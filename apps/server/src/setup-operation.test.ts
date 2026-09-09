@@ -67,8 +67,11 @@ describe("setup operation store", () => {
 
   it("reclaims a lock left by a dead process", async () => {
     const dir = await stateDir();
-    await writeFile(join(dir, "setup-operation.lock"), JSON.stringify({ pid: 2_147_483_647 }));
-    const store = createSetupOperationStore(dir);
+    await writeFile(
+      join(dir, "setup-operation.lock"),
+      JSON.stringify({ ownerId: "previous-container", token: "old-token" }),
+    );
+    const store = createSetupOperationStore(dir, "current-container");
 
     await store.run("provision", "request-a", async () => {});
 
@@ -84,5 +87,39 @@ describe("setup operation store", () => {
     await expect(
       createSetupOperationStore(dir).run("provision", "request-a", async () => {}),
     ).rejects.toBeInstanceOf(AppError);
+  });
+
+  it("does not mistake a reused container PID for a live setup lock", async () => {
+    const dir = await stateDir();
+    await writeFile(
+      join(dir, "setup-operation.lock"),
+      JSON.stringify({ pid: process.pid, token: "previous-container" }),
+    );
+
+    await createSetupOperationStore(dir, "current-container").run(
+      "provision",
+      "request-a",
+      async () => {},
+    );
+
+    await expect(readFile(join(dir, "setup-operation.json"), "utf8")).resolves.toContain(
+      '"requestHash":"request-a"',
+    );
+  });
+
+  it("discards validation failures so a corrected request can proceed", async () => {
+    const store = createSetupOperationStore(await stateDir());
+
+    await expect(
+      store.run("provision", "invalid-request", async () => {
+        throw new AppError("person.email_invalid", {});
+      }),
+    ).rejects.toMatchObject({ code: "person.email_invalid" });
+
+    await expect(
+      store.run("provision", "corrected-request", async (operation) => {
+        await operation.advance("venue_committed");
+      }),
+    ).resolves.toBeUndefined();
   });
 });

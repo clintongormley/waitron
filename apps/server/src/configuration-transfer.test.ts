@@ -61,6 +61,7 @@ const bundle: ConfigurationBundle = {
   version: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceTenantId: "tenant",
+  sourceOperatorId: "source-admin",
   venue: {
     country: "ES",
     taxId: "B12345678",
@@ -210,6 +211,12 @@ describe("configuration transfer database path", () => {
     });
     await withTenant(suite.db, source.tenantId, async (tx) => {
       await tx.execute(sql`
+        insert into persons
+          (id, tenant_id, display_name, pin_hash, password_hash, email, role)
+        values
+          ('12121212-aaaa-aaaa-aaaa-121212121212', ${source.tenantId}, 'Second admin',
+           'second-admin-pin', 'second-admin-password', 'second-admin@example.test', 'admin')`);
+      await tx.execute(sql`
         insert into catalogues (id, tenant_id, name) values
           ('11111111-aaaa-aaaa-aaaa-111111111111', ${source.tenantId}, 'Prepared menu')`);
       await tx.execute(sql`
@@ -299,20 +306,23 @@ describe("configuration transfer database path", () => {
            '2026-09-09T10:00:00Z', 0, 1.50, '[]', 'es-ES', array['es-ES'],
            'verifactu', 'recorded')`);
     });
+    const sourceOperator = await suite.db.execute<{ id: string }>(sql`
+      select id from persons
+      where tenant_id = ${source.tenantId} and role = 'admin'
+        and id <> '12121212-aaaa-aaaa-aaaa-121212121212'
+    `);
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
     const transferred = await buildConfigurationBundle(
       suite.db,
-      source,
+      { ...source, sourceOperatorId: sourceOperator.rows[0]!.id },
       ALL_MODULES,
       new Date("2026-09-09T00:00:00.000Z"),
       versions,
     );
-    expect(transferred.tables.persons).toContainEqual(
-      expect.not.objectContaining({
-        pin_hash: expect.anything(),
-        password_hash: expect.anything(),
-      }),
-    );
+    for (const person of transferred.tables.persons ?? []) {
+      expect(person).not.toHaveProperty("pin_hash");
+      expect(person).not.toHaveProperty("password_hash");
+    }
     expect(transferred.tables).not.toHaveProperty("sales");
 
     const target = await applyVenue(planVenue(venue("B87654321"), ALL_MODULES), {
@@ -331,6 +341,7 @@ describe("configuration transfer database path", () => {
     const imported = await suite.db.execute<{
       products: number;
       staff: number;
+      suspended_admins: number;
       secret_hits: number;
       status: string;
       target_sales: number;
@@ -351,6 +362,8 @@ describe("configuration transfer database path", () => {
       select
         (select count(*)::int from products where tenant_id = ${target.tenantId}) as products,
         (select count(*)::int from persons where tenant_id = ${target.tenantId} and role = 'manager') as staff,
+        (select count(*)::int from persons where tenant_id = ${target.tenantId}
+          and role = 'admin' and status = 'suspended') as suspended_admins,
         (select count(*)::int from persons where tenant_id = ${target.tenantId}
           and (pin_hash = 'source-pin-secret' or password_hash = 'source-password-secret')) as secret_hits,
         (select status from persons where tenant_id = ${target.tenantId} and role = 'manager') as status,
@@ -376,6 +389,7 @@ describe("configuration transfer database path", () => {
     expect(imported.rows[0]).toEqual({
       products: 1,
       staff: 1,
+      suspended_admins: 1,
       secret_hits: 0,
       status: "suspended",
       target_sales: 0,

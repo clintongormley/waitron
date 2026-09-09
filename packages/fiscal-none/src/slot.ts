@@ -18,6 +18,7 @@ import { NoneBackend } from "./backend.js";
 export const FISCAL_NONE_SLOT: FiscalContribution = {
   id: "none",
   activationReadiness: "not-applicable",
+  activationReadinessTarget: () => null,
   makeBackend: () => new NoneBackend(),
   drain: async () => emptyDrainResult(),
 };

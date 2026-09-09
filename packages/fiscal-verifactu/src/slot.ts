@@ -19,6 +19,8 @@ export function rejectResolveClient(): Promise<never> {
 export const FISCAL_SLOT: FiscalContribution = {
   id: "verifactu",
   activationReadiness: "accepted-test-submission",
+  activationReadinessTarget: (secret) =>
+    aeatEndpointFor("preproduction")(parseAeatCert(secret).certKind),
   makeBackend: ({ db, clock, environment }) =>
     new VerifactuBackend({
       clock,

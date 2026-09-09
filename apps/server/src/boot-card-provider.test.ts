@@ -116,6 +116,17 @@ describe("buildCardProvider", () => {
     expect(provider?.provider).toBe("stripe");
   });
 
+  it("uses an explicitly configured Stripe test provider on a Prepare node", async () => {
+    const tenantId = await seedTenantWithStripeKey("sk_test_prepare");
+    const provider = await buildCardProvider(
+      cfgFor(tenantId, "stripe_terminal", "tmr_1"),
+      deps(),
+      "prepare",
+      true,
+    );
+    expect(provider).toBeInstanceOf(StripeTerminalProvider);
+  });
+
   it("builds a StripeOnDeviceProvider for cardProvider 'stripe_on_device'", async () => {
     const tenantId = await seedTenantWithStripeKey("sk_test_device");
     const provider = await buildCardProvider(cfgFor(tenantId, "stripe_on_device"), deps());

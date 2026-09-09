@@ -39,6 +39,30 @@ describe("staged restore requests", () => {
     }
   });
 
+  it("validates the encrypted artifact before staging any restart request", async () => {
+    const stateDir = await fresh();
+    const validate = vi.fn(async () => {
+      throw new Error("wrong recovery key");
+    });
+
+    await expect(
+      stageRestoreRequest(
+        stateDir,
+        {
+          artifact: Uint8Array.from([1, 2, 3]),
+          recoveryKey: "wrong-key",
+          environment: "production",
+        },
+        validate,
+      ),
+    ).rejects.toThrow("wrong recovery key");
+
+    expect(validate).toHaveBeenCalledOnce();
+    await expect(readFile(join(stateDir, "restore-request.artifact"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("runs before boot and removes the request only after success", async () => {
     const stateDir = await fresh();
     await stageRestoreRequest(stateDir, {
@@ -76,7 +100,7 @@ describe("staged restore requests", () => {
     });
   });
 
-  it("retains the staged request when restore fails", async () => {
+  it("clears the staged request when restore fails so the next boot returns to recovery", async () => {
     const stateDir = await fresh();
     await stageRestoreRequest(stateDir, {
       artifact: Uint8Array.from([9]),
@@ -97,6 +121,11 @@ describe("staged restore requests", () => {
         },
       ),
     ).rejects.toThrow("restore failed");
-    expect(await readFile(join(stateDir, "restore-request.artifact"))).toEqual(Buffer.from([9]));
+    await expect(readFile(join(stateDir, "restore-request.artifact"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

@@ -45,7 +45,13 @@ export interface PreparedVenue {
 
 export async function buildConfigurationBundle(
   db: Database | Transaction,
-  source: { tenantId: string; locationId: string; tillId: string; nodeId: string },
+  source: {
+    tenantId: string;
+    locationId: string;
+    tillId: string;
+    nodeId: string;
+    sourceOperatorId?: string;
+  },
   modules: readonly WaitronModule[],
   now: Date,
   moduleVersions: Record<string, number>,
@@ -91,6 +97,7 @@ export async function buildConfigurationBundle(
     version: 1,
     createdAt: now.toISOString(),
     sourceTenantId: source.tenantId,
+    sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
       country,
       taxId,
@@ -132,6 +139,7 @@ export interface ConfigurationBundle {
   version: 1;
   createdAt: string;
   sourceTenantId: string;
+  sourceOperatorId: string;
   venue: PreparedVenue;
   modules: Record<string, number>;
   tables: Record<string, Array<Record<string, unknown>>>;
@@ -296,6 +304,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     typeof value.createdAt !== "string" ||
     Number.isNaN(Date.parse(value.createdAt)) ||
     typeof value.sourceTenantId !== "string" ||
+    typeof value.sourceOperatorId !== "string" ||
     !isRecord(venue) ||
     !isRecord(location) ||
     !isRecord(modules) ||
@@ -456,11 +465,8 @@ export async function importConfigurationTables(
     }
   }
 
-  const sourceAdminIds = new Set(
-    (bundle.tables.persons ?? [])
-      .filter((row) => row.role === "admin")
-      .map((row) => row.id)
-      .filter((id): id is string => typeof id === "string"),
+  const sourceOperatorIds = new Set(
+    bundle.sourceOperatorId === "" ? [] : [bundle.sourceOperatorId],
   );
   const idMap = new Map<string, string>([
     [bundle.sourceTenantId, target.tenantId],
@@ -473,8 +479,8 @@ export async function importConfigurationTables(
   }
   for (const [declaration, rows] of checked) {
     for (const source of rows) {
-      if (declaration.name === "persons" && source.role === "admin") continue;
-      if (typeof source.person_id === "string" && sourceAdminIds.has(source.person_id)) continue;
+      if (declaration.name === "persons" && source.id === bundle.sourceOperatorId) continue;
+      if (typeof source.person_id === "string" && sourceOperatorIds.has(source.person_id)) continue;
       const row: Record<string, unknown> = { ...source, tenant_id: target.tenantId };
       for (const [field, value] of Object.entries(row)) {
         if (typeof value === "string" && idMap.has(value)) row[field] = idMap.get(value)!;

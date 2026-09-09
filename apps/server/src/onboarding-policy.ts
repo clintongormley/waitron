@@ -10,8 +10,8 @@ export interface FiscalDrainPolicy {
 
 /** Demo and Prepare never submit. Preproduction submission exists only for a dedicated integration target. */
 export function fiscalDrainEnabled(policy: FiscalDrainPolicy): boolean {
+  if (policy.onboardingIntent === "demo" || policy.onboardingIntent === "prepare") return false;
   if (policy.environment === "production") return true;
-  if (policy.onboardingIntent !== undefined) return false;
   return policy.fiscalTestSubmissions;
 }
 

@@ -31,6 +31,7 @@ export interface SetupStatus {
   environment: "production" | "preproduction";
   developmentMode?: boolean;
   needs: string[];
+  operationBlocked?: boolean;
 }
 
 /**

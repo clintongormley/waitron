@@ -6,7 +6,15 @@ import { writeFileAtomic } from "./fs-atomic.js";
 import "./errors.js";
 
 export type SetupOperationKind = "provision" | "adopt" | "restore" | "import";
-export type SetupOperationPhase = "started" | "venue_committed" | "publishing" | "complete";
+export type SetupOperationPhase =
+  | "started"
+  | "venue_committed"
+  | "content_seeded"
+  | "identity_established"
+  | "membership_seeded"
+  | "secret_sealed"
+  | "publishing"
+  | "complete";
 
 export interface SetupOperationState {
   version: 1;
@@ -46,7 +54,16 @@ function parseState(raw: string): SetupOperationState | null {
       typeof value.id !== "string" ||
       !["provision", "adopt", "restore", "import"].includes(value.kind ?? "") ||
       typeof value.requestHash !== "string" ||
-      !["started", "venue_committed", "publishing", "complete"].includes(value.phase ?? "") ||
+      ![
+        "started",
+        "venue_committed",
+        "content_seeded",
+        "identity_established",
+        "membership_seeded",
+        "secret_sealed",
+        "publishing",
+        "complete",
+      ].includes(value.phase ?? "") ||
       typeof value.data !== "object" ||
       value.data === null ||
       Array.isArray(value.data) ||
@@ -60,9 +77,13 @@ function parseState(raw: string): SetupOperationState | null {
 }
 
 /** Persist and serialize first-boot work so a supervised restart can resume a known request. */
-export function createSetupOperationStore(stateDir: string): SetupOperationStore {
+export function createSetupOperationStore(
+  stateDir: string,
+  ownerId: string = randomUUID(),
+): SetupOperationStore {
   const statePath = join(stateDir, "setup-operation.json");
   const lockPath = join(stateDir, "setup-operation.lock");
+  let active = false;
 
   const read = async (): Promise<SetupOperationState | null> => {
     try {
@@ -81,7 +102,7 @@ export function createSetupOperationStore(stateDir: string): SetupOperationStore
     const writeLock = async (): Promise<void> => {
       const handle = await open(lockPath, "wx", 0o600);
       try {
-        await handle.writeFile(JSON.stringify({ pid: process.pid, token }));
+        await handle.writeFile(JSON.stringify({ ownerId, token }));
       } finally {
         await handle.close();
       }
@@ -92,20 +113,23 @@ export function createSetupOperationStore(stateDir: string): SetupOperationStore
     } catch (error) {
       if (!hasCode(error, "EEXIST")) throw error;
     }
-    let owner: { pid?: unknown };
+    let owner: { ownerId?: unknown; pid?: unknown };
     try {
-      owner = JSON.parse(await readFile(lockPath, "utf8")) as { pid?: unknown };
+      owner = JSON.parse(await readFile(lockPath, "utf8")) as {
+        ownerId?: unknown;
+        pid?: unknown;
+      };
     } catch {
       throw new AppError("setup.already_provisioning", {});
     }
-    if (!Number.isSafeInteger(owner.pid) || Number(owner.pid) <= 0) {
+    if (owner.ownerId === ownerId) {
       throw new AppError("setup.already_provisioning", {});
     }
-    try {
-      process.kill(Number(owner.pid), 0);
+    const belongsToPreviousBoot =
+      typeof owner.ownerId === "string" ||
+      (Number.isSafeInteger(owner.pid) && Number(owner.pid) > 0);
+    if (!belongsToPreviousBoot) {
       throw new AppError("setup.already_provisioning", {});
-    } catch (error) {
-      if (!hasCode(error, "ESRCH")) throw error;
     }
     await unlink(lockPath).catch((error: unknown) => {
       if (!hasCode(error, "ENOENT")) throw error;
@@ -131,8 +155,11 @@ export function createSetupOperationStore(stateDir: string): SetupOperationStore
   return {
     read,
     async run(kind, requestHash, fn) {
-      const token = await acquire();
+      if (active) throw new AppError("setup.already_provisioning", {});
+      active = true;
+      let token: string | undefined;
       try {
+        token = await acquire();
         const existing = await read();
         if (existing !== null && (existing.kind !== kind || existing.requestHash !== requestHash)) {
           throw new AppError("setup.operation_conflict", {});
@@ -165,9 +192,22 @@ export function createSetupOperationStore(stateDir: string): SetupOperationStore
           advance: (phase, data) => persist(phase, data),
           complete: (data) => persist("complete", data),
         };
-        return await fn(operation);
+        try {
+          return await fn(operation);
+        } catch (error) {
+          if (operation.phase === "started") {
+            await unlink(statePath).catch((unlinkError: unknown) => {
+              if (!hasCode(unlinkError, "ENOENT")) throw unlinkError;
+            });
+          }
+          throw error;
+        }
       } finally {
-        await release(token);
+        try {
+          if (token !== undefined) await release(token);
+        } finally {
+          active = false;
+        }
       }
     },
   };

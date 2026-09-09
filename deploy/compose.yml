@@ -43,6 +43,9 @@ services:
       WAITRON_BACKUP_DIR: ${WAITRON_BACKUP_DIR:-}
       WAITRON_BACKUP_DATABASE_URL: ${WAITRON_BACKUP_DATABASE_URL:-}
       WAITRON_BACKUP_RECOVERY_KEY: ${WAITRON_BACKUP_RECOVERY_KEY:-}
+      # Prepare uses the local card simulator unless an operator deliberately enables a configured
+      # provider whose credential is restricted to its test environment.
+      WAITRON_PAYMENT_TEST_PROVIDERS: ${WAITRON_PAYMENT_TEST_PROVIDERS:-}
     volumes:
       - state:/var/lib/waitron/state
       - logs:/var/lib/waitron/logs

@@ -42,6 +42,7 @@ export function fiscalReadinessInput(args: {
     taxId: args.venue.taxId,
     legalName: args.venue.legalName,
     fiscalTerritory: args.venue.location.fiscalTerritory,
+    submissionTarget: args.contribution.activationReadinessTarget?.(args.secret) ?? null,
     certificateFingerprint,
     certificateKind: typeof raw?.certKind === "string" ? raw.certKind : null,
     moduleVersions: args.moduleVersions,
@@ -127,14 +128,17 @@ export async function submitFiscalReadiness(args: {
         ),
       );
     }
-    const result = await args.contribution.drain(
-      { db, ring: args.ring, environment: "preproduction", skipRetryMs: 300_000 },
-      (args.now ?? (() => new Date()))(),
-    );
+    let result;
+    try {
+      result = await args.contribution.drain(
+        { db, ring: args.ring, environment: "preproduction", skipRetryMs: 0 },
+        (args.now ?? (() => new Date()))(),
+      );
+    } catch {
+      return "uncertain";
+    }
     if (result.recordsAccepted > 0) return "accepted";
     if (result.recordsHalted > 0) return "rejected";
-    return "uncertain";
-  } catch {
     return "uncertain";
   } finally {
     await db.close();

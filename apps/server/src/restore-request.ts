@@ -21,7 +21,9 @@ export interface RestoreRequest {
 export async function stageRestoreRequest(
   stateDir: string,
   request: RestoreRequest,
+  validate?: (request: RestoreRequest) => Promise<void>,
 ): Promise<void> {
+  await validate?.(request);
   await writeFileAtomic(join(stateDir, ARTIFACT), request.artifact, 0o600);
   await writeFileAtomic(join(stateDir, KEY), request.recoveryKey, 0o600);
   await writeFileAtomic(
@@ -40,6 +42,15 @@ export interface StagedRestoreDeps {
 }
 
 type Restore = (deps: RestoreDeps) => Promise<void>;
+
+async function clearStagedRestore(stateDir: string): Promise<void> {
+  await Promise.all([
+    rm(join(stateDir, MARKER), { force: true }),
+    rm(join(stateDir, SETUP_OPERATION), { force: true }),
+    rm(join(stateDir, ARTIFACT), { force: true }),
+    rm(join(stateDir, KEY), { force: true }),
+  ]);
+}
 
 /** Run a staged cold restore before any server pool opens. Returns false when no request exists. */
 export async function runStagedRestore(
@@ -64,23 +75,23 @@ export async function runStagedRestore(
     readFile(join(deps.stateDir, ARTIFACT)),
     readFile(join(deps.stateDir, KEY), "utf8"),
   ]);
-  await restore({
-    artifact,
-    recoveryKey,
-    databaseUrl: deps.databaseUrl,
-    mediaDir: deps.mediaDir,
-    stateDir: deps.stateDir,
-    stagingDir: join(deps.stateDir, "restore-staging"),
-    migrationsRoot: deps.migrationsRoot,
-    modules: ALL_MODULES,
-    environment: marker.environment,
-    log: deps.log,
-  });
-  await rm(join(deps.stateDir, MARKER), { force: true });
-  await rm(join(deps.stateDir, SETUP_OPERATION), { force: true });
-  await Promise.all([
-    rm(join(deps.stateDir, ARTIFACT), { force: true }),
-    rm(join(deps.stateDir, KEY), { force: true }),
-  ]);
+  try {
+    await restore({
+      artifact,
+      recoveryKey,
+      databaseUrl: deps.databaseUrl,
+      mediaDir: deps.mediaDir,
+      stateDir: deps.stateDir,
+      stagingDir: join(deps.stateDir, "restore-staging"),
+      migrationsRoot: deps.migrationsRoot,
+      modules: ALL_MODULES,
+      environment: marker.environment,
+      log: deps.log,
+    });
+  } catch (error) {
+    await clearStagedRestore(deps.stateDir);
+    throw error;
+  }
+  await clearStagedRestore(deps.stateDir);
   return true;
 }

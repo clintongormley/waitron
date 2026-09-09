@@ -14,6 +14,7 @@ import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+import type { ConfigurationPreview } from "./configuration-import.js";
 
 const noopLog: Logger = () => {};
 
@@ -317,6 +318,25 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     }
   });
 
+  it("keeps setup status healthy when persisted operation state needs operator recovery", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-corrupt-operation-"));
+    try {
+      writeFileSync(join(dir, "setup-operation.json"), "not-json");
+      const app = new Hono();
+      mountSetup(
+        app,
+        { environment: "preproduction", operations: createSetupOperationStore(dir) },
+        noopLog,
+      );
+
+      const response = await app.request("/setup-api/status");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ operationBlocked: true });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("recovers a venue committed before operation progress reached disk", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-recovery-"));
     const body = demoBody();
@@ -342,6 +362,41 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       expect(recoverProvision).toHaveBeenCalledOnce();
       expect(deps.establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
       expect((await operations.read())?.phase).toBe("complete");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not repeat committed demo setup steps after a later publishing failure", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-step-resume-"));
+    try {
+      const firstPersist = vi
+        .fn<NonNullable<SetupDeps["persistTrading"]>>()
+        .mockRejectedValueOnce(new Error("disk unavailable"));
+      const first = makeDeps({
+        operations: createSetupOperationStore(dir),
+        persistTrading: firstPersist,
+      });
+      const firstApp = new Hono();
+      mountSetup(firstApp, first.deps, noopLog);
+
+      expect((await postProvision(firstApp, demoBody())).status).toBe(500);
+      expect(first.seedDemo).toHaveBeenCalledOnce();
+      expect(first.establishIdentity).toHaveBeenCalledOnce();
+      expect(first.seedMembership).toHaveBeenCalledOnce();
+
+      const resumed = makeDeps({
+        operations: createSetupOperationStore(dir),
+        persistTrading: vi.fn(async () => {}),
+      });
+      const resumedApp = new Hono();
+      mountSetup(resumedApp, resumed.deps, noopLog);
+
+      expect((await postProvision(resumedApp, demoBody())).status).toBe(200);
+      expect(resumed.provision).not.toHaveBeenCalled();
+      expect(resumed.seedDemo).not.toHaveBeenCalled();
+      expect(resumed.establishIdentity).not.toHaveBeenCalled();
+      expect(resumed.seedMembership).not.toHaveBeenCalled();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1144,6 +1199,25 @@ describe("POST /setup-api/configuration", () => {
       Uint8Array.from([1, 2, 3]),
       "a strong passphrase",
     );
+  });
+
+  it("blocks provisioning while a configuration archive is being staged", async () => {
+    let release!: () => void;
+    const held = new Promise<ConfigurationPreview>((resolve) => {
+      release = () => resolve({ venue: {} as never, counts: {}, reconnect: [] });
+    });
+    const app = new Hono();
+    const { deps, provision } = makeDeps({ stageConfiguration: vi.fn(() => held) });
+    mountSetup(app, deps, noopLog);
+
+    const staging = postConfiguration(app, Uint8Array.from([1, 2, 3]));
+    await tick();
+    const provisionResponse = await postProvision(app, demoBody());
+
+    expect(provisionResponse.status).toBe(409);
+    expect(provision).not.toHaveBeenCalled();
+    release();
+    expect((await staging).status).toBe(200);
   });
 });
 

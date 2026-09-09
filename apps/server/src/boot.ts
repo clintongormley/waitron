@@ -101,6 +101,7 @@ import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { stageRestoreRequest } from "./restore-request.js";
+import { validateArtifact } from "./restore.js";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -293,11 +294,11 @@ const BOX_HOSTNAME = "waitron.local";
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /**
- * The card-payment provider this till drives. Demo and Prepare installations receive the local
- * simulator and never read a Stripe credential. A live till serves one tenant (`cfg.tenantId`), so
- * its provider is built once at boot. Its collect-side client comes from that tenant's encrypted
- * `payments.stripe` credential through the environment-key guard, so bad live credentials fail here
- * rather than on the first sale.
+ * The card-payment provider this till drives. Demo receives the local simulator. Prepare does too
+ * unless its explicit integration switch selects the configured test provider. A live till serves
+ * one tenant (`cfg.tenantId`), so its provider is built once at boot. Its collect-side client comes
+ * from that tenant's encrypted `payments.stripe` credential through the environment-key guard, so
+ * bad credentials fail here rather than on the first sale.
  *
  * Exported, not inlined into `startServer`: `startServer`'s only test subject (`boot.test.ts`) boots
  * against a real container with `cardProvider=none`, so it exercises only the `undefined` branch —
@@ -309,8 +310,9 @@ export async function buildCardProvider(
   cfg: TillConfig,
   deps: StripeAccountDeps,
   onboardingIntent?: OnboardingIntent,
+  paymentTestProviders = false,
 ): Promise<PaymentProvider | undefined> {
-  if (onboardingIntent === "demo" || onboardingIntent === "prepare") {
+  if (onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders)) {
     return new SimulatorPaymentProvider(deps.db, cfg.tenantId);
   }
   if (cfg.cardProvider === "none") return undefined;
@@ -937,20 +939,40 @@ export async function startServer(
             environment: config.environment,
             devMode: config.devMode,
             operations: createSetupOperationStore(config.stateDir),
-            stageRestore: (request) => stageRestoreRequest(config.stateDir, request),
-            stageConfiguration: (artifact, passphrase) =>
-              stageConfigurationImport(config.stateDir, artifact, passphrase, async (bundle) => {
-                const resolvedConfig = venueModuleConfig(
-                  moduleConfig,
-                  bundle.venue.location.fiscalTerritory,
-                );
-                const modules = enabledModules(ALL_MODULES, resolvedConfig);
-                validateConfigurationBundle(
-                  bundle,
-                  modules,
-                  await schemaVersionsByModule(ownerDb, modules),
-                );
+            stageRestore: (request) =>
+              stageRestoreRequest(config.stateDir, request, async (candidate) => {
+                await validateArtifact({
+                  artifact: candidate.artifact,
+                  recoveryKey: candidate.recoveryKey,
+                  databaseUrl: config.migrationsDatabaseUrl,
+                  mediaDir: config.mediaDir,
+                  stateDir: config.stateDir,
+                  stagingDir: join(config.stateDir, "restore-staging"),
+                  migrationsRoot: config.migrationsRoot,
+                  modules: ALL_MODULES,
+                  environment: candidate.environment,
+                  log,
+                });
               }),
+            stageConfiguration: (artifact, passphrase) =>
+              stageConfigurationImport(
+                config.stateDir,
+                ring,
+                artifact,
+                passphrase,
+                async (bundle) => {
+                  const resolvedConfig = venueModuleConfig(
+                    moduleConfig,
+                    bundle.venue.location.fiscalTerritory,
+                  );
+                  const modules = enabledModules(ALL_MODULES, resolvedConfig);
+                  validateConfigurationBundle(
+                    bundle,
+                    modules,
+                    await schemaVersionsByModule(ownerDb, modules),
+                  );
+                },
+              ),
             clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
             runFiscalTest: async ({ request, contribution, secret }) => {
               const resolvedConfig = venueModuleConfig(
@@ -967,17 +989,20 @@ export async function startServer(
                 applicationVersion:
                   process.env.WAITRON_BUILD_ID ?? process.env.npm_package_version ?? "development",
               });
-              return createFiscalReadinessStore(config.stateDir, () =>
-                submitFiscalReadiness({
-                  stateDir: config.stateDir,
-                  migrationsRoot: config.migrationsRoot,
-                  modules,
-                  venue: request.venue,
-                  contribution,
-                  secret,
-                  ring,
-                  readinessInput: input,
-                }),
+              return createFiscalReadinessStore(
+                config.stateDir,
+                () =>
+                  submitFiscalReadiness({
+                    stateDir: config.stateDir,
+                    migrationsRoot: config.migrationsRoot,
+                    modules,
+                    venue: request.venue,
+                    contribution,
+                    secret,
+                    ring,
+                    readinessInput: input,
+                  }),
+                ring.current.key,
               ).run(input);
             },
             assertFiscalReady: async ({ request, contribution, secret }) => {
@@ -990,6 +1015,7 @@ export async function startServer(
               await createFiscalReadinessStore(
                 config.stateDir,
                 async () => "uncertain",
+                ring.current.key,
               ).assertReady(
                 fiscalReadinessInput({
                   venue: request.venue,
@@ -1014,7 +1040,7 @@ export async function startServer(
               );
               const modules = enabledModules(ALL_MODULES, resolvedConfig);
               const staged = req.configurationImport
-                ? await readStagedConfigurationImport(config.stateDir)
+                ? await readStagedConfigurationImport(config.stateDir, ring)
                 : null;
               if (req.configurationImport && staged === null) {
                 throw new AppError("setup.request_invalid", { field: "configurationImport" });
@@ -1062,7 +1088,7 @@ export async function startServer(
             recoverProvision: async (req) => {
               const result = await recoverProvisionedVenue(ownerDb, req);
               if (req.configurationImport) {
-                const staged = await readStagedConfigurationImport(config.stateDir);
+                const staged = await readStagedConfigurationImport(config.stateDir, ring);
                 if (staged === null) {
                   throw new AppError("setup.request_invalid", { field: "configurationImport" });
                 }
@@ -1647,9 +1673,9 @@ export async function startServer(
     locationId: till.locationId,
     override: till.localeOverride,
   });
-  // Demo/Prepare use the local simulator; live installations build from the tenant's Stripe
-  // credential. `makeStripe` is `defaultMakeStripe`, the same SDK factory `stripeAccountResolver`
-  // above uses. A live installation with bad credentials fails at boot, never on its first card sale.
+  // Demo and the default Prepare target use the local simulator. Live and the explicit Prepare
+  // integration target build from the tenant's Stripe credential. `makeStripe` is
+  // `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses.
   const cardProvider = await buildCardProvider(
     till,
     {
@@ -1659,6 +1685,7 @@ export async function startServer(
       makeStripe: defaultMakeStripe,
     },
     config.onboardingIntent,
+    config.paymentTestProviders,
   );
   // The session cookie is `Secure` only when TLS is configured. Hoisted to ONE binding so the till
   // and management mounts below both read the same value — a shared local, not a duplicated literal.
@@ -1814,22 +1841,24 @@ export async function startServer(
     },
     log,
   );
-  mountConfigurationExportApi(
-    app,
-    {
-      db,
-      cfg: {
-        tenantId: till.tenantId,
-        locationId: till.locationId,
-        tillId: till.tillId,
-        nodeId: till.nodeId,
+  if (config.onboardingIntent === "prepare") {
+    mountConfigurationExportApi(
+      app,
+      {
+        db,
+        cfg: {
+          tenantId: till.tenantId,
+          locationId: till.locationId,
+          tillId: till.tillId,
+          nodeId: till.nodeId,
+        },
+        modules: setsToMigrate,
+        moduleVersions: appliedModuleVersions,
+        mediaDir: config.mediaDir,
       },
-      modules: setsToMigrate,
-      moduleVersions: appliedModuleVersions,
-      mediaDir: config.mediaDir,
-    },
-    log,
-  );
+      log,
+    );
+  }
   mountEmailInboxApi(
     app,
     {

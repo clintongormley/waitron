@@ -2,9 +2,8 @@
 // `apps/server/.env`, so `pnpm dev` boots the server UNPROVISIONED and the slice-1b setup surface
 // (`/setup-api/status` + the placeholder page) is exercisable on a laptop. A trimmed `dev-setup.ts`
 // that STOPS after migrating — it never provisions a venue, so it mints no fiscal chain and writes
-// none of the five `WAITRON_TILL_*_ID` or the `WAITRON_CREDENTIALS_KEY` a trading box needs. Setup
-// mode needs neither: `boot.ts`'s `config.till === undefined` branch loads no key ring and mounts no
-// trading routes (see `boot.test.ts`'s setup-mode boot, landed Task 3).
+// none of the five `WAITRON_TILL_*_ID`. Setup boot creates and loads its own key ring from the
+// persistent state directory so it can stage configuration and seal the first venue's credentials.
 //
 // FISCAL NOTE (CLAUDE.md §5): a venue-bearing database is NOT a setup-mode target — provisioning a
 // second venue would start a second SIF and a second hash chain. So this REFUSES to run against a
@@ -35,8 +34,8 @@ import type { DevSetupOptions } from "./dev-setup.js";
  * The env contract a SETUP-MODE box boots against — a deliberate SUBSET of `dev-setup`'s `DevEnv`.
  * DATABASE_URL + environment + port and nothing else: `boot.ts`'s setup branch (`config.till ===
  * undefined`) mounts only `/health` + the setup surface, so it reads no `WAITRON_TILL_*_ID` (their
- * absence is what SELECTS setup mode — `tryLoadTillConfig` returns undefined) and no
- * `WAITRON_CREDENTIALS_KEY` (no key ring is loaded on the setup path).
+ * absence is what SELECTS setup mode — `tryLoadTillConfig` returns undefined). The key ring is
+ * generated in the persistent state directory by setup boot, outside this environment file.
  */
 export interface SetupEnv {
   DATABASE_URL: string;

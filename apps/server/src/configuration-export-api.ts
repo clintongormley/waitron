@@ -62,7 +62,7 @@ export function mountConfigurationExportApi(
         }
         return buildConfigurationBundle(
           tx,
-          deps.cfg,
+          { ...deps.cfg, sourceOperatorId: authorization.authorizedBy },
           deps.modules,
           (deps.now ?? (() => new Date()))(),
           deps.moduleVersions,

@@ -425,6 +425,10 @@ export class SetupApp extends LitElement {
         this.screen = "review";
         return;
       }
+      case "person.email_invalid":
+        this.reviewError = "The admin email address is invalid. Check it, then provision again.";
+        this.screen = "review";
+        return;
       case "setup.provisioning_secret_required":
         this.screen = "cert";
         return;
@@ -438,6 +442,12 @@ export class SetupApp extends LitElement {
         this.provisionCanRetry = false;
         // A provision is running elsewhere — no re-POST, but a reload re-reads status so the operator
         // isn't stranded on a dead-end alert.
+        this.provisionReloadLabel = "Reload";
+        return;
+      case "setup.operation_conflict":
+        this.provisionMessage =
+          "This box has saved setup work for a different request. Resume the original setup or contact support.";
+        this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":

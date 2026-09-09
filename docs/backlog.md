@@ -268,13 +268,14 @@ deli must trade, so 1-Jan-2027 ranks nothing above anything. Order by dependency
 de-risking the most-reused / most-uncertain foundations first. **Residency:** cloud instances will be
 hosted in Spain (owner decision 2026-09-05), so asesor Q16 does not arise.
 
-**Run path (local; no hardware, cloud, or AEAT cert):** `pnpm dev:setup && pnpm dev` → till
+**Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
 :8080. The till enrols itself on first load in dev mode — no code, no approval step. Till PIN **5555**;
 dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a believable demo
 restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16 tables), staff
 on PIN 5555, and ~28 days of back-dated preproduction sales — English by default, Spanish via
-`WAITRON_SEED_LOCALE=es-ES`. From a worktree, start the stack with `wa-wt <name>` (CLAUDE.md §6).
+`WAITRON_SEED_LOCALE=es-ES`. Use `wa-wt onboarding <worktree-name>` for a fresh shipping-style
+onboarding wizard. `wa-wt reset demo|onboarding [worktree-name]` wipes and rebuilds that target.
 
 ### Whole-project design review (2026-09-05) — decisions taken; execution in three parallel tracks
 
@@ -1627,7 +1628,8 @@ a new package that copies either config must set the `90/90/85/85` floor (CLAUDE
 `docs/superpowers/plans/2026-08-19-shared-test-container.md`. A two-node replication suite uses
 `packages/db/src/testing/two-node.ts`, or `two-node-wireguard.ts` when the link itself is under test.
 
-**Dev stack from a worktree.** `wa-wt <worktree-name>` / `wa-wt reset [name]` — the rule is in
+**Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
+`wa-wt reset demo|onboarding [worktree-name]` — the rule is in
 CLAUDE.md §6; detail in [ui-review.md](ui-review.md) → _Running the stack from a worktree_.
 
 ## How to keep this file honest

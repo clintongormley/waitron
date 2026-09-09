@@ -23,7 +23,11 @@ import { readJsonBody } from "@waitron/server-kit";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
-import type { ActiveSetupOperation, SetupOperationStore } from "./setup-operation.js";
+import type {
+  ActiveSetupOperation,
+  SetupOperationPhase,
+  SetupOperationStore,
+} from "./setup-operation.js";
 import type { RestoreRequest } from "./restore-request.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import type { FiscalContribution } from "@waitron/fiscal";
@@ -111,7 +115,7 @@ export interface SetupDeps {
   stageRestore?: (request: RestoreRequest) => Promise<void>;
   /** Validates and stages a prepared configuration archive before live provisioning. */
   stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
-  /** Removes the staged archive only after the live venue and its configuration are durable. */
+  /** Removes any staged archive after the selected venue and its configuration are durable. */
   clearConfiguration?: () => Promise<void>;
   /** Runs one explicit preproduction submission for the intended live fiscal inputs. */
   runFiscalTest?: (input: {
@@ -125,6 +129,26 @@ export interface SetupDeps {
     contribution: FiscalContribution;
     secret: unknown;
   }) => Promise<void>;
+}
+
+const SETUP_PHASES: readonly SetupOperationPhase[] = [
+  "started",
+  "venue_committed",
+  "content_seeded",
+  "identity_established",
+  "membership_seeded",
+  "secret_sealed",
+  "publishing",
+  "complete",
+];
+
+function setupPhaseReached(
+  operation: ActiveSetupOperation | undefined,
+  phase: SetupOperationPhase,
+): boolean {
+  return (
+    operation !== undefined && SETUP_PHASES.indexOf(operation.phase) >= SETUP_PHASES.indexOf(phase)
+  );
 }
 
 /**
@@ -443,13 +467,22 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   log("info", "setup.mode_active", { environment: deps.environment });
 
   app.get("/setup-api/status", async (c) => {
-    const operation = await deps.operations?.read();
+    let operation: Awaited<ReturnType<SetupOperationStore["read"]>> | undefined;
+    let operationBlocked = false;
+    try {
+      operation = await deps.operations?.read();
+    } catch (error) {
+      if (!isAppError(error) || error.code !== "setup.operation_conflict") throw error;
+      operationBlocked = true;
+      log("error", "setup.operation_conflict", {});
+    }
     return c.json(
       {
         provisioned: false,
         environment: deps.environment,
         ...(deps.devMode === true ? { developmentMode: true } : {}),
         needs: ["venue"],
+        ...(operationBlocked ? { operationBlocked: true } : {}),
         ...(operation === undefined || operation === null
           ? {}
           : {
@@ -467,9 +500,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   let provisioning = false;
   let fiscalTesting = false;
+  let configurationStaging = false;
 
   app.post("/setup-api/fiscal-test", async (c) => {
-    if (provisioning || fiscalTesting) {
+    if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     fiscalTesting = true;
@@ -540,7 +574,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // check+set completes before a second near-simultaneous POST's handler begins; the loser is
     // refused 409 here rather than being allowed to mint a second chain. Reset to false on ANY
     // failure (below) so a corrected retry works; LEFT true on success — the box is about to restart.
-    if (provisioning || fiscalTesting) {
+    if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
@@ -589,38 +623,53 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           await operation?.advance("venue_committed", { result });
         }
 
-        if (mode === "demo") {
-          await seedDemo(result, { environment, venue });
+        if (!setupPhaseReached(operation, "content_seeded")) {
+          if (mode === "demo") {
+            await seedDemo(result, { environment, venue });
+          }
+          await operation?.advance("content_seeded");
         }
 
         // Establish this node's membership identity (design §4): after the tenant/node are minted (the
         // vault row is FK-restricted to the tenant) and before the trading config is persisted. A fresh
         // primary becomes its own sole trust anchor; boot reads it into membershipTrustSet.
-        await establishIdentity(result.tenantId, result.nodeId);
+        if (!setupPhaseReached(operation, "identity_established")) {
+          await establishIdentity(result.tenantId, result.nodeId);
+          await operation?.advance("identity_established");
+        }
 
         // Seed the venue's term-0 membership document (design §6 R1): after the identity key exists,
         // before the trading config is persisted. The primary signs its own org chart; boot has
         // nothing to bump yet.
-        await seedMembership(result.tenantId, result.nodeId);
+        if (!setupPhaseReached(operation, "membership_seeded")) {
+          await seedMembership(result.tenantId, result.nodeId);
+          await operation?.advance("membership_seeded");
+        }
 
         // Seal the regime's provisioning secret AFTER provision mints the tenant (the vault row is
         // FK-restricted to it) and BEFORE the trading config is persisted. Reaches the regime only
         // through the `seal` seat, so this host imports no regime package.
-        if (expected) await secret!.seal({ db, ring }, result.tenantId, rawSecret);
+        if (!setupPhaseReached(operation, "secret_sealed")) {
+          if (expected) await secret!.seal({ db, ring }, result.tenantId, rawSecret);
+          await operation?.advance("secret_sealed");
+        }
 
-        await persistTrading({
-          tenantId: result.tenantId,
-          tillId: result.tillId,
-          nodeId: result.nodeId,
-          seriesId: result.seriesIds[0],
-          locationId: result.locationId,
-          databaseUrl,
-          migrationsDatabaseUrl,
-          environment,
-          ...(deps.devMode === true ? { developmentMode: true } : {}),
-          onboardingIntent: mode,
-        });
-        if (mode === "live") await deps.clearConfiguration?.();
+        if (!setupPhaseReached(operation, "publishing")) {
+          await persistTrading({
+            tenantId: result.tenantId,
+            tillId: result.tillId,
+            nodeId: result.nodeId,
+            seriesId: result.seriesIds[0],
+            locationId: result.locationId,
+            databaseUrl,
+            migrationsDatabaseUrl,
+            environment,
+            ...(deps.devMode === true ? { developmentMode: true } : {}),
+            onboardingIntent: mode,
+          });
+          await deps.clearConfiguration?.();
+          await operation?.advance("publishing");
+        }
 
         const response = c.json(
           { provisioned: true, tenantId: result.tenantId, restarting: true },
@@ -675,7 +724,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // One-shot latch — CRITICAL, SYNCHRONOUS before ANY `await` — shared with provision (above). The
     // loser is refused 409 here rather than starting a second adopt. Reset to false on ANY failure
     // (below) so a corrected retry works; LEFT true on success — the box is about to restart.
-    if (provisioning) {
+    if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
@@ -749,7 +798,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     if (stageRestore === undefined || requestRestart === undefined) {
       return directError(c, log, "setup.not_ready", 503);
     }
-    if (provisioning) return directError(c, log, "setup.already_provisioning", 409);
+    if (provisioning || fiscalTesting || configurationStaging) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
     provisioning = true;
 
     return runRestore(c, log, async () => {
@@ -802,23 +853,28 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   app.post("/setup-api/configuration", async (c) => {
     const stage = deps.stageConfiguration;
     if (stage === undefined) return directError(c, log, "setup.not_ready", 503);
-    if (provisioning || fiscalTesting) {
+    if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
+    configurationStaging = true;
     return runRestore(c, log, async () => {
-      if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")) {
-        invalidRequest("artifact");
+      try {
+        if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")) {
+          invalidRequest("artifact");
+        }
+        const passphrase = asString(c.req.header("x-waitron-export-passphrase"), "passphrase");
+        const declaredLength = Number(c.req.header("content-length"));
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
+          invalidRequest("artifact");
+        }
+        const artifact = new Uint8Array(await c.req.arrayBuffer());
+        if (artifact.byteLength === 0 || artifact.byteLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
+          invalidRequest("artifact");
+        }
+        return c.json(await stage(artifact, passphrase), 200);
+      } finally {
+        configurationStaging = false;
       }
-      const passphrase = asString(c.req.header("x-waitron-export-passphrase"), "passphrase");
-      const declaredLength = Number(c.req.header("content-length"));
-      if (Number.isFinite(declaredLength) && declaredLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
-        invalidRequest("artifact");
-      }
-      const artifact = new Uint8Array(await c.req.arrayBuffer());
-      if (artifact.byteLength === 0 || artifact.byteLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
-        invalidRequest("artifact");
-      }
-      return c.json(await stage(artifact, passphrase), 200);
     });
   });
 

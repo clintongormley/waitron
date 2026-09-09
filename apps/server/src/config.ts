@@ -55,6 +55,8 @@ export interface ServerConfig {
   onboardingIntent: OnboardingIntent | undefined;
   /** Explicitly enables preproduction submissions on a dedicated integration-test target. */
   fiscalTestSubmissions: boolean;
+  /** Lets a Prepare node exercise a configured payment provider with test credentials. */
+  paymentTestProviders: boolean;
   httpPort: number;
   /**
    * The plain-HTTP trust/landing listener's port (default 80); `0` disables it. A SECOND listener,
@@ -631,6 +633,18 @@ function fiscalTestSubmissions(env: Env): boolean {
   return true;
 }
 
+function paymentTestProviders(env: Env): boolean {
+  const raw = env.WAITRON_PAYMENT_TEST_PROVIDERS;
+  if (isUnset(raw)) return false;
+  if (raw !== "enabled") {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_PAYMENT_TEST_PROVIDERS",
+      reason: "not_enabled",
+    });
+  }
+  return true;
+}
+
 export function loadConfig(
   env: Env,
   defaultMigrationsRoot: string,
@@ -768,6 +782,7 @@ export function loadConfig(
     devMode: isDevMode(env),
     onboardingIntent: onboardingIntent(env, environment),
     fiscalTestSubmissions: fiscalTestSubmissions(env),
+    paymentTestProviders: paymentTestProviders(env),
     httpPort,
     // The plain-HTTP landing listener's port (default 80, `0` = disabled). Its OWN bounded parser
     // (not `positiveInt`), because `0` is a valid value here and `positiveInt` rejects it.

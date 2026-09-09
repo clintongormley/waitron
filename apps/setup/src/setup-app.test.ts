@@ -553,6 +553,15 @@ describe("setup-app", () => {
     expect(await screenText(el, "review", "[data-test=error]")).toContain("rejected the details");
   });
 
+  it("routes a server-rejected admin email back to review with an actionable message", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "person.email_invalid", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(await screenText(el, "review", "[data-test=error]")).toContain("admin email");
+  });
+
   it("routes setup.provisioning_secret_required back to the cert screen", async () => {
     const provision = vi.fn().mockRejectedValue({
       code: "setup.provisioning_secret_required",
@@ -576,6 +585,17 @@ describe("setup-app", () => {
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
+  });
+
+  it("maps a conflicting saved operation to a terminal recovery message", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.operation_conflict", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("saved setup");
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reload]")).not.toBeNull();
   });
 
   it.each(["setup.already_provisioned", "deployment.already_stamped"])(

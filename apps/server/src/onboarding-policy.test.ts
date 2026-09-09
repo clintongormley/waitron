@@ -3,11 +3,11 @@ import { fiscalDrainEnabled, runFiscalDrain } from "./onboarding-policy.js";
 
 describe("fiscalDrainEnabled", () => {
   it.each(["demo", "prepare"] as const)(
-    "never drains %s records, even when the integration-test switch is enabled",
+    "never drains %s records, regardless of environment or integration-test switch",
     (onboardingIntent) => {
       expect(
         fiscalDrainEnabled({
-          environment: "preproduction",
+          environment: "production",
           onboardingIntent,
           fiscalTestSubmissions: true,
         }),

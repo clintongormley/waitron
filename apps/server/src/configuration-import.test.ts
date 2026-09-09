@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   encodeConfigurationBundle,
   validateConfigurationBundle,
@@ -15,6 +16,9 @@ import {
 } from "./configuration-import.js";
 
 const dirs: string[] = [];
+const ring = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 17).toString("base64"),
+});
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -23,6 +27,7 @@ const bundle: ConfigurationBundle = {
   version: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceTenantId: "tenant",
+  sourceOperatorId: "source-admin",
   venue: {
     country: "ES",
     taxId: "B12345678",
@@ -75,15 +80,18 @@ describe("staged configuration import", () => {
     dirs.push(stateDir);
     const artifact = encodeConfigurationBundle(bundle, "a strong passphrase");
     await expect(
-      stageConfigurationImport(stateDir, artifact, "a strong passphrase", validate),
+      stageConfigurationImport(stateDir, ring, artifact, "a strong passphrase", validate),
     ).resolves.toEqual({
       venue: bundle.venue,
       counts: { products: 1 },
       reconnect: ["printers"],
     });
-    await expect(readStagedConfigurationImport(stateDir)).resolves.toEqual(
+    await expect(readStagedConfigurationImport(stateDir, ring)).resolves.toEqual(
       expect.objectContaining({ bundle, passphrase: "a strong passphrase" }),
     );
+    await expect(
+      readFile(join(stateDir, "configuration-import.key"), "utf8"),
+    ).resolves.not.toContain("a strong passphrase");
     for (const name of [
       "configuration-import.artifact",
       "configuration-import.key",
@@ -102,7 +110,7 @@ describe("staged configuration import", () => {
     dirs.push(stateDir);
     const artifact = encodeConfigurationBundle(bundle, "a strong passphrase");
     await expect(
-      stageConfigurationImport(stateDir, artifact, "wrong passphrase", validate),
+      stageConfigurationImport(stateDir, ring, artifact, "wrong passphrase", validate),
     ).rejects.toMatchObject({ code: "recovery.passphrase_invalid" });
     await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -117,7 +125,7 @@ describe("staged configuration import", () => {
       "a strong passphrase",
     );
     await expect(
-      stageConfigurationImport(stateDir, artifact, "a strong passphrase", validate),
+      stageConfigurationImport(stateDir, ring, artifact, "a strong passphrase", validate),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "tables" } });
     await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
       code: "ENOENT",

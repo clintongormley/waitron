@@ -79,6 +79,7 @@ describe("loadConfig", () => {
       devMode: false,
       onboardingIntent: undefined,
       fiscalTestSubmissions: false,
+      paymentTestProviders: false,
       httpPort: 8080,
       // The plain-HTTP trust/landing listener defaults to port 80 (Task 3); `0` disables it.
       landingPort: 80,
@@ -1072,6 +1073,36 @@ describe("WAITRON_FISCAL_TEST_SUBMISSIONS", () => {
       expect.objectContaining({
         code: "server.config_invalid",
         params: { variable: "WAITRON_FISCAL_TEST_SUBMISSIONS", reason: "not_enabled" },
+      }),
+    );
+  });
+});
+
+describe("WAITRON_PAYMENT_TEST_PROVIDERS", () => {
+  it("is disabled by default and enabled only by the explicit 'enabled' value", () => {
+    expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).paymentTestProviders).toBe(false);
+    expect(
+      loadConfig(
+        { ...MIN_ENV, WAITRON_PAYMENT_TEST_PROVIDERS: "enabled" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ).paymentTestProviders,
+    ).toBe(true);
+  });
+
+  it("rejects an ambiguous value", () => {
+    expect(() =>
+      loadConfig(
+        { ...MIN_ENV, WAITRON_PAYMENT_TEST_PROVIDERS: "true" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_PAYMENT_TEST_PROVIDERS", reason: "not_enabled" },
       }),
     );
   });

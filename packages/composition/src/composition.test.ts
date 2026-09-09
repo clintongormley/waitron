@@ -49,20 +49,20 @@ describe("ALL_MODULES configuration transfer contribution", () => {
         ? module.configurationTransfer.tables.map((table) => table.name)
         : [],
     );
-    expect(names).not.toEqual(
-      expect.arrayContaining([
-        "sales",
-        "tenders",
-        "payments",
-        "payment_refunds",
-        "tenant_credentials",
-        "management_account_actions",
-        "management_sessions",
-        "sessions",
-        "bookings",
-        "time_entries",
-      ]),
-    );
+    for (const forbidden of [
+      "sales",
+      "tenders",
+      "payments",
+      "payment_refunds",
+      "tenant_credentials",
+      "management_account_actions",
+      "management_sessions",
+      "sessions",
+      "bookings",
+      "time_entries",
+    ]) {
+      expect(names).not.toContain(forbidden);
+    }
     expect(
       ALL_MODULES.find((module) => module.name === "fiscal-verifactu")?.configurationTransfer,
     ).toEqual({ kind: "none" });

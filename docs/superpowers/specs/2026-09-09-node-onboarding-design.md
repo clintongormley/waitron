@@ -64,10 +64,12 @@ staff profiles and business configuration are private. Do not include credential
 | Printer definitions, routing, device profiles and intended hardware assignments | Device enrolments, node identity, membership, replication slots and subscriptions |
 | Relevant module settings and payment policy | Invoice counters/series, provider resource IDs, API keys, fiscal certificates and SMTP secrets |
 
-Default account policy: configure the first production administrator during setup, preserving their
-imported profile where selected; activate the other imported accounts through the normal account
-setup process. Device and payment connections need a guided reconnect/check. You do not re-enter
-menus, layouts or staff profiles. The prepared installation remains separate for practice.
+Default account policy: configure the first production administrator during setup. The administrator
+who authorizes the preparation export is omitted from the import because setup creates that account
+afresh; every other administrator and staff profile is copied in a suspended state and activated
+through the normal account setup process. Device and payment connections need a guided
+reconnect/check. You do not re-enter menus, layouts or staff profiles. The prepared installation
+remains separate for practice.
 
 Each owning module declares its configuration export, validation and import through a module
 contract contribution, assembled only by composition. The existing replication classification is

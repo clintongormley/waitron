@@ -38,6 +38,8 @@ export interface FiscalContribution {
   readonly id: string;
   /** The server-controlled evidence required before first production activation. */
   readonly activationReadiness: "accepted-test-submission" | "not-applicable";
+  /** The exact preproduction authority endpoint bound into activation evidence. */
+  activationReadinessTarget?(secret: unknown): string | null;
   /** The SALE-PATH backend: it records locally and never contacts an authority — nothing external
    * may block a sale. The duty that does contact one is a separate, later seat. */
   makeBackend(deps: FiscalBackendDeps): FiscalBackend;

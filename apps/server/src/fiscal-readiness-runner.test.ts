@@ -46,6 +46,7 @@ describe("fiscal readiness submission runner", () => {
       taxId: "B12345678",
       legalName: "Ready SL",
       fiscalTerritory: "ES-common",
+      submissionTarget: "https://preproduction.example.test/soap",
       certificateFingerprint: "cert-one",
       certificateKind: "sello",
       moduleVersions: { core: 1 },
@@ -59,6 +60,12 @@ describe("fiscal readiness submission runner", () => {
     expect(fiscalReadinessDatabaseKey({ ...input, applicationVersion: "1.0.1" })).not.toBe(
       original,
     );
+    expect(
+      fiscalReadinessDatabaseKey({
+        ...input,
+        submissionTarget: "https://other-preproduction.example.test/soap",
+      }),
+    ).not.toBe(original);
   });
 
   it("records the sample in an isolated retained database before asking the fiscal slot to drain", async () => {
@@ -87,6 +94,7 @@ describe("fiscal readiness submission runner", () => {
           taxId: venue.taxId,
           legalName: venue.legalName,
           fiscalTerritory: venue.location.fiscalTerritory,
+          submissionTarget: contribution.activationReadinessTarget?.(undefined) ?? null,
           certificateFingerprint: null,
           certificateKind: null,
           moduleVersions: { core: 1 },
@@ -96,6 +104,47 @@ describe("fiscal readiness submission runner", () => {
       }),
     ).resolves.toBe("accepted");
     expect(drain).toHaveBeenCalledOnce();
-    expect(drain.mock.calls[0]![0]).toMatchObject({ environment: "preproduction" });
+    expect(drain.mock.calls[0]![0]).toMatchObject({
+      environment: "preproduction",
+      skipRetryMs: 0,
+    });
+  });
+
+  it("surfaces a local setup failure instead of reporting an uncertain authority response", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-local-error-"));
+    dirs.push(stateDir);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const modules = enabledModules(ALL_MODULES, selected.config);
+    const contribution = {
+      ...selected.contribution!,
+      activationReadiness: "accepted-test-submission" as const,
+      makeBackend: () => {
+        throw new Error("local backend misconfigured");
+      },
+    };
+
+    await expect(
+      submitFiscalReadiness({
+        stateDir,
+        modules,
+        venue,
+        contribution,
+        secret: undefined,
+        ring: {} as never,
+        readinessInput: {
+          requirement: "accepted-test-submission",
+          fiscalModule: contribution.id,
+          country: venue.country,
+          taxId: venue.taxId,
+          legalName: venue.legalName,
+          fiscalTerritory: venue.location.fiscalTerritory,
+          submissionTarget: null,
+          certificateFingerprint: null,
+          certificateKind: null,
+          moduleVersions: { core: 1 },
+          applicationVersion: "0.0.0",
+        },
+      }),
+    ).rejects.toThrow("local backend misconfigured");
   });
 });
