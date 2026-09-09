@@ -1,5 +1,6 @@
 import type { GlobalSetupContext } from "vitest/node";
 import { CORE_MIGRATIONS } from "@waitron/db";
+import { CATALOGUE_MIGRATIONS } from "../migrations.js";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
 
@@ -45,7 +46,7 @@ export default async function ({ provide }: GlobalSetupContext) {
       "file's header: removing the tier is the per-suite target review's call — see " +
       "docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4.",
     templates: {
-      core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
+      core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS]),
     },
   });
   provide("sharedPg", handle);

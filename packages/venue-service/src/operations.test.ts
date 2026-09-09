@@ -1,0 +1,408 @@
+import { sql } from "drizzle-orm";
+import { beforeAll, describe, expect, it } from "vitest";
+import {
+  CATALOGUE_MIGRATIONS,
+  createCatalogue,
+  createCategory,
+  createMenuItem,
+  createMenuSection,
+  createProduct,
+} from "@waitron/catalogue";
+import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  locationId as brandLocationId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
+import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import {
+  configureZone,
+  createDepartment,
+  createPreparationRoute,
+  allowMenuInZone,
+  getOrderServiceContext,
+  listZoneOffers,
+  recordOrderServiceContext,
+  resolvePreparationRoute,
+  resolveZoneContext,
+} from "./operations.js";
+
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  timeoutMs: 60_000,
+});
+
+let db: Database;
+
+beforeAll(() => {
+  db = suite.db;
+});
+
+async function scoped<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTenant(db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    return fn(tx);
+  });
+}
+
+describe("venue service routing", () => {
+  it("routes one cocktail to the bar serving its service zone", async () => {
+    const rawTenantId = await seedTenant(db);
+    const tenantId = brandTenantId(rawTenantId);
+    const location = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+    const locationId = brandLocationId(location.rows[0]!.id);
+    const upstairsZone = await db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Upstairs') returning id`);
+    const downstairsZone = await db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Downstairs') returning id`);
+    const upstairsBar = await db.execute<{ id: string }>(sql`
+      insert into kitchen_stations (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Upstairs bar') returning id`);
+    const downstairsBar = await db.execute<{ id: string }>(sql`
+      insert into kitchen_stations (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Downstairs bar') returning id`);
+
+    await scoped(tenantId, async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { tenantId, locationId },
+        {
+          name: "Restaurant and bar",
+          defaultServiceMode: "table_tab",
+        },
+      );
+      await configureZone(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: upstairsZone.rows[0]!.id,
+          departmentId: department.id,
+        },
+      );
+      await configureZone(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: downstairsZone.rows[0]!.id,
+          departmentId: department.id,
+        },
+      );
+      const menu = await createCatalogue(tx, tenantId, { name: "Drinks" });
+      const category = await createCategory(tx, tenantId, { name: "Cocktails" });
+      const negroni = await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        descriptions: { en: "Negroni" },
+        pricingUnit: "each",
+        unitPrice: "9.00",
+        vatClass: "general",
+      });
+      await createPreparationRoute(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: upstairsZone.rows[0]!.id,
+          categoryId: category.id,
+          target: { kind: "station", stationId: upstairsBar.rows[0]!.id },
+        },
+      );
+      await createPreparationRoute(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: downstairsZone.rows[0]!.id,
+          categoryId: category.id,
+          target: { kind: "station", stationId: downstairsBar.rows[0]!.id },
+        },
+      );
+
+      await expect(
+        resolvePreparationRoute(tx, { tenantId, locationId }, upstairsZone.rows[0]!.id, negroni.id),
+      ).resolves.toEqual({ kind: "station", stationId: upstairsBar.rows[0]!.id });
+      await expect(
+        resolvePreparationRoute(
+          tx,
+          { tenantId, locationId },
+          downstairsZone.rows[0]!.id,
+          negroni.id,
+        ),
+      ).resolves.toEqual({ kind: "station", stationId: downstairsBar.rows[0]!.id });
+    });
+  });
+
+  it("inherits service mode, lists zone offers, and freezes the order context", async () => {
+    const rawTenantId = await seedTenant(db);
+    const tenantId = brandTenantId(rawTenantId);
+    const location = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+    const locationId = brandLocationId(location.rows[0]!.id);
+    const zone = await db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Deli counter') returning id`);
+    const till = await db.execute<{ id: string }>(sql`
+      insert into tills (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Deli till') returning id`);
+    const nodeId = await seedNode(db, tenantId, locationId);
+
+    await scoped(tenantId, async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { tenantId, locationId },
+        {
+          name: "Deli",
+          defaultServiceMode: "prepay",
+        },
+      );
+      await configureZone(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: zone.rows[0]!.id,
+          departmentId: department.id,
+        },
+      );
+      const menu = await createCatalogue(tx, tenantId, { name: "Deli takeaway" });
+      const category = await createCategory(tx, tenantId, { name: "Cold cuts" });
+      const ham = await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        descriptions: { en: "Sliced ham" },
+        pricingUnit: "weight",
+        unitPrice: "0.00",
+        vatClass: "reduced",
+      });
+      const section = await createMenuSection(tx, tenantId, {
+        menuId: menu.id,
+        name: { en: "Counter" },
+      });
+      const offer = await createMenuItem(tx, tenantId, {
+        menuId: menu.id,
+        productId: ham.id,
+        sectionId: section.id,
+        grossPrice: "24.90",
+      });
+      await allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id, {
+        makeDefault: true,
+      });
+
+      await tx.execute(sql`
+        insert into working_orders (id, tenant_id, till_id, node_id, order_number)
+        values ('00000000-0000-4000-8000-000000000001', ${tenantId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 1)`);
+      await recordOrderServiceContext(
+        tx,
+        { tenantId, locationId },
+        "00000000-0000-4000-8000-000000000001",
+        zone.rows[0]!.id,
+      );
+      await configureZone(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: zone.rows[0]!.id,
+          departmentId: department.id,
+          serviceMode: "invoice_first",
+        },
+      );
+
+      await expect(
+        resolveZoneContext(tx, { tenantId, locationId }, zone.rows[0]!.id),
+      ).resolves.toMatchObject({
+        serviceMode: "invoice_first",
+      });
+      await expect(
+        getOrderServiceContext(
+          tx,
+          { tenantId, locationId },
+          "00000000-0000-4000-8000-000000000001",
+        ),
+      ).resolves.toEqual({
+        zoneId: zone.rows[0]!.id,
+        departmentId: department.id,
+        serviceMode: "prepay",
+      });
+      const visible = await listZoneOffers(tx, { tenantId, locationId }, zone.rows[0]!.id);
+      expect(visible.defaultMenuId).toBe(menu.id);
+      expect(visible.offers).toHaveLength(1);
+      expect(visible.offers[0]).toMatchObject({
+        id: offer.id,
+        productId: ham.id,
+        grossPrice: "24.90",
+      });
+    });
+  });
+
+  it("refuses missing configuration and supports explicit no-preparation", async () => {
+    const rawTenantId = await seedTenant(db);
+    const tenantId = brandTenantId(rawTenantId);
+    const location = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+    const locationId = brandLocationId(location.rows[0]!.id);
+    const zone = await db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+
+    await scoped(tenantId, async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { tenantId, locationId },
+        {
+          name: "Restaurant",
+          tradingName: "Terrace restaurant",
+          defaultServiceMode: "table_tab",
+        },
+      );
+      await expect(
+        configureZone(
+          tx,
+          { tenantId, locationId },
+          {
+            zoneId: "00000000-0000-4000-8000-000000000099",
+            departmentId: department.id,
+          },
+        ),
+      ).rejects.toMatchObject({ code: "service_zone.not_found" });
+      await expect(
+        configureZone(
+          tx,
+          { tenantId, locationId },
+          {
+            zoneId: zone.rows[0]!.id,
+            departmentId: "00000000-0000-4000-8000-000000000099",
+          },
+        ),
+      ).rejects.toMatchObject({ code: "department.not_found" });
+      await expect(
+        allowMenuInZone(
+          tx,
+          { tenantId, locationId },
+          zone.rows[0]!.id,
+          "00000000-0000-4000-8000-000000000099",
+        ),
+      ).rejects.toMatchObject({ code: "catalogue.not_found" });
+
+      const menu = await createCatalogue(tx, tenantId, { name: "Terrace" });
+      await expect(
+        allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id),
+      ).rejects.toMatchObject({ code: "service_zone.not_found" });
+      await configureZone(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: zone.rows[0]!.id,
+          departmentId: department.id,
+          serviceMode: "ticket_then_pay",
+        },
+      );
+      await allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id);
+      await expect(listZoneOffers(tx, { tenantId, locationId }, zone.rows[0]!.id)).resolves.toEqual(
+        {
+          defaultMenuId: null,
+          offers: [],
+        },
+      );
+      await expect(
+        getOrderServiceContext(
+          tx,
+          { tenantId, locationId },
+          "00000000-0000-4000-8000-000000000099",
+        ),
+      ).rejects.toMatchObject({ code: "order.service_context_missing" });
+
+      const category = await createCategory(tx, tenantId, { name: "Packaged" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        descriptions: { en: "Crisps" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "reduced",
+      });
+      await createPreparationRoute(
+        tx,
+        { tenantId, locationId },
+        {
+          productId: product.id,
+          target: { kind: "no_preparation" },
+        },
+      );
+      await expect(
+        resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
+      ).resolves.toEqual({ kind: "no_preparation" });
+      await expect(
+        resolvePreparationRoute(
+          tx,
+          { tenantId, locationId },
+          zone.rows[0]!.id,
+          "00000000-0000-4000-8000-000000000099",
+        ),
+      ).rejects.toMatchObject({ code: "route.missing" });
+    });
+  });
+
+  it("refuses a missing route and a route to an inactive station", async () => {
+    const rawTenantId = await seedTenant(db);
+    const tenantId = brandTenantId(rawTenantId);
+    const location = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+    const locationId = brandLocationId(location.rows[0]!.id);
+    const zone = await db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Interior') returning id`);
+    const station = await db.execute<{ id: string }>(sql`
+      insert into kitchen_stations (tenant_id, location_id, name, active)
+      values (${tenantId}, ${locationId}, 'Closed bar', false) returning id`);
+
+    await scoped(tenantId, async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { tenantId, locationId },
+        {
+          name: "Restaurant",
+          defaultServiceMode: "table_tab",
+        },
+      );
+      await configureZone(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: zone.rows[0]!.id,
+          departmentId: department.id,
+        },
+      );
+      const menu = await createCatalogue(tx, tenantId, { name: "Drinks" });
+      const category = await createCategory(tx, tenantId, { name: "Cocktails" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        descriptions: { en: "Negroni" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      await expect(
+        resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
+      ).rejects.toMatchObject({ code: "route.missing" });
+      await createPreparationRoute(
+        tx,
+        { tenantId, locationId },
+        {
+          categoryId: category.id,
+          target: { kind: "station", stationId: station.rows[0]!.id },
+        },
+      );
+      await expect(
+        resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
+      ).rejects.toMatchObject({ code: "route.station_inactive" });
+    });
+  });
+});

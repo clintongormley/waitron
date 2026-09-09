@@ -1,8 +1,17 @@
 import { ALL_MODULES } from "@waitron/composition";
 import { tablesForPublication, type ClassifiedTable } from "@waitron/sync";
-import type { FloorAnnotator, ModulePermission, WaitronModule } from "@waitron/module";
+import { selectVenueService } from "@waitron/module";
+import type {
+  FloorAnnotator,
+  ModulePermission,
+  VenueServiceContribution,
+  WaitronModule,
+} from "@waitron/module";
 
 export { ALL_MODULES };
+
+/** The sole venue-service contribution, resolved during module assembly so boot fails immediately. */
+export const VENUE_SERVICE: VenueServiceContribution = selectVenueService(ALL_MODULES);
 
 /** Every ENABLED module's floor-read annotator (SP1 bookings), for `listTablesWithState`. UNLIKE
  * `ALL_MODULE_PERMISSIONS` — which folds ALL_MODULES because a disabled module mounts no route, so its

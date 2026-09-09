@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@waitron/bookings": "workspace:*",
+    "@waitron/catalogue": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal-none": "workspace:*",
@@ -25,6 +26,7 @@
     "@waitron/payments": "workspace:*",
     "@waitron/scheduler": "workspace:*",
     "@waitron/sync": "workspace:*",
+    "@waitron/venue-service": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*"
   },

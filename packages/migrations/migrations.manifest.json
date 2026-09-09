@@ -1,6 +1,16 @@
 [
   { "name": "core", "table": "__drizzle_migrations_db", "from": "../db/drizzle" },
   {
+    "name": "catalogue",
+    "table": "__drizzle_migrations_catalogue",
+    "from": "../catalogue/drizzle"
+  },
+  {
+    "name": "venue-service",
+    "table": "__drizzle_migrations_venue_service",
+    "from": "../venue-service/drizzle"
+  },
+  {
     "name": "identity",
     "table": "__drizzle_migrations_identity",
     "from": "../identity/drizzle"

@@ -29,6 +29,7 @@ import {
   type DietProfile,
 } from "./dietary.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
+import { menuItemOptionGroups, menuItemOptions, menuItems, menuSections } from "./schema/menu.js";
 
 /**
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
@@ -53,6 +54,52 @@ export interface Catalogue {
 export interface Category {
   id: string;
   name: string;
+}
+
+export interface MenuSection {
+  id: string;
+  menuId: string;
+  name: Record<string, string>;
+  displayOrder: number;
+  active: boolean;
+}
+
+export interface MenuItem {
+  id: string;
+  menuId: string;
+  productId: string;
+  sectionId: string;
+  grossPrice: string;
+  displayOrder: number;
+  active: boolean;
+}
+
+/** One sellable identity. The menu-item id, rather than the product id, selects its price. */
+export interface MenuOffer extends MenuItem {
+  menuName: string;
+  sectionName: Record<string, string>;
+  descriptions: Record<string, string>;
+  pricingUnit: PricingUnit;
+  vatClass: VatClass;
+  category: string;
+  optionGroups: MenuOfferOptionGroup[];
+}
+
+export interface MenuOfferOptionGroup {
+  id: string;
+  name: Record<string, string>;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  options: MenuOfferOption[];
+}
+
+export interface MenuOfferOption {
+  id: string;
+  name: Record<string, string>;
+  priceDelta: string;
+  maxQuantity: number;
+  vatClass: VatClass | null;
 }
 
 export interface Product {
@@ -289,6 +336,230 @@ export async function createCatalogue(
 
 export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
   return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
+}
+
+export async function createMenuSection(
+  tx: Transaction,
+  tenantId: TenantId,
+  input: { menuId: string; name: Record<string, string>; displayOrder?: number },
+): Promise<MenuSection> {
+  const [row] = await tx
+    .insert(menuSections)
+    .values({ tenantId, ...input })
+    .returning({
+      id: menuSections.id,
+      menuId: menuSections.menuId,
+      name: menuSections.name,
+      displayOrder: menuSections.displayOrder,
+      active: menuSections.active,
+    });
+  return row!;
+}
+
+export async function createMenuItem(
+  tx: Transaction,
+  tenantId: TenantId,
+  input: {
+    menuId: string;
+    productId: string;
+    sectionId: string;
+    grossPrice: string;
+    displayOrder?: number;
+  },
+): Promise<MenuItem> {
+  const [row] = await tx
+    .insert(menuItems)
+    .values({ tenantId, ...input })
+    .returning({
+      id: menuItems.id,
+      menuId: menuItems.menuId,
+      productId: menuItems.productId,
+      sectionId: menuItems.sectionId,
+      grossPrice: menuItems.grossPrice,
+      displayOrder: menuItems.displayOrder,
+      active: menuItems.active,
+    });
+  return row!;
+}
+
+/** Replace the groups and choices offered for one menu item, including their menu-specific prices. */
+export async function setMenuItemOptionGroups(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuItemId: string,
+  groups: {
+    groupId: string;
+    options: { optionId: string; priceDelta: string }[];
+  }[],
+): Promise<void> {
+  await tx
+    .delete(menuItemOptionGroups)
+    .where(
+      and(
+        eq(menuItemOptionGroups.tenantId, tenantId),
+        eq(menuItemOptionGroups.menuItemId, menuItemId),
+      ),
+    );
+  if (groups.length === 0) return;
+  await tx.insert(menuItemOptionGroups).values(
+    groups.map((group, displayOrder) => ({
+      tenantId,
+      menuItemId,
+      groupId: group.groupId,
+      displayOrder,
+    })),
+  );
+  const options = groups.flatMap((group) =>
+    group.options.map((option) => ({
+      tenantId,
+      menuItemId,
+      groupId: group.groupId,
+      optionId: option.optionId,
+      priceDelta: option.priceDelta,
+    })),
+  );
+  if (options.length > 0) await tx.insert(menuItemOptions).values(options);
+}
+
+export async function listMenuOffers(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuIds: string[],
+): Promise<MenuOffer[]> {
+  if (menuIds.length === 0) return [];
+  const rows = await tx
+    .select({
+      id: menuItems.id,
+      menuId: menuItems.menuId,
+      productId: menuItems.productId,
+      sectionId: menuItems.sectionId,
+      grossPrice: menuItems.grossPrice,
+      displayOrder: menuItems.displayOrder,
+      active: menuItems.active,
+      menuName: catalogues.name,
+      sectionName: menuSections.name,
+      descriptions: products.descriptions,
+      pricingUnit: products.pricingUnit,
+      vatClass: products.vatClass,
+      category: categories.name,
+    })
+    .from(menuItems)
+    .innerJoin(
+      catalogues,
+      and(eq(catalogues.tenantId, menuItems.tenantId), eq(catalogues.id, menuItems.menuId)),
+    )
+    .innerJoin(
+      menuSections,
+      and(eq(menuSections.tenantId, menuItems.tenantId), eq(menuSections.id, menuItems.sectionId)),
+    )
+    .innerJoin(
+      products,
+      and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
+    )
+    .innerJoin(
+      categories,
+      and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
+    )
+    .where(
+      and(
+        eq(menuItems.tenantId, tenantId),
+        inArray(menuItems.menuId, menuIds),
+        eq(menuItems.active, true),
+        eq(menuSections.active, true),
+        eq(catalogues.active, true),
+        eq(products.active, true),
+      ),
+    )
+    .orderBy(catalogues.name, menuSections.displayOrder, menuItems.displayOrder, menuItems.id);
+  if (rows.length === 0) return [];
+  const optionRows = await tx
+    .select({
+      menuItemId: menuItemOptionGroups.menuItemId,
+      groupId: optionGroups.id,
+      groupName: optionGroups.name,
+      minSelect: optionGroups.minSelect,
+      maxSelect: optionGroups.maxSelect,
+      required: optionGroups.required,
+      optionId: optionGroupItems.id,
+      optionName: optionGroupItems.name,
+      priceDelta: menuItemOptions.priceDelta,
+      maxQuantity: optionGroupItems.maxQuantity,
+      vatClass: optionGroupItems.vatClass,
+    })
+    .from(menuItemOptionGroups)
+    .innerJoin(
+      optionGroups,
+      and(
+        eq(optionGroups.tenantId, menuItemOptionGroups.tenantId),
+        eq(optionGroups.id, menuItemOptionGroups.groupId),
+      ),
+    )
+    .innerJoin(
+      menuItemOptions,
+      and(
+        eq(menuItemOptions.tenantId, menuItemOptionGroups.tenantId),
+        eq(menuItemOptions.menuItemId, menuItemOptionGroups.menuItemId),
+        eq(menuItemOptions.groupId, menuItemOptionGroups.groupId),
+      ),
+    )
+    .innerJoin(
+      optionGroupItems,
+      and(
+        eq(optionGroupItems.tenantId, menuItemOptions.tenantId),
+        eq(optionGroupItems.id, menuItemOptions.optionId),
+        eq(optionGroupItems.groupId, menuItemOptions.groupId),
+      ),
+    )
+    .where(
+      and(
+        eq(menuItemOptionGroups.tenantId, tenantId),
+        inArray(
+          menuItemOptionGroups.menuItemId,
+          rows.map((row) => row.id),
+        ),
+        eq(optionGroups.active, true),
+        eq(optionGroupItems.active, true),
+      ),
+    )
+    .orderBy(
+      menuItemOptionGroups.displayOrder,
+      optionGroups.id,
+      optionGroupItems.sort,
+      optionGroupItems.id,
+    );
+  const groupsByItem = new Map<string, MenuOfferOptionGroup[]>();
+  for (const option of optionRows) {
+    let groups = groupsByItem.get(option.menuItemId);
+    if (groups === undefined) {
+      groups = [];
+      groupsByItem.set(option.menuItemId, groups);
+    }
+    let group = groups.find((candidate) => candidate.id === option.groupId);
+    if (group === undefined) {
+      group = {
+        id: option.groupId,
+        name: option.groupName,
+        minSelect: option.minSelect,
+        maxSelect: option.maxSelect,
+        required: option.required,
+        options: [],
+      };
+      groups.push(group);
+    }
+    group.options.push({
+      id: option.optionId,
+      name: option.optionName,
+      priceDelta: option.priceDelta,
+      maxQuantity: option.maxQuantity,
+      vatClass: option.vatClass as VatClass | null,
+    });
+  }
+  return rows.map((row) => ({
+    ...row,
+    pricingUnit: row.pricingUnit as PricingUnit,
+    vatClass: row.vatClass as VatClass,
+    optionGroups: groupsByItem.get(row.id) ?? [],
+  }));
 }
 
 /**

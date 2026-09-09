@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_CLASSIFICATIONS,
+  ALL_MODULES,
   LEDGER_PUBLICATION_TABLES,
   STATE_PUBLICATION_TABLES,
+  VENUE_SERVICE,
 } from "./modules.js";
+
+describe("venue-service assembly", () => {
+  it("injects the composed contribution through the generic module seat", () => {
+    expect(VENUE_SERVICE).toBe(ALL_MODULES.find((module) => module.venueService)?.venueService);
+  });
+});
 
 describe("classification assembly", () => {
   it("classifies each table exactly once", () => {

@@ -20,6 +20,9 @@ import {
   catalogueExists,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
+  setMenuItemOptionGroups,
   createOptionGroup,
   createOptionGroupItem,
   createProduct,
@@ -30,6 +33,7 @@ import {
   listCatalogues,
   listCataloguesForLocation,
   listCategories,
+  listMenuOffers,
   listOptionGroupItems,
   listOptionGroups,
   listProductOptionGroupIds,
@@ -51,6 +55,113 @@ import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixture
 const fx = useCatalogueDb();
 
 describe("catalogue operations", () => {
+  it("offers one product on two menus with distinct identities and prices", async () => {
+    await asTenant(async (tx) => {
+      const category = await createCategory(tx, tenantId, { name: "Cocktails" });
+      const upstairs = await createCatalogue(tx, tenantId, { name: "Upstairs" });
+      const downstairs = await createCatalogue(tx, tenantId, { name: "Downstairs" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: upstairs.id,
+        categoryId: category.id,
+        descriptions: { en: "Negroni" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      const garnish = await createOptionGroup(tx, tenantId, {
+        name: { en: "Garnish" },
+      });
+      const orange = await createOptionGroupItem(tx, tenantId, garnish.id, {
+        name: { en: "Orange" },
+        priceDelta: "0.25",
+      });
+      await setProductOptionGroups(tx, tenantId, product.id, [garnish.id]);
+      const upstairsSection = await createMenuSection(tx, tenantId, {
+        menuId: upstairs.id,
+        name: { en: "Cocktails" },
+      });
+      const downstairsSection = await createMenuSection(tx, tenantId, {
+        menuId: downstairs.id,
+        name: { en: "Drinks" },
+      });
+      const nine = await createMenuItem(tx, tenantId, {
+        menuId: upstairs.id,
+        productId: product.id,
+        sectionId: upstairsSection.id,
+        grossPrice: "9.00",
+      });
+      const eleven = await createMenuItem(tx, tenantId, {
+        menuId: downstairs.id,
+        productId: product.id,
+        sectionId: downstairsSection.id,
+        grossPrice: "11.00",
+      });
+      await setMenuItemOptionGroups(tx, tenantId, nine.id, [
+        { groupId: garnish.id, options: [{ optionId: orange.id, priceDelta: "0.50" }] },
+      ]);
+      await setMenuItemOptionGroups(tx, tenantId, eleven.id, [
+        { groupId: garnish.id, options: [{ optionId: orange.id, priceDelta: "1.00" }] },
+      ]);
+
+      const offers = await listMenuOffers(tx, tenantId, [upstairs.id, downstairs.id]);
+      expect(
+        offers.map(({ id, productId, grossPrice, optionGroups }) => ({
+          id,
+          productId,
+          grossPrice,
+          optionGroups,
+        })),
+      ).toEqual([
+        {
+          id: eleven.id,
+          productId: product.id,
+          grossPrice: "11.00",
+          optionGroups: [
+            {
+              id: garnish.id,
+              name: { en: "Garnish" },
+              minSelect: 0,
+              maxSelect: 1,
+              required: false,
+              options: [
+                {
+                  id: orange.id,
+                  name: { en: "Orange" },
+                  priceDelta: "1.00",
+                  maxQuantity: 1,
+                  vatClass: null,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: nine.id,
+          productId: product.id,
+          grossPrice: "9.00",
+          optionGroups: [
+            {
+              id: garnish.id,
+              name: { en: "Garnish" },
+              minSelect: 0,
+              maxSelect: 1,
+              required: false,
+              options: [
+                {
+                  id: orange.id,
+                  name: { en: "Orange" },
+                  priceDelta: "0.50",
+                  maxQuantity: 1,
+                  vatClass: null,
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+    });
+  });
+
   let tenantId: TenantId;
   let locationId: string;
 
