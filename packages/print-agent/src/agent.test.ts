@@ -200,6 +200,22 @@ describe("createAgent — push and report", () => {
     expect(host.statuses.at(-1)?.lastError).toBe("no route");
   });
 
+  it("a failed send's error is cleared once a later fully clean tick runs", async () => {
+    const transport = {
+      send: vi.fn().mockRejectedValueOnce(new Error("no route")).mockResolvedValue(undefined),
+    };
+    const host = fakeHost({ config: CONFIG, token: "a1.s", transport });
+    const pulls = vi
+      .fn()
+      .mockResolvedValueOnce(okR<PullReply>({ nodeId: "n1", servers: [], jobs: [job("j1")] }))
+      .mockResolvedValue(okR<PullReply>({ nodeId: "n1", servers: [], jobs: [] }));
+    const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
+    await agent.runOnce();
+    expect(host.statuses.at(-1)?.lastError).toBe("no route"); // failed send stays visible
+    await agent.runOnce();
+    expect(host.statuses.at(-1)?.lastError).toBeUndefined(); // clean tick clears it
+  });
+
   it("a report that cannot be delivered is logged and dropped (the lease reclaims)", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     const c = client({

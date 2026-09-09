@@ -81,8 +81,13 @@ export function createAgent(opts: AgentOptions): Agent {
     });
   }
 
-  async function push(job: WireJob, token: string, current: string): Promise<void> {
+  /** Sends one job and reports its outcome. Returns true if the send FAILED (not the report delivery),
+   * so the caller knows whether this tick was clean. `lastError` is set on a failed send and left
+   * alone on a successful one — a same-batch failure stays visible; the end-of-tick running report is
+   * the only place that clears it, and only for a fully clean tick. */
+  async function push(job: WireJob, token: string, current: string): Promise<boolean> {
     let outcome: { status: "done" } | { status: "failed"; error: string };
+    let failed = false;
     try {
       await host.transport.send(
         {
@@ -95,19 +100,19 @@ export function createAgent(opts: AgentOptions): Agent {
         job.payload,
       );
       outcome = { status: "done" };
-      // A prior failure in the same batch stays on the status: the operator must see a job that failed
-      // even when a later job in the tick succeeds. Only a clean tick (no failed send) leaves it unset.
       status = { ...status, lastJobAt: host.now() };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       outcome = { status: "failed", error: message };
       status = { ...status, lastError: message };
+      failed = true;
     }
     const sent = await client.report(current, token, job.id, outcome);
     if (!sent.ok) {
       // Dropped on purpose: the server's claim lease reclaims an unreported job (at-least-once).
       host.log.warn("report dropped", { job: job.id, failure: sent.failure });
     }
+    return failed;
   }
 
   /** Returns true when the tick did work (a non-empty batch), so `start` re-polls at once. */
@@ -193,8 +198,18 @@ export function createAgent(opts: AgentOptions): Agent {
       return false;
     }
     r.merge(pulled.value.servers);
-    for (const job of pulled.value.jobs) await push(job, token, current);
-    report({ phase: "running", serverUrl: config.serverUrl, current, verificationCode: undefined });
+    // Tick-local, reset every tick (never `lastError` itself mid-loop): did ANY send fail this tick?
+    let anyFailed = false;
+    for (const job of pulled.value.jobs) if (await push(job, token, current)) anyFailed = true;
+    // `lastError` is overwritten only by a later failed send and cleared only by a fully clean running
+    // tick — an all-success batch or an empty pull. A partial-failure batch keeps the failure visible.
+    report({
+      phase: "running",
+      serverUrl: config.serverUrl,
+      current,
+      verificationCode: undefined,
+      ...(anyFailed ? {} : { lastError: undefined }),
+    });
     return pulled.value.jobs.length > 0;
   }
 
