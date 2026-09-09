@@ -55,8 +55,12 @@ mechanism reached over WireGuard, when Waitron Cloud exists.
 
 **The shape we build for:**
 
-- **One tenant per node.** One primary, one or more warm mirrors, human promotion. A node belongs to
-  one taxpayer; no database ever holds two.
+- **One venue and one taxpayer per operational node group** (clarified 2026-09-09). One active primary,
+  one or more warm mirrors, human promotion. Restaurant/bar and deli can be departments within the
+  same venue and share preparation. A taxpayer with independent venues has separate node groups;
+  shared cloud management sits above them. This is the target; the
+  [department/menu plan](superpowers/plans/2026-09-09-venue-departments-and-menus.md) includes explicit
+  single-venue provisioning and boot checks.
 - **A mirror is on prem or in the cloud and is reached the same way** — URL + credentials over the
   same replication link. The only difference is that a cloud mirror is reached over WireGuard, so
   two containers on one machine joined by WireGuard IS the cloud test.
@@ -625,12 +629,13 @@ unchanged, so no new H2 receipt
      supplier country/identifier scheme before validating purchasing tax IDs; apply a pack's declared
      module preset when country-specific module toggling is needed; implement the currently refused
      foral, Canary, Ceuta and Melilla fiscal jurisdictions.
-5. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** With one tenant per database and a
-   dedicated cloud instance per tenant, the only multi-tenant service Waitron runs is a small control
-   plane: accounts (a customer of ours — one customer may own several taxpayers), subscriptions,
-   instances (which box/VM serves which tenant, its version; region Spain), a WireGuard keypair +
-   endpoint per box and the box's public names, version rollout per tenant. Still open from the relay
-   decision (§3): one name or two for LAN-vs-remote reach. Docs-only until designed.
+5. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** The 2026-09-09 department/menu design
+   clarifies the target as one operational database/node group per venue, with one taxpayer identity
+   in that group. One taxpayer may own several venues. A shared management layer would hold accounts,
+   subscriptions, venue/node-group discovery, versions, WireGuard endpoints and public names;
+   consolidated reporting and shared menu templates are later consumers. A separate database does
+   not require a dedicated physical cloud machine. Still open from the relay decision (§3): one name
+   or two for LAN-vs-remote reach. Docs-only until designed; no cloud implementation in the menu plan.
 6. **Reconsider the backup container against off-the-shelf** (brainstorm, not a mandate): `WBA1` +
    `artifact-cipher.ts` (whole-dump in memory, restorable only by Waitron code — `pg_dump | age`,
    tar).
@@ -784,6 +789,16 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
 
 **Ordering / menu (SP18):**
 
+- **Venue departments and menu model — design agreed, implementation planned (owner, 2026-09-09;
+  branch `menus`).** One venue contains Restaurant/bar and Deli departments with their own zones,
+  menus, service defaults, hours and staffing, sharing products and preparation stations. One
+  product can have different prices/modifiers on different menus; zone/category routing selects
+  the preparation station. Same legal seller is the working assumption, to confirm before go-live.
+  [Design](superpowers/specs/2026-09-09-venue-departments-and-menus-design.md) and
+  [implementation plan for Sol or Claude](superpowers/plans/2026-09-09-venue-departments-and-menus.md)
+  include order/payment consumers, department reporting and test-first acceptance. No implementation
+  is claimed yet. Includes the counter-fire follow-up below and the till's menu-refresh defect;
+  inventory, recipe depth and multi-venue cloud management remain separate work.
 - **Counter/walk-up kitchen fire (#193 follow-up) — the next actionable ordering slice.** The
   counter/walk-up basket shows the note/doneness editor and the server persists both on
   `working_order_lines`, but `/api/sales` (`recordTillSale` → `createOpenOrder`) never calls
