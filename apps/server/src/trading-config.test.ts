@@ -63,6 +63,16 @@ describe("writeTradingEnv", () => {
     expect(env).not.toContain("WAITRON_ONBOARDING_INTENT");
   });
 
+  it("keeps a development Live walkthrough on WAITRON_ENV=dev after restart", async () => {
+    const d = await newDir();
+    const env = await readFile(
+      await writeTradingEnv(d, { ...cfg, environment: "preproduction", developmentMode: true }),
+      "utf8",
+    );
+    expect(env).toContain("WAITRON_ENV=dev\n");
+    expect(env).toContain("WAITRON_ONBOARDING_INTENT=live\n");
+  });
+
   it("writes the file 0600 (owner-only)", async () => {
     const d = await newDir();
     await writeTradingEnv(d, cfg);

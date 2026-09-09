@@ -115,7 +115,7 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
   // unset here, which `config.ts` defaults to this same `DATABASE_URL`.
   const env: SetupEnv = {
     DATABASE_URL: databaseUrl,
-    WAITRON_ENV: "preproduction",
+    WAITRON_ENV: "dev",
     WAITRON_HTTP_PORT: "8080",
   };
   writeFileSync(envPath, renderSetupEnvFile(env));

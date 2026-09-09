@@ -23,6 +23,8 @@ export interface TradingConfig {
   databaseUrl: string;
   migrationsDatabaseUrl: string;
   environment: "production" | "preproduction";
+  /** Persist WAITRON_ENV=dev while exercising a Live-shaped onboarding in development. */
+  developmentMode?: boolean;
   /** Absent for a mirror or a restored configuration which did not create a fresh primary. */
   onboardingIntent?: OnboardingIntent;
 }
@@ -43,7 +45,7 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
     WAITRON_TILL_LOCATION_ID: cfg.locationId,
     DATABASE_URL: cfg.databaseUrl,
     WAITRON_MIGRATIONS_DATABASE_URL: cfg.migrationsDatabaseUrl,
-    WAITRON_ENV: cfg.environment,
+    WAITRON_ENV: cfg.developmentMode === true ? "dev" : cfg.environment,
     ...(cfg.onboardingIntent === undefined
       ? {}
       : { WAITRON_ONBOARDING_INTENT: cfg.onboardingIntent }),

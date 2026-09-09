@@ -987,6 +987,20 @@ describe("WAITRON_ONBOARDING_INTENT", () => {
     expect(config.onboardingIntent).toBe(intent);
   });
 
+  it("accepts the live UI intent in dev while retaining preproduction external services", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_ENV: "dev", WAITRON_ONBOARDING_INTENT: "live" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config).toMatchObject({
+      environment: "preproduction",
+      devMode: true,
+      onboardingIntent: "live",
+    });
+  });
+
   it.each([
     ["demo", "production"],
     ["prepare", "production"],

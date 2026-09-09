@@ -562,6 +562,18 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
+  it("lets the dev onboarding target exercise Live without production filing or a real cert", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests, persistTrading } = makeDeps({ devMode: true });
+    mountSetup(app, deps, noopLog);
+
+    expect((await postProvision(app, liveBody())).status).toBe(200);
+    expect(provisionRequests[0].environment).toBe("preproduction");
+    expect(persistTrading).toHaveBeenCalledWith(
+      expect.objectContaining({ environment: "preproduction", onboardingIntent: "live" }),
+    );
+  });
+
   it("provisions a live venue with a cert: stamps production and seals the cert in order", async () => {
     const app = new Hono();
     const { deps, calls, provisionRequests } = makeDeps();

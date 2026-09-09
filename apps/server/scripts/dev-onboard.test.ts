@@ -18,7 +18,7 @@ import {
 
 const sampleSetupEnv: SetupEnv = {
   DATABASE_URL: "postgres://postgres:pg@localhost:5432/postgres",
-  WAITRON_ENV: "preproduction",
+  WAITRON_ENV: "dev",
   WAITRON_HTTP_PORT: "8080",
 };
 
@@ -28,7 +28,7 @@ describe("renderSetupEnvFile", () => {
     const lines = text.split("\n").filter((line) => line.trim() !== "" && !line.startsWith("#"));
     expect(lines).toEqual([
       "DATABASE_URL=postgres://postgres:pg@localhost:5432/postgres",
-      "WAITRON_ENV=preproduction",
+      "WAITRON_ENV=dev",
       "WAITRON_HTTP_PORT=8080",
     ]);
     // The load-bearing setup-mode property: the file writes NEITHER the five WAITRON_TILL_*_ID (whose
@@ -94,7 +94,7 @@ describe("devOnboard against real Postgres", () => {
     expect(written).toEqual({ ...first.env });
     expect(written).toEqual({
       DATABASE_URL: suite.pg.uri,
-      WAITRON_ENV: "preproduction",
+      WAITRON_ENV: "dev",
       WAITRON_HTTP_PORT: "8080",
     });
     // No trading-only keys leaked into the file (the boot-mode selector — see the render test above).
@@ -134,6 +134,7 @@ describe("devOnboard against real Postgres", () => {
       "/dev/null/state",
     );
     expect(config.environment).toBe("preproduction");
+    expect(config.devMode).toBe(true);
     expect(config.httpPort).toBe(8080);
     // The load-bearing property that makes this SETUP mode: no venue is bound, so `tryLoadTillConfig`
     // returns undefined and boot.ts takes its setup branch. dev-setup's .env resolves config.till to

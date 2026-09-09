@@ -41,6 +41,8 @@ export interface SetupDeps {
   /** The deployment environment (`production` / `preproduction`) this box booted under, echoed by
    * `/setup-api/status` so slice 2's wizard can warn before it provisions a real production venue. */
   environment: DeploymentEnvironment;
+  /** Keeps a developer Live walkthrough on preproduction transports after restart. */
+  devMode?: boolean;
   /** `provisionVenue({ ownerDb, moduleConfig, database, stateDir })` bound in boot: resolves the fiscal
    * slot from the request's territory (`venueModuleConfig`), refuses a foreign/existing tenant, stamps
    * the environment, mints the venue, and persists the resolved `modules.json` — returning the five ids
@@ -455,7 +457,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
         // Fiscal environment and onboarding intent stay separate: Live stamps production, while
         // Demo and Prepare both stamp preproduction and differ later in whether sample data is seeded.
-        const environment: DeploymentEnvironment = mode === "live" ? "production" : "preproduction";
+        const environment: DeploymentEnvironment =
+          mode === "live" && deps.devMode !== true ? "production" : "preproduction";
 
         // Resolve the fiscal regime the REQUEST's territory picks (the box's enabled set is not yet
         // written at setup) through the shared `venueFiscalSelection` seam, and reach its provision-time
@@ -540,6 +543,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           databaseUrl,
           migrationsDatabaseUrl,
           environment,
+          ...(deps.devMode === true ? { developmentMode: true } : {}),
           onboardingIntent: mode,
         });
 

@@ -919,6 +919,7 @@ export async function startServer(
           app,
           {
             environment: config.environment,
+            devMode: config.devMode,
             operations: createSetupOperationStore(config.stateDir),
             // Resolve the fiscal slot from the REQUEST's territory (authoritative, §4): the box's
             // `moduleConfig` base is default-on, which with two fiscal-slot members would be ambiguous;

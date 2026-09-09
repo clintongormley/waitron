@@ -606,7 +606,10 @@ function onboardingIntent(
       reason: "not_an_onboarding_intent",
     });
   }
-  const matches = raw === "live" ? environment === "production" : environment === "preproduction";
+  const matches =
+    raw === "live"
+      ? environment === "production" || isDevMode(env)
+      : environment === "preproduction";
   if (!matches) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_ONBOARDING_INTENT",
