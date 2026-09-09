@@ -507,6 +507,12 @@ is only safe because the image guard lives in the ROOT project: measured, adding
 `apps/server` would stop running on exactly the change class it exists to catch. Whoever takes the
 optimisation must check that every guard over `deploy/` is still in the root project.
 
+> **2026-09-09:** the optimisation foreseen here was taken. `isImageInputPath` (an allowlist that
+> does NOT touch `ROOT_SCOPE_PREFIXES`) feeds a `deploy` output, and the `image` job now runs on a
+> pull request only when `deploy/` changed — still on `code` for a push to `main`, so `publish` is
+> unaffected. The build + smoke moved into the reusable `image-smoke.yml`, also called by a nightly
+> `image-nightly.yml`. Code is truth; this paragraph is the prediction, not the current gate.
+
 **Updating a box:** `docker compose pull && docker compose up -d` — the compose pins `:main` until
 release tags exist. Unattended updates are the installer spec's question (a box we did not sell
 still needs them).

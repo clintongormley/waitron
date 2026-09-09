@@ -75,8 +75,9 @@ export function isRootScopePath(path) {
 }
 
 /**
- * The box image's build and runtime inputs — everything under `deploy/`: the Dockerfile compose
- * builds, `compose.yml` itself, the operator `prepare.sh`, the `.env.example` template.
+ * True when `path` is one of the box image's build/runtime inputs — everything under `deploy/`: the
+ * Dockerfile compose builds, `compose.yml` itself, the operator `prepare.sh`, the `.env.example`
+ * template.
  *
  * This is the ONE thing ci.yml's `image` smoke actually exercises — it builds `deploy/Dockerfile`
  * and brings `deploy/compose.yml` up — so a change here is what must re-run that smoke on a pull
@@ -514,7 +515,7 @@ export function gateOutputs(inScope) {
 // reads the two streams apart.
 //
 // It used to carry a second, argument-less subcommand that answered ci.yml's `code` gate by calling
-// `classify` on a list of changed paths. That gate is now one of the three lines
+// `classify` on a list of changed paths. That gate is now one of the five lines
 // scripts/changed-packages.mjs emits, from the same `classify` call that decides the scope, so CI
 // and the pre-push hook classify a diff exactly once and by exactly one route.
 //

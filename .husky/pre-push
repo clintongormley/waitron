@@ -360,20 +360,22 @@ check_signoff() {
 
 run_step "sign-off (DCO)" "git rebase --signoff <base>   (or: git commit -s --amend)" check_signoff
 
-# ONE classifier call answers both questions. stdout carries four lines (`code=`, `scope=`,
-# `packages=`, `root=`) and nothing else; this hook reads `scope=` and `packages=` and routes on
-# them — `root=` is emitted for the record and read by no consumer today. The reason goes to
-# stderr, where it has already been printed by the time this reads the result.
+# ONE classifier call answers both questions. stdout carries five lines (`code=`, `scope=`,
+# `packages=`, `root=`, `deploy=`) and nothing else; this hook reads `scope=` and `packages=` and
+# routes on them — `root=` and `deploy=` are emitted for other consumers and read by no consumer
+# here (`deploy=` gates CI's image job, and this hook builds no image). The reason goes to stderr,
+# where it has already been printed by the time this reads the result.
 #
 #   scope=documentation   every changed path is inert: prose, or root config no code-gated job reads
 #   scope=root            the repository's own machinery only — the repo-level suite, nothing scoped
 #   scope=global          run everything
 #   scope=packages        `packages=` names what to narrow to
 #
-# `root=true|false` is a fourth line, orthogonal to the scope: true whenever ANY changed path is that
+# `root=true|false` is a further line, orthogonal to the scope: true whenever ANY changed path is that
 # machinery, so a push touching `scripts/` and `packages/db` is `scope=packages root=true`. The
 # repo-level suite is unscoped and runs on every non-documentation push, so nothing here reads it
-# today; it is emitted for the same reason `code=` is — one classifier, one answer.
+# today; it is emitted for the same reason `code=` is — one classifier, one answer. `deploy=` is the
+# last line, likewise unread here — it tells CI's image job whether the box image's inputs changed.
 #
 # It runs AFTER the sign-off check, which it does not feed: `check_signoff` reads `$commits` alone,
 # and the ref loop above has already determined that. Run on 2026-08-01 against a crafted push

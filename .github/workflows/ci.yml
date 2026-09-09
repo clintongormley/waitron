@@ -187,8 +187,8 @@ jobs:
           # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
-          # emit nothing, and it is load-bearing for ONE of the three outputs rather than a nicety
-          # for all of them. An empty `scope` would be safe: it is not the literal `packages`, so
+          # emit nothing, and it matters for ONE of the outputs rather than being a nicety for all of
+          # them: `code`. An empty `scope` would be safe: it is not the literal `packages`, so
           # every branch below falls through to running everything. An empty `code` would NOT be —
           # all nine gated jobs test `needs.changes.outputs.code == 'true'` (bundle-smoke, typecheck,
           # all five test shards, both mutation runs), so an empty value skips every one of them, and
