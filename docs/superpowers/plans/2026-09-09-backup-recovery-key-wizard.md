@@ -570,7 +570,6 @@ export interface BackupRuntimeStatus {           // SYNC, config-derived only (n
   keyFingerprint: string | undefined;    // short hash prefix — NEVER the key
   keyRotatedAt: string | undefined;
   recoveryKey: string | undefined;        // effective running key (for GET recovery-key; never logged)
-  archiveUnderCurrentKey: boolean;         // false until the first dump after enable/rotate lands
 }
 export interface BackupSupervisorDeps {
   // Re-reads the box-env files from DISK each reload (B2) — closing over a boot-time value would
@@ -591,7 +590,7 @@ export class BackupSupervisor {
   constructor(deps: BackupSupervisorDeps);
   reload(): Promise<void>;          // latched; stop→close→awaited buildConfig→derive→probe→immediate dump→loop
   current(): BackupRuntimeStatus;   // SYNC config-derived snapshot (routes + status shell)
-  status(): Promise<BackupRuntimeStatus & { backupStatus: BackupStatus }>;  // current() + live readBackupStatus freshness (B3)
+  status(): Promise<BackupRuntimeStatus & { backupStatus: BackupStatus; archiveUnderCurrentKey: boolean }>;  // current() + live readBackupStatus freshness (B3); archiveUnderCurrentKey derived (below)
   stop(): Promise<void>;
 }
 export function keyFingerprint(key: string): string; // e.g. sha256(key).hex().slice(0,8)
@@ -609,9 +608,10 @@ import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 
 const suite = useTemplateDb({ template: "manifest" });
 
-it("enable from off writes an archive and reports enabled", async () => { /* reload(); poll dest dir has one artifact; current().enabled true; keyFingerprint set */ });
+it("enable from off writes an archive and reports enabled", async () => { /* reload(); poll dest dir has one artifact; current().enabled true; keyFingerprint set; (await status()).archiveUnderCurrentKey true */ });
 it("change destination closes the old pool and writes to the new dir", async () => { /* reload with dest A, reload with dest B; A stops, B receives */ });
-it("rotate takes an immediate dump under the new key and updates the fingerprint", async () => { /* enable K1, reload K2; a new artifact exists that decrypts under K2, fingerprint changed */ });
+it("rotate takes an immediate dump under the new key and updates the fingerprint", async () => { /* enable K1, reload K2; a new artifact exists that decrypts under K2, keyFingerprint changed, (await status()).archiveUnderCurrentKey true */ });
+it("archiveUnderCurrentKey is false when every destination fails", async () => { /* dest dir made unwritable (or a failing backend); reload; the tick's fan-out fails; (await status()).archiveUnderCurrentKey stays FALSE — the Task 3 carry: onDump-style flag would have lied here */ });
 it("a non-primary node runs no duty", async () => { /* readSingletonRole → 'secondary'; reload; current().enabled false, no artifact */ });
 it("removing the probe lets a bad connection through (prove-by-deletion)", async () => { /* skipped/inverted control per CLAUDE.md §4 */ });
 ```
@@ -647,7 +647,7 @@ export class BackupSupervisor {
   #db: Database | undefined;
   #config: BackupConfig | undefined;
   #reloading = false;
-  #firstDumpDone = false;
+  #reloadedAt: Date | undefined;
 
   constructor(deps: BackupSupervisorDeps) { this.#deps = deps; }
 
@@ -658,7 +658,7 @@ export class BackupSupervisor {
       await this.#teardown();
       const cfg = await this.#deps.buildConfig();   // re-read from DISK each reload (B2)
       this.#config = cfg;
-      this.#firstDumpDone = false;
+      this.#reloadedAt = (this.#deps.now ?? (() => new Date()))();   // for archiveUnderCurrentKey (below)
       if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
         this.#deps.log("info", "backup.disabled", {});
         return;   // #config kept for current(): enabled=(cfg!==undefined && isPrimary), so a non-primary reads disabled
@@ -708,16 +708,21 @@ export class BackupSupervisor {
       keyFingerprint: cfg === undefined ? undefined : keyFingerprint(cfg.recoveryKey),
       keyRotatedAt: cfg?.keyRotatedAt,
       recoveryKey: cfg?.recoveryKey,
-      archiveUnderCurrentKey: this.#firstDumpDone,
     };
   }
-  async status(): Promise<BackupRuntimeStatus & { backupStatus: BackupStatus }> {
+  async status(): Promise<BackupRuntimeStatus & { backupStatus: BackupStatus; archiveUnderCurrentKey: boolean }> {
     const base = this.current();
     const cfg = this.#config;
     const now = (this.#deps.now ?? (() => new Date()))();
     const backends = cfg?.destinations.map(buildBackend) ?? [];
     const backupStatus = await readBackupStatus(backends, cfg?.staleAfterMs ?? 0, now);
-    return { ...base, backupStatus };
+    // Truthful: an archive exists under the CURRENT key iff a destination stored one at/after the
+    // last reload (which is when the current key/config took effect). Never true on all-failed.
+    const since = this.#reloadedAt?.getTime() ?? Infinity;
+    const archiveUnderCurrentKey =
+      backupStatus.configured &&
+      backupStatus.destinations.some((d) => d.lastBackupAt !== null && Date.parse(d.lastBackupAt) >= since);
+    return { ...base, backupStatus, archiveUnderCurrentKey };
   }
   async stop(): Promise<void> { await this.#teardown(); }
   async #teardown(): Promise<void> {
@@ -728,7 +733,7 @@ export class BackupSupervisor {
   }
 }
 ```
-Pass `onDump: () => { this.#firstDumpDone = true; }` into `runBackupSweep` (the hook Task 3 added), which flips `archiveUnderCurrentKey`. Register `"backup.reload_in_progress": Record<string, never>` in `errors.ts`. Note `status()` rebuilds the backends to read freshness; that is cheap (`buildBackend` is a constructor over a path) and keeps `current()` synchronous and I/O-free.
+**`archiveUnderCurrentKey` is DERIVED truthfully, not flagged.** Task 3's `onDump` fires after the fan-out even when every destination FAILED (`allSettled` swallows per-backend faults), so a flag set off it would claim an archive exists when nothing was stored (Task 3 review carry). Instead: record `#reloadedAt = now()` when `reload()` starts a duty, and compute `archiveUnderCurrentKey` in the async `status()` from the freshness read — `true` iff some destination's `lastBackupAt` is at/after `#reloadedAt` (an archive was actually STORED under the current key). This reflects real stored state, survives a restart, and cannot lie on an all-destinations-failed tick. Because the flag needs the (async) `readBackupStatus`, it lives on `status()`'s return, not sync `current()`. **`onDump` is now unused by the supervisor** — if nothing else uses it, remove `onDump` from `BackupSweepDeps`, its call in `runOnce`, and its Task 3 test (do not leave a dead hook; CLAUDE.md §1/YAGNI). Register `"backup.reload_in_progress": Record<string, never>` in `errors.ts`. `status()` rebuilds the backends to read freshness; that is cheap (`buildBackend` is a constructor over a path) and keeps `current()` synchronous and I/O-free.
 
 - [ ] **Step 4: Run — passes**
 
