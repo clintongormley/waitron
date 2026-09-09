@@ -76,9 +76,20 @@ describe("planVenue", () => {
           name: "Mostrador",
           formFactor: "till",
           capabilities: ["integrated-card-payment", "open-cash-drawer"],
+          inactivityTimeoutSeconds: null,
         },
-        { name: "Cocina", formFactor: "kds", capabilities: ["act-as-kds"] },
-        { name: "Móvil", formFactor: "phone-portrait", capabilities: [] },
+        {
+          name: "Cocina",
+          formFactor: "kds",
+          capabilities: ["act-as-kds"],
+          inactivityTimeoutSeconds: null,
+        },
+        {
+          name: "Móvil",
+          formFactor: "phone-portrait",
+          capabilities: [],
+          inactivityTimeoutSeconds: 300,
+        },
       ],
     });
   });

@@ -23,6 +23,25 @@ export function validateCapabilities(input: unknown): CapabilityFlag[] {
 }
 
 /**
+ * Fail-closed validation of a profile's auto-logout idle timeout (seconds). NULL means "never log
+ * out". A `kds` profile is FORCED to NULL — a kitchen display is not a logged-in operator, so it is
+ * exempt from auto-logout regardless of what a caller passes. A non-null value must be a non-negative
+ * integer; anything else throws `device_profile.invalid` {reason: "bad_inactivity_timeout"}, the same
+ * gate `validateCapabilities` uses. Returns the value to store.
+ */
+export function validateInactivityTimeout(
+  value: number | null,
+  formFactor: FormFactor,
+): number | null {
+  if (formFactor === "kds") return null;
+  if (value === null) return null;
+  if (!Number.isInteger(value) || value < 0) {
+    throw new AppError("device_profile.invalid", { reason: "bad_inactivity_timeout" });
+  }
+  return value;
+}
+
+/**
  * The default capabilities a device of each form factor should get when a profile is seeded from the
  * built-in defaults (design §5.3/§10). These are the values that used to live on DEFAULT_CANVASES,
  * relocated here as capabilities leave the canvas record (Task 9).
@@ -43,6 +62,10 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
 export interface DefaultDeviceProfile {
   formFactor: FormFactor;
   capabilities: CapabilityFlag[];
+  /** The auto-logout idle timeout (seconds) the profile is seeded with; NULL/omitted = never. Only
+   * `phone-portrait` (Handheld) carries one — a shared handheld auto-logs-out so the next server does
+   * not inherit the last one's session. The 300 s (five-minute) default is owner-confirmed at review. */
+  inactivityTimeoutSeconds?: number | null;
   /**
    * The seeded name per BARE language subtag (`"es"`, `"en"`). These names are LOCALE CONTENT — the
    * tenant renames them freely — NOT schema tokens, so the Spanish literals live here, in an
@@ -74,6 +97,8 @@ export const DEFAULT_DEVICE_PROFILES: readonly DefaultDeviceProfile[] = [
     formFactor: "phone-portrait",
     capabilities: DEFAULT_PROFILE_CAPABILITIES["phone-portrait"],
     nameByLocale: { es: "Móvil", en: "Handheld" },
+    // A shared handheld auto-logs-out after five minutes idle; till/kds are left NULL (never).
+    inactivityTimeoutSeconds: 300,
   },
 ];
 

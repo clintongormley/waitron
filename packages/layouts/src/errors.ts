@@ -107,10 +107,12 @@ declare module "@waitron/shared" {
     //                      `device_profiles_canvas_fk` (a canvas that is absent, or belongs to another
     //                      tenant): `device-profile-store.ts` translates the driver's 23503 so a bad
     //                      reference returns a clean 4xx, never a raw 500.
+    //   bad_inactivity_timeout — the auto-logout idle timeout failed validateInactivityTimeout
+    //                      (device-profile.ts): a non-null value that was not a non-negative integer.
     // A `reason` enum PARALLEL to `canvas.invalid`'s discriminator; NEVER echoes the offending value
     // (§1) — the enum names WHICH field went wrong, not what the caller supplied.
     "device_profile.invalid": {
-      reason: "bad_capabilities" | "bad_canvas_ref";
+      reason: "bad_capabilities" | "bad_canvas_ref" | "bad_inactivity_timeout";
     };
     // A GET-by-id on the management device-profile surface named no profile the tenant owns (an absent
     // id, or another tenant's row excluded by the tenant predicate). No params: the caller-supplied id is not echoed (§1) —

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import {
   validateCapabilities,
+  validateInactivityTimeout,
   DEFAULT_PROFILE_CAPABILITIES,
   DEFAULT_DEVICE_PROFILES,
   defaultProfileName,
@@ -38,6 +39,38 @@ describe("validateCapabilities", () => {
       expect((e as AppError).code).toBe("device_profile.invalid");
       expect((e as AppError).params).toEqual({ reason: "bad_capabilities" });
     }
+  });
+});
+
+describe("validateInactivityTimeout", () => {
+  it("returns a non-negative integer unchanged for a non-kds form factor", () => {
+    expect(validateInactivityTimeout(300, "phone-portrait")).toBe(300);
+    expect(validateInactivityTimeout(0, "till")).toBe(0);
+  });
+
+  it("passes null through as null (never log out)", () => {
+    expect(validateInactivityTimeout(null, "till")).toBeNull();
+  });
+
+  it("FORCES null for a kds profile regardless of the value (a display is not a logged-in operator)", () => {
+    // Proof-by-deletion: drop the `formFactor === "kds"` guard and this returns 300.
+    expect(validateInactivityTimeout(300, "kds")).toBeNull();
+    expect(validateInactivityTimeout(null, "kds")).toBeNull();
+  });
+
+  it("rejects a negative value with device_profile.invalid {bad_inactivity_timeout}", () => {
+    try {
+      validateInactivityTimeout(-5, "till");
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect(e).toBeInstanceOf(AppError);
+      expect((e as AppError).code).toBe("device_profile.invalid");
+      expect((e as AppError).params).toEqual({ reason: "bad_inactivity_timeout" });
+    }
+  });
+
+  it("rejects a non-integer value", () => {
+    expect(() => validateInactivityTimeout(1.5, "till")).toThrow(AppError);
   });
 });
 
@@ -88,6 +121,15 @@ describe("DEFAULT_DEVICE_PROFILES", () => {
     expect(byFormFactor.till!.nameByLocale).toEqual({ es: "Mostrador", en: "Counter" });
     expect(byFormFactor.kds!.nameByLocale).toEqual({ es: "Cocina", en: "Kitchen" });
     expect(byFormFactor["phone-portrait"]!.nameByLocale).toEqual({ es: "Móvil", en: "Handheld" });
+  });
+
+  it("seeds only the handheld with a 300 s inactivity timeout; till and kds carry none", () => {
+    // The owner-confirmed default: a shared handheld auto-logs-out after five minutes; a till and a
+    // kitchen display do not. `?? null` normalizes the till's omitted value.
+    const byFormFactor = Object.fromEntries(DEFAULT_DEVICE_PROFILES.map((p) => [p.formFactor, p]));
+    expect(byFormFactor["phone-portrait"]!.inactivityTimeoutSeconds).toBe(300);
+    expect(byFormFactor.till!.inactivityTimeoutSeconds ?? null).toBeNull();
+    expect(byFormFactor.kds!.inactivityTimeoutSeconds ?? null).toBeNull();
   });
 });
 

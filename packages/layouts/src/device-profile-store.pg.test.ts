@@ -119,6 +119,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         formFactor: "till",
         canvasId: null,
         capabilities: ["open-cash-drawer", "integrated-card-payment"],
+        inactivityTimeoutSeconds: null, // omitted on create ⇒ NULL (never)
       });
       const fetched = await asApp(managerTenant, (tx) =>
         getDeviceProfile(tx, managerTenant, created.id),
@@ -148,12 +149,49 @@ describe("device-profile store on real Postgres, as the app role", () => {
       canvasId: null,
       capabilities: ["act-as-kds"],
       formFactor: "kds",
+      inactivityTimeoutSeconds: null,
     });
     expect(await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id))).toEqual(
       created,
     );
     const listed = await asApp(tenantId, (tx) => listDeviceProfiles(tx, tenantId));
     expect(listed).toEqual([created]);
+  });
+
+  it("round-trips a phone-portrait inactivity timeout through create → get, and forces null for kds", async () => {
+    // The auto-logout timeout persists and reads back for a non-exempt form factor; a kds create is
+    // coerced to null by validateInactivityTimeout even when a value is passed (a display never logs
+    // out). Proof-by-deletion: drop the `formFactor === "kds"` guard and the kds row reads 600.
+    const tenantId = await seedTenant(suite.admin);
+    const session = await seedSession(tenantId, "manager");
+    const handheld = await asApp(tenantId, (tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        tenantId,
+        name: "Handheld",
+        formFactor: "phone-portrait",
+        canvasId: null,
+        capabilities: [],
+        inactivityTimeoutSeconds: 300,
+      }),
+    );
+    expect(handheld.inactivityTimeoutSeconds).toBe(300);
+    expect(await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, handheld.id))).toEqual(
+      handheld,
+    );
+
+    const kds = await asApp(tenantId, (tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        tenantId,
+        name: "Kitchen",
+        formFactor: "kds",
+        canvasId: null,
+        capabilities: ["act-as-kds"],
+        inactivityTimeoutSeconds: 600, // ignored — kds is exempt
+      }),
+    );
+    expect(kds.inactivityTimeoutSeconds).toBeNull();
   });
 
   it("stores and returns a canvas reference that satisfies the composite FK", async () => {
@@ -176,6 +214,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
       formFactor: "till",
       canvasId,
       capabilities: [],
+      inactivityTimeoutSeconds: null,
     });
   });
 
@@ -245,6 +284,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
       formFactor: "till",
       canvasId,
       capabilities: ["integrated-card-payment"],
+      inactivityTimeoutSeconds: null,
     });
     expect(await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id))).toEqual(
       updated,

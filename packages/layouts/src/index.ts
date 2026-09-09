@@ -24,6 +24,7 @@ export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from 
 export { DEFAULT_CANVASES } from "./default-canvases.js";
 export {
   validateCapabilities,
+  validateInactivityTimeout,
   DEFAULT_PROFILE_CAPABILITIES,
   DEFAULT_DEVICE_PROFILES,
   defaultProfileName,

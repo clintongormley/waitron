@@ -1,4 +1,13 @@
-import { jsonb, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import {
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { tenants } from "./tenants.js";
 
 /**
@@ -40,6 +49,11 @@ export const deviceProfiles = pgTable(
     formFactor: deviceFormFactorEnum("form_factor").notNull(),
     canvasId: uuid("canvas_id"),
     capabilities: jsonb("capabilities").notNull().default([]),
+    // Auto-logout idle timeout in seconds; NULL = never (KDS is always NULL — it is a display, not a
+    // logged-in operator). Nullable because most profiles opt out; @waitron/layouts validates it on
+    // write. Added --custom (snapshot-less) so `db:generate` never proposes dropping the module-owned
+    // `bookings` table it still carries in the core snapshot chain.
+    inactivityTimeoutSeconds: integer("inactivity_timeout_seconds"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),
