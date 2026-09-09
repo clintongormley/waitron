@@ -102,10 +102,22 @@ export function nextFireMs(
 
   const allowed = (wd: number) => schedule.days === "daily" || schedule.days.includes(wd);
   // Scan today..+7 for the next allowed local day whose fire instant is strictly in the future.
+  // Step the LOCAL CIVIL date (start's Y-M-D + `add` days), NOT `now + add*86400000ms`: across a DST
+  // spring-forward the day is only 23h long, so adding elapsed 24h skips the wall date and could jump a
+  // whole week past an allowed weekday. Civil-date arithmetic via Date.UTC normalises month/day
+  // rollover; getUTCDay on the same anchored date gives that day's weekday.
+  const start = localParts(now, clock.timeZone);
   for (let add = 0; add <= 7; add++) {
-    const base = localParts(new Date(now.getTime() + add * 86400000), clock.timeZone);
-    if (!allowed(base.weekday)) continue;
-    const fire = instantOfLocal(base.year, base.month, base.day, hour, minute, clock.timeZone);
+    const civil = new Date(Date.UTC(start.year, start.month - 1, start.day + add));
+    if (!allowed(civil.getUTCDay())) continue;
+    const fire = instantOfLocal(
+      civil.getUTCFullYear(),
+      civil.getUTCMonth() + 1,
+      civil.getUTCDate(),
+      hour,
+      minute,
+      clock.timeZone,
+    );
     if (fire > now.getTime()) return fire;
   }
   // Fallback: 24h out (defensive; the 7-day scan should always find one).
