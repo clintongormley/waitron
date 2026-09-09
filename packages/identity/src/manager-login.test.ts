@@ -104,7 +104,8 @@ describe("loginManager", () => {
     );
     expect(code).toBe("password.invalid");
     // Timing equalization: the null-password branch still pays for one KDF (against the dummy hash),
-    // so a PIN-only account isn't distinguishable by latency from a wrong password. Proof-by-deletion:
+    // so an account awaiting password setup isn't distinguishable by latency from a wrong password.
+    // Proof-by-deletion:
     // remove the dummy verifyPassword in completeManagerLogin's null branch and this goes red.
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -142,13 +143,12 @@ describe("loginManager", () => {
 });
 
 // The by-id entry point the C2b mirror-bundle route uses to authenticate the primary's admin — a
-// server-to-server flow carrying an id, so it resolves by id regardless of whether the admin carries an
-// email (the bare `venue` CLI seeds it emailless; onboarding may set one). Behaviour is `loginManager`'s,
+// server-to-server flow carrying an id, so it resolves by id rather than treating the id as an email.
+// Behaviour is `loginManager`'s,
 // minus email lookup: an UNKNOWN id is `person.not_found` (no enumeration surface here), and every
 // post-lookup check is the shared `completeManagerLogin`.
 describe("loginManagerById", () => {
-  it("logs in an emailless person by id + password (the provisioned-admin shape)", async () => {
-    // `seedPersonWithPassword` sets a password but NO email — exactly the admin the mirror flow signs in.
+  it("logs in a low-level fixture by id + password without depending on email", async () => {
     const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
     const session = await run((tx) =>
       loginManagerById(tx, { tenantId, personId, password: "correct horse" }),
@@ -175,7 +175,7 @@ describe("loginManagerById", () => {
     expect(code).toBe("password.invalid");
   });
   it("rejects a suspended person with person.suspended", async () => {
-    // Seed an emailless person WITH a password, then suspend — the shared suspension gate fires before
+    // Seed a low-level person WITH a password, then suspend — the shared suspension gate fires before
     // the password check, the same as the email path.
     const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
     await run((tx) =>

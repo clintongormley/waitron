@@ -763,6 +763,7 @@ async function provisionPrimaryVenue(ownerDb: Database): Promise<AdoptResult> {
           displayName: "Administradora",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
+          email: "owner@example.test",
         },
       },
       ALL_MODULES,

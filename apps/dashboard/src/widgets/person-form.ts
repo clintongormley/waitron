@@ -1,9 +1,12 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -21,8 +24,9 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
  *
  * The staff screen drives it by setting `.open` — the same open-by-property contract `wt-dialog`
  * itself uses — and hears one event: on confirm the form dispatches `create-person` carrying
- * `{ displayName, role, pin }` plus `email` WHEN one was typed (a blank email is omitted, never sent
- * as ""), `bubbles`/`composed` so it crosses the shadow boundary to the staff screen, which turns it
+ * `{ displayName, role, pin, email }`. Confirm stays available so an incomplete submission can show
+ * the shared form summary and an explanation beside every missing or malformed field.
+ * The event uses `bubbles`/`composed` so it crosses the shadow boundary to the staff screen, which turns it
  * into `DashboardApi.createPerson`. The form does NOT call the API itself
  * (like the pure-display staff list, unlike the login screen) and does NOT close itself on confirm —
  * the staff screen closes it once the create succeeds, so a rejected create leaves the entered
@@ -49,11 +53,9 @@ export class PersonForm extends LitElement {
         display: block;
         margin-bottom: var(--wt-space-4);
       }
-      /* The in-dialog error banner — rendered in the modal's own top layer, unlike the screen's
-         page-level banner which the backdrop would occlude. */
-      .create-error {
+      .required {
+        margin-inline-start: var(--wt-space-1);
         color: var(--wt-color-danger);
-        margin: 0 0 var(--wt-space-3);
       }
     `,
   ];
@@ -76,10 +78,10 @@ export class PersonForm extends LitElement {
   // `ha-*`/`wt-*` components hit with `ariaLabel`. The emitted event's detail key is still `role`.
   @state() private selectedRole: PersonRole = "staff";
   @state() private pin = "";
-  // The dashboard sign-in email (grouped with a password on the edit form; the PIN is the till
-  // credential). Optional on create — a blank field is OMITTED from the emitted detail, so a create
-  // with no email never sends an empty string the server would reject as `person.email_invalid`.
+  // The dashboard sign-in email (the PIN is still the till credential). Every person gets a
+  // dashboard account, so this is required on create.
   @state() private email = "";
+  @state() private fieldErrors: { name?: string; pin?: string; email?: string } = {};
 
   // A handle to the native role <select>, reconciled to `selectedRole` in `updated()` (see that
   // method for why a template binding cannot do this on a native select).
@@ -112,6 +114,7 @@ export class PersonForm extends LitElement {
   #onDisplayNameChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.displayName = event.detail.value;
+    this.fieldErrors = { ...this.fieldErrors, name: undefined };
   }
 
   /**
@@ -128,12 +131,27 @@ export class PersonForm extends LitElement {
   #onPinChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.pin = event.detail.value;
+    this.fieldErrors = { ...this.fieldErrors, pin: undefined };
   }
 
   /** Capture the email field's new value; stops the composed `wt-change` from leaking out. */
   #onEmailChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.email = event.detail.value;
+    this.fieldErrors = { ...this.fieldErrors, email: undefined };
+  }
+
+  #validate(): boolean {
+    const errors: { name?: string; pin?: string; email?: string } = {};
+    if (this.displayName.trim() === "") errors.name = t("form.name_required");
+    if (this.pin.trim() === "") errors.pin = t("form.pin_required");
+    else if (this.pin.length < 4) errors.pin = codeMessage("pin.too_short");
+    if (this.email.trim() === "") errors.email = t("form.email_required");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email.trim())) {
+      errors.email = codeMessage("person.email_invalid");
+    }
+    this.fieldErrors = errors;
+    return Object.keys(errors).length === 0;
   }
 
   /**
@@ -143,16 +161,13 @@ export class PersonForm extends LitElement {
    */
   #confirm(event: Event): void {
     event.stopPropagation();
-    // A blank OR whitespace-only email is OMITTED, never sent: an empty address is not "no email" to
-    // the server — it fails `isValidEmail` as `person.email_invalid`. Trim first so "   " counts as
-    // blank, and emit the trimmed value; the key is present only when a real address was typed.
-    const detail: { displayName: string; role: PersonRole; pin: string; email?: string } = {
-      displayName: this.displayName,
+    if (!this.#validate()) return;
+    const detail: { displayName: string; role: PersonRole; pin: string; email: string } = {
+      displayName: this.displayName.trim(),
       role: this.selectedRole,
       pin: this.pin,
+      email: this.email.trim(),
     };
-    const email = this.email.trim();
-    if (email !== "") detail.email = email;
     this.dispatchEvent(new CustomEvent("create-person", { detail, bubbles: true, composed: true }));
   }
 
@@ -175,6 +190,12 @@ export class PersonForm extends LitElement {
     this.selectedRole = "staff";
     this.pin = "";
     this.email = "";
+    this.fieldErrors = {};
+  }
+
+  #cancel(event: Event): void {
+    event.stopPropagation();
+    this.open = false;
   }
 
   override render() {
@@ -185,48 +206,76 @@ export class PersonForm extends LitElement {
         .open=${this.open}
         @wt-close=${() => this.#onClose()}
       >
-        ${
-          this.error
-            ? html`<p class="create-error" role="alert">${codeMessage(this.error)}</p>`
-            : nothing
-        }
+        <wt-form-error-summary
+          heading=${t("form.error_heading")}
+          .errors=${[
+            ...Object.values(this.fieldErrors).filter((message): message is string => !!message),
+            ...(this.error ? [codeMessage(this.error)] : []),
+          ]}
+        ></wt-form-error-summary>
         <wt-input
           class="field"
           data-test="display-name"
+          name="name"
+          required
           label=${t("person.name")}
+          error=${this.fieldErrors.name ?? ""}
           .value=${this.displayName}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDisplayNameChange(e)}
         ></wt-input>
         <label class="field"
-          >${t("person.role")}
-          <select ${ref(this.#roleSelect)} @change=${(e: Event) => this.#onRoleChange(e)}>
+          >${t("person.role")}<span class="required" aria-hidden="true">*</span>
+          <select
+            name="role"
+            required
+            ${ref(this.#roleSelect)}
+            @change=${(e: Event) => this.#onRoleChange(e)}
+          >
             ${ROLES.map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
           </select>
         </label>
         <wt-input
           class="field"
           data-test="pin"
+          name="pin"
+          required
           label=${t("person.pin")}
+          error=${
+            this.fieldErrors.pin ?? (this.error === "pin.too_short" ? codeMessage(this.error) : "")
+          }
           .value=${this.pin}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
         ></wt-input>
-        <!-- Dashboard sign-in credential (the PIN above is the till credential): the login email.
-             Optional on create — a blank field is omitted from the emitted detail (see #confirm). -->
+        <!-- Dashboard sign-in credential (the PIN above remains the till credential). -->
         <wt-input
           class="field"
           data-test="email"
+          name="email"
+          autocomplete="email"
+          required
           type="email"
           label=${t("person.email")}
+          error=${
+            this.fieldErrors.email ??
+            (this.error === "person.email_invalid" || this.error === "person.email_taken"
+              ? codeMessage(this.error)
+              : "")
+          }
           .value=${this.email}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
-        ></wt-input>
-        <wt-button
-          slot="footer"
-          variant="primary"
-          data-test="confirm"
-          @click=${(e: Event) => this.#confirm(e)}
-          >${t("action.create")}</wt-button
         >
+          <wt-help-tooltip slot="help" aria-label=${t("person.email_help_label")}
+            >${t("person.email_help")}</wt-help-tooltip
+          >
+        </wt-input>
+        <wt-form-actions slot="footer">
+          <wt-button slot="cancel" data-test="cancel" variant="secondary" @click=${this.#cancel}
+            >${t("action.cancel")}</wt-button
+          >
+          <wt-button variant="primary" data-test="confirm" @click=${(e: Event) => this.#confirm(e)}
+            >${t("action.create")}</wt-button
+          >
+        </wt-form-actions>
       </wt-dialog>
     `;
   }

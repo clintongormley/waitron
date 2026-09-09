@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
@@ -16,11 +16,20 @@ export class WtInput extends LitElement {
         display: block;
       }
 
+      .label-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: var(--wt-space-1);
+      }
+
       label {
         display: block;
-        margin-bottom: var(--wt-space-1);
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
+      }
+
+      .control {
+        position: relative;
       }
 
       input {
@@ -39,40 +48,104 @@ export class WtInput extends LitElement {
         ${disabledStyles}
       }
 
-      :host([invalid]) input {
+      .control.has-end input {
+        padding-inline-end: calc(var(--wt-tap-min) + var(--wt-space-3));
+      }
+
+      .end {
+        display: none;
+        position: absolute;
+        inset-block: 0;
+        inset-inline-end: var(--wt-space-1);
+        align-items: center;
+      }
+
+      .control.has-end .end {
+        display: flex;
+      }
+
+      input[aria-invalid="true"] {
         border-color: var(--wt-color-danger);
+      }
+
+      .required,
+      .error {
+        color: var(--wt-color-danger);
+      }
+
+      .required {
+        margin-inline-start: var(--wt-space-1);
+      }
+
+      .error {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
       }
     `,
   ];
 
   @property() value = "";
   @property() label = "";
+  @property() name = "";
   @property() type = "text";
+  @property() autocomplete = "";
   @property() placeholder = "";
+  @property() error = "";
+  @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean, reflect: true }) invalid = false;
+  @state() private hasEnd = false;
 
-  // Unique per instance so a page with multiple wt-input elements never
-  // collides label `for`/input `id` pairs.
-  private readonly inputId = uniqueId("wt-input");
+  // Unnamed legacy fields retain a generated id. Named fields use the semantic name for both native
+  // attributes, so consumers never have to infer "email" from "wt-input-2". Each input owns its own
+  // shadow root, so repeated names do not collide with another field's label association.
+  private readonly generatedInputId = uniqueId("wt-input");
+  private readonly errorId = uniqueId("wt-input-error");
 
   private onInput(event: Event): void {
     this.value = (event.target as HTMLInputElement).value;
     dispatchWtChange(this, event, { value: this.value });
   }
 
+  private onEndSlotChange(event: Event): void {
+    this.hasEnd = (event.target as HTMLSlotElement).assignedElements().length > 0;
+  }
+
   override render() {
+    const hasError = this.error !== "";
+    const inputId = this.name || this.generatedInputId;
     return html`
-      ${this.label ? html`<label for=${this.inputId}>${this.label}</label>` : nothing}
-      <input
-        id=${this.inputId}
-        .value=${this.value}
-        type=${this.type}
-        placeholder=${this.placeholder}
-        ?disabled=${this.disabled}
-        aria-invalid=${this.invalid}
-        @input=${this.onInput}
-      />
+      ${
+        this.label
+          ? html`<div class="label-row">
+              <label for=${inputId}
+                >${this.label}${
+                  this.required
+                    ? html`<span class="required" data-required aria-hidden="true">*</span>`
+                    : nothing
+                }</label
+              >
+              <slot name="help"></slot>
+            </div>`
+          : nothing
+      }
+      <div class=${this.hasEnd ? "control has-end" : "control"}>
+        <input
+          id=${inputId}
+          name=${this.name || nothing}
+          .value=${this.value}
+          type=${this.type}
+          autocomplete=${this.autocomplete || nothing}
+          placeholder=${this.placeholder}
+          ?required=${this.required}
+          ?disabled=${this.disabled}
+          aria-invalid=${this.invalid || hasError}
+          aria-describedby=${hasError ? this.errorId : nothing}
+          @input=${this.onInput}
+        />
+        <slot class="end" name="end" @slotchange=${this.onEndSlotChange}></slot>
+      </div>
+      ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;
   }
 }

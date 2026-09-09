@@ -73,15 +73,15 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("login carries an optional totp when supplied", async () => {
+  it("login sends the email and password", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1" }));
     const api = new DashboardApi("", fetchImpl);
-    await api.login({ email: "owner@x.com", password: "correct horse", totp: "123456" });
+    await api.login({ email: "owner@x.com", password: "correct horse" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/session", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "owner@x.com", password: "correct horse", totp: "123456" }),
+      body: JSON.stringify({ email: "owner@x.com", password: "correct horse" }),
     });
   });
 
@@ -96,32 +96,51 @@ describe("DashboardApi", () => {
   });
 
   it("createPerson POSTs the new person and returns its id", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "p2" }));
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "p2", invitationSent: true }));
     const api = new DashboardApi("", fetchImpl);
-    const out = await api.createPerson({ displayName: "Bea", role: "staff", pin: "4321" });
-    expect(out).toEqual({ id: "p2" });
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Bea", role: "staff", pin: "4321" }),
-    });
-  });
-
-  it("createPerson carries an optional email when supplied", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "p2" }));
-    const api = new DashboardApi("", fetchImpl);
-    await api.createPerson({
+    const out = await api.createPerson({
       displayName: "Bea",
       role: "staff",
       pin: "4321",
       email: "bea@x.com",
     });
+    expect(out).toEqual({ id: "p2", invitationSent: true });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Bea", role: "staff", pin: "4321", email: "bea@x.com" }),
+      body: JSON.stringify({
+        displayName: "Bea",
+        role: "staff",
+        pin: "4321",
+        email: "bea@x.com",
+      }),
+    });
+  });
+
+  it("requests and completes password recovery", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(jsonResponse({ personId: "p1" }));
+    const api = new DashboardApi("", fetchImpl);
+    await api.requestPasswordReset("bea@x.com");
+    await api.completeAccountAction("token-1", "password_reset", "a replacement password");
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/management-api/password-reset", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "bea@x.com" }),
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/management-api/account-actions/complete", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token: "token-1",
+        purpose: "password_reset",
+        password: "a replacement password",
+      }),
     });
   });
 
@@ -740,10 +759,16 @@ describe("DashboardApi — planned vs actual", () => {
 });
 
 describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
-  it("getMe GETs the whoami route and returns { personId, role, locale, venueLocale }", async () => {
+  it("getMe GETs the whoami route and returns the session and venue identity", async () => {
     // Per-user-language-preference (Task 5): the whoami now also carries the signed-in person's stored
     // UI `locale` (null when unset) and the geography-derived `venueLocale` fallback.
-    const body = { personId: "p1", role: "staff", locale: "en-GB", venueLocale: "es-ES" };
+    const body = {
+      personId: "p1",
+      role: "staff",
+      locale: "en-GB",
+      venueLocale: "es-ES",
+      venueName: "Deli Test SL",
+    };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getMe()).toEqual(body);
@@ -754,7 +779,13 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
   });
 
   it("getMe surfaces a null stored locale for a person with no preference", async () => {
-    const body = { personId: "p1", role: "manager", locale: null, venueLocale: "es-ES" };
+    const body = {
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+      venueName: "Deli Test SL",
+    };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getMe()).toEqual(body);
@@ -1874,13 +1905,14 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
 
   // ── Per-user language preference (Task 4's PUBLIC pre-login read) ──
 
-  it("getLocales GETs the public /management-api/locales list and returns { locales, venueDefault }", async () => {
+  it("getLocales GETs the public locale catalogue and venue identity", async () => {
     const body = {
       locales: [
         { code: "es-ES", label: "Español" },
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      venueName: "Deli Test SL",
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
     const api = new DashboardApi("", fetchImpl);

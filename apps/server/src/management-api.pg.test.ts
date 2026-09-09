@@ -7,6 +7,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { DEFAULT_RECEIPT } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
+import type { AccountEmailSender } from "./account-email.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 
@@ -66,6 +67,7 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
           displayName: "Administradora",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
+          email: "owner@example.test",
         },
       },
       ALL_MODULES,
@@ -88,7 +90,7 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
   return { tenantId: venue.tenantId, managerId, staffId };
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(tenantId: string, sendAccountEmail?: AccountEmailSender): Hono {
   const app = new Hono();
   // `secureCookies: false` so the session cookie rides the non-TLS `app.request` (mirrors
   // `till-api.pg.test.ts`'s `apiDeps`). `deps.db` is the owner connection; the routes drop to
@@ -104,6 +106,7 @@ function mountApp(tenantId: string): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      sendAccountEmail,
     },
     noopLog,
   );
@@ -163,7 +166,12 @@ describe("Management API staff + session routes over real Postgres", () => {
     const created = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ displayName: "Ada", role: "staff", pin: "4321" }),
+      body: JSON.stringify({
+        displayName: "Ada",
+        role: "staff",
+        pin: "4321",
+        email: "ada@x.com",
+      }),
     });
     expect(created.status).toBe(201);
     expect((await created.json()) as { id: string }).toHaveProperty("id");
@@ -211,7 +219,12 @@ describe("Management API staff + session routes over real Postgres", () => {
     const res = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ displayName: "Nope", role: "staff", pin: "4321" }),
+      body: JSON.stringify({
+        displayName: "Nope",
+        role: "staff",
+        pin: "4321",
+        email: "nope@x.com",
+      }),
     });
     expect(res.status).toBe(403);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -376,6 +389,93 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   // ── Email (dashboard sign-in identifier) on create + edit + listing (Task 6) ────────────────────
+
+  it("requires an email when creating a person", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ displayName: "No email", role: "staff", pin: "1234" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { params: { field: string } } }).toMatchObject({
+      error: { params: { field: "email" } },
+    });
+    expect(await countPersonsNamed(tenantId, "No email")).toBe(0);
+  });
+
+  it("emails a single-use setup link after creating a person", async () => {
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId, async (message) => {
+      sent.push(message);
+    });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        displayName: "Invited",
+        role: "staff",
+        pin: "1234",
+        email: "invited@x.com",
+      }),
+    });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ invitationSent: true });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      purpose: "invitation",
+      email: "invited@x.com",
+      displayName: "Invited",
+    });
+    expect(new URL(sent[0]!.actionUrl).pathname).toBe("/manage/account");
+    expect(new URL(sent[0]!.actionUrl).searchParams.get("token")).toBeTruthy();
+    expect(new URL(sent[0]!.actionUrl).searchParams.get("purpose")).toBe("invitation");
+    expect(new URLSearchParams(new URL(sent[0]!.actionUrl).hash.slice(1)).get("email")).toBe(
+      "invited@x.com",
+    );
+  });
+
+  it("requests and completes a password reset without revealing unknown emails", async () => {
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId, async (message) => {
+      sent.push(message);
+    });
+    const unknown = await app.request("/management-api/password-reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "unknown@x.com" }),
+    });
+    expect(unknown.status).toBe(202);
+    expect(sent).toHaveLength(0);
+
+    const requested = await app.request("/management-api/password-reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: STAFF_EMAIL }),
+    });
+    expect(requested.status).toBe(202);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.purpose).toBe("password_reset");
+    const token = new URL(sent[0]!.actionUrl).searchParams.get("token")!;
+    const purpose = new URL(sent[0]!.actionUrl).searchParams.get("purpose")!;
+
+    const completed = await app.request("/management-api/account-actions/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, purpose, password: "a replacement password" }),
+    });
+    expect(completed.status).toBe(200);
+    expect(await completed.json()).toEqual({ personId: staffId });
+    expect(completed.headers.get("set-cookie")).toMatch(/^waitron_management_session=/);
+    await expect(login(app, STAFF_EMAIL, "a replacement password")).resolves.toMatch(
+      /^waitron_management_session=/,
+    );
+  });
 
   it("creates a person with an email and lists it back", async () => {
     const { tenantId } = await setupTenant();

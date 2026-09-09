@@ -88,6 +88,8 @@ const VENUE_ARGS = [
   "R",
   "--admin-name",
   "Owner",
+  "--admin-email",
+  "owner@example.test",
 ];
 
 /** The three secrets `venue` reads the SAME way — from the env or an echo-off prompt, never argv: the
@@ -1579,6 +1581,7 @@ describe("runCli venue", () => {
         "A",
         "R",
         "Owner", // admin name
+        "owner@example.test", // admin email
       ],
       // The admin PIN and dashboard password are the echo-OFF options here: WAITRON_ADMIN_PIN and
       // WAITRON_ADMIN_PASSWORD are unset (URL-only env), so each is read through `promptSecret`, never
@@ -1616,6 +1619,7 @@ describe("runCli venue", () => {
       "series code: ",
       "rectificative series code: ",
       "admin name: ",
+      "admin email: ",
     ]);
     // The admin PIN and password are the echo-off prompts, in that order (the admin URI came from the
     // env; WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD are unset here so both fall through to a prompt).

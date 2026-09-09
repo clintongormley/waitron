@@ -103,7 +103,7 @@ export const ADMIN_PIN = "5555";
 /** The provisioned admin's ("Administradora") dashboard password. Single source of truth: the demo
  * dashboard password the seeded manager also gets (`DEMO_DASHBOARD_PASSWORD`, staff.ts), imported here
  * rather than re-spelt so the two cannot drift and silently break the demo login. The admin signs in to
- * the dashboard with `DEMO_ADMIN_EMAIL` (set by `seedStaff`) + this password. */
+ * the dashboard with `DEMO_ADMIN_EMAIL` (set during provisioning) + this password. */
 const ADMIN_PASSWORD = DEMO_DASHBOARD_PASSWORD;
 
 /**
@@ -363,6 +363,7 @@ async function provisionVenue(
           displayName: "Administradora",
           pinHash: hashPin(ADMIN_PIN),
           passwordHash: hashPassword(ADMIN_PASSWORD),
+          email: DEMO_ADMIN_EMAIL,
         },
       },
       ALL_MODULES,

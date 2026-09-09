@@ -71,6 +71,7 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
           displayName: "Administradora",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword(ADMIN_PASSWORD),
+          email: "owner@example.test",
         },
       },
       ALL_MODULES,

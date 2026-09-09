@@ -53,7 +53,7 @@ const steadyClock: TrustedClock = {
   currentAnchor: () => null,
 };
 
-function request(taxId = "B12345678", adminEmail?: string): VenueRequest {
+function request(taxId = "B12345678", adminEmail = "owner@example.test"): VenueRequest {
   return {
     country: "ES",
     taxId,
@@ -78,7 +78,7 @@ function request(taxId = "B12345678", adminEmail?: string): VenueRequest {
       displayName: "Owner",
       pinHash: "scrypt$00$00",
       passwordHash: hashPassword("dashPass123"),
-      ...(adminEmail !== undefined ? { email: adminEmail } : {}),
+      email: adminEmail,
     },
   };
 }
@@ -186,9 +186,8 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
 
 describe("the provisioned admin authenticates by id with its password", () => {
   it("loginManagerById succeeds with the provisioned password and rejects a wrong one", async () => {
-    // `venue` seeds the admin's password but NO email, so the email-based dashboard login
-    // (`loginManager`) has no address to resolve. The emailless admin authenticates by id via
-    // `loginManagerById` — the same path the C2b mirror-bundle route uses to adopt from the primary.
+    // The mirror-bundle path authenticates the admin by id via `loginManagerById`, independently of
+    // the email the venue also requires.
     // A distinct tenant (B33333333) so this test's admin is its own (the PGlite suite shares one
     // database).
     const venue = await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {

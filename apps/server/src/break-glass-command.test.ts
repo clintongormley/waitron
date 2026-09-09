@@ -53,6 +53,7 @@ async function setupTenant(
           displayName: "Administradora",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword(adminPassword),
+          email: "owner@example.test",
         },
       },
       ALL_MODULES,

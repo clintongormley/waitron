@@ -38,6 +38,28 @@ describe("setup-admin-screen", () => {
     expect(email).not.toBeNull();
     expect(email!.tagName.toLowerCase()).toBe("wt-input");
     expect(email!.getAttribute("type")).toBe("email");
+    const native = email!.shadowRoot!.querySelector("input")!;
+    expect({ name: native.name, autocomplete: native.autocomplete }).toEqual({
+      name: "email",
+      autocomplete: "username",
+    });
+  });
+
+  it("names the remaining account fields for autofill", async () => {
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    const field = (key: string) => q(el, `[data-test=${key}]`)!.shadowRoot!.querySelector("input")!;
+    expect({
+      name: field("displayName").name,
+      autocomplete: field("displayName").autocomplete,
+    }).toEqual({ name: "name", autocomplete: "name" });
+    expect({ name: field("password").name, autocomplete: field("password").autocomplete }).toEqual({
+      name: "new-password",
+      autocomplete: "new-password",
+    });
+    expect({ name: field("pin").name, autocomplete: field("pin").autocomplete }).toEqual({
+      name: "pin",
+      autocomplete: "off",
+    });
   });
 
   it("collects the four fields and advances to venue with the admin patch", async () => {

@@ -224,6 +224,10 @@ The front door for demo mode. Two sections:
   this tab's `sessionStorage` (so the fresh device stays this tab's identity rather than overwriting
   the browser cookie).
 
+**Follow-up (2026-09-07):** User review moved the step-2 form into a modal with an explicit Cancel
+action. The chooser and standalone enrolment form are centred, and front-door screens retain `/`
+instead of publishing the canvas's first `/tabs/*` route before login.
+
 The login screen carries a small **"Switch device"** link in dev mode only, which clears this tab's
 `sessionStorage` device and returns to the chooser — the replacement for the removed reset button,
 scoped to the tab.

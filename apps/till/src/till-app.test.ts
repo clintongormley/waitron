@@ -835,6 +835,16 @@ describe("till-app", () => {
     expect(chooser(el)!.list).toEqual(list);
   });
 
+  it("keeps / while the dev chooser is open instead of exposing a post-login tab route", async () => {
+    history.replaceState(null, "", "/");
+    const { el } = await mountApp({
+      getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
+    });
+    await flush(el);
+    expect(chooser(el)).not.toBeNull();
+    expect(location.pathname).toBe("/");
+  });
+
   it("skips the chooser when this tab has already adopted a device (probes identity with its header)", async () => {
     // A dev tab that adopted a device (sessionStorage id set) boots AS that device — its identity probe
     // (carrying the x-waitron-dev-device header) decides the shell, and the dev list is never read.

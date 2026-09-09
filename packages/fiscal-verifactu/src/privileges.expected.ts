@@ -40,6 +40,7 @@ export const PRIVILEGES: Record<string, string> = {
   kitchen_stations: "SIU",
   location_catalogues: "SID",
   locations: "SIU",
+  management_account_actions: "SIU",
   management_sessions: "SIU",
   mirror_config: "S",
   node_membership: "SIU",

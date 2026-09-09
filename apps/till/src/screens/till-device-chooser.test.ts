@@ -107,16 +107,37 @@ describe("till-device-chooser", () => {
     expect(navigate).toHaveBeenCalledWith("/");
   });
 
-  it("Set up a new device is collapsed, then expands to the join screen's name field", async () => {
+  it("centres the chooser and right-aligns the Set up a new device action", async () => {
+    const { el, host } = await mountWidget<TillDeviceChooser>("till-device-chooser", {
+      api: stubApi(),
+    });
+    host.style.width = "800px";
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector<HTMLElement>(".screen")!;
+    const screenBounds = screen.getBoundingClientRect();
+    const hostBounds = host.getBoundingClientRect();
+    expect(screenBounds.left - hostBounds.left).toBeCloseTo(
+      hostBounds.right - screenBounds.right,
+      0,
+    );
+    expect(
+      getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>(".setup")!).justifyContent,
+    ).toBe("flex-end");
+  });
+
+  it("opens the new-device join screen in a modal with Cancel on the left", async () => {
     const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", { api: stubApi() });
     await flush(el);
-    // Collapsed by default: the toggle shows, the join screen does not.
+    // Closed by default: the action shows, with no join form in the page flow.
     expect(el.shadowRoot!.querySelector("[data-setup-new]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-enrol-screen")).toBeNull();
-    // Expand it.
+    expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+    // Open it as a modal.
     el.shadowRoot!.querySelector<HTMLElement>("[data-setup-new]")!.click();
     await el.updateComplete;
-    const join = el.shadowRoot!.querySelector<TillEnrolScreen>("till-enrol-screen")!;
+    const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-dialog")!;
+    expect(dialog.open).toBe(true);
+    const join = dialog.querySelector<TillEnrolScreen>("till-enrol-screen")!;
     expect(join).not.toBeNull();
     await join.updateComplete;
     await flush(el);
@@ -124,6 +145,16 @@ describe("till-device-chooser", () => {
     // admin opens pairing mode and accepts the number, exactly as in a venue.
     expect(join.shadowRoot!.querySelector("[data-name]")).not.toBeNull();
     expect(join.shadowRoot!.querySelector("[data-number]")).toBeNull();
+    // Both form actions share one row, with Cancel immediately before the primary action.
+    const cancel = dialog.querySelector<HTMLElement>("[data-setup-cancel]")!;
+    const submit = join.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!;
+    expect(cancel.assignedSlot?.getAttribute("slot")).toBe("cancel");
+    expect(submit.assignedSlot?.parentElement?.classList.contains("primary")).toBe(true);
+    // Cancel dismisses the modal without adopting a device.
+    cancel.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-enrol-screen")).toBeNull();
   });
 
   it("an approved join writes the new id to this tab's sessionStorage and navigates", async () => {
@@ -141,7 +172,9 @@ describe("till-device-chooser", () => {
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-setup-new]")!.click();
       await el.updateComplete;
-      const screen = el.shadowRoot!.querySelector<TillEnrolScreen>("till-enrol-screen")!;
+      const screen = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .querySelector<TillEnrolScreen>("till-enrol-screen")!;
       await screen.updateComplete;
       // Name it and knock.
       const name = screen.shadowRoot!.querySelector<HTMLElement & { value: string }>(

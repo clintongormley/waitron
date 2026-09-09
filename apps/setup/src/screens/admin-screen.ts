@@ -124,11 +124,19 @@ export class SetupAdminScreen extends LitElement {
 
   /** Renders one credential field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
   #field(label: string, key: AdminField, type = "text"): TemplateResult {
+    const fieldPurpose = {
+      displayName: { name: "name", autocomplete: "name" },
+      email: { name: "email", autocomplete: "username" },
+      password: { name: "new-password", autocomplete: "new-password" },
+      pin: { name: "pin", autocomplete: "off" },
+    }[key];
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${label}
       data-test=${key}
+      name=${fieldPurpose.name}
+      autocomplete=${fieldPurpose.autocomplete}
       type=${type}
       ?invalid=${this.invalid.has(key)}
       .value=${this.values[key]}

@@ -29,6 +29,8 @@ export const en = {
   "action.login": "Log in",
   "action.back": "Back",
   "action.cancel": "Cancel",
+  "form.error_heading": "There is a problem with this form",
+  "form.name_required": "Enter a name",
   "action.hold": "Hold",
   // The confirm verb of the reusable supervisor-override dialog (cash-drawer-authorization §5).
   "action.authorize": "Authorize",
@@ -438,6 +440,8 @@ export const es: Record<StringKey, string> = {
   "action.login": "Entrar",
   "action.back": "Atrás",
   "action.cancel": "Cancelar",
+  "form.error_heading": "Hay un problema con este formulario",
+  "form.name_required": "Introduce un nombre",
   "action.hold": "Aparcar",
   "action.authorize": "Autorizar",
   "tender.cash": "Efectivo",

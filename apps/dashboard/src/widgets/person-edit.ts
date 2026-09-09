@@ -16,7 +16,7 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
 
 /**
  * The management dashboard's EDIT-PERSON form: a `wt-dialog` (heading "Editar <name>") that manages one
- * existing person through the four slice-1b staff mutations, each committed INDEPENDENTLY so changing a
+ * existing person through independent staff/account actions, so changing a
  * role never forces the operator to retype a PIN. Sections:
  *
  * - **Rol** — a role picker (native `<select>`, as there is no `wt-select` primitive, matching the
@@ -30,8 +30,10 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
  * - **Correo** + **Contraseña** (the dashboard sign-in credentials, grouped) — an email field
  *   (`wt-input[type=email]`) + "Guardar correo" → emits `set-email { email }` (the screen turns it into
  *   `updatePerson({ email })`), and a password field + "Establecer contraseña" → emits
- *   `set-password { password }`. Unlike the write-only PIN/password, the email is EXISTING data, so it
- *   is preset to the person's current address (parallel to the role picker), not left blank.
+ *   `set-password { password }`. “Send new invitation” emits `resend-invitation`; the screen targets
+ *   the person already being edited, so the event needs no caller-controlled id. Unlike the write-only
+ *   PIN/password, the email is EXISTING data, so it is preset to the person's current address
+ *   (parallel to the role picker), not left blank.
  *
  * Like the pure-display staff list and the create form (and UNLIKE the login screen), it does NOT call
  * the API: the staff screen owns the injected `DashboardApi` and turns each domain event into the
@@ -267,6 +269,8 @@ export class PersonEdit extends LitElement {
                     @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-pin]"))}
                     class="field grow"
                     data-test="edit-pin"
+                    name="pin"
+                    autocomplete="off"
                     label=${t("person.pin")}
                     type="password"
                     .value=${this.pin}
@@ -287,6 +291,8 @@ export class PersonEdit extends LitElement {
                     @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-email]"))}
                     class="field grow"
                     data-test="edit-email"
+                    name="email"
+                    autocomplete="email"
                     type="email"
                     label=${t("person.email")}
                     .value=${this.email}
@@ -301,11 +307,21 @@ export class PersonEdit extends LitElement {
                   >
                 </div>
 
+                <wt-button
+                  class="field"
+                  variant="secondary"
+                  data-test="resend-invitation"
+                  @click=${(e: Event) => this.#emit("resend-invitation", {}, e)}
+                  >${t("person.resend_invitation")}</wt-button
+                >
+
                 <div class="action">
                   <wt-input
                     @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-password]"))}
                     class="field grow"
                     data-test="edit-password"
+                    name="new-password"
+                    autocomplete="new-password"
                     label=${t("person.password")}
                     type="password"
                     .value=${this.password}

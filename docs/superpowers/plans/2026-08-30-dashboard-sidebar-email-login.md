@@ -10,6 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-30-dashboard-sidebar-email-login-design.md` — read it alongside this plan.
 
+Account activation, required staff email, recovery, and progressive login are superseded by
+`docs/superpowers/plans/2026-09-08-dashboard-account-activation.md`.
+
 ## Global Constraints
 
 - **TDD**: failing test first, watch it fail, minimal impl, watch it pass, commit. Every commit `git commit -s`.

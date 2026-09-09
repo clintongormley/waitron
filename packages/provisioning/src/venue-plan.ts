@@ -46,10 +46,9 @@ export interface VenueRequest {
   /** The initial ADMIN person a freshly provisioned venue needs, so someone can log in and
    * authorize privileged actions from day one. Both secrets are already HASHED here (hashed at the CLI
    * boundary by `hashPin` / `hashPassword`) — `pinHash` for the till, `passwordHash` for the dashboard,
-   * never a plaintext secret, so neither enters the plan or any action. `email` is the admin's
-   * dashboard-login address, captured during onboarding; OPTIONAL because the CLI/dev-setup/e2e paths
-   * seed an emailless admin, and validated/normalized at the setup-api boundary, not here. */
-  admin: { displayName: string; pinHash: string; passwordHash: string; email?: string };
+   * never a plaintext secret, so neither enters the plan or any action. `email` is required because
+   * the admin is a dashboard account as well as a till PIN holder. */
+  admin: { displayName: string; pinHash: string; passwordHash: string; email: string };
 }
 
 export type VenueAction =
@@ -59,7 +58,7 @@ export type VenueAction =
       displayName: string;
       pinHash: string;
       passwordHash: string;
-      email?: string;
+      email: string;
     }
   | {
       kind: "create-location";

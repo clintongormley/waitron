@@ -37,5 +37,19 @@ describe.each(["light", "dark"] as const)("login-screen a11y (%s theme)", (theme
     );
     await flush(el);
     await expectNoA11yViolations(host);
+
+    (el as unknown as { email: string }).email = "owner@example.com";
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=try-another-way]")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
   });
 });

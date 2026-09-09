@@ -2,6 +2,9 @@
 
 Status: approved for planning (2026-08-30).
 
+Superseded for account activation, required staff email, recovery, and progressive login by
+`2026-09-08-dashboard-account-activation-design.md`. The decisions below remain historical.
+
 ## 1. Motivation
 
 Backlog **Tier A #2 — Admin-site professionalization**. Two coupled halves the owner flagged:

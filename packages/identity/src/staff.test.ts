@@ -85,6 +85,7 @@ describe("createPerson", () => {
         displayName: "Bea",
         role: "supervisor",
         pin: "5678",
+        email: "bea@x.com",
       }),
     );
 
@@ -121,6 +122,7 @@ describe("createPerson", () => {
           displayName: "Ghost",
           role: "staff",
           pin: "5678",
+          email: "ghost@x.com",
         }),
       ),
     );
@@ -144,6 +146,7 @@ describe("createPerson", () => {
           displayName: "TooShort",
           role: "staff",
           pin: "12",
+          email: "too-short@x.com",
         }),
       ),
     );
@@ -188,18 +191,22 @@ describe("createPerson email", () => {
     expect(await personCount()).toBe(before);
   });
 
-  it("leaves email null when the param is omitted", async () => {
+  it("rejects an omitted email with person.email_invalid, writing no row", async () => {
     const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const { id } = await run((tx) =>
-      createPerson(tx, {
-        tenantId,
-        managementSessionId: sessionId,
-        displayName: "PinOnly",
-        role: "staff",
-        pin: "5678",
-      }),
+    const before = await personCount();
+    const code = await codeOf(() =>
+      run((tx) =>
+        createPerson(tx, {
+          tenantId,
+          managementSessionId: sessionId,
+          displayName: "PinOnly",
+          role: "staff",
+          pin: "5678",
+        } as Parameters<typeof createPerson>[1]),
+      ),
     );
-    expect(await emailOf(id)).toBeNull();
+    expect(code).toBe("person.email_invalid");
+    expect(await personCount()).toBe(before);
   });
 });
 
@@ -529,6 +536,7 @@ describe("listActiveStaff", () => {
         displayName: "Zoe",
         role: "staff",
         pin: "4444",
+        email: "zoe@x.com",
       }),
     );
     const ana = await run((tx) =>
@@ -538,6 +546,7 @@ describe("listActiveStaff", () => {
         displayName: "Ana",
         role: "supervisor",
         pin: "5555",
+        email: "ana@x.com",
       }),
     );
     const gone = await run((tx) =>
@@ -547,6 +556,7 @@ describe("listActiveStaff", () => {
         displayName: "Gone",
         role: "staff",
         pin: "6666",
+        email: "gone@x.com",
       }),
     );
     await run((tx) => suspendPerson(tx, { managementSessionId: sessionId, personId: gone.id }));
@@ -581,6 +591,7 @@ describe("listPersons", () => {
         displayName: "Ada",
         role: "staff",
         pin: "4321",
+        email: "ada-list@x.com",
       }),
     );
     const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
@@ -602,7 +613,7 @@ describe("listPersons", () => {
     expect(JSON.stringify(roster)).not.toContain("scrypt$");
   });
 
-  it("projects each person's email — the stored value, and null when unset", async () => {
+  it("projects every created person's required email", async () => {
     const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
     const withEmail = await run((tx) =>
       createPerson(tx, {
@@ -614,19 +625,20 @@ describe("listPersons", () => {
         email: "mailed@x.com",
       }),
     );
-    const withoutEmail = await run((tx) =>
+    const second = await run((tx) =>
       createPerson(tx, {
         tenantId,
         managementSessionId: sessionId,
         displayName: "Unmailed",
         role: "staff",
         pin: "4321",
+        email: "second@x.com",
       }),
     );
 
     const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
     expect(roster.find((p) => p.personId === withEmail.id)!.email).toBe("mailed@x.com");
-    expect(roster.find((p) => p.personId === withoutEmail.id)!.email).toBeNull();
+    expect(roster.find((p) => p.personId === second.id)!.email).toBe("second@x.com");
     // email is part of the summary shape.
     expect(Object.keys(roster[0]!)).toEqual(expect.arrayContaining(["email"]));
   });

@@ -162,7 +162,10 @@ export class ServerRouter extends EventTarget {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     try {
-      const res = await this.#fetch(`${s.url}/api/node`, {
+      // Call the injected fetch as a plain function. `this.#fetch(...)` would bind `this` to the router;
+      // Chromium's native window.fetch rejects that receiver before sending the request.
+      const fetchImpl = this.#fetch;
+      const res = await fetchImpl(`${s.url}/api/node`, {
         signal: controller.signal,
         cache: "no-store",
       });
@@ -199,13 +202,20 @@ export class ServerRouter extends EventTarget {
       const url = parsed.origin;
       if (next.some((n) => n.url === url)) return;
       const prev = byUrl.get(url);
-      next.push({
-        url,
-        label: parsed.hostname,
-        nodeId: e.nodeId ?? prev?.nodeId,
-        state: prev?.state ?? "unknown",
-        term: prev?.term ?? null,
-      });
+      if (prev !== undefined) {
+        // A probe mutates this tracked object after its fetch resolves. Retain it when getTill refreshes
+        // the same URL mid-probe so that successful result remains in the active list.
+        if (e.nodeId !== undefined) prev.nodeId = e.nodeId;
+        next.push(prev);
+      } else {
+        next.push({
+          url,
+          label: parsed.hostname,
+          nodeId: e.nodeId,
+          state: "unknown",
+          term: null,
+        });
+      }
     };
     push({ url: this.#origin });
     for (const e of list) {

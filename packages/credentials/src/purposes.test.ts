@@ -4,13 +4,18 @@ import { PURPOSES, isPurpose, validatePayload } from "./purposes.js";
 import { capturedSync as captured } from "./testing/captured.js";
 
 describe("PURPOSES", () => {
-  it("declares the four purposes the host needs", () => {
+  it("declares the host credential purposes", () => {
     expect(Object.keys(PURPOSES).sort()).toEqual([
+      "email.smtp",
       "fiscal.aeat",
       "membership.node_key",
       "payments.stripe",
       "sync.mirror_token",
     ]);
+  });
+
+  it("defines an SMTP connection URL and sender address", () => {
+    expect(PURPOSES["email.smtp"]).toEqual(["url", "from"]);
   });
 
   it("names every field the Stripe hosted client is constructed from", () => {

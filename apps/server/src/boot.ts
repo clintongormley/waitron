@@ -92,6 +92,8 @@ import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
+import { createAccountEmailSender } from "./account-email.js";
+import { readCredential } from "./credentials.js";
 import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -1620,6 +1622,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       secureCookies,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
+      venueLocale,
+      // Development email is captured by the Mailpit service in docker-compose.yml. Production
+      // reads the venue's SMTP URL + sender from the encrypted credential vault on every send, so
+      // configuration and rotation take effect without restarting the box.
+      sendAccountEmail: async (message) => {
+        const smtp = config.devMode
+          ? { url: "smtp://127.0.0.1:1025", from: "Waitron <no-reply@waitron.test>" }
+          : await readCredential(db, ring, till.tenantId, "email.smtp");
+        await createAccountEmailSender({ url: smtp.url!, from: smtp.from! })(message);
+      },
     },
     log,
   );

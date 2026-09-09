@@ -97,6 +97,7 @@ async function provisionVenue(): Promise<Venue> {
           displayName: "Administradora",
           pinHash: hashPin("5555"),
           passwordHash: hashPassword("dashPass123"),
+          email: "owner@example.test",
         },
       },
       ALL_MODULES,

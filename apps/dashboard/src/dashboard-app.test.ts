@@ -92,6 +92,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       role: "manager",
       locale: null,
       venueLocale: "es-ES",
+      venueName: "Deli Test SL",
       permissions: ["booking.manage"],
       modules: ["bookings"],
     }),
@@ -101,6 +102,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      venueName: "Deli Test SL",
     }),
     putLocale: vi.fn().mockResolvedValue(undefined),
     listStaff: vi.fn().mockResolvedValue(people),
@@ -218,6 +220,10 @@ const screenCanvasEditor = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-canvas-editor-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
+const brandBanner = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=brand-banner]");
+const venueName = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=venue-name]");
 const navOverview = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]");
 const navSales = (el: DashboardApp) =>
@@ -362,6 +368,78 @@ describe("dashboard-app", () => {
     expect(customElements.get("dashboard-app")).toBe(DashboardApp);
   });
 
+  it("shows the Waitron banner and venue name on the login screen without logout", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+
+    expect(brandBanner(el)).toBeTruthy();
+    expect(brandBanner(el)!.querySelector<HTMLImageElement>('img[alt="Waitron"]')).toBeTruthy();
+    expect(venueName(el)!.textContent?.trim()).toBe("Deli Test SL");
+    expect(logoutBtn(el)).toBeNull();
+  });
+
+  it("shows an account-action link before probing an existing management session", async () => {
+    history.replaceState(
+      null,
+      "",
+      "/manage/account?token=action-token&purpose=invitation#email=new%40example.test",
+    );
+    const getMe = vi.fn().mockResolvedValue({
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+      venueName: "Deli Test SL",
+      permissions: [],
+      modules: [],
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe }),
+    });
+    await flush(el);
+
+    expect(login(el)?.shadowRoot?.querySelector("[data-test=complete-account]")).not.toBeNull();
+    expect(overview(el)).toBeNull();
+    expect(getMe).not.toHaveBeenCalled();
+  });
+
+  it("puts logout on the right side of the authenticated banner", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+
+    const banner = brandBanner(el)!;
+    const name = venueName(el)!;
+    const logout = logoutBtn(el)!;
+    expect(banner).toBeTruthy();
+    expect(name.textContent?.trim()).toBe("Deli Test SL");
+    expect(logout).toBeTruthy();
+    expect(logout.getBoundingClientRect().left).toBeGreaterThan(name.getBoundingClientRect().right);
+    const bannerBox = banner.getBoundingClientRect();
+    const trailingPadding = Number.parseFloat(getComputedStyle(banner).paddingRight);
+    expect(logout.getBoundingClientRect().right).toBeCloseTo(bannerBox.right - trailingPadding, 0);
+  });
+
+  it("puts the full-width banner above both the sidebar and page content", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+
+    const shell = el.shadowRoot!.querySelector<HTMLElement>(".shell")!;
+    const banner = brandBanner(el)!;
+    const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const hostBox = el.getBoundingClientRect();
+    const bannerBox = banner.getBoundingClientRect();
+
+    expect(shell.firstElementChild).toBe(banner);
+    expect(bannerBox.left).toBeCloseTo(hostBox.left, 0);
+    expect(bannerBox.right).toBeCloseTo(hostBox.right, 0);
+    expect(sidebar.getBoundingClientRect().top).toBeGreaterThanOrEqual(bannerBox.bottom);
+    expect(main.getBoundingClientRect().top).toBeGreaterThanOrEqual(bannerBox.bottom);
+  });
+
   it("shows login when no session, business overview after a manager logs in", async () => {
     // getMe rejects at boot (no session) then resolves as a MANAGER after login — the real shape: the
     // whoami 401s before login and resolves once the cookie is set. Since Task 9 a non-staff login
@@ -376,6 +454,7 @@ describe("dashboard-app", () => {
           role: "manager",
           locale: null,
           venueLocale: "es-ES",
+          venueName: "Deli Test SL",
           permissions: [],
           modules: [],
         }),
@@ -390,6 +469,7 @@ describe("dashboard-app", () => {
     expect(overview(el)).toBeTruthy();
     expect(staff(el)).toBeNull();
     expect(login(el)).toBeNull();
+    expect(venueName(el)!.textContent?.trim()).toBe("Deli Test SL");
   });
 
   it("starts on the business overview screen when a manager session already exists", async () => {
@@ -548,6 +628,8 @@ describe("dashboard-app", () => {
     expect(api.logout).toHaveBeenCalledOnce();
     expect(login(el)).toBeTruthy();
     expect(overview(el)).toBeNull();
+    expect(venueName(el)!.textContent?.trim()).toBe("Deli Test SL");
+    expect(logoutBtn(el)).toBeNull();
   });
 
   // The logged-in shell gains a nav between the staff and catalogue screens. It opens on overview (the
@@ -1237,13 +1319,18 @@ describe("dashboard-app", () => {
 });
 
 /** The resolved shape `getLocales` answers with (used by the controllable-promise disconnect tests). */
-type LocalesResponse = { locales: { code: string; label: string }[]; venueDefault: string };
+type LocalesResponse = {
+  locales: { code: string; label: string }[];
+  venueDefault: string;
+  venueName: string;
+};
 /** The resolved shape the widened `getMe` answers with. */
 type MeResponse = {
   personId: string;
   role: string;
   locale: string | null;
   venueLocale: string;
+  venueName: string;
   permissions: string[];
   modules: string[];
 };
@@ -1266,11 +1353,11 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("en-GB");
     // The email/password field labels live inside the wt-input primitive's own shadow root, so a
     // localised string that renders in the login screen's OWN shadow is the observable proxy: the
-    // submit button's slotted text. It differs across locales, so it proves the keyed re-render
+    // first-step button's slotted text. It differs across locales, so it proves the keyed re-render
     // reached this deep child in the seeded venue default (en-GB), not the module default (es-ES).
-    const submit = login(el)!.shadowRoot!.querySelector("[data-test=submit]")!;
-    expect(submit.textContent).toContain(t("action.login", "en-GB")); // "Log in"
-    expect(submit.textContent).not.toContain(t("action.login", "es-ES")); // not "Entrar"
+    const submit = login(el)!.shadowRoot!.querySelector("[data-test=continue]")!;
+    expect(submit.textContent).toContain(t("action.continue", "en-GB")); // "Continue"
+    expect(submit.textContent).not.toContain(t("action.continue", "es-ES")); // not "Continuar"
   });
 
   it("applies the person's stored locale on a logged-in boot — the seed never clobbers it, and never runs", async () => {
@@ -1434,7 +1521,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el); // probe rejected → on login; the seed's getLocales is now pending
     expect(currentLocale()).toBe("es-ES"); // module default, not yet seeded
     host.remove(); // torn down before getLocales resolves
-    resolveLocales({ locales: [], venueDefault: "en-GB" });
+    resolveLocales({ locales: [], venueDefault: "en-GB", venueName: "Deli Test SL" });
     await flush(el);
     expect(getLocales).toHaveBeenCalledOnce();
     expect(currentLocale()).toBe("es-ES"); // the seed to en-GB was skipped on the detached app
@@ -1456,6 +1543,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
       role: "manager",
       locale: "en-GB",
       venueLocale: "es-ES",
+      venueName: "Deli Test SL",
       permissions: [],
       modules: [],
     });

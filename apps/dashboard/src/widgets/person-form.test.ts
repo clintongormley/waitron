@@ -1,7 +1,9 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
+import { t } from "../i18n/t.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-person-form` so `mountWidget` can create it.
 import { PersonForm } from "./person-form.js";
@@ -13,6 +15,19 @@ async function openedDialog(el: PersonForm): Promise<HTMLDialogElement> {
   const wtDialog = el.shadowRoot!.querySelector("wt-dialog")!;
   await (wtDialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
   return wtDialog.shadowRoot!.querySelector("dialog")!;
+}
+
+async function fillRequired(el: PersonForm): Promise<void> {
+  for (const [testId, value] of [
+    ["display-name", "Ada"],
+    ["pin", "1234"],
+    ["email", "ada@x.com"],
+  ] as const) {
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+  }
+  await el.updateComplete;
 }
 
 describe("person-form", () => {
@@ -64,10 +79,12 @@ describe("person-form", () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     const displayName = el.shadowRoot!.querySelector<HTMLElement>("[data-test=display-name]")!;
     const pin = el.shadowRoot!.querySelector<HTMLElement>("[data-test=pin]")!;
+    const email = el.shadowRoot!.querySelector<HTMLElement>("[data-test=email]")!;
     const select = el.shadowRoot!.querySelector("select")!;
 
     displayName.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Ada" } }));
     pin.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1234" } }));
+    email.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "ada@x.com" } }));
     select.value = "manager";
     select.dispatchEvent(new Event("change"));
     await el.updateComplete;
@@ -77,7 +94,12 @@ describe("person-form", () => {
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     const event = await created;
-    expect(event.detail).toEqual({ displayName: "Ada", role: "manager", pin: "1234" });
+    expect(event.detail).toEqual({
+      displayName: "Ada",
+      role: "manager",
+      pin: "1234",
+      email: "ada@x.com",
+    });
   });
 
   // The dashboard sign-in email is carried on create-person alongside the other fields. Typed into
@@ -107,38 +129,78 @@ describe("person-form", () => {
     });
   });
 
-  // A blank email is OMITTED from the detail entirely — a create with no email must not send an empty
-  // string the server would reject as `person.email_invalid`. Prove by deletion: drop the non-empty
-  // guard in `#confirm` and this fails with `email: ""` present.
-  it("omits email from create-person when the field is left blank", async () => {
+  it("keeps create available so an empty submission can explain every missing field", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
-    const created = new Promise<CustomEvent<Record<string, unknown>>>((resolve) =>
-      el.addEventListener("create-person", (e) => resolve(e as CustomEvent)),
+    const confirm = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=confirm]",
+    )!;
+    expect(confirm.disabled).toBe(false);
+    confirm.click();
+    await el.updateComplete;
+    const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
+    expect(summary.shadowRoot!.querySelector("[data-heading]")?.textContent).toBe(
+      t("form.error_heading"),
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
-    expect("email" in (await created).detail).toBe(false);
+    expect(summary.shadowRoot!.querySelectorAll("li")).toHaveLength(3);
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-input")].map(
+        (field) => field.error,
+      ),
+    ).toEqual([t("form.name_required"), t("form.pin_required"), t("form.email_required")]);
   });
 
-  // A whitespace-only email counts as blank and is OMITTED too — "   " must not be sent and then
-  // rejected as person.email_invalid from a seemingly empty field. Prove by deletion: drop the
-  // `.trim()` in `#confirm` and this fails with `email: "   "` present. (Copilot, PR #172.)
-  it("omits a whitespace-only email from create-person", async () => {
+  it("gives fields semantic names and marks every required value", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=email]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "   " } }),
-    );
-    await el.updateComplete;
-    const created = new Promise<CustomEvent<Record<string, unknown>>>((resolve) =>
-      el.addEventListener("create-person", (e) => resolve(e as CustomEvent)),
-    );
+    const fields = [...el.shadowRoot!.querySelectorAll("wt-input")].map((field) => {
+      const input = field.shadowRoot!.querySelector("input")!;
+      return { name: input.name, required: input.required };
+    });
+    expect(fields).toEqual([
+      { name: "name", required: true },
+      { name: "pin", required: true },
+      { name: "email", required: true },
+    ]);
+    expect(el.shadowRoot!.querySelector("select")!.name).toBe("role");
+  });
+
+  it("shows explanatory errors for a short PIN and malformed email", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    for (const [testId, value] of [
+      ["display-name", "Ada"],
+      ["pin", "12"],
+      ["email", "not-an-email"],
+    ] as const) {
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value } }),
+      );
+    }
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
-    expect("email" in (await created).detail).toBe(false);
+    await el.updateComplete;
+    expect(
+      (el.shadowRoot!.querySelector("[data-test=pin]") as HTMLElement & { error: string }).error,
+    ).toBe(codeMessage("pin.too_short"));
+    expect(
+      (el.shadowRoot!.querySelector("[data-test=email]") as HTMLElement & { error: string }).error,
+    ).toBe(codeMessage("person.email_invalid"));
+  });
+
+  it("puts Cancel on the left, Create on the right, and offers contextual email help", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    expect(actions.querySelector('[slot="cancel"]')?.getAttribute("data-test")).toBe("cancel");
+    expect(actions.querySelector("wt-button:not([slot])")?.getAttribute("data-test")).toBe(
+      "confirm",
+    );
+    expect(
+      el.shadowRoot!.querySelector("[data-test=email] wt-help-tooltip")?.textContent?.trim(),
+    ).toBe(t("person.email_help"));
   });
 
   // A padded real address is emitted TRIMMED, so surrounding spaces never reach the server's own
   // trim+validate as a distinct (still valid, but noisy) value. (Copilot, PR #172.)
   it("emits a padded email trimmed on create-person", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=email]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "  owner@x.com  " } }),
     );
@@ -164,6 +226,7 @@ describe("person-form", () => {
   // so it is dispatched bubbles+composed — asserted so a future edit does not quietly drop either.
   it("emits create-person as a bubbling, composed event", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
     const seen = new Promise<Event>((resolve) => el.addEventListener("create-person", resolve));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     const event = await seen;
@@ -175,6 +238,7 @@ describe("person-form", () => {
   // one field with no explicit starting value in the confirm test above.
   it("defaults the role to staff when the select is untouched", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
     const created = new Promise<CustomEvent<{ role: string }>>((resolve) =>
       el.addEventListener("create-person", (e) => resolve(e as CustomEvent)),
     );
@@ -199,6 +263,25 @@ describe("person-form", () => {
     await closed;
     await el.updateComplete;
     expect(el.open).toBe(false);
+  });
+
+  it("keeps the person dialog open when Escape only dismisses its help tooltip", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const nativeDialog = await openedDialog(el);
+    const tooltip = el.shadowRoot!.querySelector("wt-help-tooltip")!;
+    const button = tooltip.shadowRoot!.querySelector("button")!;
+    button.click();
+    await (tooltip as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    expect(tooltip.shadowRoot!.querySelector("[role=tooltip]")).not.toBeNull();
+
+    button.focus();
+    await userEvent.keyboard("{Escape}");
+    await (tooltip as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(tooltip.shadowRoot!.querySelector("[role=tooltip]")).toBeNull();
+    expect(nativeDialog.open).toBe(true);
+    expect(el.open).toBe(true);
   });
 
   // When the dialog CLOSES — a successful create (the staff screen sets `.open=false`, and wt-dialog
@@ -253,7 +336,9 @@ describe("person-form", () => {
       open: true,
       error: "pin.too_short",
     });
-    const alert = el.shadowRoot!.querySelector("[role=alert]");
+    const alert = el
+      .shadowRoot!.querySelector("wt-form-error-summary")!
+      .shadowRoot!.querySelector("[role=alert]");
     // The banner shows LOCALISED copy for the code, never the raw wire code (the code stays in `error`).
     expect(alert?.textContent).toContain(codeMessage("pin.too_short", "es-ES"));
     expect(alert?.textContent).not.toContain("pin.too_short");

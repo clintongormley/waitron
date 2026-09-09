@@ -1,6 +1,8 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "../widgets/language-chooser.js";
@@ -47,7 +49,8 @@ export class TillEnrolScreen extends LitElement {
       /* A narrow reading column so the field + button stack rather than span a device edge-to-edge. */
       .screen {
         display: flex;
-        max-width: 24rem;
+        max-width: var(--till-enrol-max-width, 24rem);
+        margin-inline: auto;
         flex-direction: column;
         gap: var(--wt-space-3);
       }
@@ -108,6 +111,8 @@ export class TillEnrolScreen extends LitElement {
   @state() private errorCode = "";
   /** Reentry guard: one in-flight knock at a time (a double-tap is a no-op). */
   @state() private busy = false;
+  /** An empty name is only flagged after the operator tries to submit the form. */
+  @state() private attempted = false;
   #poll?: ReturnType<typeof setInterval>;
 
   override disconnectedCallback(): void {
@@ -128,7 +133,9 @@ export class TillEnrolScreen extends LitElement {
    * `refused` re-enters here, and the name field is the only thing the operator can still change.
    */
   async #join(): Promise<void> {
-    if (this.name === "" || this.busy) return;
+    if (this.busy) return;
+    this.attempted = true;
+    if (this.name === "") return;
     this.busy = true;
     this.errorCode = "";
     try {
@@ -192,6 +199,7 @@ export class TillEnrolScreen extends LitElement {
   }
 
   #renderName(): TemplateResult {
+    const nameError = this.attempted && this.name === "" ? t("form.name_required") : "";
     return html`
       <h1 class="title">${t("device.join_name_title")}</h1>
       <p class="hint">${t("device.join_name_hint")}</p>
@@ -200,25 +208,35 @@ export class TillEnrolScreen extends LitElement {
           ? nothing
           : html`<p class="error" role="alert" data-error>${codeMessage(this.errorCode)}</p>`
       }
+      <wt-form-error-summary
+        heading=${t("form.error_heading")}
+        .errors=${nameError === "" ? [] : [nameError]}
+      ></wt-form-error-summary>
       <wt-input
         @keydown=${(e: KeyboardEvent) =>
           submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
         data-name
+        name="device-name"
+        required
         .label=${t("device.join_name_label")}
         .value=${this.name}
+        .error=${nameError}
         @wt-change=${(e: Event) => {
           e.stopPropagation();
           this.#onName(e);
         }}
       ></wt-input>
-      <wt-button
-        data-submit
-        variant="primary"
-        ?disabled=${this.name === "" || this.busy}
-        @click=${() => void this.#join()}
-      >
-        ${t("device.join_submit")}
-      </wt-button>
+      <wt-form-actions>
+        <slot name="actions-before" slot="cancel"></slot>
+        <wt-button
+          data-submit
+          variant="primary"
+          ?disabled=${this.busy}
+          @click=${() => void this.#join()}
+        >
+          ${t("device.join_submit")}
+        </wt-button>
+      </wt-form-actions>
     `;
   }
 
