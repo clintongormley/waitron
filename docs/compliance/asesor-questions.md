@@ -12,6 +12,10 @@ priority. Q9 is referenced from other documents; do not renumber it.
 Last revised **2026-08-26** — Q17 (F3 *canje*) and Q18 (*modelo 303* IVA soportado) added, Q16
 sharpened; see the 2026-08-26 banner. Prior substantive pass **2026-08-01**.
 
+> **2026-09-09:** Added the separate preparation-environment question below for
+> [node onboarding](../superpowers/specs/2026-09-09-node-onboarding-design.md). This does not
+> reopen the settled treatment of training invoices issued by an operational live SIF.
+
 > **⚠ Read before sending, 2026-08-01.** Two architecture designs and one research pass have moved
 > this list since the questions below were written. Read this before paying for any answer.
 >
@@ -1046,6 +1050,37 @@ deducible figure turns on it:
 > importaciones (32–39)?
 
 ---
+
+## Separate preparation environment (added 2026-09-09)
+
+You configure your actual restaurant in a separate preproduction database, practise only simulated
+transactions and test payments, then export configuration into a fresh production database. Sales,
+fiscal chains/counters and credentials do not transfer. Default preparation sends nothing to AEAT;
+a deliberate functional check uses its external test service. The live system has no switch that
+suppresses filing for training.
+
+**Known boundary:** AEAT's developer FAQ v1.3, §11 pp.21–23, discusses systems invoicing
+“en real” and treats their training invoices as real, followed by cancellation and retained history.
+This is already recorded in `verifactu-findings.md`. The test portal separately states that its
+submissions have no tax consequences. Neither statement alone answers the distribution and
+operating constraints for the proposed preparation product.
+
+**Question to resolve before releasing this mode:** What technical separation, output marking,
+retention duties and product/declaration wording are required to distribute and use this separate
+configuration-and-simulation environment, with no actual sales, alongside the live SIF?
+
+**Para el asesor:** Queremos ofrecer un entorno separado de preparación, con su propia base de
+datos, para configurar el restaurante y simular operaciones sin entregas de bienes ni prestaciones
+reales, usando pagos de prueba. Solo se exportaría la configuración a una nueva base de producción;
+no se trasladarían ventas, registros de facturación ni numeraciones. ¿Qué separación técnica,
+identificación de los documentos simulados, obligaciones de conservación y descripción en el
+producto y su declaración responsable exige esta modalidad? No proponemos desactivar la remisión
+en el SIF que factura en real.
+
+Sources checked 2026-09-09:
+[AEAT developer FAQ, §11](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/FAQs-Desarrolladores.pdf#page=22)
+and [external test portal](https://preportal.aeat.es/PRE-Exteriores/Inicio/Inicio.html).
+This records a question; no enquiry has been sent.
 
 ## Notes for the conversation
 

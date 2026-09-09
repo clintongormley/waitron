@@ -1,5 +1,9 @@
 # Appliance onboarding — from an installed box to a trading venue, in a browser
 
+> **2026-09-09:** The [node onboarding design](2026-09-09-node-onboarding-design.md) supersedes
+> this document's first-run mode choices, default preparation filing behavior and development
+> targets. This document retains the historical appliance/network design and its original rationale.
+
 **Date:** 2026-08-26
 **Status:** captured brainstorm — a design, not an implementation-ready spec. Records decisions,
 leans, and open questions. Several slices named here (AP-mode firmware, the appliance OS image, the

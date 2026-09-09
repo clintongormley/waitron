@@ -163,7 +163,11 @@ design-review section apply.
   module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
   installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick
   carries the images so install needs no internet, unattended updates for a box we did not sell,
-  AP-mode WiFi onboarding). Then: the from-scratch primary and first-run modes 1–2, images into
+  AP-mode WiFi onboarding). **Node onboarding is now planned in `waitron-node-onboarding`**:
+  [design](superpowers/specs/2026-09-09-node-onboarding-design.md) and
+  [implementation plan](superpowers/plans/2026-09-09-node-onboarding.md), covering Demo, Prepare,
+  Go live, and Join or recover. Coordinate its setup UI and module-contract changes with Tracks 1
+  and C. Other work: images into
   Postgres, backup destinations (mirror → S3 → Drive). (The name-constrained CA + plain-HTTP landing
   page + the LAN-HTTPS spike's desktop half **LANDED #290** — Track 1's slice, but it touched these
   Track P files; the phone rows are the owner's.) *Follow-ups from #290 now LANDED #293:* the
@@ -866,10 +870,6 @@ for the projected remainder.
   the rest is post-polish. See *Open threads → Printing*.
 - **Cloud trial on-ramp** — gated on Waitron Cloud (the per-tenant instance fleet + control plane),
   which does not exist yet. See *Open threads → Onboarding*.
-- **Guided onboarding wizard (four setup modes)** — a non-technical first-run chooser (demo /
-  pre-production / production-from-pre-production / add-a-node) + per-mode wizards, wrapping the existing
-  dev/demo/provisioning/adopt paths, plus Square/CSV migration as a step. See *Open threads →
-  Onboarding*.
 - **Recipes → stock → procurement (depth)** — recipe-authoring built; plate costing / stock depletion /
   suppliers/POs is product depth. See *Open threads → Recipes*.
 - **Distribution / deployment remainder** — appliance image, on-device agent, the cloud standby's
@@ -1196,43 +1196,30 @@ Onboarding free-tier slices 1–4 are complete (#137–#166); spec
 venue-only (R1) — the full `instance` role-split is deferred to the appliance image (*Debt →
 Provisioning/build*).
 
-**Guided onboarding wizard — four setup modes (owner-added 2026-09-04).** Onboarding today is a
-developer path (`pnpm dev:setup`, env vars, the provisioning CLIs); the owner wants a **simple first-run
-chooser** so a non-technical installer is never overwhelmed and never "runs away". On installing a new
-node, present a small menu of **four intents**, then a dedicated wizard that guides each one to
-completion:
+**Guided node onboarding (owner decisions, 2026-09-09): planning complete, implementation next.**
+[Design](superpowers/specs/2026-09-09-node-onboarding-design.md) and
+[plan](superpowers/plans/2026-09-09-node-onboarding.md) supersede the 2026-09-04 mode sketch.
 
-1. **Set up a demo** — load the demo seed, enable **dev mode** for devices, **no real POS payments**,
-   **nothing filed** to AEAT. Maps to `WAITRON_ENV=dev` (fiscally = preproduction, `config.devMode` on
-   — SP-C #201) + the `dev:setup` seed (~44-product menu, floor plan, staff, back-dated sales). Mostly
-   built already; the wizard is the friendly wrapper over it.
-2. **Set up a new pre-production system** — empty DB, **test cards** for POS, fiscal records **submitted
-   to AEAT's pre-production** endpoint. Maps to `WAITRON_ENV=preproduction` (the default) + the
-   `venue`/`instance` provisioning path (onboarding slices 1–4, #137–#166).
-3. **Set up a new production system, copying from an existing pre-production system** — a real venue goes
-   live reusing the configuration it already tuned in pre-production. **Fiscal caution (§5): one database
-   per environment — a pre-production DB is _never promoted_.** Its `invoice_series` / hash-chain must
-   **not** carry over (pre-prod sales would leave a permanent hole in the production series, which is
-   exactly what Veri\*Factu detects, and a chain cannot be migrated). So this wizard copies
-   **configuration only** — catalogue/menus, floor plan, staff, devices, canvases, hardware
-   bindings, printer/payment config — into a **fresh production DB with a brand-new fiscal chain +
-   series**. Needs a defined config **export/import** surface (what copies vs. what is minted fresh);
-   H2-adjacent, so specced with the owner, never landed unattended.
-4. **Add a node to an existing system** — a second box joins an already-running venue. Maps to the
-   **membership adopt** arc (the standby's dormant identity at join, *Replication, membership &
-   failover*) plus till reroute (landed). Largely a wizard over infra already built; a second LOCAL box
-   is post-MVP.
+1. **Demo:** sample restaurant and sales, test payments, no fiscal submissions; Mailpit with an inbox
+   link when SMTP is absent. Public Demo is separate from developer identity shortcuts.
+2. **Prepare your restaurant:** real configuration without sample content; simulated transactions,
+   test payments and no fiscal submissions by default. This is not for actual trading.
+3. **Go live:** recommend configuration transfer from Prepare into a fresh production database;
+   also offer an empty start. Keep sales/history, fiscal chains/counters, credentials and device
+   enrolments out of the transfer. Reconnect hardware and activate staff accounts. A bounded fiscal
+   test before initial activation is the proposed product policy, not an established legal duty.
+4. **Join or recover an existing restaurant:** add a mirror or restore a backup, inheriting the
+   source environment and retaining existing membership, fencing and fiscal restore safeguards.
 
-Plus **data migration from common systems (e.g. Square)** to lower the switching cost for an owner
-leaving another POS — this is the existing *Square (and generic CSV) menu import* item
-(*Priorities → Tier C*; a one-off import is NOT the cheap seed path, spike 2026-08-29), which the wizard
-would surface as an optional step inside modes 2/3. The territory picker `fiscal-none` needs (a
-GB/no-regime venue is not wizard-reachable today) belongs in modes 2/3 too.
+Development gets two managed targets: seeded **dev demo** and blank **dev onboarding**, sharing
+persistent development trust while resetting application identity separately. The implementation
+uses Sol high, per owner instruction. The plan covers the module transfer contract, installed seed
+and Mailpit, resumable setup and fiscal checks, both recovery UI paths and installed-image checks.
 
-**Scope to brainstorm when picked up:** the first-run chooser UI (`apps/setup`), the four wizard flows,
-the config export/import surface for mode 3 (and its fresh-chain guarantee), how each mode sets
-`WAITRON_ENV` / `devMode` / provisioning, and where the Square/CSV importer slots in. Modes 1–2 are
-mostly a UX wrapper over built paths; modes 3–4 carry the real new work.
+The no-filing regime must be wizard-reachable through the fiscal contribution. Third-party
+Square/CSV import remains its separate backlog item. Live-system training with automatic invoice
+issue/cancel is outside this onboarding scope. The compliance track records the remaining question
+about distributing a separate preparation environment; this planning pass is not legal clearance.
 
 **Constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid real-cert):**
 
