@@ -13,7 +13,7 @@ import type { PrinterTarget, Transport } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
 // PGlite is the right target for the runtime's LOGIC — the happy pull→push→report path, per-printer
-// failure isolation, the retry cap, and the agent-scope filter — none of which depend on concurrency
+// failure isolation, the retry cap, and the venue-scope filter — none of which depend on concurrency
 // or the deployment role. The one property PGlite CANNOT show is the double-pull race (it serialises
 // every query onto one backend, so two agents never truly contend): that lives in runtime.race.test.ts
 // against real Postgres, proven by deletion of the locking pull (CLAUDE.md §4).
@@ -34,11 +34,10 @@ async function seedAgent(cfg: PrintConfig, name = "Kitchen agent"): Promise<stri
   return rows[0]!.id;
 }
 
-async function seedPrinter(tx: Transaction, cfg: PrintConfig, agentId: string): Promise<string> {
+async function seedPrinter(tx: Transaction, cfg: PrintConfig): Promise<string> {
   const { id } = await createPrinter(tx, cfg, {
     name: "Kitchen",
     transport: "network_tcp",
-    agentId,
     host: "10.0.0.9",
     port: 9100,
   });
@@ -82,7 +81,7 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTenant(suite.db, cfg.tenantId, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg, agentId);
+      const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(
         tx,
         cfg,
@@ -91,7 +90,14 @@ describe("runAgentOnce (pull → push → report)", () => {
       );
 
       const sink = new FakeSink();
-      const result = await runAgentOnce({ tx, cfg, agentId, transport: sink });
+      const result = await runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: cfg.locationId,
+        visibleKeys: [],
+        transport: sink,
+      });
 
       expect(sink.written).toEqual([{ printerId, bytes: esc().text("Table 4").cut().bytes() }]);
       expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
@@ -108,20 +114,25 @@ describe("runAgentOnce (pull → push → report)", () => {
       const down = await createPrinter(tx, cfg, {
         name: "Down",
         transport: "network_tcp",
-        agentId,
         host: "10.0.0.1",
       });
       const up = await createPrinter(tx, cfg, {
         name: "Up",
         transport: "network_tcp",
-        agentId,
         host: "10.0.0.2",
       });
       const { jobId: downJob } = await enqueuePrintJob(tx, cfg, down.id, new Uint8Array([1]));
       const { jobId: upJob } = await enqueuePrintJob(tx, cfg, up.id, new Uint8Array([2]));
 
       const sink = new FlakySink(down.id);
-      const result = await runAgentOnce({ tx, cfg, agentId, transport: sink });
+      const result = await runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: cfg.locationId,
+        visibleKeys: [],
+        transport: sink,
+      });
 
       expect(result).toEqual({ claimed: 2, delivered: 1, failed: 1 });
       // The up printer's job still printed — the down printer never blocked its queue.
@@ -140,12 +151,19 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTenant(suite.db, cfg.tenantId, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg, agentId);
+      const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
       // A transport that rejects with a bare string, not an Error — the non-Error branch of the
       // report path (String(error)), so last_error is still a readable message.
       const rejecting: Transport = { send: () => Promise.reject("drawer jammed") };
-      const result = await runAgentOnce({ tx, cfg, agentId, transport: rejecting });
+      const result = await runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: cfg.locationId,
+        visibleKeys: [],
+        transport: rejecting,
+      });
       expect(result).toEqual({ claimed: 1, delivered: 0, failed: 1 });
       const row = await jobRow(tx, jobId);
       expect(row.status).toBe("failed");
@@ -157,17 +175,31 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTenant(suite.db, cfg.tenantId, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg, agentId);
+      const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([7]));
 
       // Run 1: the printer is down → failed, attempts 1.
-      await runAgentOnce({ tx, cfg, agentId, transport: new FlakySink(printerId) });
+      await runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: cfg.locationId,
+        visibleKeys: [],
+        transport: new FlakySink(printerId),
+      });
       expect(await jobRow(tx, jobId).then((r) => r.status)).toBe("failed");
       expect(await jobRow(tx, jobId).then((r) => r.attempts)).toBe(1);
 
       // Run 2: the printer recovers → the failed job is re-claimed and delivered.
       const sink = new FakeSink();
-      const result = await runAgentOnce({ tx, cfg, agentId, transport: sink });
+      const result = await runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: cfg.locationId,
+        visibleKeys: [],
+        transport: sink,
+      });
       expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
       expect(sink.written).toEqual([{ printerId, bytes: new Uint8Array([7]) }]);
       expect((await jobRow(tx, jobId)).status).toBe("done");
@@ -178,7 +210,7 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTenant(suite.db, cfg.tenantId, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg, agentId);
+      const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([9]));
       // Drive the job straight to the cap so it is no longer claimable.
       await tx
@@ -187,27 +219,46 @@ describe("runAgentOnce (pull → push → report)", () => {
         .where(eq(printJobs.id, jobId));
 
       const sink = new FakeSink();
-      const result = await runAgentOnce({ tx, cfg, agentId, transport: sink });
+      const result = await runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: cfg.locationId,
+        visibleKeys: [],
+        transport: sink,
+      });
       expect(result).toEqual({ claimed: 0, delivered: 0, failed: 0 });
       expect(sink.written).toEqual([]);
       expect((await jobRow(tx, jobId)).status).toBe("failed"); // still failed — not re-claimed
     });
   });
 
-  it("pulls ONLY the calling agent's own printers' jobs (authorization scope)", async () => {
+  it("does NOT pull a network printer's job for an agent serving a DIFFERENT venue (venue scope)", async () => {
     const cfg = await setup();
-    const mine = await seedAgent(cfg, "Mine");
-    const other = await seedAgent(cfg, "Other");
+    const agentId = await seedAgent(cfg);
+    // A second venue in the same tenant. Printers carry no agent binding now, so venue membership is
+    // what scopes a network printer's job — an agent reporting the OTHER venue must claim nothing.
+    const { rows } = await suite.db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${cfg.tenantId}, 'Terrace', array['es-ES'], 'Sale on premises') returning id`);
+    const otherLocationId = rows[0]!.id;
     await withTenant(suite.db, cfg.tenantId, async (tx) => {
-      const otherPrinter = await seedPrinter(tx, cfg, other);
-      const { jobId } = await enqueuePrintJob(tx, cfg, otherPrinter, new Uint8Array([1]));
+      const printerId = await seedPrinter(tx, cfg);
+      const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
 
-      // MY runtime must see nothing — the job belongs to another agent's printer.
+      // The agent serves a different venue, so the network printer's `location_id` conjunct excludes it.
       const sink = new FakeSink();
-      const result = await runAgentOnce({ tx, cfg, agentId: mine, transport: sink });
+      const result = await runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: otherLocationId,
+        visibleKeys: [],
+        transport: sink,
+      });
       expect(result).toEqual({ claimed: 0, delivered: 0, failed: 0 });
       expect(sink.written).toEqual([]);
-      expect((await jobRow(tx, jobId)).status).toBe("queued"); // untouched, still the other agent's
+      expect((await jobRow(tx, jobId)).status).toBe("queued"); // untouched, wrong venue
     });
   });
 
@@ -215,9 +266,18 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTenant(suite.db, cfg.tenantId, async (tx) => {
-      await seedPrinter(tx, cfg, agentId); // a printer, but no jobs
+      await seedPrinter(tx, cfg); // a printer, but no jobs
       const sink = new FakeSink();
-      expect(await runAgentOnce({ tx, cfg, agentId, transport: sink })).toEqual({
+      expect(
+        await runAgentOnce({
+          tx,
+          cfg,
+          agentId,
+          locationId: cfg.locationId,
+          visibleKeys: [],
+          transport: sink,
+        }),
+      ).toEqual({
         claimed: 0,
         delivered: 0,
         failed: 0,

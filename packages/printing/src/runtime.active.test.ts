@@ -57,19 +57,17 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
 
-    // Two printers on the same agent — both jobs enqueued while ACTIVE (enqueue itself now rejects an
-    // inactive printer), then one printer is deactivated.
+    // Two network printers in the venue — both jobs enqueued while ACTIVE (enqueue itself now rejects
+    // an inactive printer), then one printer is deactivated.
     const seeded = await asApp(suite.admin, cfg, async (tx) => {
       const active = await createPrinter(tx, cfg, {
         name: "Active",
         transport: "network_tcp",
-        agentId,
         host: "10.0.0.1",
       });
       const dead = await createPrinter(tx, cfg, {
         name: "Dead",
         transport: "network_tcp",
-        agentId,
         host: "10.0.0.2",
       });
       const { jobId: activeJobId } = await enqueuePrintJob(tx, cfg, active.id, new Uint8Array([1]));
@@ -78,7 +76,9 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
     });
     await deactivate(seeded.dead);
 
-    const claimed = await asApp(suite.admin, cfg, (tx) => claimPrintJobs(tx, cfg, agentId));
+    const claimed = await asApp(suite.admin, cfg, (tx) =>
+      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
 
     // The active printer's job is claimed; the deactivated printer's queued job is left untouched — the
     // agent stops pulling for a disabled printer, so the job simply waits for reactivation.
@@ -95,7 +95,6 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
       const p = await createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
-        agentId,
         host: "10.0.0.9",
       });
       const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([0x41]));
@@ -104,7 +103,9 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
 
     // The agent CLAIMS the job (queued → printing, claimed_at stamped) in its own committed transaction,
     // then "dies": the row is left committed-and-unlocked in `printing`.
-    const claimed = await asApp(suite.admin, cfg, (tx) => claimPrintJobs(tx, cfg, agentId));
+    const claimed = await asApp(suite.admin, cfg, (tx) =>
+      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
     expect(claimed).toHaveLength(1);
     const printerId = claimed[0]!.printer_id;
 
@@ -117,7 +118,9 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
 
     // A later pull must NOT reclaim the stuck job: the printer is deactivated, so the lease reclaim is
     // suppressed and the job stays stranded in `printing` until the printer is reactivated.
-    const reclaimed = await asApp(suite.admin, cfg, (tx) => claimPrintJobs(tx, cfg, agentId));
+    const reclaimed = await asApp(suite.admin, cfg, (tx) =>
+      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
     expect(reclaimed).toEqual([]);
     expect(await jobStatus(jobId)).toBe("printing");
   });

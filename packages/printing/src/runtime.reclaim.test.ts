@@ -58,12 +58,11 @@ async function jobRow(jobId: string): Promise<{
   return rows[0]!;
 }
 
-async function seedPrinterAndJob(cfg: PrintConfig, agentId: string): Promise<string> {
+async function seedPrinterAndJob(cfg: PrintConfig): Promise<string> {
   return asApp(suite.admin, cfg, async (tx) => {
     const printer = await createPrinter(tx, cfg, {
       name: "Kitchen",
       transport: "network_tcp",
-      agentId,
       host: "10.0.0.9",
     });
     const { jobId } = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([0x41]));
@@ -75,11 +74,13 @@ describe("print-job lease reclaim (real Postgres)", () => {
   it("stamps claimed_at on claim, then RECLAIMS a stuck printing job once the lease has expired", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    const jobId = await seedPrinterAndJob(cfg, agentId);
+    const jobId = await seedPrinterAndJob(cfg);
 
     // The agent CLAIMS the job (queued → printing, claimed_at stamped) in its own committed transaction,
     // then "dies": it never reports, so the row is left committed-and-unlocked in `printing`.
-    const claimed = await asApp(suite.admin, cfg, (tx) => claimPrintJobs(tx, cfg, agentId));
+    const claimed = await asApp(suite.admin, cfg, (tx) =>
+      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
     expect(claimed).toHaveLength(1);
     expect(claimed[0]!.id).toBe(jobId);
     const afterClaim = await jobRow(jobId);
@@ -97,7 +98,14 @@ describe("print-job lease reclaim (real Postgres)", () => {
     // it eligible — and delivers it.
     const sink = new FakeSink();
     const result = await asApp(suite.admin, cfg, (tx) =>
-      runAgentOnce({ tx, cfg, agentId, transport: sink }),
+      runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: cfg.locationId,
+        visibleKeys: [],
+        transport: sink,
+      }),
     );
     expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
     expect(sink.written).toEqual([
@@ -112,7 +120,7 @@ describe("print-job lease reclaim (real Postgres)", () => {
   it("RECLAIMS an anomalous printing job whose claimed_at is NULL (no live lease)", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    const jobId = await seedPrinterAndJob(cfg, agentId);
+    const jobId = await seedPrinterAndJob(cfg);
 
     // Force the row into the anomalous state the lease's own guarantee must cover: `printing` with NO
     // `claimed_at`. The claim UPDATE stamps `status='printing'` and `claimed_at=now()` atomically and is
@@ -135,7 +143,14 @@ describe("print-job lease reclaim (real Postgres)", () => {
     // `printing`; restore it and the run reclaims and delivers it (see copilot-null-claimedat-fix-report.md).
     const sink = new FakeSink();
     const result = await asApp(suite.admin, cfg, (tx) =>
-      runAgentOnce({ tx, cfg, agentId, transport: sink }),
+      runAgentOnce({
+        tx,
+        cfg,
+        agentId,
+        locationId: cfg.locationId,
+        visibleKeys: [],
+        transport: sink,
+      }),
     );
     expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
     expect(sink.written).toEqual([{ printerId, bytes: new Uint8Array([0x41]) }]);
@@ -148,18 +163,22 @@ describe("print-job lease reclaim (real Postgres)", () => {
   it("does NOT steal a live claim: a freshly-claimed printing job (lease not expired) is not re-selected", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    const jobId = await seedPrinterAndJob(cfg, agentId);
+    const jobId = await seedPrinterAndJob(cfg);
 
     // The agent claims the job and is STILL WORKING — a slow-but-live push. The claim is committed
     // (printing, claimed_at = now()) but the lease has NOT expired.
-    const claimed = await asApp(suite.admin, cfg, (tx) => claimPrintJobs(tx, cfg, agentId));
+    const claimed = await asApp(suite.admin, cfg, (tx) =>
+      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
     expect(claimed).toHaveLength(1);
     const firstClaimedAt = (await jobRow(jobId)).claimed_at;
     expect(firstClaimedAt).not.toBeNull();
 
     // A concurrent claim (a second agent, or the same agent's next batch) must NOT reclaim it: the
     // visibility timeout does not fire on a live claim, so the fresh printing row is left alone.
-    const second = await asApp(suite.admin, cfg, (tx) => claimPrintJobs(tx, cfg, agentId));
+    const second = await asApp(suite.admin, cfg, (tx) =>
+      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
     expect(second).toEqual([]);
 
     const row = await jobRow(jobId);

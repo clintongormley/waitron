@@ -31,13 +31,6 @@ async function setup(): Promise<PrintConfig> {
   return { tenantId, locationId: rows[0]!.id };
 }
 
-async function seedAgent(cfg: PrintConfig): Promise<string> {
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into print_agents (tenant_id, location_id, name, token_hash)
-    values (${cfg.tenantId}, ${cfg.locationId}, 'Kitchen agent', 'scrypt$fixture') returning id`);
-  return rows[0]!.id;
-}
-
 /** Read one job row back (the brief's `jobRow`). Uses the drizzle `printJobs` model so `payload`
  * decodes through the bytea customType to a Buffer. */
 async function jobRow(
@@ -70,12 +63,10 @@ function spyOnNoSocketOpened() {
 describe("enqueuePrintJob (never-block outbox)", () => {
   it("enqueues a queued job with no socket I/O", async () => {
     const cfg = await setup();
-    const agentId = await seedAgent(cfg);
     await withTenant(suite.db, cfg.tenantId, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
-        agentId,
         host: "10.0.0.9",
         port: 9100,
       });
@@ -113,12 +104,10 @@ describe("enqueuePrintJob (never-block outbox)", () => {
     // pass here means the `active = true` pre-check conjunct (not some unrelated reason) is doing the
     // work. Without that conjunct the deactivated enqueue succeeds and this test goes red.
     const cfg = await setup();
-    const agentId = await seedAgent(cfg);
     const code = await withTenant(suite.db, cfg.tenantId, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
-        agentId,
         host: "10.0.0.9",
       });
       // Control: while ACTIVE the printer enqueues a queued job.
