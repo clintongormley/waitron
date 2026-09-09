@@ -9,13 +9,14 @@ import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 
 /**
  * The wizard's first step: welcome the operator, warn that the browser's certificate warning is
- * expected (the box serves the wizard over its own self-signed HTTPS; the full per-device trust UI is
- * slice 3), and let them pick DEMO or LIVE.
+ * expected, and offer the four top-level onboarding journeys. Demo, Prepare and Go live enter fresh
+ * primary provisioning; Join or recover opens the existing-restaurant subchooser.
  *
  * The choice is irreversible one way — a live box files real invoices to AEAT and can never become a
  * demo (fiscal §5) — so LIVE does NOT provision on a single click. Clicking it reveals a loud
  * permanence warning and an "I understand" switch that gates an explicit confirm button; only that
- * confirm emits `mode:"live"`. DEMO, being reversible in practice, advances immediately.
+ * confirm emits `mode:"live"`. Demo and Prepare advance immediately. Join or recover selects no
+ * mode because a mirror inherits its environment and a restored backup carries its own.
  *
  * It talks to the shell through the two composed/bubbling events the whole wizard shares: a
  * `setup-patch` carrying the chosen `mode`, then a `setup-goto` to the `admin` step. `environment`
@@ -116,6 +117,11 @@ export class SetupModeScreen extends LitElement {
     this.#advance("prepare");
   }
 
+  /** Joining or recovering has its own subchooser and must not write a fresh-primary intent. */
+  #chooseExisting(): void {
+    dispatchSetupGoto(this, "role");
+  }
+
   /**
    * LIVE does NOT advance here — it reveals the permanence warning + confirm gate. This is the guard:
    * prove-by-deletion by wiring the LIVE button straight to `#advance("live")` instead, and the
@@ -202,6 +208,18 @@ export class SetupModeScreen extends LitElement {
           </p>
           <wt-button variant="secondary" data-test="choose-live" @click=${() => this.#chooseLive()}
             >Go live</wt-button
+          >
+        </wt-card>
+        <wt-card raised>
+          <h2>Join or recover an existing restaurant</h2>
+          <p class="choice-copy">
+            Add this box as a mirror of a running restaurant, or recover a restaurant from a backup.
+          </p>
+          <wt-button
+            variant="secondary"
+            data-test="choose-existing"
+            @click=${() => this.#chooseExisting()}
+            >Join or recover</wt-button
           >
         </wt-card>
       </div>

@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 // Side-effect imports register the screen custom elements this shell only names as tags below.
 import "./screens/role-screen.js";
 import "./screens/connect-screen.js";
+import "./screens/restore-screen.js";
 import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
@@ -15,19 +16,26 @@ import type { AdoptBody, ApiError, ProvisionBody, SetupApi } from "./api/client.
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
- * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The FIRST screen is `role`
- * (primary | mirror), which forks the rest of the flow (spec §8, C2b):
+ * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The first screen is `mode`,
+ * which offers the four product journeys:
  *
- * - `role` = **primary** → the provisioning flow: `mode` (demo/prepare/live) → `admin`
+ * - Demo, Prepare or Go live → `admin`
  *   (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
  *   `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). The venue step
  *   routes to `cert` only for a live ES-common venue, otherwise straight to `review`.
- * - `role` = **mirror** → `connect` (connect-to-primary), which reuses the shared `provisioning` /
- *   `done` terminal screens. The `connect` screen itself is built in Task 13; the name is in the
- *   union here so the shell can already route to it.
+ * - Join or recover → `role`, whose mirror branch opens `connect` and backup branch opens `restore`.
  */
 export type Screen =
-  "role" | "connect" | "mode" | "admin" | "venue" | "cert" | "review" | "provisioning" | "done";
+  | "role"
+  | "connect"
+  | "restore"
+  | "mode"
+  | "admin"
+  | "venue"
+  | "cert"
+  | "review"
+  | "provisioning"
+  | "done";
 
 /**
  * A recursively-optional view of `T`: every field, at every depth, may be absent — an array is left
@@ -166,8 +174,8 @@ export class SetupApp extends LitElement {
    * attribute string. */
   @property({ attribute: false }) api!: SetupApi;
 
-  /** Which screen is showing. Defaults to `role`, the wizard's first step (primary | mirror). */
-  @state() private screen: Screen = "role";
+  /** Which screen is showing. Defaults to `mode`, the four-choice onboarding entry point. */
+  @state() private screen: Screen = "mode";
 
   /**
    * The box's stamped deployment environment, read from `GET /setup-api/status` on boot. `undefined`
@@ -272,22 +280,6 @@ export class SetupApp extends LitElement {
   #onPatch(event: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>): void {
     event.stopPropagation();
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
-  }
-
-  /**
-   * Resolve the first `role` screen's choice (spec §8, C2b). The role→next-screen conditional lives
-   * HERE, in the shell, not in the role screen — the same altitude fix (m) that lifted venue→`cert`/
-   * `review` out of a screen (backlog #149). A **primary** enters the existing provisioning flow at
-   * `mode` (unchanged); a **mirror** goes to the connect-to-primary screen, which skips
-   * `mode`/`admin`/`venue`/`cert`/`review` entirely (a mirror has no onboarding-intent choice, seeds no
-   * admin, and files nothing). Same boundary `stopPropagation` as {@link SetupApp.#onPatch}.
-   */
-  #onRole(event: CustomEvent<{ role: "primary" | "mirror" }>): void {
-    event.stopPropagation();
-    // A fresh role choice starts a clean flow — drop any stale adopt banner from an earlier attempt so
-    // re-entering the connect screen doesn't show a rejection the operator has since navigated away from.
-    this.connectError = undefined;
-    this.screen = event.detail.role === "mirror" ? "connect" : "mode";
   }
 
   /**
@@ -514,15 +506,13 @@ export class SetupApp extends LitElement {
   }
 
   override render(): TemplateResult {
-    // The screens emit these composed events UP to the shell: `setup-role` (the first screen's
-    // primary/mirror choice, routed here), `setup-patch` (merge a slice into the draft), `setup-goto`
+    // The screens emit these composed events UP to the shell: `setup-patch` (merge a slice into the draft), `setup-goto`
     // (flip the visible screen), `setup-advance` (the venue screen's conditional next-step, resolved
     // here against the draft), and `provision-requested` (review's Provision and the provisioning
     // screen's retry both fire it). Wiring them on the container means each screen talks back without
     // the shell knowing which one is mounted.
     return html`<div
       class="wizard"
-      @setup-role=${(e: CustomEvent<{ role: "primary" | "mirror" }>) => this.#onRole(e)}
       @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
       @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
       @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
@@ -536,9 +526,9 @@ export class SetupApp extends LitElement {
   /**
    * The mounted screen for the current {@link SetupApp.screen} — each real screen carries the
    * `data-test="screen-*"` hook on its own host so the shell's screen-switching tests stay uniform.
-   * The `role` screen (the wizard's first step) is the `default`.
+   * The four-choice `mode` screen is the default.
    *
-   * `role` forks the flow (primary → `mode`, mirror → `connect`); `mode` reads `environment` (to warn
+   * `mode` reads `environment` (to warn
    * on a production box); `admin`, `venue`, `cert` and `review` read the accumulated `draft` (to seed
    * their fields / summarise it, so stepping Back is non-destructive); `venue` and `review` also take a
    * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
@@ -550,6 +540,10 @@ export class SetupApp extends LitElement {
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
+      case "role":
+        return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
+      case "restore":
+        return html`<setup-restore-screen data-test="screen-restore"></setup-restore-screen>`;
       case "mode":
         return html`<setup-mode-screen
           data-test="screen-mode"
@@ -607,7 +601,10 @@ export class SetupApp extends LitElement {
           .devMode=${this.draft.mode === "demo"}
         ></setup-done-screen>`;
       default:
-        return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
+        return html`<setup-mode-screen
+          data-test="screen-mode"
+          .environment=${this.environment}
+        ></setup-mode-screen>`;
     }
   }
 }

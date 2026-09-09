@@ -82,13 +82,6 @@ async function screenHost(el: SetupApp, screen: Screen): Promise<HTMLElement> {
  * which has no DOM surface until the later `review` screen. TS-private is erased at runtime. */
 const readDraft = (el: SetupApp) => (el as unknown as { draft: DeepPartial<ProvisionBody> }).draft;
 
-/** Fires the composed `setup-role` the first `role` screen emits (primary | mirror), into the shell. */
-function role(el: SetupApp, choice: "primary" | "mirror"): void {
-  wizard(el).dispatchEvent(
-    new CustomEvent("setup-role", { detail: { role: choice }, bubbles: true, composed: true }),
-  );
-}
-
 function goto(el: SetupApp, screen: Screen): void {
   wizard(el).dispatchEvent(
     new CustomEvent("setup-goto", { detail: { screen }, bubbles: true, composed: true }),
@@ -127,28 +120,20 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
 }
 
 describe("setup-app", () => {
-  it("renders the role screen with its heading on boot", async () => {
+  it("renders the four-choice onboarding screen on boot", async () => {
     const el = await mountSetupApp();
-    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).not.toBeNull();
-    const roleScreen = await screenHost(el, "role");
-    expect(roleScreen.shadowRoot!.querySelector("h1")?.textContent).toContain("What is this box?");
-  });
-
-  // The primary path: role=primary lands on `mode`, the head of the existing (unchanged) flow.
-  it("routes role=primary to the mode screen", async () => {
-    const el = await mountSetupApp();
-    role(el, "primary");
-    await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).toBeNull();
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain("Set up this Waitron box");
   });
 
-  // The mirror path: role=mirror lands on `connect` (Task 13 mounts the real screen there).
-  it("routes role=mirror to the connect screen", async () => {
+  it("routes Join or recover through its subchooser to the mirror connection form", async () => {
     const el = await mountSetupApp();
-    role(el, "mirror");
+    const mode = await screenHost(el, "mode");
+    mode.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-existing]")!.click();
+    await el.updateComplete;
+    const subchooser = await screenHost(el, "role");
+    subchooser.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-mirror]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
@@ -163,8 +148,6 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
     expect(getStatus).toHaveBeenCalledOnce();
-    role(el, "primary");
-    await el.updateComplete;
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
       "production",
@@ -175,10 +158,8 @@ describe("setup-app", () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
-    // The shell rendered its first screen despite the rejection, and no environment is shown on mode.
-    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).not.toBeNull();
-    role(el, "primary");
-    await el.updateComplete;
+    // The shell rendered its first screen despite the rejection, and no environment is shown on it.
+    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
   });
@@ -195,6 +176,7 @@ describe("setup-app", () => {
     const el = await mountSetupApp();
     const screens: Screen[] = [
       "connect",
+      "restore",
       "admin",
       "venue",
       "cert",
@@ -631,7 +613,7 @@ describe("setup-app", () => {
 
   it("mounts the real connect screen on the mirror path", async () => {
     const el = await mountSetupApp();
-    role(el, "mirror");
+    goto(el, "connect");
     await el.updateComplete;
     const connect = await screenHost(el, "connect");
     expect(connect.shadowRoot!.querySelector("h1")?.textContent).toContain(
