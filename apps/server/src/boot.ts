@@ -115,8 +115,9 @@ import { ensureReplicationShape } from "./replication.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
-import { listBoxIpv4 } from "./box-reach.js";
+import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
+import { buildLandingApp } from "./landing-app.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
@@ -411,6 +412,87 @@ function startTradingListener(
 }
 
 /**
+ * Bind the plain-HTTP trust/landing listener (Task 3) on `config.landingPort` (default 80) — a SECOND
+ * listener beside the HTTPS one, on a DIFFERENT port, so the two never conflict. It exists because a
+ * phone that opens the box's HTTPS origin on an untrusted self-signed leaf hits the browser's
+ * certificate interstitial BEFORE any of our JS runs, so the "download and trust the CA" page has to
+ * be served over plain HTTP where the browser will actually load it (and where the CA download link
+ * resolves without a trust step). It NEVER redirects and sends NO HSTS — both would strand the phone
+ * back on the interstitial.
+ *
+ * Returns a closable handle threaded into `makeStartedServer` (so shutdown closes it too), or
+ * `undefined` when there is nothing meaningful to serve:
+ *   - `config.landingPort === 0` — the operator disabled it; or
+ *   - `config.tls` is set — an operator-TLS box serves the operator's cert, which its devices already
+ *     trust, so there is no box CA worth handing out; or
+ *   - the box has no minted leaf (`mintedBoxLeaf`) — a leaf-less dev box serves plain HTTP on its main
+ *     port anyway, so there is no untrusted-cert interstitial to escape.
+ *
+ * The last two conditions together are exactly "the box serves its own minted leaf" — the same
+ * `config.tls ?? mintedBoxLeaf(...)` selection `startTradingListener` makes for the HTTPS bind, so the
+ * landing page appears precisely when the HTTPS origin presents a self-signed leaf a phone must trust.
+ *
+ * The reach URLs and the HTTPS hand-off link it renders point at the box's OWN https origin
+ * (`config.httpPort`), because that is where the visitor continues once the CA is trusted.
+ */
+// TODO(recovery): landing listener in recovery mode — coordinate with the backup/recovery session
+export function startLandingListener(
+  config: ServerConfig,
+  log: Logger,
+): { close(): Promise<void> } | undefined {
+  if (
+    config.landingPort === 0 ||
+    config.tls !== undefined ||
+    mintedBoxLeaf(config.stateDir) === undefined
+  ) {
+    return undefined;
+  }
+  const reach = buildReachInfo({
+    hostname: BOX_HOSTNAME,
+    port: config.httpPort,
+    secure: true,
+    listIpv4: () => config.boxAddresses ?? listBoxIpv4(),
+  });
+  const app = buildLandingApp({
+    stateDir: config.stateDir,
+    reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
+    httpsUrl: reach.hostnameUrl,
+    log,
+  });
+  // Plain HTTP: `buildServeOptions(base, undefined)` returns `base` unchanged (tls.ts), so this binds
+  // a plain-HTTP socket — the whole point, an origin the browser does not gate behind the
+  // untrusted-cert interstitial.
+  const server = serve(
+    buildServeOptions(
+      { fetch: app.fetch, port: config.landingPort, hostname: config.httpHost },
+      undefined,
+    ),
+    (info) => log("info", "landing.listening", { port: info.port }),
+  );
+  // Unlike the main HTTPS listener, a landing-listener bind failure must NOT take the box down: it is
+  // a convenience surface (the box still sells and serves HTTPS), and port 80 is the likeliest to be
+  // taken or need a privilege the process lacks (the box image grants `cap_net_bind_service`; a
+  // non-root dev host or CI runner does not, so this handler fires with EACCES on every such boot).
+  // Log and carry on — the mDNS responder's own non-load-bearing posture. Without this handler, Node
+  // would throw the 'error' as unhandled and crash the process.
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    log("warn", "landing.listen_failed", {
+      port: config.landingPort,
+      // `code` is optional on the error TYPE, but every listen failure this can hit (EACCES,
+      // EADDRINUSE, …) sets it; the fallback is type-required but unreachable in practice.
+      /* v8 ignore next */
+      code: error.code ?? "unknown",
+    });
+  });
+  return {
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      ),
+  };
+}
+
+/**
  * The `StartedServer` BOTH modes return, with the shared `close()` sequence written once. `close()`
  * is idempotent and always drains the connection pools, whatever the teardown does first — the
  * mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops any background work
@@ -425,6 +507,10 @@ function makeStartedServer(
   log: Logger,
   teardown: BootTeardown,
   mdns: MdnsResponder,
+  // The plain-HTTP landing listener (Task 3), or `undefined` when none was started (disabled, or a
+  // leaf-less/operator-TLS box). `close()` shuts it down alongside the main listener — a SECOND socket
+  // that would otherwise leak on shutdown.
+  landing: { close(): Promise<void> } | undefined,
   promote?:
     | { kind: "mirror"; run: (a: FenceAttestation) => Promise<MirrorPromotionResult> }
     | { kind: "local-secondary"; run: (a: FenceAttestation) => Promise<PromotionResult> },
@@ -470,6 +556,10 @@ function makeStartedServer(
           server.close((error) => (error ? reject(error) : resolve())),
         );
       } finally {
+        // Close the plain-HTTP landing listener too (when one was started), in the `finally` so a
+        // rejecting `server.close()` above never leaks it. `.catch(() => {})` for the same reason the
+        // mdns stop above swallows: a reject here must not skip the guaranteed pool teardown below.
+        if (landing !== undefined) await landing.close().catch(() => {});
         await teardown.closePools();
       }
       log("info", "server.stopped");
@@ -894,6 +984,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
             },
           },
           mdns,
+          // The plain-HTTP trust/landing listener (Task 3): a setup box serves its own minted leaf,
+          // so a phone can trust the CA from this page before hitting the HTTPS interstitial. Started
+          // AFTER the HTTPS bind above, on a different port; `undefined` when disabled or leaf-less.
+          startLandingListener(config, log),
         );
       } catch (error) {
         // A throw AFTER `ownerDb` opened (`mountSetup` / `startListening` / `buildServeOptions`) must
@@ -1014,6 +1108,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         },
       },
       mdns,
+      // The plain-HTTP trust/landing listener (Task 3) — an adoption-pending box serves trading over
+      // its own minted leaf, so a phone can still trust the CA from this page.
+      startLandingListener(config, log),
     );
   }
 
@@ -2134,6 +2231,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       },
     },
     mdns,
+    // The plain-HTTP trust/landing listener (Task 3) — a trading box serves its own minted leaf, so a
+    // newly-arriving phone can trust the CA from this page before the HTTPS interstitial.
+    startLandingListener(config, log),
     // Which in-process promote this box exposes is decided ONCE at boot by the deployment mode (captured
     // in `isMirror`), so a mirror surfaces `promoteMirrorToPrimary` and a local secondary
     // `promoteLocalSecondaryToPrimary` — never both. The mirror path (`promoteMirrorRun`, defined above,

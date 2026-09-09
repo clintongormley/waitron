@@ -78,6 +78,8 @@ describe("loadConfig", () => {
       // off. `devMode` is `true` only for the literal WAITRON_ENV=dev.
       devMode: false,
       httpPort: 8080,
+      // The plain-HTTP trust/landing listener defaults to port 80 (Task 3); `0` disables it.
+      landingPort: 80,
       // /health is unauthenticated (spec §9); loopback-only is the safe default.
       httpHost: "127.0.0.1",
       minTickMs: 5_000,
@@ -126,6 +128,22 @@ describe("loadConfig", () => {
         staleAfterMs: 3_600_000,
       },
     });
+  });
+
+  it("landingPort defaults to 80 and 0 disables it", () => {
+    const cfg = (env: Record<string, string>) => loadConfig(env, ROOT, MEDIA_ROOT, STATE_ROOT);
+    expect(cfg({ ...MIN_ENV }).landingPort).toBe(80);
+    expect(cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "0" }).landingPort).toBe(0);
+    expect(cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "8081" }).landingPort).toBe(8081);
+  });
+
+  it("rejects a WAITRON_HTTP_LANDING_PORT outside 0..65535", () => {
+    const cfg = (env: Record<string, string>) => loadConfig(env, ROOT, MEDIA_ROOT, STATE_ROOT);
+    // Above the TCP ceiling and a negative value both throw `port_out_of_range` — 0 is the ONLY
+    // sub-positive value the bounded parser accepts (it means "disabled").
+    expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "70000" })).toThrow();
+    expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "-1" })).toThrow();
+    expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "notaport" })).toThrow();
   });
 
   it("populates config.till from the WAITRON_TILL_* environment (the till's fiscal identity)", () => {

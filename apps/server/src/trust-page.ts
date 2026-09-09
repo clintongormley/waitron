@@ -35,8 +35,16 @@ export interface TrustPageInput {
  * URLs come from config and the box's own interfaces (never request input), so no escaping is needed.
  */
 export function renderTrustPage(input: TrustPageInput): string {
-  const { reachUrls, caAvailable, caDownloadPath, qrSvg } = input;
+  const { reachUrls, caAvailable, caDownloadPath, qrSvg, httpsUrl } = input;
   const urlItems = reachUrls.map((u) => `<li><a href="${u}">${u}</a></li>`).join("");
+
+  // The hand-off to the box's canonical HTTPS origin. On the plain-HTTP landing origin (Task 3) this
+  // is the "I've trusted the certificate, take me to the real site" link — the page's whole purpose,
+  // since the HTTPS interstitial fires before any of our JS on the untrusted origin. On the HTTPS
+  // discovery origin it points at the same secure host the visitor is already on, which is harmless.
+  // Server-derived (config + interfaces, never request input), so no escaping is needed — same as the
+  // reach URLs above.
+  const continueBlock = `<p class="continue"><a href="${httpsUrl}">Continue to the secure site</a></p>`;
 
   const caBlock = caAvailable
     ? `<p>First, <a href="${caDownloadPath}" download="${CA_FILENAME}">download this box's certificate</a>, then follow the steps for your device to trust it.</p>`
@@ -80,6 +88,10 @@ export function renderTrustPage(input: TrustPageInput): string {
         ${caBlock}
       </section>
       ${osSteps}
+      <section class="go">
+        <h2>Continue</h2>
+        ${continueBlock}
+      </section>
       <section class="scan">
         <h2>Scan to open</h2>
         ${qrBlock}
