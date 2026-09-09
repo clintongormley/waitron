@@ -53,7 +53,6 @@ import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -846,9 +845,10 @@ describe("startServer, against a real container as the deployment role", () => {
   it("setup mode mints the leaf for WAITRON_BOX_ADDRESSES and serves it as the discovery address", async () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-box-addresses-"));
-    // TEST-NET-3 (RFC 5737) — documentation-only, so it can never be an address this host actually
-    // holds, which is what makes the negative assertion below meaningful.
-    const override = "203.0.113.7";
+    // A private RFC1918 address (inside the box CA's permitted name space, self-signed-cert.ts) that
+    // this host is overwhelmingly unlikely to actually hold, which is what makes the negative
+    // assertion below meaningful — the override must be what lands in the SAN, not a resolved interface.
+    const override = "10.1.2.3";
     const server = await startServer({
       DATABASE_URL: databaseUrl,
       WAITRON_HTTP_PORT: String(port),
@@ -1308,15 +1308,14 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-op-tls-"));
     const certDir = await mkdtemp(join(tmpdir(), "waitron-boot-op-cert-"));
-    // A pre-minted operator cert pair with a DISTINCTIVE identity (hostnames ["operator.example"]) so
-    // it cannot be confused with the box's own fallback leaf (hostnames ["waitron.local","localhost"]);
-    // it also carries 127.0.0.1 as an iPAddress SAN so a loopback dial verifies against it.
-    // `mintSelfSignedServerCert` is the same minter `ensureBoxSecrets` wraps.
-    const material = mintSelfSignedServerCert({
-      hostnames: ["operator.example"],
-      ipAddresses: ["127.0.0.1"],
-      now: new Date(),
-    });
+    // A pre-minted operator cert pair signed by a SEPARATE, UNCONSTRAINED CA (`mintMtlsMaterial`'s
+    // `waitron-test-ca`), NOT the box's own name-constrained self-signed CA — a real operator brings a
+    // cert from their own/public CA, so the box's minter must not stand in for it here. The
+    // discriminator this test turns on is the CA SIGNATURE, not the hostname: the client below trusts
+    // ONLY the operator CA, so a completed handshake proves the operator leaf (not the box's own leaf,
+    // signed by the box CA) was served. The fixture's leaf carries a 127.0.0.1 SAN so the loopback
+    // dial verifies against it.
+    const material = mintMtlsMaterial();
     const certFile = join(certDir, "operator.crt");
     const keyFile = join(certDir, "operator.key");
     await writeFile(certFile, material.serverCertPem);
@@ -1333,7 +1332,7 @@ describe("startServer, against a real container as the deployment role", () => {
     });
     // Trust the OPERATOR CA (not the box-minted one): a completed handshake here proves the OPERATOR
     // leaf is what the box served. Dialling with the BOX CA would be the wrong-direction control.
-    const { via, close } = httpsVia(material.caCertPem);
+    const { via, close } = httpsVia(material.caPem);
     try {
       // (a) HTTPS serves from the OPERATOR cert — the operator-CA client completes the handshake.
       const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);

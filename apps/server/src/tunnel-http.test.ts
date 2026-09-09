@@ -6,10 +6,11 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 
 // The whole point of this client: the URL host is the RELAY's address (127.0.0.1:<port> here), while
-// the certificate belongs to the BOX (`box.test`) and is signed by the box's own private CA. TLS must
-// therefore terminate against `box.test` (SNI + identity check) and trust the box CA — the relay is a
-// blind byte-splicer. The box cert below carries `box.test` as its ONLY SAN and NO IP SAN, so a pass
-// can only come from the servername override doing the identity check (not from an IP-SAN shortcut).
+// the certificate belongs to the BOX (`waitron.local`) and is signed by the box's own private CA. TLS
+// must therefore terminate against `waitron.local` (SNI + identity check) and trust the box CA — the
+// relay is a blind byte-splicer. The box cert below carries `waitron.local` as its ONLY SAN and NO IP
+// SAN, so a pass can only come from the servername override doing the identity check (not from an
+// IP-SAN shortcut). `waitron.local` is inside the box CA's permitted name space (self-signed-cert.ts).
 describe("tunnelHttpClient", () => {
   let sharedKeypair: forge.pki.rsa.KeyPair;
   beforeAll(() => {
@@ -22,7 +23,7 @@ describe("tunnelHttpClient", () => {
     close: () => Promise<void>;
   }> => {
     const { caCertPem, serverCertPem, serverKeyPem } = mintSelfSignedServerCert({
-      hostnames: ["box.test"], // SAN=box.test only
+      hostnames: ["waitron.local"], // SAN=waitron.local only
       ipAddresses: [], // no IP SAN — 127.0.0.1 must NOT be what authorizes the handshake
       now: new Date("2026-08-26T00:00:00Z"),
       keypair: () => sharedKeypair,
@@ -48,7 +49,7 @@ describe("tunnelHttpClient", () => {
   it("connects to the relay address while validating the box hostname + CA", async () => {
     const { port, ca, close } = await startBoxServer();
     try {
-      const http = tunnelHttpClient({ ca, servername: "box.test" });
+      const http = tunnelHttpClient({ ca, servername: "waitron.local" });
       const res = await http(`https://127.0.0.1:${port}/`, { headers: {} });
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("ok");
@@ -66,7 +67,7 @@ describe("tunnelHttpClient", () => {
       // undici wraps the Node TLS error, so the trust code lives on `cause.code`. Observed here
       // (Node built-in TLS, 2026-08-27): UNABLE_TO_VERIFY_LEAF_SIGNATURE. The alternation covers the
       // self-signed family in case a Node version reports a sibling code for the same untrusted CA.
-      const http = tunnelHttpClient({ servername: "box.test" });
+      const http = tunnelHttpClient({ servername: "waitron.local" });
       await expect(http(`https://127.0.0.1:${port}/`, { headers: {} })).rejects.toMatchObject({
         cause: {
           code: expect.stringMatching(
