@@ -58,6 +58,7 @@ export function isNetworkFailure(err: unknown): boolean {
  */
 export interface TillInfo {
   locale: string;
+  onboardingIntent?: "demo" | "prepare" | "live";
   /**
    * The RECEIPT (fiscal document) locale — the language the printed legal ticket renders in. Sourced
    * server-side from the fiscal `cfg.locale`, DELIBERATELY DISTINCT from the UI-driving {@link locale}

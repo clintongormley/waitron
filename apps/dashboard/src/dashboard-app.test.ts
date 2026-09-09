@@ -93,6 +93,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       locale: null,
       venueLocale: "es-ES",
       venueName: "Deli Test SL",
+      onboardingIntent: "prepare",
       permissions: ["booking.manage"],
       modules: ["bookings"],
     }),
@@ -103,6 +104,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       ],
       venueDefault: "es-ES",
       venueName: "Deli Test SL",
+      onboardingIntent: "prepare",
     }),
     putLocale: vi.fn().mockResolvedValue(undefined),
     listStaff: vi.fn().mockResolvedValue(people),
@@ -224,6 +226,8 @@ const brandBanner = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=brand-banner]");
 const venueName = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=venue-name]");
+const modeIndicator = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=mode-indicator]");
 const navOverview = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]");
 const navSales = (el: DashboardApp) =>
@@ -379,6 +383,7 @@ describe("dashboard-app", () => {
     expect(brandBanner(el)).toBeTruthy();
     expect(brandBanner(el)!.querySelector<HTMLImageElement>('img[alt="Waitron"]')).toBeTruthy();
     expect(venueName(el)!.textContent?.trim()).toBe("Deli Test SL");
+    expect(modeIndicator(el)?.textContent?.trim()).toBe("Preparación");
     expect(logoutBtn(el)).toBeNull();
   });
 

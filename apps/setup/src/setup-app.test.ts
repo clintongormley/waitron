@@ -323,8 +323,8 @@ describe("setup-app", () => {
   // The done screen's first-run backup nudge (Task 8) is gated on the wizard's own DEMO/LIVE choice —
   // NOT `config.devMode` (`WAITRON_ENV=dev`), which this browser wizard never observes. `draft.mode`
   // is what the shell already holds by the time provisioning succeeds, so it is threaded straight
-  // through as the done screen's `devMode` property.
-  it("threads the onboarding intent through to the done screen as devMode", async () => {
+  // through as the done screen's `onboardingIntent` property.
+  it("threads demo intent through to the done screen", async () => {
     const el = await mountSetupApp(
       stubApi({
         provision: vi
@@ -336,7 +336,7 @@ describe("setup-app", () => {
     provisionRequest(el);
     await flush(el);
     const host = await screenHost(el, "done");
-    expect((host as unknown as { devMode: boolean }).devMode).toBe(true);
+    expect((host as unknown as { onboardingIntent: string }).onboardingIntent).toBe("demo");
   });
 
   it("does not treat a live provision as demo mode on the done screen", async () => {
@@ -351,7 +351,7 @@ describe("setup-app", () => {
     provisionRequest(el);
     await flush(el);
     const host = await screenHost(el, "done");
-    expect((host as unknown as { devMode: boolean }).devMode).toBe(false);
+    expect((host as unknown as { onboardingIntent: string }).onboardingIntent).toBe("live");
   });
 
   it("does not treat a prepared provision as demo mode on the done screen", async () => {
@@ -366,7 +366,7 @@ describe("setup-app", () => {
     provisionRequest(el);
     await flush(el);
     const host = await screenHost(el, "done");
-    expect((host as unknown as { devMode: boolean }).devMode).toBe(false);
+    expect((host as unknown as { onboardingIntent: string }).onboardingIntent).toBe("prepare");
   });
 
   it("shows the in-flight state with a DISABLED provision control while the POST is pending", async () => {

@@ -1241,6 +1241,7 @@ export class DashboardApi {
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
     venueName: string;
+    onboardingIntent?: "demo" | "prepare" | "live";
   }>;
 
   /**
@@ -1270,6 +1271,7 @@ export class DashboardApi {
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
     venueName: string;
+    onboardingIntent?: "demo" | "prepare" | "live";
   }> {
     // The list + venue default are immutable for this client's lifetime; fetch once and share.
     // Cache the promise ONLY on success — clear it on rejection so a transient failure retries.
@@ -1277,6 +1279,7 @@ export class DashboardApi {
       locales: Array<{ code: string; label: string }>;
       venueDefault: string;
       venueName: string;
+      onboardingIntent?: "demo" | "prepare" | "live";
     }>("/management-api/locales", "GET").catch((err) => {
       this.#localesPromise = undefined;
       throw err;
@@ -2354,6 +2357,7 @@ export class DashboardApi {
     permissions: string[];
     modules: string[];
     venueName: string;
+    onboardingIntent?: "demo" | "prepare" | "live";
   }> {
     return this.#request<{
       personId: string;
@@ -2363,6 +2367,7 @@ export class DashboardApi {
       permissions: string[];
       modules: string[];
       venueName: string;
+      onboardingIntent?: "demo" | "prepare" | "live";
     }>("/management-api/session/me", "GET");
   }
 

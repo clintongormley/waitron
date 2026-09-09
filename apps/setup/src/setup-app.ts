@@ -533,7 +533,7 @@ export class SetupApp extends LitElement {
    * their fields / summarise it, so stepping Back is non-destructive); `venue` and `review` also take a
    * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
    * retry flag + terminal reload label; `done` takes the `api` to poll during the restart, the
-   * `draft.mode`-derived `devMode` (see the `case "done"` comment below) to gate its first-run backup
+   * `draft.mode` (see the `case "done"` comment below) to label the result and gate its first-run backup
    * nudge, and — on the mirror path — the once-only `breakGlassSecret` to surface for the operator to
    * record. All are passed as properties, since neither an api nor a draft object can travel as an
    * attribute.
@@ -586,7 +586,8 @@ export class SetupApp extends LitElement {
           .reloadLabel=${this.provisionReloadLabel}
         ></setup-provisioning-screen>`;
       case "done":
-        // `devMode` is the done screen's first-run backup-nudge gate. It is NOT `config.devMode`
+        // `draft.mode` is the done screen's visible result and first-run backup-nudge gate. It is not
+        // `config.devMode`
         // (`WAITRON_ENV=dev`, `apps/server/src/config.ts`'s `isDevMode`) — that flag governs the dev
         // per-tab device switcher and is never set on a box an operator runs this wizard against.
         // The wizard's own DEMO/LIVE choice (`draft.mode`, mode-screen.ts) is what "demo mode" means
@@ -598,7 +599,7 @@ export class SetupApp extends LitElement {
           data-test="screen-done"
           .api=${this.api}
           .breakGlassSecret=${this.breakGlassSecret}
-          .devMode=${this.draft.mode === "demo"}
+          .onboardingIntent=${this.draft.mode}
         ></setup-done-screen>`;
       default:
         return html`<setup-mode-screen

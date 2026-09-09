@@ -380,6 +380,8 @@ async function flush(el: TillApp): Promise<void> {
 }
 
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
+const modeIndicator = (el: TillApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=mode-indicator]");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
@@ -512,6 +514,15 @@ afterEach(() => {
 describe("till-app", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-app")).toBe(TillApp);
+  });
+
+  it("keeps preparation mode visible before login", async () => {
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "prepare" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await flush(el);
+    expect(modeIndicator(el)?.textContent?.trim()).toBe("Preparación");
   });
 
   it("starts on the lock screen", async () => {

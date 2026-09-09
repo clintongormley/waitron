@@ -241,6 +241,7 @@ function deps(db: Database): TillApiDeps {
     // now sourced from `deps.venueLocale` rather than the fiscal `cfg.locale`. `GET /api/locales`
     // echoes it as `venueDefault`.
     venueLocale: "es-ES",
+    onboardingIntent: "prepare",
     // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined). `GET
     // /api/till` echoes `deps.cfg.tipsEnabled` (this suite's `cfg` has it `false`); a separate test
     // below drives `cfg.tipsEnabled` to `true` to prove the route reads it rather than hardcoding.
@@ -954,6 +955,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // The RECEIPT locale — the fiscal `cfg.locale`, DISTINCT from the UI `locale` above (both es-ES
       // for this ES venue, but sourced from different fields — the decoupling test below drives them apart).
       invoiceLocale: "es-ES",
+      onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,
       orderFlow: "prepay",

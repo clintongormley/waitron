@@ -70,6 +70,16 @@ export class SetupDoneScreen extends LitElement {
         border: 1px solid var(--wt-color-border, #cbd5e1);
         border-radius: 0.5rem;
       }
+      .mode-indicator {
+        display: inline-block;
+        margin: 0 0 1rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        border: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font-weight: 700;
+      }
       .nudge-link {
         display: inline-block;
         margin-top: 0.5rem;
@@ -90,13 +100,8 @@ export class SetupDoneScreen extends LitElement {
    */
   @property({ attribute: false }) breakGlassSecret?: string;
 
-  /**
-   * Whether this box provisioned as a disposable demo (the wizard's own DEMO/LIVE choice,
-   * `draft.mode === "demo"` — `apps/setup/src/setup-app.ts`), which suppresses the first-run backup
-   * nudge below: a demo box is reversible in practice (mode-screen.ts), so a missing backup is not
-   * worth interrupting the operator over.
-   */
-  @property({ type: Boolean }) devMode = false;
+  /** The selected setup journey. Its label stays visible here, and Demo suppresses the backup nudge. */
+  @property() onboardingIntent?: "demo" | "prepare" | "live";
 
   /** How to reload into the till once trading mode is up. Injectable so a test can assert it without
    * navigating the runner; the default is the real page reload (a bound native, not authored code). */
@@ -152,6 +157,13 @@ export class SetupDoneScreen extends LitElement {
     return html`
       <wt-card>
         <h1>Setup complete</h1>
+        ${
+          this.onboardingIntent === undefined
+            ? nothing
+            : html`<p class="mode-indicator" data-test="mode-indicator">
+                ${{ demo: "Demo", prepare: "Preparation", live: "Live" }[this.onboardingIntent]}
+              </p>`
+        }
         <p>The box is restarting into trading mode.</p>
         ${
           this.breakGlassSecret !== undefined
@@ -168,7 +180,7 @@ export class SetupDoneScreen extends LitElement {
             : null
         }
         ${
-          this.devMode
+          this.onboardingIntent === "demo"
             ? nothing
             : html`<div class="backup-nudge" data-test="backup-nudge">
                 <p>

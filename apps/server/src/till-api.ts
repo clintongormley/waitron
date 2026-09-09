@@ -25,6 +25,7 @@ import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import type { OnboardingIntent } from "./trading-config.js";
 import type { TillConfig } from "./till-config.js";
 import {
   collectOrder,
@@ -154,6 +155,8 @@ export interface TillApiDeps {
    * as `venueDefault`. DISTINCT from the fiscal `cfg.locale`/`cfg.invoiceLocales`, which are unchanged.
    */
   venueLocale: string;
+  /** The setup journey that created this installation, shown persistently by the till. */
+  onboardingIntent?: OnboardingIntent;
   /**
    * The per-(device, person) wrong-PIN back-off the login route consults (§5). OPTIONAL and injected
    * only by tests (over a controllable clock, CLAUDE.md §4); production omits it and `mountTillApi`
@@ -809,6 +812,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // venue's language and is not an input to the UI derivation. The till threads THIS to
         // `till-ticket-view.invoiceLocale`, and the UI `locale` to `setLocale` — two different things.
         invoiceLocale: deps.cfg.locale,
+        onboardingIntent: deps.onboardingIntent,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,
