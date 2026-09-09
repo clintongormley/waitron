@@ -12,6 +12,7 @@ import type { ProvisionRequest } from "./provision.js";
 import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { createSetupOperationStore } from "./setup-operation.js";
 
 const noopLog: Logger = () => {};
 
@@ -256,6 +257,31 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 const asRec = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
 
 describe("POST /setup-api/provision — orchestration, onboarding intent, cert gate, latch", () => {
+  it("reports completed persistent progress and replays it after a process restart", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-operation-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const first = new Hono();
+      mountSetup(first, makeDeps({ operations }).deps, noopLog);
+      expect((await postProvision(first, demoBody())).status).toBe(200);
+
+      const status = await (await first.request("/setup-api/status")).json();
+      expect(status.operation).toMatchObject({ kind: "provision", phase: "complete" });
+      expect(status.operation).not.toHaveProperty("requestHash");
+      expect(status.operation).not.toHaveProperty("data");
+
+      const restarted = new Hono();
+      const next = makeDeps({ operations: createSetupOperationStore(dir) });
+      mountSetup(restarted, next.deps, noopLog);
+      const replay = await postProvision(restarted, demoBody());
+      expect(replay.status).toBe(200);
+      expect(await replay.json()).toMatchObject({ provisioned: true, tenantId: TENANT_ID });
+      expect(next.provision).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("provisions and seeds a demo venue: 200, orchestrates in order, defers restart, seals no cert", async () => {
     const app = new Hono();
     const {

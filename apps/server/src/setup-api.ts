@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { createHash } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 import { venueFiscalSelection } from "@waitron/provisioning";
@@ -22,6 +23,7 @@ import { readJsonBody } from "@waitron/server-kit";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
+import type { SetupOperationStore } from "./setup-operation.js";
 import "./errors.js";
 
 /**
@@ -95,6 +97,8 @@ export interface SetupDeps {
    * dir holds an `index.html`, so a mis-built dir fails the boot loudly rather than 404ing here. From
    * `config.setupAppDir` (`WAITRON_SETUP_APP_DIR`). */
   setupAppDir?: string;
+  /** Persistent first-boot serialization and progress, shared by provision, adoption and recovery. */
+  operations?: SetupOperationStore;
 }
 
 /**
@@ -156,6 +160,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   // enumerated so this map stays the surface's whole 4xx contract.
   "person.email_invalid": 400,
   "setup.already_provisioned": 409,
+  "setup.operation_conflict": 409,
   "deployment.already_stamped": 409,
   // SP-1b fiscal gate: provisioning refused because a `provision-only` module (fiscal) is disabled in
   // `modules.json`. A conflict with the box's config, like the two refusals above — 409, not 400.
@@ -353,9 +358,27 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // log. Fires once, not per request, so the catch-all below stays silent under browser load.
   log("info", "setup.mode_active", { environment: deps.environment });
 
-  app.get("/setup-api/status", (c) =>
-    c.json({ provisioned: false, environment: deps.environment, needs: ["venue"] }, 200),
-  );
+  app.get("/setup-api/status", async (c) => {
+    const operation = await deps.operations?.read();
+    return c.json(
+      {
+        provisioned: false,
+        environment: deps.environment,
+        needs: ["venue"],
+        ...(operation === undefined || operation === null
+          ? {}
+          : {
+              operation: {
+                id: operation.id,
+                kind: operation.kind,
+                phase: operation.phase,
+                updatedAt: operation.updatedAt,
+              },
+            }),
+      },
+      200,
+    );
+  });
 
   // The one-shot provisioning latch. CLOSURE-scoped (per `mountSetup`, i.e. per booted process — one
   // mount per boot), so it survives across requests to THIS box yet gives every test its own fresh
@@ -371,7 +394,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // POST /setup-api/provision — orchestrates the whole flow: onboarding intent → validate + hash →
   // provisioning-secret gate (validate upfront) → provisionVenue → seal the secret → persist trading
   // config → restart. Registered BEFORE the `GET *` catch-all below (Hono first-match wins).
-  app.post("/setup-api/provision", (c) => {
+  app.post("/setup-api/provision", async (c) => {
     // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Captured as
     // consts so TypeScript narrows them non-undefined for the async closure below.
     const provision = deps.provision;
@@ -408,7 +431,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    return runProvision(c, log, async () => {
+    const requestHash = createHash("sha256")
+      .update(await c.req.raw.clone().text())
+      .digest("hex");
+    const execute = async (): Promise<Response> => {
       try {
         // Parse defensively: `c.req.json()` throws on a malformed body and returns `null` for a
         // literal JSON `null` — both are a bad request, not a 500.
@@ -509,6 +535,21 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         provisioning = false;
         throw error;
       }
+    };
+    return runProvision(c, log, async () => {
+      if (deps.operations === undefined) return execute();
+      return deps.operations.run("provision", requestHash, async (operation) => {
+        if (operation.phase === "complete") {
+          return c.json(
+            operation.data as { provisioned: true; tenantId: string; restarting: true },
+          );
+        }
+        const response = await execute();
+        if (response.ok) {
+          await operation.complete((await response.clone().json()) as Record<string, unknown>);
+        }
+        return response;
+      });
     });
   });
 
