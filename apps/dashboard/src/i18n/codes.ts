@@ -244,11 +244,38 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese curso ya no existe",
   },
   // Device management (apps/server/src/device-api.ts, device-identity-1). The revoke route rejects with
-  // this when the addressed device id names no device (absent, another tenant's, or a malformed id); the
-  // generate-code route's own faults (`station.not_found`, `management.request_invalid`) are mapped above.
+  // this when the addressed device id names no device (absent, another tenant's, or a malformed id).
   "device.not_found": {
     en: "That device no longer exists",
     es: "Ese dispositivo ya no existe",
+  },
+  // Letting a device in (apps/server/src/join-api.ts, device-join-and-accept). These are the accept
+  // route's client faults; its other two (`device_profile.not_found`, `station.not_found`) are mapped
+  // above. `device.join_mismatch` is the only TERMINAL one — the server DELETED the request before
+  // answering, so the copy sends the operator back to the device rather than inviting a second tap.
+  "device.join_mismatch": {
+    en: "That number did not match, so the request was refused — the device has to ask again",
+    es: "Ese número no coincide, así que se rechazó la solicitud. El dispositivo debe solicitarlo de nuevo",
+  },
+  "join_request.not_found": {
+    en: "That request is no longer waiting",
+    es: "Esa solicitud ya no está esperando",
+  },
+  "device.station_required": {
+    en: "This profile needs a station — choose one",
+    es: "Este perfil necesita una estación. Elige una",
+  },
+  "device.register_required": {
+    en: "This profile needs a register — choose one",
+    es: "Este perfil necesita una caja. Elige una",
+  },
+  "device.register_name_taken": {
+    en: "A register with that name already exists — rename the device and let it ask again",
+    es: "Ya existe una caja con ese nombre. Cambia el nombre del dispositivo y que lo solicite de nuevo",
+  },
+  "device.binding_invalid": {
+    en: "That station or register is no longer available",
+    es: "Esa estación o caja ya no está disponible",
   },
   "shared.invalid_id": {
     en: "That identifier isn't valid",

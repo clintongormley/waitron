@@ -34,7 +34,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createStation } from "./kitchen.js";
 
@@ -261,8 +261,8 @@ function apiDepsWithCardProvider(
  * till and every sale's fiscal record is byte-identical to the pre-cutover env-till (the same `till_id`,
  * and `nodeId`/`seriesId` still come from cfg). An optional `deviceProfileId` binds a device profile —
  * the `/api/pay` tests need one declaring `integrated-card-payment` so `assertDeviceCapability` passes
- * (capabilities relocated onto the profile, Task 9). The mint→redeem runs on the app role under the
- * tenant (the production enrol path), so the scrypt hash actually verifies and `tryReadDevice` resolves
+ * (capabilities relocated onto the profile, Task 9). Join-and-accept runs on the app role under the
+ * tenant (the production accept path), so the scrypt hash actually verifies and `tryReadDevice` resolves
  * a genuine binding rather than a miss.
  */
 let tillDeviceCounter = 0;
@@ -271,14 +271,13 @@ async function enrolTillCookie(
   deviceProfileId: string | null = null,
 ): Promise<string> {
   tillDeviceCounter += 1;
-  // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the code is bare, the device
-  // describes itself at enrol, and `enrolDevice` AUTO-CREATES the register it rings against (named after
-  // the device). Each call names the device uniquely so its auto-created register cannot collide.
+  // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the device describes itself
+  // at accept, and `resolveDeviceBinding` AUTO-CREATES the register it rings against (named after the
+  // device). Each call names the device uniquely so its auto-created register cannot collide.
   const profileId = deviceProfileId ?? (await seedProfileFF(cfg, "till"));
-  const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, { code, name: `Counter till ${tillDeviceCounter}`, profileId });
+  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    name: `Counter till ${tillDeviceCounter}`,
+    profileId,
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
@@ -586,10 +585,10 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
     const profileId = await seedProfileFF(cfg, "kds");
-    const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      const { code } = await generatePairingCode(tx, cfg);
-      return enrolDevice(tx, cfg, { code, name: "Pantalla", profileId, stationId: station.id });
+    const dev = await enrolDeviceForTest(suite.admin, cfg, {
+      name: "Pantalla",
+      profileId,
+      stationId: station.id,
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 
@@ -1268,15 +1267,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     // A handheld is DEFINED by a `phone-portrait`/`tablet-landscape` profile (Task 7) and, being
     // sale-capable, binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
     const profileId = await seedProfileFF(cfg, "phone-portrait");
-    const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      const { code } = await generatePairingCode(tx, cfg);
-      return enrolDevice(tx, cfg, {
-        code,
-        name: "Waiter phone",
-        profileId,
-        registerId: cfg.tillId,
-      });
+    const dev = await enrolDeviceForTest(suite.admin, cfg, {
+      name: "Waiter phone",
+      profileId,
+      registerId: cfg.tillId,
     });
     return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
   }
@@ -1485,15 +1479,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
       values (${cfg.tenantId}, 'Waiter phone', 'phone-portrait', ${JSON.stringify([])}::jsonb)
       returning id`);
     const deviceProfileId = prof.rows[0]!.id;
-    const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      const { code } = await generatePairingCode(tx, cfg);
-      return enrolDevice(tx, cfg, {
-        code,
-        name: "Waiter phone",
-        profileId: deviceProfileId,
-        registerId: cfg.tillId,
-      });
+    const dev = await enrolDeviceForTest(suite.admin, cfg, {
+      name: "Waiter phone",
+      profileId: deviceProfileId,
+      registerId: cfg.tillId,
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
     const sessionPair = await loginOperator(app, cfg, operatorId);

@@ -126,63 +126,26 @@ export const en = {
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
-  // Device mode (device-identity-1 §5a) — the always-on KDS station display. `device.setup` is the lock
-  // screen's affordance that routes a FRESH (unenrolled) display to the station screen in device mode;
-  // the `device.enrol_*` keys are the enrol view shown there when no device cookie is present (a labelled
-  // pairing-code field → enrol). The pairing-code redemption ERRORS (`device.pairing_invalid`/
-  // `_expired`/`unauthorized`) are surfaced via `i18n/codes.ts`, not here — these are static UI copy.
-  "device.setup": "Set up as kitchen display",
-  "device.enrol_title": "Set up this kitchen display",
-  "device.enrol_hint": "Enter the pairing code shown on the dashboard",
-  "device.enrol_code": "Pairing code",
-  "device.enrol_submit": "Set up",
-  // Handheld enrol (handheld-tableside Task 8) — the twin of `device.setup`/the `device.enrol_*` keys
-  // above, for a waiter's PHONE rather than a kitchen display. `device.setup_handheld` is the lock
-  // screen's second affordance (beside `device.setup`) that routes a FRESH phone to the handheld enrol
-  // view; `device.handheld_enrol_*` are that view's title/hint/submit (the code-field label reuses
-  // `device.enrol_code`, which names no device type). A refused code shows the ONE generic
-  // `device.enrol_failed` — the phone shell has no per-code recovery, so "invalid" vs "expired" would
-  // read the same to the waiter (contrast the station screen, which maps codes via i18n/codes.ts).
-  "device.setup_handheld": "Set up as waiter handheld",
-  "device.handheld_enrol_title": "Set up this waiter handheld",
-  "device.handheld_enrol_hint": "Enter the pairing code shown on the dashboard",
-  "device.handheld_enrol_submit": "Set up",
-  // Till enrol (SP-A.2 device unification) — the twin of the `device.setup_handheld`/`device.handheld_enrol_*`
-  // keys above, for a sale-capable COUNTER TILL rather than a waiter's phone. `device.setup_till` is the lock
-  // screen's third affordance (beside `device.setup`/`device.setup_handheld`) that opens the till enrol view;
-  // `device.till_enrol_*` are that view's title/hint/submit (the code-field label reuses `device.enrol_code`,
-  // which names no device type). A refused code shows the shared generic `device.enrol_failed`, exactly as the
-  // handheld view does — the operator's only recovery is a fresh code from the manager either way.
-  "device.setup_till": "Set up this till",
-  "device.till_enrol_title": "Set up this till",
-  "device.till_enrol_hint": "Enter the pairing code shown on the dashboard",
-  "device.till_enrol_submit": "Set up",
-  // KDS enrol (SP-B4 fresh-display enrol overlay) — the STANDALONE enrol screen the lock screen's
-  // `device.setup` affordance now opens for a FRESH kitchen display, symmetric with the
-  // `device.handheld_enrol_*`/`device.till_enrol_*` overlays above. Its own per-kind title/hint/submit
-  // (the code-field label reuses `device.enrol_code`, which names no device type). A refused code shows
-  // the shared generic `device.enrol_failed`. DISTINCT from the `device.enrol_*` keys above, which the
-  // station screen's own device-mode enrol sub-view still uses.
-  "device.kds_enrol_title": "Set up this kitchen display",
-  "device.kds_enrol_hint": "Enter the pairing code shown on the dashboard",
-  "device.kds_enrol_submit": "Set up",
-  "device.enrol_failed": "That pairing code was not accepted. Ask a manager for a new one.",
-  // Device enrolment (device-enrolment §3.3) — the two-step front-door screen a FRESH browser shows:
-  // step 1 verifies an enrolment key, step 2 describes the device (name + profile, then a station or
-  // cash-register picker driven by the profile's form factor). `device.enrol_key_*` are step 1;
-  // `device.describe_*` are step 2. A refused key reuses the shared generic `device.enrol_failed`.
+  // Device join (device-join-and-accept §2) — the front-door screen a FRESH browser shows. `_name_*`
+  // is the one field it asks for; `_waiting_*` and `_number_label` are the wait, where an admin reads
+  // the two digits off this screen and taps their twin in the dashboard; `_refused_*` and `_retry` are
+  // the "not approved" end. `{number}` is substituted at the call site (`t(...).replace`), the same
+  // shape `login.throttled` uses — `t` itself does no interpolation. A REFUSED KNOCK has no key here:
+  // it resolves through `i18n/codes.ts`, so `device.pairing_closed` gets its own sentence and every
+  // other code the generic one.
   // `device.type.*` are the human labels for a device's kind (never the raw `kds_station`/`till` token),
   // shown in the dev chooser's device rows — mapped from the kind via `i18n/device-label.ts`.
-  "device.enrol_key_title": "Set up this device",
-  "device.enrol_key_hint": "Enter the enrolment key shown on the dashboard",
-  "device.enrol_key_label": "Enrolment key",
-  "device.enrol_continue": "Continue",
-  "device.describe_title": "Describe this device",
-  "device.describe_name": "Name",
-  "device.describe_profile": "Profile",
-  "device.describe_station": "Station",
-  "device.describe_register": "Cash register",
-  "device.describe_submit": "Set up device",
+  "device.join_name_title": "Set up this device",
+  "device.join_name_hint":
+    "Give this device a name, then ask a manager to approve it in the dashboard",
+  "device.join_name_label": "Name",
+  "device.join_submit": "Ask to join",
+  "device.join_waiting_title": "Waiting for approval",
+  "device.join_waiting_hint": "In the dashboard, tap this number to approve this device",
+  "device.join_number_label": "Verification number {number}",
+  "device.join_refused_title": "This device was not approved",
+  "device.join_refused_hint": "Ask a manager to approve it, then try again",
+  "device.join_retry": "Try again",
   "device.type.till": "Counter till",
   "device.type.handheld": "Handheld",
   "device.type.kds": "Kitchen display",
@@ -529,34 +492,17 @@ export const es: Record<StringKey, string> = {
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",
-  "device.setup": "Configurar como pantalla de cocina",
-  "device.enrol_title": "Configurar esta pantalla de cocina",
-  "device.enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
-  "device.enrol_code": "Código de emparejamiento",
-  "device.enrol_submit": "Configurar",
-  "device.setup_handheld": "Configurar como terminal de camarero",
-  "device.handheld_enrol_title": "Configurar este terminal de camarero",
-  "device.handheld_enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
-  "device.handheld_enrol_submit": "Configurar",
-  "device.setup_till": "Configurar esta caja",
-  "device.till_enrol_title": "Configurar esta caja",
-  "device.till_enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
-  "device.till_enrol_submit": "Configurar",
-  "device.kds_enrol_title": "Configurar esta pantalla de cocina",
-  "device.kds_enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
-  "device.kds_enrol_submit": "Configurar",
-  "device.enrol_failed":
-    "No se aceptó ese código de emparejamiento. Pide uno nuevo a un responsable.",
-  "device.enrol_key_title": "Configurar este dispositivo",
-  "device.enrol_key_hint": "Introduce la clave de alta que aparece en el panel",
-  "device.enrol_key_label": "Clave de alta",
-  "device.enrol_continue": "Continuar",
-  "device.describe_title": "Describe este dispositivo",
-  "device.describe_name": "Nombre",
-  "device.describe_profile": "Perfil",
-  "device.describe_station": "Estación",
-  "device.describe_register": "Caja registradora",
-  "device.describe_submit": "Configurar dispositivo",
+  "device.join_name_title": "Configurar este dispositivo",
+  "device.join_name_hint":
+    "Pon un nombre a este dispositivo y pide a un responsable que lo apruebe en el panel",
+  "device.join_name_label": "Nombre",
+  "device.join_submit": "Solicitar alta",
+  "device.join_waiting_title": "Esperando aprobación",
+  "device.join_waiting_hint": "En el panel, pulsa este número para aprobar este dispositivo",
+  "device.join_number_label": "Número de verificación {number}",
+  "device.join_refused_title": "Este dispositivo no fue aprobado",
+  "device.join_refused_hint": "Pide a un responsable que lo apruebe e inténtalo de nuevo",
+  "device.join_retry": "Intentar de nuevo",
   "device.type.till": "Caja de mostrador",
   "device.type.handheld": "Terminal de camarero",
   "device.type.kds": "Pantalla de cocina",

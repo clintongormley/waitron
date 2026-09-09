@@ -352,7 +352,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     // enrolled `till`, so the default boot lands on the login (lock) screen — the surface almost every
     // downstream test logs in through (`toCounter`). The not-enrolled/kds/handheld boot tests override it
     // (a 401 → the enrol screen; `kds`/`phone-portrait` → their shells). `getDeviceStation` keeps its own
-    // 401 default so a non-KDS boot never prefetches. `enrolVerify`/`enrol`/`deviceAdvance` are present so
+    // 401 default so a non-KDS boot never prefetches. `join`/`joinStatus`/`deviceAdvance` are present so
     // the front-door/device screens never hit an undefined method.
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
@@ -363,8 +363,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       tillId: "t1",
     }),
     getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
-    enrolVerify: vi.fn().mockResolvedValue({ profiles: [], stations: [], registers: [] }),
-    enrol: vi.fn().mockResolvedValue({ deviceId: "dev-1", name: "Nuevo", formFactor: "till" }),
+    join: vi.fn().mockResolvedValue({ joinId: "dev-1", verificationNumber: "47" }),
+    joinStatus: vi.fn().mockResolvedValue({ status: "pending" }),
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -411,8 +411,8 @@ const station = (el: TillApp) =>
       "till-station-screen",
     ) as TillStationScreen | null) ??
     null) as TillStationScreen | null;
-/** The two-step enrol screen the boot front door renders for a fresh (unenrolled) browser (device-
- * enrolment §3.3), present only while `frontDoor === "enrol"`; queried by tag. */
+/** The join screen the boot front door renders for a fresh (unenrolled) browser (device-join-and-accept
+ * §2), present only while `frontDoor === "enrol"`; queried by tag. */
 const enrolScreen = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-enrol-screen");
 /** The dev-only device chooser the boot front door renders in dev mode with no adopted tab device
  * (device-enrolment §3.2), present only while `frontDoor === "chooser"`; queried by tag. */
@@ -746,17 +746,17 @@ describe("till-app", () => {
   });
 
   // ── Device front door (device-enrolment §3.1) ───────────────────────────────────────────────────────
-  // One boot decision: dev + no adopted tab device → the chooser; not enrolled (401, not dev) → the enrol
-  // screen at step 1; enrolled `kds` → the kiosk shell (the kds-boot test above); enrolled other → the
-  // login (lock) screen. The default stub is an enrolled `till` (→ login); these tests override it.
+  // One boot decision: dev + no adopted tab device → the chooser; not enrolled (401, not dev) → the join
+  // screen; enrolled `kds` → the kiosk shell (the kds-boot test above); enrolled other → the login (lock)
+  // screen. The default stub is an enrolled `till` (→ login); these tests override it.
 
-  it("a NOT-enrolled browser (401 identity probe, not dev) shows the enrol screen at step 1", async () => {
+  it("a NOT-enrolled browser (401 identity probe, not dev) shows the join screen", async () => {
     // getDevDevices rejects (not dev) and getDeviceIdentity 401s — the fresh production-browser case.
     const { el } = await mountApp({
       getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     });
     await flush(el);
-    // The front door renders the enrol screen, NOT the login screen, and NOT a boot error.
+    // The front door renders the join screen, NOT the login screen, and NOT a boot error.
     expect(enrolScreen(el)).not.toBeNull();
     expect(lock(el)).toBeNull();
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
@@ -766,8 +766,8 @@ describe("till-app", () => {
   it("a NON-401 identity-probe failure (transient) stays on the LOGIN screen, never the enrol front door", async () => {
     // Finding 1 (CLAUDE.md §5): `getTill` succeeds but `getDeviceIdentity` fails transiently — a 5xx or a
     // network blip carrying NO `device.unauthorized` code (a mid-boot ServerRouter failover to an origin
-    // without the device cookie has this shape). An enrolled, SELLABLE till must NOT be stranded behind the
-    // two-step enrol key it cannot clear: `#boot` only routes to enrol on a genuine 401, so this falls
+    // without the device cookie has this shape). An enrolled, SELLABLE till must NOT be stranded behind an
+    // approval it cannot get: `#boot` only routes to the join screen on a genuine 401, so this falls
     // through to the login screen. Prove-by-inversion: drop the `code === "device.unauthorized"` guard and
     // this goes red (the enrol front door renders instead).
     const { el } = await mountApp({
@@ -5376,7 +5376,7 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
       .getBoundingClientRect();
     expect(trigger.right).toBeLessThanOrEqual(window.innerWidth);
     // The device front door (device-enrolment §3.1): a FRESH browser (401 identity probe) renders the
-    // two-step enrol screen — its own language chooser must sit clear of the step-1 Continue action.
+    // join screen — its own language chooser must sit clear of the Ask to join action.
     const fresh = await mountApp({
       getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     });
@@ -5389,8 +5389,7 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
       .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
       .getBoundingClientRect();
     expect(
-      enrol.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.getBoundingClientRect()
-        .bottom,
+      enrol.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.getBoundingClientRect().bottom,
     ).toBeLessThanOrEqual(language.top);
   } finally {
     await page.viewport(width, height);

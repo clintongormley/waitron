@@ -8,8 +8,8 @@ corrects what is wrong or unintuitive, and the fixes land. This file records whe
 walkthrough survives a context clear.
 
 **Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190>, dashboard
-<http://localhost:5191>, setup <http://localhost:5192>. Enrol the till once per browser with pairing
-code **DEMO** (dev only). Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
+<http://localhost:5191>, setup <http://localhost:5192>. The till enrols itself on first load in dev
+mode — no code, no approval step. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
 
 **Running the stack from a worktree.** Start it with `wa-wt <worktree-name>`
 (`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. The dev Postgres is ONE
@@ -24,7 +24,7 @@ checkout has one, and follows the log. The server migrates the shared DB forward
 worktrees is fine; a venue seeded before the code's seed data (e.g. before device profiles) makes
 `dev:setup` refuse, and the fix is `wa-wt reset [name]` (throwaway preproduction data): it wipes the
 volume, re-provisions from that checkout's code, copies the new `.env` to every other checkout and
-restarts. The till must then be re-enrolled per browser with the fixed dev pairing code `DEMO`.
+restarts. In dev mode the till re-enrols itself on first load after that — no code, no approval step.
 `/health` reports `ok:false` on the dev venue because the fiscal drain has no AEAT credentials; the
 till and API serve normally regardless.
 

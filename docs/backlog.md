@@ -185,7 +185,7 @@ hosted in Spain (owner decision 2026-09-05), so asesor Q16 does not arise.
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `pnpm dev:setup && pnpm dev` → till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
-:8080. Enrol the till once per browser with pairing code **DEMO** (dev only). Till PIN **5555**;
+:8080. The till enrols itself on first load in dev mode — no code, no approval step. Till PIN **5555**;
 dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a believable demo
 restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16 tables), staff
 on PIN 5555, and ~28 days of back-dated preproduction sales — English by default, Spanish via
@@ -411,18 +411,15 @@ unchanged, so no new H2 receipt
    kind derives from its profile's `form_factor`; a `till`-form-factor enrol auto-creates its own
    register; `tills(tenant_id, location_id, name)` is unique per venue; the shift session is keyed to
    the device's register; a per-(device, person) PIN throttle (`pin.throttled`).
-   - **IN FLIGHT — enrolment by pairing mode + numeric match.** Branch `feat/device-join-and-accept`
-     (worktree `waitron-feat-device-join-and-accept`), 10 of 13 tasks landed and reviewed as of
-     2026-09-08; plan
+   - **COMPLETE, finishing the branch for its PR — enrolment by pairing mode + numeric match.** Branch
+     `feat/device-join-and-accept` (worktree `waitron-feat-device-join-and-accept`), all 13 tasks
+     implemented and reviewed as of 2026-09-09; plan
      [`2026-09-08-device-join-and-accept.md`](superpowers/plans/2026-09-08-device-join-and-accept.md),
      execution ledger at `.superpowers/sdd/2026-09-08-device-join-and-accept/progress.md` in that
      worktree (gitignored) and a session handoff beside it in `docs/handoffs/` (also gitignored — it
-     exists only on this machine). Remaining: review Task 10 (the till, implemented but unreviewed),
-     Task 11 (dev mode + the receipt sweep), Task 12 (end to end + the full gate).
-     **Two things a resuming session needs before touching anything:** the dev till cannot enrol until
-     Task 11 lands (`createPairingMode()` starts shut and there is no devMode auto-open yet, so the
-     documented `DEMO` procedure in `README.md`, `CLAUDE.md` §6 and `docs/ui-review.md` returns
-     `device.pairing_closed`); and **do not run `pnpm --filter @waitron/db db:generate`** — it proposes
+     exists only on this machine). devMode now auto-accepts, so the dev till enrols on first knock (the
+     retired `DEMO` pairing code is gone). **One thing a resuming session needs before touching
+     anything:** **do not run `pnpm --filter @waitron/db db:generate`** — it proposes
      `DROP TABLE "bookings" CASCADE`, a live table `@waitron/bookings` owns, because that table left
      core's schema barrel in #270 but stayed in core's snapshot chain. Design approved 2026-09-08,
      [`2026-09-08-device-join-and-accept-design.md`](superpowers/specs/2026-09-08-device-join-and-accept-design.md),

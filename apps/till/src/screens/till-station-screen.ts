@@ -135,8 +135,8 @@ export class TillStationScreen extends LitElement {
    * station's queue with NO picker and NO Back-to-counter, and bumps through `deviceAdvance`. A 401
    * (`device.unauthorized`) on that probe means the device cookie was revoked/expired: the screen emits
    * `device-unauthorized` so the app RE-BOOTS through the unified front door (device-enrolment §3.1),
-   * which routes the now-unauthorized device to the two-step enrol screen — this screen no longer carries
-   * its own enrol sub-view. Threaded from the app (the boot probe).
+   * which routes the now-unauthorized device to the join screen — this screen no longer carries its own
+   * enrol sub-view. Threaded from the app (the boot probe).
    */
   @property() deviceMode = false;
   /**
@@ -244,7 +244,7 @@ export class TillStationScreen extends LitElement {
    * DEVICE MODE probe (§5a): read the display's OWN bound station + queue with no login. A 200 renders
    * the queue. A 401 (`device.unauthorized`) means the device cookie is gone (revoked/expired) — the
    * screen emits `device-unauthorized` so the app RE-BOOTS through the unified front door, which routes
-   * the unauthorized device to the two-step enrol screen (device-enrolment §3.1); this screen holds no
+   * the unauthorized device to the join screen (device-enrolment §3.1); this screen holds no
    * enrol sub-view of its own. Any OTHER failure is transient — keep the last-known queue and recover on
    * the next reload/reboot, never tearing the kiosk down for a blip. State-only after the await, so no
    * `isConnected` guard (the sibling screens' reasoning).

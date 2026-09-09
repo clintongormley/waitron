@@ -39,8 +39,10 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
-import { asAppUser, createPostgresDb, withTenant, type Database } from "@waitron/db";
+import { and, eq } from "drizzle-orm";
+import { asAppUser, createPostgresDb, tills, withTenant, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
+import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   applyVenue,
@@ -63,8 +65,8 @@ import { ALL_MODULES } from "../src/modules.js";
 import { venueModuleConfig } from "../src/provision.js";
 import { writeModuleConfig } from "../src/module-config.js";
 import { resolveConfigDir } from "../src/config.js";
-import { enrolDevice, generatePairingCode, readEnrolCatalogue } from "../src/device.js";
-import { DEV_PAIRING_CODE } from "../src/dev-pairing.js";
+import { listStations } from "../src/kitchen.js";
+import { enrolDeviceForTest } from "../src/testing/enrol.js";
 import type { TillConfig } from "../src/till-config.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant } from "./demo-seed/seed.js";
@@ -391,13 +393,19 @@ async function provisionVenue(
 }
 
 /**
- * Enrol three demo devices through the SHIPPING enrol path — `generatePairingCode` then `enrolDevice`,
- * the exact pair the enrol route calls minus HTTP — so `?dev`'s chooser lists a real till, handheld and
- * kitchen display on first run and the seed EXERCISES the production enrol code rather than direct-
- * inserting `devices` rows. All three run in ONE tenant/`app_user` transaction (CLAUDE.md §3): any throw
- * rolls back every device, the till's auto-created register and every consumed pairing code together.
+ * Enrol three demo devices via `enrolDeviceForTest` (`src/testing/enrol.ts`, the fixture every
+ * join-and-accept suite shares) so `?dev`'s chooser lists a real till, handheld and kitchen display on
+ * first run. This runs the store body — `createJoinRequest` then `acceptDeviceJoinRequest`'s
+ * profile-resolve → bind → `devices` insert — NOT the admin-facing pairing window or numeric
+ * challenge/match gate, which the fixture deliberately bypasses (it is not a production verb). So the
+ * seed exercises the accept store logic, not the shipping window-and-match flow, and stops short of
+ * direct-inserting `devices` rows. Each device is its own transaction now that join-and-accept replaces the
+ * pairing code's single mint→redeem pair with a knock and a separate accept — there is no longer one
+ * shared tenant transaction to roll the three back together, so a failure partway leaves the earlier
+ * device(s) enrolled; devSetup's own idempotency check (a venue already provisioned refuses a second
+ * run) is what a partial seed falls back on, not a rollback.
  *
- * The bindings mirror `enrolDevice`'s form-factor rules (device.ts):
+ * The bindings mirror `resolveDeviceBinding`'s form-factor rules (device.ts):
  *  - the TILL profile AUTO-CREATES its own register named after the device, so the till device is
  *    "Mostrador" — NOT "Caja 1", the register provisioning already made, which would trip the
  *    `tills (tenant, location, name)` unique index → `device.register_name_taken`;
@@ -405,16 +413,15 @@ async function provisionVenue(
  *    the waiter's phone rings into the same drawer as the counter, adding no third register;
  *  - the KITCHEN display binds to the provisioned default "Cocina" station (looked up by name, the same
  *    key `seed-catalogue.ts` resolves it by; the name is not localized).
- * Each `enrolDevice` consumes a FRESH `generatePairingCode` — a pairing code is single-use.
  */
 async function seedDemoDevices(
   db: Database,
   ids: DevVenueIds,
   seedLocale: SeedLocale,
 ): Promise<void> {
-  // The enrol verbs are typed `cfg: TillConfig`; they read only `tenantId`/`locationId` (and the code
-  // carries the venue), so the sale-side fields carry inert-but-valid placeholders (no card, no tips,
-  // `prepay`) — the enrol path never persists them.
+  // The enrol verbs are typed `cfg: TillConfig`; they read only `tenantId`/`locationId` (and the join
+  // request carries the venue), so the sale-side fields carry inert-but-valid placeholders (no card,
+  // no tips, `prepay`) — the enrol path never persists them.
   const cfg: TillConfig = {
     tenantId: brandTenantId(ids.tenantId),
     tillId: brandTillId(ids.tillId),
@@ -428,55 +435,63 @@ async function seedDemoDevices(
     orderFlow: "prepay",
   };
 
-  await withTenant(db, cfg.tenantId, async (tx) => {
+  // The profiles + stations the devices bind to — provisioning seeds one profile per form factor
+  // (till/kds/phone-portrait) and the default "Cocina" station.
+  const { profiles, stations } = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-
-    // The profiles + stations the devices bind to — provisioning seeds one profile per form factor
-    // (till/kds/phone-portrait) and the default "Cocina" station.
-    const before = await readEnrolCatalogue(tx, cfg);
-    const profileFor = (formFactor: "till" | "kds" | "phone-portrait"): string => {
-      const profile = before.profiles.find((p) => p.formFactor === formFactor);
-      if (profile === undefined) {
-        throw new Error(`dev-setup: no seeded device profile for form factor "${formFactor}"`);
-      }
-      return profile.id;
+    return {
+      profiles: await listDeviceProfiles(tx, cfg.tenantId),
+      stations: await listStations(tx, cfg),
     };
-    const kitchen = before.stations.find((s) => s.name === "Cocina");
-    if (kitchen === undefined) {
-      throw new Error('dev-setup: no "Cocina" kitchen station to bind the kitchen display to');
+  });
+  const profileFor = (formFactor: "till" | "kds" | "phone-portrait"): string => {
+    const profile = profiles.find((p) => p.formFactor === formFactor);
+    if (profile === undefined) {
+      throw new Error(`dev-setup: no seeded device profile for form factor "${formFactor}"`);
     }
+    return profile.id;
+  };
+  const kitchen = stations.find((s) => s.name === "Cocina");
+  if (kitchen === undefined) {
+    throw new Error('dev-setup: no "Cocina" kitchen station to bind the kitchen display to');
+  }
 
-    // 1. Till — auto-creates its register "Mostrador".
-    await enrolDevice(tx, cfg, {
-      code: (await generatePairingCode(tx, cfg)).code,
-      name: "Mostrador",
-      profileId: profileFor("till"),
-    });
+  // 1. Till — auto-creates its register "Mostrador".
+  await enrolDeviceForTest(db, cfg, { name: "Mostrador", profileId: profileFor("till") });
 
-    // The register the till device just minted, re-read from the same tx — `enrolDevice` returns the
-    // device, not its register, and the counter's register is the one the handheld rings into.
-    const counter = (await readEnrolCatalogue(tx, cfg)).registers.find(
-      (r) => r.name === "Mostrador",
-    );
-    if (counter === undefined) {
-      throw new Error('dev-setup: the till enrol did not create its "Mostrador" register');
-    }
+  // The register the till device just minted, re-read fresh — `enrolDeviceForTest` returns the
+  // device, not its register, and the counter's register is the one the handheld rings into.
+  const counter = (
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx
+        .select({ id: tills.id })
+        .from(tills)
+        .where(
+          and(
+            eq(tills.tenantId, cfg.tenantId),
+            eq(tills.locationId, cfg.locationId),
+            eq(tills.name, "Mostrador"),
+          ),
+        );
+    })
+  )[0];
+  if (counter === undefined) {
+    throw new Error('dev-setup: the till enrol did not create its "Mostrador" register');
+  }
 
-    // 2. Handheld — bound to the counter's register.
-    await enrolDevice(tx, cfg, {
-      code: (await generatePairingCode(tx, cfg)).code,
-      name: "Camarero 1",
-      profileId: profileFor("phone-portrait"),
-      registerId: counter.id,
-    });
+  // 2. Handheld — bound to the counter's register.
+  await enrolDeviceForTest(db, cfg, {
+    name: "Camarero 1",
+    profileId: profileFor("phone-portrait"),
+    registerId: counter.id,
+  });
 
-    // 3. Kitchen display — bound to the "Cocina" station.
-    await enrolDevice(tx, cfg, {
-      code: (await generatePairingCode(tx, cfg)).code,
-      name: "Pantalla Cocina",
-      profileId: profileFor("kds"),
-      stationId: kitchen.id,
-    });
+  // 3. Kitchen display — bound to the "Cocina" station.
+  await enrolDeviceForTest(db, cfg, {
+    name: "Pantalla Cocina",
+    profileId: profileFor("kds"),
+    stationId: kitchen.id,
   });
 }
 
@@ -689,9 +704,9 @@ async function main(): Promise<void> {
   console.log("    Mostrador (till) · Camarero 1 (handheld) · Pantalla Cocina (kitchen display)");
   console.log("");
   console.log(
-    `  Or enrol a FRESH browser at http://localhost:5190 with pairing code: ${DEV_PAIRING_CODE}`,
+    "  Or knock from a FRESH browser at http://localhost:5190 — a manager then switches on",
   );
-  console.log("  (fixed in dev mode, reusable by every fresh browser)");
+  console.log("  pairing mode in the dashboard and matches the number the till shows.");
   const salesDays = resolveSalesDays();
   if (!result.reused) {
     console.log(

@@ -5,10 +5,21 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
-import type { DashboardApi, DeviceProfile, DeviceRow, Printer, Station } from "../api/client.js";
+import type {
+  DashboardApi,
+  DeviceProfile,
+  DeviceRow,
+  FormFactor,
+  JoinRequestRow,
+  PairingModeState,
+  Printer,
+  Station,
+  Till,
+} from "../api/client.js";
 
 /** The card-payment providers the per-device hardware editor offers, in render order — mirrors the
  * `devices.card_provider` text column's accepted values and the server's `CARD_PROVIDERS` screen. `none`
@@ -17,6 +28,27 @@ import type { DashboardApi, DeviceProfile, DeviceRow, Printer, Station } from ".
  * and `stripe_on_device` (Tap to Pay on the device itself, no separate reader id). The server stores
  * the string as-is and re-validates it; the picker constrains the choice to these three. */
 const CARD_PROVIDERS: readonly string[] = ["none", "stripe_terminal", "stripe_on_device"];
+
+/**
+ * Which binding the accept dialog must ask for, given the chosen profile's form factor. A
+ * dashboard-LOCAL mirror of `kindOfFormFactor` (`@waitron/layouts`), which the #70 bundle rule forbids
+ * importing here; the switch is exhaustive over `FormFactor`, so a new form factor fails to compile
+ * until it gets an answer. A `till` binds NEITHER picker — the server creates the register that device
+ * rings against, named after it (`resolveDeviceBinding`, `apps/server/src/device.ts`). The server
+ * re-derives all of this from the profile and refuses a missing binding
+ * (`device.station_required` / `device.register_required`), so this only decides which picker to show.
+ */
+function bindingOf(formFactor: FormFactor): "station" | "register" | "none" {
+  switch (formFactor) {
+    case "kds":
+      return "station";
+    case "till":
+      return "none";
+    case "phone-portrait":
+    case "tablet-landscape":
+      return "register";
+  }
+}
 
 /** A device's editable hardware, held per row while the operator edits it (before Save). */
 interface HardwareEdit {
@@ -34,9 +66,9 @@ const DEFAULT_HARDWARE: HardwareEdit = {
 };
 
 /**
- * The management dashboard's DEVICES screen (device-identity-1 §5b): manages the venue's enrolled
- * devices. It does four things, modelled on the kitchen / service-status config screens (their inline
- * list idiom, `@waitron/ui` primitives, `--wt-*` tokens):
+ * The management dashboard's DEVICES screen: it lets a device in and then manages it, modelled on the
+ * kitchen / service-status config screens (their inline list idiom, `@waitron/ui` primitives, `--wt-*`
+ * tokens):
  *
  *  - LISTS the enrolled devices (`api.listDevices()`), one `wt-card` row each: the label, the assigned
  *    device profile's NAME (resolved from `api.listDeviceProfiles()` — the list carries only a
@@ -44,10 +76,19 @@ const DEFAULT_HARDWARE: HardwareEdit = {
  *    register-bound device carries no station and shows the neutral placeholder — the list shape carries
  *    no register name), the status (active / revoked) and the last-seen time. Newest-enrolled first is
  *    the server's order, rendered as-is.
- *  - GENERATES an enrolment key: one button → `api.createDeviceCode()` (NO body — the code is a bare
- *    bearer token now; the device describes itself at enrolment). The returned code is shown ONCE in a
- *    prominent, copyable panel and lives ONLY in component state — it is NOT re-fetchable (like a passkey
- *    challenge handle), so dismissing the panel is final. Generating reloads the device list.
+ *  - CONTROLS THE VENUE-WIDE PAIRING WINDOW (device-join-and-accept §1.1): nothing may ask to join while
+ *    it is shut. Open / Extend are the same idempotent `api.openPairingMode()` call (the route moves an
+ *    open window's lapse rather than adding one); `api.closePairingMode()` shuts it. While it is shut the
+ *    card shows how many knocks were turned away in the last ten minutes, so an admin looking at a device
+ *    that appears broken can see it is waiting to be let in.
+ *  - LETS DEVICES IN. `api.joinRequests("device")` is the queue of devices waiting: a name and when they
+ *    asked, and NO verification number — the row shape has no such field (design §1.2 rule 1), so the
+ *    list cannot show the answer beside the question. Opening a row fetches `api.joinChallenge(id)`,
+ *    three shuffled two-digit numbers of which the server does not say which is real, and renders them
+ *    as three buttons; the admin taps the one the device is showing, having first chosen the profile and
+ *    the binding its form factor calls for. A WRONG tap is terminal for that row — the server has
+ *    already denied it — so the dialog closes and the copy says the device must ask again. Deny sits
+ *    behind the same two-step confirm as Revoke.
  *  - EDITS a device's static hardware (SP-A.2 §16.3): each ACTIVE row carries a receipt-printer picker
  *    (`api.listPrinters()`), a has-cash-drawer switch, a card-provider picker and — only for a Stripe
  *    Terminal reader — a card-reader-id field, saved through `api.patchDeviceHardware(id, …)`. The edit
@@ -130,37 +171,26 @@ export class DevicesScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      .generate {
-        margin-top: var(--wt-space-2);
-      }
-      .code-panel {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        align-items: flex-start;
-        margin-top: var(--wt-space-4);
-        padding: var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-      }
-      .code-hint {
-        margin: 0;
+      .hint {
+        margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-text-muted);
       }
-      .code-value {
-        font-family: var(--wt-font-family-mono, monospace);
-        font-size: var(--wt-font-size-lg);
-        letter-spacing: 0.15em;
-        color: var(--wt-color-text);
-      }
-      .code-actions {
+      .actions {
         display: flex;
         gap: var(--wt-space-2);
         align-items: center;
+        flex-wrap: wrap;
       }
-      .copied {
-        color: var(--wt-color-text-muted);
+      .pickers {
+        display: flex;
+        gap: var(--wt-space-3);
+        flex-wrap: wrap;
+        margin-bottom: var(--wt-space-4);
+      }
+      .choices {
+        display: flex;
+        gap: var(--wt-space-3);
+        flex-wrap: wrap;
       }
       .error {
         color: var(--wt-color-danger);
@@ -172,7 +202,8 @@ export class DevicesScreen extends LitElement {
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
 
-  // Whether an enrolment-key mint is in flight (disables the generate button).
+  // Whether an accept is in flight — a second tap on a number while the first is unanswered would
+  // race a request the server may already have consumed, so the choices disable until it settles.
   @state() private submitting = false;
   // The enrolled devices, loaded on connect and re-synced after every mutation (server order kept).
   @state() private devices: DeviceRow[] = [];
@@ -186,10 +217,25 @@ export class DevicesScreen extends LitElement {
   // DEFAULT_HARDWARE (the device list carries no hardware); a Save writes it and refreshes the entry
   // from the server's stored values.
   @state() private hardwareEdits: Record<string, HardwareEdit> = {};
-  // The one-time enrolment key, held ONLY here — never re-fetchable. null when no code is being shown.
-  @state() private generatedCode: string | null = null;
-  // Whether the shown code has just been copied (a transient confirmation next to the Copy button).
-  @state() private copied = false;
+  // The venue's tills — the accept dialog's register picker for a handheld profile.
+  @state() private tills: Till[] = [];
+  // The pairing window as the server last reported it; undefined until the first read settles.
+  @state() private pairing: PairingModeState | undefined;
+  // The devices waiting to join, in the server's order. These rows carry NO verification number.
+  @state() private pendingJoins: JoinRequestRow[] = [];
+  // The request whose accept dialog is open, or null. Single-valued: one dialog at a time, so the
+  // dialog's three picks below are single-valued too rather than maps keyed by a row that cannot vary.
+  @state() private openRequestId: string | null = null;
+  // The three numbers the server offered, per request. CACHED: the set is fixed at join, so reopening
+  // a row must show the same three rather than re-asking (design §1.2 rule 2).
+  @state() private challenges: Record<string, string[]> = {};
+  // The open dialog's picks, reset each time a row is opened.
+  @state() private chosenProfileId = "";
+  @state() private chosenStationId = "";
+  @state() private chosenRegisterId = "";
+  // The id of the pending request whose Deny is ARMED, or null — Revoke's two-step confirm, on its own
+  // state so arming a Deny does not disarm a Revoke in the list below it.
+  @state() private armedDenyId: string | null = null;
   // The id of the device whose Revoke control is ARMED (awaiting a confirming second click), or null.
   // Single-valued, so arming one row disarms any other by construction.
   @state() private armedRevokeId: string | null = null;
@@ -225,6 +271,17 @@ export class DevicesScreen extends LitElement {
       const id = select.dataset.test!.slice("hw-card-provider-".length);
       select.value = this.#hardwareFor(id).cardProvider;
     }
+    // The accept dialog's three pickers, same post-render reconciliation as the selects above: their
+    // <option> children are rendered in the same pass, and the binding picker is a DIFFERENT element
+    // per form factor, so each control is snapped to what state holds after every render.
+    for (const [testId, value] of [
+      ["join-profile", this.chosenProfileId],
+      ["join-station", this.chosenStationId],
+      ["join-register", this.chosenRegisterId],
+    ] as const) {
+      const select = this.renderRoot.querySelector<HTMLSelectElement>(`[data-test="${testId}"]`);
+      if (select !== null) select.value = value;
+    }
   }
 
   /** (Re)load the devices + option feeds. Called on connect and after every mutation. A rejection
@@ -233,70 +290,184 @@ export class DevicesScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     this.armedRevokeId = null;
+    this.armedDenyId = null;
     try {
-      const [devices, stations, deviceProfiles, printers] = await Promise.all([
-        this.api.listDevices(),
-        this.api.listStations(),
-        // `listDeviceProfiles` is `till.configure`-gated and `listPrinters` is `printer.manage`-gated,
-        // whereas this screen is `device.manage`-gated — but that mismatch is unreachable: all three
-        // permissions sit in the {manager, admin} set (packages/identity/src/permissions.ts; admin holds
-        // ALL), so every user who reaches this screen holds them (the printers-screen documents the same
-        // reuse). A custom-role split is a documented follow-on — no device.manage-gated list variants.
-        this.api.listDeviceProfiles(),
-        this.api.listPrinters(),
-      ]);
+      const [devices, stations, deviceProfiles, printers, tills, pairing, pendingJoins] =
+        await Promise.all([
+          this.api.listDevices(),
+          this.api.listStations(),
+          // This screen is `device.manage`-gated, but four of these feeds are not: `listStations` and
+          // `listDeviceProfiles` are `till.configure`-gated (apps/server/src/management-api.ts, the
+          // `withVenueAuth` helper and the device-profiles list route), and `listPrinters` /
+          // `listTills` are `printer.manage`-gated (apps/server/src/print-api.ts's `gated` helper).
+          // The mismatch is unreachable today: all four permissions sit in the {manager, admin} set
+          // (`MANAGER` in packages/identity/src/permissions.ts carries `till.configure`,
+          // `device.manage` and `printer.manage`; admin holds ALL), so every user who reaches this
+          // screen holds them. That is a claim about the ROLE MAP, not about the permissions — if a
+          // custom role ever holds `device.manage` alone, these four reject and this screen needs
+          // `device.manage`-gated variants of them.
+          this.api.listDeviceProfiles(),
+          this.api.listPrinters(),
+          this.api.listTills(),
+          this.api.pairingMode(),
+          this.api.joinRequests("device"),
+        ]);
       this.devices = devices;
       this.stations = stations;
       this.deviceProfiles = deviceProfiles;
       this.printers = printers;
+      this.tills = tills;
+      this.pairing = pairing;
+      this.pendingJoins = pendingJoins;
     } catch (error) {
       this.errorKey = codeOf(error);
     }
   }
 
-  /** Reload the DEVICES only (not the option feeds) after a mutation. `#generate` and `#revoke` change
-   * the device set but never the stations/profiles/printers, so re-fetching those — which {@link #load}
-   * does — would be pure waste. Throws on failure like `listDevices` itself: both callers run it inside
-   * their own `try/catch` that maps the rejection to the `errorKey` banner. Disarms any armed revoke
-   * (mirroring {@link #load}). */
-  async #reloadDevices(): Promise<void> {
-    this.armedRevokeId = null;
-    this.devices = await this.api.listDevices();
+  /** Re-read the window and the pending queue after a join-side mutation, WITHOUT the option feeds
+   * (which none of those mutations change). Throws like the verbs it calls: every caller runs it
+   * inside its own `try/catch` that maps the rejection to the `errorKey` banner. Disarms any armed
+   * deny (the armed row may no longer exist). */
+  async #reloadJoins(): Promise<void> {
+    this.armedDenyId = null;
+    const [pairing, pendingJoins] = await Promise.all([
+      this.api.pairingMode(),
+      this.api.joinRequests("device"),
+    ]);
+    this.pairing = pairing;
+    this.pendingJoins = pendingJoins;
   }
 
-  /** Mint an enrolment key (a bare token — no body) then show it ONCE and reload the list. On success
-   * the code goes into state (never re-fetched); on rejection the `errorKey` banner shows. */
-  async #generate(): Promise<void> {
-    if (this.submitting) return;
+  /** Open the pairing window, or extend an already-open one — the SAME call, because the route moves
+   * an open window's lapse to a fresh window from now rather than adding another. */
+  async #openPairing(): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.openPairingMode();
+      await this.#reloadJoins();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** Shut the window. Requests already pending stay pending and are still acceptable — the window
+   * admits an ask, it does not hold one open. */
+  async #closePairing(): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.closePairingMode();
+      await this.#reloadJoins();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** Open a pending request's accept dialog on a clean set of picks, fetching its three numbers the
+   * FIRST time only: the server fixes the set at join, so a second fetch would show the same three and
+   * teach nobody anything (design §1.2 rule 2). */
+  async #openRequest(id: string): Promise<void> {
+    this.errorKey = null;
+    this.openRequestId = id;
+    this.chosenProfileId = "";
+    this.chosenStationId = "";
+    this.chosenRegisterId = "";
+    if (this.challenges[id] !== undefined) return;
+    try {
+      const { choices } = await this.api.joinChallenge(id);
+      this.challenges = { ...this.challenges, [id]: choices };
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** The two-step deny: the first click ARMS `id`, a second on the armed row confirms. Revoke's idiom
+   * — denying is not undoable, so the confirm gate is deliberate. */
+  #onDeny(id: string): void {
+    if (this.armedDenyId === id) {
+      this.armedDenyId = null;
+      void this.#deny(id);
+      return;
+    }
+    this.armedDenyId = id;
+  }
+
+  /** Refuse a pending request, then re-read the queue. `#onDeny` already cleared the armed state. */
+  async #deny(id: string): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.denyJoinRequest(id);
+      if (this.openRequestId === id) this.openRequestId = null;
+      await this.#reloadJoins();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** The profile the dialog currently has chosen, or undefined while none is. */
+  #chosenProfile(): DeviceProfile | undefined {
+    return this.deviceProfiles.find((p) => p.id === this.chosenProfileId);
+  }
+
+  /** Whether the dialog holds enough to accept: a profile, plus the binding its form factor calls for.
+   * Until it does, the numbers stay untappable — so tapping one is always a decision about the NUMBER
+   * and never an accidental accept with an unchosen binding. */
+  #bindingReady(): boolean {
+    const profile = this.#chosenProfile();
+    if (profile === undefined) return false;
+    const binding = bindingOf(profile.formFactor);
+    if (binding === "station") return this.chosenStationId !== "";
+    if (binding === "register") return this.chosenRegisterId !== "";
+    return true;
+  }
+
+  /**
+   * Accept the open request with the number the admin tapped, and the profile and binding they chose.
+   *
+   * A WRONG number is not a rejected submission: the server DELETED the request before answering
+   * `device.join_mismatch` (design §1.2), so that code is terminal for this row — the dialog closes,
+   * the queue is re-read without it, and the banner tells the operator the device has to ask again.
+   * Every other fault names something fixable here (a station the profile needs, a register that has
+   * gone), so the dialog stays open on the same request for a corrected second tap.
+   */
+  async #accept(request: JoinRequestRow, choice: string): Promise<void> {
+    const profile = this.#chosenProfile();
+    if (this.submitting || profile === undefined || !this.#bindingReady()) return;
+    const binding = bindingOf(profile.formFactor);
     this.errorKey = null;
     this.submitting = true;
     try {
-      const { code } = await this.api.createDeviceCode();
-      this.generatedCode = code;
-      this.copied = false;
-      await this.#reloadDevices();
+      await this.api.acceptDeviceJoinRequest(request.id, {
+        choice,
+        profileId: profile.id,
+        ...(binding === "station" ? { stationId: this.chosenStationId } : {}),
+        ...(binding === "register" ? { registerId: this.chosenRegisterId } : {}),
+      });
+      this.openRequestId = null;
+      await Promise.all([this.#reloadJoins(), this.#reloadDevices()]);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      const code = codeOf(error);
+      this.errorKey = code;
+      if (code === "device.join_mismatch") {
+        this.openRequestId = null;
+        try {
+          await this.#reloadJoins();
+        } catch (reloadError) {
+          this.errorKey = codeOf(reloadError);
+        }
+      }
     } finally {
       this.submitting = false;
     }
   }
 
-  /** Copy the shown code to the clipboard, confirming with a transient "Copied" status. Never throws: if
-   * the clipboard is unavailable or denied the code stays on screen to copy by hand (the catch arm). */
-  async #copyCode(code: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(code);
-      this.copied = true;
-    } catch {
-      this.copied = false;
-    }
-  }
-
-  /** Dismiss the shown-once code — it lived only in state, so this is final (it cannot be re-fetched). */
-  #dismissCode(): void {
-    this.generatedCode = null;
-    this.copied = false;
+  /** Reload the DEVICES only (not the option feeds) after a mutation. `#accept` and `#revoke` change
+   * the device set but never the stations/profiles/printers/tills, so re-fetching those — which
+   * {@link #load} does — would be pure waste. Throws on failure like `listDevices` itself: every caller
+   * runs it inside its own `try/catch` that maps the rejection to the `errorKey` banner. Disarms any
+   * armed revoke (mirroring {@link #load}). */
+  async #reloadDevices(): Promise<void> {
+    this.armedRevokeId = null;
+    this.devices = await this.api.listDevices();
   }
 
   /** The two-step revoke: the first click ARMS `id`, a second click on the armed row confirms and revokes.
@@ -551,39 +722,211 @@ export class DevicesScreen extends LitElement {
     </li>`;
   }
 
-  #renderCodePanel(code: string): TemplateResult {
-    return html`<section
-      class="code-panel"
-      data-test="code-panel"
-      aria-label=${t("devices.code_title")}
+  /** The venue-wide pairing window. While it is OPEN: when it lapses, plus Extend and Close. While it
+   * is SHUT: Open, and — only when there were any — how many knocks were turned away in the last ten
+   * minutes (`REFUSED_WINDOW_MS`, apps/server/src/pairing-mode.ts, which the copy names; the two move
+   * together). The count is composed with `.replace`, as this catalogue has no interpolation. */
+  #renderPairing(): TemplateResult {
+    const mode = this.pairing;
+    if (mode === undefined) return html`<p class="hint">${t("devices.pairing_loading")}</p>`;
+    return html`<wt-card data-test="pairing-mode">
+      <h2 class="panel-title">${t("devices.pairing_title")}</h2>
+      <p class="hint">${t("devices.pairing_hint")}</p>
+      ${
+        mode.open
+          ? html`<p data-test="pairing-until">
+                ${t("devices.pairing_open_until").replace(
+                  "{time}",
+                  mode.openUntil === null ? "" : formatIsoMinute(mode.openUntil),
+                )}
+              </p>
+              <div class="actions">
+                <wt-button
+                  variant="primary"
+                  data-test="pairing-extend"
+                  @click=${() => void this.#openPairing()}
+                  >${t("devices.pairing_extend")}</wt-button
+                >
+                <wt-button
+                  variant="secondary"
+                  data-test="pairing-close"
+                  @click=${() => void this.#closePairing()}
+                  >${t("devices.pairing_close")}</wt-button
+                >
+              </div>`
+          : html`<div class="actions">
+                <wt-button
+                  variant="primary"
+                  data-test="pairing-open"
+                  @click=${() => void this.#openPairing()}
+                  >${t("devices.pairing_open")}</wt-button
+                >
+              </div>
+              ${
+                mode.refusedRecently > 0
+                  ? html`<p class="hint" data-test="pairing-refused">
+                      ${t("devices.pairing_refused").replace(
+                        "{count}",
+                        String(mode.refusedRecently),
+                      )}
+                    </p>`
+                  : nothing
+              }`
+      }
+    </wt-card>`;
+  }
+
+  /** One waiting device: the name it asked for and when, plus Let in and the two-step Deny. NO number
+   * is rendered here and none is fetched to render it — the row shape has none (design §1.2 rule 1). */
+  #renderJoinRequest(request: JoinRequestRow): TemplateResult {
+    const armed = this.armedDenyId === request.id;
+    return html`<li data-test="join-row-${request.id}">
+      <wt-card>
+        <div class="row">
+          <div class="details">
+            <span class="label" data-test="join-label-${request.id}">${request.label}</span>
+            <span class="meta">
+              <span data-test="join-asked-${request.id}"
+                >${formatIsoMinute(request.createdAt)}</span
+              >
+            </span>
+          </div>
+          <wt-button
+            variant="primary"
+            size="sm"
+            data-test="join-review-${request.id}"
+            aria-label=${`${t("devices.join_review")} ${request.label}`}
+            @click=${() => void this.#openRequest(request.id)}
+            >${t("devices.join_review")}</wt-button
+          >
+          <wt-button
+            variant="danger"
+            size="sm"
+            data-test="join-deny-${request.id}"
+            data-armed=${armed ? "true" : nothing}
+            aria-label=${`${armed ? t("devices.join_deny_confirm") : t("devices.join_deny")} ${request.label}`}
+            @click=${() => this.#onDeny(request.id)}
+            >${armed ? t("devices.join_deny_confirm") : t("devices.join_deny")}</wt-button
+          >
+        </div>
+      </wt-card>
+    </li>`;
+  }
+
+  /** The accept dialog's binding picker — a station for a `kds` profile, a register for a handheld,
+   * and nothing at all for a till (the server creates the register it rings against). */
+  #renderBindingPicker(profile: DeviceProfile): TemplateResult | typeof nothing {
+    const binding = bindingOf(profile.formFactor);
+    if (binding === "none") return nothing;
+    if (binding === "station") {
+      return html`<label class="field"
+        >${t("devices.station")}
+        <select
+          data-test="join-station"
+          @change=${(e: Event) => (this.chosenStationId = (e.target as HTMLSelectElement).value)}
+        >
+          <option value="">${t("devices.join_pick_station")}</option>
+          ${this.stations.map((station) => html`<option value=${station.id}>${station.name}</option>`)}
+        </select>
+      </label>`;
+    }
+    return html`<label class="field"
+      >${t("devices.till")}
+      <select
+        data-test="join-register"
+        @change=${(e: Event) => (this.chosenRegisterId = (e.target as HTMLSelectElement).value)}
+      >
+        <option value="">${t("devices.join_pick_register")}</option>
+        ${this.tills.map((till) => html`<option value=${till.id}>${till.label}</option>`)}
+      </select>
+    </label>`;
+  }
+
+  /**
+   * The accept dialog: the profile and binding pickers, then the three numbers as three real buttons,
+   * each accessibly named ("Number 47", not a bare "47") so the comparison against what the device is
+   * showing is a deliberate act. The server does not say which is real, and a wrong tap denies the
+   * request — so the buttons stay disabled until the binding is complete, and there is no separate
+   * Accept control to press afterwards: the number IS the accept.
+   */
+  #renderAcceptDialog(): TemplateResult | typeof nothing {
+    const request = this.pendingJoins.find((r) => r.id === this.openRequestId);
+    if (request === undefined) return nothing;
+    const choices = this.challenges[request.id];
+    const profile = this.#chosenProfile();
+    const ready = this.#bindingReady();
+    return html`<wt-dialog
+      data-test="join-dialog"
+      heading=${t("devices.join_dialog_title")}
+      .open=${true}
+      @wt-close=${() => (this.openRequestId = null)}
     >
-      <h2 class="panel-title">${t("devices.code_title")}</h2>
-      <p class="code-hint">${t("devices.code_hint")}</p>
-      <code class="code-value" data-test="code-value">${code}</code>
-      <div class="code-actions">
-        <wt-button
-          variant="secondary"
-          data-test="copy-code"
-          @click=${() => void this.#copyCode(code)}
-          >${t("devices.copy")}</wt-button
-        >
-        <wt-button variant="ghost" data-test="dismiss-code" @click=${() => this.#dismissCode()}
-          >${t("devices.done")}</wt-button
-        >
-        ${
-          this.copied
-            ? html`<span class="copied" role="status" data-test="copied"
-                >${t("devices.copied")}</span
-              >`
-            : nothing
-        }
+      <p class="label" data-test="join-dialog-label">${request.label}</p>
+      <div class="pickers">
+        <label class="field"
+          >${t("devices.device_profile")}
+          <select
+            data-test="join-profile"
+            @change=${(e: Event) => {
+              this.chosenProfileId = (e.target as HTMLSelectElement).value;
+              this.chosenStationId = "";
+              this.chosenRegisterId = "";
+            }}
+          >
+            <option value="">${t("devices.join_pick_profile")}</option>
+            ${this.deviceProfiles.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+          </select>
+        </label>
+        ${profile === undefined ? nothing : this.#renderBindingPicker(profile)}
       </div>
-    </section>`;
+      ${
+        choices === undefined
+          ? html`<p class="hint">${t("devices.join_loading")}</p>`
+          : html`<p id="join-match-prompt">${t("devices.join_match_prompt")}</p>
+              ${ready ? nothing : html`<p class="hint">${t("devices.join_pick_first")}</p>`}
+              <div class="choices" role="group" aria-labelledby="join-match-prompt">
+                ${choices.map(
+                  // `size="lg"`: the number has to be legible from where the admin is standing,
+                  // against a device across the room — that is the whole job of a two-digit code.
+                  (number) =>
+                    html`<wt-button
+                      variant="secondary"
+                      size="lg"
+                      data-choice=${number}
+                      ?disabled=${!ready || this.submitting}
+                      aria-label=${t("devices.join_choice_label").replace("{number}", number)}
+                      @click=${() => void this.#accept(request, number)}
+                      >${number}</wt-button
+                    >`,
+                )}
+              </div>`
+      }
+      <wt-button
+        slot="footer"
+        variant="ghost"
+        data-test="join-cancel"
+        @click=${() => (this.openRequestId = null)}
+        >${t("action.cancel")}</wt-button
+      >
+    </wt-dialog>`;
   }
 
   override render(): TemplateResult {
     return html`
       <h1 class="title">${t("devices.title")}</h1>
+      <section data-test="pairing-panel">${this.#renderPairing()}</section>
+
+      <section data-test="join-panel">
+        <h2 class="panel-title">${t("devices.join_waiting_title")}</h2>
+        ${
+          this.pendingJoins.length === 0
+            ? html`<p class="empty" data-test="no-join-requests">${t("devices.join_none")}</p>`
+            : html`<ol>
+                ${this.pendingJoins.map((request) => this.#renderJoinRequest(request))}
+              </ol>`
+        }
+      </section>
+
       <section data-test="devices-panel">
         ${
           this.devices.length === 0
@@ -594,20 +937,7 @@ export class DevicesScreen extends LitElement {
         }
       </section>
 
-      <section>
-        <h2 class="panel-title">${t("devices.generate_title")}</h2>
-        <div class="generate">
-          <wt-button
-            variant="primary"
-            data-test="generate"
-            ?disabled=${this.submitting}
-            @click=${() => void this.#generate()}
-            >${t("devices.generate")}</wt-button
-          >
-        </div>
-        ${this.generatedCode !== null ? this.#renderCodePanel(this.generatedCode) : nothing}
-      </section>
-
+      ${this.#renderAcceptDialog()}
       ${
         this.errorKey
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`

@@ -40,7 +40,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
@@ -331,15 +331,14 @@ async function enrolTillCookie(cfg: TillConfig): Promise<string> {
   // per call — both carry a tenant-scoped unique index.
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
-  const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    // A `till` device is defined by a `till`-form-factor profile (Task 7); `enrolDevice` auto-creates
-    // the register it rings against, so the resolved sale till is this device's own.
-    const { rows } = await tx.execute<{ id: string }>(sql`
+  // A `till` device is defined by a `till`-form-factor profile (Task 7); `resolveDeviceBinding`
+  // auto-creates the register it rings against, so the resolved sale till is this device's own.
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
       insert into device_profiles (tenant_id, name, form_factor)
       values (${cfg.tenantId}, ${`Counter till profile ${n}`}, 'till') returning id`);
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, { code, name: `Counter till ${n}`, profileId: rows[0]!.id });
+  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    name: `Counter till ${n}`,
+    profileId: rows[0]!.id,
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }

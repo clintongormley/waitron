@@ -1,19 +1,19 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { tablesCreatedBy } from "@waitron/sync-enrolment";
 import { CORE_CLASSIFICATION } from "./classification.js";
 
 const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
 
-function tablesInDrizzle(): string[] {
-  const names: string[] = [];
-  for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {
-    const sql = readFileSync(join(DRIZZLE, file), "utf8");
-    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z0-9_]+)"?/gi)) {
-      names.push(m[1]!);
-    }
-  }
-  return names;
+/** The tables core's migrations LEAVE IN EXISTENCE — CREATEs minus later DROPs, filename order
+ * (`readdirSync` does not sort). */
+function tablesInDrizzle(): Set<string> {
+  const files = readdirSync(DRIZZLE)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .map((f) => readFileSync(join(DRIZZLE, f), "utf8"));
+  return tablesCreatedBy(files);
 }
 
 describe("CORE_CLASSIFICATION", () => {
@@ -29,7 +29,7 @@ describe("CORE_CLASSIFICATION", () => {
   });
   it("classifies exactly the tables core's migrations create", () => {
     const classified = new Set(CORE_CLASSIFICATION.map((c) => c.table));
-    const created = new Set(tablesInDrizzle());
+    const created = tablesInDrizzle();
     expect([...created].filter((t) => !classified.has(t)).sort()).toEqual([]);
     expect([...classified].filter((t) => !created.has(t)).sort()).toEqual([]);
   });

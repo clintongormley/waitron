@@ -945,34 +945,6 @@ declare module "@waitron/shared" {
      */
     "device.forbidden_action": { action: string };
     /**
-     * A device enrolment (`POST /api/device/enrol`, device-identity-1 §3b) presented a pairing code that
-     * redeemed nothing — the locking `DELETE FROM device_pairing_codes WHERE code_sha256 = sha256(code)
-     * RETURNING` (the single-use `consumeChallenge` shape) matched no row: the code never existed, was
-     * mistyped, or was ALREADY consumed (each code is single-use, and a concurrent redeem the row-lock
-     * serialised loses here too). All fold into THIS one code. NO params: a pairing code is a bearer
-     * SECRET a caller can mis-send, and it must never land in an error's params — the same no-leak
-     * discipline `management.request_invalid` follows for a PIN and `session.required` for the session
-     * cookie; there is nothing non-secret to carry.
-     *
-     * `device.*` names the DOMAIN CONCEPT (device enrolment), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local STATUS
-     * map (Task 5), not here. Distinct from `device.pairing_expired`, where a row WAS found but has
-     * lapsed. Never renamed once shipped.
-     */
-    "device.pairing_invalid": Record<string, never>;
-    /**
-     * A device enrolment presented a pairing code that redeemed a row, but the row is older than
-     * `PAIRING_TTL_MS` (device-identity-1 §3b step 2 — the deleted row is rolled back with the tx so it
-     * lapses by TTL rather than being burned, the WebAuthn `consumeChallenge` semantic). NO params, for
-     * the same reason as `device.pairing_invalid`: the code is a bearer secret and is never echoed, and
-     * there is nothing non-secret to carry. Distinct from `device.pairing_invalid` (which matched no row
-     * at all): this says the code was real but has expired, so the remedy is to generate a fresh one.
-     *
-     * `device.*` names the DOMAIN CONCEPT (device enrolment), never the throwing package. Mapped to HTTP
-     * 400 by `device-api.ts`'s local STATUS map (Task 5), not here. Never renamed once shipped.
-     */
-    "device.pairing_expired": Record<string, never>;
-    /**
      * The deployment holds one tenant per database. No such device for this tenant — the device
      * management surface (`POST /management-api/devices/:id/ revoke` and the list,
      * device-identity-1 §3e) named a device id that matches nothing: absent, in this database
@@ -991,130 +963,85 @@ declare module "@waitron/shared" {
      */
     "device.not_found": { deviceId: string };
     /**
-     * Too many device-enrolment attempts reached `POST /api/device/enrol` in one fixed window — the
-     * per-process, GLOBAL, in-memory rate limit (`enrol-rate-limit.ts`, device-identity-1 §8 open item)
-     * refused this attempt at the TOP of the handler, BEFORE the body is parsed and BEFORE the
-     * pairing-code DELETE runs. Defense-in-depth over the primary controls (the code is ~40-bit,
-     * single-use, 15-min TTL, so brute-force over HTTP is already infeasible) PLUS DoS / connection-pool
-     * protection: rejecting before any DB work is what keeps an enrol flood from exhausting the pool and
-     * starving the sale path (the fiscal invariant "nothing may block a sale", CLAUDE.md §5). The limit is
-     * GLOBAL rather than per-IP because the on-prem server sits behind the snitun tunnel / a reverse
-     * proxy, so every client presents one address and a per-IP key would buy nothing.
-     *
-     * NO params: this is a blanket throttle, not a fact about the caller's code, and there is nothing
-     * non-secret to carry (the pairing code is a bearer secret and is never echoed — the same no-leak
-     * discipline `device.pairing_invalid`/`device.pairing_expired` follow). `device.pairing_*` names the
-     * DOMAIN CONCEPT (device enrolment/redemption), never the throwing package (`tenant.not_found`'s note
-     * gives the rule), and sits in the pairing-redemption family. Mapped to HTTP 429 by `device-api.ts`'s
-     * local STATUS map (the FIRST 429 in `apps/server`), not here. Never renamed once shipped.
-     */
-    "device.pairing_rate_limited": Record<string, never>;
-    /**
-     * A pairing code could not be minted because its SHA-256 digest collided with an outstanding code's
-     * — the `device_pairing_codes_lookup_idx` UNIQUE index on (tenant_id, code_sha256) rejected the
-     * INSERT with 23505. That index (added for single-use safety, 385b6248, so the redeeming
-     * `DELETE … RETURNING` can never consume a duplicate) makes a duplicate digest FAIL the mint rather
-     * than silently minting a consumable duplicate. The pairing code is ~40-bit Crockford entropy, so a
-     * fresh random code whose digest collides with an outstanding one is astronomically rare (~2^-40 per
-     * mint × outstanding codes) — but real, and `generatePairingCode` maps it to THIS code rather than
-     * letting the raw constraint error surface as an opaque `server.internal` 500. TRANSIENT: the remedy
-     * is simply to retry the mint, which draws a fresh code.
-     *
-     * NO params: there is nothing non-secret to carry (the code itself is a bearer secret, never echoed —
-     * the same no-leak discipline `device.pairing_invalid`/`device.pairing_expired`/
-     * `device.pairing_rate_limited` follow), and a blanket "retry" needs none. Distinct from
-     * `device.pairing_rate_limited` (a throttle refusing the enrol side before any DB work) and from the
-     * redemption faults `device.pairing_invalid`/`device.pairing_expired` (the REDEEM side): this is the
-     * GENERATE side failing to find a free code. `device.pairing_*` names the DOMAIN CONCEPT (device
-     * pairing), never the throwing package (`tenant.not_found`'s note gives the rule), and sits in the
-     * pairing family. Mapped to HTTP 409 by `device-api.ts`'s local STATUS map (a conflict on the digest,
-     * the same 409 the `isUniqueViolation`-mapped `station.name_taken`/`table.label_taken` take), not
-     * here. Never renamed once shipped.
-     */
-    "device.pairing_code_unavailable": Record<string, never>;
-    /**
-     * A pairing code for a STATION-BINDING kind (`kds_station`) was minted
-     * with NO station — `generatePairingCode`'s `stationId` was `null` for a kind that requires one. This
-     * is a VALIDATION failure on the mint, not a lookup miss: nothing was looked up, so there is no
-     * caller-supplied station id to echo. Distinct from `station.not_found`, which `requireLiveStation`
-     * raises when a station WAS supplied but is unknown/foreign/retired (that path still throws
-     * `station.not_found`, echoing the supplied uuid); the null case was previously folded into
-     * `station.not_found` with an empty `stationId: ""`, which violated that code's contract (it echoes a
-     * caller-supplied station uuid) — hence its own code here.
+     * A join request was ACCEPTED under a STATION-BINDING profile (`kds_station`) with NO station —
+     * `resolveDeviceBinding`'s `stationId` was `null` for a form factor that requires one. A VALIDATION
+     * failure, not a lookup miss: nothing was looked up, so there is no caller-supplied station id to
+     * echo. Distinct from `station.not_found`, which `requireLiveStation` raises when a station WAS
+     * supplied but is unknown/foreign/retired (that path echoes the supplied uuid).
      *
      * NO params: there is no station id (it was null), and a "name a station" validation carries nothing
-     * else non-secret. `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local STATUS map
-     * (a request that named no station), not here — the route layer owns the status. Never renamed once
-     * shipped.
+     * else non-secret. `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing
+     * package (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by the route's local STATUS
+     * map (a request that named no station), not here — the route layer owns the status. Never renamed
+     * once shipped.
      */
     "device.station_required": Record<string, never>;
     /**
-     * A pairing code for a SALE-CAPABLE kind (`till` or `handheld`) was minted
-     * with NO `till_id`, OR a `kds_station` code was minted WITH one. The `tills` row a sale-capable
-     * device rings against is the fiscal register-snapshot a later task stamps at sale time (SP-A.2
-     * §16.4), so a `till`/`handheld` MUST name one and a `kds_station` (which rings no sale) must name
-     * NONE. A VALIDATION failure on the mint, checked BEFORE any write, the exact twin of the per-kind
-     * station gate `device.station_required` (a required binding missing, or a forbidden one present).
+     * A device whose binding carries no `till_id` reached a path that requires one — `requireSaleTillId`
+     * on the sale routes (the guard lives in `device-session.ts`) and the roster-login guard in
+     * `till-api.ts`; both are `till-api.ts` routes. What actually trips it is a NON-sale-capable binding
+     * on a till-only path, in practice a `kds_station`: every sale-capable form factor holds a non-null
+     * `till_id` by the `device_binding_rule` trigger (migration 0004, whose non-kds arm RAISEs on a null
+     * `till_id`), so the sale-capable case the code's NAME suggests is unrepresentable. A SETUP
+     * precondition surfaced before any fiscal write, not a per-sale block (CLAUDE.md §5).
      *
-     * NO params: the fault names the PROBLEM, not a value — the missing/forbidden till id carries
+     * NO params: the fault names the PROBLEM, not a value — the missing till id carries
      * nothing non-secret worth echoing, the same no-param shape `device.station_required` uses. Grep
      * `"device.` in this file for the family: `station_required` / `register_required` /
-     * `register_name_taken` / `pairing_invalid` / `pairing_expired` / `pairing_rate_limited` /
-     * `pairing_code_unavailable` / `unauthorized` are the param-less device siblings, while
-     * `forbidden_station` / `not_found` echo an id — this one takes after the former. `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local STATUS
-     * map (a request that named the wrong bindings for the kind), not here — the route owns the status.
+     * `register_name_taken` / `pairing_closed` / `join_full` / `join_rate_limited` / `join_mismatch` /
+     * `unauthorized` are the param-less device siblings, while
+     * `forbidden_station` / `not_found` echo an id — this one takes after the former. `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
+     * (`tenant.not_found`'s note gives the rule). Mapped to 400 by BOTH surfaces' local STATUS maps —
+     * `till-api.ts`, which answers it, and `device-api.ts`, which maps it without throwing it so the
+     * code has one status everywhere — not here; the routes own the status.
      * Never renamed once shipped.
      */
     "device.till_required": Record<string, never>;
     /**
-     * A device enrolling under a REGISTER-BINDING profile (a `phone-portrait`/`tablet-landscape`
-     * handheld) named NO register. A handheld rings sales under its node's
-     * SIF and must name the `tills` row it files against, so `enrolDevice` refuses it before any write
-     * (a `till`-form-factor device does not reach this — it MINTS its own register). The twin of
-     * `device.station_required` on the other binding: a required binding was omitted at enrol.
+     * A join request was ACCEPTED under a REGISTER-BINDING profile (a `phone-portrait`/`tablet-landscape`
+     * handheld) with NO register. A handheld rings sales under its node's
+     * SIF and must name the `tills` row it files against, so `resolveDeviceBinding` refuses it before any
+     * write (a `till`-form-factor device does not reach this — it MINTS its own register). The twin of
+     * `device.station_required` on the other binding: a required binding was omitted at accept.
      *
      * NO params: the fault names the PROBLEM, not a value — the missing register carries nothing
      * non-secret worth echoing, the same no-param shape `device.station_required` uses. Distinct from
      * `device.binding_invalid` (a register WAS named but matches no row of this venue, which echoes the
-     * FIELD). `device.*` names the DOMAIN CONCEPT (device enrolment), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP status by the enrol route (Task 8),
+     * FIELD). `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
+     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by the route's local STATUS map,
      * not here. Never renamed once shipped.
      */
     "device.register_required": Record<string, never>;
     /**
-     * A `till`-form-factor device's enrolment tried to auto-create its cash register under a name
-     * already used by another register at the same venue. `enrolDevice` names the register after the
-     * device and reject-not-suffixes the clash (the operator renames the device), so two
+     * Accepting a `till`-form-factor device tried to auto-create its cash register under a name
+     * already used by another register at the same venue. `resolveDeviceBinding` names the register after
+     * the device and reject-not-suffixes the clash (the admin renames the device), so two
      * indistinguishable registers can never exist at one location — the `tills_tenant_location_name_key`
      * unique index (migration 0006) is the guard, and this is its 23505 translated to a clean domain
      * code rather than a raw 500.
      *
      * NO params: a "rename the device" validation carries nothing non-secret worth echoing (the
      * colliding name is the operator's own input), the same no-param shape `device.station_required`
-     * uses. `device.*` names the DOMAIN CONCEPT (device enrolment), never the throwing package or the
-     * `tills` table (`tenant.not_found`'s note gives the rule). Mapped to HTTP status by the enrol
-     * route (Task 8), not here. Never renamed once shipped.
+     * uses. `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package or the
+     * `tills` table (`tenant.not_found`'s note gives the rule). Mapped to HTTP 409 by the route's local
+     * STATUS map, not here. Never renamed once shipped.
      */
     "device.register_name_taken": Record<string, never>;
     /**
-     * A pairing code named a binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
+     * A request named a device binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
      * that matches no row of THIS tenant (absent, or another tenant's, which the tenant-consistent
-     * composite FK rejects too). Surfaced by translating the `23503` the composite FK raises at the
-     * `device_pairing_codes` INSERT (or the `devices` UPDATE the assign-device-profile route runs),
-     * keyed on the CONSTRAINT NAME (`device_pairing_codes_till_fk` /
-     * `device_pairing_codes_receipt_printer_fk` / `device_pairing_codes_device_profile_fk`, migrations
-     * 0095/0109) — the `isZoneFkViolation` idiom (`tables.ts`). A NULL binding (MATCH SIMPLE skips its FK)
+     * composite FK rejects too). Surfaced by translating the `23503` a composite FK on `devices` raises
+     * (the assign-device-profile UPDATE, the hardware PATCH), keyed on the CONSTRAINT NAME
+     * (`devices_device_profile_fk` / `devices_receipt_printer_fk`) — the `isZoneFkViolation` idiom
+     * (`tables.ts`) — or raised directly by the accept path's explicit register read, which sees the
+     * venue a composite FK cannot. A NULL binding (MATCH SIMPLE skips its FK)
      * never reaches this, and a 23503 on any OTHER constraint is rethrown raw rather than mislabelled.
-     * (The direct device→canvas binding was dropped in the Task 10 cutover, so `canvasId` is no longer a
-     * `field` here — a bad profile canvas reference is `device_profile.invalid`, in the profile store.)
      *
      * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
      * `"receiptPrinterId"`, `"deviceProfileId"` — and NEVER the offending id value: a request-shape
      * fault names the field, not the value, the same no-leak, echo-the-name discipline
      * `management.request_invalid` and `setup.request_invalid` follow (grep `{ field: string }` in this
-     * file for that family). `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing
+     * file for that family). `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing
      * package (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local
      * STATUS map (a request naming a binding that does not exist), not here. Never renamed once shipped.
      */
@@ -1122,15 +1049,48 @@ declare module "@waitron/shared" {
       field: "tillId" | "receiptPrinterId" | "deviceProfileId";
     };
     /**
-     * DORMANT — currently unthrown and unmapped. Its only thrower was the dev-till mint (which
-     * pre-selected a seeded starter `till` profile), deleted when the enrol flow moved profile choice to
-     * the device: the two-step verify→enrol path now takes an explicit `profileId`, so a missing profile
-     * surfaces as `device_profile.not_found` (404) instead. Removed from `device-api.ts`'s STATUS map
-     * with its thrower, so it maps nowhere. Kept REGISTERED — codes are never removed once shipped
-     * (§3) — so a future consumer can revive it; `device.*` names the DOMAIN CONCEPT (device pairing),
+     * DORMANT — currently unthrown and unmapped. Nothing selects a profile on a device's behalf any
+     * more: the accept dialog takes an explicit `profileId`, so a missing profile surfaces as
+     * `device_profile.not_found` (404) instead. Absent from every STATUS map, so it maps nowhere. Kept
+     * REGISTERED — codes are never removed once shipped (§3) — so a future consumer can revive it;
+     * `device.*` names the DOMAIN CONCEPT (an enrolled device),
      * never the throwing package. Never renamed once shipped.
      */
     "device.profile_missing": Record<string, never>;
+    /**
+     * A knock arrived at `POST /api/device/join` while pairing mode is SHUT (design §1.1). The window
+     * is a deliberate admin act, so this is the ORDINARY state, not an anomaly — the device shows "ask
+     * the manager to switch on pairing mode" and the operator has a real next step. NO params — nothing
+     * about the window is the joiner's business. HTTP 403. Never renamed once shipped.
+     */
+    "device.pairing_closed": Record<string, never>;
+    /**
+     * The tenant already holds the cap of pending DEVICE join requests (design §1.2's decoy rule needs
+     * room, and an uncapped pending list is a denial-of-service on the admin's attention). Per (tenant,
+     * kind), so ten agents mid-install cannot lock devices out. HTTP 429.
+     */
+    "device.join_full": Record<string, never>;
+    /**
+     * Too many knocks reached `POST /api/device/join` in one fixed window — the per-process, GLOBAL,
+     * in-memory limiter (`enrol-rate-limit.ts`) refused this one at the TOP of the handler, BEFORE the
+     * body is parsed, BEFORE the window is consulted and BEFORE any DB work, so a flood creates no row
+     * and draws no connection from the pool (CLAUDE.md §5). NO params: a blanket throttle is not a fact
+     * about the caller. HTTP 429.
+     */
+    "device.join_rate_limited": Record<string, never>;
+    /**
+     * The admin tapped a number that is not this request's (design §1.2). The request is DELETED, not
+     * offered again: a wrong tap denies, which is what makes one-in-three an acceptable guess rate. The
+     * device's recovery is its own "Try again", which knocks afresh with a new number. HTTP 400.
+     */
+    "device.join_mismatch": Record<string, never>;
+    /**
+     * No pending join request with that id in this tenant — never existed, already accepted or denied,
+     * or lapsed past its TTL. All fold into one code: the admin's recovery is the same in every case,
+     * and the joiner must knock again.
+     * `join_request.*` names the domain concept. HTTP 404.
+     */
+    "join_request.not_found": Record<string, never>;
     /**
      * A self-signed server certificate was asked for with no hostname to put on the leaf — the
      * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve

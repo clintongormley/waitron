@@ -130,9 +130,10 @@ describe("the held-ticket error code carries its declared params", () => {
 // import above), so the fail-first signal for these registration tests is `tsc --noEmit`, NOT the
 // runtime run (AppError does no runtime validation of the code, so `new AppError("device.unauthorized",
 // {})` would run green even with the code undeclared). The real throwers arrive in later tasks: the
-// enrol verb (pairing_invalid/pairing_expired, T3), `requireDevice` (unauthorized, T4), and the
-// device-scoped advance + management routes (forbidden_station/not_found, T5). The two no-param codes
-// carry `Record<string, never>` — a pairing code and the device cookie are bearer SECRETS never echoed
+// knock route (pairing_closed/join_rate_limited), `requireDevice` (unauthorized), and the
+// device-scoped advance + management routes (forbidden_station/not_found). The no-param codes
+// carry `Record<string, never>` — the device cookie is a bearer SECRET never echoed, and a throttle or a
+// shut window is not a fact about the caller
 // (the no-leak discipline, CLAUDE.md §1); `stationId`/`deviceId` follow the qualified domain-record
 // family (station.not_found's `stationId`). The HTTP statuses (401/403/400/400/404) are NOT here — they
 // live in device-api.ts's local STATUS map (Task 5), the same declare-here / status-in-route split the
@@ -157,15 +158,9 @@ describe("the device error codes carry their declared params", () => {
     expect(error.params).toEqual({ action: "record_sale" });
   });
 
-  it("constructs device.pairing_invalid with no params (a pairing code is never echoed)", () => {
-    const error = new AppError("device.pairing_invalid", {});
-    expect(error.code).toBe("device.pairing_invalid");
-    expect(error.params).toEqual({});
-  });
-
-  it("constructs device.pairing_expired with no params (a pairing code is never echoed)", () => {
-    const error = new AppError("device.pairing_expired", {});
-    expect(error.code).toBe("device.pairing_expired");
+  it("constructs device.pairing_closed with no params (nothing about the window is the joiner's)", () => {
+    const error = new AppError("device.pairing_closed", {});
+    expect(error.code).toBe("device.pairing_closed");
     expect(error.params).toEqual({});
   });
 
@@ -176,12 +171,9 @@ describe("the device error codes carry their declared params", () => {
     expect(error.params).toEqual({ deviceId });
   });
 
-  it("constructs device.pairing_rate_limited with no params (a blanket enrol-flood throttle)", () => {
-    // The real thrower is `enrol-rate-limit.ts`'s limiter, at the TOP of the enrol route (device-identity-1
-    // §8). No params — it is a blanket throttle, not a fact about the caller's code, and the pairing code
-    // is a bearer secret never echoed (the no-leak discipline pairing_invalid/pairing_expired follow).
-    const error = new AppError("device.pairing_rate_limited", {});
-    expect(error.code).toBe("device.pairing_rate_limited");
+  it("constructs device.join_rate_limited with no params (a blanket throttle names no caller)", () => {
+    const error = new AppError("device.join_rate_limited", {});
+    expect(error.code).toBe("device.join_rate_limited");
     expect(error.params).toEqual({});
   });
 });

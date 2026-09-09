@@ -41,12 +41,12 @@ import { hashSecret, verifySecret } from "@waitron/identity";
  */
 export const PAIRING_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
-/** Bytes of entropy per pairing code. 32 bytes = 256 bits, emitted as base64url. Unlike the device's
- * ~40-bit human-transcribed Crockford code (read off one screen, typed into another), an agent code is
- * copied into the agent process's config, so it needs no ambiguity-proof alphabet — a high-entropy
- * URL-safe string is enough. At 256 bits the SHA-256 digest collision the `(tenant_id, code_sha256)`
- * unique index guards against is unreachable in practice, so — unlike `generatePairingCode` — there is
- * no digest-collision translation/retry here; that index is a pure defense-in-depth backstop. */
+/** Bytes of entropy per pairing code. 32 bytes = 256 bits, emitted as base64url. An agent code is
+ * copied into the agent process's config rather than read off one screen and typed into another, so it
+ * needs no ambiguity-proof alphabet — a high-entropy URL-safe string is enough. At 256 bits the SHA-256
+ * digest collision the `(tenant_id, code_sha256)` unique index guards against is unreachable in
+ * practice, so there is no digest-collision translation or retry here; that index is a pure
+ * defense-in-depth backstop. */
 const PAIRING_CODE_BYTES = 32;
 
 /** Bytes of entropy in the bearer token's secret half. 32 bytes = 256 bits, base64url — the
@@ -97,8 +97,8 @@ export async function generateAgentCode(
 }
 
 /**
- * Redeem a pairing code and enrol the agent (§3a). Mirrors the WebAuthn `consumeChallenge` /
- * `enrolDevice` semantic EXACTLY:
+ * Redeem a pairing code and enrol the agent (§3a). Mirrors the WebAuthn `consumeChallenge` semantic
+ * (`passkey.ts`) EXACTLY:
  *
  *  1. A locking `DELETE FROM print_agent_pairing_codes WHERE tenant_id AND code_sha256 = sha256(code)
  *     RETURNING` — Drizzle-parameterised, never string-concatenated. The DELETE row-locks the code, so

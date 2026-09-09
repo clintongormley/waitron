@@ -295,7 +295,7 @@ Temporarily append `DROP TABLE "devices";` to a scratch copy of a core migration
 `packages/db`'s guard now FAILS with `devices` in the "classified but not created" list — that is the
 negative control proving the subtraction is live, not decorative. Revert the scratch edit.
 
-Run: `pnpm --filter @waitron/sync-enrolment test:coverage && pnpm --filter @waitron/db test -- classification && pnpm vitest run --project root scripts/classification-complete.test.ts`
+Run: `pnpm --filter @waitron/sync-enrolment test:coverage && pnpm --filter @waitron/db test -- classification && pnpm vitest run scripts/classification-complete.test.ts`
 Expected: all PASS, and the tree-wide guard's anchors (`allCreatedTables.size >= 78`, `discovered.length >= 8`) still hold.
 
 - [ ] **Step 8: Commit**
@@ -315,7 +315,15 @@ because readdirSync does not."
 
 ---
 
-### Task 2: The `join_requests` table, and drop `device_pairing_codes`
+### Task 2: The `join_requests` table
+
+> **Amended before execution (controller Ruling 1).** This task no longer drops
+> `device_pairing_codes` — the drop, its classification row, its `privileges.expected.ts` row and the
+> two `packages/db` test files that use it all move to **Task 7**, which deletes the code that imports
+> it in the same commit. As originally written, this task removed the table and its barrel export while
+> `apps/server/src/device.ts` still imported it, so neither this task nor Tasks 4, 5, 6 or 6b could end
+> green — and Task 6b's gate is an unfiltered `apps/server` run. Ignore every instruction below about
+> deleting, dropping or removing `device_pairing_codes`; ADD `join_requests` and change nothing else.
 
 **Files:**
 
@@ -542,7 +550,7 @@ GRANT SELECT, INSERT, DELETE ON "join_requests" TO app_user;
 ```bash
 pnpm --filter @waitron/db test:coverage
 pnpm --filter @waitron/fiscal-verifactu test -- privileges
-pnpm vitest run --project root scripts/classification-complete.test.ts
+pnpm vitest run scripts/classification-complete.test.ts
 pnpm --filter @waitron/db typecheck && pnpm format:check
 ```
 
@@ -554,7 +562,7 @@ Also run the second root guard, as spec §11 asks — `join_requests` creates no
 trigger so it will pass, but the guard is what proves that:
 
 ```bash
-pnpm vitest run --project root scripts/append-only-enable-always.test.ts
+pnpm vitest run scripts/append-only-enable-always.test.ts
 ```
 
 **Note:** `apps/server` will not typecheck until Tasks 6 and 6b delete and migrate the code that
@@ -1747,6 +1755,27 @@ it."
 ---
 
 ### Task 7: The device's two routes, and the death of the pairing code
+
+> **Amended before execution (controller Rulings 1 and 2).** This task additionally carries, all in the
+> same commit as the route swap that deletes the importing code:
+>
+> - `DROP TABLE "device_pairing_codes"` — a hand-written `--custom` migration, since Task 2's generated
+>   one no longer emits it. Follow `0009_join_requests_grants_sql.sql`'s shape and say in the SQL
+>   comment why the drop is safe (nothing references it; pre-production, no backfill — CLAUDE.md §3).
+> - Deleting `devicePairingCodes` from `packages/db/src/schema/devices.ts`, from
+>   `packages/db/src/index.ts`, and its `classify("device_pairing_codes", …)` row from
+>   `packages/db/src/classification.ts`.
+> - Deleting the `device_pairing_codes: "SID",` row from
+>   `packages/fiscal-verifactu/src/privileges.expected.ts`.
+> - `packages/db/src/schema/devices.test.ts` — `:8` drops it from the import; the whole
+>   `device_pairing_codes` material goes (`:44`, `:122`, `:172-224`).
+> - `packages/db/src/schema/devices.fk.test.ts:65` — `delete from device_pairing_codes`.
+> - Building the `PairingMode` holder in `boot.ts` and passing it to `mountDeviceApi`, because this task
+>   makes `DeviceApiDeps.pairingMode` required and this task's gate includes `typecheck`. Task 8 adds
+>   `mountJoinApi` and the pairing-mode routes on top.
+>
+> Its gate therefore also runs `pnpm --filter @waitron/db test:coverage`,
+> `pnpm --filter @waitron/fiscal-verifactu test -- privileges` and both root guards.
 
 **Files:**
 

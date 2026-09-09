@@ -57,9 +57,8 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({ reason: "bad_canvas_ref" });
   });
 
-  // The ON DELETE RESTRICT FK a device holds on a profile → device_profile.in_use. (The pairing-code
-  // FK is gone — migration 0003 dropped `device_pairing_codes.device_profile_id` — so the DB can no
-  // longer emit `device_pairing_codes_device_profile_fk`, and a test on that input asserts nothing.)
+  // The ON DELETE RESTRICT FK a device holds on a profile → device_profile.in_use. It is the only FK
+  // that references a profile, so it is the only constraint name this branch has to recognise.
   it("translates a 23001 on devices_device_profile_fk to device_profile.in_use", () => {
     let thrown: unknown;
     try {

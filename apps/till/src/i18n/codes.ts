@@ -30,21 +30,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "You already have time off that overlaps those dates",
     es: "Ya tienes una ausencia que se solapa con esas fechas",
   },
-  // Device enrolment / auth (device-identity-1 §5a). The station display's enrol view surfaces a rejected
-  // pairing-code `{ code }` through this resolver so a setup operator sees WHY a code was refused;
-  // `device.unauthorized` is mapped for completeness (the display normally shows its enrol view on a 401
-  // rather than a banner). Never the raw code — the enrol infra's own contract.
-  "device.pairing_invalid": {
-    en: "That pairing code is not valid — check it and try again",
-    es: "Ese código de emparejamiento no es válido. Revísalo e inténtalo de nuevo",
-  },
-  "device.pairing_expired": {
-    en: "That pairing code has expired — ask for a new one",
-    es: "Ese código de emparejamiento ha caducado. Solicita uno nuevo",
+  // Device join / auth (device-join-and-accept §2). The join screen renders a refused KNOCK through this
+  // resolver, so `device.pairing_closed` is the ONE code that earns its own sentence: the operator has a
+  // real next step. `device.join_rate_limited` and `device.join_full` are deliberately UNMAPPED — a
+  // flood and a full venue both leave the operator only "try again", which is what the generic sentence
+  // says, and naming either would tell an unapproved device something about the venue's state.
+  // `device.unauthorized` is mapped for completeness (a 401 normally re-boots to the join screen rather
+  // than raising a banner). Never the raw code — the resolver's own contract.
+  "device.pairing_closed": {
+    en: "New devices aren't being accepted right now. Ask a manager to switch on “Allow new devices”.",
+    es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que active «Permitir dispositivos nuevos».",
   },
   "device.unauthorized": {
-    en: "This display isn't set up — enter a pairing code",
-    es: "Esta pantalla no está configurada. Introduce un código de emparejamiento",
+    en: "This device isn't set up — ask to join this venue",
+    es: "Este dispositivo no está configurado. Solicita el alta en este local",
   },
   "session.required": {
     en: "Your shift session has ended — please log in again",

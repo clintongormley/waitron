@@ -86,7 +86,7 @@ starts all three processes in parallel:
 | Server    | http://localhost:8080 |
 
 Each front-end proxies its API to the server (the till's `/api`, the dashboard's `/management-api`).
-Enrol the till once per browser with the pairing code **DEMO** (accepted in dev mode only), then log
+The till enrols itself on first load in dev mode — no code, no approval step — then log
 in with the **cashier PIN 5555**; the dashboard owner login is **owner@demo.waitron.local /
 dashPass123** (`pnpm dev:setup` prints all three).
 

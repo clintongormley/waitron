@@ -31,7 +31,7 @@ import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -271,10 +271,10 @@ async function closeSession(db: Database, id: string): Promise<void> {
   });
 }
 
-/** Enrol a REAL `till` device for the seeded tenant via the Task 3 mint→redeem path (the only way to
- * get a `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a
- * `deviceProfileId`. Runs the mint + redeem on the app role under the tenant — the production
- * enrol path — and returns the `${DEVICE_COOKIE}=…` header value a booting device would carry. A `till`
+/** Enrol a REAL `till` device for the seeded tenant via join-and-accept (the only way to get a
+ * `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a
+ * `deviceProfileId`. Runs on the app role under the tenant — the production accept path — and
+ * returns the `${DEVICE_COOKIE}=…` header value a booting device would carry. A `till`
  * is sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). After the Task 9/10 cutover,
  * `GET /api/till` resolves the canvas + capabilities THROUGH the device profile — the profile is the
  * SOLE canvas binding (the direct device→canvas link was dropped in Task 10). */
@@ -284,15 +284,14 @@ async function enrolTillDeviceCookie(
   deviceProfileId: string | null = null,
 ): Promise<string> {
   tillDeviceCounter += 1;
-  // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the code is a bare bearer
-  // token and the device describes itself at enrol. `enrolDevice` AUTO-CREATES the register a till
-  // rings against (named after the device), so each call gets a unique device name.
+  // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the device describes itself
+  // at accept. `resolveDeviceBinding` AUTO-CREATES the register a till rings against (named after the
+  // device), so each call gets a unique device name.
   const profileId =
     deviceProfileId ?? (await seedDeviceProfile(db, `Till profile ${tillDeviceCounter}`, [], null));
-  const dev = await withTenant(db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, { code, name: `Counter till ${tillDeviceCounter}`, profileId });
+  const dev = await enrolDeviceForTest(db, cfg, {
+    name: `Counter till ${tillDeviceCounter}`,
+    profileId,
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }

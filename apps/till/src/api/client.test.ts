@@ -1651,67 +1651,52 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "placement.invalid" });
   });
 
-  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display + the enrol front door. The
+  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display + the join front door. The
   // httpOnly device cookie rides `credentials: "include"` exactly like the operator session, so these
   // never send a token themselves. ---
 
-  it("enrolVerify POSTs { code } to /api/device/enrol/verify and returns the catalogue", async () => {
-    // Verifying a key does NOT consume it; the server returns the profiles + station/register
-    // option-sources the enrol screen's describe step binds against.
-    const cat = {
-      profiles: [{ id: "pr1", name: "Front counter", formFactor: "till" }],
-      stations: [{ id: "st1", name: "Pass" }],
-      registers: [{ id: "rg1", name: "Caja 1" }],
-    };
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(cat));
-
-    const r = await new TillApi("", fetchStub).enrolVerify("DEMO");
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/device/enrol/verify",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: "DEMO" }),
-      }),
-    );
-    expect(r).toEqual(cat);
-  });
-
-  it("enrolVerify surfaces { code } for an expired key", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "device.pairing_expired" } }), {
-        status: 400,
-      }),
-    );
-
-    await expect(new TillApi("", fetchStub).enrolVerify("STALE")).rejects.toMatchObject({
-      code: "device.pairing_expired",
-    });
-  });
-
-  it("enrol POSTs the describe body to /api/device/enrol and returns { deviceId, name, formFactor }", async () => {
-    const result = { deviceId: "dev-9", name: "Pass", formFactor: "kds" };
+  it("join POSTs only { name } to /api/device/join and returns the id + the number", async () => {
+    // ONLY the name goes up, and nothing about the venue comes back: the profile and the binding are
+    // chosen in the dashboard's accept dialog, so an unapproved device reads no catalogue.
+    const result = { joinId: "jr-1", verificationNumber: "47" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(result));
 
-    const r = await new TillApi("", fetchStub).enrol({
-      code: "DEMO",
-      name: "Pass",
-      profileId: "pr-kds",
-      stationId: "st1",
-    });
+    const r = await new TillApi("", fetchStub).join("Front counter");
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/device/enrol",
+      "/api/device/join",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: "DEMO", name: "Pass", profileId: "pr-kds", stationId: "st1" }),
+        body: JSON.stringify({ name: "Front counter" }),
       }),
     );
     expect(r).toEqual(result);
+  });
+
+  it("join surfaces { code } when the venue's pairing window is shut", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "device.pairing_closed" } }), {
+        status: 403,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).join("Front counter")).rejects.toMatchObject({
+      code: "device.pairing_closed",
+    });
+  });
+
+  it("joinStatus GETs /api/device/join/status with no body and returns the status", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ status: "approved" }));
+
+    const r = await new TillApi("", fetchStub).joinStatus();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/join/status",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual({ status: "approved" });
   });
 
   it("getDeviceStation GETs /api/device/station and returns the bound station + its queue", async () => {

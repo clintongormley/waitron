@@ -233,8 +233,8 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
 /** Seed the venue-sale prerequisites onto the mirror clone (owner writes), so the PROMOTED primary can
  * ring a real cash sale over HTTP that chains on its own reserved SIF: a till bound to the venue, a
  * catalogue with one sellable product, a staff operator on a known PIN, and an enrolled till device
- * (`token_hash` = scrypt of `DEVICE_TOKEN`, the same shape `enrolDevice` stores, so the device cookie
- * verifies). */
+ * (`token_hash` = scrypt of `DEVICE_TOKEN`, the same shape `acceptDeviceJoinRequest` stores, so the
+ * device cookie verifies). */
 async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
   await admin.execute(sql`
     insert into tills (id, tenant_id, location_id, name)

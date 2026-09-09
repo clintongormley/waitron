@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Database, Transaction } from "../client.js";
+import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
-import { devicePairingCodes, devices } from "./devices.js";
+import { devices } from "./devices.js";
 import { tenants } from "./tenants.js";
 
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
@@ -27,21 +27,7 @@ const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 // value comes from hashSecret in a later task).
 const TOKEN_HASH = "scrypt$00$00";
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  tenant: string,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
-describe("devices + device_pairing_codes schema (columns, FKs, unique)", () => {
+describe("devices schema (columns, FKs, unique)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -112,20 +98,6 @@ describe("devices + device_pairing_codes schema (columns, FKs, unique)", () => {
     });
   }
 
-  async function seedPairingCode(
-    tenant: string,
-    codeSha256: string,
-    location: string = locationOf(tenant),
-  ): Promise<string> {
-    return asApp(tenant, async (tx) => {
-      const r = await tx.execute<{ id: string }>(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256)
-            values (${tenant}, ${location}, ${codeSha256}) returning id`,
-      );
-      return r.rows[0]!.id;
-    });
-  }
-
   // ---- devices ------------------------------------------------------------------------------
 
   it("devices: exposes every column through the Drizzle export, with the active default", async () => {
@@ -167,61 +139,5 @@ describe("devices + device_pairing_codes schema (columns, FKs, unique)", () => {
       seedDevice(TENANT_A, STATION_A, "Ghost location", GHOST_LOCATION),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on location_id
-  });
-
-  // ---- device_pairing_codes ----------------------------------------------------------------
-
-  it("device_pairing_codes: maps every column and is consumed by DELETE … RETURNING", async () => {
-    const id = await seedPairingCode(TENANT_A, "sha-control");
-    // Read back through the Drizzle `devicePairingCodes` export — exercises its column mapping. The
-    // code carries NO binding columns now: the enrolling device's profile (and everything it decides)
-    // is chosen at enrolment, not stamped on the code.
-    const [row] = await asApp(TENANT_A, (tx) =>
-      tx
-        .select()
-        .from(devicePairingCodes)
-        .where(sql`id = ${id}`),
-    );
-    expect(row!.codeSha256).toBe("sha-control");
-    expect(row!.locationId).toBe(LOCATION_A);
-    // The redemption shape: a locking DELETE … RETURNING consumes the row (app_user holds DELETE).
-    const deleted = await asApp(TENANT_A, (tx) =>
-      tx
-        .execute<{ id: string }>(
-          sql`delete from device_pairing_codes where id = ${id} returning id`,
-        )
-        .then((r) => r.rows),
-    );
-    expect(deleted).toHaveLength(1);
-    expect(deleted[0]!.id).toBe(id);
-  });
-
-  it("device_pairing_codes: (tenant_id, code_sha256) is UNIQUE — a duplicate digest is rejected 23505", async () => {
-    // The redemption path (`enrolDevice`) deletes by (tenant_id, code_sha256) and reads only the FIRST
-    // returned row, so two rows sharing a digest would let one escape consumption — breaking the
-    // single-use invariant. A UNIQUE index on (tenant_id, code_sha256) makes that unrepresentable: the
-    // generator's ~1-in-2^40 duplicate code now fails the INSERT (the manager retries) instead of
-    // silently minting a consumable duplicate.
-    await seedPairingCode(TENANT_A, "sha-dup");
-    const e = await captureError(() => seedPairingCode(TENANT_A, "sha-dup"));
-    expect(pgErrorCode(e)).toBe("23505"); // unique_violation on (tenant_id, code_sha256)
-
-    // Proof by deletion of the guard (§4): with the UNIQUE index replaced by a PLAIN one inside a
-    // ROLLED-BACK tx, the SAME (tenant, digest) inserts a second time without error — attributing the
-    // 23505 above to the unique index, not to some other constraint. The rollback restores it for the
-    // shared clone. drop/create run as the owner (app_user holds no DDL), then `set local role app_user`
-    // inserts through the same app path the positive case used.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`drop index device_pairing_codes_lookup_idx`);
-      await tx.execute(
-        sql`create index device_pairing_codes_lookup_idx on device_pairing_codes (tenant_id, code_sha256)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const inserted = await tx.execute<{ id: string }>(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-dup') returning id`,
-      );
-      expect(inserted.rows).toHaveLength(1); // the duplicate digest inserts once the UNIQUE index is gone
-    });
   });
 });

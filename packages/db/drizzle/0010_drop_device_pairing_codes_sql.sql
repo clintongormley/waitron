@@ -1,0 +1,22 @@
+-- The pairing code is gone: a device now knocks (`join_requests`) and an admin accepts, so nothing
+-- reads or writes this table any more — `apps/server/src/device.ts` lost its mint/verify/redeem verbs
+-- and `device-api.ts` its three routes in the same commit. Dropped rather than left dormant because an
+-- unused table still carries grants and a classification row. NOT a publication membership: it was
+-- classified `local`, and a `local` table is in neither publication
+-- (`packages/sync/src/publications.ts`).
+--
+-- Safe to DROP outright: no other table ever pointed AT it, and its own mint-time binding FKs went with
+-- their columns. Receipt — `grep -rn 'device_pairing_codes' packages apps scripts` (excluding the
+-- gitignored `coverage/` output) matches eighteen files, ALL of them either this migration directory's
+-- own history (0000/0001/0003/0004 created and reshaped it, 0009 mentions it in prose, `_journal.json`
+-- carries this file's tag, and snapshots 0000-0009 record it as it then was) or
+-- `packages/sync-enrolment/src/migration-tables.test.ts`, which uses the NAME as a create-drop-create
+-- string fixture. No schema module, no source file, no other table. The `-r` is what makes that a
+-- measurement: `grep -n` on a directory searches nothing and exits 1, which reads exactly like a clean
+-- result (CLAUDE.md §1).
+--
+-- Waitron is pre-production, so there is no data to preserve and no backfill (CLAUDE.md §3).
+--
+-- CASCADE is deliberately NOT used: a dependency this drop does not expect should FAIL here rather than
+-- be silently removed with the table.
+DROP TABLE "device_pairing_codes";
