@@ -79,6 +79,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The password is too short",
     es: "La contraseña es demasiado corta",
   },
+  "account_action.invalid": {
+    en: "This link is invalid or has expired. Request a new one.",
+    es: "Este enlace no es válido o ha caducado. Solicita uno nuevo.",
+  },
+  "account_action.rate_limited": {
+    en: "Too many attempts. Wait a minute and try again.",
+    es: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
+  },
   "management.request_invalid": {
     en: "Check the form and try again",
     es: "Revisa el formulario e inténtalo de nuevo",

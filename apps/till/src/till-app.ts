@@ -800,8 +800,10 @@ export class TillApp extends LitElement {
       // idle logout). Fed to the session-activity controller after the device kind resolves below. `?? null`
       // tolerates an older server that omits the field.
       this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
-      // Validate the requested tab against the device's resolved canvas before retaining it.
-      this.#setActiveTab(this.#requestedTab(), true, true);
+      // Validate and retain the requested tab, but do not publish a default tab URL yet. The device
+      // chooser, enrolment and login are front-door surfaces, not `/tabs/*` destinations; the selected
+      // tab is written only when login (or an auto-booting KDS) actually opens the shell below.
+      this.activeTabKey = this.#requestedTab();
     } catch {
       // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
       // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints

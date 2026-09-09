@@ -158,6 +158,7 @@ async function main(): Promise<void> {
         .values({
           tenantId: tenant,
           displayName: "Supervisora",
+          email: "supervisor@invoice-first.demo",
           pinHash: hashPin("1234"),
           role: "supervisor",
         })

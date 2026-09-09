@@ -107,6 +107,7 @@ async function setupVenue(): Promise<{
           displayName: "Administradora",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword(ADMIN_PASSWORD),
+          email: "owner@example.test",
         },
       },
       ALL_MODULES,

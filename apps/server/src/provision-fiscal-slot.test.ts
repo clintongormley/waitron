@@ -75,7 +75,13 @@ function venueRequest() {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
-    admin: { displayName: "Administradora", pinHash: "x", passwordHash: "y" },
+    admin: {
+      displayName: "Administradora",
+      pinHash: "x",
+      passwordHash: "y",
+      email: "owner@example.test",
+    },
+    email: "owner@example.test",
   };
 }
 

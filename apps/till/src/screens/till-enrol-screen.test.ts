@@ -61,6 +61,18 @@ it("registers as a custom element", () => {
   expect(customElements.get("till-enrol-screen")).toBe(TillEnrolScreen);
 });
 
+it("centres the width-constrained enrolment form", async () => {
+  const { el, host } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
+    api: stubApi(),
+  });
+  host.style.width = "800px";
+  await flush(el);
+  const screen = el.shadowRoot!.querySelector<HTMLElement>(".screen")!;
+  const screenBounds = screen.getBoundingClientRect();
+  const hostBounds = host.getBoundingClientRect();
+  expect(screenBounds.left - hostBounds.left).toBeCloseTo(hostBounds.right - screenBounds.right, 0);
+});
+
 it("asks only for a name — no key field, no profile picker, no binding picker", async () => {
   // The profile and the binding are chosen in the dashboard's accept dialog, so an unapproved device
   // reads no catalogue: there is nothing here for it to learn about the venue.
@@ -73,8 +85,31 @@ it("asks only for a name — no key field, no profile picker, no binding picker"
   expect(el.shadowRoot!.querySelectorAll("wt-input")).toHaveLength(1);
   expect(el.shadowRoot!.querySelector("select")).toBeNull();
   expect(query(el, "[data-number]")).toBeNull();
-  // Submit is dead until a name is typed, so an empty knock never reaches the server.
-  expect(query(el, "[data-submit]")!.hasAttribute("disabled")).toBe(true);
+  const name = query(el, "[data-name]")!;
+  const native = name.shadowRoot!.querySelector("input")!;
+  expect(native.name).toBe("device-name");
+  expect(native.required).toBe(true);
+  // The action remains available so an attempted empty submission can explain what is missing.
+  expect(query(el, "[data-submit]")!.hasAttribute("disabled")).toBe(false);
+});
+
+it("explains an attempted empty submission beside the field and in the form summary", async () => {
+  const join = vi.fn();
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
+    api: stubApi({ join }),
+  });
+  await flush(el);
+  query(el, "[data-submit]")!.click();
+  await el.updateComplete;
+  expect(join).not.toHaveBeenCalled();
+  const field = query(el, "[data-name]")!;
+  expect((field as HTMLElement & { error: string }).error).toBe(t("form.name_required"));
+  const summary = query(el, "wt-form-error-summary") as HTMLElement & {
+    heading: string;
+    errors: string[];
+  };
+  expect(summary.heading).toBe(t("form.error_heading"));
+  expect(summary.errors).toEqual([t("form.name_required")]);
 });
 
 it("posts only the name and shows the two-digit number, announced, with 'waiting for approval'", async () => {

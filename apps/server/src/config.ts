@@ -352,6 +352,23 @@ function bareOrigin(value: string, variable: string): string {
   return value;
 }
 
+/** Account-action links carry a bearer token, so a non-loopback dashboard origin must use HTTPS. */
+function secureManagementOrigin(value: string): string {
+  const origin = bareOrigin(value, "WAITRON_MANAGEMENT_ORIGIN");
+  const parsed = new URL(origin);
+  const loopback =
+    parsed.hostname === "localhost" ||
+    parsed.hostname === "127.0.0.1" ||
+    parsed.hostname === "[::1]";
+  if (parsed.protocol !== "https:" && !loopback) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_MANAGEMENT_ORIGIN",
+      reason: "https_required",
+    });
+  }
+  return origin;
+}
+
 /** `WAITRON_TENANT_DOMAIN` as the cookie `Domain` (see ServerConfig.tenantDomain): unset OR empty →
  * undefined, a set value lower-cased, and a value carrying `/`, `:` or whitespace refused loudly at
  * boot (`server.config_invalid`, `reason: "not_a_domain"`) rather than handed to a Set-Cookie
@@ -692,9 +709,8 @@ export function loadConfig(
     environment,
     DEFAULT_MANAGEMENT_RP_ID,
   );
-  const managementOrigin = bareOrigin(
+  const managementOrigin = secureManagementOrigin(
     requiredInProduction(env, "WAITRON_MANAGEMENT_ORIGIN", environment, DEFAULT_MANAGEMENT_ORIGIN),
-    "WAITRON_MANAGEMENT_ORIGIN",
   );
   return {
     databaseUrl,

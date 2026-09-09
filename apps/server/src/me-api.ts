@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -111,12 +112,31 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return fn(tx);
     });
 
+  /** Read the configured tenant's public display identity inside the same tenant-scoped app-role
+   * transaction as its caller. A missing row means the boot configuration names no tenant. */
+  const readVenueName = async (tx: Transaction): Promise<string> => {
+    const [venue] = await tx
+      .select({ venueName: tenants.legalName })
+      .from(tenants)
+      .where(eq(tenants.id, deps.cfg.tenantId));
+    if (venue === undefined) throw new Error("Configured tenant does not exist");
+    return venue.venueName;
+  };
+
   // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED
-  // (the dashboard shell fetches it before login to pick its language) and free of secrets — `locales`
-  // is the static catalogue and `venueDefault` the geography-derived boot value (`deps.venueLocale`).
-  // NO management-session gate, the browser twin of the till's `GET /api/locales`.
+  // (the dashboard shell fetches it before login to pick its language and label the installation)
+  // and free of secrets — `locales` is the static catalogue, `venueDefault` the geography-derived
+  // boot value (`deps.venueLocale`), and `venueName` the tenant's legal name. NO management-session
+  // gate, the browser twin of the till's `GET /api/locales`.
   app.get("/management-api/locales", (c) =>
-    run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
+    run(c, log, async () => {
+      const venueName = await asStaff(readVenueName);
+      return c.json({
+        locales: SUPPORTED_LOCALES,
+        venueDefault: deps.venueLocale,
+        venueName,
+      });
+    }),
   );
 
   // The deployment holds one tenant per database. Whoami: who is signed into this browser, with
@@ -132,9 +152,10 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, role, locale } = await asStaff((tx) =>
-        resolveManagementSession(tx, sessionId),
-      );
+      const { personId, role, locale, venueName } = await asStaff(async (tx) => ({
+        ...(await resolveManagementSession(tx, sessionId)),
+        venueName: await readVenueName(tx),
+      }));
       // `permissions` is the signed-in person's EFFECTIVE set (core catalog + registered module
       // permissions, folded through identity's ladder) and `modules` the enabled-module names — a
       // client-side HINT the dashboard gates a module's nav/screen on, NEVER a substitute for the
@@ -144,6 +165,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         role,
         locale,
         venueLocale: deps.venueLocale,
+        venueName,
         permissions: permissionsForRole(role),
         modules: deps.modules,
       });

@@ -35,7 +35,12 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
-    admin: { displayName: "Owner", pinHash: "scrypt$00$00", passwordHash: "scrypt$aa$bb" },
+    admin: {
+      displayName: "Owner",
+      pinHash: "scrypt$00$00",
+      passwordHash: "scrypt$aa$bb",
+      email: "owner@example.test",
+    },
     ...overrides,
   };
 }
@@ -117,6 +122,7 @@ describe("planVenue", () => {
       displayName: "Owner",
       pinHash: "scrypt$00$00",
       passwordHash: "scrypt$aa$bb",
+      email: "owner@example.test",
     });
   });
 
@@ -326,6 +332,7 @@ describe("describeVenueAction", () => {
       displayName: "Alicia",
       pinHash: "scrypt$deadbeef$cafef00d",
       passwordHash: "scrypt$feedface$0ddba11",
+      email: "owner@example.test",
     });
     expect(line).toBe("seed admin Alicia");
     expect(line).not.toContain("scrypt");

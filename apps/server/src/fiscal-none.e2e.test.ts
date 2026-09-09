@@ -122,6 +122,7 @@ async function setupGbVenue(): Promise<GbVenue> {
           displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
+          email: "owner@example.test",
         },
       },
       gbModules,

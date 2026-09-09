@@ -57,7 +57,7 @@ usage: waitron-provision <command> [options]
            [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]
-           [--rectificative-code <code>] [--admin-name <name>] [--yes]
+           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>] [--yes]
 ```
 
 Every option is prompted for when omitted, so a bare `waitron-provision instance` is a complete
@@ -215,21 +215,16 @@ admin connection string — read from an environment variable or an echo-off pro
 `argv`: a till **PIN** (`WAITRON_ADMIN_PIN`, for the counter POS) and a dashboard **password**
 (`WAITRON_ADMIN_PASSWORD`, for the management dashboard, ≥8 characters). Each is hashed at the CLI
 boundary (`assertPinLength` / `assertPasswordLength` enforce the same floors the identity package
-does), so only the hash ever reaches the plan or the database, and the display name (`--admin-name`) is
-the only non-secret, so it stays a flag. This is the ONLY place either secret is set for the FIRST
-admin: `setPassword` and passkey enrollment are gated on an already-authenticated management session.
+does), so only the hash ever reaches the plan or the database. The display name (`--admin-name`) and
+required email (`--admin-email`) are not secrets, so they stay as flags. This is the ONLY place either
+secret is set for the FIRST admin: `setPassword` and passkey enrollment are gated on an
+already-authenticated management session.
 
-**Whether the seeded admin can sign in to the dashboard depends on how it was seeded.** Dashboard
-(management) login is **email + password** — `loginManager` resolves the person by email. The
-`seed-admin` insert now names an `email` column (written when the request supplies one; `email ?? null`
-otherwise), and **onboarding via the setup UI** (`apps/setup` → `setup-api.ts`) captures the admin email
-as a **required** field, so an **onboarding-provisioned admin signs in to the dashboard immediately**.
-The bare `venue` CLI has no `--admin-email` flag, so it seeds the admin **emailless** (email is OPTIONAL
-in provisioning), and such an admin has no email sign-in path until an email is set out-of-band
-(`setEmail` is gated on an already-authenticated management session); today only the demo bootstrap
-(`apps/server/scripts/dev-setup.ts`) does that. Independent of the email, the provisioned password is
-not idle — the C2b mirror-bundle adoption route authenticates the admin **by id** via `loginManagerById`
-(a server-to-server flow carrying the id, not the email form), regardless of whether it has an email.
+Dashboard management login is **email + password**: `loginManager` resolves the person by email. Both
+the setup UI and the bare `venue` CLI require the first admin's email and thread it into `seed-admin`,
+so the provisioned admin can sign in immediately. The C2b mirror-bundle adoption route independently
+authenticates that admin **by id** via `loginManagerById`, because it is a server-to-server flow
+carrying the id rather than the dashboard form.
 
 It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
 confirmation (`--yes` skips it), applies, then prints the new `tenant` and `node` ids and one

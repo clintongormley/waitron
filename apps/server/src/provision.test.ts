@@ -55,6 +55,7 @@ function venueRequest(taxId: string): VenueRequest {
       displayName: "Administradora",
       pinHash: hashPin("1234"),
       passwordHash: hashPassword("dashPass123"),
+      email: "owner@example.test",
     },
   };
 }

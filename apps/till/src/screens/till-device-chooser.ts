@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-dialog.js";
 import { setDevDeviceId } from "../api/dev-device.js";
 import { deviceKindLabel } from "../i18n/device-label.js";
 import "./till-enrol-screen.js";
@@ -15,7 +16,7 @@ import type { DevDeviceList, TillApi } from "../api/client.js";
  *    navigates to `/`, so the tab boots as that device (the stored id rides every request as the
  *    `x-waitron-dev-device` header the server trusts in dev mode). That per-tab id is how one browser runs
  *    device X in one tab and device Y in another.
- *  - **Set up a new device** — collapsed by default; expands to the {@link TillEnrolScreen}, which knocks
+ *  - **Set up a new device** — opens a modal containing the {@link TillEnrolScreen}, which knocks
  *    at `POST /api/device/join` like any other fresh browser. Because the server runs in devMode here, that
  *    knock is AUTO-ACCEPTED on the spot with the venue's default `till` profile — no pairing window, no
  *    number to match. On approval the new device id is written to THIS tab's `sessionStorage` (not the
@@ -46,6 +47,7 @@ export class TillDeviceChooser extends LitElement {
       .screen {
         display: flex;
         max-width: 32rem;
+        margin-inline: auto;
         flex-direction: column;
         gap: var(--wt-space-4);
       }
@@ -89,6 +91,21 @@ export class TillDeviceChooser extends LitElement {
       .meta {
         color: var(--wt-color-text-muted);
       }
+
+      .setup {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      wt-dialog {
+        --wt-dialog-max-width: min(96vw, 40rem);
+      }
+
+      .dialog-enrol {
+        width: 32rem;
+        max-width: 100%;
+        --till-enrol-max-width: 32rem;
+      }
     `,
   ];
 
@@ -105,7 +122,7 @@ export class TillDeviceChooser extends LitElement {
   /** Set on ANY rejected `getDevDevices` (the 404 outside dev mode, chiefly) — renders the load-failure
    * hint. It only knows the list failed to load, not why, so the copy does not assert the cause. */
   @state() private loadFailed = false;
-  /** Whether the "Set up a new device" section is expanded to the embedded enrol screen. */
+  /** Whether the "Set up a new device" modal is open. */
   @state() private settingUp = false;
 
   override connectedCallback(): void {
@@ -192,22 +209,37 @@ export class TillDeviceChooser extends LitElement {
   }
 
   #setupSection(): TemplateResult {
-    return html`<section class="setup">
+    return html`
+      <section class="setup">
+        <wt-button data-setup-new variant="secondary" @click=${() => (this.settingUp = true)}>
+          Set up a new device
+        </wt-button>
+      </section>
       ${
         this.settingUp
-          ? html`<till-enrol-screen
-              .api=${this.api}
-              @enrolled=${(e: Event) => this.#onEnrolled(e)}
-            ></till-enrol-screen>`
-          : html`<wt-button
-              data-setup-new
-              variant="secondary"
-              @click=${() => (this.settingUp = true)}
+          ? html`<wt-dialog
+              .open=${true}
+              aria-label="Set up a new device"
+              @wt-close=${() => (this.settingUp = false)}
             >
-              Set up a new device
-            </wt-button>`
+              <till-enrol-screen
+                class="dialog-enrol"
+                .api=${this.api}
+                @enrolled=${(e: Event) => this.#onEnrolled(e)}
+              >
+                <wt-button
+                  slot="actions-before"
+                  data-setup-cancel
+                  variant="secondary"
+                  @click=${() => (this.settingUp = false)}
+                >
+                  Cancel
+                </wt-button>
+              </till-enrol-screen>
+            </wt-dialog>`
+          : html``
       }
-    </section>`;
+    `;
   }
 }
 

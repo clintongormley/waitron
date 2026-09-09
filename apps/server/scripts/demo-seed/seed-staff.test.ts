@@ -9,7 +9,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin, verifyPin, type PersonRoleValue } from "@waitron/identity";
 import { seedStaff } from "./seed-staff.js";
-import { DEMO_ADMIN_EMAIL, DEMO_PIN } from "./staff.js";
+import { DEMO_ADMIN_EMAIL, DEMO_PIN, DEMO_STAFF } from "./staff.js";
 
 const LOCALE = "en-GB";
 
@@ -52,6 +52,7 @@ async function provisionVenue(): Promise<{ tenantId: string }> {
           displayName: "Administradora",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
+          email: DEMO_ADMIN_EMAIL,
         },
       },
       ALL_MODULES,
@@ -99,7 +100,7 @@ describe("seedStaff", () => {
     }
   });
 
-  it("gives the dashboard-login persons (admin + manager) a login email + password", async () => {
+  it("gives every person an email while preserving which demo accounts have preset passwords", async () => {
     const { tenantId } = await provisionVenue();
 
     const rows = await withTenant(suite.admin, tenantId, async (tx) => {
@@ -129,10 +130,12 @@ describe("seedStaff", () => {
     expect(manager?.email).not.toBe(admin?.email);
     expect(manager?.password_hash).not.toBeNull();
 
-    // Till-only (PIN-only) staff carry NEITHER an email NOR a password — email login is for
-    // dashboard persons only, and the email index is NULL-permissive so many rows may be null.
+    // Every other staff member has a proper account email. Their password remains unset until they
+    // follow an invitation or reset link.
     for (const person of rows.filter((p) => p.role === "supervisor" || p.role === "staff")) {
-      expect(person.email).toBeNull();
+      expect(person.email).toBe(
+        DEMO_STAFF.find((seeded) => seeded.displayName === person.display_name)!.email,
+      );
       expect(person.password_hash).toBeNull();
     }
   });

@@ -36,20 +36,14 @@ export function asEmailTaken(err: unknown, email: string): never {
   throw err;
 }
 
-/** Normalize a REQUIRED email and validate it, throwing `person.email_invalid` on a malformed value
- * BEFORE any write. The single source of the email write-boundary rule, shared by `screenEmail`
- * (create) and `setEmail` (edit) here, and — via the package barrel — by `apps/server`'s setup-api
- * onboarding boundary, so all three cannot drift. */
+/** Normalize a required email and validate it, throwing `person.email_invalid` on a malformed value
+ * before any write. This is the single email write-boundary rule used by account creation, editing,
+ * and setup onboarding. */
 export function normalizeAndValidateEmail(raw: string): string {
+  if (typeof raw !== "string") throw new AppError("person.email_invalid", {});
   const email = normalizeEmail(raw);
   if (!isValidEmail(email)) throw new AppError("person.email_invalid", {});
   return email;
-}
-
-/** Screen an OPTIONAL email input: `undefined` → `null` (no email); otherwise
- * `normalizeAndValidateEmail`. */
-function screenEmail(raw: string | undefined): string | null {
-  return raw === undefined ? null : normalizeAndValidateEmail(raw);
 }
 
 /** The shortest PIN accepted. Four digits is the floor a POS keypad expects; longer is allowed. */
@@ -75,7 +69,7 @@ export async function createPerson(
     displayName: string;
     role: PersonRoleValue;
     pin: string;
-    email?: string;
+    email: string;
   },
 ): Promise<{ id: string }> {
   await authorizeManager(tx, {
@@ -83,7 +77,7 @@ export async function createPerson(
     permission: "person.manage",
   });
   assertPinLength(input.pin);
-  const email = screenEmail(input.email);
+  const email = normalizeAndValidateEmail(input.email);
   try {
     const [row] = await tx
       .insert(persons)
@@ -103,7 +97,7 @@ export async function createPerson(
     // can only fire with a non-null email — so whenever it translates, `email!` is genuinely non-null.
     // (A null-email PK clash is a cryptographically-unreachable `defaultRandom()` collision, re-thrown
     // untouched on a driver that reports the constraint name.)
-    asEmailTaken(err, email!);
+    asEmailTaken(err, email);
   }
 }
 
@@ -171,7 +165,10 @@ export async function setEmail(
   });
   const email = normalizeAndValidateEmail(input.email);
   try {
-    await tx.update(persons).set({ email }).where(eq(persons.id, input.personId));
+    await tx
+      .update(persons)
+      .set({ email, emailVerifiedAt: null })
+      .where(eq(persons.id, input.personId));
   } catch (err) {
     asEmailTaken(err, email);
   }
@@ -273,7 +270,7 @@ export async function listActivePersonsWithPermission(
 export interface PersonSummary {
   personId: string;
   displayName: string;
-  /** The person's login email (dashboard sign-in identifier), or null for till-only PIN staff. */
+  /** The person's login email. Null is reserved for internal principals and low-level fixtures. */
   email: string | null;
   role: PersonRoleValue;
   status: "active" | "suspended";

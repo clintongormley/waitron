@@ -1,3 +1,4 @@
+import { LitElement } from "lit";
 import { expect, test, afterEach } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-input.js";
@@ -17,13 +18,72 @@ test("associates the label with the input so it has an accessible name", async (
   expect(label.htmlFor).toBe(input.id);
 });
 
-test("gives each instance a unique id so labels never collide", async () => {
+test("forwards a semantic name and autocomplete purpose to the native input", async () => {
+  const el = await mount(
+    '<wt-input label="Email" name="email" autocomplete="username"></wt-input>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.name).toBe("email");
+  expect(input.autocomplete).toBe("username");
+  expect(input.id).toBe("email");
+});
+
+test("marks a required field visibly and in the native input contract", async () => {
+  const el = await mount('<wt-input label="Email" name="email" required></wt-input>');
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.required).toBe(true);
+  expect(input.checkValidity()).toBe(false);
+  expect(el.shadowRoot!.querySelector("[data-required]")?.textContent).toBe("*");
+});
+
+test("links explanatory error text to the invalid native input", async () => {
+  const el = await mount(
+    '<wt-input label="Email" name="email" error="Enter a valid email address"></wt-input>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+  expect(input.getAttribute("aria-describedby")).toBe(error.id);
+  expect(error.textContent).toBe("Enter a valid email address");
+});
+
+test("places field help beside the label without nesting its button inside the label", async () => {
+  const el = await mount('<wt-input label="Email"><button slot="help">?</button></wt-input>');
+  const label = el.shadowRoot!.querySelector("label")!;
+  const slot = el.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="help"]')!;
+  expect(label.contains(slot)).toBe(false);
+  expect(slot.assignedElements()[0]?.textContent).toBe("?");
+});
+
+test("places an end action inside the field and only reserves space while it exists", async () => {
+  const el = await mount('<wt-input label="Password"><button slot="end">Show</button></wt-input>');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await (el as LitElement).updateComplete;
+
+  const control = el.shadowRoot!.querySelector<HTMLElement>(".control")!;
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  const action = el.querySelector<HTMLButtonElement>('[slot="end"]')!;
+  expect(control.classList.contains("has-end")).toBe(true);
+  expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(
+    input.getBoundingClientRect().right,
+  );
+  expect(action.getBoundingClientRect().left).toBeGreaterThan(
+    input.getBoundingClientRect().left + input.getBoundingClientRect().width / 2,
+  );
+
+  action.remove();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await (el as LitElement).updateComplete;
+  expect(control.classList.contains("has-end")).toBe(false);
+});
+
+test("gives each unnamed instance a unique fallback id", async () => {
   const a = await mount('<wt-input label="Weight"></wt-input>');
   const b = await mount('<wt-input label="Price"></wt-input>');
   const inputA = a.shadowRoot!.querySelector("input")!;
   const inputB = b.shadowRoot!.querySelector("input")!;
   expect(inputA.id).not.toBe(inputB.id);
-  // Pins down the actual "wt-input-N" shape uniqueId() produces, not just that two ids differ
+  // Pins down the unnamed fallback's actual "wt-input-N" shape, not just that two ids differ
   // from each other: a mutant that empties out the "wt-input" prefix argument still produces two
   // distinct (but wrongly-shaped) ids and would slip past a bare inequality check.
   expect(inputA.id).toMatch(/^wt-input-\d+$/);

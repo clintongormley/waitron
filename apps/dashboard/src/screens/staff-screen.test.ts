@@ -44,10 +44,11 @@ const people: PersonSummary[] = [
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listStaff: vi.fn().mockResolvedValue(people),
-    createPerson: vi.fn().mockResolvedValue({ id: "p3" }),
+    createPerson: vi.fn().mockResolvedValue({ id: "p3", invitationSent: true }),
     updatePerson: vi.fn().mockResolvedValue(undefined),
     resetPin: vi.fn().mockResolvedValue(undefined),
     setPassword: vi.fn().mockResolvedValue(undefined),
+    resendInvitation: vi.fn().mockResolvedValue({ invitationSent: true }),
     passkeyRegisterOptions: vi
       .fn()
       .mockResolvedValue({ challengeHandle: "h2", options: { challenge: "def" } }),
@@ -70,6 +71,15 @@ function list(el: StaffScreen): StaffList {
 /** The create-person form the screen renders. */
 function form(el: StaffScreen): PersonForm {
   return el.shadowRoot!.querySelector("dashboard-person-form")!;
+}
+
+/** The rendered text inside the create form's shared error summary. */
+function formErrorText(el: StaffScreen): string | undefined {
+  return (
+    form(el)
+      .shadowRoot!.querySelector("wt-form-error-summary")
+      ?.shadowRoot!.querySelector("[role=alert]")?.textContent ?? undefined
+  );
 }
 
 /** The edit-person dialog the screen renders. */
@@ -158,7 +168,12 @@ describe("staff-screen", () => {
     await el.updateComplete;
     expect(form(el).open).toBe(true);
 
-    const detail = { displayName: "Cy", role: "staff" as const, pin: "1234" };
+    const detail = {
+      displayName: "Cy",
+      role: "staff" as const,
+      pin: "1234",
+      email: "cy@x.com",
+    };
     form(el).dispatchEvent(
       new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
     );
@@ -167,6 +182,28 @@ describe("staff-screen", () => {
     expect(api.createPerson).toHaveBeenCalledWith(detail);
     expect(api.listStaff).toHaveBeenCalledTimes(2);
     expect(form(el).open).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent).toContain(
+      "invitación",
+    );
+  });
+
+  it("reports when the person was created but email delivery was unavailable", async () => {
+    const api = stubApi({
+      createPerson: vi.fn().mockResolvedValue({ id: "p3", invitationSent: false }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    form(el).dispatchEvent(
+      new CustomEvent("create-person", {
+        detail: { displayName: "Cy", role: "staff", pin: "1234", email: "cy@x.com" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent).toContain(
+      "no se ha podido enviar",
+    );
   });
 
   // The create form carries the dashboard sign-in email on its create-person detail; the screen
@@ -208,7 +245,7 @@ describe("staff-screen", () => {
     await flush(el);
 
     expect(form(el).error).toBe("person.email_taken");
-    const banner = form(el).shadowRoot!.querySelector("[role=alert]")?.textContent;
+    const banner = formErrorText(el);
     expect(banner).toContain(codeMessage("person.email_taken", "es-ES"));
     expect(banner).not.toContain("person.email_taken");
   });
@@ -248,7 +285,7 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
 
-    const detail = { displayName: "Cy", role: "staff" as const, pin: "12" };
+    const detail = { displayName: "Cy", role: "staff" as const, pin: "12", email: "cy@x.com" };
     form(el).dispatchEvent(
       new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
     );
@@ -272,7 +309,7 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
 
-    const detail = { displayName: "Cy", role: "staff" as const, pin: "12" };
+    const detail = { displayName: "Cy", role: "staff" as const, pin: "12", email: "cy@x.com" };
     form(el).dispatchEvent(
       new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
     );
@@ -280,12 +317,8 @@ describe("staff-screen", () => {
 
     // Passed down and rendered inside the create dialog as LOCALISED copy, never the raw wire code.
     expect(form(el).error).toBe("pin.too_short");
-    expect(form(el).shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
-      codeMessage("pin.too_short", "es-ES"),
-    );
-    expect(form(el).shadowRoot!.querySelector("[role=alert]")?.textContent).not.toContain(
-      "pin.too_short",
-    );
+    expect(formErrorText(el)).toContain(codeMessage("pin.too_short", "es-ES"));
+    expect(formErrorText(el)).not.toContain("pin.too_short");
     // The screen's own page-level banner is suppressed while the create dialog is open.
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
@@ -299,7 +332,7 @@ describe("staff-screen", () => {
     await el.updateComplete;
     form(el).dispatchEvent(
       new CustomEvent("create-person", {
-        detail: { displayName: "Cy", role: "staff", pin: "12" },
+        detail: { displayName: "Cy", role: "staff", pin: "12", email: "cy@x.com" },
         bubbles: true,
         composed: true,
       }),
@@ -321,7 +354,12 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
 
-    const detail = { displayName: "Ada", role: "staff" as const, pin: "1234" };
+    const detail = {
+      displayName: "Ada",
+      role: "staff" as const,
+      pin: "1234",
+      email: "ada@x.com",
+    };
     // Dispatched synchronously back-to-back: the first #onCreatePerson sets its in-flight guard before
     // awaiting createPerson, so the second is dropped before it can call the API again.
     form(el).dispatchEvent(
@@ -483,6 +521,24 @@ describe("staff-screen — row edit", () => {
 
     expect(api.updatePerson).toHaveBeenCalledWith("p1", { email: "owner@x.com" });
     expect(api.listStaff).toHaveBeenCalledTimes(2);
+  });
+
+  it("resends an invitation and reports delivery after closing the edit dialog", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("resend-invitation", { bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(api.resendInvitation).toHaveBeenCalledWith("p1");
+    expect(editForm(el).open).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent).toContain(
+      "invitación",
+    );
   });
 
   it("set-password calls setPassword with the password and reloads the list", async () => {

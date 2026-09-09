@@ -83,6 +83,15 @@ class FailingFileReader {
 afterEach(cleanupWidgets);
 
 describe("setup-cert-screen", () => {
+  it("gives the certificate passphrase a stable non-login name", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    const input = q(el, "[data-test=passphrase]")!.shadowRoot!.querySelector("input")!;
+    expect({ name: input.name, autocomplete: input.autocomplete }).toEqual({
+      name: "certificate-passphrase",
+      autocomplete: "off",
+    });
+  });
+
   it("reads the file to canonical base64 with NO data: prefix, and emits the cert patch", async () => {
     const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const events = collect(host);

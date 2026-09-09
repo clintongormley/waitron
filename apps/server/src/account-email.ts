@@ -1,0 +1,102 @@
+import nodemailer from "nodemailer";
+import type { AccountActionPurpose } from "@waitron/identity";
+
+export interface AccountEmail {
+  purpose: AccountActionPurpose;
+  email: string;
+  displayName: string;
+  actionUrl: string;
+  expiresAt: string;
+  locale: string;
+}
+
+export type AccountEmailSender = (message: AccountEmail) => Promise<void>;
+
+interface MailTransport {
+  sendMail(message: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+  }): Promise<unknown>;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+const COPY = {
+  en: {
+    invitationSubject: "Set up your Waitron account",
+    resetSubject: "Reset your Waitron password",
+    hello: (name: string) => `Hello ${name},`,
+    invitationAction: "set up your account",
+    resetAction: "reset your password",
+    invitationLink: "Set up your account",
+    resetLink: "Reset your password",
+    expires: (expiry: string) => `This single-use link expires at ${expiry}.`,
+    ignore: "If you did not expect this email, you can ignore it.",
+  },
+  es: {
+    invitationSubject: "Configura tu cuenta de Waitron",
+    resetSubject: "Restablece tu contraseña de Waitron",
+    hello: (name: string) => `Hola ${name},`,
+    invitationAction: "configurar tu cuenta",
+    resetAction: "restablecer tu contraseña",
+    invitationLink: "Configura tu cuenta",
+    resetLink: "Restablece tu contraseña",
+    expires: (expiry: string) => `Este enlace de un solo uso caduca el ${expiry}.`,
+    ignore: "Si no esperabas este correo, puedes ignorarlo.",
+  },
+} as const;
+
+/** Build an SMTP-backed sender. The optional transport is the unit-test seam. */
+export function createAccountEmailSender(
+  config: { url: string; from: string },
+  transport: MailTransport = nodemailer.createTransport(config.url),
+): AccountEmailSender {
+  return async (message) => {
+    const invitation = message.purpose === "invitation";
+    const copy = message.locale.startsWith("es") ? COPY.es : COPY.en;
+    const subject = invitation ? copy.invitationSubject : copy.resetSubject;
+    const action = invitation ? copy.invitationAction : copy.resetAction;
+    const link = invitation ? copy.invitationLink : copy.resetLink;
+    // Accounts are tenant-wide and a tenant may span time zones, so expiry is explicit UTC while its
+    // words and date order follow the recipient's UI locale.
+    const expiry = new Intl.DateTimeFormat(message.locale, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+      timeZoneName: "short",
+    }).format(new Date(message.expiresAt));
+    const text = [
+      copy.hello(message.displayName),
+      "",
+      `${message.locale.startsWith("es") ? "Usa este enlace para" : "Use this link to"} ${action}:`,
+      message.actionUrl,
+      "",
+      copy.expires(expiry),
+      copy.ignore,
+    ].join("\n");
+    const html = `<p>${escapeHtml(copy.hello(message.displayName))}</p>
+<p><a href="${escapeHtml(message.actionUrl)}">${link}</a></p>
+<p>${escapeHtml(copy.expires(expiry))}</p>
+<p>${copy.ignore}</p>`;
+    await transport.sendMail({
+      from: config.from,
+      to: message.email,
+      subject,
+      text,
+      html,
+    });
+  };
+}

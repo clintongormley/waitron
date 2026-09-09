@@ -56,6 +56,7 @@ async function setupVenue(): Promise<VenueResult> {
           displayName: "Administradora",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
+          email: "owner@example.test",
         },
       },
       ALL_MODULES,
@@ -202,6 +203,7 @@ describe("Me API over real Postgres (the identity property: the session's person
         role: string;
         locale: string | null;
         venueLocale: string;
+        venueName: string;
         permissions: string[];
         modules: string[];
       },
@@ -210,6 +212,7 @@ describe("Me API over real Postgres (the identity property: the session's person
       role: "staff",
       locale: null,
       venueLocale: "es-ES",
+      venueName: "Deli Test SL",
       // A staff person holds no permission; this fixture injects no enabled modules.
       permissions: [],
       modules: [],

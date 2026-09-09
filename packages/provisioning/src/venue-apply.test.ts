@@ -42,7 +42,12 @@ function request(taxId = "B12345678"): VenueRequest {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
-    admin: { displayName: "Owner", pinHash: "scrypt$00$00", passwordHash: "scrypt$00$00" },
+    admin: {
+      displayName: "Owner",
+      pinHash: "scrypt$00$00",
+      passwordHash: "scrypt$00$00",
+      email: "owner@example.test",
+    },
   };
 }
 
@@ -109,6 +114,7 @@ describe("applyVenue", () => {
       displayName: "Alicia",
       pinHash: "scrypt$abc$def",
       passwordHash: "scrypt$pwd$hash",
+      email: "owner@example.test",
     };
     const result = await applyVenue(planVenue(seedRequest, ALL_MODULES), {
       db: suite.db,
@@ -189,11 +195,7 @@ describe("applyVenue", () => {
     expect(count.rows[0]?.n).toBe(3); // three, not six
   });
 
-  it("writes the admin's dashboard email when the request carries one, and NULL when it omits it", async () => {
-    // Onboarding captures the admin's dashboard-login email; provisioning threads it into the seeded
-    // `persons` row so the email-based dashboard login can resolve the address. It is OPTIONAL — the
-    // CLI/dev-setup/e2e paths seed an admin with no email — so an absent email must write NULL, not a
-    // throw or an empty string. Two distinct tenants so each admin is this run's alone.
+  it("writes the admin's required dashboard email", async () => {
     const withEmail = request("B66666666");
     withEmail.admin = {
       displayName: "Owner",
@@ -209,15 +211,6 @@ describe("applyVenue", () => {
     const seeded = await suite.db.execute<{ email: string | null }>(sql`
       select email from persons where tenant_id = ${withEmailResult.tenantId} and role = 'admin'`);
     expect(seeded.rows[0]?.email).toBe("owner@x.com");
-
-    // Omitted email → NULL. request() builds an admin with no `email` key.
-    const withoutEmailResult = await applyVenue(planVenue(request("B67676767"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
-    });
-    const emailless = await suite.db.execute<{ email: string | null }>(sql`
-      select email from persons where tenant_id = ${withoutEmailResult.tenantId} and role = 'admin'`);
-    expect(emailless.rows[0]?.email).toBeNull();
   });
 
   it("reuses the tenant on a re-run rather than duplicating it (idempotent tenant, spec D8)", async () => {

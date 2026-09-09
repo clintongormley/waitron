@@ -317,8 +317,8 @@ async function seedVenue(db: Database): Promise<Venue> {
   // A supervisor (holds `sale.rectify`), PIN "1234", inserted as the superuser like everything else
   // — the authorizer the rectificativa's gate requires.
   const person = await db.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, 'Supervisora', ${hashPin("1234")}, 'supervisor') returning id`);
+    insert into persons (tenant_id, display_name, email, pin_hash, role)
+    values (${tenantId}, 'Supervisora', 'supervisor@modelo-303.demo', ${hashPin("1234")}, 'supervisor') returning id`);
   const authorizerId = person.rows[0]!.id;
 
   return { tenantId, tillId, nodes, authorizerId };

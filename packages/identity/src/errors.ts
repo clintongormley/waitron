@@ -43,6 +43,8 @@ declare module "@waitron/shared" {
     /** Another person in this tenant already holds this normalised email — the create/setEmail insert
      * hit the unique index. The domain concept is "already taken", not the column that collided (§3). */
     "person.email_taken": { email: string };
+    /** The account invitation or password-reset token is unknown, expired, or already used. */
+    "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
     /** No passkey is registered for this person (or no credential matched the returned id) — they

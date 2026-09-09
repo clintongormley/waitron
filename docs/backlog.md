@@ -1375,6 +1375,14 @@ genuinely-decision-bearing.
   (`Promise.all([computeDailyClose(tx), computeTopSellers(tx), countOpenTables(tx)])`, also
   `daily-close`). pg@8 queues them (serial, correct, no speedup, a deprecation warning); it BREAKS in
   pg@9. Replace with sequential awaits or one combined query before pg@9 lands.
+- **Dashboard-wide location context.** The dashboard can manage several locations, but location choice
+  currently lives inside individual screens: menus, roster and planned-vs-actual each mount their own
+  `dashboard-location-picker`. Add one persistent location dropdown to the authenticated dashboard
+  banner and make location-scoped screens consume that shared choice. First classify every screen and
+  API as tenant-wide or location-scoped so the selector never narrows tenant-wide work accidentally;
+  preserve the selected location across navigation and refresh, and make the multi-location state
+  explicit rather than silently editing whichever location a screen chose first. Single-location
+  installations may collapse the control to a label, but must use the same location context.
 - **Handheld live updates (SSE/WebSocket).** Deferred from the order-only handheld slice (#173, owner,
   2026-08-30). The app is pull-only today (refetch after each round/serve/fire + manual refresh), so two
   waiters on the same table see stale data until a refetch (the server still guards append-only rounds +
@@ -1552,9 +1560,9 @@ genuinely-decision-bearing.
   one-tenant-per-database design.
 - **The €0 comped-sale settles at the settlement instant, not backdated to `issued_at`.** Till-UX
   question (is a comp ever finalised long after the invoice printed, in invoice-first mode?).
-- **No UI path to REMOVE a person's email** (Tier A #2 follow-up). The Users form's Save-email is disabled
-  when blank, and clearing an existing email is rejected by `setEmail` (`person.email_invalid`) — add a
-  clear-email path (a dedicated `clearEmail`/null-accepting `setEmail`) if a venue ever needs it.
+- **A human account always keeps an email.** The Users form does not offer a remove-email action,
+  and clearing an existing email is rejected by `setEmail` (`person.email_invalid`). This is now the
+  account rule rather than a missing UI path; till use still authenticates with the person's PIN.
 
 ---
 

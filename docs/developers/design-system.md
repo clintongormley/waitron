@@ -126,9 +126,12 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `disabled`, `aria-label` | native `click` |
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
-| `wt-input` | `value`, `label`, `type`, `placeholder`, `disabled`, `invalid` (also sets `aria-invalid`) | `wt-change` — `detail: { value: string }` |
+| `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label` | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`); default slot (body), `footer` slot | `wt-close` |
+| `wt-form-error-summary` | `heading`, `errors` | — |
+| `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
+| `wt-help-tooltip` | `aria-label`; default slot | — |
 
 `wt-button` has no `type` property — see "Forms" below.
 
@@ -149,11 +152,12 @@ An unregistered `name` renders nothing — there is no broken-icon fallback mark
 
 Both associate their visible `<label>` with the native control through a real `for`/`id` pair —
 not by wrapping the control inside the `<label>` — so the existing layout and font sizing stay
-untouched. The `id` comes from a module-level counter (`wt-input-N` / `wt-switch-N`), so multiple
-instances on one page never collide.
+untouched. A named `wt-input` uses that semantic name for its native `name` and `id`. An unnamed
+legacy input and every `wt-switch` use a module-level counter (`wt-input-N` / `wt-switch-N`).
 
-- `wt-input`: `<label for="wt-input-N">` + `<input id="wt-input-N">`. The label supplies the
-  input's accessible name purely through that native association.
+- `wt-input name="email"`: `<label for="email">` + `<input id="email" name="email">`. The label
+  supplies the input's accessible name through that native association, while automation and
+  password managers receive a stable field purpose instead of a generated component id.
 - `wt-switch`: the same `for`/`id` pairing is what makes clicking the visible label text toggle the
   switch. Because the control also carries `role="switch"` (re-purposing a native checkbox), its
   `<input>` *additionally* sets `aria-label` directly from the `label` property, so the accessible
@@ -231,6 +235,73 @@ worse than no property at all. Full form association via `ElementInternals`
 (`attachInternals().form`, `formAssociated = true`, etc.) is out of scope for this design system —
 if a screen needs form-like behaviour, wire it up in JS: listen for `wt-change` on each field and
 call your own submit handler on the triggering `wt-button`'s `click` event.
+
+Do not disable the primary action merely because a required field is empty. The operator needs to
+be able to press it and learn what is wrong. On an invalid submission:
+
+- mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
+  the native constraint;
+- pass a plain-language sentence to each invalid field's `error` property;
+- pass the same sentences to `wt-form-error-summary`, with a localized heading equivalent to
+  “There is a problem with this form”;
+- keep the entered values so the operator can correct them.
+
+Give every field an explicit semantic `name`. Use the standard autocomplete purposes where they
+exist: `username` for a login email, `current-password` for a login password, and `new-password`
+for password creation and confirmation. A generated name such as `wt-input-2` describes the widget,
+not the value, and gives automation nothing useful to work with.
+
+Put an icon-only password visibility button in the input's `end` slot. Toggle the native input type
+between `password` and `text`, retain the entered value, and give the button a localized accessible
+label that describes its current action: “Show password” or “Hide password”. The slot reserves room
+inside the field only while it contains an action.
+
+Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
+the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
+it stays on the bottom left. A secondary action that belongs beside the primary action goes in the
+`secondary` slot.
+
+```ts
+html`
+  <wt-form-error-summary
+    heading=${t("form.error_heading")}
+    .errors=${errors}
+  ></wt-form-error-summary>
+  <wt-input
+    name="email"
+    autocomplete="username"
+    required
+    label=${t("login.email")}
+    error=${emailError}
+  ></wt-input>
+  <wt-form-actions>
+    <wt-button slot="cancel" variant="secondary">${t("action.cancel")}</wt-button>
+    <wt-button variant="primary">${t("action.continue")}</wt-button>
+  </wt-form-actions>
+`;
+```
+
+Use `wt-help-tooltip` for short explanations that would distract from the form when always visible.
+Give its question-mark button a localized `aria-label`. It opens on click, stays open while you
+interact with it, and closes when you press Escape or click anywhere outside it. Place it in a
+`wt-input`'s `help` slot to align it beside that field's label.
+
+### Dashboard banner
+
+Keep the dashboard's branded banner at the very top of the page, spanning its full width, on the
+login screen and every authenticated screen. The menu and page content belong underneath it. The
+banner shows the canonical Waitron lockup and the deployment tenant's legal name, not a location
+name: one deployment database represents one tenant, while that tenant can contain several
+locations. Once a session is active, put Logout at the banner's trailing (right-hand in the shipped
+locales) edge. Do not show Logout before authentication.
+
+### Dashboard authentication
+
+After a syntactically valid email address, offer passkey login as the primary method. Put password
+login and enumeration-safe account recovery behind **Try another way**. Render the same passkey-first
+step for every valid address: choosing the next screen from server-side passkey enrolment would
+reveal whether an account has a passkey. The WebAuthn ceremony itself determines whether the user can
+provide an enrolled passkey.
 
 ### Empty slots don't reserve space
 

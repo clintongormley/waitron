@@ -1181,6 +1181,7 @@ export class DashboardApi {
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
+    venueName: string;
   }>;
 
   /**
@@ -1202,15 +1203,21 @@ export class DashboardApi {
   /**
    * `GET /management-api/locales` — the venue's offered languages (per-user-language-preference,
    * Task 4). PUBLIC and read pre-login by the login screen's language chooser: each `{ code, label }` is a
-   * `SUPPORTED_LOCALES` entry, and `venueDefault` the tenant's fallback locale. The language chooser
-   * reads the list; the app decides what to do with a pick, so the client only surfaces the shape.
+   * `SUPPORTED_LOCALES` entry, `venueDefault` the tenant's fallback locale, and `venueName` its public
+   * legal name for the pre-login banner. The language chooser reads the list; the app decides what to
+   * do with a pick, so the client only surfaces the shape.
    */
-  getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
+  getLocales(): Promise<{
+    locales: Array<{ code: string; label: string }>;
+    venueDefault: string;
+    venueName: string;
+  }> {
     // The list + venue default are immutable for this client's lifetime; fetch once and share.
     // Cache the promise ONLY on success — clear it on rejection so a transient failure retries.
     this.#localesPromise ??= this.#request<{
       locales: Array<{ code: string; label: string }>;
       venueDefault: string;
+      venueName: string;
     }>("/management-api/locales", "GET").catch((err) => {
       this.#localesPromise = undefined;
       throw err;
@@ -1219,11 +1226,27 @@ export class DashboardApi {
   }
 
   /**
-   * `POST /management-api/session` — log in with an email + password (and an optional TOTP second
-   * factor). Returns who is now logged in; a bad credential rejects with the server's `{ code }`.
+   * `POST /management-api/session` — log in with an email + password. Returns who is now logged in;
+   * a bad credential rejects with the server's `{ code }`.
    */
-  login(input: { email: string; password: string; totp?: string }): Promise<{ personId: string }> {
+  login(input: { email: string; password: string }): Promise<{ personId: string }> {
     return this.#request<{ personId: string }>("/management-api/session", "POST", input);
+  }
+
+  requestPasswordReset(email: string): Promise<void> {
+    return this.#request<void>("/management-api/password-reset", "POST", { email });
+  }
+
+  completeAccountAction(
+    token: string,
+    purpose: "invitation" | "password_reset",
+    password: string,
+  ): Promise<{ personId: string }> {
+    return this.#request<{ personId: string }>("/management-api/account-actions/complete", "POST", {
+      token,
+      purpose,
+      password,
+    });
   }
 
   /** `DELETE /management-api/session` — end the session. Answers an empty 204. */
@@ -1236,15 +1259,25 @@ export class DashboardApi {
     return this.#request<PersonSummary[]>("/management-api/staff", "GET");
   }
 
-  /** `POST /management-api/staff` — create a person with a starting role and PIN (and an optional
-   * login email); returns its id. */
+  /** Create a person with their required dashboard email and device PIN. */
   createPerson(input: {
     displayName: string;
     role: PersonRole;
     pin: string;
-    email?: string;
-  }): Promise<{ id: string }> {
-    return this.#request<{ id: string }>("/management-api/staff", "POST", input);
+    email: string;
+  }): Promise<{ id: string; invitationSent: boolean }> {
+    return this.#request<{ id: string; invitationSent: boolean }>(
+      "/management-api/staff",
+      "POST",
+      input,
+    );
+  }
+
+  resendInvitation(id: string): Promise<{ invitationSent: boolean }> {
+    return this.#request<{ invitationSent: boolean }>(
+      `/management-api/staff/${id}/invitation`,
+      "POST",
+    );
   }
 
   /**
@@ -2261,6 +2294,7 @@ export class DashboardApi {
     venueLocale: string;
     permissions: string[];
     modules: string[];
+    venueName: string;
   }> {
     return this.#request<{
       personId: string;
@@ -2269,6 +2303,7 @@ export class DashboardApi {
       venueLocale: string;
       permissions: string[];
       modules: string[];
+      venueName: string;
     }>("/management-api/session/me", "GET");
   }
 

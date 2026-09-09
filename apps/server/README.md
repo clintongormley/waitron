@@ -232,29 +232,20 @@ WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
     --address-line1 'Calle Mayor 1' --postal-code 28001 --city Madrid --province Madrid \
     --time-zone Europe/Madrid --day-cutover 06:00 \
     --till-name 'Caja 1' --series-code A --rectificative-code R \
-    --admin-name 'Owner' \
+    --admin-name 'Owner' --admin-email 'owner@example.com' \
     --yes
 ```
 
-The command seeds the venue's first **admin** person. `--admin-name` is the display name (not a secret,
-so it stays a flag), while the admin's two login secrets are read only from the environment or an
-echo-off prompt, never from `argv`: `WAITRON_ADMIN_PIN` (the till PIN) and `WAITRON_ADMIN_PASSWORD` (the
-dashboard password, ≥8 characters), both required.
+The command seeds the venue's first **admin** person. `--admin-name` and the required `--admin-email`
+are not secrets, so they stay as flags. The admin's two login secrets are read only from the
+environment or an echo-off prompt, never from `argv`: `WAITRON_ADMIN_PIN` (the till PIN) and
+`WAITRON_ADMIN_PASSWORD` (the dashboard password, ≥8 characters), both required.
 
-**Whether this admin can sign in to the dashboard depends on how it was seeded.** Dashboard
-(management) login is **email + password** — the login screen POSTs an `{ email }`, and `loginManager`
-resolves the person by email. Onboarding via the **setup UI** (`apps/setup` → `setup-api.ts`) captures
-the admin email as a **required** field and threads it into `seed-admin`, whose insert now names
-`email` (`packages/provisioning/src/venue-apply.ts`), so an **onboarding-provisioned admin signs in to
-the dashboard immediately**. The bare `venue` CLI shown above has no `--admin-email` flag, so it seeds
-the admin **emailless** — `email` is OPTIONAL in provisioning (`email ?? null`) — and such an admin has
-no email sign-in path until an email is set for it out-of-band (`setEmail` requires an
-already-authenticated management session). Today only the demo bootstrap
-(`apps/server/scripts/dev-setup.ts`, via `seedStaff`) does that, giving its admin
-`owner@demo.waitron.local`. Independent of the email, the provisioned **password** is still exercised:
-it is what the C2b mirror-bundle adoption route authenticates **by id** (via `loginManagerById`, a
-server-to-server flow carrying the admin's id, not the email form) and what `venue-apply.e2e.test.ts`
-authenticates by id.
+Dashboard management login is **email + password**: `loginManager` resolves the person by email. Both
+the setup UI and the bare `venue` CLI require the first admin's email and thread it into `seed-admin`,
+so the provisioned admin can sign in immediately. The provisioned password is also what the C2b
+mirror-bundle adoption route authenticates **by id** via `loginManagerById`, because that
+server-to-server flow carries the admin's id rather than the dashboard form.
 
 Every option is prompted for when omitted, so a bare `venue` is a complete interactive session;
 `--yes` skips the confirmation for a non-interactive run. `--territory` currently accepts only
@@ -349,6 +340,34 @@ Provisioning and rotating credentials themselves (`fiscal.aeat`, `payments.strip
 `waitron-credentials` with no arguments for its own usage text (`set` / `list` / `delete` /
 `rotate` — `packages/credentials/src/cli.ts`'s `USAGE` constant); there is no `get`, since that CLI
 never prints a decrypted credential.
+
+### Account email
+
+Development captures invitation and password-reset email in Mailpit. `pnpm dev:setup`,
+`pnpm dev:reset`, `pnpm dev:onboard`, and the `wa-wt` worktree launcher start it with the shared database; open
+`http://127.0.0.1:8025` to read the messages. SMTP and the Mailpit UI bind to loopback only.
+
+For a production or on-prem venue, put its SMTP relay in the encrypted credential vault. Write the
+payload to a permission-restricted file rather than putting its password in a shell argument:
+
+```json
+{
+  "url": "smtps://user:password@smtp.example.com:465",
+  "from": "Waitron <no-reply@example.com>"
+}
+```
+
+```bash
+waitron-credentials set --tenant <uuid> --purpose email.smtp --file /secure/path/smtp.json
+```
+
+The server reads this credential when it sends, so rotating it does not require a restart. If it is
+missing or the relay is unavailable, creating a person still succeeds and reports that the
+invitation was not sent; password-reset requests continue to return their generic accepted response.
+Once SMTP is restored, request another reset or resend the invitation from Users.
+
+`WAITRON_MANAGEMENT_ORIGIN` determines the link host. It must use HTTPS unless it is a loopback
+development origin; the server refuses an insecure LAN or public origin at boot.
 
 ## What `/health` means
 

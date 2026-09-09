@@ -489,6 +489,9 @@ Policy (spec §5): 3 free failures per `(deviceId,personId)`, then wait `2^(n-3)
 
 - [ ] **Step 1: Failing tests.**
   - `till-device-chooser`: lists enrolled devices with "Use this device" (writes sessionStorage, navigates `/`); "Set up a new device" is collapsed, expands to the enrol step-2 form, and enrolling writes the new id to this tab's sessionStorage;
+
+  Follow-up (2026-09-07): user review replaced the inline expansion with a cancellable modal,
+  centred both front-door forms, and kept `/` until the authenticated shell opens.
   - `till-enrol-screen`: step 1 posts the key to `enrolVerify` and advances with the catalogue; step 2 shows Name + Profile, and a station picker for a kds profile / a register picker for a phone-or-tablet profile / neither for a till profile; "Set up device" posts to `enrol`;
   - `till-app` boot: the four-way decision table (spec §3.1); the dev "Switch device" link clears the tab device and returns to the chooser.
 

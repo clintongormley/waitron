@@ -11,6 +11,7 @@ const OWNED = [
   "persons",
   "sessions",
   "management_sessions",
+  "management_account_actions",
   "webauthn_credentials",
   "webauthn_challenges",
 ];

@@ -166,10 +166,8 @@ export function mountMirrorBundleApi(
       // enrolled), `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user`
       // under the designated tenant, in the database holding this venue's tenant. This flow
       // authenticates by PERSON ID, not email, because it is a server-to-server flow carrying an
-      // id the operator typed — not the email dashboard-login form. The primary's admin MAY now
-      // carry an email (onboarding via the setup UI sets one; the bare `venue` CLI seeds it
-      // emailless, since email is OPTIONAL in provisioning —
-      // `packages/provisioning/src/venue-apply.ts`), but this path never uses it:
+      // id the operator typed — not the email dashboard-login form. Human admins carry a required
+      // email, but this path never uses it:
       // `loginManagerById` is the id sibling that shares all the same credential checks
       // (`packages/identity/src/manager-login.ts`) and resolves the admin by id regardless.
       await withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {

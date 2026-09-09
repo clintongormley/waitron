@@ -147,6 +147,29 @@ describe("ServerRouter", () => {
     expect(r.statuses()[0]?.state).toBe("unreachable");
   });
 
+  it("calls the injected fetch as a function instead of rebinding it to the router", async () => {
+    const receivers: unknown[] = [];
+    const receiverSensitiveFetch = async function (this: unknown): Promise<Response> {
+      receivers.push(this);
+      return new Response(JSON.stringify({ acceptingSales: true, term: null, nodeId: "local" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    } as typeof fetch;
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: receiverSensitiveFetch,
+      storage: memoryStorage(),
+    });
+
+    await r.probeNow();
+
+    // Browser-native fetch rejects when called with the ServerRouter as its receiver. Test doubles
+    // normally ignore `this`, which hid the fact that no /api/node request was leaving Chromium.
+    expect(receivers).toEqual([undefined]);
+    expect(r.statuses()[0]?.state).toBe("primary");
+  });
+
   it("degrades to memory when the DEFAULT localStorage global throws on access (blocked site data)", () => {
     // A browser that blocks site data throws on the bare `localStorage` access itself, not only on
     // getItem/setItem. With no `storage` opt the constructor takes the default-acquisition path, which
@@ -196,6 +219,40 @@ describe("ServerRouter", () => {
     await Promise.all([first, second]);
     expect(calls).toEqual([BOX, CLOUD]);
     expect(r.current).toBe(CLOUD);
+  });
+
+  it("keeps an in-flight probe attached when getTill refreshes the same server list", async () => {
+    let answer!: () => void;
+    const pendingFetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = () =>
+            resolve(
+              new Response(JSON.stringify({ acceptingSales: true, term: null, nodeId: "local" }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+        }),
+    ) as unknown as typeof fetch;
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: pendingFetch,
+      storage: memoryStorage(),
+    });
+
+    // main.ts starts the probe before till-app's getTill response supplies its server list. Refreshing
+    // that list must retain the object the probe is updating, or this successful answer is discarded and
+    // a newly enrolled KDS briefly reports that no primary exists.
+    const round = r.probeNow();
+    r.setServers([]);
+    answer();
+    await round;
+
+    expect(r.waiting).toBe(false);
+    expect(r.statuses()).toEqual([
+      { url: BOX, label: "box.deli.test", state: "primary", term: null },
+    ]);
   });
 
   it("drops a non-http(s) server entry instead of crashing statuses()", () => {

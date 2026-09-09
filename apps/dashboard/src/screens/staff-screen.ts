@@ -104,6 +104,7 @@ export class StaffScreen extends LitElement {
   // The WebAuthn ceremony has no visible surface of its own once the browser dialog closes, so
   // without this the operator gets no feedback.
   @state() private passkeyStatus: string | null = null;
+  @state() private invitationStatus: "sent" | "not_sent" | null = null;
 
   // A re-entrancy guard, NOT @state (nothing renders off it): set synchronously at `#onCreatePerson`
   // entry so a double-clicked "Crear" (two `create-person` events) files at most one person —
@@ -142,6 +143,7 @@ export class StaffScreen extends LitElement {
   #openForm(): void {
     this.errorKey = null;
     this.passkeyStatus = null;
+    this.invitationStatus = null;
     this.#closeEdit(); // the two dialogs are mutually exclusive (both are modal)
     this.formOpen = true;
   }
@@ -170,6 +172,7 @@ export class StaffScreen extends LitElement {
     if (person === undefined) return;
     this.errorKey = null;
     this.passkeyStatus = null;
+    this.invitationStatus = null;
     this.formOpen = false;
     this.editingPerson = person;
     this.editOpen = true;
@@ -229,6 +232,24 @@ export class StaffScreen extends LitElement {
     this.#editWith((id) => this.api.updatePerson(id, { email: event.detail.email }));
   }
 
+  async #onResendInvitation(event: Event): Promise<void> {
+    event.stopPropagation();
+    const personId = this.editingPerson?.personId;
+    if (personId === undefined || this.#editing) return;
+    this.#editing = true;
+    this.errorKey = null;
+    this.invitationStatus = null;
+    try {
+      const result = await this.api.resendInvitation(personId);
+      this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+      this.#closeEdit();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    } finally {
+      this.#editing = false;
+    }
+  }
+
   /**
    * Resolve the open dialog's person id and run `action(id)` through the single-flight edit runner.
    * The shared head of the four edit handlers, so the `editingPerson` null-narrowing lives in ONE
@@ -283,14 +304,15 @@ export class StaffScreen extends LitElement {
    * and close the form; on rejection set `errorKey` and leave the form open with its values intact.
    */
   async #onCreatePerson(
-    event: CustomEvent<{ displayName: string; role: PersonRole; pin: string; email?: string }>,
+    event: CustomEvent<{ displayName: string; role: PersonRole; pin: string; email: string }>,
   ): Promise<void> {
     event.stopPropagation();
     if (this.#creating) return; // single-flight: drop a double-click's second create-person
     this.#creating = true;
     this.errorKey = null;
     try {
-      await this.api.createPerson(event.detail);
+      const result = await this.api.createPerson(event.detail);
+      this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
       this.formOpen = false;
       await this.#load();
     } catch (error) {
@@ -330,11 +352,18 @@ export class StaffScreen extends LitElement {
           ? html`<p class="status" role="status">${codeMessage(this.passkeyStatus)}</p>`
           : nothing
       }
+      ${
+        this.invitationStatus
+          ? html`<p class="status" role="status" data-test="invitation-status">
+              ${t(`staff.invitation_${this.invitationStatus}`)}
+            </p>`
+          : nothing
+      }
       <dashboard-person-form
         .open=${this.formOpen}
         .error=${this.formOpen ? this.errorKey : null}
         @create-person=${(
-          e: CustomEvent<{ displayName: string; role: PersonRole; pin: string; email?: string }>,
+          e: CustomEvent<{ displayName: string; role: PersonRole; pin: string; email: string }>,
         ) => void this.#onCreatePerson(e)}
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
@@ -347,6 +376,7 @@ export class StaffScreen extends LitElement {
         @reset-pin=${(e: CustomEvent<{ pin: string }>) => this.#onResetPin(e)}
         @set-password=${(e: CustomEvent<{ password: string }>) => this.#onSetPassword(e)}
         @set-email=${(e: CustomEvent<{ email: string }>) => this.#onSetEmail(e)}
+        @resend-invitation=${(e: Event) => void this.#onResendInvitation(e)}
         @wt-close=${() => this.#closeEdit()}
       ></dashboard-person-edit>
     `;

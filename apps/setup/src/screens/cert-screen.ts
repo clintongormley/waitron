@@ -227,6 +227,8 @@ export class SetupCertScreen extends LitElement {
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
           class="field"
           label="Certificate passphrase"
+          name="certificate-passphrase"
+          autocomplete="off"
           type="password"
           data-test="passphrase"
           ?invalid=${this.invalid.has("passphrase")}

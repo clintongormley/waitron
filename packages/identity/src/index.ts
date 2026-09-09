@@ -29,6 +29,7 @@ export type { Permission, PersonRoleValue } from "./permissions.js";
 export { persons, personStatus, personRole } from "./schema/persons.js";
 export { sessions } from "./schema/sessions.js";
 export { managementSessions } from "./schema/management-sessions.js";
+export { managementAccountActions } from "./schema/management-account-actions.js";
 export { webauthnCredentials, webauthnChallenges } from "./schema/webauthn.js";
 export {
   MIN_PIN_LENGTH,
@@ -47,6 +48,13 @@ export {
   suspendPerson,
 } from "./staff.js";
 export type { PersonSummary, StaffListEntry } from "./staff.js";
+export {
+  ACCOUNT_ACTION_TTL_MS,
+  completeAccountAction,
+  issueAccountAction,
+  requestPasswordResetAction,
+} from "./account-action.js";
+export type { AccountActionPurpose, IssuedAccountAction } from "./account-action.js";
 export { hashSecret, verifySecret } from "./secret-hash.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {

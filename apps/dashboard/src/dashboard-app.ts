@@ -95,6 +95,11 @@ type ScreenId = CoreScreen | (string & {});
  * matches the existing repo precedent in `apps/till/src/screens/till-counter-screen.ts:111`. */
 const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 
+/** The canonical brand lockup. `new URL(..., import.meta.url)` lets Vite fingerprint the shared SVG
+ * without copying logo geometry into this shell. */
+const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg", import.meta.url)
+  .href;
+
 /** One nav entry: the face it switches to, the i18n key for its label, and whether it is manager-gated
  * (`requiresManager` hides it from a `supervisor` session — `#nav()` filters on it before mapping). */
 type NavItem = { screen: ScreenId; labelKey: StringKey; requiresManager?: boolean };
@@ -185,11 +190,20 @@ export class DashboardApp extends LitElement {
         --dashboard-sidebar-width: 18ch;
       }
 
-      /* Two-column app chrome: a fixed-width sidebar beside the scrolling main column. */
+      /* The banner owns the first full-width row; navigation and content share the row below it. */
+      .shell {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+
+      /* Two-column app chrome below the banner: a fixed-width sidebar beside the main column. */
       .layout {
         display: flex;
+        position: relative;
+        flex: 1 1 auto;
         align-items: stretch;
-        min-height: 100vh;
+        min-height: 0;
       }
 
       /* The desktop sidebar: fixed width, scrolls vertically on its own when the nav is tall. */
@@ -217,7 +231,7 @@ export class DashboardApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The main column: top bar (logout) over the scrolling screen body. */
+      /* The content column beside the sidebar. */
       .main {
         flex: 1 1 auto;
         min-width: 0;
@@ -225,29 +239,54 @@ export class DashboardApp extends LitElement {
         flex-direction: column;
       }
 
-      .topbar {
+      .brand-banner {
         display: flex;
         align-items: center;
-        justify-content: flex-end;
         gap: var(--wt-space-2);
         padding: var(--wt-space-3);
         border-bottom: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface);
+      }
+
+      .brand-identity {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        min-width: 0;
+        gap: var(--wt-space-3);
+      }
+
+      .brand-logo {
+        display: block;
+        flex: 0 0 auto;
+        width: calc(var(--wt-space-6) * 4);
+        height: auto;
+      }
+
+      .venue-name {
+        min-width: 0;
+        padding-inline-start: var(--wt-space-3);
+        border-inline-start: 1px solid var(--wt-color-border);
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+      }
+
+      .banner-actions {
+        display: flex;
+        align-items: center;
+        margin-inline-start: auto;
       }
 
       /* The hamburger that opens the off-canvas drawer. Hidden at desktop width (the sidebar is always
-         in-flow there); the narrow-screen media query below reveals it. Pushed to the LEADING edge so
-         the chooser + logout stay grouped at the trailing edge (the topbar is otherwise flex-end). */
+         in-flow there); the narrow-screen media query below reveals it at the banner's leading edge. */
       .nav-toggle {
         display: none;
-        margin-inline-end: auto;
       }
 
-      /* The veil behind the open drawer: it dims the main column and closes the drawer on a tap. Only
-         rendered while the drawer is open, and the drawer only opens on narrow screens — crossing to
-         desktop force-closes it (#onBreakpointChange), so this full-viewport veil never shows at
-         desktop width. Sits under the sliding sidebar but over the main content. */
+      /* The veil behind the open drawer: it covers the content row below the banner and closes the
+         drawer on a tap. It sits under the sliding sidebar but over the main content. */
       .scrim {
-        position: fixed;
+        position: absolute;
         inset: 0;
         z-index: 20;
         background: var(--wt-color-scrim);
@@ -260,8 +299,8 @@ export class DashboardApp extends LitElement {
         );
       }
 
-      /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER. It leaves
-         the flow (position: fixed, translated off the leading edge) and slides in when the layout gains
+      /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
+         content row, below the banner. It leaves the flow and slides in when the layout gains
          the drawer-open class; the hamburger appears to toggle it. A CSS media query cannot read a
          --custom-property, so the breakpoint is a literal here (and mirrored in the JS DRAWER_BREAKPOINT
          constant that drives the narrow state); 48rem matches the existing repo precedent in
@@ -271,7 +310,7 @@ export class DashboardApp extends LitElement {
           display: inline-block;
         }
         .sidebar {
-          position: fixed;
+          position: absolute;
           top: 0;
           bottom: 0;
           left: 0;
@@ -358,6 +397,10 @@ export class DashboardApp extends LitElement {
    * this out, and it names a swap's counterparty). Empty until a probe/login resolves. */
   @state() private myPersonId = "";
 
+  /** The one tenant/business this deployment database represents. It remains visible across login
+   * and every dashboard location, because a tenant can contain several locations. */
+  @state() private venueName = "";
+
   /**
    * The venue's DERIVED default UI locale (per-user-language-preference), read from
    * `GET /management-api/locales` on boot ({@link #seedLocale}) — the dashboard has no venue locale until
@@ -396,7 +439,9 @@ export class DashboardApp extends LitElement {
   }
 
   /**
-   * Boot: probe for a session, THEN — only when none was found (still on `login`) — seed the login
+   * Boot: an account-action link takes precedence over an existing session, so a person opening an
+   * invitation or reset link on a shared dashboard reaches their own action form. Otherwise probe for
+   * a session, THEN — only when none was found (still on `login`) — seed the login
    * screen in the venue's language. The two are serialized deliberately, not raced:
    *  - a LOGGED-IN probe's {@link #applyMe} already sets the UI locale from the WHOAMI (`me.locale`
    *    resolved against `me.venueLocale`) and remembers `venueLocale`, so a venue-default seed
@@ -407,6 +452,10 @@ export class DashboardApp extends LitElement {
    * `#probeSession` swallows its own rejection (→ `login`), so this never throws.
    */
   async #boot(): Promise<void> {
+    if (new URLSearchParams(window.location.search).has("token")) {
+      await this.#seedLocale();
+      return;
+    }
     await this.#probeSession();
     if (this.screen === "login") await this.#seedLocale();
   }
@@ -419,12 +468,13 @@ export class DashboardApp extends LitElement {
    */
   async #seedLocale(): Promise<void> {
     try {
-      const { venueDefault } = await this.api.getLocales();
+      const { venueDefault, venueName } = await this.api.getLocales();
       // Guard the post-await module-global `setLocale`: a teardown during the fetch must not repaint a
       // live sibling's locale (the DISCONNECT SAFETY note). The `#venueLocale` write below the guard is
       // harmless to skip on a detached element — nothing reads it after teardown.
       if (!this.isConnected) return;
       this.#venueLocale = venueDefault;
+      this.venueName = venueName;
       setLocale(venueDefault);
     } catch {
       // Stay on the module default — a failed locale read must never block sign-in.
@@ -458,6 +508,7 @@ export class DashboardApp extends LitElement {
     venueLocale: string;
     permissions: string[];
     modules: string[];
+    venueName: string;
   }): void {
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
@@ -468,6 +519,7 @@ export class DashboardApp extends LitElement {
     this.#activate(me.modules);
     this.screen = this.#permittedScreen(this.#url.read("dashboard"));
     this.#venueLocale = me.venueLocale;
+    this.venueName = me.venueName;
     if (!this.isConnected) return;
     this.#writeScreenUrl(this.screen, true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
@@ -579,82 +631,105 @@ export class DashboardApp extends LitElement {
       // The login screen's own chooser bubbles its composed `locale-selected` up to this `<div>`, where
       // `#onLocaleSelected` turns a pre-login pick into a transient switch. `keyed(currentLocale(), …)`
       // recreates the login screen on a locale change so it repaints in the new language (it holds no controller).
-      return html`<div
-        class="body"
-        @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
-      >
-        ${keyed(
-          currentLocale(),
-          html`<dashboard-login-screen
-            .api=${this.api}
-            @logged-in=${(event: Event) => this.#onLoggedIn(event)}
-          ></dashboard-login-screen>`,
-        )}
-      </div>`;
+      return html`
+        ${this.#banner(false, false)}
+        <div
+          class="body"
+          @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+        >
+          ${keyed(
+            currentLocale(),
+            html`<dashboard-login-screen
+              .api=${this.api}
+              @logged-in=${(event: Event) => this.#onLoggedIn(event)}
+            ></dashboard-login-screen>`,
+          )}
+        </div>
+      `;
     }
     // A non-staff session carries the nav; a staff person has only the self-service view, so it gets no
     // sidebar, no hamburger and no drawer at all.
     const hasNav = this.sessionRole !== "staff";
     return html`
       <div
-        class=${classMap({ layout: true, "drawer-open": hasNav && this.drawerOpen })}
+        class="shell"
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
-        <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
-             breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
-             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nineteen nav buttons
-             leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
-             control; it is interactive at desktop width and whenever the drawer is open. -->
-        ${
-          hasNav
-            ? html`<aside class="sidebar" ?inert=${this.narrow && !this.drawerOpen}>
-                ${this.#nav()}
-              </aside>`
-            : nothing
-        }
-        <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open
-             (and only a non-staff session can open one); the drawer is force-closed on the transition
-             to desktop (#onBreakpointChange), so this never renders at desktop width.
-             aria-hidden: it is a decorative veil, not an interactive control in the a11y tree. -->
-        ${
-          hasNav && this.drawerOpen
-            ? html`<div
-                class="scrim"
-                aria-hidden="true"
-                @click=${() => (this.drawerOpen = false)}
-              ></div>`
-            : nothing
-        }
-        <div class="main">
-          <header class="topbar">
-            <!-- The hamburger: opens/closes the off-canvas drawer. Present only for a non-staff session
-                 (a staff person has no nav to reveal); hidden at desktop width by the CSS above. -->
-            ${
-              hasNav
-                ? html`<wt-button
-                    class="nav-toggle"
-                    variant="ghost"
-                    data-test="nav-toggle"
-                    aria-label=${t("nav.toggle")}
-                    @click=${() => (this.drawerOpen = !this.drawerOpen)}
-                    >☰</wt-button
-                  >`
-                : nothing
-            }
-            <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
-              >${t("action.logout")}</wt-button
-            >
-          </header>
-          <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
-               screen subtree, repainting every child in the new language (screens hold no controller). -->
-          <div class="body">${keyed(currentLocale(), this.#renderScreen())}</div>
-          <dashboard-language-chooser
-            .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-          ></dashboard-language-chooser>
+        ${this.#banner(true, hasNav)}
+        <div class=${classMap({ layout: true, "drawer-open": hasNav && this.drawerOpen })}>
+          <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
+               breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
+               off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nineteen nav buttons
+               leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
+               control; it is interactive at desktop width and whenever the drawer is open. -->
+          ${
+            hasNav
+              ? html`<aside class="sidebar" ?inert=${this.narrow && !this.drawerOpen}>
+                  ${this.#nav()}
+                </aside>`
+              : nothing
+          }
+          <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open
+               (and only a non-staff session can open one); the drawer is force-closed on the transition
+               to desktop (#onBreakpointChange), so this never renders at desktop width.
+               aria-hidden: it is a decorative veil, not an interactive control in the a11y tree. -->
+          ${
+            hasNav && this.drawerOpen
+              ? html`<div
+                  class="scrim"
+                  aria-hidden="true"
+                  @click=${() => (this.drawerOpen = false)}
+                ></div>`
+              : nothing
+          }
+          <div class="main">
+            <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
+                 screen subtree, repainting every child in the new language (screens hold no controller). -->
+            <div class="body">${keyed(currentLocale(), this.#renderScreen())}</div>
+            <dashboard-language-chooser
+              .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+            ></dashboard-language-chooser>
+          </div>
         </div>
       </div>
     `;
+  }
+
+  /** The dashboard's stable identity chrome: logo + tenant legal name on every face, with session
+   * actions only after authentication. The narrow-screen navigation toggle stays at the leading
+   * edge; Logout occupies the trailing edge in both desktop and narrow layouts. */
+  #banner(authenticated: boolean, hasNav: boolean): TemplateResult {
+    return html`<header class="brand-banner" data-test="brand-banner">
+      <div class="brand-identity">
+        ${
+          authenticated && hasNav
+            ? html`<wt-button
+                class="nav-toggle"
+                variant="ghost"
+                data-test="nav-toggle"
+                aria-label=${t("nav.toggle")}
+                @click=${() => (this.drawerOpen = !this.drawerOpen)}
+                >☰</wt-button
+              >`
+            : nothing
+        }
+        <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
+        <span class="venue-name" data-test="venue-name">${this.venueName}</span>
+      </div>
+      ${
+        authenticated
+          ? html`<div class="banner-actions">
+              <wt-button
+                variant="secondary"
+                data-test="logout"
+                @click=${() => void this.#onLogout()}
+                >${t("action.logout")}</wt-button
+              >
+            </div>`
+          : nothing
+      }
+    </header>`;
   }
 
   /** Switch to a nav face AND close the drawer (Task 12). One handler for every nav item so navigating

@@ -53,10 +53,12 @@ async function completeManagerLogin(
     throw new AppError("person.suspended", { personId: person.id });
   let passwordOk = false;
   if (person.passwordHash === null) {
-    // A found person with NO dashboard password (PIN-only) still runs one KDF against the dummy hash
+    // A found person with NO dashboard password (for example, before activation) still runs one KDF
+    // against the dummy hash
     // before failing, so it can't be told apart by response time from a wrong-password attempt — the
     // same enumeration-timing class the not-found branch closes. A short-circuit here would leak "this
-    // email is a PIN-only account" by latency. Result unused: a null-password person can never sign in.
+    // email names an account awaiting password setup" by latency. Result unused: a null-password
+    // person can never sign in with a password.
     verifyPassword(input.password, DUMMY_PASSWORD_HASH);
   } else {
     passwordOk = verifyPassword(input.password, person.passwordHash);
@@ -104,9 +106,8 @@ export async function loginManagerById(
 ): Promise<ManagementSession> {
   // The C2b mirror-bundle route (`apps/server/src/mirror-bundle-api.ts`) authenticates the primary's
   // ADMIN by id, NOT by email — the mirror is a trusted server-to-server flow over the primary's
-  // first-contact TLS, carrying an id the operator typed, not an email login form. (The provisioned
-  // admin MAY now carry an email — onboarding via the setup UI sets one, though the `venue` CLI /
-  // dev-setup can still seed it emailless — but this path never uses it.) There is no enumeration
+  // first-contact TLS, carrying an id the operator typed, not an email login form. Every human admin
+  // now carries an email, but this path deliberately does not use it. There is no enumeration
   // surface to hide here — a caller either holds a valid primary admin id or does not — so an unknown
   // id is a straight `person.not_found` (no dummy-KDF equalisation). Everything after the lookup is
   // identical to `loginManager`, via `completeManagerLogin`.

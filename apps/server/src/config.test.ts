@@ -286,6 +286,29 @@ describe("loadConfig", () => {
     });
   });
 
+  it("refuses an HTTP management origin in production", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          {
+            ...MIN_ENV,
+            WAITRON_ENV: "production",
+            WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+            WAITRON_MANAGEMENT_ORIGIN: "http://dashboard.example.com",
+          },
+          ROOT,
+          MEDIA_ROOT,
+          STATE_ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_MANAGEMENT_ORIGIN",
+      reason: "https_required",
+    });
+  });
+
   // In PRODUCTION the passkey Relying Party ID and origin are REQUIRED, not defaulted: shipping the
   // loopback defaults to a real deployment binds every passkey ceremony to `localhost`, so a browser
   // served from the real domain fails its origin check with an opaque 401 at LOGIN time rather than a

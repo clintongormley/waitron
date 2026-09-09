@@ -225,6 +225,18 @@ describe("person-edit", () => {
     expect((await seen).detail).toEqual({ email: "owner@x.com" });
   });
 
+  it("offers a new invitation for the account being edited", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: active,
+      open: true,
+    });
+    const seen = new Promise<Event>((resolve) => el.addEventListener("resend-invitation", resolve));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=resend-invitation]")!.click();
+    const event = await seen;
+    expect(event.bubbles).toBe(true);
+    expect(event.composed).toBe(true);
+  });
+
   it("emits set-password with the entered password on save", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       person: active,
@@ -340,6 +352,18 @@ describe("person-edit", () => {
         .shadowRoot!.querySelector<HTMLInputElement>("input")!;
     expect(inner("edit-pin").type).toBe("password");
     expect(inner("edit-password").type).toBe("password");
+    expect({ name: inner("edit-pin").name, autocomplete: inner("edit-pin").autocomplete }).toEqual({
+      name: "pin",
+      autocomplete: "off",
+    });
+    expect({
+      name: inner("edit-password").name,
+      autocomplete: inner("edit-password").autocomplete,
+    }).toEqual({ name: "new-password", autocomplete: "new-password" });
+    expect({
+      name: inner("edit-email").name,
+      autocomplete: inner("edit-email").autocomplete,
+    }).toEqual({ name: "email", autocomplete: "email" });
   });
 
   // The screen passes an edit action's failure down as `error`; it renders in the dialog's own top

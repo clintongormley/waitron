@@ -154,7 +154,7 @@ async function insertAbsence(personId: string, startsOn: string, endsOn: string)
 }
 
 describe("mountMeApi — whoami", () => {
-  it("GET /management-api/session/me returns { personId, role, locale, venueLocale, permissions, modules } for a staff session (role-blind)", async () => {
+  it("GET /management-api/session/me returns identity, locale, venue and module hints for a staff session", async () => {
     const res = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: await cookieFor(me),
     });
@@ -169,6 +169,7 @@ describe("mountMeApi — whoami", () => {
         role: string;
         locale: string | null;
         venueLocale: string;
+        venueName: string;
         permissions: string[];
         modules: string[];
       },
@@ -177,6 +178,7 @@ describe("mountMeApi — whoami", () => {
       role: "staff",
       locale: null,
       venueLocale: VENUE_LOCALE,
+      venueName: "Test SL",
       permissions: [],
       modules: MODULES,
     });
@@ -197,6 +199,7 @@ describe("mountMeApi — whoami", () => {
         role: string;
         locale: string | null;
         venueLocale: string;
+        venueName: string;
         permissions: string[];
         modules: string[];
       },
@@ -205,6 +208,7 @@ describe("mountMeApi — whoami", () => {
       role: "staff",
       locale: "es-ES",
       venueLocale: VENUE_LOCALE,
+      venueName: "Test SL",
       permissions: [],
       modules: MODULES,
     });
@@ -252,13 +256,17 @@ describe("mountMeApi — whoami", () => {
 });
 
 describe("mountMeApi — locales (public)", () => {
-  it("GET /management-api/locales returns the supported list + venue default, NO session required", async () => {
+  it("GET /management-api/locales returns the supported list, venue default and venue name without a session", async () => {
     // Deliberately unauthenticated — the dashboard shell fetches it before login. No cookie sent.
     const res = await send(mountApp(), "GET", "/management-api/locales", { cookie: null });
     expect(res.status).toBe(200);
     // The static catalogue verbatim plus the injected boot default (`en-GB` here, proving the route
     // echoes `deps.venueLocale` rather than a constant).
-    expect(await res.json()).toEqual({ locales: SUPPORTED_LOCALES, venueDefault: VENUE_LOCALE });
+    expect(await res.json()).toEqual({
+      locales: SUPPORTED_LOCALES,
+      venueDefault: VENUE_LOCALE,
+      venueName: "Test SL",
+    });
   });
 });
 

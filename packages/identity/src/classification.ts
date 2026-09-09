@@ -9,15 +9,20 @@ const STATE = "manager configuration / live service; copied to a standby, never 
  * identity's migrations is guarded by `classification.test.ts`.
  */
 export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [
-  // state (2) — durable account data; copied to a standby, never drained back.
+  // Durable account data; copied to a standby, never drained back.
   classify("persons", "state", STATE),
+  classify(
+    "management_account_actions",
+    "state",
+    "pending account activation and recovery proofs; copied to a standby, never drained back",
+  ),
   classify(
     "webauthn_credentials",
     "state",
     "a person's registered authenticators; copied to a standby, never drained back",
   ),
 
-  // local (3) — this node's own live login records; not copied, not drained.
+  // This node's own live login records; not copied, not drained.
   classify("sessions", "local", "this node's own live login sessions; not copied"),
   classify(
     "management_sessions",

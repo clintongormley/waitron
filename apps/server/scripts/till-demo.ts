@@ -123,6 +123,7 @@ async function main(): Promise<void> {
             displayName: "Administradora",
             pinHash: hashPin("1234"),
             passwordHash: hashPassword("dashPass123"),
+            email: "owner@example.test",
           },
         },
         ALL_MODULES,
@@ -175,8 +176,8 @@ async function main(): Promise<void> {
       });
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
       await tx.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff')`);
+        insert into persons (tenant_id, display_name, email, pin_hash, role)
+        values (${cfg.tenantId}, 'Cajera', 'cashier@till.demo', ${hashPin("5555")}, 'staff')`);
     });
 
     const clock = systemClock();

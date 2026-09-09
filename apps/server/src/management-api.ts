@@ -22,6 +22,7 @@ import {
   authorizeManager,
   beginPasskeyAuthentication,
   beginPasskeyRegistration,
+  completeAccountAction,
   createPerson,
   endManagementSession,
   finishPasskeyAuthentication,
@@ -30,14 +31,17 @@ import {
   listPersons,
   loginManager,
   loginManagerById,
+  issueAccountAction,
   reactivatePerson,
   resetPin,
+  requestPasswordResetAction,
   setEmail,
   setPassword,
   setRole,
   suspendPerson,
   type PersonRoleValue,
 } from "@waitron/identity";
+import type { IssuedAccountAction } from "@waitron/identity";
 import {
   FORM_FACTORS,
   createCanvas,
@@ -103,6 +107,11 @@ import {
 } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js"; // the same Logger till-api.ts's routes take
+import type { AccountEmailSender } from "./account-email.js";
+import {
+  createAccountActionRateLimiter,
+  type AccountActionRateLimiter,
+} from "./account-rate-limit.js";
 
 /**
  * Everything the dashboard's management HTTP routes need. The management surface reads and writes only
@@ -138,6 +147,48 @@ export interface ManagementApiDeps {
    * (`config.ts`'s `managementOrigin`, defaulted to `http://localhost:5191`). Carries scheme + port,
    * unlike the bare-domain `rpId`. */
   origin: string;
+  /** Venue default used when the recipient has not chosen their own UI language. */
+  venueLocale?: string;
+  /** Outbound delivery for invitation and password-reset links. Omitted in harnesses and when an
+   * on-prem installation has not configured SMTP yet. */
+  sendAccountEmail?: AccountEmailSender;
+  accountActionRateLimiters?: {
+    passwordReset: AccountActionRateLimiter;
+    completion: AccountActionRateLimiter;
+  };
+}
+
+async function deliverAccountAction(
+  deps: ManagementApiDeps,
+  log: Logger,
+  issued: IssuedAccountAction,
+): Promise<boolean> {
+  if (deps.sendAccountEmail === undefined) return false;
+  const actionUrl = new URL("/manage/account", deps.origin);
+  actionUrl.searchParams.set("token", issued.token);
+  actionUrl.searchParams.set("purpose", issued.purpose);
+  // Keep the email out of the action query. The SPA reads this fragment and supplies the semantic
+  // username alongside the new-password fields for password managers.
+  actionUrl.hash = new URLSearchParams({ email: issued.email }).toString();
+  try {
+    await deps.sendAccountEmail({
+      purpose: issued.purpose,
+      email: issued.email,
+      displayName: issued.displayName,
+      actionUrl: actionUrl.toString(),
+      expiresAt: issued.expiresAt,
+      locale: issued.locale ?? deps.venueLocale ?? "en-GB",
+    });
+    return true;
+  } catch {
+    // Do not log the mailer error: SMTP connection URLs can contain credentials, and provider
+    // errors sometimes echo them. The purpose/person id are enough for an operator to retry.
+    log("error", "account_email.send_failed", {
+      purpose: issued.purpose,
+      personId: issued.personId,
+    });
+    return false;
+  }
 }
 
 /**
@@ -161,6 +212,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.expired": 401,
   "password.invalid": 401,
   "totp.invalid": 401,
+  "account_action.invalid": 400,
+  "account_action.rate_limited": 429,
   // Passkey (WebAuthn) ceremony faults, thrown by the two `finishPasskey*` calls the verify routes
   // below wrap (the `beginPasskey*` options calls never throw these). Both authentication-failure codes
   // are 401 — the auth-verify route IS the login,
@@ -555,6 +608,10 @@ async function parsePasskeyVerifyBody(
  * dashboard's tenant.
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
+  const passwordResetRateLimiter =
+    deps.accountActionRateLimiters?.passwordReset ?? createAccountActionRateLimiter();
+  const completionRateLimiter =
+    deps.accountActionRateLimiters?.completion ?? createAccountActionRateLimiter();
   // The deployment holds one tenant per database. Roster of active persons. Deliberately
   // UNAUTHENTICATED — it exposes no secret, so it calls `listActiveStaff` under `withTenant` +
   // `asAppUser` rather than `requireManagementSession`. One dashboard screen fetches it via
@@ -625,6 +682,60 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           email,
           password,
           totp,
+        });
+      });
+      setManagementCookie(c, session.id, deps.secureCookies);
+      return c.json({ personId: session.personId });
+    }),
+  );
+
+  // Password recovery always answers 202, whether the address is malformed, unknown, unconfigured
+  // for mail, or accepted. That keeps account membership out of this public response.
+  app.post("/management-api/password-reset", (c) =>
+    run(c, log, async () => {
+      const body = await readJsonBody<{ email?: unknown }>(c);
+      passwordResetRateLimiter.check(
+        typeof body.email === "string" ? body.email.trim().toLowerCase() : "invalid-email",
+      );
+      if (typeof body.email === "string") {
+        const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          return requestPasswordResetAction(tx, {
+            tenantId: deps.cfg.tenantId,
+            email: body.email as string,
+          });
+        });
+        // Do not make a known address wait for SMTP while an unknown address returns immediately:
+        // that would expose account membership through a large timing difference. The action has
+        // already committed, and delivery handles its own failure without rejecting this promise.
+        if (issued !== null) void deliverAccountAction(deps, log, issued);
+      }
+      return c.body(null, 202);
+    }),
+  );
+
+  // A scanner-safe action link: GET merely loads the SPA; only this explicit POST consumes the token.
+  app.post("/management-api/account-actions/complete", (c) =>
+    run(c, log, async () => {
+      const body = await readJsonBody<{ token?: unknown; purpose?: unknown; password?: unknown }>(
+        c,
+      );
+      completionRateLimiter.check(typeof body.token === "string" ? body.token : "invalid-token");
+      if (
+        typeof body.token !== "string" ||
+        (body.purpose !== "invitation" && body.purpose !== "password_reset") ||
+        typeof body.password !== "string"
+      ) {
+        throw new AppError("account_action.invalid", {});
+      }
+      const { token, purpose, password } = body;
+      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return completeAccountAction(tx, {
+          tenantId: deps.cfg.tenantId,
+          token,
+          purpose,
+          password,
         });
       });
       setManagementCookie(c, session.id, deps.secureCookies);
@@ -730,7 +841,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why) and screened: a missing
   // or non-string `displayName`, `role` or `pin` — every field of a `null`/non-object body included —
   // is refused as `management.request_invalid` naming the FIELDS, never their values. `email` is
-  // OPTIONAL (till-only PIN staff carry none) and screened typeof-only when present; its SHAPE and
+  // required for every staff account; its SHAPE and
   // per-tenant uniqueness are `createPerson`'s job (`person.email_invalid` → 400, `person.email_taken`
   // → 409). The narrowed
   // fields are bound to locals AFTER the guard because that narrowing does not survive into the
@@ -751,17 +862,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         throw new AppError("management.request_invalid", { field: "displayName|role|pin" });
       }
-      // `email` is OPTIONAL (till-only PIN staff carry none). A PRESENT-but-non-string value is a
-      // request-shape fault named by FIELD, the same typeof-only screen the required fields get; a
-      // present string flows on to `createPerson`, which validates its SHAPE (`person.email_invalid`)
-      // and per-tenant uniqueness (`person.email_taken`). An absent field stays `undefined` → no email.
-      if (body.email !== undefined && typeof body.email !== "string") {
+      if (typeof body.email !== "string") {
         throw new AppError("management.request_invalid", { field: "email" });
       }
       const { displayName, role, pin, email } = body;
-      const created = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const { created, issued } = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return createPerson(tx, {
+        const created = await createPerson(tx, {
           tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
           displayName,
@@ -769,8 +876,35 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           pin,
           email,
         });
+        const issued = await issueAccountAction(tx, {
+          tenantId: deps.cfg.tenantId,
+          personId: created.id,
+          purpose: "invitation",
+        });
+        return { created, issued };
       });
-      return c.json(created, 201);
+      const invitationSent = await deliverAccountAction(deps, log, issued);
+      return c.json({ ...created, invitationSent }, 201);
+    }),
+  );
+
+  app.post("/management-api/staff/:id/invitation", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const personId = requirePersonId(c.req.param("id"));
+      const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "person.manage",
+        });
+        return issueAccountAction(tx, {
+          tenantId: deps.cfg.tenantId,
+          personId,
+          purpose: "invitation",
+        });
+      });
+      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
     }),
   );
 

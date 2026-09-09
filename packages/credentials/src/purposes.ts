@@ -13,6 +13,9 @@ import "./errors.js";
  * an opaque blob, learning the real answer changes this list — not a migration.
  */
 export const PURPOSES = {
+  /** Outbound account email. `url` is an SMTP connection URL (and may contain credentials); `from`
+   * is the RFC 5322 sender shown to recipients. Both remain sealed in the tenant vault. */
+  "email.smtp": ["url", "from"],
   "payments.stripe": ["secretKey", "webhookSecret", "successUrl", "cancelUrl"],
   /**
    * `certKind` is `"sello"` or `"representante"` — validated by the READER, not here: this package

@@ -6,7 +6,13 @@ import {
   type Database,
   type DeploymentEnvironment,
 } from "@waitron/db";
-import { assertPasswordLength, assertPinLength, hashPassword, hashPin } from "@waitron/identity";
+import {
+  assertPasswordLength,
+  assertPinLength,
+  hashPassword,
+  hashPin,
+  normalizeAndValidateEmail,
+} from "@waitron/identity";
 import { enabledModules, type ModuleConfig, type WaitronModule } from "@waitron/module";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import { assertIdentifier, withRole } from "./identifiers.js";
@@ -102,7 +108,7 @@ const USAGE = [
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]",
-  "           [--rectificative-code <code>] [--admin-name <name>] [--yes]",
+  "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>] [--yes]",
   "",
   `  <env> is one of: ${ENVIRONMENTS.join(", ")}`,
   "",
@@ -368,6 +374,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "series-code": { type: "string" },
       "rectificative-code": { type: "string" },
       "admin-name": { type: "string" },
+      "admin-email": { type: "string" },
       yes: { type: "boolean" },
     }));
   } catch {
@@ -426,6 +433,9 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     );
     // The admin's DISPLAY NAME is not a secret, so it is a normal flag-or-prompt field.
     const adminName = await resolveOption(values["admin-name"], "admin name: ", deps);
+    const adminEmail = normalizeAndValidateEmail(
+      await resolveOption(values["admin-email"], "admin email: ", deps),
+    );
     // The PIN and dashboard password are SECRETS, resolved exactly as the admin connection string is:
     // from WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD or an echo-OFF prompt, NEVER from argv
     // (`readAdminPin` / `readAdminPassword`). Each is then checked against the same floor the identity
@@ -464,6 +474,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         displayName: adminName,
         pinHash: hashPin(adminPin),
         passwordHash: hashPassword(adminPassword),
+        email: adminEmail,
       },
     };
     // Resolve the fiscal slot from the territory (authoritative, design §4) through the shared
