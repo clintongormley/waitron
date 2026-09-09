@@ -79,9 +79,28 @@ mechanism reached over WireGuard, when Waitron Cloud exists.
 **The on-prem push, in order** (each step its own brainstorm → spec → plan → PR; fiscal-adjacent
 steps take owner sign-off at land):
 
-1. **A node as containers, and a from-scratch primary.** No Dockerfile exists today. Build the two
-   containers + compose + volumes, the first-run chooser's modes 1–2 (*Onboarding*, the four-mode
-   wizard), and backup off the primary (mirror → S3 → Drive; only `LocalFsBackend` exists).
+1. **A node as containers, and a from-scratch primary. Container packaging DELIVERED on
+   `feat/node-containers` (PR at land)** — the two containers + `deploy/compose.yml` + named volumes,
+   `deploy/prepare.sh`, the entrypoint that ensures the database shape on every boot, the
+   recovery-supervisor half (an escalating failure counter that serves a page over the box's own leaf
+   when boot fails), the box serving its own leaf over HTTPS in ALL modes (setup, recovery AND
+   trading — a trading-mode plain-HTTP bug the run-it proof caught, design §11), and the CI `image`
+   job that builds, smokes the real host-network compose and publishes to GHCR gated on the full
+   suite. Proven end to end on 2026-09-09: a blank box → phone setup → provision → trading over HTTPS
+   → enrolled till → a recorded preproduction sale (design §11). **Still open under this step:** the
+   first-run chooser's modes 1–2 (*Onboarding*, the four-mode wizard) and backup off the primary
+   (mirror → S3 → Drive; only `LocalFsBackend` exists).
+   **A prepared box takes NO backups until a human edits `/opt/waitron/.env`.** The image
+   deliberately does not set `WAITRON_BACKUP_DIR` (node-containers design §3.1): `loadBackupConfig`
+   is fail-closed, so a destination without `WAITRON_BACKUP_DATABASE_URL` and
+   `WAITRON_BACKUP_RECOVERY_KEY` throws at boot — baking the path alone would kill a box on its
+   first restart into trading, right after the wizard. So the trio is `.env`-only, and NOTHING in
+   the plug-in-and-open-your-phone flow asks for it. That matters because the recorded posture is
+   COLD RECOVERY — restore from backup plus a fresh chain is what gets a venue trading again — and a
+   box with backups off has nothing to restore. The natural fix is the wizard: mint the recovery key
+   there and SHOW it, because a silently generated recovery key is not a recovery key. Until then a
+   box is one disk failure from having no way back.
+
 2. **Device onboarding and the three displays** — till, handheld and KDS working, kiosk optional
    (owner 2026-09-08; most waiters use their own phones). Includes the LAN-HTTPS spike + the
    installable-till build
@@ -114,9 +133,19 @@ design-review section apply.
   `packages/identity`. Work: device onboarding and the three displays, kiosk, the installable-till
   build (manifest, trust flow, wake lock), the register/device follow-ups, the `ui-review.md`
   walkthrough, counter kitchen fire, pricing adjustments, the two open by-id read-leak classes.
+  **Till menu does not load until a manual refresh** (owner, 2026-09-09, from the blank-box-to-selling
+  run-it proof): a freshly enrolled handheld showed no menu until the operator reloaded, and a
+  dashboard menu change did not appear live. The till should load / live-refresh its catalogue after
+  enrolment and after a menu change without a manual reload — a till-app fix, not the box (the box +
+  sale path themselves worked).
 - **Track P — platform & packaging** (push step 1). Owns the Dockerfiles/compose, `packages/provisioning`,
   `apps/server`'s config/boot wiring/backup-*/media/tls + certificate code, `packages/credentials`.
-  Work: the two containers + volumes, the from-scratch primary and first-run modes 1–2, images into
+  Work: the two containers + volumes **DELIVERED on `feat/node-containers`** (see Priorities item 1);
+  the named next Track P specs are **the recovery spec** (a degraded-but-trading mode + the
+  module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
+  installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick
+  carries the images so install needs no internet, unattended updates for a box we did not sell,
+  AP-mode WiFi onboarding). Then: the from-scratch primary and first-run modes 1–2, images into
   Postgres, backup destinations (mirror → S3 → Drive), the name-constrained CA + HTTP landing page,
   the LAN-HTTPS spike (its desktop half; the phone rows are the owner's). Owed to Track H: the box's
   compose runs the print-agent container beside the server with `WAITRON_SERVER_URL` set to the

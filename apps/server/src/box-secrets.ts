@@ -1,10 +1,12 @@
 import { mkdir, access } from "node:fs/promises";
-import { networkInterfaces } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
+import { listBoxIpv4 } from "./box-reach.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
+import type { TlsFiles } from "./tls.js";
 
 /**
  * The three TLS file paths `node:https` needs to serve setup-mode HTTPS from the box's self-signed
@@ -28,6 +30,23 @@ export function caCertPath(stateDir: string): string {
   return join(stateDir, "tls", "ca.crt");
 }
 
+/**
+ * The box's own minted leaf (`<stateDir>/tls/server.{crt,key}`), or `undefined` when it has never
+ * completed a setup boot. The ONE source of truth for the leaf-path convention, shared by every
+ * serve site that falls back to it: the recovery page (`node-entry.ts`) AND the trading branches
+ * (`boot.ts`), which must present the same leaf setup already serves so an already-trusting phone or
+ * till reaches the box over HTTPS with no new trust step. `server.key` is `ensureBoxSecrets`'s own
+ * presence sentinel (written last of the quartet); both halves are checked because `buildServeOptions`
+ * reads both and a half-written pair would throw inside the one serve call. A leaf-less box falls back
+ * to plain HTTP, the honest limit — refusing to serve would hand the operator nothing.
+ */
+export function mintedBoxLeaf(stateDir: string): TlsFiles | undefined {
+  const certFile = join(stateDir, "tls", "server.crt");
+  const keyFile = join(stateDir, "tls", "server.key");
+  if (!existsSync(certFile) || !existsSync(keyFile)) return undefined;
+  return { certFile, keyFile };
+}
+
 export interface EnsureBoxSecretsDeps {
   /** Directory the box owns its state under; the layout below is materialised beneath it. */
   stateDir: string;
@@ -40,7 +59,12 @@ export interface EnsureBoxSecretsDeps {
   // Injectables (all default to the real implementations):
   mint?: typeof mintSelfSignedServerCert;
   makeKeyRing?: () => GeneratedKeyRing; // default generateKeyRing
-  listIpv4?: () => string[]; // default: non-internal IPv4s from os
+  /**
+   * The addresses the leaf's iPAddress SANs cover beyond 127.0.0.1. Defaults to this host's
+   * non-internal IPv4s (`listBoxIpv4`); boot passes the operator override when one is configured,
+   * because a containerised box's own interface address is not the one devices dial.
+   */
+  listIpv4?: () => string[];
 }
 
 // ENOENT means genuinely absent, so callers proceed to mint. Any other error (EACCES/EIO/etc.) is
@@ -55,17 +79,6 @@ const exists = (p: string): Promise<boolean> =>
       throw err;
     },
   );
-
-/**
- * The box's own non-internal IPv4 addresses, so a setup client on the LAN can dial the leaf by IP.
- * `internal` drops loopback (127.0.0.1 is added unconditionally by the caller) and the `IPv4`
- * filter drops the IPv6 entries `networkInterfaces` returns for the same interface.
- */
-const defaultListIpv4 = (): string[] =>
-  Object.values(networkInterfaces())
-    .flat()
-    .filter((n): n is NonNullable<typeof n> => !!n && n.family === "IPv4" && !n.internal)
-    .map((n) => n.address);
 
 /**
  * Materialise the box's self-signed cert + secrets ONCE under `stateDir`, then reuse them on every
@@ -96,7 +109,7 @@ const defaultListIpv4 = (): string[] =>
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
   const mint = deps.mint ?? mintSelfSignedServerCert;
   const makeKeyRing = deps.makeKeyRing ?? generateKeyRing;
-  const listIpv4 = deps.listIpv4 ?? defaultListIpv4;
+  const listIpv4 = deps.listIpv4 ?? listBoxIpv4;
 
   const tlsDir = join(deps.stateDir, "tls");
   // 0o700 so the dir holding the private material is owner-only too (defense in depth around the

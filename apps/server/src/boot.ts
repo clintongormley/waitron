@@ -116,7 +116,7 @@ import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
-import { ensureBoxSecrets } from "./box-secrets.js";
+import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
@@ -231,10 +231,15 @@ export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
 /**
- * The box's canonical mDNS / self-hosted hostname. ONE source of truth so the three wirings that MUST
+ * The box's canonical mDNS / self-hosted hostname. ONE source of truth so the wirings that MUST
  * agree can never drift into a certificate-hostname mismatch — the exact failure the trust flow exists
  * to avoid (spec §7/§8): the mDNS responder that ANSWERS for the name, the discovery/trust surface that
  * ADVERTISES it, and the self-signed leaf's SAN list (`ensureBoxSecrets`) that must COVER it.
+ *
+ * Three copies of this string live outside this process, where no import can reach them: the
+ * image's `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`, compose's defaults for the
+ * same, and `prepare.sh`'s QR URL. `scripts/deploy-image-env.test.ts` reads this line as text and
+ * pins all three to it.
  */
 const BOX_HOSTNAME = "waitron.local";
 
@@ -388,6 +393,23 @@ function startListening(
   return server;
 }
 
+/** Bind a TRADING listener over the box's OWN minted leaf: an operator `WAITRON_TLS_*` (`config.tls`)
+ * still wins, and a leaf-less box keeps plain HTTP. A box never sets `WAITRON_TLS_*`, so without this
+ * fallback a trading listener would speak plain HTTP and every already-trusting phone/till would hit
+ * a TLS handshake error after setup. ONE home for the two trading binds (adoption-pending and the
+ * main trading listener), so a future third cannot silently drift back to plain HTTP the way one of
+ * these two once did. The SETUP bind is deliberately not routed through here — it mints its leaf a
+ * different way (from the `ensured` secrets it already holds). */
+function startTradingListener(
+  config: ServerConfig,
+  app: Hono,
+  now: () => Date,
+  log: Logger,
+): ReturnType<typeof serve> {
+  const tls = config.tls ?? mintedBoxLeaf(config.stateDir);
+  return startListening({ ...config, tls }, app, now, log);
+}
+
 /**
  * The `StartedServer` BOTH modes return, with the shared `close()` sequence written once. `close()`
  * is idempotent and always drains the connection pools, whatever the teardown does first — the
@@ -480,6 +502,20 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
   // escapes here (§8) before any logger, pool or listener exists.
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
+  // The addresses this box tells the LAN to reach it on — the leaf's iPAddress SANs, the discovery
+  // document's IP URLs (and the QR built from them) and the mDNS answers. One resolver, so all three
+  // read the same list on any single call: the operator's `WAITRON_BOX_ADDRESSES` when set, else the
+  // host's own interfaces. A container behind bridge networking holds an address no device on the
+  // venue network can reach, so it needs the override; a box on the venue's own network does not.
+  //
+  // It does NOT keep them agreeing over time, and the difference is observable: the leaf is minted
+  // ONCE and reused (`server.key` is `ensureBoxSecrets`'s presence sentinel), while discovery and
+  // mDNS resolve per request. Adding or changing the override on a box that already holds
+  // `<stateDir>/tls/server.key` therefore moves the QR and the mDNS answers to an address the
+  // certificate does not cover — a name mismatch in the trust flow. Measured on a two-boot probe
+  // against a real container. Set the override on the FIRST boot of a state dir, or discard the
+  // `tls/` quartet to re-mint.
+  const boxAddresses = (): string[] => config.boxAddresses ?? listBoxIpv4();
   // Fold every module's permission seat into identity's role ladder ONCE, before any surface that
   // gates on a management session is mounted below (in either mode). Pure and dependency-free (no DB,
   // no config), so it runs at the very top of boot; `registerModulePermissions` overwrites on a
@@ -676,7 +712,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // resources (the owner pool / key ring) — only config.
     mountDiscovery(
       app,
-      { stateDir: config.stateDir, hostname: BOX_HOSTNAME, port: config.httpPort, secure: true },
+      {
+        stateDir: config.stateDir,
+        hostname: BOX_HOSTNAME,
+        port: config.httpPort,
+        secure: true,
+        listIpv4: boxAddresses,
+      },
       log,
     );
     // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
@@ -690,6 +732,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         stateDir: config.stateDir,
         hostnames: [BOX_HOSTNAME, "localhost"],
         now,
+        listIpv4: boxAddresses,
       });
       // Recover the vault key ring (slice 2b R5). `ensureBoxSecrets` above WROTE
       // `WAITRON_CREDENTIALS_KEY`(+`_VERSION`) into `<stateDir>/secrets.env` but never loaded it into
@@ -830,7 +873,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // Both modes advertise; the responder is stopped in makeStartedServer's close() below. mDNS is
         // non-load-bearing (the box stays reachable by IP); a bind / no-multicast-route failure logs and
         // is swallowed inside the responder.
-        const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+        const mdns = startMdnsResponder({
+          hostname: BOX_HOSTNAME,
+          getAddresses: boxAddresses,
+          log,
+        });
         return makeStartedServer(
           server,
           health,
@@ -948,8 +995,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     finishWorker.catch((err) =>
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
-    const server = startListening(config, app, now, log);
-    const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+    // The adoption-pending listener serves trading, so it takes the box's own minted leaf via the
+    // shared fallback (see `startTradingListener`) — without it this bind spoke plain HTTP and every
+    // already-trusting phone/till hit a TLS handshake error after setup.
+    const server = startTradingListener(config, app, now, log);
+    const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log });
     return makeStartedServer(
       server,
       health,
@@ -1952,8 +2002,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   // Bind the HTTP listener and wire the listen-failure handler — the serve step shared by both boot
   // modes (see `startListening`). Mounted here, LAST, after every trading route and the optional sync
-  // block and SPA mounts above, so the app is complete before it binds.
-  const server = startListening(config, app, now, log);
+  // block and SPA mounts above, so the app is complete before it binds. Trading serves the box's OWN
+  // minted leaf via the shared fallback (see `startTradingListener`), HTTPS like setup and recovery.
+  const server = startTradingListener(config, app, now, log);
 
   const controller = new AbortController();
   const loop = runLoop({
@@ -2035,7 +2086,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // Advertise waitron.local over mDNS LAST — after every throwing setup step in this branch AND once
   // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
   // earlier throw never started it). Both modes advertise; stopped in makeStartedServer's close() below.
-  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log });
   return makeStartedServer(
     server,
     health,

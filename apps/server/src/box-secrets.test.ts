@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import forge from "node-forge";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { ensureBoxSecrets } from "./box-secrets.js";
+import { writeFile, mkdir } from "node:fs/promises";
+import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // `access` alone is wrapped so one test can inject a non-ENOENT failure for a single path; every
@@ -137,9 +138,8 @@ describe("ensureBoxSecrets", () => {
   });
 
   // Every case above injects mint/makeKeyRing/listIpv4, which leaves the REAL default
-  // branches (mintSelfSignedServerCert, generateKeyRing, defaultListIpv4)
-  // unexercised. Task 4's boot test — which would drive them — does not exist yet, so this one
-  // case runs ensureBoxSecrets with ONLY the required deps, exercising real keygen/entropy/os in a
+  // branches (mintSelfSignedServerCert, generateKeyRing, listBoxIpv4) unexercised. This one case
+  // runs ensureBoxSecrets with ONLY the required deps, exercising real keygen/entropy/os in a
   // single fresh temp dir and asserting the four PEMs + a well-formed secrets.env land.
   it("uses the real minter, key ring and IPv4 detection with no injectables", async () => {
     const d = await newDir();
@@ -189,5 +189,29 @@ describe("ensureBoxSecrets", () => {
     }
     // Proves it wasn't swallowed-and-regenerated: nothing was ever written for secrets.env.
     await expect(readFile(secretsFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("mintedBoxLeaf", () => {
+  it("is undefined when the box has never minted a leaf", async () => {
+    expect(mintedBoxLeaf(await newDir())).toBeUndefined();
+  });
+
+  it("is undefined when only one half of the pair is present (a half-written quartet)", async () => {
+    // `server.key` is `ensureBoxSecrets`'s presence sentinel, written LAST, so a crash between the
+    // renames can leave `server.crt` alone — the box must NOT try to serve that lone cert.
+    const d = await newDir();
+    await mkdir(join(d, "tls"));
+    await writeFile(join(d, "tls", "server.crt"), "x");
+    expect(mintedBoxLeaf(d)).toBeUndefined();
+  });
+
+  it("is the box's own leaf when the state volume holds both halves", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    expect(mintedBoxLeaf(d)).toEqual({
+      certFile: join(d, "tls", "server.crt"),
+      keyFile: join(d, "tls", "server.key"),
+    });
   });
 });

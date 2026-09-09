@@ -106,10 +106,47 @@ their file (§10).
 
 Fixed environment in the image (never operator-set): `WAITRON_STATE_DIR=/var/lib/waitron/state`,
 `WAITRON_LOG_DIR=/var/lib/waitron/logs`, `WAITRON_MEDIA_DIR=/var/lib/waitron/media`,
-`WAITRON_BACKUP_DIR=/var/lib/waitron/backups`, `WAITRON_MIGRATIONS_DIR=/app/drizzle`,
-`WAITRON_{TILL,DASHBOARD,SETUP}_APP_DIR=/app/web/…`, `WAITRON_HTTP_PORT=443`. The server's own
-defaults for these are "beside the bundle", which is a read-only image layer — every writable
-path is a volume (§4).
+`WAITRON_MIGRATIONS_DIR=/app/drizzle`, `WAITRON_{TILL,DASHBOARD,SETUP}_APP_DIR=/app/web/…`,
+`WAITRON_HTTP_PORT=443`, `WAITRON_HTTP_HOST=0.0.0.0`, `WAITRON_MANAGEMENT_RP_ID=waitron.local` and
+`WAITRON_MANAGEMENT_ORIGIN=https://waitron.local`. The server's own defaults for these are "beside
+the bundle", which is a read-only image layer — every writable path is a volume (§4).
+
+Three of those are corrections made while building the image, each with a measurement (task 8's
+report carries both readings of each):
+
+- **`WAITRON_HTTP_HOST=0.0.0.0`.** `config.ts` defaults it to `127.0.0.1`, which is right for a dev
+  machine and serves nobody from a container. Without it the box comes up `healthy` — the
+  healthcheck probes the same loopback — while every request from outside is reset at the TLS
+  handshake. It is the one variable whose absence yields a container that reports healthy and
+  serves nobody.
+- **`WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`.** The wizard's "live" writes
+  `WAITRON_ENV=production` into `trading.env`, and `config.ts` then REQUIRES both — they carry dev
+  defaults only. Nothing else on a box sets them, so without them a restaurant that picks live gets
+  `server.config_missing { variable: "WAITRON_MANAGEMENT_RP_ID" }` on every boot until the
+  entrypoint's counter reaches `RECOVERY_AT = 3`, at which point the box serves the RECOVERY PAGE
+  (`{"failures":3,"level":"recovery","lastErrorCode":"server.config_missing"}`) and never trades
+  again without an operator. (An earlier draft of this bullet said it restarts "for ever, with
+  `restart: unless-stopped` guaranteeing the loop"; §9's escalation is what actually happens.)
+
+  They are the ON-PREM DEFAULT, not a fixed fact. `box-env.ts` merges the process environment LAST,
+  so the image's `ENV` beats `trading.env` and nothing on the box can override a baked value — which
+  would make a bridge/cloud node on this same image (§2, §11) boot happily at a real domain with
+  relying party `waitron.local`, where no passkey can ever be registered and every till is handed
+  `https://waitron.local` (`advertisedOrigin` defaults to `managementOrigin`). Before these lines
+  existed that deployment refused to boot and NAMED the variable. So `compose.yml` passes both from
+  the box's `.env` with the image's values as the `${VAR:-default}` fallback, and `.env.example` and
+  `deploy/README.md` both say a box reached at any name other than `waitron.local` must set them.
+  The image's, compose's and `prepare.sh`'s copies of the hostname are pinned to `boot.ts`'s
+  `BOX_HOSTNAME` by `scripts/deploy-image-env.test.ts`, which also loads the image's own declared
+  environment under `WAITRON_ENV=production`.
+- **`WAITRON_BACKUP_DIR` is NOT set** (it was listed here, and must not be). `loadBackupConfig` is
+  fail-closed: a destination without `WAITRON_BACKUP_DATABASE_URL` and
+  `WAITRON_BACKUP_RECOVERY_KEY` throws — `server.config_invalid {
+  variable: "WAITRON_BACKUP_DATABASE_URL", reason: "required_with_backup_destination" }` fires
+  first — so baking the path alone would take a box down at its first boot into trading, right
+  after the wizard. The volume and its mount point stay; `compose.yml` passes the three together
+  from the box's `.env`. Consequence, recorded in `docs/backlog.md`: a prepared box takes no
+  backups until a human writes those three lines.
 
 Image size is not a goal of this spec; correctness of the boot is. A slimmer image is a later
 concern.
@@ -198,8 +235,19 @@ start, in order:
    action is filtered away regardless. `WAITRON_ENV` is deliberately NOT consulted here: the
    database's own stamp is the authority (CLAUDE.md §5, one database per environment).
 
-   Then `replicationBootstrapStatements` if `waitron_repl` is absent (`assertReplicationReady`'s
-   probe decides). The generated passwords are written ONCE to `<state>/instance.env` (0600, via
+   Then the replication bootstrap, on ONE superuser connection to the TARGET database (its
+   schema-local statements land in whichever database the connection is on). Two questions, asked
+   separately: if `waitron_repl` does not exist at all, run the full
+   `replicationBootstrapStatements`; if it exists but this DATABASE lacks the migrator's default
+   SELECT for it (`readReplicationReadiness`'s `replicationHasDefaultSelect`), re-issue only
+   `replicationSchemaGrantStatements` — the full array would fail at `CREATE ROLE` on the surviving
+   role. A `waitron_repl` that exists WITHOUT `LOGIN REPLICATION` is refused
+   (`provisioning.role_unusable`), never `ALTER`ed: the tool did not create it and does not know its
+   password, the same rule `assertUsable` applies to the two instance roles. `readReplicationReadiness`'s
+   own `replicationRolePresent` is deliberately NOT the create-it gate — it is the conjunction of
+   existence and both attributes, so it reads "absent" for a role that exists, and `CREATE ROLE` then
+   returns `42710` on every start forever. The generated passwords are written ONCE, BEFORE those
+   statements run, to `<state>/instance.env` (0600, via
    `formatEnvFile`/`writeFileAtomic`) as `DATABASE_URL` (the `waitron_app` login),
    `WAITRON_MIGRATIONS_DATABASE_URL` (the migrator) and `WAITRON_REPLICATION_PASSWORD`, each
    pointing at `127.0.0.1:5432/waitron`; every later start reads them back and `planInstance` emits
@@ -207,13 +255,32 @@ start, in order:
    password — the CLI prints them for the same reason, and neither can recover a password it did
    not generate.
 
-   **Rejoin and restore agree with this by construction** (checked, not assumed):
-   `dropAndCreateDatabase` (`db-wipe.ts`, the R3 rejoin wipe) drops the database and RECREATES it
-   empty and migrator-owned, and roles are cluster-global, so a rejoined box presents
-   database-exists + roles-exist + nothing-inside — for which this step plans no actions at all and
-   `boot.ts` migrates as usual. It also closes a gap `db-wipe.ts`'s header records: a crash between
-   its drop and its create leaves the box dropped-not-created and "does not self-recover on re-run".
-   Under this entrypoint it does — the next start plans the one `create-database` and continues.
+   **A rejoin needs MORE than the instance plan, and this was measured rather than reasoned about.**
+   An earlier version of this paragraph claimed, under the words "checked, not assumed", that a
+   rejoined box "presents database-exists + roles-exist + nothing-inside — for which this step plans
+   no actions at all". The instance-plan half is right; the replication half was false, and a real
+   container disproved it: `ensureInstance` → `drop database … with (force)` → `ensureInstance` left
+   `replicationHasDefaultSelect: false` with **zero** `pg_default_acl` rows. `pg_authid` is
+   CLUSTER-SHARED while `pg_default_acl` and table grants are PER-DATABASE, so
+   `dropAndCreateDatabase` (`db-wipe.ts`, the R3 rejoin wipe) takes the two schema-local grants with
+   the database while `waitron_repl` itself survives — and a gate that asks only whether the role
+   exists skips the bootstrap and leaves the recreated database with no SELECT for it. Nothing fails
+   at boot; it surfaces at the next adopt as `provisioning.replication_not_ready`, or as a silently
+   empty initial COPY at a promotion. Hence the split above: the entrypoint DOES do work on a rejoin,
+   re-issuing `replicationSchemaGrantStatements` against the new database.
+
+   It also closes a gap `db-wipe.ts`'s header records: a crash between its drop and its create leaves
+   the box dropped-not-created and "does not self-recover on re-run". Under this entrypoint it does —
+   the next start plans the one `create-database` and continues.
+
+   > **Cross-track note — supersedes CLAUDE.md §3 for a containerised node.** §3's replication bullet
+   > states that "the replication role is a bootstrap the app provisioner only verifies… The app
+   > performs none of it — `assertReplicationReady` verifies it instead." This design deliberately
+   > moves that bootstrap INTO the container entrypoint, because the whole point of the image is that
+   > a blank box needs no operator step: there is no box-image author standing between the container
+   > and its first boot. `ensureInstance` therefore PERFORMS the bootstrap, and the contradiction is
+   > real, not apparent. It is recorded here rather than fixed: CLAUDE.md §2–§5 belongs to another
+   > track's session, so that edit needs coordinating with the track that owns it.
 
 3. **Load the env files** into the process environment: `instance.env`, then `secrets.env`, then
    `trading.env` — **a variable already present in the environment always wins over a file**.
@@ -428,8 +495,17 @@ build` with GHA layer caching, then a compose smoke against fresh volumes in the
 push to `main` it also logs into GHCR with `GITHUB_TOKEN` and pushes
 `ghcr.io/<owner>/waitron:main`, `:sha-<short>` and, for a `v*` tag, `:<version>`; the manifest is
 `linux/amd64,linux/arm64` on pushes (QEMU for arm64, so a small ARM box works) and amd64-only on
-PRs (speed). `deploy/**` is added to `scripts/changed-scope.mjs`'s CODE paths, or the `changes`
-job would skip the image build for a Dockerfile change (CLAUDE.md §2).
+PRs (speed). A `deploy/**` entry in `scripts/changed-scope.mjs` would be an OPTIMISATION,
+not a correctness fix: the classifier is an allowlist of INERT paths, not of code paths, so
+`deploy/**` already classifies as code today — measured, `classify(["deploy/Dockerfile"])` returns
+`{ code: true, reason: "deploy/Dockerfile is not documentation" }` and
+`scopeForPaths(["deploy/Dockerfile"])` returns `{ kind: "global" }`. A deploy change therefore runs
+MORE CI than a package change, not less; an entry would narrow it to the image job. That narrowing
+is only safe because the image guard lives in the ROOT project: measured, adding `"deploy/"` to
+`ROOT_SCOPE_PREFIXES` turns `scopeForPaths(["deploy/Dockerfile"])` into
+`{ kind: "root", packages: [] }`, which drops `@waitron/server` from scope — so the same guard in
+`apps/server` would stop running on exactly the change class it exists to catch. Whoever takes the
+optimisation must check that every guard over `deploy/` is still in the root project.
 
 **Updating a box:** `docker compose pull && docker compose up -d` — the compose pins `:main` until
 release tags exist. Unattended updates are the installer spec's question (a box we did not sell
@@ -485,6 +561,53 @@ record one sale. The host-network variant is run on a Linux box when one is at h
 added to this file with a date. What the FAILING case prints is stated before each step
 (CLAUDE.md §1): e.g. a bridge-shaped SAN list shows `172.` in `openssl x509 -text`; the override
 working shows the LAN IP there and nothing else.
+
+**Run-it proof — executed 2026-09-09** (this Mac, Docker Desktop; the fixed image built off the
+branch HEAD; each stack on a throwaway compose project, the box's Postgres published on 55432 to
+clear the shared dev db on 5432). Every failing case was stated before its step.
+
+- **Live-path config check** (the defect this section's own §11 hid: a preproduction-only proof
+  cannot tell a live box's pass from its fail). A blank box booted with `WAITRON_ENV=production`
+  (which reaches `loadConfig` identically to the wizard's `trading.env` — `box-env.ts` merges both,
+  and the production RP guard runs in setup mode too) → `GET /setup-api/status` = 200,
+  `{"environment":"production"}`, zero `config_missing`, `server.listening {environment:production}`;
+  no fiscal chain minted (unprovisioned). Control, fresh volumes, identical bar the RP vars
+  (`WAITRON_MANAGEMENT_RP_ID=""`, `_ORIGIN=""`) → `server.config_missing` + `restart: unless-stopped`
+  loop, reproducing the Task-8 pre-fix behaviour. (A one-shot `docker run` with no state volume
+  against a reused, already-provisioned db instead threw `config_invalid` — a confounded reading, not
+  the faithful control; the fresh-volume compose run is.)
+- **Recovery proof** (§9.2/§9.3). Clean boot minted the leaf (`state/tls/server.{crt,key}`), served
+  setup over HTTPS, leaf SHA256 `F6:43…:27`. An unparseable bootstrap URL then forced fast crashes:
+  three `server.boot_failed` → `recovery.serving {failures:3}` → `recovery.listening {tls:true}`.
+  `GET /` = 200, `<title>Waitron did not start</title>` + a Retry form, served over the **same** leaf
+  `F6:43…:27` at the same URL; `recovery.json = {failures:3, level:"recovery"}`. With the fault
+  fixed, the retry button (`POST /recovery-api/retry`) reset the counter and a normal boot resumed
+  (`setup.mode_active`, `/setup-api/status` 200).
+- **Trading-mode TLS — bug found and fixed here.** The blank-box-to-selling run caught that a
+  provisioned box served PLAIN HTTP in trading mode: setup and recovery fall back to the box's minted
+  leaf, but `boot.ts`'s two trading `startListening` sites passed `config.tls` unchanged — set only by
+  an operator's `WAITRON_TLS_*`, which a box never sets — so trading served plain HTTP and a phone
+  that trusted the box CA got a TLS handshake error (`EPROTO`); the HTTPS healthcheck failed the same
+  way, marking the container `unhealthy`. HTTPS-in-all-modes is the intended contract (setup,
+  recovery and the healthcheck all assume it). Fix: both trading sites now
+  `config.tls ?? mintedBoxLeaf(config.stateDir)` (a shared helper in `box-secrets.ts`;
+  `node-entry.ts`'s `recoveryTlsFiles` delegates to it), operator TLS still winning. Verified in the
+  container: provision → restart → trading `https /health` = 200, plain HTTP on 443 → `ECONNRESET`,
+  container `healthy`, leaf `CN=waitron.local`. It stayed invisible because CI's smoke and every prior
+  proof only ever exercised a BLANK box in SETUP mode — the same blind-spot shape as Task 8's
+  production Critical.
+- **Blank-box-to-selling** (owner-run, phone, fixed image). Phone → `https://192.168.10.101`, trusted
+  the CA (SAN carried the LAN IP) → wizard provisioned a **demo** (= preproduction) venue → the box
+  restarted into trading **over HTTPS and came back** (the pre-fix hang gone) → dashboard `/manage`
+  login → minted a pairing code → enrolled the till → **recorded a sale**. Box DB: `sales` = 1
+  (€20.00, invoice #1, `verifactu`, `fiscal_state:recorded`, VAT 21%); `registros_facturacion` = 1
+  (`num_serie_factura 1/1`, `entorno preproduction`, `huella CD58CD8F…`). The first-admin password was
+  reset with `bin-break-glass.js` in the container (also proving that recovery tool). One observed
+  gap, backlogged: the handheld showed no menu until a manual refresh (a till-app catalogue-load
+  timing issue, not the box).
+
+Still owed (honest limit): the **host-network** 443 bind on real Linux — measured three ways here
+under Docker Desktop's bridge, but CI's `image` job is the standing host-network proof once it runs.
 
 ## 12. Out of scope, named
 

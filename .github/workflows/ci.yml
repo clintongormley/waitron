@@ -22,12 +22,21 @@ name: CI
 # that would never report. Both of those are now free moves, which is what makes the scoping in
 # docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all.
 #
-# The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`. A job
-# that does not is reporting to nothing — it could fail while the pull request stays green.
+# The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`, with a
+# single deliberate exception. A job that does not is reporting to nothing — it could fail while the
+# pull request stays green. The exception is `publish`, which runs AFTER `ci` (it `needs: ci`) and so
+# cannot be in `ci`'s needs without a cycle; it is a post-gate leaf reporting no required status, and
+# scripts/ci-workflow.test.mjs pins it downstream of `ci` rather than absent from it.
 
 on:
   push:
     branches: [main]
+    # Release tags, for the `publish` job alone: a `v*` push is what publishes `ghcr.io/<owner>/waitron:<version>`.
+    # The rest of the workflow running on that ref is the point rather than a cost — nothing should
+    # be published from a commit whose suite has not run. `github.event.before` is all-zero on a tag
+    # push, which the `changes` job already treats as "no usable base" and fails closed to a full,
+    # unscoped run.
+    tags: ["v*"]
   pull_request:
 
 concurrency:
@@ -465,6 +474,133 @@ jobs:
             echo "expected the 'server.config_missing' code in output, got: $output" >&2
             exit 1
           fi
+
+  # The image a restaurant actually runs: built and brought up on blank volumes. Publishing it is the
+  # separate `publish` job below, gated on the whole suite — this job only builds and smoke-tests.
+  #
+  # It earns its place by proving the one thing no developer's machine can. The runner is real
+  # Linux, so deploy/compose.yml's `network_mode: host` is the SHIPPED profile here — and that
+  # namespace keeps the kernel's ip_unprivileged_port_start=1024, so a non-root process reaches 443
+  # only because the image sets cap_net_bind_service on node. Docker Desktop's "host" network is its
+  # own Linux VM's, so a Mac stack-up has to override the file to bridge + published ports, and
+  # Docker's bridge namespace sets that floor to 0 — it binds 443 with no capability at all. The
+  # shape assertions below exist because that override is the easy mistake to make here: a job that
+  # smoke-tests a bridge stack passes everything and proves only what a laptop already proved.
+  #
+  # Gated on `code` like every other build job, which `deploy/**` reaches by construction rather
+  # than by an entry: `isInertPath` (scripts/changed-scope.mjs) is an allowlist of INERT paths, so a
+  # Dockerfile change classifies as code and `scopeForPaths` puts it in `global`. Pinned by
+  # scripts/changed-scope.test.mjs, because narrowing that would silently stop building the image.
+  image:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    # Naming any permission drops every default, so `contents: read` is restated. This job pushes
+    # nothing to a registry — the GHCR publish moved to the `publish` job, which holds `packages: write`.
+    permissions:
+      contents: read
+    # Every compose invocation below reads these, so none of them can drift onto the wrong file or
+    # the wrong project. The env file is deploy/.env — where prepare.sh puts a real box's, and
+    # gitignored — so compose picks it up with no flag and interpolation cannot fail on a later
+    # `ps` or `down`.
+    env:
+      COMPOSE_FILE: deploy/compose.yml
+      COMPOSE_PROJECT_NAME: waitron-ci
+    steps:
+      - uses: actions/checkout@v5
+
+      # Written before anything can fail, because the teardown step runs `if: always()` and compose
+      # refuses to interpolate this file — required, no default — even to tear a stack down.
+      - name: Write the box's .env, the one secret it needs before anything runs
+        run: |
+          set -euo pipefail
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)"
+            echo "WAITRON_IMAGE=waitron:ci"
+          } > deploy/.env
+
+      # A measurement taken where both answers look alike measures nothing (CLAUDE.md §1). The app
+      # runs in the HOST namespace and reaches Postgres over the host's own loopback, so a
+      # pre-existing listener on 5432 would take the bootstrap and every assertion below would then
+      # pass against a cluster this job never created. 443 is the port the box itself must bind.
+      - name: Refuse to smoke against something already listening
+        run: |
+          set -euo pipefail
+          for port in 443 5432; do
+            if ss -ltn "( sport = :$port )" | grep -q LISTEN; then
+              ss -ltn
+              echo "port $port is already in use — the smoke below would measure the wrong thing" >&2
+              exit 1
+            fi
+          done
+
+      # The default builder uses the `docker` driver, which supports neither a GHA cache export nor
+      # a multi-platform manifest.
+      - uses: docker/setup-buildx-action@v3
+
+      # Loaded into the runner's daemon so `docker compose` can run it. A multi-platform build
+      # cannot be loaded at all, which is why the `publish` job builds a second time — it reuses
+      # these amd64 layers from the same GHA cache scope and only arm64 is actually built.
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: waitron:ci
+          cache-from: type=gha
+          # ignore-error, because a cache EXPORT failure is a slow build, not a broken image, and
+          # this job gates the pull request.
+          cache-to: type=gha,mode=max,ignore-error=true
+
+      # `--wait` blocks on the compose healthcheck, which passes on EITHER /health or
+      # /setup-api/status — /health is 503 by design on a setup box, so waiting on that alone would
+      # sit here for the whole timeout and then call a healthy box broken.
+      - name: Bring the node up on blank volumes
+        run: docker compose up -d --wait --wait-timeout 300
+
+      - name: The setup surface answers over the box's own TLS
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+
+          # -k, because the leaf is the box's own and serving the CA that signed it is exactly what
+          # /setup-api/ca.crt is for — a client that already trusted it would not need the endpoint.
+          code=$(curl -sk -o status.json -w '%{http_code}' https://127.0.0.1/setup-api/status)
+          cat status.json
+          echo
+          [ "$code" = "200" ]
+          # A blank box is unprovisioned and PREPRODUCTION: production is only ever reached by an
+          # owner choosing it in the wizard, and an image that came up live would file for real.
+          [ "$(jq -r .provisioned status.json)" = "false" ]
+          [ "$(jq -r .environment status.json)" = "preproduction" ]
+
+          code=$(curl -sk -o ca.crt -w '%{http_code}' https://127.0.0.1/setup-api/ca.crt)
+          [ "$code" = "200" ]
+          # A 200 carrying an error page would satisfy a status check on its own, so the body is
+          # parsed and then checked against the leaf the box just served: this endpoint is worth
+          # nothing unless what it hands back is the issuer a phone needs in order to trust that
+          # leaf.
+          openssl x509 -in ca.crt -noout -subject -issuer
+          openssl x509 -in ca.crt -noout -text | grep -q "CA:TRUE"
+          openssl s_client -connect 127.0.0.1:443 -showcerts </dev/null 2>/dev/null \
+            | openssl x509 > leaf.pem
+          openssl verify -CAfile ca.crt leaf.pem
+
+      - name: The box binds 443 as a non-root process, under host networking
+        run: |
+          set -euo pipefail
+          app=$(docker compose ps -q app)
+          # The whole reason this job exists on a Linux runner. Everything above passes just as well
+          # against a bridge network with `ports: ["443:443"]`, which proves nothing a Mac cannot.
+          [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$app")" = "host" ]
+          [ "$(docker exec "$app" id -u)" = "10001" ]
+          docker exec "$app" getcap /usr/local/bin/node | grep -q cap_net_bind_service
+
+      - name: Tear the stack down, volumes and all
+        if: always()
+        run: docker compose down -v --remove-orphans
 
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:
@@ -1305,6 +1441,7 @@ jobs:
       - changes
       - lint
       - bundle-smoke
+      - image
       - typecheck
       - test-heavy
       - test-heavy-merge
@@ -1343,3 +1480,79 @@ jobs:
           echo "A required job did not succeed:"
           echo '${{ toJSON(needs) }}'
           exit 1
+
+  # Publishes the image to GHCR — a POST-GATE LEAF, downstream of the WHOLE suite rather than of the
+  # image smoke alone. `needs: [changes, ci]` waits on the `ci` aggregate, so a push to `main` (or a
+  # `v*` tag) whose full unfiltered run goes red never ships `:main` / `:sha-…` / `:<version>` to a
+  # box that follows it via `docker compose pull` (spec §10; the red post-merge `main` run is exactly
+  # what CLAUDE.md §2 relies on to catch a cross-package failure a scoped PR skipped). `changes` is
+  # needed for its `code` output.
+  #
+  # It cannot appear in `ci`'s `needs` — that would be a cycle — so it is the ONE job the
+  # "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
+  # of `ci` (needs `ci`, `if:` reads `needs.ci.result`) rather than merely absent.
+  #
+  # A fresh runner: it re-does checkout and the buildx/qemu setup. amd64 comes back from the image
+  # job's amd64 smoke build over the shared GHA cache scope; only arm64 is really built, under QEMU.
+  publish:
+    needs: [changes, ci]
+    # `needs: ci` already enforces GitHub's implicit success(); the explicit `needs.ci.result` keeps
+    # the gate legible in place and is what the guard test pins. A pull request never publishes.
+    if: github.event_name == 'push' && needs.changes.outputs.code == 'true' && needs.ci.result == 'success'
+    runs-on: ubuntu-latest
+    # Naming any permission drops every default. `packages: write` is for the GHCR push.
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      # arm64 is emulated. Registered BEFORE the builder, which probes the platforms it can serve
+      # when it is created.
+      - uses: docker/setup-qemu-action@v3
+
+      # The default builder uses the `docker` driver, which supports neither a GHA cache export nor
+      # a multi-platform manifest.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Work out the tags to publish
+        id: tags
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # GHCR refuses an uppercase path, and github.repository_owner keeps the account's casing.
+          repo="ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')/waitron"
+          # Always the immutable one, so a box can be pinned to an exact commit.
+          tags="$repo:sha-$(printf '%s' "$SHA" | cut -c1-7)"
+          case "$REF" in
+            # What deploy/compose.yml defaults to: `docker compose pull` on a box follows main.
+            refs/heads/main) tags="$tags,$repo:main" ;;
+            # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
+            # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.
+            refs/tags/v*) tags="$tags,$repo:${REF#refs/tags/v}" ;;
+          esac
+          echo "$tags"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # amd64 comes back from the image job's smoke-build cache; only arm64 is really built, under
+      # QEMU, because a small ARM box is a target (spec §10). `cache-to` STAYS: the smoke build was
+      # amd64-only, so nothing has yet cached the arm64 layers this build produces.
+      - name: Publish to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,ignore-error=true

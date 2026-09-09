@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
+import { parseBoxAddresses } from "./box-reach.js";
 import { tryLoadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { isUnset } from "./env-value.js";
@@ -86,6 +87,21 @@ export interface ServerConfig {
    * the dev default lives beside the bundle and is gitignored, because it holds secrets.
    */
   stateDir: string;
+  /**
+   * The addresses this box advertises — the iPAddress SANs of its self-signed leaf, the IP-QR the
+   * trust page encodes, and the A records its mDNS responder answers with. Undefined means "read the
+   * host's interfaces" (`listBoxIpv4`), which is right for a box on the venue's own network and wrong
+   * for a container behind bridge networking, whose interface address no device on the LAN can reach.
+   * `WAITRON_BOX_ADDRESSES` supplies it as a comma-separated IPv4 list; an unset OR empty value falls
+   * back to the interfaces (the `VAR=`-means-unset rule, CLAUDE.md §3).
+   *
+   * OPERATOR CAVEAT: the self-signed leaf is minted once and then reused forever (`ensureBoxSecrets`
+   * treats `<stateDir>/tls/server.key` as the presence sentinel), so setting or changing this on a
+   * box that has ALREADY booted does not re-mint its SANs — the QR and mDNS move to the new address
+   * while the certificate still covers the old one. Set it on the first boot of a state dir, or
+   * delete the `tls/` quartet to force a re-mint.
+   */
+  boxAddresses?: string[];
   /**
    * Where the box writes its rotating structured logs — the directory `createRotatingFileSink` appends
    * `waitron.log` (+ rotated `.1`..`.N`) into, and `createLogReader` reads back for the diagnostics
@@ -204,7 +220,11 @@ export const DEFAULT_MAX_TICK_MS = 60 * 60 * 1000;
  * answer). Neither duty reports `now` for merely SKIPPED work any more — see `skipRetryMs` above,
  * and `drain` has no `deferred` concept at all. */
 const DEFAULT_MIN_TICK_MS = 5_000;
-const DEFAULT_HTTP_PORT = 8080;
+/** Exported for `node-entry.ts`'s recovery path, which resolves the same variable WITHOUT calling
+ * `loadConfig` — a box is in recovery precisely when its configuration may be what is broken, so a
+ * config that throws must not take the page down with it. One constant, not two, so the page and
+ * the server can never disagree about where an operator will look for it. */
+export const DEFAULT_HTTP_PORT = 8080;
 /** The PostgreSQL port a node advertises for a peer's subscription to dial when
  * WAITRON_REPLICATION_PORT is unset — the cluster default. */
 const DEFAULT_REPLICATION_PORT = 5432;
@@ -219,8 +239,11 @@ const DEFAULT_HTTP_HOST = "127.0.0.1";
  * a value like `999999` reach `serve()` (`boot.ts`), which throws a raw, unformatted
  * `RangeError [ERR_SOCKET_BAD_PORT]` straight out of `startServer` — not the structured
  * `server.config_invalid` this file promises for every other bad input, and not what
- * `apps/server/README.md`'s "every value is validated once, at boot" line claims either. */
-const MAX_HTTP_PORT = 65_535;
+ * `apps/server/README.md`'s "every value is validated once, at boot" line claims either. Exported
+ * for the same reason `DEFAULT_HTTP_PORT` above is: `node-entry.ts`'s recovery path needs the same
+ * bound, and an unbounded copy there would throw that same raw `RangeError` out of the one call
+ * that serves the page. */
+export const MAX_HTTP_PORT = 65_535;
 /** Loopback defaults for the passkey Relying Party, so dev and every test resolve a working RP ID +
  * origin without setting either variable. These apply in preproduction/dev ONLY: in production both
  * are REQUIRED (`requiredInProduction` below throws `server.config_missing` if either is unset), so a
@@ -665,6 +688,10 @@ export function loadConfig(
     // Same isUnset fallback + resolve-only-a-real-value shape mediaDir uses (CLAUDE.md §3): an unset
     // OR empty WAITRON_STATE_DIR takes `defaultStateRoot`, never `resolve("")` (which is cwd).
     stateDir: resolvedStateDir,
+    // The operator's override for the addresses the box advertises; undefined leaves every consumer
+    // on `listBoxIpv4`. Validated at load (`parseBoxAddresses`) so a typo fails boot rather than
+    // minting a certificate for an address that is not an address.
+    boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
     // The rotating-log directory. Default is `join(stateDir, "logs")` — under whichever state root won
     // above (`resolvedStateDir`), so logs live beside the box's other persisted state. An unset OR empty
     // WAITRON_LOG_DIR takes that default via `isUnset`, never `resolve("")` / cwd (CLAUDE.md §3); an
