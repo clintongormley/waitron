@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFileClusterMutex, isProcessAlive, type ClusterMutex } from "./cluster-mutex.js";
@@ -103,6 +103,20 @@ describe("createFileClusterMutex", () => {
     await (
       await acquire3
     )();
+  });
+
+  it("release does NOT free a lock that was stolen and re-acquired by another holder", async () => {
+    const lockDir = freshLockDir();
+    const mutex = createFileClusterMutex({ lockDir, pollIntervalMs: 10, acquireTimeoutMs: 2_000 });
+    const release = await mutex.acquire();
+    // Simulate another holder stealing (we hung past STALE_MS) and re-acquiring: same dir, DIFFERENT
+    // token. Our release must see the token mismatch and leave the new holder's lock alone.
+    writeFileSync(
+      join(lockDir, "holder.json"),
+      JSON.stringify({ pid: process.pid, startedAt: Date.now(), token: "someone-else" }),
+    );
+    await release();
+    expect(existsSync(lockDir)).toBe(true); // the new holder still owns it
   });
 
   it("times out with a LOUD throw naming the holder, rather than hanging forever", async () => {

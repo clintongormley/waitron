@@ -18,15 +18,22 @@ import { join } from "node:path";
  *
  * Stale recovery (a crashed holder must NEVER deadlock the suite): a waiter steals the lock when the
  * holder's pid is no longer alive (`process.kill(pid, 0)` throws ESRCH) OR the hold is older than
- * {@link STALE_MS} — set WELL above the 300s `beforeAll` budget so a slow-but-alive holder is never
- * stolen from, only a dead or hung-past-timeout one. A holder that crashed AFTER `mkdir` but BEFORE
- * writing metadata leaves a holderless dir; that is reclaimed by the dir's own age past STALE_MS, and
- * never in the microsecond write window. The steal is race-safe: remove then re-attempt the atomic
- * create, and a lost race just keeps polling.
+ * {@link STALE_MS}. The pid-liveness check is the primary reclaim — a DEAD holder is taken over at
+ * once. The age check is only a backstop for an ABANDONED lock whose pid has since been reused by an
+ * unrelated process (so `isAlive` wrongly reports it live). Because the lock is held for the WHOLE
+ * suite — `beforeAll` (boot + post-boot replication setup) through every `it` to `afterAll` — the
+ * permitted legitimate hold is large (see {@link STALE_MS}); the age bound is set comfortably above
+ * that worst case so it can only ever fire on a genuinely abandoned lock, never on a slow-but-alive
+ * holder (which would boot a SECOND concurrent cluster — the exact oversubscription this prevents). A
+ * holder that crashed AFTER `mkdir` but BEFORE writing metadata leaves a holderless dir, reclaimed by
+ * the dir's own age past STALE_MS, never in the microsecond write window. The steal is race-safe:
+ * remove then re-attempt the atomic create, and a lost race just keeps polling.
  *
  * Fail loud, never hang: if acquire cannot win within {@link ACQUIRE_TIMEOUT_MS} it THROWS naming the
- * current holder's pid and age, so a genuine deadlock surfaces as a loud error rather than a silent
- * 300s hook timeout.
+ * current holder's pid and age. That bound sits BELOW the callers' 300s `beforeAll` hook timeout so a
+ * genuinely-stuck holder surfaces as this named error FIRST, rather than as vitest's generic
+ * hook-timeout abort. High STALE_MS (never steal from a slow-but-alive holder) and a low acquire
+ * timeout (fail loud on a real stall) are the two halves of that trade.
  *
  * Escape hatch: `WAITRON_TWO_NODE_MUTEX=0` disables the mutex (acquire is a no-op) for debugging or
  * CI-shard tuning; the mutex is ON by default.
@@ -65,11 +72,20 @@ interface Holder {
 
 /** The machine-wide lock path — one per OS temp dir, shared by every process on the box. */
 export const DEFAULT_LOCK_DIR = join(tmpdir(), "waitron-two-node-cluster.lock");
-/** Generous stale bound — must EXCEED the longest legitimate hold (the 300s `beforeAll` budget) so a
- * slow-but-alive holder is never stolen, only a dead/hung-past-timeout one. */
-export const STALE_MS = 360_000;
-/** Acquire fails loud past this — longer than any real hold plus a full queue of waiters. */
-export const ACQUIRE_TIMEOUT_MS = 600_000;
+/** Age at which an EXISTING lock may be stolen from a pid that still LOOKS alive — the backstop for a
+ * reused-pid abandoned lock, distinct from the immediate pid-liveness reclaim. It must COMFORTABLY
+ * exceed the longest legitimate WHOLE-SUITE hold, since the lock spans `beforeAll` (boot + post-boot
+ * replication setup) through every `it` to `afterAll`. Worst case among the consuming suites: a 300s
+ * `beforeAll` cap + up to ~8 test bodies at the 120s `testTimeout` each (~16 min) + `afterAll`
+ * teardown ≈ 21 min. 30 minutes clears that with margin, so the age path can only ever fire on a
+ * genuinely abandoned lock — never on a slow-but-alive holder, which would boot a second concurrent
+ * cluster and reintroduce the oversubscription this exists to prevent. */
+export const STALE_MS = 1_800_000;
+/** Acquire fails loud past this, naming the holder. Set BELOW the callers' 300s `beforeAll` hook
+ * timeout so a stuck holder surfaces as the named-holder throw before vitest's generic hook abort.
+ * Measured happy-path holds are 8-22s and the worst queue-wait behind all four suites is ~66s, both
+ * far under 240s, so this only ever fires on a real stall — not on normal queueing. */
+export const ACQUIRE_TIMEOUT_MS = 240_000;
 /** Modest base poll; jitter is added to avoid a thundering herd. */
 export const POLL_INTERVAL_MS = 150;
 
@@ -117,8 +133,10 @@ export function createFileClusterMutex(options: FileClusterMutexOptions = {}): C
         const dirStat = await stat(lockDir);
         return now() - dirStat.mtimeMs > staleMs;
       } catch {
-        // The dir vanished between our EEXIST and this stat — not stale; the next mkdir will win.
+        /* v8 ignore start -- the dir vanished between our EEXIST and this stat (raced by another
+           waiter's steal); not stale, the next mkdir wins. Not deterministically reachable. */
         return false;
+        /* v8 ignore stop */
       }
     }
     return now() - holder.startedAt > staleMs || !isAlive(holder.pid);
@@ -133,10 +151,21 @@ export function createFileClusterMutex(options: FileClusterMutexOptions = {}): C
       try {
         await mkdir(lockDir); // atomic exclusive create — fails EEXIST if another holder has it
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+          /* v8 ignore start -- a non-EEXIST mkdir failure (e.g. EACCES on the temp dir) is not a held
+             lock and is unreachable in a normal run where the only contention is EEXIST. */
+          throw error;
+          /* v8 ignore stop */
+        }
         // The lock is held. Steal it if stale; otherwise poll until the deadline, then fail loud.
         if (await isStale()) {
+          // Race-safe against two waiters stealing at once: remove, then re-attempt the atomic mkdir;
+          // whoever loses the create sees EEXIST and loops. This two-waiter race is reasoned, not
+          // tested — a deterministic test for it would be flaky — so it is a deliberate no-test call.
+          /* v8 ignore start -- best-effort: force:true already swallows ENOENT; any other rm error
+             just falls through to a re-attempt on the next loop. */
           await rm(lockDir, { recursive: true, force: true }).catch(() => {});
+          /* v8 ignore stop */
           continue; // re-attempt the atomic create; a lost steal race just loops again
         }
         if (now() >= deadline) {
@@ -166,10 +195,12 @@ export function createFileClusterMutex(options: FileClusterMutexOptions = {}): C
           // and re-acquired by another holder carries a different token and must NOT be freed here.
           const holder = await readHolder();
           if (holder?.token === token) await rm(lockDir, { recursive: true, force: true });
+          /* v8 ignore start -- best-effort swallow: a teardown error must never strand the caller, and
+             stale recovery reclaims a lock we somehow failed to remove. Not reachable via the tests. */
         } catch {
-          // Best-effort: a teardown error must never strand the caller, and stale recovery reclaims a
-          // lock we somehow failed to remove.
+          // intentionally ignored (see above)
         }
+        /* v8 ignore stop */
       };
     }
   };
