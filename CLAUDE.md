@@ -338,8 +338,19 @@ unfiltered `main` run, not a wrong hook.
   (`packages/db/src/testing/harness.ts`) runs a suite against both. Pick the lighter one when the
   heavier one's justification does not apply, and say why in a comment.
 - **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, or container suites hang until the
-  180 s `hookTimeout`. Docker contention on a full `pnpm test` shows up as `EADDRINUSE` and passes on
-  retry.
+  `hookTimeout`. **A recurrent real-PG flake is a defect to investigate, never a "timing flake" to
+  re-run.** The full LOCAL run oversubscribes Docker's container-boot throughput in a way CI never
+  does — the hook runs `pnpm -r test:coverage` over every changed package and its dependents WITH a
+  concurrent whole-workspace `tsc` and the browser suites, while CI shards each package onto its own
+  runner. Under that contention a starved boot must recover, not hang: the two-node cluster fixture
+  (`packages/db/src/testing/two-node.ts`) boots its two nodes in parallel and RETRIES a failed
+  attempt behind a bounded `withStartupTimeout`/`connectionTimeoutMillis`, so a transient stall
+  recovers in a calmer window instead of hanging the whole `hookTimeout`. Root-caused by experiment,
+  not assumed: each two-node suite passes in 8–22 s alone and four clusters boot concurrently in 4.5 s,
+  but before the retry a LATE two-node `beforeAll` under the full run hung the full 300 s (measured on
+  `replication-subscribe` and `replication-fidelity`); an `EADDRINUSE` on `freePort` is the same
+  oversubscription. If a suite still stalls the whole local run, cut the local concurrency and reduce
+  the contention — do not re-run and hope.
 - **With Ryuk off, INTERRUPTED runs leak containers** (a clean vitest exit self-reaps via
   `globalTeardown`). The bloat (once: 173 volumes, 23 GB) starves PGlite `beforeAll`s and the
   `freePort` race, while an isolated re-run passes and proves nothing. `pnpm reap`
