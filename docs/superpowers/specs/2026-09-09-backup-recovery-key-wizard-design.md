@@ -47,16 +47,18 @@ This slice adds three things and extends the engine in two small ways:
 Engine extensions: a **wall-clock scheduler** (a chosen time of day on chosen days, in the venue's
 local timezone) replacing "every N hours from boot", and **age-based retention** added beside the
 existing count-based prune (keep at most N *and* nothing older than D days — prune on whichever bites
-first), both driven by the new policy step (§3.3); and **capturing `backup.env` into the archive** so
-the backup settings survive a restore (§3.2), an **optional** entry beside the fatal `RECOVERY_FILES`
-(a box with backups off has none).
+first), both driven by the new policy step (§3.3); and **capturing `backup.env` and `modules.json`
+into the archive** so the backup settings and the enabled-module set survive a restore (§3.2) — an
+**optional** companion to the fatal `RECOVERY_FILES` (both can be legitimately absent). The broader
+"capture the whole state volume, not a curated list" change is a separate spun-out slice (§10).
 
 **In scope:** `BackupSupervisor` (`apps/server`); a new `backup.env` box-env file and its place in
 the env-source precedence (§3.2); the schedule + dual-retention extension to `loadBackupConfig` and
 `runBackupSweep`; `mountBackupAdminApi` (authenticated) with the five routes in §3.4; the
 recovery-key mint / show-once / override / download / re-view / rotate flow (§3.5); the UI screens and
-the first-run nudge (§3.6); capturing `backup.env` into the archive as an optional entry (§3.2); the
-`backup.*` error codes the routes reuse and any new ones; tests that prove each guarantee.
+the first-run nudge (§3.6); capturing `backup.env` and `modules.json` into the archive as optional
+entries (§3.2); the `backup.*` error codes the routes reuse and any new ones; tests that prove each
+guarantee.
 
 **Out of scope, named (§10):** any backend other than local-fs — S3/Drive stay the later
 destination-build task, and the wizard offers only what runs today; **re-encrypting existing archives
@@ -161,13 +163,28 @@ not as a hand-config feature**:
 override would defeat a wizard edit with no explanation. Kept, because that silent-override case is
 exactly the confusion §1 of `CLAUDE.md` is about.)*
 
-**The archive captures `backup.env`.** So a restore brings back the backup settings and the policy,
-and a same-node cold restore resumes backing up unchanged. It is added as an **optional** capture
-distinct from `RECOVERY_FILES` (whose missing-file semantics are fatal, `recovery.state_incomplete`):
-a box with backups off, or one whose config lives in the real environment, has no `backup.env`, and
-its absence must be fine, not a failed backup. That the archive then contains the very key it is
-encrypted under is harmless — decrypting already requires the key; recovering it just lets the
-restored box carry on.
+**The archive captures `backup.env` and `modules.json`.** So a restore brings back the backup
+settings/policy (a same-node cold restore resumes backing up unchanged) **and** the enabled-module set
+— which is durable config held only on disk, not a DB row ("the enabled set is not a DB row",
+[module-config.ts:12](../../../apps/server/src/module-config.ts)), so a restore that missed it would
+silently re-enable every module, including flipping the fiscal regime. Both are added as an
+**optional companion** to `RECOVERY_FILES` — captured when present, skipped when absent — NOT into
+`RECOVERY_FILES` itself, whose missing-file semantics are fatal (`recovery.state_incomplete`): a box
+with backups off, or one whose config lives in the real environment, legitimately has neither file.
+
+This is a **capture-side-only** change with a tiny §5 blast radius, because two existing facts do the
+rest:
+
+- The restore already writes back **any** `secrets/*` archive entry into the state dir — it is not
+  gated to `RECOVERY_FILES` ([restore.ts:152](../../../apps/server/src/restore.ts)) — so once the
+  capture packs `secrets/backup.env` and `secrets/modules.json`, the restore applies them with **no
+  restore-side change**.
+- **Per-hardware safety is preserved for free:** `instance.env` (the box's DB connection, regenerated
+  per hardware) is deliberately *not* captured, so the restore never overwrites the new box's
+  connection. `backup.env` and `modules.json` are per-*venue* config, safe to restore anywhere.
+
+That the archive then contains the very key it is encrypted under is harmless — decrypting already
+requires the key; recovering it just lets the restored box carry on.
 
 `backup.env` holds the full trio plus the policy: `WAITRON_BACKUP_DIR` (or
 `WAITRON_BACKUP_DESTINATIONS`), `WAITRON_BACKUP_DATABASE_URL`, `WAITRON_BACKUP_RECOVERY_KEY`, and the
@@ -340,9 +357,11 @@ Because §6 touches the recovery posture, this spec gets a **Fable fresh-context
   `auto` case resolves to `day_cutover` + margin and is node-stable across boots), and a DST boundary
   in the venue tz. Age + count prune: an artifact pruned by age but within count, and vice-versa, and
   the "whichever first" boundary.
-- **Archive capture of `backup.env`** — a backup taken with backups on includes `backup.env`; one on a
-  box whose config is env-managed (no file) omits it without failing; a restore round-trips the
-  settings. Prove by deletion that removing the optional-capture step drops the file.
+- **Archive capture of `backup.env` and `modules.json`** — a backup taken with backups on and a
+  non-default module set includes both; a box missing either (env-managed config, or all-modules
+  default) omits the absent one **without failing**; a restore round-trips both into the state dir,
+  and `instance.env` is never captured (so a restore cannot clobber the new box's DB connection).
+  Prove by deletion that removing the optional-capture step drops the files.
 - **Routes** — validation parity with `loadBackupConfig` (a route must reject exactly what boot
   rejects); the apply latch (a concurrent apply is refused, not raced); `managed_by_environment`
   refusal when the real env owns the config; the re-view/rotate authz.
@@ -407,6 +426,14 @@ can decrypt a stored archive.
 - **Ordering the box-chosen backup after a nightly report job** — no such job exists yet, so the
   box-chosen time anchors on `day_cutover` + margin (§3.3). When a report duty lands, the backup should
   fire after it completes.
+- **Whole-state-volume capture (allowlist → denylist) — a SEPARATE, §5-reviewed slice** (owner,
+  2026-09-09). This branch adds `backup.env` + `modules.json` as an optional companion so nothing is
+  lost now; the deeper change spins out: capture the whole state directory **except** an explicit
+  exclusion set (`backup-staging/`, `restore-staging/`, `logs/`, the per-hardware `instance.env` and
+  `recovery.json`), add a **completeness guard** that fails when a new top-level state entry is neither
+  captured nor explicitly excluded (a curated list goes stale — `CLAUDE.md` §7; `modules.json` was a
+  live example of exactly that gap), and give the restore-apply step per-hardware rules so a broadened
+  capture never overwrites new-hardware config. Touches BR-2, BR-3 and the recovery bundle.
 
 ---
 
@@ -420,7 +447,9 @@ rotate** (all four); schedule = **daily or chosen weekdays, at a chosen time or 
 retention = **both count and age, whichever prunes first**.
 
 Refinements from the spec-review round (owner, 2026-09-09): the archive must also capture the backup
-settings (`backup.env`), not just the DB — folded into §1/§3.2; the ongoing nag moves to the
+settings (`backup.env`) and the enabled-module set (`modules.json`), not just the DB — folded into
+§1/§3.2 as a capture-only change; the whole-state-volume (allowlist→denylist) capture is spun out as
+its own §5-reviewed slice (§10); the ongoing nag moves to the
 **notifications centre** (not built) and this slice only makes the state reportable — §2/§10; the
 box-chosen time is **after `day_cutover` and after the day's reports**, not a 02:00–06:00 window —
 §3.3; and env/hand-config is not a feature but an inherent cloud-injection path, so the wizard's
