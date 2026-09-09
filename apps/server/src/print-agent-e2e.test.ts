@@ -26,6 +26,7 @@ import {
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountJoinApi } from "./join-api.js";
+import { mountNodeApi } from "./node-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -159,7 +160,9 @@ describe("print-agent end to end", () => {
     // 1. One app carrying both surfaces, sharing ONE pairing window (the venue's one window). Open it,
     //    or the agent's knock is refused. `readMembership` returns null → the pull echoes no extra
     //    servers, so the agent's router follows only its configured address (hermetic, no phantom probe
-    //    chasing a real host).
+    //    chasing a real host). The `/api/node` probe is mounted too and answers an accepting primary in
+    //    the agent's environment, so the router marks the configured address `primary` and the loop is
+    //    allowed to talk to it (CLAUDE.md §5 — the loop refuses a non-accepting or wrong-env server).
     const app = new Hono();
     const pairingMode = createPairingMode();
     pairingMode.open();
@@ -169,6 +172,16 @@ describe("print-agent end to end", () => {
       noopLog,
     );
     mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+    mountNodeApi(
+      app,
+      {
+        nodeId: cfg.nodeId,
+        acceptingSales: true,
+        environment: "preproduction",
+        readMembership: async () => null,
+      },
+      noopLog,
+    );
 
     // 3. The agent: config against BASE, a real routing transport over a real TCP adapter, and a fetch
     //    that routes every wire call into the server under test.

@@ -1,4 +1,10 @@
-import { createClient, type AgentClient, type Failure, type WireJob } from "./client.js";
+import {
+  createClient,
+  type AgentClient,
+  type Failure,
+  type JobOutcome,
+  type WireJob,
+} from "./client.js";
 import type { AgentConfig, AgentStatus, Host } from "./host.js";
 import { Router } from "./router.js";
 
@@ -73,6 +79,10 @@ export function createAgent(opts: AgentOptions): Agent {
     halted = true;
     approved = false;
     await host.saveToken(null);
+    // The join request is dead; drop the persisted verification number so a restart shows no stale code.
+    if (config.pendingVerificationNumber !== undefined) {
+      await host.saveConfig({ ...config, pendingVerificationNumber: undefined });
+    }
     report({
       phase: "unauthorized",
       serverUrl: config.serverUrl,
@@ -86,7 +96,7 @@ export function createAgent(opts: AgentOptions): Agent {
    * alone on a successful one — a same-batch failure stays visible; the end-of-tick running report is
    * the only place that clears it, and only for a fully clean tick. */
   async function push(job: WireJob, token: string, current: string): Promise<boolean> {
-    let outcome: { status: "done" } | { status: "failed"; error: string };
+    let outcome: JobOutcome;
     let failed = false;
     try {
       await host.transport.send(
@@ -117,7 +127,9 @@ export function createAgent(opts: AgentOptions): Agent {
 
   /** Returns true when the tick did work (a non-empty batch), so `start` re-polls at once. */
   async function tick(): Promise<boolean> {
-    const config = await host.config();
+    // Tracked across the tick's own `saveConfig` calls so a later merge (the pinned environment, the
+    // pending number) never clobbers an earlier one — the loop, not the host, holds the live config.
+    let config = await host.config();
     if (config === null) {
       report({ phase: "unconfigured", serverUrl: null, current: null });
       return false;
@@ -127,11 +139,25 @@ export function createAgent(opts: AgentOptions): Agent {
       return false;
     }
     const r = routerFor(config);
-    await r.probe();
+    const round = await r.probe();
     if (config.environment === undefined && r.environment !== undefined) {
-      await host.saveConfig({ ...config, environment: r.environment });
+      config = { ...config, environment: r.environment };
+      await host.saveConfig(config);
     }
     const current = r.current;
+
+    // The round found no accepting primary in the agent's own environment — a server answering a
+    // DIFFERENT environment is `standby`, not `primary`, and its token must never be sent there
+    // (CLAUDE.md §5). End the tick with NO network write; only an eligible in-env primary proceeds.
+    if (!round.anyAccepting) {
+      report({
+        phase: "unreachable",
+        serverUrl: config.serverUrl,
+        current,
+        lastError: `no accepting primary in environment ${r.environment ?? "unknown"}`,
+      });
+      return false;
+    }
 
     let token = await host.token();
     if (token === null) {
@@ -152,6 +178,10 @@ export function createAgent(opts: AgentOptions): Agent {
       token = joined.value.token;
       await host.saveToken(token);
       approved = false;
+      // Persist the number so a restart-while-pending still shows it: the reloaded token keeps polling
+      // the SAME join request, so this is the only surviving copy of the code the admin must match.
+      config = { ...config, pendingVerificationNumber: joined.value.verificationNumber };
+      await host.saveConfig(config);
       report({
         phase: "pending",
         serverUrl: config.serverUrl,
@@ -173,7 +203,13 @@ export function createAgent(opts: AgentOptions): Agent {
         return false;
       }
       if (s.value === "pending") {
-        report({ phase: "pending", serverUrl: config.serverUrl, current });
+        // Sourced from the persisted config, so it survives a restart (the join reply is long gone).
+        report({
+          phase: "pending",
+          serverUrl: config.serverUrl,
+          current,
+          verificationCode: config.pendingVerificationNumber,
+        });
         return false;
       }
       if (s.value === "not_approved") {
@@ -181,6 +217,11 @@ export function createAgent(opts: AgentOptions): Agent {
         return false;
       }
       approved = true;
+      // Approved: the number has served its purpose, so drop it from the persisted config.
+      if (config.pendingVerificationNumber !== undefined) {
+        config = { ...config, pendingVerificationNumber: undefined };
+        await host.saveConfig(config);
+      }
     }
 
     const pulled = await client.pullJobs(current, token);

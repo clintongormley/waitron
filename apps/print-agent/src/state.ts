@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentConfig } from "@waitron/print-agent";
@@ -40,6 +41,12 @@ export class FileState {
         if ("environment" in parsed && typeof parsed.environment === "string") {
           config.environment = parsed.environment;
         }
+        if (
+          "pendingVerificationNumber" in parsed &&
+          typeof parsed.pendingVerificationNumber === "string"
+        ) {
+          config.pendingVerificationNumber = parsed.pendingVerificationNumber;
+        }
         return config;
       }
     } catch {
@@ -71,7 +78,10 @@ export class FileState {
 
   private async atomicWrite(path: string, data: string, mode: number): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    const tmp = `${path}.tmp`;
+    // A per-write temp name (pid + random), so two concurrent writers — the loop persisting the pinned
+    // environment or the pending number while the setup handler saves the address — never share one
+    // temp file and race on the rename (19 of 20 concurrent saves failed ENOENT with a single `.tmp`).
+    const tmp = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
     await writeFile(tmp, data, { mode });
     await rename(tmp, path);
   }

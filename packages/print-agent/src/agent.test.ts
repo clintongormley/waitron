@@ -112,6 +112,59 @@ describe("createAgent — phases", () => {
     expect((await host.config())?.environment).toBe("preproduction");
   });
 
+  it("never sends to a server whose environment differs from the agent's pin (CLAUDE.md §5)", async () => {
+    const host = fakeHost({
+      config: { serverUrl: A, name: "kitchen-pi", environment: "production" },
+    });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        okR<NodeProbe>({
+          nodeId: "n1",
+          term: 1,
+          acceptingSales: true,
+          environment: "preproduction",
+        }),
+      ),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    expect(c.join).not.toHaveBeenCalled();
+    expect(c.joinStatus).not.toHaveBeenCalled();
+    expect(c.pullJobs).not.toHaveBeenCalled();
+    expect(host.statuses.at(-1)?.phase).toBe("unreachable");
+  });
+
+  it("does send to a server reporting the agent's own environment (positive control)", async () => {
+    const host = fakeHost({
+      config: { serverUrl: A, name: "kitchen-pi", environment: "production" },
+    });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        okR<NodeProbe>({ nodeId: "n1", term: 1, acceptingSales: true, environment: "production" }),
+      ),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    expect(c.join).toHaveBeenCalledWith(A, "kitchen-pi");
+  });
+
+  it("persists the verification number so a restart while pending can still show it", async () => {
+    const host = fakeHost({ config: CONFIG });
+    await createAgent({ host, client: client() }).runOnce(); // joins, saves token + number
+    expect((await host.config())?.pendingVerificationNumber).toBe("07");
+    // Simulate a restart: a fresh agent over the SAME persisted config + token, status still pending.
+    const c2 = client({ joinStatus: vi.fn(async () => okR<JoinStatus>("pending")) });
+    await createAgent({ host, client: c2 }).runOnce();
+    expect(c2.join).not.toHaveBeenCalled(); // re-uses the saved token, no fresh join
+    expect(host.statuses.at(-1)).toMatchObject({ phase: "pending", verificationCode: "07" });
+  });
+
+  it("clears the persisted verification number once approved", async () => {
+    const host = fakeHost({ config: CONFIG });
+    await createAgent({ host, client: client() }).runOnce(); // join → number persisted
+    expect((await host.config())?.pendingVerificationNumber).toBe("07");
+    await createAgent({ host, client: client() }).runOnce(); // token present, approved → clears
+    expect((await host.config())?.pendingVerificationNumber).toBeUndefined();
+  });
+
   it("pull unreachable → phase unreachable, token kept, no halt", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     const c = client({ pullJobs: vi.fn(async () => failR({ kind: "unreachable", detail: "x" })) });

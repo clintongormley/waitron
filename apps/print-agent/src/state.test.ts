@@ -42,6 +42,28 @@ describe("FileState", () => {
     });
   });
 
+  it("preserves the pending verification number on a config round-trip", async () => {
+    const state = new FileState(dir);
+    await state.writeConfig({ serverUrl: "https://a", name: "n", pendingVerificationNumber: "07" });
+    expect(await state.readConfig()).toEqual({
+      serverUrl: "https://a",
+      name: "n",
+      pendingVerificationNumber: "07",
+    });
+  });
+
+  it("survives many concurrent config saves without a temp-file race, leaving one valid JSON", async () => {
+    const state = new FileState(dir);
+    await Promise.all(
+      Array.from({ length: 20 }, (_, i) =>
+        state.writeConfig({ serverUrl: `https://a${i}`, name: "n" }),
+      ),
+    );
+    const config = await state.readConfig();
+    expect(config).not.toBeNull();
+    expect(config?.name).toBe("n");
+  });
+
   it("creates the state directory on first write", async () => {
     const nested = join(dir, "does", "not", "exist");
     const state = new FileState(nested);

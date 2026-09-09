@@ -38,12 +38,13 @@ describe("createSetupApp — GET /", () => {
     expect(html).toContain("42");
   });
 
-  it("pending after a restart that lost the code tells the operator to restart for a fresh one", async () => {
+  it("pending with no code (state wiped) waits truthfully, without the false 'restart for a fresh code' claim", async () => {
     const status: AgentStatus = { phase: "pending", serverUrl: "https://box.test", current: null };
     const app = createSetupApp(deps({ status: () => status }));
     const html = await (await app.request("/")).text();
-    expect(html).toContain("restart to get a fresh code");
-    expect(html).not.toContain("verification code 4");
+    expect(html).toContain("Waiting for approval");
+    expect(html).not.toContain("restart to get a fresh code");
+    expect(html).not.toContain("verification code");
   });
 
   it("pairing_closed asks the manager to switch on pairing mode", async () => {
@@ -85,7 +86,7 @@ describe("createSetupApp — GET /", () => {
     expect(html).not.toContain("Last error");
   });
 
-  it("unauthorized says the agent was revoked and must be restarted", async () => {
+  it("unauthorized says the agent was denied or revoked and must be restarted", async () => {
     const status: AgentStatus = {
       phase: "unauthorized",
       serverUrl: "https://box.test",
@@ -93,7 +94,7 @@ describe("createSetupApp — GET /", () => {
     };
     const app = createSetupApp(deps({ status: () => status }));
     const html = await (await app.request("/")).text();
-    expect(html).toContain("revoked");
+    expect(html).toContain("denied or revoked");
     expect(html).toContain("restart it to ask to join again");
   });
 

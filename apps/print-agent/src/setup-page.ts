@@ -88,13 +88,14 @@ function statusCard(status: AgentStatus & { phase: Exclude<AgentPhase, "unconfig
   const server = escapeHtml(status.current ?? status.serverUrl ?? "the server");
   switch (status.phase) {
     case "pending": {
-      // The verification code lives only in memory from the join reply; a restart loses it (resumed
-      // plan decision 4), and then the only way to a fresh one is to restart so the agent re-joins.
+      // The verification code is persisted while pending (AgentConfig.pendingVerificationNumber), so it
+      // survives a restart and is normally always here. The fallback covers only a wiped state directory
+      // and stays truthful — a plain restart re-polls the same request, it does NOT mint a fresh code.
       const body =
         status.verificationCode !== undefined
           ? `<p>Waiting for approval — verification code <strong>${escapeHtml(status.verificationCode)}</strong></p>
 <p class="muted">Match this number in the dashboard to accept the agent.</p>`
-          : `<p>Waiting for approval — restart to get a fresh code.</p>`;
+          : `<p>Waiting for approval.</p>`;
       return `<h1>Waitron print agent</h1>${body}`;
     }
     case "pairing_closed":
@@ -118,8 +119,10 @@ ${lastError}
 </dl>`;
     }
     case "unauthorized":
+      // Reached from two paths — a `not_approved` status (the admin DENIED) and a pull `unauthorized`
+      // (a live token was REVOKED) — so the copy names both.
       return `<h1>Waitron print agent</h1>
-<p>This agent was revoked — restart it to ask to join again.</p>`;
+<p>This agent was denied or revoked — restart it to ask to join again.</p>`;
     case "unreachable": {
       const detail =
         status.lastError !== undefined

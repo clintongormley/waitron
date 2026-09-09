@@ -11,6 +11,10 @@ export interface AgentConfig {
   /** Fixed by the first successful probe of the configured address; pins which environment's jobs the
    * agent will ever pull (CLAUDE.md §5). */
   environment?: string;
+  /** The two-digit verification number of the OPEN join request, persisted while pending so a restart
+   * (which reloads the token and keeps polling the same request) can still show the code the admin
+   * matches. Cleared on approval and on halt. */
+  pendingVerificationNumber?: string;
 }
 
 export type AgentPhase =
@@ -20,8 +24,9 @@ export interface AgentStatus {
   phase: AgentPhase;
   serverUrl: string | null;
   current: string | null;
-  /** The two-digit number the admin matches in the dashboard. Held in memory from the join reply; a
-   * restart while pending loses it (see the resumed plan's decision 4). */
+  /** The two-digit number the admin matches in the dashboard. Sourced from the join reply and, across a
+   * restart, from the persisted {@link AgentConfig.pendingVerificationNumber}, so a pending agent always
+   * shows it. */
   verificationCode?: string;
   lastJobAt?: number;
   lastError?: string;
