@@ -67,6 +67,45 @@ describe("runEntry", () => {
     expect(d.startServer).not.toHaveBeenCalled();
   });
 
+  it("passes a landing config to serveRecovery so recovery serves the trust page too", async () => {
+    const serveRecovery = vi.fn<
+      (app: Hono, opts: { landing?: Record<string, unknown> }) => Promise<void>
+    >(() => Promise.resolve());
+    const d = deps({
+      baseEnv: { WAITRON_HTTP_LANDING_PORT: "80", WAITRON_HTTP_HOST: "0.0.0.0" },
+      readRecoveryState: vi.fn(() =>
+        Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+      ),
+      serveRecovery,
+    });
+    await runEntry(d);
+    const opts = serveRecovery.mock.calls[0]![1];
+    expect(opts.landing).toMatchObject({
+      landingPort: 80,
+      httpHost: "0.0.0.0",
+      stateDir: "/state",
+      httpPort: 8080,
+      tls: undefined,
+    });
+  });
+
+  it("builds the landing config without throwing on a malformed WAITRON_BOX_ADDRESSES", async () => {
+    // Recovery never runs `loadConfig`, so a broken box-addresses knob (which `loadConfig` rejects)
+    // must not crash the one path that serves the page — it falls back to enumerating interfaces.
+    const serveRecovery = vi.fn<
+      (app: Hono, opts: { landing?: { boxAddresses?: unknown } }) => Promise<void>
+    >(() => Promise.resolve());
+    const d = deps({
+      baseEnv: { WAITRON_BOX_ADDRESSES: "not-an-ip" },
+      readRecoveryState: vi.fn(() =>
+        Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+      ),
+      serveRecovery,
+    });
+    await expect(runEntry(d)).resolves.toBeUndefined();
+    expect(serveRecovery.mock.calls[0]![1].landing?.boxAddresses).toBeUndefined();
+  });
+
   it("decides BEFORE touching Postgres — the page is served even when the database is unreachable", async () => {
     const d = deps({
       readRecoveryState: vi.fn(() =>
@@ -396,6 +435,53 @@ describe("serveRecovery's bind failure", () => {
       });
     } finally {
       await new Promise<void>((resolve) => first.close(() => resolve()));
+    }
+  });
+});
+
+describe("serveRecovery's landing listener", () => {
+  it("starts the landing listener beside the recovery server and closes it on teardown", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-landing-"));
+    const app = recoveryApp({ state: FRESH, logDir: stateDir, onRetry: () => Promise.resolve() });
+    // The wiring is asserted with an injected stand-in rather than a real port-80 bind: the wire under
+    // test is "recovery starts it and closes it", not the plain-HTTP socket startLandingListener owns
+    // (covered by boot's own suite).
+    const close = vi.fn(() => Promise.resolve());
+    const startLanding = vi.fn(() => ({ close }));
+    const landing = {
+      landingPort: 80,
+      httpHost: "0.0.0.0",
+      stateDir,
+      httpPort: 8080,
+      boxAddresses: undefined,
+      tls: undefined,
+    };
+    const server = await serveRecovery(app, {
+      stateDir,
+      port: 0,
+      log: vi.fn(),
+      landing,
+      startLanding,
+    });
+    try {
+      expect(startLanding).toHaveBeenCalledWith(landing, expect.any(Function));
+      expect(close).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    // Closing the recovery server cascades to the landing listener.
+    await vi.waitFor(() => expect(close).toHaveBeenCalled());
+  });
+
+  it("starts no landing listener when none is configured", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-landing2-"));
+    const app = recoveryApp({ state: FRESH, logDir: stateDir, onRetry: () => Promise.resolve() });
+    const startLanding = vi.fn(() => ({ close: vi.fn(() => Promise.resolve()) }));
+    const server = await serveRecovery(app, { stateDir, port: 0, log: vi.fn(), startLanding });
+    try {
+      expect(startLanding).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
 });

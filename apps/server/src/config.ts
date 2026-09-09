@@ -235,8 +235,9 @@ const DEFAULT_MIN_TICK_MS = 5_000;
  * the server can never disagree about where an operator will look for it. */
 export const DEFAULT_HTTP_PORT = 8080;
 /** The plain-HTTP trust/landing listener's port when `WAITRON_HTTP_LANDING_PORT` is unset — port 80,
- * where a phone lands by typing the box's bare address. `0` disables the listener entirely. */
-const DEFAULT_HTTP_LANDING_PORT = 80;
+ * where a phone lands by typing the box's bare address. `0` disables the listener entirely. Exported
+ * because `node-entry.ts`'s recovery path builds its own landing config without running `loadConfig`. */
+export const DEFAULT_HTTP_LANDING_PORT = 80;
 /** The PostgreSQL port a node advertises for a peer's subscription to dial when
  * WAITRON_REPLICATION_PORT is unset — the cluster default. */
 const DEFAULT_REPLICATION_PORT = 5432;
@@ -246,7 +247,10 @@ const DEFAULT_LOG_MAX_BYTES = 10_000_000;
 /** How many rotated log files the sink keeps + the reader reads back when WAITRON_LOG_MAX_FILES is
  * unset. Five × 10 MB is a bounded, small on-disk footprint. */
 const DEFAULT_LOG_MAX_FILES = 5;
-const DEFAULT_HTTP_HOST = "127.0.0.1";
+/** The bind host when `WAITRON_HTTP_HOST` is unset — loopback, so an unconfigured box never binds a
+ * public interface (the box image sets `0.0.0.0`). Exported for `node-entry.ts`'s recovery landing
+ * config, built without `loadConfig`. */
+export const DEFAULT_HTTP_HOST = "127.0.0.1";
 /** The highest port TCP/`net.Server.listen` accepts. Without this bound, `positiveInt` alone lets
  * a value like `999999` reach `serve()` (`boot.ts`), which throws a raw, unformatted
  * `RangeError [ERR_SOCKET_BAD_PORT]` straight out of `startServer` — not the structured

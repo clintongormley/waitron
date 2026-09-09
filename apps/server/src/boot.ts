@@ -434,10 +434,18 @@ function startTradingListener(
  *
  * The reach URLs and the HTTPS hand-off link it renders point at the box's OWN https origin
  * (`config.httpPort`), because that is where the visitor continues once the CA is trusted.
+ *
+ * Takes only the fields it reads (not the whole `ServerConfig`) so the recovery entrypoint — which
+ * deliberately never runs `loadConfig`, since a broken config is what lands a box in recovery — can
+ * build one from a handful of throw-free env reads (`node-entry.ts`).
  */
-// TODO(recovery): landing listener in recovery mode — coordinate with the backup/recovery session
+export type LandingListenerConfig = Pick<
+  ServerConfig,
+  "landingPort" | "httpHost" | "stateDir" | "httpPort" | "boxAddresses" | "tls"
+>;
+
 export function startLandingListener(
-  config: ServerConfig,
+  config: LandingListenerConfig,
   log: Logger,
 ): { close(): Promise<void> } | undefined {
   if (

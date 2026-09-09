@@ -6,9 +6,22 @@ import type { Hono } from "hono";
 import pg from "pg";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
-import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
+import {
+  DEFAULT_MIGRATIONS_ROOT,
+  DEFAULT_STATE_ROOT,
+  startLandingListener,
+  startServer,
+  type LandingListenerConfig,
+} from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
-import { DEFAULT_HTTP_PORT, MAX_HTTP_PORT, resolveConfigDir } from "./config.js";
+import { parseBoxAddresses } from "./box-reach.js";
+import {
+  DEFAULT_HTTP_HOST,
+  DEFAULT_HTTP_LANDING_PORT,
+  DEFAULT_HTTP_PORT,
+  MAX_HTTP_PORT,
+  resolveConfigDir,
+} from "./config.js";
 import { isUnset } from "./env-value.js";
 import { ensureInstance, type InstanceUrls } from "./instance-bootstrap.js";
 import { createLogger, type Logger } from "./logger.js";
@@ -94,11 +107,23 @@ export interface RecoveryServeOptions {
   stateDir: string;
   port: number;
   log: Logger;
+  /** The plain-HTTP trust/landing listener's config, when recovery should serve the trust page beside
+   * the HTTPS page (built by `landingConfigFrom` in the recovery path). Omitted → no landing listener,
+   * which is how the direct-bind tests keep to one socket. */
+  landing?: LandingListenerConfig;
+  /** Injected for tests; defaults to the real `startLandingListener`. */
+  startLanding?: (
+    config: LandingListenerConfig,
+    log: Logger,
+  ) => { close(): Promise<void> } | undefined;
 }
 
 /**
  * Bind the recovery page on the box's own HTTPS port, presented with the box's existing leaf so an
- * already-trusting phone reaches it at the same URL with no new trust step.
+ * already-trusting phone reaches it at the same URL with no new trust step. Beside it, serve the same
+ * plain-HTTP trust/landing page trading mode does (when `opts.landing` is given): a phone that does
+ * NOT yet trust the box's self-signed leaf hits the browser's cert interstitial before any recovery JS
+ * runs, so it needs the plain-HTTP page to fetch the CA and its trust steps.
  *
  * Resolves when the socket is actually bound (`serve`'s `listeningListener`, not source order —
  * `serve()` returns before the bind, as `boot.ts`'s `startListening` records), and rejects if the
@@ -113,12 +138,59 @@ export function serveRecovery(
     const tls = recoveryTlsFiles(opts.stateDir);
     const server = serve(buildServeOptions({ fetch: app.fetch, port: opts.port }, tls), (info) => {
       opts.log("warn", "recovery.listening", { port: info.port, tls: tls !== undefined });
+      // Best-effort, exactly as in trading mode: `startLandingListener` swallows its own bind failure
+      // and returns undefined when there is nothing to serve (no minted leaf, or the port disabled),
+      // so a missing or unbindable landing page never takes the recovery page down. Started only after
+      // the HTTPS bind succeeds so the two do not race for the same port.
+      const startLanding = opts.startLanding ?? startLandingListener;
+      const landing = opts.landing ? startLanding(opts.landing, opts.log) : undefined;
+      if (landing !== undefined) {
+        // The recovery server outlives everything until the process exits (production never closes it),
+        // so this fires only on a deliberate teardown — a test, or a future shutdown path.
+        server.on("close", () => void landing.close().catch(() => {}));
+      }
       resolve(server);
     });
     server.on("error", (error: NodeJS.ErrnoException) => {
       reject(new AppError("server.listen_failed", { port: opts.port, code: error.code ?? "" }));
     });
   });
+}
+
+/**
+ * The plain-HTTP trust/landing listener's config for the recovery path, built from throw-free env
+ * reads (recovery never runs `loadConfig` — a broken config is what lands a box here). `tls` is always
+ * undefined: recovery presents the box's OWN minted leaf (`recoveryTlsFiles`), never an operator cert,
+ * so the trust page is warranted exactly when a minted leaf exists — the check `startLandingListener`
+ * then makes.
+ */
+function landingConfigFrom(
+  env: NodeJS.ProcessEnv,
+  stateDir: string,
+  httpPort: number,
+): LandingListenerConfig {
+  let boxAddresses: string[] | undefined;
+  try {
+    boxAddresses = parseBoxAddresses(env.WAITRON_BOX_ADDRESSES);
+  } catch {
+    // A malformed WAITRON_BOX_ADDRESSES must not crash recovery; fall back to enumerating interfaces.
+    boxAddresses = undefined;
+  }
+  const raw = env.WAITRON_HTTP_LANDING_PORT;
+  // `0` disables the listener (kept, unlike httpPort); an unset or out-of-range value takes the
+  // default rather than throwing, mirroring `httpPortFrom`.
+  const landingPort = isUnset(raw) ? DEFAULT_HTTP_LANDING_PORT : Number.parseInt(raw, 10);
+  return {
+    landingPort:
+      Number.isInteger(landingPort) && landingPort >= 0 && landingPort <= MAX_HTTP_PORT
+        ? landingPort
+        : DEFAULT_HTTP_LANDING_PORT,
+    httpHost: isUnset(env.WAITRON_HTTP_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_HTTP_HOST,
+    stateDir,
+    httpPort,
+    boxAddresses,
+    tls: undefined,
+  };
 }
 
 export interface EntryDeps {
@@ -248,6 +320,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       failures: state.failures,
       lastErrorCode: state.lastErrorCode,
     });
+    const httpPort = httpPortFrom(deps.baseEnv);
     await deps.serveRecovery(
       recoveryApp({
         state,
@@ -260,7 +333,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           exit(0);
         },
       }),
-      { stateDir: deps.stateDir, port: httpPortFrom(deps.baseEnv), log: deps.log },
+      {
+        stateDir: deps.stateDir,
+        port: httpPort,
+        log: deps.log,
+        landing: landingConfigFrom(deps.baseEnv, deps.stateDir, httpPort),
+      },
     );
     return;
   }
