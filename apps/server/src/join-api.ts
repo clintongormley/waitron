@@ -21,6 +21,7 @@ import {
 } from "@waitron/server-kit";
 import {
   acceptDeviceJoinRequest,
+  acceptPrintAgentJoinRequest,
   challengeFor,
   denyJoinRequest,
   joinRequestKind,
@@ -126,7 +127,8 @@ function optionalBodyUuid(v: unknown, field: string): string | null {
  *  2. THE PENDING REQUESTS. Everything that is the MECHANISM is shared across the surfaces — list,
  *     challenge, deny — and takes its permission from the row's kind. Only ACCEPT is per-surface,
  *     because that is the one step where the surfaces differ in what an approved request becomes; this
- *     file mounts the DEVICE accept, and an agent's ask is refused by it (404).
+ *     file mounts BOTH accepts (device → `device.manage`, print agent → `printer.manage`), and each
+ *     refuses the OTHER kind 404 via the predicate riding its consuming delete.
  */
 export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
@@ -312,6 +314,37 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         { deviceId: result.deviceId, name: result.name, formFactor: result.formFactor },
         200,
       );
+    }),
+  );
+
+  // ── Approve a PRINT AGENT's ask (printer.manage) ─────────────────────────────────────────────────
+  // The other per-surface accept, gated on `printer.manage` rather than `device.manage`. What an
+  // approved request becomes differs (here, a `print_agents` row carrying the request's own id + token
+  // hash, so the agent's Bearer keeps working — no device binding), which is why accept is per-surface
+  // while list/challenge/deny are shared above. A device ask is refused 404 by the kind predicate riding
+  // `acceptPrintAgentJoinRequest`'s consuming delete, so a `printer.manage` holder can never turn one
+  // into an agent. The body is just `{ choice }` — there is no binding to resolve.
+  app.post("/management-api/print-agent-join-requests/:id/accept", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      // PARSED out here, screened inside the gate — the device accept route's ordering, so the file's two
+      // by-id accept paths do not disagree: an unauthorised caller is refused 403 before the route says
+      // anything about its id or body. `readJsonBody` coerces an empty/malformed/`null` body to `{}`.
+      const body = await readJsonBody<{ choice?: unknown }>(c);
+      const result = await gated(sessionId, "printer.manage", (tx) => {
+        const choice = requireString(body.choice, "choice");
+        // A malformed id names no request — refused before it reaches a bare-uuid comparison (which
+        // would `22P02` → an opaque 500), exactly as an unknown one is (oracle-free, decision M3).
+        if (!isUuid(id)) throw new AppError("join_request.not_found", {});
+        return acceptPrintAgentJoinRequest(tx, deps.cfg, id, { choice });
+      });
+      // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT — an AppError raised inside
+      // `withTenant` (which IS the transaction) would roll the consuming delete back into existence and
+      // turn a wrong tap into an unlimited retry. The verb returns the mismatch as a RESULT for exactly
+      // this reason; the route commits it, then answers (see `acceptPrintAgentJoinRequest`'s header).
+      if (!result.ok) throw new AppError("device.join_mismatch", {});
+      return c.body(null, 204);
     }),
   );
 }

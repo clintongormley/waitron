@@ -1,16 +1,16 @@
-// Keeps `device.join_rate_limited` (errors.ts) reachable from this file — it is the DEFAULT code
-// this limiter throws and one of the two the enrol surfaces pass (the print surface passes its own
-// `agent.pairing_rate_limited`, registered in @waitron/printing's errors.ts and reached through
-// print-api.ts's imports). The reachability convention device.ts / kitchen.ts follow. See errors.ts.
+// Keeps `device.join_rate_limited` (errors.ts) reachable from this file — the ONE code this limiter
+// throws, shared by both knock surfaces (the device knock and the print-agent knock both build it with
+// this default). The reachability convention device.ts / kitchen.ts follow. See errors.ts.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 
 /**
- * The rate-limit for the unauthenticated enrol routes (`POST /api/device/join`, device-identity-1 §8, and
- * `POST /print-api/agent/enrol`, which reuses this same limiter). A per-process, in-memory, GLOBAL
+ * The rate-limit for the unauthenticated knock routes (`POST /api/device/join`, device-identity-1 §8,
+ * and `POST /print-api/agent/join`, which reuses this same limiter). A per-process, in-memory, GLOBAL
  * fixed-window counter, checked at the TOP of the handler BEFORE the body is parsed and BEFORE any DB
- * work — so a rejected attempt touches no DB. Only the thrown CODE differs per surface
- * (see {@link EnrolRateLimiterOptions.code}); the window, cap and topology reasoning below are shared.
+ * work — so a rejected attempt touches no DB. Both surfaces throw the SAME `device.join_rate_limited`
+ * (the agent client reads the HTTP 429, not the code string); the window, cap and topology reasoning
+ * below are shared.
  *
  * Why a limit at all, and why THIS shape:
  *  - It is not the primary guard on either surface: the device knock is admitted only while an admin
@@ -55,14 +55,14 @@ export interface EnrolRateLimiterOptions {
    */
   now?: () => number;
   /**
-   * The `AppError` code thrown when the window is over the cap. Each enrol surface passes its OWN domain
-   * code — `device.join_rate_limited` for `POST /api/device/join`, `agent.pairing_rate_limited` for
-   * `POST /print-api/agent/enrol` — so a throttled attempt is answered in that surface's namespace (codes
-   * name the domain concept, CLAUDE.md §1/§3) and no caller has to catch-and-translate a foreign one.
-   * Defaults to `device.join_rate_limited`, so a caller that omits it gets the device surface's code.
-   * Both codes take empty params.
+   * The `AppError` code thrown when the window is over the cap. A one-member union today: both knock
+   * surfaces (`POST /api/device/join`, `POST /print-api/agent/join`) answer a throttle with
+   * `device.join_rate_limited` — the agent client reads the HTTP 429, not the code string, so the print
+   * surface reuses the shared device knock code rather than minting a sibling (CLAUDE.md §3). The field
+   * stays so a future surface that needs its OWN throttle code widens the union here; defaults to
+   * `device.join_rate_limited`. Takes empty params.
    */
-  code?: "device.join_rate_limited" | "agent.pairing_rate_limited";
+  code?: "device.join_rate_limited";
 }
 
 export interface EnrolRateLimiter {
@@ -79,12 +79,12 @@ export interface EnrolRateLimiter {
  * The GLOBAL, in-memory, per-process enrol rate-limiter (spec §8). A fixed-window counter with the
  * window ({@link ENROL_RATE_WINDOW_MS}) and cap ({@link ENROL_RATE_MAX}) BAKED IN — a generic
  * `windowMs`/`max` API would misrepresent that fixed policy (CLAUDE.md §1/§3). The one thing it is
- * parameterised on is the thrown {@link EnrolRateLimiterOptions.code}, so the device and print enrol
- * routes share this counter yet each answers a throttle in its own namespace. Not per-key (no
+ * parameterised on is the thrown {@link EnrolRateLimiterOptions.code} (a one-member union today), so the
+ * device knock and the print-agent knock share this counter and the same throttle code. Not per-key (no
  * per-IP/per-tenant bucket) by design — see the module doc: the on-prem topology makes a per-IP key
  * worthless, and one global bucket is exactly the connection-pool protection wanted. State is two
  * closure variables, so a fresh limiter is fully isolated (each test builds its own; production builds
- * one per enrol surface at boot); only the clock and code are injectable.
+ * one per knock surface at boot); only the clock and code are injectable.
  */
 export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): EnrolRateLimiter {
   const { now = Date.now, code = "device.join_rate_limited" } = opts;

@@ -6,7 +6,17 @@ import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
+import { acceptPrintAgentJoinRequest } from "./join-requests.js";
+import { createPairingMode } from "./pairing-mode.js";
+import type { TillConfig } from "./till-config.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -74,10 +84,35 @@ beforeAll(async () => {
   staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
 });
 
-/** The print API mounted over the REAL app-role pool (suite.admin), scoped to `tenant`. */
+/** The FULL TillConfig for a seeded tenant. Only tenantId/locationId are read by the join verbs and
+ * routes here; nodeId is echoed on the pull and the rest are unused, so branded random uuids stand in. */
+function cfgOf(tenant: Tenant): TillConfig {
+  return {
+    tenantId: brandTenantId(tenant.tenantId),
+    tillId: brandTillId(randomUUID()),
+    nodeId: brandNodeId(randomUUID()),
+    seriesId: brandSeriesId(randomUUID()),
+    locationId: brandLocationId(tenant.locationId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    cardProvider: "none",
+    tipsEnabled: false,
+    orderFlow: "ticket_then_pay",
+  };
+}
+
+/** The print API mounted over the REAL app-role pool (suite.admin), scoped to `tenant`. The pairing
+ * window is OPEN so `enrolAgent`'s knock is admitted; `readMembership` returns no chart (the pull's
+ * `servers` are proven in the PGlite suite). */
 function mountApp(tenant: Tenant): Hono {
   const app = new Hono();
-  mountPrintApi(app, { db: suite.admin, cfg: tenant }, noopLog);
+  const pairingMode = createPairingMode();
+  pairingMode.open();
+  mountPrintApi(
+    app,
+    { db: suite.admin, cfg: cfgOf(tenant), pairingMode, readMembership: async () => null },
+    noopLog,
+  );
   return app;
 }
 
@@ -98,16 +133,29 @@ async function send(
   });
 }
 
-async function enrolAgent(app: Hono, label: string): Promise<{ agentId: string; token: string }> {
-  const codeRes = await send(app, "POST", "/management-api/print-agents/codes", {
-    cookie: managerCookie,
-    body: { label },
+/** Knock (unauth, window open) then accept the join in-process via the verb (the accept ROUTE lives in
+ * join-api.ts, proven in join-api.pg.test.ts). The agent's Bearer is the knock's `${joinId}.${secret}`
+ * and joinId becomes the agent id. */
+async function enrolAgent(
+  app: Hono,
+  label: string,
+  tenant: Tenant = tenantA,
+): Promise<{ agentId: string; token: string }> {
+  const knock = await send(app, "POST", "/print-api/agent/join", { body: { name: label } });
+  expect(knock.status).toBe(201);
+  const { token, verificationNumber } = (await knock.json()) as {
+    token: string;
+    verificationNumber: string;
+  };
+  const joinId = token.slice(0, token.indexOf("."));
+  await withTenant(suite.admin, tenant.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const result = await acceptPrintAgentJoinRequest(tx, cfgOf(tenant), joinId, {
+      choice: verificationNumber,
+    });
+    expect(result.ok).toBe(true);
   });
-  expect(codeRes.status).toBe(201);
-  const { code } = (await codeRes.json()) as { code: string };
-  const enrol = await send(app, "POST", "/print-api/agent/enrol", { body: { code } });
-  expect(enrol.status).toBe(200);
-  return (await enrol.json()) as { agentId: string; token: string };
+  return { agentId: joinId, token };
 }
 
 async function createPrinter(app: Hono, agentId: string, name: string): Promise<string> {
@@ -215,21 +263,17 @@ describe("Print API over real Postgres (as the app role)", () => {
     });
 
     // Staff session → 403 (the gate refuses it).
-    const staff = await send(app, "POST", "/management-api/print-agents/codes", {
-      cookie: staffCookie,
-      body: { label: "nope" },
-    });
+    const staff = await send(app, "GET", "/management-api/print-agents", { cookie: staffCookie });
     expect(staff.status).toBe(403);
     expect((await staff.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
 
-    // Manager session → 201 (the gate admits it).
-    const manager = await send(app, "POST", "/management-api/print-agents/codes", {
+    // Manager session → 200 (the gate admits it).
+    const manager = await send(app, "GET", "/management-api/print-agents", {
       cookie: managerCookie,
-      body: { label: "Gate OK" },
     });
-    expect(manager.status).toBe(201);
+    expect(manager.status).toBe(200);
   });
 });
 
