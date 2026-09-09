@@ -1,40 +1,22 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 
-// TWO projects, ONE merged coverage report, serialized by `sequence.groupOrder`.
-//
-// `replication-fidelity.pg.test.ts` boots its OWN two-node real-PostgreSQL cluster and then does heavy
-// POST-boot replication setup in a beforeAll (`provisionAndBootstrapNode` ×2, `createPublications`, a
-// cross-node COPY `createSubscription`, `seedTill`). That setup is not bounded by the two-node fixture's
-// boot retry, so when it runs CONCURRENTLY with sibling container/connection-heavy files (the
-// concurrency and e2e suites open ~70-80 backends against the ONE shared cluster plus heavy CPU) it is
-// starved and hangs to the 300s hook timeout. It needs the property `packages/sync` gets from
-// singleFork: it must run ALONE within this package. But the other 32 AEAT files must stay on the
-// maxForks:4 connection-budget lever (below); making the whole package singleFork is not allowed.
-//
-// So the two-node suite is a SEPARATE project pinned to run after everything else:
-//   - `main` (groupOrder 0, maxForks:4) — every file EXCEPT the two-node suite. Unchanged behaviour.
-//   - `replication` (groupOrder 1, singleFork) — only the two-node suite.
-// `sequence.groupOrder` runs groups low-to-high, so ALL of group 0 finishes before group 1 starts;
-// nothing overlaps the two-node suite. Verified empirically from the run's file interleaving (the
-// suite's `✓` line appears only after every other file's, never between them) — vitest `projects` do
-// NOT otherwise serialize against each other (they run in parallel by default), which groupOrder fixes.
-// A single `vitest run --coverage` still runs both projects and merges into ONE report at the
-// thresholds below, so no coverage-blob merge is needed.
-//
-// `restore.pg.test.ts` is a PGlite suite (no container, lightweight) and stays in `main`; only the
-// two-node cluster suite needs isolation. A future suite that boots its own `startTwoNodeCluster`
-// belongs in the `replication` project's include.
+// The main suites share a PostgreSQL container; the replication suite owns its own pair.
+// Run them in separate groups, with one merged coverage report. The pool's fork limit belongs
+// on the OUTER test config: Vitest 3's createForksPool reads vitest.config, not project.config.
 const twoNodeSuite = "src/replication-fidelity.pg.test.ts";
 
 export default defineConfig({
   test: {
+    // Keep at most four fork workers alive. Per-project singleFork still selects
+    // the replication suite's serial lane inside this pool.
+    poolOptions: { forks: { maxForks: 4 } },
     projects: [
       {
         test: {
           name: "main",
           globals: true,
           // Shared globalSetup requires Docker for the real-Postgres privilege and concurrency suites.
-          // It runs before every worker, so Docker absence also fails PGlite-only test selections.
+          // It runs once before this project's workers, including for PGlite-only selections.
           globalSetup: ["./src/testing/global-setup.ts"],
           include: ["src/**/*.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", twoNodeSuite],
@@ -46,27 +28,6 @@ export default defineConfig({
           // covers the ordinary risk of a migration suite booting a second database inside a single `it`.
           testTimeout: 120_000,
           hookTimeout: 180_000,
-          // BOUNDED multi-fork — the connection-budget lever, the same reason `packages/db` caps its own
-          // forks, NOT `singleFork`/coverage-v8. Unlike packages/payments, this package does NOT need
-          // `singleFork` for the @vitest/coverage-v8 branch-merge artifact: it has thousands of real
-          // branches that dilute that mis-merge below the 95% gate (payments' config note records the same
-          // asymmetry from the other side — a small package where a handful of mis-merged branches sinks
-          // the ratio). So it runs multi-fork, and its concurrency suites open many backends against the
-          // ONE shared cluster's default 100-connection budget the old per-file containers did not share.
-          // The peak driver: chain.concurrency and chain.node-rekey.concurrency each open `WRITERS = 20`
-          // pools at once, and `createPostgresDb` EAGERLY probes+releases one backend per pool
-          // (client.ts:118) which lingers idle (~10s), so all 20 are held live across the test window; those
-          // files' admin pools also fan out toward their max of 10 under concurrent seeding, so a heavy file
-          // peaks ~30. Pinning the exact cross-fork peak is fragile (many short-lived pools with idle
-          // retention); a conservative worst case at maxForks: 4 — two ~30 heavy files plus a couple of
-          // lighter ones — lands around 70-80, under the EFFECTIVE budget of ~97 (the stock 100 minus
-          // superuser_reserved_connections=3), so 4 needs no `max_connections` bump to the shared
-          // `startPostgresContainer`. That margin is thinner than packages/db's, so the verification is
-          // deliberately EMPIRICAL, not this arithmetic and not an isolated local pass: the full suite passes
-          // green under maxForks: 4, and the unfiltered `main` run is where a real exhaustion ("too many
-          // clients already") would surface. 4 also matches CI's ubuntu-latest runner vCPU count (this
-          // package runs on the `test-light` shard). Same lever and cap as packages/db.
-          poolOptions: { forks: { maxForks: 4 } },
           // Group 0: runs to completion before the `replication` group (groupOrder 1) starts.
           sequence: { groupOrder: 0 },
         },
@@ -81,7 +42,7 @@ export default defineConfig({
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
           testTimeout: 120_000,
           hookTimeout: 180_000,
-          // Runs ALONE — one file, one fork — so its heavy post-boot replication setup is never starved.
+          // The one replication file runs serially after the main project.
           poolOptions: { forks: { singleFork: true } },
           // Group 1: starts only after every `main` (group 0) file has finished.
           sequence: { groupOrder: 1 },

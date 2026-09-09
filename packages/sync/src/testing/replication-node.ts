@@ -1,7 +1,11 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { sql } from "drizzle-orm";
 import { createPostgresDb, type Database } from "@waitron/db";
-import { POSTGRES_IMAGE, roleUrl } from "@waitron/db/testing/postgres.js";
+import {
+  POSTGRES_IMAGE,
+  roleUrl,
+  networkedPostgresContainer,
+} from "@waitron/db/testing/postgres.js";
 import type { StartedNetwork } from "@waitron/db/testing/two-node.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -58,7 +62,7 @@ export interface ReplicationNode {
   owner: Database;
   /** The container's own superuser URI (host-published), for composing further connections. */
   superuserUri: string;
-  /** The Docker-network alias a PEER dials (Task 7). The container hostname when no network is given. */
+  /** The container name a peer can resolve when both join the same Docker network. */
   networkAlias: string;
   /** The database `waitron_migrator` owns and every table lives in. */
   database: string;
@@ -68,9 +72,9 @@ export interface ReplicationNode {
 }
 
 export interface ReplicationNodeOptions {
-  /** Join this shared network so a peer can dial the node by `alias` (Task 7). */
+  /** Join this shared network so a peer can dial the node by `networkAlias`. */
   network?: StartedNetwork;
-  /** The network alias to answer to; required to be reachable from a peer. Defaults to `repl-node`. */
+  /** Suffix for this node's unique Docker name. Defaults to `repl-node`. */
   alias?: string;
   /** The owned database name. Defaults to `waitron_repl_node`. */
   database?: string;
@@ -88,15 +92,11 @@ export async function startReplicationNode(
   const alias = options.alias ?? "repl-node";
   const database = options.database ?? "waitron_repl_node";
 
-  let builder = new PostgreSqlContainer(POSTGRES_IMAGE)
-    // Same reaper marker as startPostgresContainer: an interrupted Ryuk-off run leaves this for
-    // `pnpm reap`, which removes ONLY containers carrying this label.
-    .withLabels({ "com.waitron.reapable": "true" })
-    .withCommand(LOGICAL_REPLICATION_COMMAND);
-  if (options.network !== undefined) {
-    builder = builder.withNetwork(options.network).withNetworkAliases(alias);
-  }
-  const container = await builder.start();
+  const builder =
+    options.network === undefined
+      ? new PostgreSqlContainer(POSTGRES_IMAGE).withLabels({ "com.waitron.reapable": "true" })
+      : networkedPostgresContainer(options.network, alias);
+  const container = await builder.withCommand(LOGICAL_REPLICATION_COMMAND).start();
 
   // Everything acquired, in order; teardown reverses it and swallows each failure so one wedged close
   // can never strand the container.stop().
@@ -118,7 +118,7 @@ export async function startReplicationNode(
       superuser,
       owner,
       superuserUri,
-      networkAlias: alias,
+      networkAlias: container.getName().replace(/^\//, ""),
       database,
       migratorPassword: MIGRATOR_PASSWORD,
       stop,

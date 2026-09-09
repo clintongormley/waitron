@@ -1,8 +1,7 @@
 import { Network } from "testcontainers";
-import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import pg from "pg";
 import { dockerAvailable } from "./harness.js";
-import { POSTGRES_IMAGE } from "./postgres.js";
+import { networkedPostgresContainer, networkNodeName } from "./postgres.js";
 import { LOGICAL_REPLICATION_COMMAND, type ReplNode, type StartedNetwork } from "./two-node.js";
 import { clusterMutex, type ClusterMutex } from "./cluster-mutex.js";
 
@@ -11,7 +10,7 @@ export type { StartedNetwork } from "./two-node.js";
 /**
  * A two-node PostgreSQL cluster whose nodes reach each other ONLY across a WireGuard tunnel — the
  * local stand-in for a box and its cloud twin talking over an untrusted network. The sibling
- * {@link import("./two-node.js")} fixture lets each node dial the other by its Docker-network alias,
+ * {@link import("./two-node.js")} fixture lets each node dial the other by its Docker DNS name,
  * a trusted, zero-latency LAN; this one puts a real encrypted WireGuard link in the path so the
  * transport a cloud standby actually runs over is exercised, without a cloud. The mechanism the
  * suites on top of it lean on is written up in
@@ -49,7 +48,7 @@ export interface TwoNodeWireguardCluster {
 export interface WireguardPeer {
   /** The peer's WireGuard public key. */
   publicKey: string;
-  /** How this node reaches the peer's WireGuard socket — the peer's Docker alias, e.g. `node-b:51820`. */
+  /** How this node reaches the peer's WireGuard socket — the peer's Docker name and port. */
   endpoint: string;
   /** The peer's tunnel address, the only address routed down the link (`allowed-ips`). */
   tunnelHost: string;
@@ -129,17 +128,10 @@ async function startPostgresWireguardContainer(
   network: StartedNetwork,
   plan: NodePlan,
 ): Promise<WireguardContainer> {
-  return (
-    new PostgreSqlContainer(POSTGRES_IMAGE)
-      // Same reaper marker as startPostgresContainer: an interrupted Ryuk-off run leaves this for
-      // `pnpm reap`, which removes ONLY containers carrying this label.
-      .withLabels({ "com.waitron.reapable": "true" })
-      .withNetwork(network)
-      .withNetworkAliases(plan.alias)
-      .withAddedCapabilities("NET_ADMIN")
-      .withCommand(LOGICAL_REPLICATION_COMMAND)
-      .start()
-  );
+  return networkedPostgresContainer(network, plan.alias)
+    .withAddedCapabilities("NET_ADMIN")
+    .withCommand(LOGICAL_REPLICATION_COMMAND)
+    .start();
 }
 
 export async function startRealWireguardNode(
@@ -188,7 +180,7 @@ export async function startRealWireguardNode(
     await client.connect();
     const node: WireguardReplNode = {
       uri,
-      networkHost: plan.alias,
+      networkHost: networkNodeName(network, plan.alias),
       tunnelHost: plan.tunnelHost,
       run: async (sql) => {
         await client.query(sql);
@@ -276,12 +268,12 @@ export async function startTwoNodeWireguardCluster(
     // down the link and dials the other by its Docker alias (WireGuard resolves the endpoint host).
     await a.configurePeer({
       publicKey: b.publicKey,
-      endpoint: `${NODE_B.alias}:${WG_PORT}`,
+      endpoint: `${b.node.networkHost}:${WG_PORT}`,
       tunnelHost: NODE_B.tunnelHost,
     });
     await b.configurePeer({
       publicKey: a.publicKey,
-      endpoint: `${NODE_A.alias}:${WG_PORT}`,
+      endpoint: `${a.node.networkHost}:${WG_PORT}`,
       tunnelHost: NODE_A.tunnelHost,
     });
 

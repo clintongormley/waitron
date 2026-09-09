@@ -559,7 +559,9 @@ par_start=$(date +%s)
 ( set +e; pnpm "$@" typecheck > "$tc_log" 2>&1; echo "$?" > "$tc_log.rc"; date +%s > "$tc_log.end" ) &
 tc_pid=$!
 cov_rc=0
-pnpm -r "$@" test:coverage || cov_rc=$?
+# Bound the whole process group, including startup and teardown outside Vitest hook timers.
+# Two package processes cap nested test-worker concurrency; each package keeps its own fork cap.
+node scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2 "$@" test:coverage || cov_rc=$?
 cov_end=$(date +%s)
 wait "$tc_pid" || true
 tc_rc=$(cat "$tc_log.rc" 2>/dev/null || echo 1)
@@ -577,7 +579,7 @@ fi
 if [ "$cov_rc" -ne 0 ]; then
   echo ""
   echo "pre-push BLOCKED: 'tests with coverage ($scope_label)' failed."
-  echo "  Reproduce:      pnpm -r$repro_filters test:coverage"
+  echo "  Reproduce:      node scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2$repro_filters test:coverage"
   echo "  Skip this once: git push --no-verify"
   echo ""
   failed=1

@@ -66,6 +66,26 @@ describe("startTwoNodeWireguardCluster setup-failure cleanup", () => {
       }),
   });
 
+  it("configures peers using their actual network names", async () => {
+    const endpoints: string[] = [];
+    const cluster = await startTwoNodeWireguardCluster({
+      startNetwork: async () => fakeNetwork([]),
+      startNode: async (_network, plan) => ({
+        ...startedNode(plan.tunnelHost, []),
+        node: { ...fakeNode(plan), networkHost: `unique-${plan.alias}` },
+        configurePeer: async (peer) => {
+          endpoints.push(peer.endpoint);
+        },
+      }),
+      mutex: noopMutex,
+    });
+    try {
+      expect(endpoints).toEqual(["unique-node-b:51820", "unique-node-a:51820"]);
+    } finally {
+      await cluster.stop();
+    }
+  });
+
   it("stops both started nodes and the network when migration throws", async () => {
     const stopped: string[] = [];
     const boom = new Error("migration failed");

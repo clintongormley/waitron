@@ -1,8 +1,7 @@
 import { Network } from "testcontainers";
-import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import pg from "pg";
 import { dockerAvailable } from "./harness.js";
-import { POSTGRES_IMAGE } from "./postgres.js";
+import { networkedPostgresContainer, networkNodeName } from "./postgres.js";
 import { clusterMutex, type ClusterMutex } from "./cluster-mutex.js";
 
 /**
@@ -16,7 +15,7 @@ import { clusterMutex, type ClusterMutex } from "./cluster-mutex.js";
  * so custom `-c` flags cannot break startup. The mechanism this fixture serves is written up in
  * `docs/superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md`.
  *
- * Each node dials the OTHER by its Docker-network alias (`networkHost`, `node-a`/`node-b`) — a
+ * Each node dials the OTHER by its unique Docker name (`networkHost`) — a
  * subscription's CONNECTION string reaches a peer through the network, never through the
  * host-published `uri`, which only this process can use.
  *
@@ -41,7 +40,7 @@ import { clusterMutex, type ClusterMutex } from "./cluster-mutex.js";
 export interface ReplNode {
   /** Reaches this node from the HOST (published port). Used by this process's own pg clients. */
   uri: string;
-  /** The Docker-network alias the OTHER node dials, e.g. `host=node-a port=5432`. */
+  /** The Docker DNS name the OTHER node dials. */
   networkHost: string;
   /** Runs one statement, discarding its rows. */
   run(sql: string): Promise<void>;
@@ -133,12 +132,7 @@ async function startRealNode(
   alias: string,
   command: string[],
 ): Promise<StartedReplNode> {
-  const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
-    // Same reaper marker as startPostgresContainer: an interrupted Ryuk-off run leaves this container
-    // for `pnpm reap`, which removes ONLY containers carrying this label.
-    .withLabels({ "com.waitron.reapable": "true" })
-    .withNetwork(network)
-    .withNetworkAliases(alias)
+  const container = await networkedPostgresContainer(network, alias)
     .withCommand(command)
     // Bound the boot so a starved start fails at the bound and the acquire retries, rather than the
     // wait strategy hanging the whole suite `beforeAll` (this fixture's original flake).
@@ -152,7 +146,7 @@ async function startRealNode(
   await client.connect();
   const node: ReplNode = {
     uri,
-    networkHost: alias,
+    networkHost: networkNodeName(network, alias),
     run: async (sql) => {
       await client.query(sql);
     },

@@ -472,6 +472,30 @@ describe("ci.yml's job graph", () => {
 });
 
 describe("the test shards", () => {
+  it("isolates Bookings and Sync from the light bins", () => {
+    for (const name of ["@waitron/bookings", "@waitron/sync"]) {
+      expect(OWN_SHARD_PACKAGES).toContain(name);
+      expect(LIGHT_A_PACKAGES).not.toContain(name);
+      expect(LIGHT_B_PACKAGES).not.toContain(name);
+    }
+  });
+
+  it("bounds every test job, including startup and teardown", () => {
+    const testJobs = jobs.filter(({ id }) => id.startsWith("test-"));
+    expect(testJobs.length).toBeGreaterThan(0);
+    for (const { id, body } of testJobs) {
+      const minutes = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(body.join("\n"))?.[1]);
+      expect(minutes, id).toBeGreaterThan(0);
+      expect(minutes, id).toBeLessThanOrEqual(15);
+    }
+  });
+
+  it("caps light-bin package concurrency explicitly", () => {
+    for (const id of ["test-light-a", "test-light-b"]) {
+      expect(job(id).body.join("\n")).toContain("--workspace-concurrency=2");
+    }
+  });
+
   it("were found, each with at least one filter", () => {
     // Extraction guard again: `shards` is derived from a step-name regex, and an empty list would
     // make the partition below hold trivially.

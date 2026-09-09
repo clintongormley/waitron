@@ -1,4 +1,5 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
+import type { StartedNetwork } from "testcontainers";
 import { createPostgresDb, type Database } from "../client.js";
 import { runMigrations, type MigrationOptions } from "../migrate.js";
 
@@ -9,6 +10,23 @@ import { runMigrations, type MigrationOptions } from "../migrate.js";
  * would be a bad trade.
  */
 export const POSTGRES_IMAGE = "postgres:18-alpine";
+
+export function networkNodeName(network: StartedNetwork, alias: string): string {
+  return `waitron-${network.getName()}-${alias}`;
+}
+
+export function networkedPostgresContainer(
+  network: StartedNetwork,
+  alias: string,
+): PostgreSqlContainer {
+  // A container name provides peer DNS without withNetworkAliases(): Testcontainers 12's
+  // alias path also attaches the default bridge. Different MTUs on those two interfaces can
+  // stall host queries above one frame on Docker Desktop (networked-postgres.test.ts).
+  return new PostgreSqlContainer(POSTGRES_IMAGE)
+    .withLabels({ "com.waitron.reapable": "true" })
+    .withName(networkNodeName(network, alias))
+    .withNetwork(network);
+}
 
 /**
  * The slice of a started container this package's test helpers actually use, and the seam a test
