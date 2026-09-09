@@ -22,9 +22,12 @@ baking a path could not kill a box on its first restart into trading).
 
 ## 1. What this is, and its scope
 
-The backup **engine** is built and unchanged in its core: it takes an encrypted `pg_dump` archive
-each tick and fans it out to every configured destination. What is missing is the way a
-**non-technical operator turns it on and keeps it healthy** without editing an env file over SSH —
+The backup **engine** is built and unchanged in its core: each tick it packs an archive — the
+`pg_dump` **plus** the media store and a fixed list of the box's secret/identity files
+(`RECOVERY_FILES`: `secrets.env`, `trading.env`, the TLS CA + leaf — so a backup is more than the
+database) — encrypts the whole thing once, and fans it out to every configured destination. What is
+missing is the way a **non-technical operator turns it on and keeps it healthy** without editing an
+env file over SSH —
 and, the part that makes a backup a *recovery*, a moment that **mints a strong recovery key and shows
 it to the operator** so a copy exists off the box. A key nobody wrote down is not a recovery key: if
 the disk dies, the archive it encrypted is unreadable.
@@ -41,17 +44,19 @@ This slice adds three things and extends the engine in two small ways:
    sends them into the admin surface once they log in; **skipped in demo mode**, which needs no real
    backups.
 
-Engine extensions, both driven by the new policy step (§3.3): a **wall-clock scheduler** (a chosen
-time of day on chosen days, in the venue's local timezone) replacing "every N hours from boot", and
-**age-based retention** added beside the existing count-based prune (keep at most N *and* nothing
-older than D days — prune on whichever bites first).
+Engine extensions: a **wall-clock scheduler** (a chosen time of day on chosen days, in the venue's
+local timezone) replacing "every N hours from boot", and **age-based retention** added beside the
+existing count-based prune (keep at most N *and* nothing older than D days — prune on whichever bites
+first), both driven by the new policy step (§3.3); and **capturing `backup.env` into the archive** so
+the backup settings survive a restore (§3.2), an **optional** entry beside the fatal `RECOVERY_FILES`
+(a box with backups off has none).
 
 **In scope:** `BackupSupervisor` (`apps/server`); a new `backup.env` box-env file and its place in
 the env-source precedence (§3.2); the schedule + dual-retention extension to `loadBackupConfig` and
 `runBackupSweep`; `mountBackupAdminApi` (authenticated) with the five routes in §3.4; the
 recovery-key mint / show-once / override / download / re-view / rotate flow (§3.5); the UI screens and
-the first-run nudge (§3.6); the `backup.*` error codes the routes reuse and any new ones; tests that
-prove each guarantee.
+the first-run nudge (§3.6); capturing `backup.env` into the archive as an optional entry (§3.2); the
+`backup.*` error codes the routes reuse and any new ones; tests that prove each guarantee.
 
 **Out of scope, named (§10):** any backend other than local-fs — S3/Drive stay the later
 destination-build task, and the wizard offers only what runs today; **re-encrypting existing archives
@@ -74,16 +79,25 @@ on the authenticated trading box, not inside the unauth setup wizard:
 So there is **one implementation with two entry points**, which is what "both" means here:
 
 - **First-run nudge.** The setup done-screen ends with "Your box is trading — but it has **no
-  backups** yet, so there is no way back from a disk failure. Set up backups now." and a link. Once
-  the admin logs in, a persistent banner / checklist item stays until backups are on. The nudge is
-  **suppressed in demo mode** (`config.devMode`), where the box is disposable.
+  backups** yet, so there is no way back from a disk failure. Set up backups now." and a link into the
+  admin surface. This is a **one-time screen**, suppressed in demo mode (`config.devMode`), where the
+  box is disposable.
 - **Admin surface.** The same screens are always reachable from the box's admin area to change the
   destination, adjust the policy, re-view the key, or rotate it, whether or not backups were set up at
   first run.
 
+The **ongoing reminder** — the persistent "backups are off / stale" nag that keeps prodding an
+operator who skipped — is **NOT a bespoke banner this slice builds**. It belongs in the
+**notifications centre, which is not yet built** (owner, 2026-09-09). This slice's job is to make
+"backups off" a first-class **reportable state** (box-status already reports backup *staleness*; §3.4
+adds the explicit on/off), so the centre reads it when it lands. Until then the first-run nudge is the
+only prompt, and skipping leaves the box quietly unprotected — an accepted gap named as a dependency
+(§10), not a silent one.
+
 The onboarding step is **skippable** — a local-fs destination needs a directory/volume (an attached
 USB, a mounted disk) that an installer may not have on hand at first run — but skipping shows a loud
-warning and leaves the nag in place until backups are on.
+warning, and the box stays in the reportable "backups off" state the notifications centre will later
+surface.
 
 ---
 
@@ -126,15 +140,34 @@ The wizard persists the backup config to a **new box-env file, `backup.env`**, i
 dir, written atomically with `formatEnvFile` (the writer `writeTradingEnv` already uses). It is added
 to `loadBoxEnv`'s file list ([box-env.ts:7](../../../apps/server/src/box-env.ts)) so it survives a
 restart, and it is read **after** the existing files but, as with all of them, the **real process
-environment still wins** (`{ ...fromFiles, ...base }`). That precedence is the load-bearing rule:
+environment still wins** (`{ ...fromFiles, ...base }`).
 
-- A box configured **by hand** via `/opt/waitron/.env` (real env) keeps that config; the wizard must
-  **not** silently fight it. When `loadBackupConfig` would read a `WAITRON_BACKUP_*` value from the
-  real environment rather than from `backup.env`, the admin surface shows **"backups are managed by
-  the environment on this box"** and the edit controls are read-only. This is detected by comparing
-  the merged env against `backup.env`'s own contents at request time.
-- A box configured by the **wizard** has an empty backup section in the real env, so `backup.env` is
-  authoritative and editable.
+**The wizard is the config path; env-config is not a workflow this slice adds — it is inherent.** The
+box loads the real environment *over* its own files on purpose: that is what lets **Waitron Cloud
+inject a cloud box's config/secrets** without the box holding a file (the box-env design's central
+property, [box-env.ts:9-18](../../../apps/server/src/box-env.ts)), and it is also the break-glass /
+recovery / dev path. Because env-wins is baked into how the box boots, the *only* real question is
+whether the wizard **notices** when the environment owns the config — otherwise it writes `backup.env`,
+the env silently overrides it, and the operator is misled. So the detection below exists as **honesty,
+not as a hand-config feature**:
+
+- When `loadBackupConfig`'s effective `WAITRON_BACKUP_*` values come from the real environment rather
+  than from `backup.env`, the admin surface shows **"backups are managed by the environment on this
+  box"** and the edit controls are read-only; `apply`/`rotate` refuse with `backup.managed_by_environment`
+  (§3.4). Detected by comparing the merged env against `backup.env`'s own contents at request time.
+- Otherwise `backup.env` is authoritative and editable — the normal on-prem box.
+
+*(Decision to challenge, §9: this honesty check could be dropped entirely — then a cloud-injected
+override would defeat a wizard edit with no explanation. Kept, because that silent-override case is
+exactly the confusion §1 of `CLAUDE.md` is about.)*
+
+**The archive captures `backup.env`.** So a restore brings back the backup settings and the policy,
+and a same-node cold restore resumes backing up unchanged. It is added as an **optional** capture
+distinct from `RECOVERY_FILES` (whose missing-file semantics are fatal, `recovery.state_incomplete`):
+a box with backups off, or one whose config lives in the real environment, has no `backup.env`, and
+its absence must be fine, not a failed backup. That the archive then contains the very key it is
+encrypted under is harmless — decrypting already requires the key; recovering it just lets the
+restored box carry on.
 
 `backup.env` holds the full trio plus the policy: `WAITRON_BACKUP_DIR` (or
 `WAITRON_BACKUP_DESTINATIONS`), `WAITRON_BACKUP_DATABASE_URL`, `WAITRON_BACKUP_RECOVERY_KEY`, and the
@@ -156,12 +189,19 @@ step needs two things the engine does not have:
 
 - **When** — a schedule of **days** (every day, or a chosen subset of weekdays) at a **time of day**,
   interpreted in the **venue's local timezone**. The box already stores this: the location row carries
-  `time_zone` and `day_cutover` (`report-api` reads `select l.time_zone, l.day_cutover`), and
-  `day_cutover` (the business-day boundary, typically after close) is the natural **default** anchor.
-  The time is either a fixed `HH:MM` the operator picks, or **"let the box choose"** — a per-box
-  stable time jittered into the 02:00–06:00 quiet window (derived once from the node id so it does not
-  wander between boots, and so a fleet does not all fire at 02:00). The scheduler computes the next
-  fire instant from (days, time, tz) and sleeps to it, replacing "sleep `intervalMs` from boot".
+  `time_zone` and `day_cutover` (`report-api` reads `select l.time_zone, l.day_cutover`). The time is
+  either a fixed `HH:MM` the operator picks, or **"let the box choose"** — which anchors on
+  **`day_cutover` + a margin**, i.e. **after the business day has closed** (so the archive captures a
+  complete day, not a day still being traded) **and after the day's reports have run** (owner,
+  2026-09-09). A per-box stable jitter (a few minutes, derived once from the node id) keeps a fleet
+  from all firing on the same second without letting the time wander between boots. The scheduler
+  computes the next fire instant from (days, time, tz) and sleeps to it, replacing "sleep
+  `intervalMs` from boot".
+  - **Ordering caveat, named:** there is **no scheduled report-generation job today** — reports are
+    computed on demand. So "after reports" currently means only "after `day_cutover` + margin", on the
+    assumption a report taken then reflects the closed day. When a nightly report duty is built, the
+    box-chosen backup must fire **after it completes**, not merely after a clock margin; that ordering
+    is a forward dependency (§10), not built here.
 - **How long** — an **age** cap (`retain_days`) beside the existing **count** cap (`retain`). The
   sweep's prune keeps a stored artifact only if it is within **both** caps; it is pruned when it
   exceeds **either**. Age is measured off the artifact's manifest timestamp (already stored), so a
@@ -226,9 +266,10 @@ Screens follow the existing `apps/setup` / dashboard patterns (`venue-screen`, `
    mounted disk"), validated non-empty and absolute.
 2. **Recovery key** — minted-and-shown by default with copy + download + the saved-it checkbox; an
    advanced "paste my own" toggle.
-3. **Policy** — days (daily / pick weekdays), time (a time picker, defaulting to the venue's
-   `day_cutover`, or "let the box choose a quiet time"), and retention (keep at most N **and** nothing
-   older than D days, both with sensible defaults — a week of dailies, 30 days).
+3. **Policy** — days (daily / pick weekdays), time (a time picker, or the default **"let the box
+   choose — after close and after the day's reports"**, which resolves to `day_cutover` + margin per
+   §3.3), and retention (keep at most N **and** nothing older than D days, both with sensible defaults
+   — a week of dailies, 30 days).
 4. **Status** — after apply, and as the always-available view: on/off, last successful backup + how
    stale, where, the policy, and the managed-by note.
 
@@ -295,9 +336,13 @@ Because §6 touches the recovery posture, this spec gets a **Fable fresh-context
   destination; rotate the key; disable back to off. After each, assert the **old** dedicated pool is
   closed (no leak) and the **new** duty runs — and prove by deletion that removing the probe lets a
   bad connection through.
-- **Scheduler** — the next-fire computation across day subsets, the fixed-time and `auto` (jittered,
-  node-stable) cases, and a DST boundary in the venue tz. Age + count prune: an artifact pruned by age
-  but within count, and vice-versa, and the "whichever first" boundary.
+- **Scheduler** — the next-fire computation across day subsets, the fixed-time and `auto` cases (the
+  `auto` case resolves to `day_cutover` + margin and is node-stable across boots), and a DST boundary
+  in the venue tz. Age + count prune: an artifact pruned by age but within count, and vice-versa, and
+  the "whichever first" boundary.
+- **Archive capture of `backup.env`** — a backup taken with backups on includes `backup.env`; one on a
+  box whose config is env-managed (no file) omits it without failing; a restore round-trips the
+  settings. Prove by deletion that removing the optional-capture step drops the file.
 - **Routes** — validation parity with `loadBackupConfig` (a route must reject exactly what boot
   rejects); the apply latch (a concurrent apply is refused, not raced); `managed_by_environment`
   refusal when the real env owns the config; the re-view/rotate authz.
@@ -339,7 +384,13 @@ can decrypt a stored archive.
    later destination task; the UI's destination step is written to take a second type without a
    rewrite but is not built for one now.
 5. **Wall-clock schedule + dual retention** replace interval-from-boot for the wizard path; the legacy
-   interval stays valid for hand-config, with a conflict error if both are set (§3.3).
+   interval stays valid for hand-config, with a conflict error if both are set (§3.3). The box-chosen
+   time anchors on `day_cutover` + margin (after close, after reports), not a fixed quiet window.
+6. **The env-managed honesty check** (§3.2) — keep it (show "managed by environment", read-only), or
+   drop it and accept that a cloud-injected override silently defeats a wizard edit. Written kept.
+7. **The ongoing "backups off/stale" nag is deferred to the notifications centre** (§2), not built as a
+   bespoke banner; this slice only makes the state reportable. Reverse cost: adding a stopgap banner is
+   additive if the centre slips.
 
 ---
 
@@ -351,6 +402,11 @@ can decrypt a stored archive.
 - **Config export/import** (onboarding mode 3) — unrelated; not here.
 - The named backup-regime carry-forwards (per-destination timeout, stale-`.tmp` sweep, the key-path
   traversal guard) — untouched by this slice; they land with the first network backend.
+- **The ongoing "backups off / stale" reminder** — belongs in the **notifications centre** (not yet
+  built, owner 2026-09-09). This slice makes the state reportable; the centre surfaces it.
+- **Ordering the box-chosen backup after a nightly report job** — no such job exists yet, so the
+  box-chosen time anchors on `day_cutover` + margin (§3.3). When a report duty lands, the backup should
+  fire after it completes.
 
 ---
 
@@ -360,5 +416,12 @@ Owner answers, 2026-09-09: placement = **both** (one surface, two entry points);
 **local-fs only (MVP)**; key = **box mints, operator can override**; record gate = **download file +
 checkbox**; apply = **hot-reload**; onboarding step = **skippable, loud warning, keep nagging**
 (and **skip the nudge in demo mode**); admin capabilities = **view / enable-change / re-view /
-rotate** (all four); schedule = **daily or chosen weekdays, at a chosen time or a box-chosen slot
-02:00–06:00**; retention = **both count and age, whichever prunes first**.
+rotate** (all four); schedule = **daily or chosen weekdays, at a chosen time or a box-chosen slot**;
+retention = **both count and age, whichever prunes first**.
+
+Refinements from the spec-review round (owner, 2026-09-09): the archive must also capture the backup
+settings (`backup.env`), not just the DB — folded into §1/§3.2; the ongoing nag moves to the
+**notifications centre** (not built) and this slice only makes the state reportable — §2/§10; the
+box-chosen time is **after `day_cutover` and after the day's reports**, not a 02:00–06:00 window —
+§3.3; and env/hand-config is not a feature but an inherent cloud-injection path, so the wizard's
+env-managed check is kept only as **honesty** — §3.2/§9.
