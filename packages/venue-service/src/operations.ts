@@ -27,6 +27,47 @@ export interface Department {
   active: boolean;
 }
 
+/** List the active, configured zones that can start a new order at this venue. */
+export async function listServiceZones(tx: Transaction, cfg: VenueScope) {
+  const rows = await tx
+    .select({
+      id: floorZones.id,
+      name: floorZones.name,
+      departmentId: departments.id,
+      departmentName: departments.name,
+      zoneMode: zoneServicePolicies.serviceMode,
+      departmentMode: departments.defaultServiceMode,
+    })
+    .from(zoneServicePolicies)
+    .innerJoin(
+      floorZones,
+      and(
+        eq(floorZones.tenantId, zoneServicePolicies.tenantId),
+        eq(floorZones.id, zoneServicePolicies.zoneId),
+      ),
+    )
+    .innerJoin(
+      departments,
+      and(
+        eq(departments.tenantId, zoneServicePolicies.tenantId),
+        eq(departments.id, zoneServicePolicies.departmentId),
+      ),
+    )
+    .where(
+      and(
+        eq(zoneServicePolicies.tenantId, cfg.tenantId),
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+        eq(departments.active, true),
+      ),
+    )
+    .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
+  return rows.map(({ zoneMode, departmentMode, ...row }) => ({
+    ...row,
+    serviceMode: (zoneMode ?? departmentMode) as ServiceMode,
+  }));
+}
+
 export async function createDepartment(
   tx: Transaction,
   cfg: VenueScope,

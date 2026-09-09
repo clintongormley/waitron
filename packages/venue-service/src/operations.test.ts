@@ -25,6 +25,7 @@ import {
   allowMenuInZone,
   getOrderServiceContext,
   listWorkingLineContexts,
+  listServiceZones,
   listZoneOffers,
   recordOrderServiceContext,
   recordWorkingLineContexts,
@@ -98,6 +99,22 @@ describe("venue service routing", () => {
           departmentId: department.id,
         },
       );
+      await expect(listServiceZones(tx, { tenantId, locationId })).resolves.toEqual([
+        {
+          id: downstairsZone.rows[0]!.id,
+          name: "Downstairs",
+          departmentId: department.id,
+          departmentName: "Restaurant and bar",
+          serviceMode: "table_tab",
+        },
+        {
+          id: upstairsZone.rows[0]!.id,
+          name: "Upstairs",
+          departmentId: department.id,
+          departmentName: "Restaurant and bar",
+          serviceMode: "table_tab",
+        },
+      ]);
       const menu = await createCatalogue(tx, tenantId, { name: "Drinks" });
       const category = await createCategory(tx, tenantId, { name: "Cocktails" });
       const negroni = await createProduct(tx, tenantId, {

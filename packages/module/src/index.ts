@@ -12,6 +12,7 @@ export type {
   ConfigurationTransferTable,
   ModuleConfigurationTransfer,
   OrderServiceContext,
+  ServiceZoneSummary,
   ZoneMenuOffer,
   PreparationRoute,
   ServiceMode,

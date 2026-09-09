@@ -414,9 +414,12 @@ export const en = {
   // about the cause ("could not load") rather than naming only the unreachable case.
   "boot.error": "Could not load the till, reload to try again",
   // Multi-menu till: the accessible name of the menu switcher (the segmented control above the product
-  // grid that picks which of the location's accessible menus the grid shows). The individual menu names
-  // are DATA from the server (`GET /api/products` `menus[].name`, localised at seed time), not keys here.
+  // grid that picks which of the current zone's menus the grid shows). Menu and service-zone names are
+  // data from the server, localised when authored rather than keys here.
   "menu.switcher": "Menu",
+  "service_zone.label": "Service area",
+  "service_zone.refresh": "Refresh menus",
+  "service_zone.load_error": "Could not load menus for this service area",
   // Server status (till-reroute §4.4)
   "server.on": "On:",
   "server.unknown": "checking",
@@ -684,6 +687,9 @@ export const es: Record<StringKey, string> = {
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
   "menu.switcher": "Menú",
+  "service_zone.label": "Zona de servicio",
+  "service_zone.refresh": "Actualizar menús",
+  "service_zone.load_error": "No se pudieron cargar los menús de esta zona",
   "server.on": "Activo:",
   "server.unknown": "comprobando",
   "server.unreachable": "sin conexión",

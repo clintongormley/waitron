@@ -899,6 +899,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {});
         return {
           context,
+          zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
+            (zone) => zone.serviceMode !== "table_tab",
+          ),
           ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId)),
         };
       });

@@ -7,6 +7,7 @@ describe("VENUE_SERVICE", () => {
       "findOrderContext",
       "getOrderContext",
       "listLineContexts",
+      "listServiceZones",
       "listZoneOffers",
       "recordLineContexts",
       "recordOrderContext",

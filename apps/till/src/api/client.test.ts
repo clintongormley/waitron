@@ -386,7 +386,7 @@ describe("TillApi", () => {
     );
   });
 
-  it("uses the resolved default zone for a subsequent order", async () => {
+  it("uses the accepted service zone for a subsequent order", async () => {
     const fetchStub = vi
       .fn()
       .mockResolvedValueOnce(
@@ -400,6 +400,7 @@ describe("TillApi", () => {
       .mockResolvedValueOnce(jsonResponse({ id: "wo-1", orderNumber: 4 }));
     const api = new TillApi("", fetchStub);
     await api.listDefaultZoneOffers();
+    api.setServiceZone("counter");
 
     await api.parkOrder({ id: "wo-1", lines: [{ menuItemId: "ham", quantity: "1" }] });
 

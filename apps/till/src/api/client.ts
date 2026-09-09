@@ -432,6 +432,15 @@ export interface ZoneOfferCatalogue {
   defaultMenuId: string | null;
   menus: TillMenu[];
   offers: TillMenuOffer[];
+  zones?: ServiceZoneSummary[];
+}
+
+export interface ServiceZoneSummary {
+  id: string;
+  name: string;
+  departmentId: string;
+  departmentName: string;
+  serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
 }
 
 /** Adapt a menu offer to the till's display model while keeping product and selling ids distinct. */
@@ -1312,21 +1321,19 @@ export class TillApi {
   }
 
   async listZoneOffers(zoneId: string): Promise<ZoneOfferCatalogue> {
-    const result = await this.#request<ZoneOfferCatalogue>(
+    return this.#request<ZoneOfferCatalogue>(
       `/api/service-zones/${encodeURIComponent(zoneId)}/offers`,
       "GET",
     );
-    this.#serviceZoneId = result.context.zoneId;
-    return result;
   }
 
   async listDefaultZoneOffers(): Promise<ZoneOfferCatalogue> {
-    const result = await this.#request<ZoneOfferCatalogue>(
-      "/api/default-service-zone/offers",
-      "GET",
-    );
-    this.#serviceZoneId = result.context.zoneId;
-    return result;
+    return this.#request<ZoneOfferCatalogue>("/api/default-service-zone/offers", "GET");
+  }
+
+  /** Set the service zone used for newly created counter orders after the app accepts an offer load. */
+  setServiceZone(zoneId: string): void {
+    this.#serviceZoneId = zoneId;
   }
 
   /**

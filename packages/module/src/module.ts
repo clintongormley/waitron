@@ -91,6 +91,14 @@ export interface OrderServiceContext {
   readonly serviceMode: ServiceMode;
 }
 
+export interface ServiceZoneSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly departmentId: string;
+  readonly departmentName: string;
+  readonly serviceMode: ServiceMode;
+}
+
 export interface ZoneMenuOffer {
   readonly id: string;
   readonly menuId: string;
@@ -139,6 +147,10 @@ export type PreparationRoute =
 
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  listServiceZones(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+  ): Promise<readonly ServiceZoneSummary[]>;
   resolveZoneContext(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },

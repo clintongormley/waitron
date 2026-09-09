@@ -2,6 +2,7 @@ import type { VenueServiceContribution } from "@waitron/module";
 import {
   findOrderServiceContext,
   getOrderServiceContext,
+  listServiceZones,
   listZoneOffers,
   listWorkingLineContexts,
   recordOrderServiceContext,
@@ -16,6 +17,7 @@ import {
 export const VENUE_SERVICE: VenueServiceContribution = {
   findOrderContext: findOrderServiceContext,
   listLineContexts: listWorkingLineContexts,
+  listServiceZones,
   resolveZoneContext,
   resolvePreparationRoute,
   listZoneOffers,

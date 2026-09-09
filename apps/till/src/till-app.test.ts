@@ -388,6 +388,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     transferLines: vi.fn().mockResolvedValue(undefined),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
+    setServiceZone: vi.fn(),
     // Device front door (device-enrolment §3.1): the boot decision. `getDevDevices` is the dev-mode
     // signal — it DEFAULTS to a rejection (a 404 outside dev mode), so the default boot is NOT the dev
     // chooser; the chooser tests override it to resolve a list. `getDeviceIdentity` DEFAULTS to an
@@ -609,6 +610,15 @@ describe("till-app", () => {
   it("loads the default zone's offers and orders two menu identities for one product", async () => {
     const listDefaultZoneOffers = vi.fn().mockResolvedValue({
       context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
+      zones: [
+        {
+          id: "zone-counter",
+          name: "Bar",
+          departmentId: "department-bar",
+          departmentName: "Bar",
+          serviceMode: "prepay",
+        },
+      ],
       defaultMenuId: "menu-standard",
       menus: [
         { id: "menu-standard", name: "Standard", isDefault: true },
@@ -665,6 +675,8 @@ describe("till-app", () => {
 
     expect(listDefaultZoneOffers).toHaveBeenCalledOnce();
     expect(currentApi.listProducts).not.toHaveBeenCalled();
+    expect(c.selectedServiceZoneId).toBe("zone-counter");
+    expect(c.serviceZones.map((zone) => zone.name)).toEqual(["Bar"]);
     expect(
       c.products.map(({ id, productId, menuItemId, unitPrice }) => ({
         id,
@@ -699,6 +711,96 @@ describe("till-app", () => {
       { method: "cash", amount: "20.00" },
       expect.any(String),
     );
+  });
+
+  it("changes and manually refreshes the counter's service zone", async () => {
+    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    defaultCatalogue.zones = [
+      {
+        id: "zone-counter",
+        name: "Counter",
+        departmentId: "department-default",
+        departmentName: "Restaurant",
+        serviceMode: "prepay",
+      },
+      {
+        id: "zone-deli",
+        name: "Deli",
+        departmentId: "department-deli",
+        departmentName: "Deli",
+        serviceMode: "ticket_then_pay",
+      },
+    ];
+    const deliCatalogue = fixtureOffers({
+      menus: [{ id: "menu-deli", name: "Deli", isDefault: true }],
+      products: [{ ...jamon, catalogueId: "menu-deli", catalogueName: "Deli" }],
+    });
+    deliCatalogue.context = {
+      zoneId: "zone-deli",
+      departmentId: "department-deli",
+      serviceMode: "ticket_then_pay",
+    };
+    const listZoneOffers = vi.fn().mockResolvedValue(deliCatalogue);
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
+      listZoneOffers,
+    });
+    const c = await toCounter(el);
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+    expect(listZoneOffers).toHaveBeenLastCalledWith("zone-deli");
+    expect(c.selectedServiceZoneId).toBe("zone-deli");
+    expect(c.products.map((product) => product.id)).toEqual(["jamon"]);
+    expect(c.orderFlow).toBe("ticket_then_pay");
+    expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("zone-deli");
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+    expect(listZoneOffers).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a late counter-zone response and keeps the accepted zone for new orders", async () => {
+    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    defaultCatalogue.zones = ["counter", "upstairs", "deli"].map((id) => ({
+      id,
+      name: id,
+      departmentId: id,
+      departmentName: id,
+      serviceMode: "prepay" as const,
+    }));
+    const upstairs = fixtureOffers({
+      menus: [{ id: "upstairs-menu", name: "Upstairs", isDefault: true }],
+      products: [{ ...cafe, id: "upstairs-product", catalogueId: "upstairs-menu" }],
+    });
+    upstairs.context.zoneId = "upstairs";
+    const deli = fixtureOffers({
+      menus: [{ id: "deli-menu", name: "Deli", isDefault: true }],
+      products: [{ ...jamon, id: "deli-product", catalogueId: "deli-menu" }],
+    });
+    deli.context.zoneId = "deli";
+    let resolveUpstairs!: (value: ZoneOfferCatalogue) => void;
+    let resolveDeli!: (value: ZoneOfferCatalogue) => void;
+    const requests = {
+      upstairs: new Promise<ZoneOfferCatalogue>((resolve) => (resolveUpstairs = resolve)),
+      deli: new Promise<ZoneOfferCatalogue>((resolve) => (resolveDeli = resolve)),
+    };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
+      listZoneOffers: vi.fn((zoneId: "upstairs" | "deli") => requests[zoneId]),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "counter-zone-selected", { zoneId: "upstairs" });
+    emit(c, "counter-zone-selected", { zoneId: "deli" });
+    resolveDeli(deli);
+    await flush(el);
+    resolveUpstairs(upstairs);
+    await flush(el);
+
+    expect(c.selectedServiceZoneId).toBe("deli");
+    expect(c.products.map((product) => product.id)).toEqual(["deli-product"]);
+    expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("deli");
   });
 
   it("a failing listStaff leaves the roster empty and never blocks the counter (no unhandled rejection)", async () => {
@@ -2864,6 +2966,50 @@ describe("till-app", () => {
         ]);
         expect(screen.menus).toEqual(diningOffer.menus);
         expect(screen.selectedMenuId).toBe("menu-dining");
+      });
+
+      it("ignores a late offer response for a table the operator has already left", async () => {
+        const tableA = { ...openTable, id: "table-a", tabId: "order-a", zoneId: "zone-a" };
+        const tableB = { ...openTable, id: "table-b", tabId: "order-b", zoneId: "zone-b" };
+        const offersA = fixtureOffers({
+          menus: [{ id: "menu-a", name: "Menu A", isDefault: true }],
+          products: [{ ...cafe, id: "product-a", catalogueId: "menu-a", catalogueName: "Menu A" }],
+        });
+        offersA.context.zoneId = "zone-a";
+        const offersB = fixtureOffers({
+          menus: [{ id: "menu-b", name: "Menu B", isDefault: true }],
+          products: [{ ...cafe, id: "product-b", catalogueId: "menu-b", catalogueName: "Menu B" }],
+        });
+        offersB.context.zoneId = "zone-b";
+        let resolveA!: (value: ZoneOfferCatalogue) => void;
+        let resolveB!: (value: ZoneOfferCatalogue) => void;
+        const pending = {
+          "zone-a": new Promise<ZoneOfferCatalogue>((resolve) => (resolveA = resolve)),
+          "zone-b": new Promise<ZoneOfferCatalogue>((resolve) => (resolveB = resolve)),
+        };
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([tableA, tableB]),
+          listZones: vi.fn().mockResolvedValue([
+            { ...floorZone, id: "zone-a" },
+            { ...floorZone, id: "zone-b" },
+          ]),
+          listZoneOffers: vi.fn((zoneId: "zone-a" | "zone-b") => pending[zoneId]),
+          getTabLines: vi.fn().mockResolvedValue([]),
+        });
+        await toCounter(el);
+        selectTab(el, "floor");
+        await flush(el);
+
+        emit(floor(el)!, "open-table", { tableId: tableA.id, hasOpenTab: true });
+        emit(floor(el)!, "open-table", { tableId: tableB.id, hasOpenTab: true });
+        resolveB(offersB);
+        await flush(el);
+        expect(tableOrder(el)!.products[0]!.id).toBe("product-b");
+
+        resolveA(offersA);
+        await flush(el);
+        expect(tableOrder(el)!.products[0]!.id).toBe("product-b");
+        expect(tableOrder(el)!.orderId).toBe("order-b");
       });
 
       it("a counter till can settle the tab — canSettle true (default)", async () => {

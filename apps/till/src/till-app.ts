@@ -44,6 +44,7 @@ import type {
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
+  ServiceZoneSummary,
   PayOutcome,
   RoundLine,
   SaleLine,
@@ -453,6 +454,11 @@ export class TillApp extends LitElement {
   @state() private tableProducts: TillProduct[] = [];
   @state() private tableMenus: TillMenu[] = [];
   @state() private tableSelectedCatalogueId = "";
+  /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
+  #tableOfferRequest = 0;
+  @state() private counterServiceZones: ServiceZoneSummary[] = [];
+  @state() private counterServiceZoneId = "";
+  #counterOfferRequest = 0;
   /** The grid's selected menu, reset to the default at login and changed by the switcher.
    * An empty selection matches no product. */
   @state() private selectedCatalogueId = "";
@@ -927,9 +933,14 @@ export class TillApp extends LitElement {
     // A fresh session reloads the floor in full — reset the "already loaded once" flag beside the other
     // per-session resets (SP-B2.1 review). The full load below (or a later floor tab-select) re-sets it.
     this.#floorLoaded = false;
-    const { menus, offers } = await this.api.listDefaultZoneOffers();
+    const { menus, offers, zones, context } = await this.api.listDefaultZoneOffers();
     this.products = offers.map(menuOfferToTillProduct);
     this.menus = menus;
+    this.counterServiceZones = zones ?? [];
+    this.counterServiceZoneId = context.zoneId;
+    this.api.setServiceZone(context.zoneId);
+    if (zones !== undefined && context.serviceMode !== "table_tab")
+      this.orderFlow = context.serviceMode;
     // A fresh login starts on the location default, regardless of the previous menu preference.
     this.#selectMenu(this.#defaultCatalogueId());
     this.#selectDiet(null);
@@ -1057,6 +1068,32 @@ export class TillApp extends LitElement {
       sessionStorage.setItem("waitron.lastMenu", id);
     } catch {
       // The current selection still works when browser storage is unavailable.
+    }
+  }
+
+  async #onCounterZoneSelected(event: Event): Promise<void> {
+    const { zoneId } = (event as CustomEvent<{ zoneId: string }>).detail;
+    if (
+      this.#store.lines.length > 0 ||
+      !this.counterServiceZones.some((zone) => zone.id === zoneId)
+    )
+      return;
+    const request = ++this.#counterOfferRequest;
+    try {
+      const { menus, offers, defaultMenuId, context } = await this.api.listZoneOffers(zoneId);
+      if (request !== this.#counterOfferRequest || this.#store.lines.length > 0) return;
+      this.products = offers.map(menuOfferToTillProduct);
+      this.menus = menus;
+      this.counterServiceZoneId = context.zoneId;
+      this.api.setServiceZone(context.zoneId);
+      if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
+      this.stage = "order";
+      if (this.orderFlow === "prepay") this.stationQueue = [];
+      else await this.#refreshStationQueue();
+      this.#selectMenu(defaultMenuId ?? this.#defaultCatalogueId(menus));
+      this.errorKey = undefined;
+    } catch {
+      if (request === this.#counterOfferRequest) this.errorKey = "service_zone.load_error";
     }
   }
 
@@ -1486,11 +1523,9 @@ export class TillApp extends LitElement {
 
   /**
    * Retrieve a parked order into the basket — the other half of the cross-till story. Fetch the order,
-   * rebuild its lines by resolving each `productId` against the loaded catalogue (the parked line
-   * stores only id + quantity — never a price — so the till RE-PRICES on retrieve), load them into the
-   * shared store under the retrieved order's own id (so paying it later keys the same idempotency slot
-   * the server persisted it under), and refresh the list. Stays on the counter with the retrieved
-   * basket ready to ring or pay.
+   * rebuild its lines from stored offer snapshots (with product-only lookup for older lines), load them
+   * into the shared store under the retrieved order's own id, and refresh the list. The stored id keeps
+   * later payment in the same idempotency slot. Stays on the counter with the basket ready to edit or pay.
    *
    * A contextual line uses the server's stored offer snapshot, so deactivation does not remove it.
    * A legacy product-only line that can no longer resolve is dropped and surfaces `held.product_gone`.
@@ -1807,15 +1842,18 @@ export class TillApp extends LitElement {
   async #onOpenTable(event: Event): Promise<void> {
     const { tableId, hasOpenTab } = (event as CustomEvent<{ tableId: string; hasOpenTab: boolean }>)
       .detail;
+    const offerRequest = ++this.#tableOfferRequest;
     this.errorKey = undefined;
     const table = this.tables.find((candidate) => candidate.id === tableId);
     if (table?.zoneId !== null && table?.zoneId !== undefined) {
       try {
         const { menus, offers, defaultMenuId } = await this.api.listZoneOffers(table.zoneId);
+        if (offerRequest !== this.#tableOfferRequest) return;
         this.tableProducts = offers.map(menuOfferToTillProduct);
         this.tableMenus = menus;
         this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
       } catch {
+        if (offerRequest !== this.#tableOfferRequest) return;
         this.tableProducts = [];
         this.tableMenus = [];
         this.tableSelectedCatalogueId = "";
@@ -2373,6 +2411,8 @@ export class TillApp extends LitElement {
         .products=${this.products}
         .menus=${this.menus}
         .selectedMenuId=${this.selectedCatalogueId}
+        .serviceZones=${this.counterServiceZones}
+        .selectedServiceZoneId=${this.counterServiceZoneId}
         .selectedDiet=${this.selectedDiet}
         .heldOrders=${this.heldOrders}
         .stationQueue=${this.stationQueue}
@@ -2555,6 +2595,7 @@ export class TillApp extends LitElement {
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
           this.#selectDiet(e.detail.predicate)}
+        @counter-zone-selected=${(event: Event) => void this.#onCounterZoneSelected(event)}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
         ${

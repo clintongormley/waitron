@@ -1390,6 +1390,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       context: { zoneId: counterZoneId, serviceMode: "prepay" },
+      zones: [{ id: counterZoneId, name: "Counter" }],
       offers: [{ id: aguaOfferId, grossPrice: "1.75" }],
     });
   });
