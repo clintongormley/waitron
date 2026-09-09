@@ -13,13 +13,13 @@ describe("resolveFiscalModules", () => {
 
   it("throws fiscal.regime_not_implemented for any other territory, echoing it", () => {
     try {
-      resolveFiscalModules("ES-PV-bizkaia");
+      resolveFiscalModules("ES-canary");
       expect.unreachable("should have thrown");
     } catch (error) {
       expect(isAppError(error)).toBe(true);
       if (isAppError(error)) {
         expect(error.code).toBe("fiscal.regime_not_implemented");
-        expect(error.params).toEqual({ territory: "ES-PV-bizkaia" });
+        expect(error.params).toEqual({ territory: "ES-canary" });
       }
     }
   });

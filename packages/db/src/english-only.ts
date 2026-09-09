@@ -44,6 +44,10 @@ export const GENERIC_PACKAGES = [
   // are English-only; user-facing translation VALUES (a `{ en, es }` copy entry) are not vocabulary.
   "dashboard-kit",
   "dashboard-modules",
+  // Browser-safe country contract and installed-pack registry. Country-specific implementations are
+  // deliberately outside this generic vocabulary boundary.
+  "country",
+  "country-packs",
 ] as const;
 
 /**

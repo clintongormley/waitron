@@ -240,9 +240,9 @@ declare module "@waitron/shared" {
      * `provisioning.invalid_identifier` above: a refusal that withheld it could not be acted on. */
     "provisioning.duplicate_series_code": { code: string };
     /** A venue's `fiscal_territory` names a country the tenant is NOT in. A location's territory must
-     * belong to the tenant's `country`: the fiscal territories are country-prefixed (`ES-common`,
-     * `ES-PV-bizkaia`, …), and the only implemented one, `ES-common` (Spain / Veri*Factu), therefore
-     * requires `country` `ES`. The combination is load-bearing because `applyVenue` writes the
+     * belong to the tenant's `country`: installed fiscal territories are country-prefixed
+     * (`ES-common`, `GB-vat`, …), so `ES-common` (Spain / Veri*Factu) requires `country` `ES`.
+     * The check matters because `applyVenue` writes the
      * tenant's `tax_id` into `registro_sif.nif` — a Spanish-NIF field — so a request like
      * `country=PT` + `fiscalTerritory=ES-common` would stand up a venue whose SIF is stamped with a
      * non-NIF identity and file its sales under the wrong country, which a hash-chained fiscal record

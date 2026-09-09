@@ -4,7 +4,6 @@ import {
   assertSupportedLocale,
   isSupportedLocale,
   resolveActiveLocale,
-  resolveVenueLocale,
   SUPPORTED_LOCALE_CODES,
   SUPPORTED_LOCALES,
 } from "./locales.js";
@@ -32,27 +31,6 @@ describe("assertSupportedLocale", () => {
       expect((err as AppError).code).toBe("locale.unsupported");
       expect((err as AppError).params).toEqual({ locale: "ca-ES" });
     }
-  });
-});
-
-describe("resolveVenueLocale (province → country → English floor)", () => {
-  it("Madrid (country ES, no regional catalogue) → es-ES", () => {
-    expect(resolveVenueLocale({ province: "Madrid", country: "ES" })).toBe("es-ES");
-  });
-  it("Cataluña → es-ES today (province→Catalan deferred, falls to country), NOT English", () => {
-    expect(resolveVenueLocale({ province: "Barcelona", country: "ES" })).toBe("es-ES");
-  });
-  it("unsupported country → the English floor", () => {
-    expect(resolveVenueLocale({ province: null, country: "FR" })).toBe("en-GB");
-  });
-  it("a supported override wins", () => {
-    expect(resolveVenueLocale({ override: "en-GB", country: "ES" })).toBe("en-GB");
-  });
-  it("an unsupported override is ignored", () => {
-    expect(resolveVenueLocale({ override: "ca-ES", country: "ES" })).toBe("es-ES");
-  });
-  it("nothing available anywhere → English floor", () => {
-    expect(resolveVenueLocale({})).toBe("en-GB");
   });
 });
 

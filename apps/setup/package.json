@@ -13,6 +13,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@waitron/country": "workspace:*",
+    "@waitron/country-packs": "workspace:*",
     "@waitron/ui": "workspace:*",
     "lit": "^3.2.0"
   },

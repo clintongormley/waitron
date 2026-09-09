@@ -12,22 +12,15 @@ export const SUPPORTED_LOCALES = [
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]["code"];
 
-export const SUPPORTED_LOCALE_CODES: readonly string[] = SUPPORTED_LOCALES.map((l) => l.code);
+export const SUPPORTED_LOCALE_CODES: readonly SupportedLocale[] = SUPPORTED_LOCALES.map(
+  ({ code }) => code,
+);
 
-/** The absolute floor — reached only when neither province nor country yields
- * an available language. */
+/** The locale resolver's typed floor when no configured preference is available. */
 export const FALLBACK_LOCALE: SupportedLocale = "en-GB";
 
-/** country → its default UI language. One meaningful entry today; a country
- * absent here falls through to FALLBACK_LOCALE. */
-export const COUNTRY_DEFAULT_LOCALE: Record<string, string> = { ES: "es-ES" };
-
-/** province → its regional language. DEFERRED: empty until a regional catalogue
- * (e.g. Catalan) ships, so every province falls through to the country step. */
-export const PROVINCE_DEFAULT_LOCALE: Record<string, string> = {};
-
 export function isSupportedLocale(code: string | null | undefined): code is SupportedLocale {
-  return code != null && SUPPORTED_LOCALE_CODES.includes(code);
+  return code != null && SUPPORTED_LOCALE_CODES.some((candidate) => candidate === code);
 }
 
 /** Validate a locale being written. Throws rather than falls back — a write of
@@ -35,27 +28,6 @@ export function isSupportedLocale(code: string | null | undefined): code is Supp
 export function assertSupportedLocale(code: string): SupportedLocale {
   if (!isSupportedLocale(code)) throw new AppError("locale.unsupported", { locale: code });
   return code;
-}
-
-/**
- * The venue's default UI language: the first AVAILABLE of
- * override → province language (deferred) → country language → English floor.
- * Always returns a supported code, so the apps never receive `ca-ES`.
- */
-export function resolveVenueLocale(input: {
-  override?: string | null;
-  province?: string | null;
-  country?: string | null;
-}): SupportedLocale {
-  const candidates = [
-    input.override ?? undefined,
-    input.province != null ? PROVINCE_DEFAULT_LOCALE[input.province] : undefined,
-    input.country != null ? COUNTRY_DEFAULT_LOCALE[input.country] : undefined,
-  ];
-  for (const candidate of candidates) {
-    if (isSupportedLocale(candidate)) return candidate;
-  }
-  return FALLBACK_LOCALE;
 }
 
 /**

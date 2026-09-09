@@ -63,11 +63,8 @@ export {
   SUPPORTED_LOCALES,
   SUPPORTED_LOCALE_CODES,
   FALLBACK_LOCALE,
-  COUNTRY_DEFAULT_LOCALE,
-  PROVINCE_DEFAULT_LOCALE,
   isSupportedLocale,
   assertSupportedLocale,
-  resolveVenueLocale,
   resolveActiveLocale,
 } from "./locales.js";
 export type { SupportedLocale } from "./locales.js";

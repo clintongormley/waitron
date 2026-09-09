@@ -1452,7 +1452,7 @@ describe("startServer, against a real container as the deployment role", () => {
         const { via, close } = httpsVia(ca);
         try {
           // A valid DEMO venue, no `aeatCert` (a plain demo box files nothing to AEAT).
-          const body = { mode: "demo", venue: provisionVenueBody("60000009K") };
+          const body = { mode: "demo", venue: provisionVenueBody("60000009R") };
           const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
             ...via,
             method: "POST",
@@ -1563,7 +1563,7 @@ describe("startServer, against a real container as the deployment role", () => {
         try {
           const body = {
             mode: "demo",
-            venue: provisionVenueBody("60000011K"),
+            venue: provisionVenueBody("60000011A"),
             aeatCert: {
               pfxBase64: material.clientPfx.toString("base64"),
               passphrase: material.clientPassphrase,
@@ -1653,7 +1653,7 @@ describe("startServer, against a real container as the deployment role", () => {
         try {
           const body = {
             mode: "live",
-            venue: provisionVenueBody("60000013K"),
+            venue: provisionVenueBody("60000013M"),
             aeatCert: {
               pfxBase64: material.clientPfx.toString("base64"),
               passphrase: material.clientPassphrase,

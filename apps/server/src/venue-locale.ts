@@ -1,15 +1,16 @@
 // No `import "./errors.js"`: this file throws no AppError code (it reads two rows and defers to the
-// shared `resolveVenueLocale`), so it is not in the throw graph the sibling route/config files load
+// country-pack locale resolver), so it is not in the throw graph the sibling route/config files load
 // the registry for.
 import { eq } from "drizzle-orm";
 import { asAppUser, locations, tenants, withTenant, type Database } from "@waitron/db";
-import { resolveVenueLocale, type SupportedLocale } from "@waitron/shared";
+import { resolveInstalledCountryLocale } from "@waitron/country-packs";
+import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
 
 /**
  * The venue's default UI locale, resolved ONCE at boot from geography + an optional env override.
  * Reads the tenant's country and the till location's province under the app role (`withTenant` +
  * `asAppUser`, with explicit id predicates on both reads), then applies the shared `override →
- * province → country → English` chain (`resolveVenueLocale`, which always returns a SUPPORTED
+ * area → country → English` chain (the installed-country resolver returns an AVAILABLE
  * code, so nothing here post-processes its result).
  *
  * This is a DISPLAY value — the UI language the apps default to. It is DELIBERATELY separate from the
@@ -34,10 +35,11 @@ export async function readVenueLocale(
       .select({ province: locations.province })
       .from(locations)
       .where(eq(locations.id, params.locationId));
-    return resolveVenueLocale({
+    return resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
       override: params.override,
-      province: loc?.province ?? null,
+      area: loc?.province ?? null,
       country: t?.country ?? null,
+      fallback: FALLBACK_LOCALE,
     });
   });
 }

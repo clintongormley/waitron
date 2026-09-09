@@ -1192,6 +1192,8 @@ jobs:
           set -- "$@" --filter "!@waitron/bookings"
           set -- "$@" --filter "!@waitron/sync"
           # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
+          set -- "$@" --filter "!@waitron/country-gb"
+          set -- "$@" --filter "!@waitron/country-packs"
           set -- "$@" --filter "!@waitron/dashboard-kit"
           set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/identity"
@@ -1263,6 +1265,8 @@ jobs:
           set -- "$@" --filter "!@waitron/bookings"
           set -- "$@" --filter "!@waitron/sync"
           # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
+          set -- "$@" --filter "!@waitron/country"
+          set -- "$@" --filter "!@waitron/country-es"
           set -- "$@" --filter "!@waitron/core"
           set -- "$@" --filter "!@waitron/payments"
           set -- "$@" --filter "!@waitron/provisioning"

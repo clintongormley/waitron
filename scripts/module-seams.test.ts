@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
+import { COUNTRY_PACKS } from "../packages/country-packs/src/index.js";
 import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioning/src/index.js";
 
 /**
@@ -40,6 +41,30 @@ const DEFERRED_RUNTIME_PASS = new Map<string, string>([]);
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const REGIME_PACKAGES = ["@waitron/fiscal-verifactu", "@waitron/verifactu"];
+
+function workspaceSourceFiles(parent: "apps" | "packages"): string[] {
+  return readdirSync(join(REPO_ROOT, parent), { withFileTypes: true }).flatMap((entry) => {
+    const src = join(REPO_ROOT, parent, entry.name, "src");
+    return entry.isDirectory() && existsSync(src) ? sourceFiles(src) : [];
+  });
+}
+
+function countryImplementationPackages(): string[] {
+  return readdirSync(join(REPO_ROOT, "packages"), { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() && entry.name.startsWith("country-") && entry.name !== "country-packs",
+    )
+    .map((entry) => {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "packages", entry.name, "package.json"), "utf8"),
+      ) as { name: string };
+      return manifest.name;
+    })
+    .sort();
+}
+
+const COUNTRY_IMPLEMENTATIONS = countryImplementationPackages();
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -161,5 +186,41 @@ describe("the territory registry and the fiscal slot agree", () => {
     const ids = new Set(ALL_MODULES.flatMap((m) => (m.fiscal === undefined ? [] : [m.fiscal.id])));
     for (const t of FISCAL_TERRITORIES)
       expect(ids.has(resolveFiscalModules(t).filing), t).toBe(true);
+  });
+
+  it("every country pack's default module id names an enabled module", () => {
+    const names = new Set(ALL_MODULES.map(({ name }) => name));
+    for (const pack of COUNTRY_PACKS) {
+      for (const moduleId of pack.moduleIds)
+        expect(names.has(moduleId), pack.countryCode).toBe(true);
+    }
+  });
+});
+
+describe("country implementations are named only by the browser-safe country registry", () => {
+  const files = [...workspaceSourceFiles("apps"), ...workspaceSourceFiles("packages")];
+  const registry = "packages/country-packs/src/registry.ts";
+
+  it("scans production sources and finds the registry's implementation imports", () => {
+    expect(files.length).toBeGreaterThan(0);
+    expect(imports(join(REPO_ROOT, registry), COUNTRY_IMPLEMENTATIONS)).toEqual(
+      COUNTRY_IMPLEMENTATIONS,
+    );
+  });
+
+  it.each(files.map((file) => [relative(REPO_ROOT, file), file]))("%s", (rel, file) => {
+    if (rel === registry) return;
+    expect(imports(file, COUNTRY_IMPLEMENTATIONS)).toEqual([]);
+  });
+
+  it("finds a planted cross-import from one country implementation to another", () => {
+    const dir = mkdtempSync(join(tmpdir(), "country-seams-"));
+    try {
+      const bad = join(dir, "bad.ts");
+      writeFileSync(bad, 'import { SPAIN } from "@waitron/country-es";\n');
+      expect(imports(bad, COUNTRY_IMPLEMENTATIONS)).toEqual(["@waitron/country-es"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

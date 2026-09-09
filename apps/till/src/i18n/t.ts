@@ -4,7 +4,7 @@ import { catalogues, en, type StringKey } from "./strings.js";
 // The active locale for calls that don't pass one explicitly. Defaults to FALLBACK_LOCALE (en-GB) — the
 // neutral English source-of-truth in @waitron/shared — matching the product/demo default. A Spanish
 // venue is driven to es-ES at boot when till-app reads the venue's derived locale and calls setLocale
-// (see @waitron/shared resolveVenueLocale). So this default governs the pre-login/lock render and any
+// (see the server's installed country-pack locale resolver). So this default governs the pre-login/lock render and any
 // call made before that boot switch. Module-level state on purpose — the till is a single-locale-at-a-
 // time UI, not a multi-tenant server. Typed `string` because setLocale reassigns it to any locale code.
 let locale: string = FALLBACK_LOCALE;

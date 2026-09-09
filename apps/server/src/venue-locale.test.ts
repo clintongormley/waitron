@@ -7,7 +7,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueLocale } from "./venue-locale.js";
 
 // PGlite, not real Postgres: `readVenueLocale` is a plain two-row read (tenant country + location
-// province) feeding the shared `resolveVenueLocale` chain, the same LOGIC shape the till/me route
+// province) feeding the installed country-pack locale chain, the same LOGIC shape the till/me route
 // mechanics prove on PGlite. It reads under `withTenant` + `asAppUser` exactly as production
 // does; the app_user privilege matrix in @waitron/fiscal-verifactu checks the table grants on
 // real PostgreSQL (`app_user` already holds SELECT on both — `GET /api/till` reads them the same
@@ -22,9 +22,8 @@ const suite = usePgliteDb({
   setup: async (db) => {
     // `seedTenant` sets country 'ES' (and legal_name 'Test SL', a generated tax_id).
     tenantId = await seedTenant(db);
-    // A location with province 'Barcelona' — a Catalan province, so once a Catalan catalogue ships the
-    // province step would fire; today `PROVINCE_DEFAULT_LOCALE` is empty (deferred), so it falls
-    // through to the country default.
+    // Barcelona prefers Catalan in the Spain pack. This server build ships no Catalan UI catalogue,
+    // so locale resolution falls through to the country default.
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, province, invoice_locales, operation_description)
       values (${tenantId}, 'Counter', 'Barcelona', array['es-ES'], 'Retail') returning id`);
@@ -34,7 +33,7 @@ const suite = usePgliteDb({
 
 describe("readVenueLocale", () => {
   it("derives the country default when no override and no regional catalogue", async () => {
-    // province 'Barcelona' → Catalan deferred (empty PROVINCE_DEFAULT_LOCALE) → country 'ES' → es-ES.
+    // Barcelona → ca-ES unavailable in this build → country ES → es-ES.
     const got = await readVenueLocale(suite.db, { tenantId, locationId, override: undefined });
     expect(got).toBe("es-ES");
   });
@@ -52,7 +51,7 @@ describe("readVenueLocale", () => {
   });
 
   it("falls to the English floor when neither tenant nor location row is found", async () => {
-    // Absent rows (ids naming nothing) leave both `country` and `province` null, so `resolveVenueLocale`
+    // Absent rows leave both `country` and `province` null, so the installed-country resolver
     // reaches its `en-GB` floor. Not a production shape (provisioning stamps the till's own tenant +
     // location), but the graceful `?? null` path exists rather than a throw — this pins it.
     const got = await readVenueLocale(suite.db, {

@@ -26,19 +26,17 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupVenueScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** Types `value` into the wt-input at `[data-test=field]` by firing its composed `wt-change`. */
+/** Changes either a `wt-input` or native select at `[data-test=field]`. */
 async function type(el: SetupVenueScreen, field: string, value: string): Promise<void> {
-  q(el, `[data-test=${field}]`)!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-}
-
-/** Picks `value` in the native `<select>` at `[data-test=field]` and fires its `change`. */
-async function pick(el: SetupVenueScreen, field: string, value: string): Promise<void> {
-  const select = q(el, `[data-test=${field}]`) as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  const target = q(el, `[data-test=${field}]`)!;
+  if (target instanceof HTMLSelectElement) {
+    target.value = value;
+    target.dispatchEvent(new Event("change"));
+  } else {
+    target.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  }
   await el.updateComplete;
 }
 
@@ -53,14 +51,14 @@ async function toggleLocale(el: SetupVenueScreen, locale: string, checked: boole
 /** The valid text-field values a complete venue carries; `addressLine2` is deliberately left blank. */
 const VALID: Record<string, string> = {
   country: "ES",
-  taxId: "B12345678",
+  taxId: "b 1234567 4",
   legalName: "Deli del Sol SL",
   name: "Calle Mayor",
   operationDescription: "Delicatessen",
   addressLine1: "Calle Mayor 1",
   postalCode: "28013",
   city: "Madrid",
-  province: "Madrid",
+  province: "28",
   dayCutover: "06:00",
   tillName: "Mostrador 1",
   seriesCode: "FA",
@@ -94,7 +92,7 @@ const EXPECTED_LOCATION = {
 
 const EXPECTED_VENUE = {
   country: "ES",
-  taxId: "B12345678",
+  taxId: "B12345674",
   legalName: "Deli del Sol SL",
   location: EXPECTED_LOCATION,
   tillName: "Mostrador 1",
@@ -116,6 +114,44 @@ describe("setup-venue-screen", () => {
       { kind: "patch", detail: { patch: { venue: EXPECTED_VENUE } } },
       { kind: "advance", detail: null },
     ]);
+  });
+
+  it("renders onboarding-ready countries and all Spanish provinces as stable-code choices", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const countries = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=country] option"),
+    ];
+    expect(countries.map(({ value }) => value)).toEqual(["ES"]);
+    const provinces = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=province] option"),
+    ];
+    expect(provinces).toHaveLength(53);
+    expect({ value: provinces[1]!.value, label: provinces[1]!.textContent?.trim() }).toEqual({
+      value: "01",
+      label: "Araba/Álava",
+    });
+    expect({
+      value: provinces.at(-1)!.value,
+      label: provinces.at(-1)!.textContent?.trim(),
+    }).toEqual({
+      value: "52",
+      label: "Melilla",
+    });
+  });
+
+  it("derives the province from a valid Spanish postcode", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await type(el, "postalCode", "08001");
+    expect((q(el, "[data-test=province]") as HTMLSelectElement).value).toBe("08");
+  });
+
+  it("keeps an explicitly selected invoice language when the postcode changes", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await toggleLocale(el, "es-ES", false);
+    await toggleLocale(el, "es-ES", true);
+    await type(el, "postalCode", "08001");
+    expect((q(el, "[data-test=locale-es-ES]") as HTMLInputElement).checked).toBe(true);
+    expect((q(el, "[data-test=locale-ca-ES]") as HTMLInputElement).checked).toBe(false);
   });
 
   it("emits a blank addressLine2 as null, and a filled one as its string", async () => {
@@ -168,7 +204,7 @@ describe("setup-venue-screen", () => {
       mode: "demo",
       venue: {
         country: "ES",
-        taxId: "B87654321",
+        taxId: "B12345674",
         legalName: "Bar Pepe SL",
         location: {
           name: "Plaza Vieja",
@@ -191,13 +227,13 @@ describe("setup-venue-screen", () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft });
     const val = (field: string) =>
       (q(el, `[data-test=${field}]`) as unknown as { value: string }).value;
-    expect(val("taxId")).toBe("B87654321");
+    expect(val("taxId")).toBe("B12345674");
     expect(val("legalName")).toBe("Bar Pepe SL");
     expect(val("name")).toBe("Plaza Vieja");
     expect(val("addressLine2")).toBe("Local B");
     expect(val("city")).toBe("Barcelona");
     expect(val("seriesCode")).toBe("AA");
-    expect((q(el, "[data-test=timeZone]") as HTMLSelectElement).value).toBe("Atlantic/Canary");
+    expect(q(el, "[data-test=timeZone]")!.textContent).toContain("Europe/Madrid");
     expect((q(el, "[data-test=locale-ca-ES]") as HTMLInputElement).checked).toBe(true);
     expect((q(el, "[data-test=locale-es-ES]") as HTMLInputElement).checked).toBe(true);
   });
@@ -258,29 +294,38 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=legalName]")!.hasAttribute("invalid")).toBe(false);
   });
 
-  // Fix C: ES-common requires country ES — the one planVenue mismatch an operator can actually reach
-  // (country is free text; the territory <select> offers only ES-common). Prove-by-deletion: drop the
-  // country/ES check and this flips red (a "PT" + ES-common Next would then emit and advance).
-  it("blocks Next when the ES-common territory's country isn't ES, marking country invalid", async () => {
+  it("blocks Next for a malformed or bad-checksum Spanish NIF", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
-    await fillValid(el, { country: "PT" }); // ES-common but not ES
+    await fillValid(el, { taxId: "B12345678" });
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
     expect(q(el, "[data-test=error]")).not.toBeNull();
-    expect(q(el, "[data-test=country]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=taxId]")!.hasAttribute("invalid")).toBe(true);
   });
 
-  it("accepts a lower-case, space-padded 'es' country for ES-common and emits it trimmed", async () => {
+  it("blocks Next when the selected province conflicts with the postcode", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
-    await fillValid(el, { country: "  es  " });
+    await fillValid(el);
+    await type(el, "province", "08");
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    expect(events.some((e) => e.kind === "advance")).toBe(true);
-    const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.venue?.country).toBe("es"); // trimmed, so the space-sensitive server check accepts it
+    expect(events).toEqual([]);
+    expect(q(el, "[data-test=postalCode]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=province]")!.hasAttribute("invalid")).toBe(true);
+  });
+
+  it("blocks an explicitly unsupported Spanish fiscal jurisdiction", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const events = collect(host);
+    await fillValid(el, { postalCode: "35001", province: "35" });
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([]);
+    expect(q(el, "[data-test=province]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=fiscalTerritory]")!.textContent).toContain("ES-canary");
   });
 
   it("renders a routed-back server error banner when errorMessage is set (no client banner yet)", async () => {
@@ -334,17 +379,15 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=error]")).not.toBeNull();
   });
 
-  it("carries a second locale and a changed time zone through into the patch", async () => {
+  it("carries a second locale and the province-derived time zone through into the patch", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
     await fillValid(el);
     await toggleLocale(el, "en-GB", true);
-    await pick(el, "timeZone", "Atlantic/Canary");
-    await pick(el, "fiscalTerritory", "ES-common");
     q(el, "[data-test=next]")!.click();
     const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
     expect(patch.venue?.location?.invoiceLocales).toEqual(["es-ES", "en-GB"]);
-    expect(patch.venue?.location?.timeZone).toBe("Atlantic/Canary");
+    expect(patch.venue?.location?.timeZone).toBe("Europe/Madrid");
   });
 
   it("clears the banner once the form is valid and Next succeeds", async () => {
