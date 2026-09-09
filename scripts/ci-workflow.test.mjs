@@ -574,6 +574,105 @@ describe("the scope gates", () => {
   });
 });
 
+describe("the image smoke's scoping", () => {
+  // The `image` job's build + smoke is the only proof a non-root process binds 443 under host
+  // networking — worth running when the box image's inputs change, wasteful on the many PRs that
+  // cannot touch them. It reads a `deploy` output (fed by `isImageInputPath` in
+  // scripts/changed-packages.mjs) so a pull request runs it only when `deploy/` changed. These pin
+  // the wiring, and — the half that matters — that a push to `main` still smokes on `code` alone,
+  // because `publish` ships the image off this smoke passing.
+  it("declares a `deploy` output on the `changes` job", () => {
+    expect(outputsOf(job("changes").body)).toContain("deploy");
+  });
+
+  it("gates the image job on `code` and reads `deploy` to scope its pull-request runs", () => {
+    const gates = gatesRead(job("image").body);
+    expect(gates).toContain("code");
+    expect(gates).toContain("deploy");
+  });
+
+  // The fail-safe half, pinned positively. The `deploy` narrowing must apply to pull requests ONLY:
+  // a push to `main` (or a `v*` tag) still runs the smoke on `code`, gating `publish` behind it. A
+  // mutation dropping this event guard — scoping main pushes to `deploy` too — would publish images
+  // no smoke ever booted; this fails on it. (Written as one `if:` line so the line-based `gatesRead`
+  // above reads it, exactly as the `publish` gate is.)
+  it("scopes the `deploy` narrowing to pull requests, so every main push is still smoked", () => {
+    const ifLine = job("image").body.find((line) => /^ {4}if:/.test(line)) ?? "";
+    expect(ifLine).toMatch(/github\.event_name != 'pull_request'/);
+  });
+
+  // Pin the gating BEHAVIOUR, not just the field names above. The run-it reviewer showed that
+  // flipping the inner `||` to `&&` — which breaks BOTH required paths (a deploy PR and a code push
+  // both stop running) — survived every other assertion here, because they check that `code` and
+  // `deploy` and the event guard are PRESENT, not how they combine. So evaluate the real extracted
+  // `if:` as a truth table. GitHub's `==`/`!=`/`&&`/`||` match JS once `==`→`===` and `!=`→`!==`
+  // (in that order: `!=`→`!==` first would then be hit by `==`→`===` and become `!===`), and the
+  // three operands are plain string comparisons, so the whole expression evaluates to a boolean.
+  const imageIf = () => {
+    const line = job("image").body.find((entry) => /^ {4}if:/.test(entry)) ?? "";
+    return line.replace(/^ {4}if:\s*/, "").trim();
+  };
+  const runsWhen = (expr, { event_name, code, deploy }) => {
+    const js = expr
+      .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
+      .replace(/needs\.changes\.outputs\.deploy/g, JSON.stringify(deploy))
+      .replace(/github\.event_name/g, JSON.stringify(event_name))
+      .replace(/==/g, "===")
+      .replace(/!=/g, "!==");
+    // `new Function` evaluates our OWN workflow's boolean, extracted from the repo file — not
+    // untrusted input. It is how the truth table pins behaviour rather than the expression's text.
+    return Boolean(new Function(`return (${js});`)());
+  };
+
+  const cases = [
+    {
+      name: "a PR that does not touch deploy/ skips",
+      ctx: { event_name: "pull_request", code: "true", deploy: "false" },
+      run: false,
+    },
+    {
+      name: "a PR that touches deploy/ runs",
+      ctx: { event_name: "pull_request", code: "true", deploy: "true" },
+      run: true,
+    },
+    {
+      name: "a docs-only PR skips",
+      ctx: { event_name: "pull_request", code: "false", deploy: "false" },
+      run: false,
+    },
+    {
+      name: "a code push to main runs even without deploy/",
+      ctx: { event_name: "push", code: "true", deploy: "false" },
+      run: true,
+    },
+    {
+      name: "a deploy push to main runs",
+      ctx: { event_name: "push", code: "true", deploy: "true" },
+      run: true,
+    },
+    {
+      name: "a docs-only push skips",
+      ctx: { event_name: "push", code: "false", deploy: "false" },
+      run: false,
+    },
+  ];
+
+  it.each(cases)("gates the image job so $name", ({ ctx, run }) => {
+    expect(runsWhen(imageIf(), ctx)).toBe(run);
+  });
+
+  // The negative control: prove this suite is actually sensitive to the mutation the run-it seat
+  // flagged. Flipping the inner `||` to `&&` must change at least one row — otherwise the truth
+  // table above measures nothing (CLAUDE.md §1).
+  it("would catch the inner || being flipped to &&", () => {
+    const real = imageIf();
+    const mutated = real.replace("||", "&&");
+    expect(mutated).not.toBe(real);
+    const differs = cases.some(({ ctx }) => runsWhen(real, ctx) !== runsWhen(mutated, ctx));
+    expect(differs).toBe(true);
+  });
+});
+
 describe("the sharded jobs", () => {
   it("were found, and each has a matching merge job", () => {
     // Extraction guard: an empty `shardedJobs` would make every case below vacuous. There are two

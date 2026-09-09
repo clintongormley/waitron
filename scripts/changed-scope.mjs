@@ -75,6 +75,25 @@ export function isRootScopePath(path) {
 }
 
 /**
+ * True when `path` is one of the box image's build/runtime inputs — everything under `deploy/`: the
+ * Dockerfile compose builds, `compose.yml` itself, the operator `prepare.sh`, the `.env.example`
+ * template.
+ *
+ * This is the ONE thing ci.yml's `image` smoke actually exercises — it builds `deploy/Dockerfile`
+ * and brings `deploy/compose.yml` up — so a change here is what must re-run that smoke on a pull
+ * request, where it is otherwise skipped (the job's `if` reads the `deploy` output this feeds; a
+ * push to `main` still runs it on `code` alone, because `publish` ships off it). It is the WHOLE
+ * directory rather than a named-file allowlist on purpose: matching too broadly only re-runs a
+ * ~2-minute smoke on a `deploy/README.md` edit, while a named list would silently SKIP the smoke on
+ * a new image-input file nobody remembered to add — the dangerous direction §2 keeps paying for.
+ *
+ * The trailing slash is not decoration: `deploy/` must not match a sibling like `deployment/`.
+ */
+export function isImageInputPath(path) {
+  return path.startsWith("deploy/");
+}
+
+/**
  * True when a change to `path` cannot affect any test, build or type-check result.
  *
  * Inert means: anywhere under `docs/`, a Markdown file at the repository root, or the root config
@@ -496,7 +515,7 @@ export function gateOutputs(inScope) {
 // reads the two streams apart.
 //
 // It used to carry a second, argument-less subcommand that answered ci.yml's `code` gate by calling
-// `classify` on a list of changed paths. That gate is now one of the three lines
+// `classify` on a list of changed paths. That gate is now one of the five lines
 // scripts/changed-packages.mjs emits, from the same `classify` call that decides the scope, so CI
 // and the pre-push hook classify a diff exactly once and by exactly one route.
 //

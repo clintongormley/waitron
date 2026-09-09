@@ -222,6 +222,7 @@ describe("scopeForPaths", () => {
       kind: "global",
       packages: [],
       root: false,
+      deploy: false,
       reason: expect.stringContaining("tsconfig.base.json"),
     });
   });
@@ -379,18 +380,42 @@ describe("scopeForPaths", () => {
       "@waitron/db",
     );
   });
+
+  // The `deploy` flag is orthogonal to `kind`, exactly like `root`: it answers "did the box image's
+  // inputs change?" so ci.yml's `image` job can re-run its smoke on a pull request only then. A
+  // deploy-only change is `kind: global` (deploy/ belongs to no package) AND `deploy: true`.
+  it("flags a change to the box image's inputs, independently of the scope kind", () => {
+    expect(scopeForPaths(["deploy/Dockerfile"], workspace())).toMatchObject({
+      kind: "global",
+      deploy: true,
+    });
+  });
+
+  it("does not flag deploy for an ordinary package change", () => {
+    expect(scopeForPaths(["packages/db/src/index.ts"], workspace()).deploy).toBe(false);
+  });
+
+  it("does not flag deploy for a documentation-only push", () => {
+    expect(scopeForPaths(["docs/backlog.md"], workspace()).deploy).toBe(false);
+  });
+
+  // Fails CLOSED, exactly as `code` does for the same input: a diff we could not work out is a
+  // reason to run the image smoke, not to skip it.
+  it("fails closed to deploy=true when the diff could not be determined", () => {
+    expect(scopeForPaths([], workspace()).deploy).toBe(true);
+  });
 });
 
 describe("formatScope", () => {
-  it("emits the docs verdict, the outcome, the package list and the root flag, in that order", () => {
+  it("emits the docs verdict, the outcome, the package list, the root flag and the deploy flag, in that order", () => {
     expect(formatScope(scopeForPaths(["packages/db/src/index.ts"], workspace()))).toBe(
-      "code=true\nscope=packages\npackages=@waitron/db\nroot=false",
+      "code=true\nscope=packages\npackages=@waitron/db\nroot=false\ndeploy=false",
     );
   });
 
   it("emits an empty package list for a global run", () => {
     expect(formatScope(scopeForPaths(["pnpm-lock.yaml"], workspace()))).toBe(
-      "code=true\nscope=global\npackages=\nroot=false",
+      "code=true\nscope=global\npackages=\nroot=false\ndeploy=false",
     );
   });
 
@@ -398,7 +423,7 @@ describe("formatScope", () => {
   // running format:check. It must not be spelled the same as a global run.
   it("emits its own line for a documentation-only push", () => {
     expect(formatScope(scopeForPaths(["docs/backlog.md"], workspace()))).toBe(
-      "code=false\nscope=documentation\npackages=\nroot=false",
+      "code=false\nscope=documentation\npackages=\nroot=false\ndeploy=false",
     );
   });
 
@@ -407,7 +432,7 @@ describe("formatScope", () => {
   // what makes the hook skip the scoped typecheck and coverage while still running it.
   it("emits its own line for a root-only push", () => {
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
-      "code=false\nscope=root\npackages=\nroot=true",
+      "code=false\nscope=root\npackages=\nroot=true\ndeploy=false",
     );
   });
 
@@ -416,7 +441,7 @@ describe("formatScope", () => {
       formatScope(
         scopeForPaths(["scripts/changed-scope.mjs", "packages/db/src/y.ts"], workspace()),
       ),
-    ).toBe("code=true\nscope=packages\npackages=@waitron/db\nroot=true");
+    ).toBe("code=true\nscope=packages\npackages=@waitron/db\nroot=true\ndeploy=false");
   });
 
   // `code` is ci.yml's gate on every job that builds, typechecks, tests or mutates a PACKAGE. For
@@ -451,7 +476,18 @@ describe("formatScope", () => {
       formatScope(
         scopeForPaths(["packages/db/src/a.ts", "packages/payments/src/b.ts"], workspace()),
       ),
-    ).toBe("code=true\nscope=packages\npackages=@waitron/db @waitron/payments\nroot=false");
+    ).toBe(
+      "code=true\nscope=packages\npackages=@waitron/db @waitron/payments\nroot=false\ndeploy=false",
+    );
+  });
+
+  // The fifth line, which ci.yml's `changes` job reads into its `deploy` output so the `image` job
+  // can scope its smoke to deploy changes on a pull request. Last, so the four the hook already
+  // reads keep their positions.
+  it("emits deploy=true as its own line when the box image's inputs changed", () => {
+    expect(formatScope(scopeForPaths(["deploy/Dockerfile"], workspace()))).toBe(
+      "code=true\nscope=global\npackages=\nroot=false\ndeploy=true",
+    );
   });
 });
 
@@ -580,35 +616,45 @@ describe("the CLI", () => {
 
   it("resolves this workspace and attributes a real package directory", () => {
     expect(run("packages/db/src/index.ts\n").stdout).toBe(
-      "code=true\nscope=packages\npackages=@waitron/db\nroot=false\n",
+      "code=true\nscope=packages\npackages=@waitron/db\nroot=false\ndeploy=false\n",
     );
   });
 
   it("attributes several real package directories", () => {
     expect(run("packages/db/src/index.ts\napps/server/src/boot.ts\n").stdout).toBe(
-      "code=true\nscope=packages\npackages=@waitron/db @waitron/server\nroot=false\n",
+      "code=true\nscope=packages\npackages=@waitron/db @waitron/server\nroot=false\ndeploy=false\n",
     );
   });
 
   it("reports a global run for root configuration", () => {
     expect(run("tsconfig.base.json\n").stdout).toBe(
-      "code=true\nscope=global\npackages=\nroot=false\n",
+      "code=true\nscope=global\npackages=\nroot=false\ndeploy=false\n",
+    );
+  });
+
+  // The whole pipeline, end to end: a Dockerfile change is code, belongs to no package (global),
+  // and sets deploy=true \u2014 the line ci.yml's `image` job reads to re-run its smoke on a PR.
+  it("flags deploy=true for a change to the box image's inputs", () => {
+    expect(run("deploy/Dockerfile\n").stdout).toBe(
+      "code=true\nscope=global\npackages=\nroot=false\ndeploy=true\n",
     );
   });
 
   it("reports a root run for the repository\u2019s own machinery", () => {
-    expect(run(".husky/pre-push\n").stdout).toBe("code=false\nscope=root\npackages=\nroot=true\n");
+    expect(run(".husky/pre-push\n").stdout).toBe(
+      "code=false\nscope=root\npackages=\nroot=true\ndeploy=false\n",
+    );
   });
 
   it("reports a documentation-only push through the CLI too", () => {
     expect(run("docs/backlog.md\nCLAUDE.md\n").stdout).toBe(
-      "code=false\nscope=documentation\npackages=\nroot=false\n",
+      "code=false\nscope=documentation\npackages=\nroot=false\ndeploy=false\n",
     );
   });
 
   it("fails closed on empty stdin", () => {
-    expect(run("").stdout).toBe("code=true\nscope=global\npackages=\nroot=false\n");
-    expect(run("\n").stdout).toBe("code=true\nscope=global\npackages=\nroot=false\n");
+    expect(run("").stdout).toBe("code=true\nscope=global\npackages=\nroot=false\ndeploy=true\n");
+    expect(run("\n").stdout).toBe("code=true\nscope=global\npackages=\nroot=false\ndeploy=true\n");
   });
 
   it("puts the reason on stderr, where the hook's sed cannot reach it", () => {

@@ -100,6 +100,7 @@ jobs:
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
       packages: ${{ steps.classify.outputs.packages }}
+      deploy: ${{ steps.classify.outputs.deploy }}
       heavy: ${{ steps.gates.outputs.heavy }}
       ui: ${{ steps.gates.outputs.ui }}
       till: ${{ steps.gates.outputs.till }}
@@ -178,16 +179,16 @@ jobs:
             esac
           fi
 
-          # Four lines out — `code=`, `scope=` (one of documentation, root, global, packages),
-          # `packages=` and `root=` — from ONE classifier call, which is also the one
-          # `.husky/pre-push` makes. Only the first three become job outputs: `root=` is emitted for
-          # the record and read by no consumer today — the hook routes a root-only push on
-          # `scope=root`, and here the repo-level suite is ungated anyway.
+          # Five lines out — `code=`, `scope=` (one of documentation, root, global, packages),
+          # `packages=`, `root=` and `deploy=` — from ONE classifier call, which is also the one
+          # `.husky/pre-push` makes. Four become job outputs: `root=` is emitted for the record and
+          # read by no consumer today — the hook routes a root-only push on `scope=root`, and here
+          # the repo-level suite is ungated anyway — while `deploy=` is read by the `image` job.
           # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
-          # emit nothing, and it is load-bearing for ONE of the three outputs rather than a nicety
-          # for all of them. An empty `scope` would be safe: it is not the literal `packages`, so
+          # emit nothing, and it matters for ONE of the outputs rather than being a nicety for all of
+          # them: `code`. An empty `scope` would be safe: it is not the literal `packages`, so
           # every branch below falls through to running everything. An empty `code` would NOT be —
           # all nine gated jobs test `needs.changes.outputs.code == 'true'` (bundle-smoke, typecheck,
           # all five test shards, both mutation runs), so an empty value skips every one of them, and
@@ -206,6 +207,9 @@ jobs:
           code=$(printf '%s\n' "$out" | sed -n 's/^code=//p')
           scope=$(printf '%s\n' "$out" | sed -n 's/^scope=//p')
           packages=$(printf '%s\n' "$out" | sed -n 's/^packages=//p')
+          # Whether the box image's inputs (deploy/) changed. The `image` job reads it to scope its
+          # smoke to those changes on a pull request; a main push still runs it on `code` alone.
+          deploy=$(printf '%s\n' "$out" | sed -n 's/^deploy=//p')
 
           # main always runs the full suite: it is what verifies the pull request's narrowing. The
           # docs verdict is left alone, so a documentation-only merge is still cheap there too.
@@ -218,6 +222,7 @@ jobs:
             echo "code=$code"
             echo "scope=$scope"
             echo "packages=$packages"
+            echo "deploy=$deploy"
           } >> "$GITHUB_OUTPUT"
 
       # Which gated jobs have anything to do? Seven today — all five test shards and the two
@@ -475,132 +480,29 @@ jobs:
             exit 1
           fi
 
-  # The image a restaurant actually runs: built and brought up on blank volumes. Publishing it is the
-  # separate `publish` job below, gated on the whole suite — this job only builds and smoke-tests.
+  # The image a restaurant actually runs: built, brought up on blank volumes, and smoke-tested. The
+  # build + smoke themselves live in the reusable `.github/workflows/image-smoke.yml`, called from
+  # here AND from the nightly `image-nightly.yml`, so those ~90 lines exist in exactly one place.
+  # Publishing the image is the separate `publish` job below.
   #
-  # It earns its place by proving the one thing no developer's machine can. The runner is real
-  # Linux, so deploy/compose.yml's `network_mode: host` is the SHIPPED profile here — and that
-  # namespace keeps the kernel's ip_unprivileged_port_start=1024, so a non-root process reaches 443
-  # only because the image sets cap_net_bind_service on node. Docker Desktop's "host" network is its
-  # own Linux VM's, so a Mac stack-up has to override the file to bridge + published ports, and
-  # Docker's bridge namespace sets that floor to 0 — it binds 443 with no capability at all. The
-  # shape assertions below exist because that override is the easy mistake to make here: a job that
-  # smoke-tests a bridge stack passes everything and proves only what a laptop already proved.
+  # It earns its place by proving the one thing no developer's machine can — a non-root process
+  # binding 443 under host networking (image-smoke.yml carries the full receipt). That is worth
+  # running when the box image's inputs change, and wasted work on the many PRs that cannot touch
+  # them.
   #
-  # Gated on `code` like every other build job, which `deploy/**` reaches by construction rather
-  # than by an entry: `isInertPath` (scripts/changed-scope.mjs) is an allowlist of INERT paths, so a
-  # Dockerfile change classifies as code and `scopeForPaths` puts it in `global`. Pinned by
-  # scripts/changed-scope.test.mjs, because narrowing that would silently stop building the image.
+  # WHEN IT RUNS. On a PULL REQUEST, only when `deploy/` changed (`needs.changes.outputs.deploy`,
+  # fed by `isImageInputPath` in scripts/changed-packages.mjs) — most PRs skip it. On a PUSH to
+  # `main` or a `v*` tag it runs on `code` alone, because `publish` ships the image off this smoke
+  # passing, so every published image was booted first. Drift on quiet days, and an edit to the image
+  # workflow itself, are covered by image-nightly.yml (a schedule plus a manual `workflow_dispatch`).
+  # ONE `if:` line, so the line-based guard in scripts/ci-workflow.test.mjs reads it — that guard
+  # pins the deploy wiring and this pull-request-only event split.
   image:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    # Naming any permission drops every default, so `contents: read` is restated. This job pushes
-    # nothing to a registry — the GHCR publish moved to the `publish` job, which holds `packages: write`.
+    if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.deploy == 'true')
     permissions:
       contents: read
-    # Every compose invocation below reads these, so none of them can drift onto the wrong file or
-    # the wrong project. The env file is deploy/.env — where prepare.sh puts a real box's, and
-    # gitignored — so compose picks it up with no flag and interpolation cannot fail on a later
-    # `ps` or `down`.
-    env:
-      COMPOSE_FILE: deploy/compose.yml
-      COMPOSE_PROJECT_NAME: waitron-ci
-    steps:
-      - uses: actions/checkout@v5
-
-      # Written before anything can fail, because the teardown step runs `if: always()` and compose
-      # refuses to interpolate this file — required, no default — even to tear a stack down.
-      - name: Write the box's .env, the one secret it needs before anything runs
-        run: |
-          set -euo pipefail
-          {
-            echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)"
-            echo "WAITRON_IMAGE=waitron:ci"
-          } > deploy/.env
-
-      # A measurement taken where both answers look alike measures nothing (CLAUDE.md §1). The app
-      # runs in the HOST namespace and reaches Postgres over the host's own loopback, so a
-      # pre-existing listener on 5432 would take the bootstrap and every assertion below would then
-      # pass against a cluster this job never created. 443 is the port the box itself must bind.
-      - name: Refuse to smoke against something already listening
-        run: |
-          set -euo pipefail
-          for port in 443 5432; do
-            if ss -ltn "( sport = :$port )" | grep -q LISTEN; then
-              ss -ltn
-              echo "port $port is already in use — the smoke below would measure the wrong thing" >&2
-              exit 1
-            fi
-          done
-
-      # The default builder uses the `docker` driver, which supports neither a GHA cache export nor
-      # a multi-platform manifest.
-      - uses: docker/setup-buildx-action@v3
-
-      # Loaded into the runner's daemon so `docker compose` can run it. A multi-platform build
-      # cannot be loaded at all, which is why the `publish` job builds a second time — it reuses
-      # these amd64 layers from the same GHA cache scope and only arm64 is actually built.
-      - name: Build the image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: deploy/Dockerfile
-          platforms: linux/amd64
-          load: true
-          tags: waitron:ci
-          cache-from: type=gha
-          # ignore-error, because a cache EXPORT failure is a slow build, not a broken image, and
-          # this job gates the pull request.
-          cache-to: type=gha,mode=max,ignore-error=true
-
-      # `--wait` blocks on the compose healthcheck, which passes on EITHER /health or
-      # /setup-api/status — /health is 503 by design on a setup box, so waiting on that alone would
-      # sit here for the whole timeout and then call a healthy box broken.
-      - name: Bring the node up on blank volumes
-        run: docker compose up -d --wait --wait-timeout 300
-
-      - name: The setup surface answers over the box's own TLS
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP"
-
-          # -k, because the leaf is the box's own and serving the CA that signed it is exactly what
-          # /setup-api/ca.crt is for — a client that already trusted it would not need the endpoint.
-          code=$(curl -sk -o status.json -w '%{http_code}' https://127.0.0.1/setup-api/status)
-          cat status.json
-          echo
-          [ "$code" = "200" ]
-          # A blank box is unprovisioned and PREPRODUCTION: production is only ever reached by an
-          # owner choosing it in the wizard, and an image that came up live would file for real.
-          [ "$(jq -r .provisioned status.json)" = "false" ]
-          [ "$(jq -r .environment status.json)" = "preproduction" ]
-
-          code=$(curl -sk -o ca.crt -w '%{http_code}' https://127.0.0.1/setup-api/ca.crt)
-          [ "$code" = "200" ]
-          # A 200 carrying an error page would satisfy a status check on its own, so the body is
-          # parsed and then checked against the leaf the box just served: this endpoint is worth
-          # nothing unless what it hands back is the issuer a phone needs in order to trust that
-          # leaf.
-          openssl x509 -in ca.crt -noout -subject -issuer
-          openssl x509 -in ca.crt -noout -text | grep -q "CA:TRUE"
-          openssl s_client -connect 127.0.0.1:443 -showcerts </dev/null 2>/dev/null \
-            | openssl x509 > leaf.pem
-          openssl verify -CAfile ca.crt leaf.pem
-
-      - name: The box binds 443 as a non-root process, under host networking
-        run: |
-          set -euo pipefail
-          app=$(docker compose ps -q app)
-          # The whole reason this job exists on a Linux runner. Everything above passes just as well
-          # against a bridge network with `ports: ["443:443"]`, which proves nothing a Mac cannot.
-          [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$app")" = "host" ]
-          [ "$(docker exec "$app" id -u)" = "10001" ]
-          docker exec "$app" getcap /usr/local/bin/node | grep -q cap_net_bind_service
-
-      - name: Tear the stack down, volumes and all
-        if: always()
-        run: docker compose down -v --remove-orphans
+    uses: ./.github/workflows/image-smoke.yml
 
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:

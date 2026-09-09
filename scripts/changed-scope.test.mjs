@@ -14,6 +14,7 @@ import {
   UI_PACKAGE,
   classify,
   gateOutputs,
+  isImageInputPath,
   isInertPath,
   isRootScopePath,
   packagesInScope,
@@ -119,6 +120,36 @@ describe("isRootScopePath", () => {
   );
 });
 
+describe("isImageInputPath", () => {
+  // The box image's build and runtime inputs: everything under deploy/ (the Dockerfile compose
+  // builds, the compose file itself, the operator prepare.sh, the .env template). This is what the
+  // `image` job's smoke actually exercises, so a change here is the one that must re-run it on a
+  // pull request. Match the WHOLE directory, not a named-file allowlist: too broad only re-runs a
+  // ~2-minute smoke on a deploy/README.md edit, while too narrow would silently skip the smoke on a
+  // NEW image-input file nobody remembered to list — the dangerous direction (CLAUDE.md §2).
+  it.each(["deploy/Dockerfile", "deploy/compose.yml", "deploy/prepare.sh", "deploy/.env.example"])(
+    "treats %s as an image input",
+    (path) => {
+      expect(isImageInputPath(path)).toBe(true);
+    },
+  );
+
+  // A deploy/ doc still re-runs the smoke — the fail-safe cost of matching the whole directory.
+  it("treats a deploy/ doc as an image input too, matching the whole directory", () => {
+    expect(isImageInputPath("deploy/README.md")).toBe(true);
+  });
+
+  it.each([
+    "packages/db/src/index.ts",
+    "apps/server/src/index.ts",
+    "docs/backlog.md",
+    ".github/workflows/ci.yml",
+    "deployment/x.ts",
+  ])("treats %s as NOT an image input", (path) => {
+    expect(isImageInputPath(path)).toBe(false);
+  });
+});
+
 describe("classify", () => {
   it("reports no code work when every path is inert", () => {
     expect(classify(["docs/backlog.md", "CLAUDE.md"]).code).toBe(false);
@@ -146,12 +177,13 @@ describe("classify", () => {
     );
   });
 
-  // A REGRESSION PIN, green the day it was written: `isInertPath` is an allowlist of inert paths,
-  // so `deploy/` is code by construction and nothing had to change for this to hold. It is here
-  // because ci.yml's `image` job — the only proof that a non-root process binds 443 under host
-  // networking — gates on `code`, so an entry added to isInertPath for `deploy/` would stop
-  // building the box's own image while every other check stayed green.
-  it("classifies deploy/ as code, so a Dockerfile change still builds the image", () => {
+  // A REGRESSION PIN: `deploy/` is code by construction (isInertPath is an allowlist of inert
+  // paths). `code` is still NECESSARY for the `image` job — its `if` is `code && (push || deploy)`
+  // — so an entry added to isInertPath for `deploy/` would still stop the box image being built.
+  // `code` is no longer SUFFICIENT on a pull request, though: since the smoke is scoped to deploy
+  // changes there, `isImageInputPath` (pinned above) is what actually re-runs it, and the `image`
+  // job reading `needs.changes.outputs.deploy` is pinned in scripts/ci-workflow.test.mjs.
+  it("classifies deploy/ as code, so a Dockerfile change still reaches the image job", () => {
     expect(classify(["deploy/Dockerfile"]).code).toBe(true);
     expect(classify(["deploy/compose.yml"]).code).toBe(true);
   });

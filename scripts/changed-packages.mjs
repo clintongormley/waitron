@@ -4,6 +4,7 @@ import { join, relative, resolve, sep } from "node:path";
 import {
   PACKAGES_WITHOUT_TESTS,
   classify,
+  isImageInputPath,
   isInertPath,
   isRootScopePath,
 } from "./changed-scope.mjs";
@@ -151,8 +152,9 @@ function owningPackage(path, packages) {
 }
 
 /**
- * The whole verdict on a push's changed paths, from ONE call: `{ kind, packages, root, reason }`,
- * where `kind` is one of FOUR outcomes and the hook does something different for each.
+ * The whole verdict on a push's changed paths, from ONE call:
+ * `{ kind, packages, root, deploy, reason }`, where `kind` is one of FOUR outcomes and the hook
+ * does something different for each.
  *
  *   "documentation"  every changed path is inert — prose, or the root config no `code`-gated job
  *                    reads (see `isInertPath`). format:check still reads it (`.prettierignore` excludes
@@ -171,7 +173,9 @@ function owningPackage(path, packages) {
  * `root` is orthogonal to `kind` and true whenever ANY changed path is root scope — so a push of
  * `scripts/x.mjs` beside `packages/db/src/y.ts` is `kind: "packages"` with `root: true`, and both
  * the repo-level project and `@waitron/db`'s suite have work. It is the fourth line `formatScope`
- * emits.
+ * emits. `deploy` is orthogonal in the same way (`isImageInputPath`): true whenever a changed path
+ * is one of the box image's inputs, and the fifth line — ci.yml's `image` job reads it to re-run
+ * its smoke on a pull request only when `deploy/` changed.
  *
  * The predecessor returned ONE object for the first two — `{packages: [], global: true, reason: "no
  * changed code path could be determined — running everything"}` — so a documentation-only push read
@@ -202,13 +206,19 @@ export function scopeForPaths(changedPaths, loadPackages) {
   const meaningful = changedPaths.map((path) => path.trim()).filter((path) => path.length > 0);
   const { code, reason } = classify(meaningful);
 
+  // Orthogonal to `kind`, the same way `root` is: did the box image's build/runtime inputs change?
+  // ci.yml's `image` job reads this to re-run its smoke on a pull request only then. Fails CLOSED on
+  // an undetermined diff (empty list), exactly as `code` does — a diff we could not work out is a
+  // reason to run the smoke, not to skip it.
+  const deploy = meaningful.length === 0 || meaningful.some(isImageInputPath);
+
   // Prose only. `classify`'s own reason already says so — "all N changed path(s) are documentation".
-  if (!code) return { kind: "documentation", packages: [], root: false, reason };
+  if (!code) return { kind: "documentation", packages: [], root: false, deploy, reason };
 
   // Fails CLOSED, the same principle as `classify` itself and as the hook's deletion guard: an empty
   // list means we could not work out what is being pushed, not that nothing is. `classify` says
   // "no changed paths could be determined — running everything", which is what this does.
-  if (meaningful.length === 0) return { kind: "global", packages: [], root: false, reason };
+  if (meaningful.length === 0) return { kind: "global", packages: [], root: false, deploy, reason };
 
   const codePaths = meaningful.filter((path) => !isInertPath(path));
   const rootPaths = codePaths.filter(isRootScopePath);
@@ -222,6 +232,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
       kind: "root",
       packages: [],
       root: true,
+      deploy,
       reason: `${rootPaths.length} changed path(s) are the repository's own machinery — repo-level suite only`,
     };
   }
@@ -232,6 +243,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
       kind: "global",
       packages: [],
       root,
+      deploy,
       reason: "the workspace layout could not be read — running everything",
     };
   }
@@ -249,6 +261,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
         kind: "global",
         packages: [],
         root,
+        deploy,
         reason: `${path} belongs to no package — running everything`,
       };
     }
@@ -260,22 +273,24 @@ export function scopeForPaths(changedPaths, loadPackages) {
     kind: "packages",
     packages: names,
     root,
+    deploy,
     reason: `${attributable.length} changed code path(s) map to ${names.join(", ")}`,
   };
 }
 
 /**
- * Renders a scope as the four lines its two callers read.
+ * Renders a scope as the five lines its two callers read.
  *
  * `code` is ci.yml's gate on every job that builds, typechecks, tests or mutates a PACKAGE, which
  * is why `kind: "root"` answers it false alongside `documentation`: a change to `scripts/`,
  * `.husky/` or `.github/` gives none of them work, and ci.yml's UNGATED `lint` job is what runs the
  * repo-level project that does read it. It is emitted from here rather than recomputed by the
- * workflow's shell so the two cannot drift. ci.yml appends the first three lines to
- * `$GITHUB_OUTPUT`; the hook reads `scope=` and `packages=` with `sed` and routes a root-only push
- * on `scope=root`. `root=` is emitted for the record — a mixed push says `packages` AND `root=true`
- * — and is read by no consumer today: the hook runs the repo-level suite on every
- * non-documentation push anyway, and ci.yml's `lint` job runs it on every push.
+ * workflow's shell so the two cannot drift. ci.yml reads `code=`, `scope=`, `packages=` and
+ * `deploy=` into job outputs with `sed`; the hook reads `scope=` and `packages=` and routes a
+ * root-only push on `scope=root`. `root=` is emitted for the record — a mixed push says `packages`
+ * AND `root=true` — and is read by no consumer today: the hook runs the repo-level suite on every
+ * non-documentation push anyway, and ci.yml's `lint` job runs it on every push. `deploy=` is read
+ * only by ci.yml (its `image` job); the hook builds no image.
  *
  * A single space separates the package names, and that separator is the contract between this file
  * and its callers, asserted as such below. Both still WORD-SPLIT that line — `for pkg in
@@ -290,9 +305,9 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * +f` for that, which is the guard the sentence used to claim was unnecessary — receipts beside the
  * loop in .husky/pre-push.
  */
-export function formatScope({ kind, packages, root }) {
+export function formatScope({ kind, packages, root, deploy }) {
   const code = kind === "packages" || kind === "global";
-  return `code=${code}\nscope=${kind}\npackages=${packages.join(" ")}\nroot=${root}`;
+  return `code=${code}\nscope=${kind}\npackages=${packages.join(" ")}\nroot=${root}\ndeploy=${deploy}`;
 }
 
 /**
@@ -370,11 +385,11 @@ export function scriptRunCheck(members, script, readScripts) {
 // CLI, two shapes:
 //
 //   node scripts/changed-packages.mjs
-//     changed paths on stdin, one per line → three `<name>=<value>` lines on stdout.
+//     changed paths on stdin, one per line → five `<name>=<value>` lines on stdout.
 //   node scripts/changed-packages.mjs runnable <script>
 //     a `pnpm <filters> ls --depth -1 --json` result on stdin → nothing on stdout, and an EXIT CODE
 //     that is 1 when that selection would run no `<script>` at all. The exit code is the only part
-//     of it a shell step can act on, which is why this is a subcommand rather than a fourth line.
+//     of it a shell step can act on, which is why this is a subcommand rather than a sixth line.
 //
 // In the DEFAULT shape the workspace layout is resolved HERE rather than passed in, because that
 // shape's own input is the changed paths and the two cannot share stdin; threading a JSON document
@@ -393,8 +408,8 @@ export function scriptRunCheck(members, script, readScripts) {
 // moves with the checkout's location — the first version of this line said 3917 bytes and a
 // reviewer's clone gave 3885.
 //
-// stdout carries the three lines and NOTHING else: ci.yml appends it straight to `$GITHUB_OUTPUT`
-// and the hook reads it with `sed -n 's/^scope=//p'` and `sed -n 's/^packages=//p'`, so a stray line
+// stdout carries the five lines and NOTHING else: ci.yml seds `code=`/`scope=`/`packages=`/`deploy=`
+// out of it into job outputs and the hook reads `scope=` and `packages=` the same way, so a stray line
 // that happened to carry a prefix would become a bogus job output or a bogus scope. The
 // human-readable reason goes to stderr, where both print it for whoever is watching.
 //
