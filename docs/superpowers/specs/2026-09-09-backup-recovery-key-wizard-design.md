@@ -285,10 +285,14 @@ step needs two things the engine does not have:
   complete day, not a day still being traded) **and after the day's reports have run** (owner,
   2026-09-09). A per-box stable jitter (a few minutes, derived once from the node id) keeps a fleet
   from all firing on the same second without letting the time wander between boots. The scheduler
-  computes the next fire instant from (days, time, tz) and sleeps toward it, replacing "sleep
-  `intervalMs` from boot" — but it **caps each sleep at ~1h and recomputes**, rather than one
-  multi-day `setTimeout`, so a clock/NTP jump or a `day_cutover`/tz edit is picked up instead of
-  firing days late (`realSleep` is `timers/promises`, [loop.ts:44-46](../../../apps/server/src/loop.ts)).
+  computes the next fire instant from (days, time, tz) per cycle and sleeps toward it, replacing
+  "sleep `intervalMs` from boot" — but it **caps each sleep at ~1h**, rather than one multi-day
+  `setTimeout`, so a **clock/NTP jump is caught within ~1h** instead of firing days late (`realSleep`
+  is `timers/promises`, [loop.ts:44-46](../../../apps/server/src/loop.ts)). The fire instant is
+  computed once per cycle (not recomputed mid-wait — recomputing after the target passed would skip a
+  fire, since next-fire is strictly future), so a `day_cutover`/tz **config** change takes effect at
+  the **next scheduled fire** (≤ one period away), not mid-wait. That is the safe trade: a tz/cutover
+  edit is near-never after setup, and skipping a fire is worse than honouring it one cycle late.
   The `time_zone`/`day_cutover` read is a **tenant-scoped** query (the by-id rule, `CLAUDE.md` §3),
   run on the backup read pool the plan names.
   - **Ordering caveat, named:** there is **no scheduled report-generation job today** — reports are
