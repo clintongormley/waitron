@@ -1,0 +1,212 @@
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * A cross-process mutex so only ONE two-node PostgreSQL replication cluster (of either kind — plain
+ * or WireGuard) is alive machine-wide at a time. Both `startTwoNodeCluster` and
+ * `startTwoNodeWireguardCluster` acquire it BEFORE booting any container and release it on teardown,
+ * so no combination of packages, vitest forks or separate `pnpm` package processes can oversubscribe
+ * Docker with concurrent cluster boots plus their heavy post-boot replication setup — the starvation
+ * that hangs a `beforeAll` under the full local/CI run (Parts 1 and 2 bound retries and within-package
+ * ordering; only this bounds CROSS-process concurrency).
+ *
+ * The lock is a DIRECTORY at a stable OS-temp path — `fs.mkdir` is atomic and fails `EEXIST` if it
+ * already exists, so exactly one waiter wins the create. The winner writes `holder.json`
+ * (`{ pid, startedAt, token }`) inside it for the staleness and ownership checks below.
+ *
+ * Stale recovery (a crashed holder must NEVER deadlock the suite): a waiter steals the lock when the
+ * holder's pid is no longer alive (`process.kill(pid, 0)` throws ESRCH) OR the hold is older than
+ * {@link STALE_MS}. The pid-liveness check is the primary reclaim — a DEAD holder is taken over at
+ * once. The age check is only a backstop for an ABANDONED lock whose pid has since been reused by an
+ * unrelated process (so `isAlive` wrongly reports it live). Because the lock is held for the WHOLE
+ * suite — `beforeAll` (boot + post-boot replication setup) through every `it` to `afterAll` — the
+ * permitted legitimate hold is large (see {@link STALE_MS}); the age bound is set comfortably above
+ * that worst case so it can only ever fire on a genuinely abandoned lock, never on a slow-but-alive
+ * holder (which would boot a SECOND concurrent cluster — the exact oversubscription this prevents). A
+ * holder that crashed AFTER `mkdir` but BEFORE writing metadata leaves a holderless dir, reclaimed by
+ * the dir's own age past STALE_MS, never in the microsecond write window. The steal is race-safe:
+ * remove then re-attempt the atomic create, and a lost race just keeps polling.
+ *
+ * Fail loud, never hang: if acquire cannot win within {@link ACQUIRE_TIMEOUT_MS} it THROWS naming the
+ * current holder's pid and age. That bound sits BELOW the callers' 300s `beforeAll` hook timeout so a
+ * genuinely-stuck holder surfaces as this named error FIRST, rather than as vitest's generic
+ * hook-timeout abort. High STALE_MS (never steal from a slow-but-alive holder) and a low acquire
+ * timeout (fail loud on a real stall) are the two halves of that trade.
+ *
+ * Escape hatch: `WAITRON_TWO_NODE_MUTEX=0` disables the mutex (acquire is a no-op) for debugging or
+ * CI-shard tuning; the mutex is ON by default.
+ */
+
+export type Release = () => Promise<void>;
+
+export interface ClusterMutex {
+  /** Blocks (polling) until it holds the machine-wide lock, then resolves a `release()` that is
+   * idempotent and best-effort. Throws if it cannot acquire within the timeout. */
+  acquire(): Promise<Release>;
+}
+
+export interface FileClusterMutexOptions {
+  /** The lock directory (a stable path). Defaults to {@link DEFAULT_LOCK_DIR}. */
+  lockDir?: string;
+  /** A hold older than this is stolen even from a live pid. Defaults to {@link STALE_MS}. */
+  staleMs?: number;
+  /** Acquire throws past this bound rather than hanging. Defaults to {@link ACQUIRE_TIMEOUT_MS}. */
+  acquireTimeoutMs?: number;
+  /** Base poll interval between attempts; a little jitter is added. Defaults to {@link POLL_INTERVAL_MS}. */
+  pollIntervalMs?: number;
+  /** Clock seam (tests inject a fake). Defaults to `Date.now`. */
+  now?: () => number;
+  /** Pid-liveness seam (tests inject). Defaults to {@link isProcessAlive}. */
+  isAlive?: (pid: number) => boolean;
+  /** Escape-hatch seam. Defaults to reading `WAITRON_TWO_NODE_MUTEX === "0"` at each acquire. */
+  disabled?: () => boolean;
+}
+
+interface Holder {
+  pid: number;
+  startedAt: number;
+  token: string;
+}
+
+/** The machine-wide lock path — one per OS temp dir, shared by every process on the box. */
+export const DEFAULT_LOCK_DIR = join(tmpdir(), "waitron-two-node-cluster.lock");
+/** Age at which an EXISTING lock may be stolen from a pid that still LOOKS alive — the backstop for a
+ * reused-pid abandoned lock, distinct from the immediate pid-liveness reclaim. It must COMFORTABLY
+ * exceed the longest legitimate WHOLE-SUITE hold, since the lock spans `beforeAll` (boot + post-boot
+ * replication setup) through every `it` to `afterAll`. Worst case among the consuming suites: a 300s
+ * `beforeAll` cap + up to ~8 test bodies at the 120s `testTimeout` each (~16 min) + `afterAll`
+ * teardown ≈ 21 min. 30 minutes clears that with margin, so the age path can only ever fire on a
+ * genuinely abandoned lock — never on a slow-but-alive holder, which would boot a second concurrent
+ * cluster and reintroduce the oversubscription this exists to prevent. */
+export const STALE_MS = 1_800_000;
+/** Acquire fails loud past this, naming the holder. Set BELOW the callers' 300s `beforeAll` hook
+ * timeout so a stuck holder surfaces as the named-holder throw before vitest's generic hook abort.
+ * Measured happy-path holds are 8-22s and the worst queue-wait behind all four suites is ~66s, both
+ * far under 240s, so this only ever fires on a real stall — not on normal queueing. */
+export const ACQUIRE_TIMEOUT_MS = 240_000;
+/** Modest base poll; jitter is added to avoid a thundering herd. */
+export const POLL_INTERVAL_MS = 150;
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** True if `pid` names a live process. `process.kill(pid, 0)` sends no signal but validates the pid:
+ * it throws ESRCH for a dead pid (=> not alive) and EPERM for a live pid we may not signal (=> alive). */
+export function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+export function createFileClusterMutex(options: FileClusterMutexOptions = {}): ClusterMutex {
+  const lockDir = options.lockDir ?? DEFAULT_LOCK_DIR;
+  const holderFile = join(lockDir, "holder.json");
+  const staleMs = options.staleMs ?? STALE_MS;
+  const acquireTimeoutMs = options.acquireTimeoutMs ?? ACQUIRE_TIMEOUT_MS;
+  const pollIntervalMs = options.pollIntervalMs ?? POLL_INTERVAL_MS;
+  const now = options.now ?? Date.now;
+  const isAlive = options.isAlive ?? isProcessAlive;
+  const disabled = options.disabled ?? (() => process.env.WAITRON_TWO_NODE_MUTEX === "0");
+
+  const readHolder = async (): Promise<Holder | undefined> => {
+    try {
+      const parsed = JSON.parse(await readFile(holderFile, "utf8")) as Holder;
+      if (typeof parsed.pid === "number" && typeof parsed.startedAt === "number") return parsed;
+      return undefined;
+    } catch {
+      // Missing, partially written, or corrupt — the caller falls back to the dir's own age.
+      return undefined;
+    }
+  };
+
+  const isStale = async (): Promise<boolean> => {
+    const holder = await readHolder();
+    if (holder === undefined) {
+      // No readable metadata (a holder mid-write, or one that crashed before writing it). Judge by the
+      // lock dir's own age so a crashed-pre-write holder is still reclaimable — but only once past
+      // STALE_MS, never in the tiny mkdir→writeFile window.
+      try {
+        const dirStat = await stat(lockDir);
+        return now() - dirStat.mtimeMs > staleMs;
+      } catch {
+        /* v8 ignore start -- the dir vanished between our EEXIST and this stat (raced by another
+           waiter's steal); not stale, the next mkdir wins. Not deterministically reachable. */
+        return false;
+        /* v8 ignore stop */
+      }
+    }
+    return now() - holder.startedAt > staleMs || !isAlive(holder.pid);
+  };
+
+  const acquire = async (): Promise<Release> => {
+    if (disabled()) return async () => {};
+    const deadline = now() + acquireTimeoutMs;
+    const token = randomUUID();
+
+    for (;;) {
+      try {
+        await mkdir(lockDir); // atomic exclusive create — fails EEXIST if another holder has it
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+          /* v8 ignore start -- a non-EEXIST mkdir failure (e.g. EACCES on the temp dir) is not a held
+             lock and is unreachable in a normal run where the only contention is EEXIST. */
+          throw error;
+          /* v8 ignore stop */
+        }
+        // The lock is held. Steal it if stale; otherwise poll until the deadline, then fail loud.
+        if (await isStale()) {
+          // Race-safe against two waiters stealing at once: remove, then re-attempt the atomic mkdir;
+          // whoever loses the create sees EEXIST and loops. This two-waiter race is reasoned, not
+          // tested — a deterministic test for it would be flaky — so it is a deliberate no-test call.
+          /* v8 ignore start -- best-effort: force:true already swallows ENOENT; any other rm error
+             just falls through to a re-attempt on the next loop. */
+          await rm(lockDir, { recursive: true, force: true }).catch(() => {});
+          /* v8 ignore stop */
+          continue; // re-attempt the atomic create; a lost steal race just loops again
+        }
+        if (now() >= deadline) {
+          const holder = await readHolder();
+          const age = holder ? now() - holder.startedAt : undefined;
+          throw new Error(
+            `cluster-mutex: could not acquire ${lockDir} within ${acquireTimeoutMs}ms; held by ` +
+              `pid ${holder?.pid ?? "unknown"} for ${age ?? "unknown"}ms. If no two-node cluster is ` +
+              `running, this is a leaked lock — remove ${lockDir}.`,
+            // The proximate reason we are here is the mkdir EEXIST that keeps failing — carry its
+            // errno so a caller sees the raw lock-held signal behind the timeout.
+            { cause: error },
+          );
+        }
+        await delay(pollIntervalMs + Math.random() * pollIntervalMs);
+        continue;
+      }
+
+      // Won the lock. Record our identity for the staleness and ownership checks.
+      await writeFile(holderFile, JSON.stringify({ pid: process.pid, startedAt: now(), token }));
+      let released = false;
+      return async () => {
+        if (released) return; // idempotent — a second release does nothing
+        released = true;
+        try {
+          // Only remove the lock while it is still OURS. A lock stolen from us (we hung past STALE_MS)
+          // and re-acquired by another holder carries a different token and must NOT be freed here.
+          const holder = await readHolder();
+          if (holder?.token === token) await rm(lockDir, { recursive: true, force: true });
+          /* v8 ignore start -- best-effort swallow: a teardown error must never strand the caller, and
+             stale recovery reclaims a lock we somehow failed to remove. Not reachable via the tests. */
+        } catch {
+          // intentionally ignored (see above)
+        }
+        /* v8 ignore stop */
+      };
+    }
+  };
+
+  return { acquire };
+}
+
+/** The shared machine-wide instance both two-node fixtures use by default. */
+export const clusterMutex: ClusterMutex = createFileClusterMutex();

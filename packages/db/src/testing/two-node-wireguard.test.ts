@@ -11,6 +11,27 @@ import {
   type WireguardReplNode,
 } from "./two-node-wireguard.js";
 import { dockerAvailable } from "./harness.js";
+import type { ClusterMutex, Release } from "./cluster-mutex.js";
+
+// A mutex that never locks — keeps the seam tests off the real machine-wide file lock (which the
+// real-Docker smoke suite exercises).
+const noopMutex: ClusterMutex = { acquire: async () => async () => {} };
+
+const makeSpyMutex = (events: string[]): { mutex: ClusterMutex; held: () => number } => {
+  let held = 0;
+  const mutex: ClusterMutex = {
+    acquire: async () => {
+      held += 1;
+      events.push("acquire");
+      const release: Release = async () => {
+        held -= 1;
+        events.push("release");
+      };
+      return release;
+    },
+  };
+  return { mutex, held: () => held };
+};
 
 // Setup-path cleanup, driven through the `startNetwork`/`startNode` seams so no daemon is needed —
 // the same discipline (and the same class of leak) the sibling two-node fixture pins: a failure
@@ -55,6 +76,7 @@ describe("startTwoNodeWireguardCluster setup-failure cleanup", () => {
         },
         startNetwork: async () => fakeNetwork(stopped),
         startNode: async (_network, plan) => startedNode(plan.tunnelHost, stopped),
+        mutex: noopMutex,
       }),
     ).rejects.toBe(boom);
     // Both nodes were up (and peered) before migration ran — all three torn down, nodes first.
@@ -74,6 +96,7 @@ describe("startTwoNodeWireguardCluster setup-failure cleanup", () => {
           if (calls === 2) throw boom;
           return startedNode(plan.tunnelHost, stopped);
         },
+        mutex: noopMutex,
       }),
     ).rejects.toBe(boom);
     // node-b never started; node-a and the network did, and both are stopped.
@@ -98,10 +121,91 @@ describe("startTwoNodeWireguardCluster setup-failure cleanup", () => {
                 }
               : undefined,
           ),
+        mutex: noopMutex,
       }),
     ).rejects.toThrow("migration failed");
     // node-b's stop() threw; node-a and the network are still torn down.
     expect(stopped).toEqual(["10.99.0.1", "network"]);
+  });
+});
+
+// The cross-process mutex wiring for the WireGuard fixture — same invariant as the sibling fixture:
+// acquire before the first boot, release on stop() and on setup-failure cleanup, so the two fixtures
+// never run a cluster concurrently.
+describe("startTwoNodeWireguardCluster cluster mutex", () => {
+  const spyNode = (events: string[], plan: NodePlan): StartedWireguardNode => ({
+    node: {
+      uri: "postgres://node/db",
+      networkHost: plan.alias,
+      tunnelHost: plan.tunnelHost,
+      run: async () => {},
+      query: async () => [],
+      execInContainer: async () => ({ exitCode: 0, output: "" }),
+    },
+    publicKey: `pub-${plan.tunnelHost}`,
+    configurePeer: async () => {},
+    stop: async () => {
+      events.push(`stop:${plan.tunnelHost}`);
+    },
+  });
+
+  it("acquires the mutex before the first boot and releases it on stop()", async () => {
+    const events: string[] = [];
+    const { mutex, held } = makeSpyMutex(events);
+    const cluster = await startTwoNodeWireguardCluster({
+      migrate: async () => {},
+      startNetwork: async () => {
+        events.push("network");
+        return { stop: async () => {} } as unknown as StartedNetwork;
+      },
+      startNode: async (_network, plan) => {
+        events.push(`node:${plan.tunnelHost}`);
+        return spyNode(events, plan);
+      },
+      mutex,
+    });
+
+    expect(events[0]).toBe("acquire");
+    expect(events.indexOf("acquire")).toBeLessThan(events.indexOf("network"));
+    expect(held()).toBe(1);
+    expect(events).not.toContain("release");
+
+    await cluster.stop();
+    expect(events.at(-1)).toBe("release");
+    expect(held()).toBe(0);
+  });
+
+  it("releases the mutex when setup fails", async () => {
+    const events: string[] = [];
+    const { mutex, held } = makeSpyMutex(events);
+    await expect(
+      startTwoNodeWireguardCluster({
+        migrate: async () => {
+          throw new Error("migration failed");
+        },
+        startNetwork: async () => ({ stop: async () => {} }) as unknown as StartedNetwork,
+        startNode: async (_network, plan) => spyNode(events, plan),
+        mutex,
+      }),
+    ).rejects.toThrow("migration failed");
+    expect(held()).toBe(0);
+    expect(events).toContain("release");
+  });
+
+  it("defaults to the real machine-wide mutex, which the escape hatch can disable", async () => {
+    const prev = process.env.WAITRON_TWO_NODE_MUTEX;
+    process.env.WAITRON_TWO_NODE_MUTEX = "0";
+    try {
+      const cluster = await startTwoNodeWireguardCluster({
+        migrate: async () => {},
+        startNetwork: async () => ({ stop: async () => {} }) as unknown as StartedNetwork,
+        startNode: async (_network, plan) => spyNode([], plan),
+      });
+      await cluster.stop();
+    } finally {
+      if (prev === undefined) delete process.env.WAITRON_TWO_NODE_MUTEX;
+      else process.env.WAITRON_TWO_NODE_MUTEX = prev;
+    }
   });
 });
 
