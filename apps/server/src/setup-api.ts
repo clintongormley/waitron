@@ -255,6 +255,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 // `runProvision` above): a non-`AppError` reaching the boundary is answered `server.internal`.
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
 const runRestore = createErrorBoundary(PROVISION_STATUS, "setup.restore_failed");
+const runConfiguration = createErrorBoundary(PROVISION_STATUS, "setup.configuration_import_failed");
 
 /** Throw the request-shape refusal for `field`, naming it but NEVER echoing its value (a PIN,
  * password or certificate secret is exactly the value a caller can mis-send). */
@@ -857,7 +858,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     configurationStaging = true;
-    return runRestore(c, log, async () => {
+    return runConfiguration(c, log, async () => {
       try {
         if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")) {
           invalidRequest("artifact");

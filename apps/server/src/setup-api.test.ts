@@ -1183,6 +1183,30 @@ async function postConfiguration(app: Hono, body: Uint8Array): Promise<Response>
 }
 
 describe("POST /setup-api/configuration", () => {
+  it("labels an unexpected configuration staging fault as configuration, not restore", async () => {
+    const log = vi.fn();
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        stageConfiguration: vi.fn(async () => {
+          throw new Error("broken staging disk");
+        }),
+      },
+      log,
+    );
+
+    const response = await postConfiguration(app, Uint8Array.from([1, 2, 3]));
+
+    expect(response.status).toBe(500);
+    expect(log).toHaveBeenCalledWith(
+      "error",
+      "setup.configuration_import_failed",
+      expect.objectContaining({ errorCode: "unknown" }),
+    );
+  });
+
   it("stages and previews a bounded preparation export", async () => {
     const preview = {
       venue: { taxId: "B12345678" },
