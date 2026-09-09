@@ -76,7 +76,7 @@ describe("planVenue", () => {
           name: "Mostrador",
           formFactor: "till",
           capabilities: ["integrated-card-payment", "open-cash-drawer"],
-          inactivityTimeoutSeconds: null,
+          inactivityTimeoutSeconds: 300,
         },
         {
           name: "Cocina",
