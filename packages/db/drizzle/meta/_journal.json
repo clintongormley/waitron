@@ -78,6 +78,13 @@
       "when": 1788893695391,
       "tag": "0010_drop_device_pairing_codes_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788946138728,
+      "tag": "0011_drop_print_agent_pairing_codes_sql",
+      "breakpoints": true
     }
   ]
 }

@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Database, Transaction } from "../client.js";
+import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
-import { printAgentPairingCodes, printAgents } from "./print-agents.js";
+import { printAgents } from "./print-agents.js";
 import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { tenants } from "./tenants.js";
@@ -23,21 +23,7 @@ const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 // comes from hashSecret in a later task).
 const TOKEN_HASH = "scrypt$00$00";
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  tenant: string,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
-describe("printing schema (print_agents/pairing_codes/printers/print_jobs — columns, CHECKs, FKs)", () => {
+describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs, FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -71,21 +57,6 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — co
       const r = await tx.execute<{ id: string }>(
         sql`insert into print_agents (tenant_id, location_id, name, token_hash)
             values (${tenant}, ${locationOf(tenant)}, ${name}, ${TOKEN_HASH}) returning id`,
-      );
-      return r.rows[0]!.id;
-    });
-  }
-
-  async function seedPairingCode(
-    tenant: string,
-    codeSha256: string,
-    label: string,
-    location: string = locationOf(tenant),
-  ): Promise<string> {
-    return asApp(tenant, async (tx) => {
-      const r = await tx.execute<{ id: string }>(
-        sql`insert into print_agent_pairing_codes (tenant_id, location_id, code_sha256, label)
-            values (${tenant}, ${location}, ${codeSha256}, ${label}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -147,51 +118,14 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — co
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on location_id
   });
 
-  // ---- print_agent_pairing_codes ------------------------------------------------------------
-
-  it("print_agent_pairing_codes: maps every column and is consumed by DELETE … RETURNING", async () => {
-    const id = await seedPairingCode(TENANT_A, "sha-control", "Code control");
-    const [row] = await asApp(TENANT_A, (tx) =>
-      tx
-        .select()
-        .from(printAgentPairingCodes)
-        .where(sql`id = ${id}`),
+  it("print_agent_pairing_codes no longer exists (join-and-accept replaced the pairing code)", async () => {
+    // Undefined_table (42P01), read off the wrapped driver error the same way the FK/CHECK cases
+    // above do — drizzle's own `.message` is "Failed query: …", so the real Postgres code lives on
+    // `.cause` (pgErrorCode unwraps it).
+    const e = await captureError(() =>
+      asApp(TENANT_A, (tx) => tx.execute(sql`select 1 from print_agent_pairing_codes limit 1`)),
     );
-    expect(row!.codeSha256).toBe("sha-control");
-    expect(row!.label).toBe("Code control");
-    expect(row!.locationId).toBe(LOCATION_A);
-    // The redemption shape: a locking DELETE … RETURNING consumes the row (app_user holds DELETE).
-    const deleted = await asApp(TENANT_A, (tx) =>
-      tx
-        .execute<{ id: string }>(
-          sql`delete from print_agent_pairing_codes where id = ${id} returning id`,
-        )
-        .then((r) => r.rows),
-    );
-    expect(deleted).toHaveLength(1);
-    expect(deleted[0]!.id).toBe(id);
-  });
-
-  it("print_agent_pairing_codes: (tenant_id, code_sha256) is UNIQUE — a duplicate digest is rejected 23505", async () => {
-    await seedPairingCode(TENANT_A, "sha-dup", "First");
-    const e = await captureError(() => seedPairingCode(TENANT_A, "sha-dup", "Duplicate"));
-    expect(pgErrorCode(e)).toBe("23505"); // unique_violation on (tenant_id, code_sha256)
-
-    // Proof by deletion of the guard (§4): with the UNIQUE index replaced by a PLAIN one inside a
-    // ROLLED-BACK tx, the SAME (tenant, digest) inserts a second time without error — attributing the
-    // 23505 above to the unique index, not to some other constraint.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`drop index print_agent_pairing_codes_lookup_idx`);
-      await tx.execute(
-        sql`create index print_agent_pairing_codes_lookup_idx on print_agent_pairing_codes (tenant_id, code_sha256)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const inserted = await tx.execute<{ id: string }>(
-        sql`insert into print_agent_pairing_codes (tenant_id, location_id, code_sha256, label)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-dup', 'Now allowed') returning id`,
-      );
-      expect(inserted.rows).toHaveLength(1); // the duplicate digest inserts once the UNIQUE index is gone
-    });
+    expect(pgErrorCode(e)).toBe("42P01");
   });
 
   // ---- printers -----------------------------------------------------------------------------
