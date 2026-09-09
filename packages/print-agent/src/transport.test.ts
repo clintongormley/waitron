@@ -4,7 +4,13 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FakeSink, NetworkTcpTransport, RoutingTransport, UsbTransport } from "./transport.js";
+import {
+  BluetoothTransport,
+  FakeSink,
+  NetworkTcpTransport,
+  RoutingTransport,
+  UsbTransport,
+} from "./transport.js";
 import type { PrinterTarget, Transport } from "./transport.js";
 
 // The transport adapters are the hardware seam. CI exercises them against LOCAL fakes — a loopback
@@ -17,7 +23,7 @@ function target(overrides: Partial<PrinterTarget>): PrinterTarget {
     transport: "network_tcp",
     host: null,
     port: null,
-    usbPath: null,
+    devicePath: null,
     ...overrides,
   };
 }
@@ -149,34 +155,66 @@ describe("UsbTransport", () => {
     for (const c of cleanups.splice(0)) await c();
   });
 
-  it("writes the exact bytes to the printer's usb_path", async () => {
+  it("writes the exact bytes to the printer's device path", async () => {
     const dir = await mkdtemp(join(tmpdir(), "waitron-usb-"));
     cleanups.push(() => rm(dir, { recursive: true, force: true }));
-    const usbPath = join(dir, "lp0");
+    const devicePath = join(dir, "lp0");
     await new UsbTransport().send(
-      target({ transport: "usb", usbPath }),
+      target({ transport: "usb", devicePath }),
       new Uint8Array([0x1d, 0x56, 0x00]),
     );
-    expect([...(await readFile(usbPath))]).toEqual([0x1d, 0x56, 0x00]);
+    expect([...(await readFile(devicePath))]).toEqual([0x1d, 0x56, 0x00]);
   });
 
-  it("rejects a usb printer with no usb_path", async () => {
+  it("rejects a usb printer with no device path", async () => {
     await expect(
-      new UsbTransport().send(target({ transport: "usb", usbPath: null }), new Uint8Array([1])),
-    ).rejects.toThrow(/usb_path/);
+      new UsbTransport().send(target({ transport: "usb", devicePath: null }), new Uint8Array([1])),
+    ).rejects.toThrow(/usb printer .* has no device path/);
   });
 
-  it("rejects when the usb path cannot be written (a missing device directory)", async () => {
+  it("rejects when the device path cannot be written (a missing device directory)", async () => {
     await expect(
       new UsbTransport().send(
-        target({ transport: "usb", usbPath: "/no/such/dir/lp0" }),
+        target({ transport: "usb", devicePath: "/no/such/dir/lp0" }),
         new Uint8Array([1]),
       ),
     ).rejects.toThrow();
   });
 });
 
+describe("BluetoothTransport", () => {
+  const cleanups: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const c of cleanups.splice(0)) await c();
+  });
+
+  it("writes the exact bytes to the printer's device path (the paired RFCOMM node)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-bt-"));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
+    const devicePath = join(dir, "rfcomm0");
+    await new BluetoothTransport().send(
+      target({ transport: "bluetooth", devicePath }),
+      new Uint8Array([0x1b, 0x40, 0x41]),
+    );
+    expect([...(await readFile(devicePath))]).toEqual([0x1b, 0x40, 0x41]);
+  });
+
+  it("rejects a bluetooth printer with no device path, with its OWN error text", async () => {
+    await expect(
+      new BluetoothTransport().send(
+        target({ transport: "bluetooth", devicePath: null }),
+        new Uint8Array([1]),
+      ),
+    ).rejects.toThrow(/bluetooth printer .* has no device path/);
+  });
+});
+
 describe("RoutingTransport", () => {
+  const cleanups: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const c of cleanups.splice(0)) await c();
+  });
+
   /** A recording double standing in for a real adapter. */
   class Recorder implements Transport {
     readonly seen: string[] = [];
@@ -189,15 +227,35 @@ describe("RoutingTransport", () => {
   it("dispatches to the adapter for the printer's transport", async () => {
     const network = new Recorder();
     const usb = new Recorder();
-    const router = new RoutingTransport({ network_tcp: network, usb });
+    const bluetooth = new Recorder();
+    const router = new RoutingTransport({ network_tcp: network, usb, bluetooth });
     await router.send(target({ id: "n", transport: "network_tcp" }), new Uint8Array([1]));
     await router.send(target({ id: "u", transport: "usb" }), new Uint8Array([2]));
+    await router.send(target({ id: "b", transport: "bluetooth" }), new Uint8Array([3]));
     expect(network.seen).toEqual(["n"]);
     expect(usb.seen).toEqual(["u"]);
+    expect(bluetooth.seen).toEqual(["b"]);
+  });
+
+  it("routes a bluetooth job to a device-path write", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-route-bt-"));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
+    const devicePath = join(dir, "rfcomm0");
+    const router = new RoutingTransport({
+      network_tcp: new FakeSink(),
+      usb: new UsbTransport(),
+      bluetooth: new BluetoothTransport(),
+    });
+    await router.send(target({ id: "p", transport: "bluetooth", devicePath }), new Uint8Array([9]));
+    expect([...(await readFile(devicePath))]).toEqual([9]);
   });
 
   it("throws for a cloud_poll printer — an agent never pushes to a self-polling printer", async () => {
-    const router = new RoutingTransport({ network_tcp: new Recorder(), usb: new Recorder() });
+    const router = new RoutingTransport({
+      network_tcp: new Recorder(),
+      usb: new Recorder(),
+      bluetooth: new Recorder(),
+    });
     await expect(
       router.send(target({ id: "c", transport: "cloud_poll" }), new Uint8Array([1])),
     ).rejects.toThrow(/cloud_poll/);

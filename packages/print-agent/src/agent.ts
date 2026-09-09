@@ -47,6 +47,10 @@ export function createAgent(opts: AgentOptions): Agent {
   let approved = false;
   let halted = false;
   let running = false;
+  // Cross-tick: the epoch-ms instant the server's last reply said discovery is open until. The NEXT
+  // tick actively scans (and posts the results) only while `host.now()` is still under it; 0 means no
+  // window, so an initial tick and a closed window both skip the scan.
+  let discoveryUntil = 0;
   let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
   let lastPhaseLine = "";
 
@@ -99,16 +103,10 @@ export function createAgent(opts: AgentOptions): Agent {
     let outcome: JobOutcome;
     let failed = false;
     try {
-      await host.transport.send(
-        {
-          id: job.printerId,
-          transport: job.transport,
-          host: job.host,
-          port: job.port,
-          usbPath: job.usbPath,
-        },
-        job.payload,
-      );
+      // Resolve the job's connection facts to a concrete target on THIS box (a localKey → device
+      // path) before sending. A device that is gone throws here and lands in the catch → `failed`.
+      const target = await host.resolve(job);
+      await host.transport.send(target, job.payload);
       outcome = { status: "done" };
       status = { ...status, lastJobAt: host.now() };
     } catch (error) {
@@ -224,7 +222,11 @@ export function createAgent(opts: AgentOptions): Agent {
       }
     }
 
-    const pulled = await client.pullJobs(current, token);
+    // Report the box's device inventory on every pull. `visible` is always gathered; `scanned` is an
+    // active discovery pass, run only while the previous reply's window is still open (cross-tick).
+    const visible = await host.visibleDevices();
+    const scanned = host.now() < discoveryUntil ? await host.scan() : [];
+    const pulled = await client.pullJobs(current, token, { visible, scanned });
     if (!pulled.ok) {
       if (pulled.failure.kind === "unauthorized") {
         await halt(config, current);
@@ -239,6 +241,8 @@ export function createAgent(opts: AgentOptions): Agent {
       return false;
     }
     r.merge(pulled.value.servers);
+    // Carry the window forward so the NEXT tick knows whether to scan; a null reply closes it (0).
+    discoveryUntil = pulled.value.discoveryUntil ?? 0;
     // Tick-local, reset every tick (never `lastError` itself mid-loop): did ANY send fail this tick?
     let anyFailed = false;
     for (const job of pulled.value.jobs) if (await push(job, token, current)) anyFailed = true;

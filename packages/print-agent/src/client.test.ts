@@ -229,35 +229,67 @@ describe("createClient — pullJobs", () => {
             transport: "network_tcp",
             host: "10.0.0.9",
             port: 9100,
-            usbPath: null,
+            localKey: null,
             payload: Buffer.from([1, 2, 3]).toString("base64"),
           },
         ],
       }),
     );
     const client = createClient({ fetch: fetchImpl });
-    const result = await client.pullJobs(URL_A, "a1.secret");
+    const result = await client.pullJobs(URL_A, "a1.secret", { visible: [], scanned: [] });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.nodeId).toBe("n1");
     expect(result.value.servers).toEqual([{ url: "http://a.test", nodeId: "n1" }]);
     expect(result.value.jobs[0]!.payload).toEqual(new Uint8Array([1, 2, 3]));
+    // A reply with no discoveryUntil field opens no discovery window.
+    expect(result.value.discoveryUntil).toBeNull();
     expect(fetchImpl.mock.calls[0]![0]).toBe(`${URL_A}/print-api/agent/jobs`);
     expect(fetchImpl.mock.calls[0]![1].headers.authorization).toBe("Bearer a1.secret");
   });
 
+  it("posts the inventory and parses discoveryUntil + localKey", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      reply(200, {
+        nodeId: "n",
+        servers: [],
+        jobs: [
+          {
+            id: "j",
+            printerId: "p",
+            transport: "usb",
+            localKey: "SN-1",
+            payload: Buffer.from([0xaa]).toString("base64"),
+          },
+        ],
+        discoveryUntil: 123,
+      }),
+    );
+    const client = createClient({ fetch: fetchImpl });
+    const inventory = { visible: [{ transport: "usb" as const, localKey: "SN-1" }], scanned: [] };
+    const r = await client.pullJobs("http://s", "tok", inventory);
+    expect(r.ok && r.value.jobs[0]!.localKey).toBe("SN-1");
+    expect(r.ok && r.value.discoveryUntil).toBe(123);
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(init.method).toBe("POST");
+    expect(init.headers["content-type"]).toBe("application/json");
+    expect(init.headers.authorization).toBe("Bearer tok");
+    expect(JSON.parse(init.body as string)).toEqual(inventory);
+  });
+
   it("401 → unauthorized; a reply whose jobs is not an array is bad_reply", async () => {
+    const inv = { visible: [], scanned: [] };
     const unauth = createClient({
       fetch: vi.fn().mockResolvedValue(reply(401, { code: "agent.unauthorized" })),
     });
-    expect(await unauth.pullJobs(URL_A, "t")).toEqual({
+    expect(await unauth.pullJobs(URL_A, "t", inv)).toEqual({
       ok: false,
       failure: { kind: "unauthorized" },
     });
     const bad = createClient({
       fetch: vi.fn().mockResolvedValue(reply(200, { nodeId: "n1", servers: [], jobs: "no" })),
     });
-    expect(await bad.pullJobs(URL_A, "t")).toMatchObject({
+    expect(await bad.pullJobs(URL_A, "t", inv)).toMatchObject({
       ok: false,
       failure: { kind: "bad_reply" },
     });

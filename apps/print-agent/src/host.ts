@@ -1,11 +1,17 @@
 import {
+  BluetoothTransport,
   NetworkTcpTransport,
   RoutingTransport,
   UsbTransport,
   type AgentConfig,
   type AgentStatus,
+  type DiscoveredDevice,
   type Host,
   type HostLog,
+  type PairResult,
+  type PrinterTarget,
+  type VisibleDevice,
+  type WireJob,
 } from "@waitron/print-agent";
 import type { EnvConfig } from "./config.js";
 import type { FileState } from "./state.js";
@@ -49,6 +55,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
   const transport = new RoutingTransport({
     network_tcp: new NetworkTcpTransport(),
     usb: new UsbTransport(),
+    bluetooth: new BluetoothTransport(),
   });
   return {
     config: async (): Promise<AgentConfig | null> => {
@@ -73,5 +80,23 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: structuredLog(opts.log ?? console),
     status: opts.onStatus,
+    // TODO(Task 6): real Linux implementation of the device seam — enumerate USB/Bluetooth devices,
+    // an active scan, MAC pairing, and localKey→device-path resolution. See the plan
+    // (.superpowers/sdd/2026-09-09-central-printer-provisioning). These stubs keep the loop's new
+    // contract satisfied meanwhile: no devices reported, no scan results, pairing unsupported, and a
+    // passthrough resolve that maps a job's localKey straight to a device path.
+    visibleDevices: async (): Promise<VisibleDevice[]> => [],
+    scan: async (): Promise<DiscoveredDevice[]> => [],
+    pair: async (): Promise<PairResult> => ({
+      ok: false,
+      error: "not implemented on this host yet",
+    }),
+    resolve: async (job: WireJob): Promise<PrinterTarget> => ({
+      id: job.printerId,
+      transport: job.transport,
+      host: job.host,
+      port: job.port,
+      devicePath: job.localKey,
+    }),
   };
 }

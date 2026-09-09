@@ -12,7 +12,12 @@ import net from "node:net";
 
 /** How a printer is reached — the `print_transport` pgEnum on the server (packages/db schema/printers.ts).
  * Declared here, in the db-free package, so the agent and the server share one wire vocabulary. */
-export type PrintTransport = "usb" | "network_tcp" | "cloud_poll";
+export type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
+
+/** The subset of {@link PrintTransport} an agent can DISCOVER on its box — the kinds `Host.scan` may be
+ * asked for. `cloud_poll` is excluded: a cloud_poll printer has no agent (it self-polls), so it is
+ * never discovered locally. */
+export type TransportKind = "usb" | "network_tcp" | "bluetooth";
 
 /**
  * The connection facts a transport needs to reach one printer — the runtime reads them off the
@@ -24,7 +29,10 @@ export interface PrinterTarget {
   transport: PrintTransport;
   host: string | null;
   port: number | null;
-  usbPath: string | null;
+  /** The OS device node a local writer opens — a `/dev/usb/lp*` character device for USB, or a paired
+   * RFCOMM node for Bluetooth. `null` for a network printer. Resolved from the printer's `local_key`
+   * by {@link Host.resolve} before a job is sent. */
+  devicePath: string | null;
 }
 
 /** How a batch of bytes reaches one printer. Implementations MUST resolve only once the bytes have
@@ -93,13 +101,34 @@ export class NetworkTcpTransport implements Transport {
   }
 }
 
-/** The USB adapter — writes the bytes to the printer's device path on the agent's box (design §3c).
- * A character device ignores the truncating open; a regular file (the test double) receives exactly
- * the bytes. */
+/** Writes the bytes to the printer's OS device node. A character device (`/dev/usb/lp*`, an RFCOMM
+ * node) ignores the truncating open; a regular file (the test double) receives exactly the bytes.
+ * `kind` names the transport in the guard message so a null device path fails with the caller's own
+ * vocabulary. */
+async function writeToDevicePath(
+  printer: PrinterTarget,
+  bytes: Uint8Array,
+  kind: "usb" | "bluetooth",
+): Promise<void> {
+  if (printer.devicePath === null) {
+    throw new Error(`${kind} printer ${printer.id} has no device path`);
+  }
+  await writeFile(printer.devicePath, Buffer.from(bytes));
+}
+
+/** The USB adapter — writes the bytes to the printer's device path on the agent's box (design §3c). */
 export class UsbTransport implements Transport {
-  async send(printer: PrinterTarget, bytes: Uint8Array): Promise<void> {
-    if (printer.usbPath === null) throw new Error(`usb printer ${printer.id} has no usb_path`);
-    await writeFile(printer.usbPath, Buffer.from(bytes));
+  send(printer: PrinterTarget, bytes: Uint8Array): Promise<void> {
+    return writeToDevicePath(printer, bytes, "usb");
+  }
+}
+
+/** The Bluetooth adapter — writes the bytes to the printer's paired RFCOMM device node (design §3c).
+ * A distinct class from {@link UsbTransport} so its guard message names `bluetooth`, even though both
+ * write to a device path: the two transports fail for their own reasons and say so. */
+export class BluetoothTransport implements Transport {
+  send(printer: PrinterTarget, bytes: Uint8Array): Promise<void> {
+    return writeToDevicePath(printer, bytes, "bluetooth");
   }
 }
 
@@ -109,6 +138,7 @@ export class UsbTransport implements Transport {
 export interface TransportAdapters {
   network_tcp: Transport;
   usb: Transport;
+  bluetooth: Transport;
 }
 
 /**
@@ -125,6 +155,8 @@ export class RoutingTransport implements Transport {
         return this.adapters.network_tcp.send(printer, bytes);
       case "usb":
         return this.adapters.usb.send(printer, bytes);
+      case "bluetooth":
+        return this.adapters.bluetooth.send(printer, bytes);
       case "cloud_poll":
         // Unreachable via the runtime — the pull only claims an agent's own printers, and a
         // cloud_poll printer has no agent (it self-polls, design §3e). Guarded anyway so a

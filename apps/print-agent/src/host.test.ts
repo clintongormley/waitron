@@ -151,7 +151,7 @@ describe("createContainerHost — the rest of the seam", () => {
     });
     await expect(
       host.transport.send(
-        { id: "p1", transport: "network_tcp", host: null, port: null, usbPath: null },
+        { id: "p1", transport: "network_tcp", host: null, port: null, devicePath: null },
         new Uint8Array([1]),
       ),
     ).rejects.toThrow(/no host/);
