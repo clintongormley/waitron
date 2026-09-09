@@ -19,6 +19,13 @@ what nobody has measured.
 
 ## 1. What exists today
 
+> **Retired 2026-09-09** by the installable-till + LAN-HTTPS build (§3/§8): the box CA is now
+> name-constrained with `pathLen:0` and its leaf SANs are filtered to the permitted set; the trust
+> page + CA download are served in all boot modes over a plain-HTTP landing listener (port 80), not
+> only setup; and the till now ships a web app manifest (still no service worker). The bullets below
+> describe the pre-build state and are kept for the record.
+
+
 - The box mints a self-signed CA and a leaf for `waitron.local` + its LAN address and serves HTTPS
   from boot (`apps/server/src/self-signed-cert.ts`, onboarding slice 2a). The CA carries **no
   `nameConstraints`** and no `pathLen` (backlog *Debt → Provisioning*, item (a)).
