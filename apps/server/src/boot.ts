@@ -26,7 +26,7 @@ import {
   StripeReconciler,
   StripeTerminalProvider,
 } from "@waitron/payments-stripe";
-import type { PaymentProvider } from "@waitron/payments";
+import { SimulatorPaymentProvider, type PaymentProvider } from "@waitron/payments";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -94,8 +94,26 @@ import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
-import { readCredential } from "./credentials.js";
+import { resolveEmailDelivery } from "./email-delivery.js";
+import { mountEmailInboxApi } from "./email-inbox-api.js";
+import { createMailpitClient } from "./mailpit-client.js";
+import { createSetupOperationStore } from "./setup-operation.js";
+import { stageRestoreRequest } from "./restore-request.js";
+import { validateArtifact } from "./restore.js";
+import {
+  clearStagedConfigurationImport,
+  readStagedConfigurationImport,
+  stageConfigurationImport,
+} from "./configuration-import.js";
+import {
+  importConfigurationTables,
+  publishConfigurationMedia,
+  validateConfigurationBundle,
+} from "./configuration-transfer.js";
+import { createFiscalReadinessStore } from "./fiscal-readiness.js";
+import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -109,12 +127,14 @@ import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
-import { provisionVenue, venueModuleConfig } from "./provision.js";
+import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
+import { seedInstalledDemo } from "./demo-seed.js";
+import { runFiscalDrain } from "./onboarding-policy.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
+import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
 import { ensureReplicationShape } from "./replication.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
@@ -274,24 +294,27 @@ const BOX_HOSTNAME = "waitron.local";
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /**
- * The one integrated card-payment provider this till drives (sub-project 7), or `undefined` when
- * `WAITRON_TILL_CARD_PROVIDER=none`. A till serves exactly ONE tenant (`cfg.tenantId`), so ONE
- * provider is built up front at boot rather than per request — the same "resolve provisioning-time
- * config once, not on the hot path" shape `readOrderFlow` follows. The collect-side client is built
- * from that tenant's own `payments.stripe` credential via the `cardClientResolver` /
- * `cardDeviceClientResolver` seams (which also apply the `sk_live_`/`sk_test_` environment guard), so
- * a missing or wrong-environment key fails the boot loudly here rather than on the first sale.
+ * The card-payment provider this till drives. Demo receives the local simulator. Prepare does too
+ * unless its explicit integration switch selects the configured test provider. A live till serves
+ * one tenant (`cfg.tenantId`), so its provider is built once at boot. Its collect-side client comes
+ * from that tenant's encrypted `payments.stripe` credential through the environment-key guard, so
+ * bad credentials fail here rather than on the first sale.
  *
  * Exported, not inlined into `startServer`: `startServer`'s only test subject (`boot.test.ts`) boots
  * against a real container with `cardProvider=none`, so it exercises only the `undefined` branch —
  * unit-testing THIS function directly (`boot-card-provider.test.ts`, PGlite + a seeded credential) is
- * what reaches the terminal / on-device branches without a full boot per provider, the same
+ * what reaches the simulator, terminal, and on-device branches without a full boot per provider, the same
  * "exported for a direct test subject" reasoning `DEFAULT_MIGRATIONS_ROOT` below carries.
  */
 export async function buildCardProvider(
   cfg: TillConfig,
   deps: StripeAccountDeps,
+  onboardingIntent?: OnboardingIntent,
+  paymentTestProviders = false,
 ): Promise<PaymentProvider | undefined> {
+  if (onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders)) {
+    return new SimulatorPaymentProvider(deps.db, cfg.tenantId);
+  }
   if (cfg.cardProvider === "none") return undefined;
   if (cfg.cardProvider === "stripe_terminal") {
     const client = await cardClientResolver(deps)(cfg.tenantId);
@@ -753,6 +776,7 @@ export async function startServer(
   // auto-commit satisfies that just as the pool would.
   // SP-1b drift visibility only (the outbox schema-version park gate that once read this is gone with
   // the sync block). Computed in the trading-mode block, used solely to log `module.reconcile` drift.
+  let appliedModuleVersions: Record<string, number> = {};
   if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
@@ -760,6 +784,7 @@ export async function startServer(
       // which the backup manifest shares — the driftProbe is an auto-commit pool, so its `Promise.all`
       // reads are each isolated); the migrated Set is derived from it (version > 0).
       const myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
+      appliedModuleVersions = myModuleVersions;
       const migrated = new Set(
         Object.entries(myModuleVersions)
           .filter(([, v]) => v > 0)
@@ -802,7 +827,8 @@ export async function startServer(
     // `applyMigrations`), ready for the provisioning wizard. The till/dashboard SPAs are deliberately
     // NOT mounted — they are useless without a venue; the built setup wizard IS served (slice 2c) when
     // `config.setupAppDir` is set, threaded into `mountSetup` below as its root catch-all (else the
-    // inline placeholder). The media store is trading-only, so it is not created here either.
+    // inline placeholder). A Demo provision writes its sample product images into the configured
+    // media store before restart; Prepare, Live, mirror and restore leave it untouched.
     //
     // Slice 2b wires the provisioning surface: `ensureBoxSecrets` (2a) runs first (below), then this
     // branch recovers the vault key ring and opens an OWNER connection, and passes both — plus the
@@ -911,20 +937,170 @@ export async function startServer(
           app,
           {
             environment: config.environment,
+            devMode: config.devMode,
+            operations: createSetupOperationStore(config.stateDir),
+            stageRestore: (request) =>
+              stageRestoreRequest(config.stateDir, request, async (candidate) => {
+                await validateArtifact({
+                  artifact: candidate.artifact,
+                  recoveryKey: candidate.recoveryKey,
+                  databaseUrl: config.migrationsDatabaseUrl,
+                  mediaDir: config.mediaDir,
+                  stateDir: config.stateDir,
+                  stagingDir: join(config.stateDir, "restore-staging"),
+                  migrationsRoot: config.migrationsRoot,
+                  modules: ALL_MODULES,
+                  environment: candidate.environment,
+                  log,
+                });
+              }),
+            stageConfiguration: (artifact, passphrase) =>
+              stageConfigurationImport(
+                config.stateDir,
+                ring,
+                artifact,
+                passphrase,
+                async (bundle) => {
+                  const resolvedConfig = venueModuleConfig(
+                    moduleConfig,
+                    bundle.venue.location.fiscalTerritory,
+                  );
+                  const modules = enabledModules(ALL_MODULES, resolvedConfig);
+                  validateConfigurationBundle(
+                    bundle,
+                    modules,
+                    await schemaVersionsByModule(ownerDb, modules),
+                  );
+                },
+              ),
+            clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
+            runFiscalTest: async ({ request, contribution, secret }) => {
+              const resolvedConfig = venueModuleConfig(
+                moduleConfig,
+                request.venue.location.fiscalTerritory,
+              );
+              const modules = enabledModules(ALL_MODULES, resolvedConfig);
+              const moduleVersions = await schemaVersionsByModule(ownerDb, modules);
+              const input = fiscalReadinessInput({
+                venue: request.venue,
+                contribution,
+                secret,
+                moduleVersions,
+                applicationVersion:
+                  process.env.WAITRON_BUILD_ID ?? process.env.npm_package_version ?? "development",
+              });
+              return createFiscalReadinessStore(
+                config.stateDir,
+                () =>
+                  submitFiscalReadiness({
+                    stateDir: config.stateDir,
+                    migrationsRoot: config.migrationsRoot,
+                    modules,
+                    venue: request.venue,
+                    contribution,
+                    secret,
+                    ring,
+                    readinessInput: input,
+                  }),
+                ring.current.key,
+              ).run(input);
+            },
+            assertFiscalReady: async ({ request, contribution, secret }) => {
+              const resolvedConfig = venueModuleConfig(
+                moduleConfig,
+                request.venue.location.fiscalTerritory,
+              );
+              const modules = enabledModules(ALL_MODULES, resolvedConfig);
+              const moduleVersions = await schemaVersionsByModule(ownerDb, modules);
+              await createFiscalReadinessStore(
+                config.stateDir,
+                async () => "uncertain",
+                ring.current.key,
+              ).assertReady(
+                fiscalReadinessInput({
+                  venue: request.venue,
+                  contribution,
+                  secret,
+                  moduleVersions,
+                  applicationVersion:
+                    process.env.WAITRON_BUILD_ID ??
+                    process.env.npm_package_version ??
+                    "development",
+                }),
+              );
+            },
             // Resolve the fiscal slot from the REQUEST's territory (authoritative, §4): the box's
             // `moduleConfig` base is default-on, which with two fiscal-slot members would be ambiguous;
             // `venueModuleConfig` forces exactly the territory's fiscal module on before provisionVenue's
             // gate/slot check runs and before it persists the set to `<stateDir>/modules.json`.
-            provision: (req) =>
-              provisionVenue(
+            provision: async (req) => {
+              const resolvedConfig = venueModuleConfig(
+                moduleConfig,
+                req.venue.location.fiscalTerritory,
+              );
+              const modules = enabledModules(ALL_MODULES, resolvedConfig);
+              const staged = req.configurationImport
+                ? await readStagedConfigurationImport(config.stateDir, ring)
+                : null;
+              if (req.configurationImport && staged === null) {
+                throw new AppError("setup.request_invalid", { field: "configurationImport" });
+              }
+              if (
+                staged !== null &&
+                (staged.bundle.venue.country !== req.venue.country ||
+                  staged.bundle.venue.taxId !== req.venue.taxId)
+              ) {
+                throw new AppError("setup.request_invalid", { field: "configurationImport" });
+              }
+              const versions =
+                staged === null ? undefined : await schemaVersionsByModule(ownerDb, modules);
+              const result = await provisionVenue(
                 {
                   ownerDb,
-                  moduleConfig: venueModuleConfig(moduleConfig, req.venue.location.fiscalTerritory),
+                  moduleConfig: resolvedConfig,
                   database: ownerDatabaseName,
                   stateDir: config.stateDir,
+                  ...(staged === null
+                    ? {}
+                    : {
+                        beforeCommit: async (tx, result) => {
+                          await importConfigurationTables(
+                            tx,
+                            staged.bundle,
+                            { tenantId: result.tenantId, locationId: result.locationId },
+                            modules,
+                            versions!,
+                          );
+                        },
+                      }),
                 },
                 req,
-              ),
+              );
+              if (staged !== null) {
+                await publishConfigurationMedia(
+                  staged.artifact,
+                  staged.passphrase,
+                  config.mediaDir,
+                );
+              }
+              return result;
+            },
+            recoverProvision: async (req) => {
+              const result = await recoverProvisionedVenue(ownerDb, req);
+              if (req.configurationImport) {
+                const staged = await readStagedConfigurationImport(config.stateDir, ring);
+                if (staged === null) {
+                  throw new AppError("setup.request_invalid", { field: "configurationImport" });
+                }
+                await publishConfigurationMedia(
+                  staged.artifact,
+                  staged.passphrase,
+                  config.mediaDir,
+                );
+              }
+              return result;
+            },
+            seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
             adopt: async (req) => {
               // Adopt establishes a NATIVE subscription (swap step 4), so it needs the MIGRATOR
               // connection that holds `pg_create_subscription` and owns the subscription it creates —
@@ -1481,7 +1657,11 @@ export async function startServer(
   // The regime's transport now lives behind this contribution's `drain`, so `boot.ts` names no regime
   // package (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
-  const till: TillConfig = { ...config.till, orderFlow };
+  const till: TillConfig = {
+    ...config.till,
+    orderFlow,
+    practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
+  };
   // The venue's DEFAULT UI locale, derived ONCE now the pool is open — the DISPLAY counterpart to the
   // fiscal `till.locale`/`invoiceLocales` (left untouched). `readVenueLocale` applies the shared
   // `override → province → country → English` chain, reading the tenant's country + the location's
@@ -1493,16 +1673,20 @@ export async function startServer(
     locationId: till.locationId,
     override: till.localeOverride,
   });
-  // The till's ONE integrated card provider (or none), built from its tenant's own Stripe credential
-  // — `makeStripe` is `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses. A
-  // missing or wrong-environment key fails the boot here (§8's "everything escapes"), never the first
-  // card sale. Tips read off `till.tipsEnabled` (part of `cfg`) wherever needed — no separate copy.
-  const cardProvider = await buildCardProvider(till, {
-    db,
-    ring,
-    environment: config.environment,
-    makeStripe: defaultMakeStripe,
-  });
+  // Demo and the default Prepare target use the local simulator. Live and the explicit Prepare
+  // integration target build from the tenant's Stripe credential. `makeStripe` is
+  // `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses.
+  const cardProvider = await buildCardProvider(
+    till,
+    {
+      db,
+      ring,
+      environment: config.environment,
+      makeStripe: defaultMakeStripe,
+    },
+    config.onboardingIntent,
+    config.paymentTestProviders,
+  );
   // The session cookie is `Secure` only when TLS is configured. Hoisted to ONE binding so the till
   // and management mounts below both read the same value — a shared local, not a duplicated literal.
   const secureCookies = config.tls !== undefined;
@@ -1521,6 +1705,7 @@ export async function startServer(
       secureCookies,
       cardProvider,
       venueLocale,
+      onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
     },
     log,
@@ -1628,6 +1813,8 @@ export async function startServer(
   // `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a passkey is bound
   // to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes only — no
   // database work at boot.
+  const resolveAccountEmail = () =>
+    resolveEmailDelivery(db, ring, till.tenantId, config.devMode || till.practiceMode === true);
   mountManagementApi(
     app,
     {
@@ -1644,15 +1831,41 @@ export async function startServer(
       rpId: config.managementRpId,
       origin: config.managementOrigin,
       venueLocale,
-      // Development email is captured by the Mailpit service in docker-compose.yml. Production
-      // reads the venue's SMTP URL + sender from the encrypted credential vault on every send, so
-      // configuration and rotation take effect without restarting the box.
+      // Resolve on every send so a newly configured or rotated SMTP gateway takes effect immediately.
+      // Configured SMTP wins; practice/dev falls back to the loopback-only Mailpit service.
       sendAccountEmail: async (message) => {
-        const smtp = config.devMode
-          ? { url: "smtp://127.0.0.1:1025", from: "Waitron <no-reply@waitron.test>" }
-          : await readCredential(db, ring, till.tenantId, "email.smtp");
-        await createAccountEmailSender({ url: smtp.url!, from: smtp.from! })(message);
+        const delivery = await resolveAccountEmail();
+        if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+        await createAccountEmailSender(delivery.smtp)(message);
       },
+    },
+    log,
+  );
+  if (config.onboardingIntent === "prepare") {
+    mountConfigurationExportApi(
+      app,
+      {
+        db,
+        cfg: {
+          tenantId: till.tenantId,
+          locationId: till.locationId,
+          tillId: till.tillId,
+          nodeId: till.nodeId,
+        },
+        modules: setsToMigrate,
+        moduleVersions: appliedModuleVersions,
+        mediaDir: config.mediaDir,
+      },
+      log,
+    );
+  }
+  mountEmailInboxApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId },
+      resolveMode: async () => (await resolveAccountEmail()).mode,
+      mailpit: createMailpitClient("http://127.0.0.1:8025"),
     },
     log,
   );
@@ -1750,6 +1963,7 @@ export async function startServer(
       db,
       cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
       venueLocale,
+      onboardingIntent: config.onboardingIntent,
       modules: setsToMigrate.map((m) => m.name),
     },
     log,
@@ -2149,14 +2363,19 @@ export async function startServer(
             // against the database at boot, and the regime's `entorno` guard refuses any due registro
             // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
             drain: (at2) =>
-              enabledFiscal.drain(
-                {
-                  db,
-                  ring,
-                  environment: config.environment,
-                  skipRetryMs: config.skipRetryMs,
-                  log,
-                },
+              runFiscalDrain(
+                config,
+                (at3) =>
+                  enabledFiscal.drain(
+                    {
+                      db,
+                      ring,
+                      environment: config.environment,
+                      skipRetryMs: config.skipRetryMs,
+                      log,
+                    },
+                    at3,
+                  ),
                 at2,
               ),
             // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served

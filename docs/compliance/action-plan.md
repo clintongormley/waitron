@@ -10,6 +10,14 @@ Written **2026-07-26**. Plain action list; the reasoning and sources are in
 >
 > **Identifying details omitted.** The obligado's registered name, NIF and any named individuals are
 > intentionally kept out of this repository; `<DELI SL>` and `<NIF>` below are placeholders.
+>
+> **Open preparation-mode question, 2026-09-09.** Before offering Prepare outside a controlled
+> trial, obtain Spanish tax counsel's written view on whether a restaurant may enter simulated sales
+> in a separately labelled preproduction system that never submits fiscal records, and what controls
+> must prevent staff from using it for actual trading. The AEAT developer FAQ explains test-service
+> mechanics but does not answer this operating question. Waitron labels Prepare as non-trading,
+> keeps payments and fiscal submission simulated, and requires a fresh production database at go-live;
+> those product controls are not legal clearance.
 
 ---
 

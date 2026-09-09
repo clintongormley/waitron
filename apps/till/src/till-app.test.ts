@@ -380,6 +380,8 @@ async function flush(el: TillApp): Promise<void> {
 }
 
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
+const modeIndicator = (el: TillApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=mode-indicator]");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
@@ -512,6 +514,15 @@ afterEach(() => {
 describe("till-app", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-app")).toBe(TillApp);
+  });
+
+  it("keeps preparation mode visible before login", async () => {
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "prepare" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await flush(el);
+    expect(modeIndicator(el)?.textContent?.trim()).toBe("Preparación");
   });
 
   it("starts on the lock screen", async () => {
@@ -1435,6 +1446,19 @@ describe("till-app", () => {
     // The receipt takes the fiscal `invoiceLocale`, distinct from the operator UI (en-GB) — proving
     // the two are read from separate fields, not aliased.
     expect(ticket(el)!.invoiceLocale).toBe("ca-ES");
+  });
+
+  it("marks the ticket as simulated on a preparation installation", async () => {
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api: stubApi({
+        getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "prepare" }),
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "2.00" });
+    await flush(el);
+    expect(ticket(el)?.simulated).toBe(true);
   });
 
   it("retrieve then pay: recordSale settles under the RETRIEVED order's own id, not a fresh one", async () => {
@@ -3234,6 +3258,21 @@ describe("till-app", () => {
   // ---------------------------------------------------------------------------------------------
 
   describe("collect-card (integrated card terminal, Task 8)", () => {
+    it("forwards the selected simulator outcome to POST /api/pay", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountWidget<TillApp>("till-app", {
+        api: stubApi({
+          getTill: vi.fn().mockResolvedValue({ ...till, cardProvider: "simulator" }),
+          pay,
+        }),
+      });
+      const c = await toCounter(el);
+      emit(c, "collect-card", { simulationOutcome: "declined" });
+      await flush(el);
+
+      expect(pay).toHaveBeenCalledWith(expect.objectContaining({ simulationOutcome: "declined" }));
+    });
+
     it("pays over the integrated terminal with the mapped lines(+tip+allowOffline), then shows the ticket", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ pay });

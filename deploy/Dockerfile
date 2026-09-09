@@ -1,6 +1,8 @@
 # The Waitron node's app image. Built from the repository root:
 #   docker build -f deploy/Dockerfile -t waitron:dev .   (`pnpm build:image`)
 
+ARG WAITRON_BUILD_ID=development
+
 # ---------------------------------------------------------------------------
 # Build stage — install the workspace and run the builds that already exist.
 # ---------------------------------------------------------------------------
@@ -30,6 +32,8 @@ RUN pnpm --filter @waitron/server build \
 # Runtime stage — the build outputs, a Postgres client and a non-root user.
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
+
+ARG WAITRON_BUILD_ID
 
 # The Postgres CLIENT major, which MUST track the SERVER major in deploy/compose.yml
 # (postgres:18-alpine). Bumping one without the other reintroduces the failure this repo comes from:
@@ -92,6 +96,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/dist/drizzle/ /app/dr
 COPY --from=build --chown=waitron:waitron /src/apps/till/dist/ /app/web/till/
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/ /app/web/dashboard/
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
+COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/media/ /app/demo-media/
 
 # Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,
 # which is a read-only layer — every writable path is a volume. WAITRON_BACKUP_DIR is deliberately
@@ -120,8 +125,10 @@ COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
 # QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one of the four
 # fail rather than ship a box whose certificate, QR and relying party disagree.
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
+  WAITRON_BUILD_ID=${WAITRON_BUILD_ID} \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
   WAITRON_MEDIA_DIR=/var/lib/waitron/media \
+  WAITRON_DEMO_MEDIA_SOURCE=/app/demo-media \
   WAITRON_MIGRATIONS_DIR=/app/drizzle \
   WAITRON_TILL_APP_DIR=/app/web/till \
   WAITRON_DASHBOARD_APP_DIR=/app/web/dashboard \

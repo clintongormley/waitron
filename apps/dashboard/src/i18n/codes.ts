@@ -4,7 +4,7 @@ import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-ki
 //
 // The dashboard's API client rejects with a bare `{ code }` (see api/client.ts) and several flows
 // surface a status code directly. This module is the ONE place those codes become human copy, and it
-// carries a load-bearing guarantee: an operator must NEVER see the raw wire code. A code that isn't in
+// carries a critical guarantee: an operator must NEVER see the raw wire code. A code that isn't in
 // the table below degrades to GENERIC ("Something went wrong, try again") rather than being rendered
 // verbatim — an unmapped code is a copy gap, not a string to show a user. So `codeMessage` cannot
 // return a code, only ever a sentence.
@@ -86,6 +86,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "account_action.rate_limited": {
     en: "Too many attempts. Wait a minute and try again.",
     es: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
+  },
+  "email.test_inbox_unavailable": {
+    en: "The test inbox is unavailable because account email is not using local capture",
+    es: "La bandeja de pruebas no está disponible porque el correo de cuentas no usa la captura local",
   },
   "management.request_invalid": {
     en: "Check the form and try again",

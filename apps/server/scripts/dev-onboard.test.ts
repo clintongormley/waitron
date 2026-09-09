@@ -18,7 +18,7 @@ import {
 
 const sampleSetupEnv: SetupEnv = {
   DATABASE_URL: "postgres://postgres:pg@localhost:5432/postgres",
-  WAITRON_ENV: "preproduction",
+  WAITRON_ENV: "dev",
   WAITRON_HTTP_PORT: "8080",
 };
 
@@ -28,7 +28,7 @@ describe("renderSetupEnvFile", () => {
     const lines = text.split("\n").filter((line) => line.trim() !== "" && !line.startsWith("#"));
     expect(lines).toEqual([
       "DATABASE_URL=postgres://postgres:pg@localhost:5432/postgres",
-      "WAITRON_ENV=preproduction",
+      "WAITRON_ENV=dev",
       "WAITRON_HTTP_PORT=8080",
     ]);
     // The load-bearing setup-mode property: the file writes NEITHER the five WAITRON_TILL_*_ID (whose
@@ -94,12 +94,33 @@ describe("devOnboard against real Postgres", () => {
     expect(written).toEqual({ ...first.env });
     expect(written).toEqual({
       DATABASE_URL: suite.pg.uri,
-      WAITRON_ENV: "preproduction",
+      WAITRON_ENV: "dev",
       WAITRON_HTTP_PORT: "8080",
     });
     // No trading-only keys leaked into the file (the boot-mode selector — see the render test above).
     expect(Object.keys(written)).not.toContain("WAITRON_CREDENTIALS_KEY");
     expect(Object.keys(written).some((k) => k.startsWith("WAITRON_TILL_"))).toBe(false);
+  });
+
+  it("uses the production-shaped migrator and replication roles", async () => {
+    const owners = await suite.admin.execute<{ owner: string }>(sql`
+      select r.rolname as owner
+      from pg_class c join pg_roles r on r.oid = c.relowner
+      where c.relname = 'tenants'
+    `);
+    expect(owners.rows).toEqual([{ owner: "waitron_migrator" }]);
+
+    const roles = await suite.admin.execute<{
+      name: string;
+      replication: boolean;
+    }>(sql`
+      select rolname as name, rolreplication as replication
+      from pg_roles where rolname in ('waitron_migrator', 'waitron_repl') order by rolname
+    `);
+    expect(roles.rows).toEqual([
+      { name: "waitron_migrator", replication: false },
+      { name: "waitron_repl", replication: true },
+    ]);
   });
 
   it("writes a .env that loadConfig accepts as a SETUP-MODE config (config.till undefined)", () => {
@@ -113,6 +134,7 @@ describe("devOnboard against real Postgres", () => {
       "/dev/null/state",
     );
     expect(config.environment).toBe("preproduction");
+    expect(config.devMode).toBe(true);
     expect(config.httpPort).toBe(8080);
     // The load-bearing property that makes this SETUP mode: no venue is bound, so `tryLoadTillConfig`
     // returns undefined and boot.ts takes its setup branch. dev-setup's .env resolves config.till to

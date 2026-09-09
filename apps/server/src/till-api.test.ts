@@ -241,6 +241,7 @@ function deps(db: Database): TillApiDeps {
     // now sourced from `deps.venueLocale` rather than the fiscal `cfg.locale`. `GET /api/locales`
     // echoes it as `venueDefault`.
     venueLocale: "es-ES",
+    onboardingIntent: "prepare",
     // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined). `GET
     // /api/till` echoes `deps.cfg.tipsEnabled` (this suite's `cfg` has it `false`); a separate test
     // below drives `cfg.tipsEnabled` to `true` to prove the route reads it rather than hardcoding.
@@ -954,6 +955,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // The RECEIPT locale — the fiscal `cfg.locale`, DISTINCT from the UI `locale` above (both es-ES
       // for this ES venue, but sourced from different fields — the decoupling test below drives them apart).
       invoiceLocale: "es-ES",
+      onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,
       orderFlow: "prepay",
@@ -1075,6 +1077,21 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ cardProvider: "stripe_terminal", tipsEnabled: true });
+  });
+
+  it("GET /api/till surfaces the local simulator selected by boot", async () => {
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        ...deps(suite.db),
+        cardProvider: { provider: "simulator" } as PaymentProvider,
+      },
+      collect([]),
+    );
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ cardProvider: "simulator" });
   });
 
   it("GET /api/till echoes a non-default bump_mode from the location, proving it reads the column", async () => {
@@ -1479,6 +1496,30 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     });
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+  });
+
+  it("refuses a browser-selected simulation outcome for a real provider", async () => {
+    const id = await openSession(suite.db);
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cardProvider: { provider: "stripe" } as PaymentProvider },
+      collect([]),
+    );
+
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      body: JSON.stringify({
+        id: randomUUID(),
+        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+        simulationOutcome: "captured",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "simulationOutcome" } },
+    });
   });
 
   it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b /api/pay sibling)", async () => {

@@ -395,6 +395,27 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(decoded).toContain("Gracias por su visita"); // the authored trim renders around the art
   });
 
+  it("marks an automatically printed practice sale as simulated", async () => {
+    const base = await setupVenue();
+    const cfg = { ...base.cfg, practiceMode: true };
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "auto", printerId });
+
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        lines: [{ productId: base.each.id, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(1);
+    expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("PRUEBA - SIN COBRO REAL");
+  });
+
   it("auto + printer + CARD: enqueues the receipt with NO kick and records NO drawer open", async () => {
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg);

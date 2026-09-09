@@ -18,6 +18,9 @@ export function rejectResolveClient(): Promise<never> {
  * take the host's deployment, so a preproduction box never files as production. */
 export const FISCAL_SLOT: FiscalContribution = {
   id: "verifactu",
+  activationReadiness: "accepted-test-submission",
+  activationReadinessTarget: (secret) =>
+    aeatEndpointFor("preproduction")(parseAeatCert(secret).certKind),
   makeBackend: ({ db, clock, environment }) =>
     new VerifactuBackend({
       clock,

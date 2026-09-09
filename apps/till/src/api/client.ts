@@ -58,6 +58,7 @@ export function isNetworkFailure(err: unknown): boolean {
  */
 export interface TillInfo {
   locale: string;
+  onboardingIntent?: "demo" | "prepare" | "live";
   /**
    * The RECEIPT (fiscal document) locale — the language the printed legal ticket renders in. Sourced
    * server-side from the fiscal `cfg.locale`, DELIBERATELY DISTINCT from the UI-driving {@link locale}
@@ -95,7 +96,7 @@ export interface TillInfo {
    * bundle-decoupling rationale as every other type in this file. `[]` for a venue with no courses.
    */
   courses: TillCourse[];
-  cardProvider: "none" | "stripe_terminal" | "stripe_on_device";
+  cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "simulator";
   tipsEnabled: boolean;
   receipt: ReceiptConfig;
   /**
@@ -1247,6 +1248,7 @@ export class TillApi {
     lines: SaleLine[];
     tip?: string;
     allowOffline?: boolean;
+    simulationOutcome?: "captured" | "declined";
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", req);
   }

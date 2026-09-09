@@ -29,7 +29,9 @@ export type FetchLike = typeof fetch;
 export interface SetupStatus {
   provisioned: boolean;
   environment: "production" | "preproduction";
+  developmentMode?: boolean;
   needs: string[];
+  operationBlocked?: boolean;
 }
 
 /**
@@ -81,12 +83,14 @@ export interface AeatCertDraft {
 
 /**
  * The `POST /setup-api/provision` request body (`apps/server/src/setup-api.ts` — the provision
- * handler; verified against `parseVenue`/`parseCert`). `mode` forks demo (stamps preproduction) vs
- * live (stamps production). `seriesCode` must differ from `rectificativeSeriesCode` (`planVenue`).
+ * handler; verified against `parseVenue`/`parseCert`). `mode` records the onboarding intent: demo
+ * and prepare stamp preproduction, while live stamps production. `seriesCode` must differ from
+ * `rectificativeSeriesCode` (`planVenue`).
  * `aeatCert` is present only for a live ES-common venue and is OMITTED otherwise.
  */
 export interface ProvisionBody {
-  mode: "demo" | "live";
+  mode: "demo" | "prepare" | "live";
+  configurationImport?: boolean;
   venue: {
     country: string;
     taxId: string;
@@ -144,6 +148,23 @@ export interface AdoptOutcome {
   restarting: true;
 }
 
+export interface RestoreOutcome {
+  restoreStaged: true;
+  restarting: true;
+}
+
+export interface ConfigurationPreview {
+  venue: Omit<ProvisionBody["venue"], "admin"> & {
+    location: ProvisionBody["venue"]["location"] & { id: string };
+  };
+  counts: Record<string, number>;
+  reconnect: string[];
+}
+
+export type FiscalReadinessResult =
+  | { status: "accepted" | "rejected" | "uncertain"; testedAt?: string }
+  | { status: "not-applicable" };
+
 /**
  * A rejected `#request`. `code` is the server's stable domain code from the `{ error: { code } }`
  * envelope (`apps/server/src/error-boundary.ts`); `params` carries its per-code detail — for
@@ -193,6 +214,60 @@ export class SetupApi {
    */
   adopt(body: AdoptBody): Promise<AdoptOutcome> {
     return this.#request<AdoptOutcome>("/setup-api/adopt", "POST", body);
+  }
+
+  /** Stage an encrypted backup; the entrypoint restores it before opening application pools. */
+  async restore(
+    artifact: Blob,
+    recoveryKey: string,
+    environment: "production" | "preproduction",
+  ): Promise<RestoreOutcome> {
+    const res = await this.#fetchImpl(this.#baseUrl + "/setup-api/restore", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": recoveryKey,
+        "x-waitron-restore-environment": environment,
+      },
+      body: artifact,
+    });
+    if (!res.ok) {
+      const envelope = (await res.json()) as {
+        error?: { code?: string; params?: Record<string, unknown> };
+      };
+      throw {
+        code: envelope.error?.code ?? "server.internal",
+        params: envelope.error?.params,
+      } satisfies ApiError;
+    }
+    return JSON.parse(await res.text()) as RestoreOutcome;
+  }
+
+  async stageConfiguration(artifact: Blob, passphrase: string): Promise<ConfigurationPreview> {
+    const res = await this.#fetchImpl(this.#baseUrl + "/setup-api/configuration", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-export-passphrase": passphrase,
+      },
+      body: artifact,
+    });
+    if (!res.ok) {
+      const envelope = (await res.json()) as {
+        error?: { code?: string; params?: Record<string, unknown> };
+      };
+      throw {
+        code: envelope.error?.code ?? "server.internal",
+        params: envelope.error?.params,
+      } satisfies ApiError;
+    }
+    return JSON.parse(await res.text()) as ConfigurationPreview;
+  }
+
+  runFiscalTest(body: ProvisionBody): Promise<FiscalReadinessResult> {
+    return this.#request<FiscalReadinessResult>("/setup-api/fiscal-test", "POST", body);
   }
 
   /**

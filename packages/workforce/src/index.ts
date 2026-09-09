@@ -92,6 +92,7 @@ export type {
 } from "./projection.js";
 
 export { WORKFORCE_CLASSIFICATION } from "./classification.js";
+export { WORKFORCE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
 // from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.

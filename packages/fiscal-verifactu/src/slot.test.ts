@@ -32,6 +32,7 @@ describe("FISCAL_SLOT", () => {
     expect(backend).toBeInstanceOf(VerifactuBackend);
     expect(backend.id).toBe(FISCAL_SLOT.id);
     expect(FISCAL_SLOT.id).toBe("verifactu");
+    expect(FISCAL_SLOT.activationReadiness).toBe("accepted-test-submission");
   });
 
   it("never resolves an AEAT client on the sale path", async () => {

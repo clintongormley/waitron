@@ -25,6 +25,7 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import type { OnboardingIntent } from "./trading-config.js";
 
 /**
  * The deployment holds one tenant per database. The deps the "me" API needs — the SAME minimal
@@ -47,6 +48,8 @@ export interface MeApiDeps {
    * before a signed-in person's own preference is known.
    */
   venueLocale: string;
+  /** The setup journey that created this installation, shown persistently by the dashboard. */
+  onboardingIntent?: OnboardingIntent;
   /**
    * The ENABLED module names on this node — boot's `setsToMigrate.map(m => m.name)`, which includes the
    * always-on `core` (harmlessly: the dashboard's browser registry only matches UI-bearing ids).
@@ -135,6 +138,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         locales: SUPPORTED_LOCALES,
         venueDefault: deps.venueLocale,
         venueName,
+        onboardingIntent: deps.onboardingIntent,
       });
     }),
   );
@@ -166,6 +170,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         locale,
         venueLocale: deps.venueLocale,
         venueName,
+        onboardingIntent: deps.onboardingIntent,
         permissions: permissionsForRole(role),
         modules: deps.modules,
       });

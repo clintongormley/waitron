@@ -48,6 +48,7 @@ import "./screens/canvas-editor-screen.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
+import "./screens/email-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
 
 /**
@@ -83,7 +84,8 @@ type CoreScreen =
   | "canvas-editor"
   | "device-profiles"
   | "diagnostics"
-  | "backup";
+  | "backup"
+  | "email";
 
 /** A destination the shell can show: a core face, or an active module's own screen id. The `& {}` keeps
  * the `CoreScreen` literal autocomplete while still admitting any module id string — the one spelling
@@ -167,6 +169,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
       { screen: "backup", labelKey: "nav.backup", requiresManager: true },
+      { screen: "email", labelKey: "nav.email", requiresManager: true },
     ],
   },
 ];
@@ -272,6 +275,17 @@ export class DashboardApp extends LitElement {
         border-inline-start: 1px solid var(--wt-color-border);
         font-weight: var(--wt-font-weight-bold);
         overflow-wrap: anywhere;
+      }
+
+      .mode-indicator {
+        flex: 0 0 auto;
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .banner-actions {
@@ -403,6 +417,7 @@ export class DashboardApp extends LitElement {
   /** The one tenant/business this deployment database represents. It remains visible across login
    * and every dashboard location, because a tenant can contain several locations. */
   @state() private venueName = "";
+  @state() private onboardingIntent?: "demo" | "prepare" | "live";
 
   /**
    * The venue's DERIVED default UI locale (per-user-language-preference), read from
@@ -471,13 +486,14 @@ export class DashboardApp extends LitElement {
    */
   async #seedLocale(): Promise<void> {
     try {
-      const { venueDefault, venueName } = await this.api.getLocales();
+      const { venueDefault, venueName, onboardingIntent } = await this.api.getLocales();
       // Guard the post-await module-global `setLocale`: a teardown during the fetch must not repaint a
       // live sibling's locale (the DISCONNECT SAFETY note). The `#venueLocale` write below the guard is
       // harmless to skip on a detached element — nothing reads it after teardown.
       if (!this.isConnected) return;
       this.#venueLocale = venueDefault;
       this.venueName = venueName;
+      this.onboardingIntent = onboardingIntent;
       setLocale(venueDefault);
     } catch {
       // Stay on the module default — a failed locale read must never block sign-in.
@@ -512,6 +528,7 @@ export class DashboardApp extends LitElement {
     permissions: string[];
     modules: string[];
     venueName: string;
+    onboardingIntent?: "demo" | "prepare" | "live";
   }): void {
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
@@ -523,6 +540,7 @@ export class DashboardApp extends LitElement {
     this.screen = this.#permittedScreen(this.#url.read("dashboard"));
     this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
+    this.onboardingIntent = me.onboardingIntent;
     if (!this.isConnected) return;
     this.#writeScreenUrl(this.screen, true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
@@ -719,6 +737,13 @@ export class DashboardApp extends LitElement {
         }
         <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
         <span class="venue-name" data-test="venue-name">${this.venueName}</span>
+        ${
+          this.onboardingIntent === undefined
+            ? nothing
+            : html`<span class="mode-indicator" data-test="mode-indicator">
+                ${t(`mode.${this.onboardingIntent}`)}
+              </span>`
+        }
       </div>
       ${
         authenticated
@@ -904,6 +929,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-diagnostics-screen .api=${this.api}></dashboard-diagnostics-screen>`;
       case "backup":
         return html`<dashboard-backup-screen .api=${this.api}></dashboard-backup-screen>`;
+      case "email":
+        return html`<dashboard-email-screen .api=${this.api}></dashboard-email-screen>`;
       default:
         return html`<dashboard-overview-screen .api=${this.api}></dashboard-overview-screen>`;
     }

@@ -19,6 +19,8 @@ export interface VenueApplyDeps {
   /** The modules whose seeds a `seed-module` action may name — the enabled set, in the composition
    * list's order. */
   modules: readonly WaitronModule[];
+  /** Optional configuration import that must commit or roll back with the freshly minted venue. */
+  beforeCommit?: (tx: Transaction, result: VenueResult) => Promise<void>;
 }
 
 export interface VenueResult {
@@ -210,7 +212,9 @@ export async function applyVenue(
     // Errors, NOT operator-facing AppError codes: a plan bug, not input.
     if (nodeId === "") throw new Error("applyVenue: plan is missing create-node");
     if (tillId === "") throw new Error("applyVenue: plan is missing create-till");
-    return { tenantId, locationId, tillId, nodeId, seriesIds, seeded };
+    const result = { tenantId, locationId, tillId, nodeId, seriesIds, seeded };
+    await deps.beforeCommit?.(tx, result);
+    return result;
   });
 }
 

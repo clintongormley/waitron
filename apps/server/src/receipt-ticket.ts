@@ -79,6 +79,8 @@ export interface FormatReceiptInput {
   receipt: ReceiptTrim;
   /** The locale the money, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
+  /** Marks a Demo/Prepare transaction without changing any filed fiscal value. */
+  simulated?: boolean;
 }
 
 /**
@@ -229,9 +231,14 @@ export function formatReceipt({
   issuer,
   receipt,
   invoiceLocale,
+  simulated = false,
 }: FormatReceiptInput): Uint8Array {
   const locale = invoiceLocale;
   const b = esc().init();
+
+  // The practice warning surrounds the immutable receipt content. It never enters the filed record or
+  // its hash, but it must survive when a paper ticket leaves a Demo/Prepare till.
+  if (simulated) b.line("PRUEBA - SIN COBRO REAL").line();
 
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
   b.line(issuer.venueName);

@@ -1,5 +1,5 @@
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
-import { CORE_CLASSIFICATION } from "@waitron/db";
+import { CORE_CLASSIFICATION, CORE_CONFIGURATION_TRANSFER } from "@waitron/db";
 import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
   FISCAL_CLASSIFICATION,
@@ -14,12 +14,16 @@ import {
   BOOKINGS_PERMISSIONS,
   BOOKINGS_ROUTES,
 } from "@waitron/bookings";
-import { IDENTITY_CLASSIFICATION } from "@waitron/identity";
+import { IDENTITY_CLASSIFICATION, IDENTITY_CONFIGURATION_TRANSFER } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
-import { PAYMENTS_CLASSIFICATION } from "@waitron/payments";
+import { PAYMENTS_CLASSIFICATION, PAYMENTS_CONFIGURATION_TRANSFER } from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
-import { WORKFORCE_CLASSIFICATION } from "@waitron/workforce";
-import { WORKFORCE_ES_CLASSIFICATION, WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
+import { WORKFORCE_CLASSIFICATION, WORKFORCE_CONFIGURATION_TRANSFER } from "@waitron/workforce";
+import {
+  WORKFORCE_ES_CLASSIFICATION,
+  WORKFORCE_ES_CONFIGURATION_TRANSFER,
+  WORKFORCE_ES_VOCABULARY,
+} from "@waitron/workforce-es";
 
 /**
  * Every Waitron module, in composition order. The one place that names every module package: the
@@ -52,6 +56,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     // The content-addressed media store is core's non-DB state; a backup must capture it
     // alongside the DB.
     backup: { nonDbState: [{ kind: "content-addressed-dir", source: "media" }] },
+    configurationTransfer: CORE_CONFIGURATION_TRANSFER,
   },
   {
     name: "identity",
@@ -64,6 +69,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../identity/drizzle",
     },
     classification: IDENTITY_CLASSIFICATION,
+    configurationTransfer: IDENTITY_CONFIGURATION_TRANSFER,
   },
   {
     name: "workforce",
@@ -76,6 +82,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../workforce/drizzle",
     },
     classification: WORKFORCE_CLASSIFICATION,
+    configurationTransfer: WORKFORCE_CONFIGURATION_TRANSFER,
   },
   {
     name: "workforce-es",
@@ -89,6 +96,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     },
     vocabulary: WORKFORCE_ES_VOCABULARY,
     classification: WORKFORCE_ES_CLASSIFICATION,
+    configurationTransfer: WORKFORCE_ES_CONFIGURATION_TRANSFER,
   },
   {
     name: "payments",
@@ -101,6 +109,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../payments/drizzle",
     },
     classification: PAYMENTS_CLASSIFICATION,
+    configurationTransfer: PAYMENTS_CONFIGURATION_TRANSFER,
   },
   {
     name: "scheduler",
@@ -113,6 +122,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../scheduler/drizzle",
     },
     classification: SCHEDULER_CLASSIFICATION,
+    configurationTransfer: { kind: "none" },
   },
   {
     name: "credentials",
@@ -125,6 +135,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../credentials/drizzle",
     },
     classification: CREDENTIALS_CLASSIFICATION,
+    configurationTransfer: { kind: "none" },
   },
   {
     name: "fiscal-verifactu",
@@ -141,6 +152,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     provisioning: FISCAL_PROVISIONING,
     fiscal: FISCAL_SLOT,
     backup: { restore: FISCAL_RESTORE },
+    configurationTransfer: { kind: "none" },
   },
   {
     // The no-regime fiscal-slot member (after `fiscal-verifactu`). It owns no tables (an empty
@@ -157,6 +169,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../fiscal-none/drizzle",
     },
     fiscal: FISCAL_NONE_SLOT,
+    configurationTransfer: { kind: "none" },
   },
   {
     // Bookings — the first UI-bearing AND first genuinely-toggleable module (SP1: server + data). It
@@ -175,5 +188,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     routes: BOOKINGS_ROUTES,
     permissions: BOOKINGS_PERMISSIONS,
     floorAnnotations: BOOKINGS_FLOOR_ANNOTATIONS,
+    configurationTransfer: { kind: "none" },
   },
 ];

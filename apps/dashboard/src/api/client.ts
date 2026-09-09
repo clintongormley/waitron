@@ -440,6 +440,32 @@ export interface ReceiptConfig {
   footerMessage?: string;
 }
 
+export interface TestEmailAddress {
+  name: string;
+  address: string;
+}
+
+export interface TestEmailSummary {
+  id: string;
+  from: TestEmailAddress;
+  to: TestEmailAddress[];
+  subject: string;
+  snippet: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface TestEmail extends Omit<TestEmailSummary, "snippet" | "createdAt" | "read"> {
+  date: string;
+  text: string;
+}
+
+export interface EmailInbox {
+  mode: "local_capture" | "smtp" | "unconfigured";
+  count: number;
+  messages: TestEmailSummary[];
+}
+
 // ── Table service-status configuration types ──────────────────────────────────────────────────────
 // A LOCAL copy of apps/server's `ServiceStatus` JSON shape (the `/management-api/service-statuses`
 // routes wrapping `apps/server/src/tables.ts`'s config CRUD), deliberately NOT imported from any
@@ -1237,10 +1263,13 @@ export class DashboardApi {
   /** The one request primitive every method funnels through (see @waitron/dashboard-kit's
    * createRequest for the credentials/JSON/FormData/empty-body/`{ code }` rules). */
   readonly #request: DashboardRequest;
+  readonly #baseUrl: string;
+  readonly #fetch: FetchLike;
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
     venueName: string;
+    onboardingIntent?: "demo" | "prepare" | "live";
   }>;
 
   /**
@@ -1249,6 +1278,8 @@ export class DashboardApi {
    * @param fetchImpl the `fetch` to use (default the global; a test injects a stub).
    */
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
+    this.#baseUrl = baseUrl;
+    this.#fetch = fetchImpl;
     this.#request = createRequest({ baseUrl, fetchImpl });
   }
 
@@ -1270,6 +1301,7 @@ export class DashboardApi {
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
     venueName: string;
+    onboardingIntent?: "demo" | "prepare" | "live";
   }> {
     // The list + venue default are immutable for this client's lifetime; fetch once and share.
     // Cache the promise ONLY on success — clear it on rejection so a transient failure retries.
@@ -1277,6 +1309,7 @@ export class DashboardApi {
       locales: Array<{ code: string; label: string }>;
       venueDefault: string;
       venueName: string;
+      onboardingIntent?: "demo" | "prepare" | "live";
     }>("/management-api/locales", "GET").catch((err) => {
       this.#localesPromise = undefined;
       throw err;
@@ -1306,6 +1339,17 @@ export class DashboardApi {
       purpose,
       password,
     });
+  }
+
+  getEmailInbox(): Promise<EmailInbox> {
+    return this.#request<EmailInbox>("/management-api/email", "GET");
+  }
+
+  getTestEmail(id: string): Promise<TestEmail> {
+    return this.#request<TestEmail>(
+      `/management-api/email/message/${encodeURIComponent(id)}`,
+      "GET",
+    );
   }
 
   /** `DELETE /management-api/session` — end the session. Answers an empty 204. */
@@ -2354,6 +2398,7 @@ export class DashboardApi {
     permissions: string[];
     modules: string[];
     venueName: string;
+    onboardingIntent?: "demo" | "prepare" | "live";
   }> {
     return this.#request<{
       personId: string;
@@ -2363,6 +2408,7 @@ export class DashboardApi {
       permissions: string[];
       modules: string[];
       venueName: string;
+      onboardingIntent?: "demo" | "prepare" | "live";
     }>("/management-api/session/me", "GET");
   }
 
@@ -2526,6 +2572,28 @@ export class DashboardApi {
    * {@link BackupStatusView}). Backs the always-available status view. */
   getBackupStatus(): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/status", "GET");
+  }
+
+  /** Download the encrypted, configuration-only preparation artifact. The ordinary request helper
+   * parses JSON, so this binary response keeps its own small fetch path. */
+  async exportConfiguration(passphrase: string): Promise<Blob> {
+    const response = await this.#fetch(`${this.#baseUrl}/management-api/configuration-export`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ passphrase }),
+    });
+    if (!response.ok) {
+      let code = "server.internal";
+      try {
+        const body = JSON.parse(await response.text()) as { error?: { code?: unknown } };
+        if (typeof body.error?.code === "string") code = body.error.code;
+      } catch {
+        // The same fallback as the JSON request helper for a malformed error response.
+      }
+      throw { code };
+    }
+    return response.blob();
   }
 
   /** `POST /api/backup/mint-key` — mint a strong recovery key for the operator to record. Stateless:

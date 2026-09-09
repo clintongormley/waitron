@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { stampDeployment, withTenant, type Database } from "@waitron/db";
+import { stampDeployment, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   applyVenue,
   assertNoForeignTenant,
@@ -36,10 +36,12 @@ export function venueModuleConfig(base: ModuleConfig, fiscalTerritory: string): 
 }
 
 export interface ProvisionRequest {
-  /** The demo/live fork: which environment this box is being stamped for. */
+  /** The fiscal environment this box is being stamped for. Demo and Prepare are preproduction. */
   environment: "production" | "preproduction";
   /** country/taxId/legalName/location/tillName/series/admin(hashed) — every field the wizard collects. */
   venue: VenueRequest;
+  /** Server-derived from the selected Live journey; browser input cannot name a staged file directly. */
+  configurationImport?: boolean;
 }
 
 export interface ProvisionDeps {
@@ -61,6 +63,59 @@ export interface ProvisionDeps {
    * `<stateDir>/modules.json` after `applyVenue` commits, so the next (trading) boot's fiscal slot
    * resolves rather than failing `module.fiscal_slot_ambiguous` under the default-on both-enabled set. */
   readonly stateDir: string;
+  readonly beforeCommit?: (tx: Transaction, result: VenueResult) => Promise<void>;
+}
+
+/**
+ * Recover the identifiers minted by a matching persisted setup operation. This is deliberately
+ * narrower than a general "find venue" query: first boot creates one location, till and node for a
+ * previously empty tenant, and both invoice series must still match the submitted codes. A shape
+ * outside those invariants is refused instead of guessing which fiscal identity to publish.
+ */
+export async function recoverProvisionedVenue(
+  ownerDb: Database,
+  req: ProvisionRequest,
+): Promise<VenueResult> {
+  const tenantId = deriveTenantId(req.venue.country, req.venue.taxId);
+  const venue = await withTenant(ownerDb, tenantId, (tx) =>
+    tx.execute<{ locationId: string; tillId: string; nodeId: string }>(sql`
+      select l.id as "locationId", t.id as "tillId", n.id as "nodeId"
+      from locations l
+      join tills t on t.tenant_id = l.tenant_id and t.location_id = l.id
+      join nodes n on n.tenant_id = l.tenant_id and n.location_id = l.id
+      where l.tenant_id = ${tenantId}
+        and l.name = ${req.venue.location.name}
+        and l.fiscal_territory = ${req.venue.location.fiscalTerritory}
+        and t.name = ${req.venue.tillName}
+        and n.name = ${req.venue.location.name}`),
+  );
+  if (venue.rows.length !== 1) {
+    throw new AppError("setup.already_provisioned", { tenantId });
+  }
+  const row = venue.rows[0]!;
+  const series = await withTenant(ownerDb, tenantId, (tx) =>
+    tx.execute<{ id: string; purpose: string; code: string }>(sql`
+      select id, purpose, code
+      from invoice_series
+      where tenant_id = ${tenantId} and node_id = ${row.nodeId}`),
+  );
+  const standard = series.rows.find(
+    (item) => item.purpose === "standard" && item.code === req.venue.seriesCode,
+  );
+  const rectificative = series.rows.find(
+    (item) => item.purpose === "rectificative" && item.code === req.venue.rectificativeSeriesCode,
+  );
+  if (series.rows.length !== 2 || standard === undefined || rectificative === undefined) {
+    throw new AppError("setup.already_provisioned", { tenantId });
+  }
+  return {
+    tenantId,
+    locationId: row.locationId,
+    tillId: row.tillId,
+    nodeId: row.nodeId,
+    seriesIds: [standard.id, rectificative.id],
+    seeded: [],
+  };
 }
 
 /**
@@ -131,7 +186,11 @@ export async function provisionVenue(
   await stampDeployment(deps.ownerDb, req.environment);
 
   // 4. Mint the venue and every enabled module's seed under one transaction.
-  const result = await applyVenue(plan, { db: deps.ownerDb, modules });
+  const result = await applyVenue(plan, {
+    db: deps.ownerDb,
+    modules,
+    beforeCommit: deps.beforeCommit,
+  });
 
   // 5. Persist the resolved module set so the trading boot reads a fiscal slot that resolves to exactly
   // one member (§4). Written AFTER applyVenue commits — a failed mint leaves no modules.json behind — and

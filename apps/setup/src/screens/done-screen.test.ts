@@ -33,6 +33,15 @@ describe("setup-done-screen", () => {
     expect(el.shadowRoot!.textContent).toContain("restarting into trading mode");
   });
 
+  it.each([
+    ["demo", "Demo"],
+    ["prepare", "Preparation"],
+    ["live", "Live"],
+  ] as const)("keeps the selected %s mode visible", async (onboardingIntent, label) => {
+    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent });
+    expect(q(el, "[data-test=mode-indicator]")?.textContent?.trim()).toBe(label);
+  });
+
   // A connection failure mid-restart is EXPECTED — it must never surface as an error, and the screen
   // must keep waiting rather than offer the reload.
   it("keeps waiting (no reload) while getStatus fails with a network TypeError", async () => {
@@ -90,7 +99,7 @@ describe("setup-done-screen", () => {
   // the operator at the dashboard's backup setup — unless the box is a disposable demo, where a
   // missing backup is not worth interrupting the operator over.
   it("shows a 'no backups yet' nudge with a link to backup setup", async () => {
-    const el = await mountDone(() => new Promise(() => {}), { devMode: false });
+    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "live" });
     const nudge = q(el, "[data-test=backup-nudge]");
     expect(nudge).not.toBeNull();
     const link = nudge!.querySelector("a");
@@ -99,7 +108,7 @@ describe("setup-done-screen", () => {
   });
 
   it("suppresses the nudge in demo mode", async () => {
-    const el = await mountDone(() => new Promise(() => {}), { devMode: true });
+    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "demo" });
     expect(q(el, "[data-test=backup-nudge]")).toBeNull();
   });
 });

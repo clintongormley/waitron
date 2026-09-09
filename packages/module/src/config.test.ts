@@ -27,6 +27,7 @@ const mod = (
  * The gate reads only whether the seat is present; the backend/drain seats are never invoked here. */
 const contribution = (id: string): FiscalContribution => ({
   id,
+  activationReadiness: "not-applicable",
   makeBackend: () => ({ id }) as unknown as FiscalBackend,
   drain: () => Promise.reject(new Error("config tests never run the drain seat")),
 });

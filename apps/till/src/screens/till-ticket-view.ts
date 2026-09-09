@@ -152,6 +152,15 @@ export class TillTicketView extends LitElement {
         text-align: center;
       }
 
+      .simulation-notice {
+        margin: 0 0 var(--wt-space-3);
+        padding: var(--wt-space-2);
+        border: 2px solid var(--wt-color-danger);
+        border-radius: var(--wt-radius-md);
+        font-weight: var(--wt-font-weight-bold);
+        text-align: center;
+      }
+
       .venue {
         margin: 0;
         font-size: var(--wt-font-size-lg);
@@ -278,6 +287,8 @@ export class TillTicketView extends LitElement {
    * operator-UI `currentLocale()`. Defaults to es-ES, the deli's invoice locale.
    */
   @property() invoiceLocale = "es-ES";
+  /** True for Demo and Preparation transactions. This warning is outside the fiscal core below. */
+  @property({ type: Boolean }) simulated = false;
   /**
    * The owner-authored NON-FISCAL trim (layout & receipt editors, design §8), threaded from `till-app`
    * (`GET /api/till`). `headerSubtitle` renders under the venue name and `footerMessage` under the
@@ -319,6 +330,13 @@ export class TillTicketView extends LitElement {
     const svg = qrSvg(r.qr);
     return html`
       <article class="ticket">
+        ${
+          this.simulated
+            ? html`<p class="simulation-notice" data-test="simulation-notice">
+                PRUEBA — SIN COBRO REAL
+              </p>`
+            : nothing
+        }
         <header class="issuer">
           <p class="venue">${this.issuer.venueName}</p>
           ${

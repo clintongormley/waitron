@@ -155,6 +155,21 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(s).toContain(TRIM.footerMessage!);
   });
 
+  it("marks a simulated receipt as a practice transaction outside the fiscal core", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        simulated: true,
+      }),
+    );
+
+    expect(s).toContain("PRUEBA - SIN COBRO REAL");
+    expect(s).toContain("VERI*FACTU");
+  });
+
   it("omits the header subtitle and footer message when the trim is empty, keeping the core", () => {
     const s = decodeTicket(
       formatReceipt({ result: FILED_SALE, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES" }),

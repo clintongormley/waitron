@@ -13,6 +13,7 @@
     "dev:setup": "docker compose up -d --wait db mailpit && pnpm --filter @waitron/server dev:setup",
     "dev:reset": "docker compose down -v && docker compose up -d --wait db mailpit && pnpm --filter @waitron/server dev:setup",
     "dev:onboard": "docker compose up -d --wait db mailpit && pnpm --filter @waitron/server dev:onboard",
+    "dev:reset:onboard": "docker compose down -v && docker compose up -d --wait db mailpit && pnpm --filter @waitron/server dev:onboard",
     "test": "vitest run && node scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2 test",
     "test:coverage": "vitest run --coverage && node scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2 test:coverage",
     "typecheck": "pnpm -r typecheck",

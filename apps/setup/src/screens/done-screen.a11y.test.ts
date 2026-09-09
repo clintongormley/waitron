@@ -43,7 +43,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         api: apiWith(() => new Promise(() => {})),
         startDelayMs: 100000,
         pollIntervalMs: 100000,
-        devMode: true,
+        onboardingIntent: "demo",
       },
       theme,
     );

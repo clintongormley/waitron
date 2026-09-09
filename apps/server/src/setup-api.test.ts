@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -12,6 +13,8 @@ import type { ProvisionRequest } from "./provision.js";
 import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { createSetupOperationStore } from "./setup-operation.js";
+import type { ConfigurationPreview } from "./configuration-import.js";
 
 const noopLog: Logger = () => {};
 
@@ -155,6 +158,10 @@ function liveBody(): Record<string, unknown> {
   return { ...demoBody(), mode: "live" };
 }
 
+function prepareBody(): Record<string, unknown> {
+  return { ...demoBody(), mode: "prepare" };
+}
+
 // A well-formed AEAT-cert wire blob (the shape the wizard POSTs as `aeatCert`). A plain object, not
 // a regime type: the host sees the secret only as opaque `unknown`, validated through the seat.
 const CERT = {
@@ -170,6 +177,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   calls: string[];
   provisionRequests: ProvisionRequest[];
   provision: ReturnType<typeof vi.fn>;
+  seedDemo: ReturnType<typeof vi.fn>;
   establishIdentity: ReturnType<typeof vi.fn>;
   seedMembership: ReturnType<typeof vi.fn>;
   persistTrading: ReturnType<typeof vi.fn>;
@@ -181,6 +189,10 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     provisionRequests.push(req);
     calls.push("provision");
     return makeVenueResult();
+  });
+  const recoverProvision = vi.fn(async () => makeVenueResult());
+  const seedDemo = vi.fn(async () => {
+    calls.push("seedDemo");
   });
   const establishIdentity = vi.fn(async () => {
     calls.push("establishIdentity");
@@ -194,6 +206,8 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   const requestRestart = vi.fn(() => {
     calls.push("requestRestart");
   });
+  const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
+  const assertFiscalReady = vi.fn().mockResolvedValue(undefined);
   // The regime's provisioning-secret seal runs `withTenant(db, …)` — i.e. `db.transaction(cb)`. A fake
   // db that RECORDS the seal (in order, into `calls`) and resolves stands in for the real vault write.
   // The seal's DB correctness — the sealed row, the right tenant, the round-trip — is covered by the
@@ -209,6 +223,8 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   const deps: SetupDeps = {
     environment: "preproduction",
     provision,
+    recoverProvision,
+    seedDemo,
     establishIdentity,
     seedMembership,
     db,
@@ -217,6 +233,8 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     requestRestart,
     databaseUrl: DATABASE_URL,
     migrationsDatabaseUrl: MIGRATIONS_DATABASE_URL,
+    runFiscalTest,
+    assertFiscalReady,
     ...overrides,
   };
   return {
@@ -224,6 +242,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     calls,
     provisionRequests,
     provision,
+    seedDemo,
     establishIdentity,
     seedMembership,
     persistTrading,
@@ -245,8 +264,145 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 /** Narrowing helper for mutating a decoded body's nested objects in the validation tests. */
 const asRec = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
 
-describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate, latch", () => {
-  it("provisions a demo venue: 200, orchestrates in order, defers restart, seals no cert", async () => {
+describe("POST /setup-api/provision — orchestration, onboarding intent, cert gate, latch", () => {
+  it("runs an explicit fiscal test and refuses activation when its bound evidence is absent", async () => {
+    const fiscalTest = new Hono();
+    const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
+    mountSetup(fiscalTest, makeDeps({ runFiscalTest }).deps, noopLog);
+    const body = { ...liveBody(), aeatCert: CERT };
+    const tested = await fiscalTest.request("/setup-api/fiscal-test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(tested.status).toBe(200);
+    expect(await tested.json()).toEqual({ status: "accepted" });
+    expect(runFiscalTest).toHaveBeenCalledOnce();
+
+    const provision = new Hono();
+    const assertFiscalReady = vi.fn(async () => {
+      throw new AppError("setup.fiscal_test_required", { module: "verifactu" });
+    });
+    const deps = makeDeps({ assertFiscalReady });
+    mountSetup(provision, deps.deps, noopLog);
+    const refused = await postProvision(provision, body);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "setup.fiscal_test_required", params: { module: "verifactu" } },
+    });
+    expect(deps.provision).not.toHaveBeenCalled();
+  });
+
+  it("reports completed persistent progress and replays it after a process restart", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-operation-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const first = new Hono();
+      mountSetup(first, makeDeps({ operations }).deps, noopLog);
+      expect((await postProvision(first, demoBody())).status).toBe(200);
+
+      const status = await (await first.request("/setup-api/status")).json();
+      expect(status.operation).toMatchObject({ kind: "provision", phase: "complete" });
+      expect(status.operation).not.toHaveProperty("requestHash");
+      expect(status.operation).not.toHaveProperty("data");
+
+      const restarted = new Hono();
+      const next = makeDeps({ operations: createSetupOperationStore(dir) });
+      mountSetup(restarted, next.deps, noopLog);
+      const replay = await postProvision(restarted, demoBody());
+      expect(replay.status).toBe(200);
+      expect(await replay.json()).toMatchObject({ provisioned: true, tenantId: TENANT_ID });
+      expect(next.provision).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps setup status healthy when persisted operation state needs operator recovery", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-corrupt-operation-"));
+    try {
+      writeFileSync(join(dir, "setup-operation.json"), "not-json");
+      const app = new Hono();
+      mountSetup(
+        app,
+        { environment: "preproduction", operations: createSetupOperationStore(dir) },
+        noopLog,
+      );
+
+      const response = await app.request("/setup-api/status");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ operationBlocked: true });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("recovers a venue committed before operation progress reached disk", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-recovery-"));
+    const body = demoBody();
+    const requestHash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+    try {
+      const operations = createSetupOperationStore(dir);
+      await expect(
+        operations.run("provision", requestHash, async () => {
+          throw new Error("process stopped after the database commit");
+        }),
+      ).rejects.toThrow("process stopped");
+
+      const recoverProvision = vi.fn(async () => makeVenueResult());
+      const provision = vi.fn(async () => {
+        throw new AppError("setup.already_provisioned", { tenantId: TENANT_ID });
+      });
+      const app = new Hono();
+      const deps = makeDeps({ operations, provision, recoverProvision });
+      mountSetup(app, deps.deps, noopLog);
+
+      expect((await postProvision(app, body)).status).toBe(200);
+      expect(provision).toHaveBeenCalledOnce();
+      expect(recoverProvision).toHaveBeenCalledOnce();
+      expect(deps.establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
+      expect((await operations.read())?.phase).toBe("complete");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not repeat committed demo setup steps after a later publishing failure", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-step-resume-"));
+    try {
+      const firstPersist = vi
+        .fn<NonNullable<SetupDeps["persistTrading"]>>()
+        .mockRejectedValueOnce(new Error("disk unavailable"));
+      const first = makeDeps({
+        operations: createSetupOperationStore(dir),
+        persistTrading: firstPersist,
+      });
+      const firstApp = new Hono();
+      mountSetup(firstApp, first.deps, noopLog);
+
+      expect((await postProvision(firstApp, demoBody())).status).toBe(500);
+      expect(first.seedDemo).toHaveBeenCalledOnce();
+      expect(first.establishIdentity).toHaveBeenCalledOnce();
+      expect(first.seedMembership).toHaveBeenCalledOnce();
+
+      const resumed = makeDeps({
+        operations: createSetupOperationStore(dir),
+        persistTrading: vi.fn(async () => {}),
+      });
+      const resumedApp = new Hono();
+      mountSetup(resumedApp, resumed.deps, noopLog);
+
+      expect((await postProvision(resumedApp, demoBody())).status).toBe(200);
+      expect(resumed.provision).not.toHaveBeenCalled();
+      expect(resumed.seedDemo).not.toHaveBeenCalled();
+      expect(resumed.establishIdentity).not.toHaveBeenCalled();
+      expect(resumed.seedMembership).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("provisions and seeds a demo venue: 200, orchestrates in order, defers restart, seals no cert", async () => {
     const app = new Hono();
     const {
       deps,
@@ -266,10 +422,17 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
 
     // The restart is scheduled on the NEXT tick, so it has NOT fired by the time the 200 is returned.
     expect(requestRestart).not.toHaveBeenCalled();
-    expect(calls).toEqual(["provision", "establishIdentity", "seedMembership", "persistTrading"]);
+    expect(calls).toEqual([
+      "provision",
+      "seedDemo",
+      "establishIdentity",
+      "seedMembership",
+      "persistTrading",
+    ]);
     await tick();
     expect(calls).toEqual([
       "provision",
+      "seedDemo",
       "establishIdentity",
       "seedMembership",
       "persistTrading",
@@ -283,7 +446,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
     expect(seedMembership).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
 
-    // Demo → no AEAT cert seal (the seal is never reached), and the demo/live fork stamped preproduction.
+    // Demo → no AEAT cert seal (the seal is never reached), and the fiscal environment is preproduction.
     expect(calls).not.toContain("sealAeat");
     const req = provisionRequests[0];
     expect(req.environment).toBe("preproduction");
@@ -304,6 +467,25 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
       databaseUrl: DATABASE_URL,
       migrationsDatabaseUrl: MIGRATIONS_DATABASE_URL,
       environment: "preproduction",
+      onboardingIntent: "demo",
+    });
+  });
+
+  it("provisions Prepare in preproduction and persists the distinct preparation intent", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests, persistTrading, calls } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, prepareBody());
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].environment).toBe("preproduction");
+    expect(calls).not.toContain("sealAeat");
+    expect(calls).not.toContain("seedDemo");
+    expect(persistTrading.mock.calls[0][0]).toMatchObject({
+      environment: "preproduction",
+      onboardingIntent: "prepare",
     });
   });
 
@@ -467,6 +649,18 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
+  it("lets the dev onboarding target exercise Live without production filing or a real cert", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests, persistTrading } = makeDeps({ devMode: true });
+    mountSetup(app, deps, noopLog);
+
+    expect((await postProvision(app, liveBody())).status).toBe(200);
+    expect(provisionRequests[0].environment).toBe("preproduction");
+    expect(persistTrading).toHaveBeenCalledWith(
+      expect.objectContaining({ environment: "preproduction", onboardingIntent: "live" }),
+    );
+  });
+
   it("provisions a live venue with a cert: stamps production and seals the cert in order", async () => {
     const app = new Hono();
     const { deps, calls, provisionRequests } = makeDeps();
@@ -516,6 +710,21 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(calls).not.toContain("sealAeat");
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Prepare provision carrying an AEAT cert before provisioning or sealing", async () => {
+    const app = new Hono();
+    const { deps, provision, calls } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, { ...prepareBody(), aeatCert: CERT });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "aeatCert" } },
+    });
+    expect(provision).not.toHaveBeenCalled();
+    expect(calls).not.toContain("sealAeat");
   });
 
   // The presence gate (Copilot, backlog i): a non-expected request carrying a MALFORMED cert must
@@ -621,7 +830,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   });
 
   // Each structural guard names the offending field and refuses BEFORE provisioning. Covers the
-  // demo/live `mode` fork, the object/array/nullable/string-array shape screens, and nested paths.
+  // onboarding `mode` choice, the object/array/nullable/string-array shape screens, and nested paths.
   it.each<[string, string, (body: Record<string, unknown>) => void]>([
     ["an unknown mode", "mode", (b) => void (b.mode = "bogus")],
     ["a string venue", "venue", (b) => void (b.venue = "nope")],
@@ -788,6 +997,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   // box is up but not ready to provision. Also covers each arm of the synchronous deps gate.
   it.each([
     ["provision"],
+    ["seedDemo"],
     ["establishIdentity"],
     ["seedMembership"],
     ["db"],
@@ -945,7 +1155,164 @@ async function postAdopt(app: Hono, body: unknown): Promise<Response> {
   });
 }
 
+async function postRestore(
+  app: Hono,
+  body: Uint8Array,
+  environment = "production",
+): Promise<Response> {
+  return app.request("/setup-api/restore", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-recovery-key": "recovery-secret",
+      "x-waitron-restore-environment": environment,
+    },
+    body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+  });
+}
+
+async function postConfiguration(app: Hono, body: Uint8Array): Promise<Response> {
+  return app.request("/setup-api/configuration", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-export-passphrase": "a strong passphrase",
+    },
+    body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+  });
+}
+
+describe("POST /setup-api/configuration", () => {
+  it("labels an unexpected configuration staging fault as configuration, not restore", async () => {
+    const log = vi.fn();
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        stageConfiguration: vi.fn(async () => {
+          throw new Error("broken staging disk");
+        }),
+      },
+      log,
+    );
+
+    const response = await postConfiguration(app, Uint8Array.from([1, 2, 3]));
+
+    expect(response.status).toBe(500);
+    expect(log).toHaveBeenCalledWith(
+      "error",
+      "setup.configuration_import_failed",
+      expect.objectContaining({ errorCode: "unknown" }),
+    );
+  });
+
+  it("stages and previews a bounded preparation export", async () => {
+    const preview = {
+      venue: { taxId: "B12345678" },
+      counts: { products: 2 },
+      reconnect: ["printers"],
+    } as never;
+    const stageConfiguration = vi.fn(async () => preview);
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
+    const response = await postConfiguration(app, Uint8Array.from([1, 2, 3]));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(preview);
+    expect(stageConfiguration).toHaveBeenCalledWith(
+      Uint8Array.from([1, 2, 3]),
+      "a strong passphrase",
+    );
+  });
+
+  it("blocks provisioning while a configuration archive is being staged", async () => {
+    let release!: () => void;
+    const held = new Promise<ConfigurationPreview>((resolve) => {
+      release = () => resolve({ venue: {} as never, counts: {}, reconnect: [] });
+    });
+    const app = new Hono();
+    const { deps, provision } = makeDeps({ stageConfiguration: vi.fn(() => held) });
+    mountSetup(app, deps, noopLog);
+
+    const staging = postConfiguration(app, Uint8Array.from([1, 2, 3]));
+    await tick();
+    const provisionResponse = await postProvision(app, demoBody());
+
+    expect(provisionResponse.status).toBe(409);
+    expect(provision).not.toHaveBeenCalled();
+    release();
+    expect((await staging).status).toBe(200);
+  });
+});
+
+describe("POST /setup-api/restore", () => {
+  it("stages the encrypted artifact under the persistent operation lease and restarts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-operation-"));
+    try {
+      const stageRestore = vi.fn(async () => {});
+      const requestRestart = vi.fn();
+      const app = new Hono();
+      const operations = createSetupOperationStore(dir);
+      mountSetup(
+        app,
+        { environment: "preproduction", operations, stageRestore, requestRestart },
+        noopLog,
+      );
+      const response = await postRestore(app, Uint8Array.from([1, 2, 3]));
+      expect(response.status).toBe(202);
+      expect(stageRestore).toHaveBeenCalledWith({
+        artifact: Uint8Array.from([1, 2, 3]),
+        recoveryKey: "recovery-secret",
+        environment: "production",
+      });
+      expect((await operations.read())?.phase).toBe("complete");
+      await tick();
+      expect(requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses an invalid target environment without staging", async () => {
+    const stageRestore = vi.fn(async () => {});
+    const app = new Hono();
+    mountSetup(
+      app,
+      { environment: "preproduction", stageRestore, requestRestart: vi.fn() },
+      noopLog,
+    );
+    const response = await postRestore(app, Uint8Array.from([1]), "dev");
+    expect(response.status).toBe(400);
+    expect(stageRestore).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, sharing provision's latch", () => {
+  it("persists adoption completion without retaining the break-glass secret", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-operation-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const first = new Hono();
+      mountSetup(first, makeAdoptDeps({ operations }).deps, noopLog);
+      const response = await postAdopt(first, adoptBody());
+      expect(await response.json()).toMatchObject({ breakGlassSecret: BREAK_GLASS_SECRET });
+      expect((await operations.read())?.data).toEqual({
+        adopted: true,
+        tenantId: TENANT_ID,
+        restarting: true,
+      });
+
+      const restarted = new Hono();
+      const next = makeAdoptDeps({ operations: createSetupOperationStore(dir) });
+      mountSetup(restarted, next.deps, noopLog);
+      const replay = await postAdopt(restarted, adoptBody());
+      expect(await replay.json()).toEqual({ adopted: true, tenantId: TENANT_ID, restarting: true });
+      expect(next.adopt).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("adopts a venue: 200, passes the body through to adopt, defers the restart", async () => {
     const app = new Hono();
     const { deps, adopt, adoptRequests, requestRestart } = makeAdoptDeps();

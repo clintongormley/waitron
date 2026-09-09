@@ -22,12 +22,37 @@ const q = (el: SetupModeScreen, sel: string) => el.shadowRoot!.querySelector<HTM
 afterEach(cleanupWidgets);
 
 describe("setup-mode-screen", () => {
+  it("renders the four top-level onboarding choices", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    expect(q(el, "[data-test=choose-demo]")).not.toBeNull();
+    expect(q(el, "[data-test=choose-prepare]")).not.toBeNull();
+    expect(q(el, "[data-test=choose-live]")).not.toBeNull();
+    expect(q(el, "[data-test=choose-existing]")).not.toBeNull();
+  });
+
+  it("opens the Join or recover subchooser without selecting a provision mode", async () => {
+    const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    const events = collect(host);
+    q(el, "[data-test=choose-existing]")!.click();
+    expect(events).toEqual([{ kind: "goto", detail: { screen: "role" } }]);
+  });
+
   it("advances to admin with mode:demo on the demo choice", async () => {
     const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
     const events = collect(host);
     q(el, "[data-test=choose-demo]")!.click();
     expect(events).toEqual([
       { kind: "patch", detail: { patch: { mode: "demo" } } },
+      { kind: "goto", detail: { screen: "admin" } },
+    ]);
+  });
+
+  it("advances to admin with mode:prepare on the Prepare choice", async () => {
+    const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    const events = collect(host);
+    q(el, "[data-test=choose-prepare]")!.click();
+    expect(events).toEqual([
+      { kind: "patch", detail: { patch: { mode: "prepare" } } },
       { kind: "goto", detail: { screen: "admin" } },
     ]);
   });
@@ -68,7 +93,7 @@ describe("setup-mode-screen", () => {
     q(el, "[data-test=confirm-live]")!.click();
     expect(events).toEqual([
       { kind: "patch", detail: { patch: { mode: "live" } } },
-      { kind: "goto", detail: { screen: "admin" } },
+      { kind: "goto", detail: { screen: "live-source" } },
     ]);
   });
 

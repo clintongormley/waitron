@@ -6,7 +6,7 @@ import type { SetupModeScreen } from "./mode-screen.js";
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("setup-mode-screen a11y (%s theme)", (theme) => {
-  it("has no violations on the demo/live choice view", async () => {
+  it("has no violations on the onboarding-intent choice view", async () => {
     const { host } = await mountWidget<SetupModeScreen>(
       "setup-mode-screen",
       { environment: "production" },

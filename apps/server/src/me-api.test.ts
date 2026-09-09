@@ -93,6 +93,7 @@ function mountApp(): Hono {
       db: suite.db,
       cfg: { tenantId, nodeId: NODE_ID },
       venueLocale: VENUE_LOCALE,
+      onboardingIntent: "prepare",
       modules: MODULES,
     },
     noopLog,
@@ -170,6 +171,7 @@ describe("mountMeApi — whoami", () => {
         locale: string | null;
         venueLocale: string;
         venueName: string;
+        onboardingIntent: string;
         permissions: string[];
         modules: string[];
       },
@@ -179,6 +181,7 @@ describe("mountMeApi — whoami", () => {
       locale: null,
       venueLocale: VENUE_LOCALE,
       venueName: "Test SL",
+      onboardingIntent: "prepare",
       permissions: [],
       modules: MODULES,
     });
@@ -200,6 +203,7 @@ describe("mountMeApi — whoami", () => {
         locale: string | null;
         venueLocale: string;
         venueName: string;
+        onboardingIntent: string;
         permissions: string[];
         modules: string[];
       },
@@ -209,6 +213,7 @@ describe("mountMeApi — whoami", () => {
       locale: "es-ES",
       venueLocale: VENUE_LOCALE,
       venueName: "Test SL",
+      onboardingIntent: "prepare",
       permissions: [],
       modules: MODULES,
     });
@@ -266,6 +271,7 @@ describe("mountMeApi — locales (public)", () => {
       locales: SUPPORTED_LOCALES,
       venueDefault: VENUE_LOCALE,
       venueName: "Test SL",
+      onboardingIntent: "prepare",
     });
   });
 });

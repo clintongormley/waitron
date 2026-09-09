@@ -30,7 +30,7 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import { insertCapturedPayment } from "@waitron/payments";
+import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
 import { listOutstandingSales } from "@waitron/core";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
@@ -431,6 +431,50 @@ beforeAll(() => {
 });
 
 describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 2)", () => {
+  it("runs a simulated approval through capture, fiscal filing and payment association", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const provider = new SimulatorPaymentProvider(app, cfg.tenantId);
+      const id = randomUUID();
+      const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        simulationOutcome: "captured",
+      });
+
+      expect(out.outcome).toBe("captured");
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await paymentsFor(id)).toMatchObject([
+        { provider: "simulator", state: "captured", linkedToSale: true },
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("runs a simulated decline through payment handling without filing a sale", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const provider = new SimulatorPaymentProvider(app, cfg.tenantId);
+      const id = randomUUID();
+      const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        simulationOutcome: "declined",
+      });
+
+      expect(out).toEqual({ outcome: "declined" });
+      expect(await saleCount(id)).toBe(0);
+      expect(await registroCount(id)).toBe(0);
+      expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("walk-up: captures, files an immediate card sale, links the payment, settles the order", async () => {
     const { cfg, cafe } = await setupVenue();
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);

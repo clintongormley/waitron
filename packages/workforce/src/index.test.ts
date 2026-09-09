@@ -7,6 +7,7 @@ describe("the public surface", () => {
     expect(Object.keys(api).sort()).toEqual(
       [
         "WORKFORCE_CLASSIFICATION",
+        "WORKFORCE_CONFIGURATION_TRANSFER",
         "WORKFORCE_MIGRATIONS",
         "employments",
         "timeEntries",

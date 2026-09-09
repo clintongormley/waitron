@@ -91,4 +91,6 @@ in with the **cashier PIN 5555**; the dashboard owner login is **owner@demo.wait
 dashPass123** (`pnpm dev:setup` prints all three).
 
 To start over from a clean database (throwaway preproduction data), `pnpm dev:reset` wipes the Docker
-volume and re-provisions.
+volume and re-provisions. From a worktree, use `wa-wt demo <name>` for this seeded target or
+`wa-wt onboarding <name>` for a fresh run through the shipping setup wizard. The launcher keeps one
+Compose database and preserves the shared development CA when you change target.

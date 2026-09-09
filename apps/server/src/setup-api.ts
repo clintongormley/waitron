@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { createHash } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 import { venueFiscalSelection } from "@waitron/provisioning";
@@ -10,7 +11,7 @@ import {
 } from "@waitron/country";
 import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
@@ -22,6 +23,15 @@ import { readJsonBody } from "@waitron/server-kit";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
+import type {
+  ActiveSetupOperation,
+  SetupOperationPhase,
+  SetupOperationStore,
+} from "./setup-operation.js";
+import type { RestoreRequest } from "./restore-request.js";
+import type { ConfigurationPreview } from "./configuration-import.js";
+import type { FiscalContribution } from "@waitron/fiscal";
+import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import "./errors.js";
 
 /**
@@ -39,12 +49,20 @@ export interface SetupDeps {
   /** The deployment environment (`production` / `preproduction`) this box booted under, echoed by
    * `/setup-api/status` so slice 2's wizard can warn before it provisions a real production venue. */
   environment: DeploymentEnvironment;
+  /** Keeps a developer Live walkthrough on preproduction transports after restart. */
+  devMode?: boolean;
   /** `provisionVenue({ ownerDb, moduleConfig, database, stateDir })` bound in boot: resolves the fiscal
    * slot from the request's territory (`venueModuleConfig`), refuses a foreign/existing tenant, stamps
    * the environment, mints the venue, and persists the resolved `modules.json` — returning the five ids
    * the trading boot needs. Plaintext admin secrets never reach it — the provision route hashes them at
    * the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  /** Reconstructs the one venue committed by this persisted request after a process interruption. */
+  recoverProvision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  /** Adds the installed sample restaurant after a Demo venue is minted. Prepare and Live never call
+   * it. Boot binds the runtime seed; keeping it injected lets the route prove the mode fork without
+   * touching external files or a database in its orchestration tests. */
+  seedDemo?: (result: VenueResult, req: ProvisionRequest) => Promise<void>;
   /** `adoptFromPrimary({ ownerDb, ring, fetchBundle, persistTrading, … })` bound in boot: the
    * mirror-side sibling of `provision`. Fetches the primary's bundle SERVER-SIDE (so the admin
    * credential never touches a browser→primary hop), adopts the venue into this box's own database,
@@ -91,6 +109,46 @@ export interface SetupDeps {
    * dir holds an `index.html`, so a mis-built dir fails the boot loudly rather than 404ing here. From
    * `config.setupAppDir` (`WAITRON_SETUP_APP_DIR`). */
   setupAppDir?: string;
+  /** Persistent first-boot serialization and progress, shared by provision, adoption and recovery. */
+  operations?: SetupOperationStore;
+  /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart. */
+  stageRestore?: (request: RestoreRequest) => Promise<void>;
+  /** Validates and stages a prepared configuration archive before live provisioning. */
+  stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
+  /** Removes any staged archive after the selected venue and its configuration are durable. */
+  clearConfiguration?: () => Promise<void>;
+  /** Runs one explicit preproduction submission for the intended live fiscal inputs. */
+  runFiscalTest?: (input: {
+    request: ProvisionRequest;
+    contribution: FiscalContribution;
+    secret: unknown;
+  }) => Promise<FiscalReadinessResult>;
+  /** Refuses first production activation unless matching accepted server evidence exists. */
+  assertFiscalReady?: (input: {
+    request: ProvisionRequest;
+    contribution: FiscalContribution;
+    secret: unknown;
+  }) => Promise<void>;
+}
+
+const SETUP_PHASES: readonly SetupOperationPhase[] = [
+  "started",
+  "venue_committed",
+  "content_seeded",
+  "identity_established",
+  "membership_seeded",
+  "secret_sealed",
+  "publishing",
+  "complete",
+];
+
+function setupPhaseReached(
+  operation: ActiveSetupOperation | undefined,
+  phase: SetupOperationPhase,
+): boolean {
+  return (
+    operation !== undefined && SETUP_PHASES.indexOf(operation.phase) >= SETUP_PHASES.indexOf(phase)
+  );
 }
 
 /**
@@ -122,6 +180,9 @@ const SETUP_PLACEHOLDER_HTML = `<!doctype html>
  * setup routes stop being mounted), so it must be revalidated, never pinned — the same reasoning
  * `spa-api.ts` revalidates a non-hashed `index.html` under. */
 const REVALIDATE_CACHE_CONTROL = "no-cache";
+/** Bounds memory consumed by one unauthenticated setup upload. */
+export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
+export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 
 /**
  * Every AppError code the provision route can THROW inside its error boundary, and its HTTP status.
@@ -147,11 +208,14 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
   "setup.provisioning_secret_required": 400,
+  "setup.fiscal_test_required": 409,
   // A present-but-malformed `admin.email` fails identity's `isValidEmail` screen (see `parseVenue`).
   // The domain-named code identity raises for the same write-boundary check; defaults to 400 anyway,
   // enumerated so this map stays the surface's whole 4xx contract.
   "person.email_invalid": 400,
   "setup.already_provisioned": 409,
+  "setup.operation_conflict": 409,
+  "setup.already_provisioning": 409,
   "deployment.already_stamped": 409,
   // SP-1b fiscal gate: provisioning refused because a `provision-only` module (fiscal) is disabled in
   // `modules.json`. A conflict with the box's config, like the two refusals above — 409, not 400.
@@ -183,11 +247,15 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   // that is a well-formed request whose UPSTREAM primary failed, this is a malformed request.
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
+  "setup.operation_conflict": 409,
+  "setup.already_provisioning": 409,
 };
 
 // `"setup.adopt_failed"` is the LOG TAG for the unexpected-crash branch, not a wire code (as with
 // `runProvision` above): a non-`AppError` reaching the boundary is answered `server.internal`.
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
+const runRestore = createErrorBoundary(PROVISION_STATUS, "setup.restore_failed");
+const runConfiguration = createErrorBoundary(PROVISION_STATUS, "setup.configuration_import_failed");
 
 /** Throw the request-shape refusal for `field`, naming it but NEVER echoing its value (a PIN,
  * password or certificate secret is exactly the value a caller can mis-send). */
@@ -308,6 +376,56 @@ function parseVenue(venueRaw: unknown): VenueRequest {
   };
 }
 
+function parseProvisionPayload(
+  parsed: unknown,
+  devMode: boolean,
+): {
+  mode: "demo" | "prepare" | "live";
+  request: ProvisionRequest;
+  contribution: FiscalContribution;
+  secret: FiscalContribution["provisioningSecret"];
+  secretExpected: boolean;
+  rawSecret: unknown;
+} {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    invalidRequest("body");
+  }
+  const body = parsed as Record<string, unknown>;
+  const mode = body.mode;
+  if (mode !== "demo" && mode !== "prepare" && mode !== "live") invalidRequest("mode");
+  if (body.configurationImport !== undefined && typeof body.configurationImport !== "boolean") {
+    invalidRequest("configurationImport");
+  }
+  if (body.configurationImport === true && mode !== "live") invalidRequest("configurationImport");
+
+  const venue = parseVenue(body.venue);
+  const environment: DeploymentEnvironment =
+    mode === "live" && !devMode ? "production" : "preproduction";
+  const selection = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+  if (selection.contribution === undefined) invalidRequest("location.fiscalTerritory");
+  const contribution = selection.contribution;
+  const secret = contribution.provisioningSecret;
+  const secretExpected = secret?.required(environment) ?? false;
+  const present = body.aeatCert !== undefined;
+  if (secretExpected && !present) {
+    throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
+  }
+  if (!secretExpected && present) invalidRequest("aeatCert");
+  if (secretExpected) secret!.validate(body.aeatCert);
+  return {
+    mode,
+    request: {
+      environment,
+      venue,
+      configurationImport: mode === "live" && body.configurationImport === true,
+    },
+    contribution,
+    secret,
+    secretExpected,
+    rawSecret: body.aeatCert,
+  };
+}
+
 /** A direct structured error response mirroring the error boundary's `{ error: { code, params } }`
  * shape, for the two refusals that are returned OUTSIDE the boundary (the latch and the deps gate). */
 function directError(
@@ -349,9 +467,67 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // log. Fires once, not per request, so the catch-all below stays silent under browser load.
   log("info", "setup.mode_active", { environment: deps.environment });
 
-  app.get("/setup-api/status", (c) =>
-    c.json({ provisioned: false, environment: deps.environment, needs: ["venue"] }, 200),
-  );
+  app.get("/setup-api/status", async (c) => {
+    let operation: Awaited<ReturnType<SetupOperationStore["read"]>> | undefined;
+    let operationBlocked = false;
+    try {
+      operation = await deps.operations?.read();
+    } catch (error) {
+      if (!isAppError(error) || error.code !== "setup.operation_conflict") throw error;
+      operationBlocked = true;
+      log("error", "setup.operation_conflict", {});
+    }
+    return c.json(
+      {
+        provisioned: false,
+        environment: deps.environment,
+        ...(deps.devMode === true ? { developmentMode: true } : {}),
+        needs: ["venue"],
+        ...(operationBlocked ? { operationBlocked: true } : {}),
+        ...(operation === undefined || operation === null
+          ? {}
+          : {
+              operation: {
+                id: operation.id,
+                kind: operation.kind,
+                phase: operation.phase,
+                updatedAt: operation.updatedAt,
+              },
+            }),
+      },
+      200,
+    );
+  });
+
+  let provisioning = false;
+  let fiscalTesting = false;
+  let configurationStaging = false;
+
+  app.post("/setup-api/fiscal-test", async (c) => {
+    if (provisioning || fiscalTesting || configurationStaging) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    fiscalTesting = true;
+    return runProvision(c, log, async () => {
+      try {
+        if (deps.runFiscalTest === undefined) return directError(c, log, "setup.not_ready", 503);
+        const parsed = await c.req.json().catch(() => null);
+        const payload = parseProvisionPayload(parsed, deps.devMode === true);
+        if (payload.mode !== "live" || payload.request.environment !== "production") {
+          invalidRequest("mode");
+        }
+        return c.json(
+          await deps.runFiscalTest({
+            request: payload.request,
+            contribution: payload.contribution,
+            secret: payload.rawSecret,
+          }),
+        );
+      } finally {
+        fiscalTesting = false;
+      }
+    });
+  });
 
   // The one-shot provisioning latch. CLOSURE-scoped (per `mountSetup`, i.e. per booted process — one
   // mount per boot), so it survives across requests to THIS box yet gives every test its own fresh
@@ -362,15 +538,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // is not atomic with `applyVenue`, so two concurrent provisions could each pass that check and start
   // a second, unrecoverable chain (CLAUDE.md §5). The single setup process + this latch prevent the
   // concurrent case; the tenant-exists check backstops a sequential re-POST.
-  let provisioning = false;
-
-  // POST /setup-api/provision — orchestrates the whole flow: demo/live fork → validate + hash →
+  // POST /setup-api/provision — orchestrates the whole flow: onboarding intent → validate + hash →
   // provisioning-secret gate (validate upfront) → provisionVenue → seal the secret → persist trading
   // config → restart. Registered BEFORE the `GET *` catch-all below (Hono first-match wins).
-  app.post("/setup-api/provision", (c) => {
+  app.post("/setup-api/provision", async (c) => {
     // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Captured as
     // consts so TypeScript narrows them non-undefined for the async closure below.
     const provision = deps.provision;
+    const recoverProvision = deps.recoverProvision;
+    const seedDemo = deps.seedDemo;
     const establishIdentity = deps.establishIdentity;
     const seedMembership = deps.seedMembership;
     const db = deps.db;
@@ -381,6 +557,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     const migrationsDatabaseUrl = deps.migrationsDatabaseUrl;
     if (
       provision === undefined ||
+      (deps.operations !== undefined && recoverProvision === undefined) ||
+      seedDemo === undefined ||
       establishIdentity === undefined ||
       seedMembership === undefined ||
       db === undefined ||
@@ -397,90 +575,102 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // check+set completes before a second near-simultaneous POST's handler begins; the loser is
     // refused 409 here rather than being allowed to mint a second chain. Reset to false on ANY
     // failure (below) so a corrected retry works; LEFT true on success — the box is about to restart.
-    if (provisioning) {
+    if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
 
-    return runProvision(c, log, async () => {
+    const requestHash = createHash("sha256")
+      .update(await c.req.raw.clone().text())
+      .digest("hex");
+    const execute = async (operation?: ActiveSetupOperation): Promise<Response> => {
       try {
         // Parse defensively: `c.req.json()` throws on a malformed body and returns `null` for a
         // literal JSON `null` — both are a bad request, not a 500.
         const parsed: unknown = await c.req.json().catch(() => null);
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          invalidRequest("body");
+        const payload = parseProvisionPayload(parsed, deps.devMode === true);
+        const {
+          mode,
+          request,
+          contribution,
+          secret,
+          secretExpected: expected,
+          rawSecret,
+        } = payload;
+        const { environment, venue } = request;
+        if (environment === "production") {
+          if (deps.assertFiscalReady === undefined) {
+            throw new AppError("setup.fiscal_test_required", { module: contribution.id });
+          }
+          await deps.assertFiscalReady({ request, contribution, secret: rawSecret });
         }
-        const body = parsed as Record<string, unknown>;
-
-        const mode = body.mode;
-        if (mode !== "demo" && mode !== "live") invalidRequest("mode");
-
-        const venue = parseVenue(body.venue);
-
-        // Demo/live fork: live stamps production, demo stamps preproduction (provisionVenue writes it).
-        const environment: DeploymentEnvironment = mode === "live" ? "production" : "preproduction";
-
-        // Resolve the fiscal regime the REQUEST's territory picks (the box's enabled set is not yet
-        // written at setup) through the shared `venueFiscalSelection` seam, and reach its provision-time
-        // secret only through the `provisioningSecret` seat — the host holds the opaque blob and the
-        // vault ring but not the regime's shape, so it imports no regime package. The seam throws
-        // `fiscal.regime_not_implemented` for an unimplemented territory, the SAME code `planVenue`
-        // would raise inside `provision`, only earlier (both before any mint). A regime with no
-        // `provisioningSecret` seat (e.g. a files-nothing regime) leaves `expected` false.
-        const { contribution } = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
-        const secret = contribution?.provisioningSecret;
-        const expected = secret?.required(environment) ?? false;
-        const present = body.aeatCert !== undefined;
-        // SYMMETRIC gate on PRESENCE (not the parsed value), both arms checked BEFORE `provision` so
-        // nothing is stamped/minted/sealed on a bad request:
-        //   - secret expected but MISSING → `setup.provisioning_secret_required` naming the module;
-        //   - secret NOT expected but PRESENT → `setup.request_invalid` naming `aeatCert`. The 2c
-        //     client already gates the cert on live mode and never sends it otherwise, so this is
-        //     defense-in-depth (CLAUDE.md §5): it stops a real AEAT signing cert being sealed into a
-        //     preproduction tenant's vault by a hand-crafted demo body. Gating on presence means a
-        //     MALFORMED secret on a non-expected request rejects cleanly with `{ field: "aeatCert" }`
-        //     and no wasted validation — never leaking which sub-field of a secret we were never
-        //     going to accept.
-        if (expected && !present) {
-          throw new AppError("setup.provisioning_secret_required", { module: contribution!.id });
+        let result: VenueResult;
+        if (operation !== undefined && operation.phase !== "started") {
+          result = operation.data.result as VenueResult;
+        } else {
+          try {
+            result = await provision(request);
+          } catch (error) {
+            if (
+              operation === undefined ||
+              recoverProvision === undefined ||
+              !isAppError(error) ||
+              error.code !== "setup.already_provisioned"
+            ) {
+              throw error;
+            }
+            result = await recoverProvision(request);
+          }
+          await operation?.advance("venue_committed", { result });
         }
-        if (!expected && present) {
-          invalidRequest("aeatCert");
-        }
-        // Validate the secret's SHAPE upfront — BEFORE `provision` mints the unrepairable SIF/hash
-        // chain (CLAUDE.md §5) — so a malformed blob 400s with `setup.request_invalid` naming the
-        // offending sub-field and NOTHING stamped or minted. `expected` implies `present` (we threw
-        // otherwise) and implies `secret` is defined (`required` returned true). The seal below
-        // re-validates as defense-in-depth for a direct caller.
-        if (expected) secret!.validate(body.aeatCert);
 
-        const result = await provision({ environment, venue });
+        if (!setupPhaseReached(operation, "content_seeded")) {
+          if (mode === "demo") {
+            await seedDemo(result, { environment, venue });
+          }
+          await operation?.advance("content_seeded");
+        }
 
         // Establish this node's membership identity (design §4): after the tenant/node are minted (the
         // vault row is FK-restricted to the tenant) and before the trading config is persisted. A fresh
         // primary becomes its own sole trust anchor; boot reads it into membershipTrustSet.
-        await establishIdentity(result.tenantId, result.nodeId);
+        if (!setupPhaseReached(operation, "identity_established")) {
+          await establishIdentity(result.tenantId, result.nodeId);
+          await operation?.advance("identity_established");
+        }
 
         // Seed the venue's term-0 membership document (design §6 R1): after the identity key exists,
         // before the trading config is persisted. The primary signs its own org chart; boot has
         // nothing to bump yet.
-        await seedMembership(result.tenantId, result.nodeId);
+        if (!setupPhaseReached(operation, "membership_seeded")) {
+          await seedMembership(result.tenantId, result.nodeId);
+          await operation?.advance("membership_seeded");
+        }
 
         // Seal the regime's provisioning secret AFTER provision mints the tenant (the vault row is
         // FK-restricted to it) and BEFORE the trading config is persisted. Reaches the regime only
         // through the `seal` seat, so this host imports no regime package.
-        if (expected) await secret!.seal({ db, ring }, result.tenantId, body.aeatCert);
+        if (!setupPhaseReached(operation, "secret_sealed")) {
+          if (expected) await secret!.seal({ db, ring }, result.tenantId, rawSecret);
+          await operation?.advance("secret_sealed");
+        }
 
-        await persistTrading({
-          tenantId: result.tenantId,
-          tillId: result.tillId,
-          nodeId: result.nodeId,
-          seriesId: result.seriesIds[0],
-          locationId: result.locationId,
-          databaseUrl,
-          migrationsDatabaseUrl,
-          environment,
-        });
+        if (!setupPhaseReached(operation, "publishing")) {
+          await persistTrading({
+            tenantId: result.tenantId,
+            tillId: result.tillId,
+            nodeId: result.nodeId,
+            seriesId: result.seriesIds[0],
+            locationId: result.locationId,
+            databaseUrl,
+            migrationsDatabaseUrl,
+            environment,
+            ...(deps.devMode === true ? { developmentMode: true } : {}),
+            onboardingIntent: mode,
+          });
+          await deps.clearConfiguration?.();
+          await operation?.advance("publishing");
+        }
 
         const response = c.json(
           { provisioned: true, tenantId: result.tenantId, restarting: true },
@@ -497,6 +687,21 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         provisioning = false;
         throw error;
       }
+    };
+    return runProvision(c, log, async () => {
+      if (deps.operations === undefined) return execute();
+      return deps.operations.run("provision", requestHash, async (operation) => {
+        if (operation.phase === "complete") {
+          return c.json(
+            operation.data as { provisioned: true; tenantId: string; restarting: true },
+          );
+        }
+        const response = await execute(operation);
+        if (response.ok) {
+          await operation.complete((await response.clone().json()) as Record<string, unknown>);
+        }
+        return response;
+      });
     });
   });
 
@@ -507,9 +712,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // (adopt), never both, so a start of either action must latch out a concurrent start of the other —
   // the same "one unrecoverable first-boot action" guard, expressed once. Registered BEFORE the
   // `GET *` catch-all below (Hono first-match wins).
-  app.post("/setup-api/adopt", (c) => {
+  app.post("/setup-api/adopt", async (c) => {
     // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Only `adopt` and
-    // `requestRestart` are load-bearing for this route (the fetch/persist deps are captured inside the
+    // `requestRestart` are required for this route (the fetch/persist deps are captured inside the
     // `adopt` closure in boot). Captured as consts so TypeScript narrows them non-undefined below.
     const adopt = deps.adopt;
     const requestRestart = deps.requestRestart;
@@ -520,54 +725,156 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // One-shot latch — CRITICAL, SYNCHRONOUS before ANY `await` — shared with provision (above). The
     // loser is refused 409 here rather than starting a second adopt. Reset to false on ANY failure
     // (below) so a corrected retry works; LEFT true on success — the box is about to restart.
-    if (provisioning) {
+    if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
 
-    return runAdopt(c, log, async () => {
+    const requestHash = createHash("sha256")
+      .update(await c.req.raw.clone().text())
+      .digest("hex");
+    const execute = () =>
+      runAdopt(c, log, async () => {
+        try {
+          // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so a degenerate body falls
+          // through to the field screen below (a 400) rather than an opaque 500. Validate the credential
+          // PER FIELD here — the primary's login object (`personId`/`password` required, `totp` optional) —
+          // so a wrong-shape body is refused at the mirror's OWN boundary as a clean `setup.request_invalid`
+          // 400, never forwarded to fail the primary and surface as an opaque `mirror.bundle_fetch_failed`
+          // 502. The password/TOTP is NEVER logged — `asString` echoes the field NAME only, never its value.
+          const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
+          const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+          // SSRF guard — `/setup-api/adopt` is UNAUTHENTICATED, so an attacker who can reach a mirror in
+          // setup could otherwise point `primaryUrl` at the cloud metadata endpoint or an internal host and
+          // drive the box to POST its admin credential there. Refuse a scheme/host the policy disallows HERE,
+          // before `adopt` runs `fetchBundle` — no fetch is attempted for a rejected URL. Throws
+          // `mirror.primary_url_invalid` (400 via `ADOPT_STATUS`); the value is never echoed.
+          assertSafePrimaryUrl(primaryUrl);
+          const cred = asObject(body.credential, "credential");
+          const credential: AdoptCredential = {
+            personId: asString(cred.personId, "credential.personId"),
+            password: asString(cred.password, "credential.password"),
+            totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
+          };
+
+          const { tenantId, breakGlassSecret } = await adopt({ primaryUrl, credential });
+
+          // Surface the break-glass secret ONCE, here, in the connect response — the operator's only
+          // chance to record the offline promote fallback. It is NEVER logged (mirroring the sync-token
+          // discipline): no `log(...)` call on this success path carries it, and it is not put in the
+          // `setup.adopt_failed` error branch either.
+          const response = c.json(
+            { adopted: true, tenantId, breakGlassSecret, restarting: true },
+            200,
+          );
+          // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
+          // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it) —
+          // the same persist-then-restart transition provision uses.
+          setTimeout(() => requestRestart(), 0);
+          return response;
+        } catch (error) {
+          // Reset on ANY failure so a corrected retry is accepted. On SUCCESS the function has already
+          // returned above, so the latch stays true and no second setup action can start before restart.
+          provisioning = false;
+          throw error;
+        }
+      });
+    if (deps.operations === undefined) return execute();
+    return deps.operations.run("adopt", requestHash, async (operation) => {
+      if (operation.phase === "complete") {
+        return c.json(operation.data as { adopted: true; tenantId: string; restarting: true });
+      }
+      const response = await execute();
+      if (response.ok) {
+        const result = (await response.clone().json()) as { tenantId: string };
+        await operation.complete({ adopted: true, tenantId: result.tenantId, restarting: true });
+      }
+      return response;
+    });
+  });
+
+  app.post("/setup-api/restore", async (c) => {
+    const stageRestore = deps.stageRestore;
+    const requestRestart = deps.requestRestart;
+    if (stageRestore === undefined || requestRestart === undefined) {
+      return directError(c, log, "setup.not_ready", 503);
+    }
+    if (provisioning || fiscalTesting || configurationStaging) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    provisioning = true;
+
+    return runRestore(c, log, async () => {
       try {
-        // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so a degenerate body falls
-        // through to the field screen below (a 400) rather than an opaque 500. Validate the credential
-        // PER FIELD here — the primary's login object (`personId`/`password` required, `totp` optional) —
-        // so a wrong-shape body is refused at the mirror's OWN boundary as a clean `setup.request_invalid`
-        // 400, never forwarded to fail the primary and surface as an opaque `mirror.bundle_fetch_failed`
-        // 502. The password/TOTP is NEVER logged — `asString` echoes the field NAME only, never its value.
-        const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
-        const primaryUrl = asString(body.primaryUrl, "primaryUrl");
-        // SSRF guard — `/setup-api/adopt` is UNAUTHENTICATED, so an attacker who can reach a mirror in
-        // setup could otherwise point `primaryUrl` at the cloud metadata endpoint or an internal host and
-        // drive the box to POST its admin credential there. Refuse a scheme/host the policy disallows HERE,
-        // before `adopt` runs `fetchBundle` — no fetch is attempted for a rejected URL. Throws
-        // `mirror.primary_url_invalid` (400 via `ADOPT_STATUS`); the value is never echoed.
-        assertSafePrimaryUrl(primaryUrl);
-        const cred = asObject(body.credential, "credential");
-        const credential: AdoptCredential = {
-          personId: asString(cred.personId, "credential.personId"),
-          password: asString(cred.password, "credential.password"),
-          totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
+        if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")) {
+          invalidRequest("artifact");
+        }
+        const declaredLength = Number(c.req.header("content-length"));
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_RESTORE_UPLOAD_BYTES) {
+          invalidRequest("artifact");
+        }
+        const recoveryKey = asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
+        const rawEnvironment = c.req.header("x-waitron-restore-environment");
+        if (rawEnvironment !== "production" && rawEnvironment !== "preproduction") {
+          invalidRequest("environment");
+        }
+        const artifact = new Uint8Array(await c.req.arrayBuffer());
+        if (artifact.byteLength === 0 || artifact.byteLength > MAX_RESTORE_UPLOAD_BYTES) {
+          invalidRequest("artifact");
+        }
+        const requestHash = createHash("sha256")
+          .update(rawEnvironment)
+          .update("\0")
+          .update(recoveryKey)
+          .update("\0")
+          .update(artifact)
+          .digest("hex");
+        const execute = async (): Promise<Response> => {
+          await stageRestore({ artifact, recoveryKey, environment: rawEnvironment });
+          const response = c.json({ restoreStaged: true, restarting: true }, 202);
+          setTimeout(() => requestRestart(), 0);
+          return response;
         };
-
-        const { tenantId, breakGlassSecret } = await adopt({ primaryUrl, credential });
-
-        // Surface the break-glass secret ONCE, here, in the connect response — the operator's only
-        // chance to record the offline promote fallback. It is NEVER logged (mirroring the sync-token
-        // discipline): no `log(...)` call on this success path carries it, and it is not put in the
-        // `setup.adopt_failed` error branch either.
-        const response = c.json(
-          { adopted: true, tenantId, breakGlassSecret, restarting: true },
-          200,
-        );
-        // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
-        // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it) —
-        // the same persist-then-restart transition provision uses.
-        setTimeout(() => requestRestart(), 0);
-        return response;
+        if (deps.operations === undefined) return execute();
+        return deps.operations.run("restore", requestHash, async (operation) => {
+          if (operation.phase === "complete") {
+            return c.json({ restoreStaged: true, restarting: true }, 202);
+          }
+          const response = await execute();
+          await operation.complete({ restoreStaged: true, restarting: true });
+          return response;
+        });
       } catch (error) {
-        // Reset on ANY failure so a corrected retry is accepted. On SUCCESS the function has already
-        // returned above, so the latch stays true and no second setup action can start before restart.
         provisioning = false;
         throw error;
+      }
+    });
+  });
+
+  app.post("/setup-api/configuration", async (c) => {
+    const stage = deps.stageConfiguration;
+    if (stage === undefined) return directError(c, log, "setup.not_ready", 503);
+    if (provisioning || fiscalTesting || configurationStaging) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    configurationStaging = true;
+    return runConfiguration(c, log, async () => {
+      try {
+        if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")) {
+          invalidRequest("artifact");
+        }
+        const passphrase = asString(c.req.header("x-waitron-export-passphrase"), "passphrase");
+        const declaredLength = Number(c.req.header("content-length"));
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
+          invalidRequest("artifact");
+        }
+        const artifact = new Uint8Array(await c.req.arrayBuffer());
+        if (artifact.byteLength === 0 || artifact.byteLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
+          invalidRequest("artifact");
+        }
+        return c.json(await stage(artifact, passphrase), 200);
+      } finally {
+        configurationStaging = false;
       }
     });
   });

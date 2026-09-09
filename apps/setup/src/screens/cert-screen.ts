@@ -22,7 +22,7 @@ import type { AeatCertDraft, ProvisionBody } from "../api/client.js";
  *
  * On `Next` it client-validates (a file loaded + a non-empty passphrase) — a failure shows a
  * `role="alert"` banner and marks the offending fields, and nothing is emitted — then emits the
- * `aeatCert` slice as a `setup-patch` and advances to `review`. `Back` returns to `venue`. Both nav
+ * `aeatCert` slice as a `setup-patch` and advances to `fiscal-test`. `Back` returns to `venue`. Both nav
  * events are the composed/bubbling pair the shell listens for. Following
  * `apps/setup/src/screens/venue-screen.ts` for the field/`wt-change`/banner + seed-once idiom.
  */
@@ -103,6 +103,7 @@ export class SetupCertScreen extends LitElement {
 
   @state() private passphrase = "";
   @state() private certKind: AeatCertDraft["certKind"] = "sello";
+  @state() private passphraseVisible = false;
 
   /** The fields a `Next` rejected — `pfx` (no file loaded) and/or `passphrase` (blank). */
   @state() private invalid = new Set<"pfx" | "passphrase">();
@@ -145,6 +146,7 @@ export class SetupCertScreen extends LitElement {
       this.fileReadFailed = false;
       return;
     }
+    this.invalid = new Set([...this.invalid].filter((field) => field !== "pfx"));
     this.fileReadFailed = false;
     this.fileName = file.name;
     try {
@@ -163,6 +165,7 @@ export class SetupCertScreen extends LitElement {
   #onPassphrase(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.passphrase = event.detail.value;
+    this.invalid = new Set([...this.invalid].filter((field) => field !== "passphrase"));
   }
 
   #onCertKind(event: Event): void {
@@ -192,7 +195,7 @@ export class SetupCertScreen extends LitElement {
         certKind: this.certKind,
       },
     });
-    dispatchSetupGoto(this, "review");
+    dispatchSetupGoto(this, "fiscal-test");
   }
 
   #back(): void {
@@ -210,12 +213,23 @@ export class SetupCertScreen extends LitElement {
         <label class="field file" ?invalid=${this.invalid.has("pfx")}>
           <span>Certificate file (.pfx or .p12)</span>
           <input
+            name="certificate-file"
             type="file"
             accept=".pfx,.p12"
+            required
+            aria-invalid=${this.invalid.has("pfx") ? "true" : "false"}
+            aria-describedby=${this.invalid.has("pfx") ? "certificate-file-error" : nothing}
             data-test="pfx"
             @change=${(e: Event) => void this.#onFileChange(e)}
           />
         </label>
+        ${
+          this.invalid.has("pfx")
+            ? html`<p id="certificate-file-error" class="error" data-test="pfx-field-error">
+                Choose the certificate file.
+              </p>`
+            : nothing
+        }
         ${
           this.pfxBase64 !== ""
             ? html`<p class="file-status" data-test="file-status">
@@ -229,15 +243,38 @@ export class SetupCertScreen extends LitElement {
           label="Certificate passphrase"
           name="certificate-passphrase"
           autocomplete="off"
-          type="password"
+          type=${this.passphraseVisible ? "text" : "password"}
+          required
           data-test="passphrase"
           ?invalid=${this.invalid.has("passphrase")}
           .value=${this.passphrase}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPassphrase(e)}
-        ></wt-input>
+        >
+          <wt-button
+            slot="end"
+            variant="ghost"
+            data-test="toggle-passphrase"
+            aria-label=${
+              this.passphraseVisible ? "Hide certificate passphrase" : "Show certificate passphrase"
+            }
+            @click=${() => (this.passphraseVisible = !this.passphraseVisible)}
+            >${this.passphraseVisible ? "Hide" : "Show"}</wt-button
+          >
+        </wt-input>
+        ${
+          this.invalid.has("passphrase")
+            ? html`<p class="error" data-test="passphrase-field-error">
+                Enter the certificate passphrase.
+              </p>`
+            : nothing
+        }
         <label class="field select">
           <span>Certificate type</span>
-          <select data-test="certKind" @change=${(e: Event) => this.#onCertKind(e)}>
+          <select
+            name="certificate-kind"
+            data-test="certKind"
+            @change=${(e: Event) => this.#onCertKind(e)}
+          >
             ${CERT_KINDS.map(
               (kind) =>
                 html`<option value=${kind.value} .selected=${kind.value === this.certKind}>

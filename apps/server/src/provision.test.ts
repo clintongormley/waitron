@@ -11,7 +11,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
 import { isAppError } from "@waitron/shared";
 import { parseModuleConfig } from "@waitron/module";
-import { provisionVenue, venueModuleConfig } from "./provision.js";
+import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 
@@ -226,6 +226,26 @@ describe("provisionVenue", () => {
 
     // No second SIF, series or node — the guard prevented a duplicate hash chain.
     expect(await fiscalCounts(db)).toEqual(afterFirst);
+  });
+
+  it("recovers the exact committed venue after a process dies before file publication", async () => {
+    const db = ownerDb();
+    const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+    const minted = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    );
+
+    const recovered = await recoverProvisionedVenue(db, request);
+
+    expect(recovered).toMatchObject({
+      tenantId: minted.tenantId,
+      locationId: minted.locationId,
+      tillId: minted.tillId,
+      nodeId: minted.nodeId,
+      seriesIds: minted.seriesIds,
+    });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
   });
 
   it("refuses a FOREIGN tenant in an occupied database and mints no second tenant (§5)", async () => {

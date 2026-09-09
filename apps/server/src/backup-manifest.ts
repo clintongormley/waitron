@@ -31,7 +31,7 @@ export type BackupManifest = {
  * whether each version is > 0).
  */
 export async function schemaVersionsByModule(
-  db: Database,
+  db: Pick<Database, "execute">,
   modules: readonly WaitronModule[],
 ): Promise<Record<string, number>> {
   const entries = await Promise.all(

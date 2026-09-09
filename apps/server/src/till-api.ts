@@ -25,6 +25,7 @@ import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import type { OnboardingIntent } from "./trading-config.js";
 import type { TillConfig } from "./till-config.js";
 import {
   collectOrder,
@@ -154,6 +155,8 @@ export interface TillApiDeps {
    * as `venueDefault`. DISTINCT from the fiscal `cfg.locale`/`cfg.invoiceLocales`, which are unchanged.
    */
   venueLocale: string;
+  /** The setup journey that created this installation, shown persistently by the till. */
+  onboardingIntent?: OnboardingIntent;
   /**
    * The per-(device, person) wrong-PIN back-off the login route consults (§5). OPTIONAL and injected
    * only by tests (over a controllable clock, CLAUDE.md §4); production omits it and `mountTillApi`
@@ -809,6 +812,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // venue's language and is not an input to the UI derivation. The till threads THIS to
         // `till-ticket-view.invoiceLocale`, and the UI `locale` to `setLocale` — two different things.
         invoiceLocale: deps.cfg.locale,
+        onboardingIntent: deps.onboardingIntent,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,
@@ -824,11 +828,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         courses: boot.courses,
         // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
         // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
-        // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the
-        // built `PaymentProvider` on `deps` — the client needs the mode name, not the server object.
+        // affordance (Task 8). Practice installs surface the local simulator selected at boot;
+        // other installs use the configured hardware selector.
         // `tipsEnabled` comes from `deps.cfg` too — the single source (`TillConfig.tipsEnabled`,
         // set at boot from `config.till`), not a second copy on `deps` that could drift from it.
-        cardProvider: deps.cfg.cardProvider,
+        cardProvider:
+          deps.cardProvider?.provider === "simulator" ? "simulator" : deps.cfg.cardProvider,
         tipsEnabled: deps.cfg.tipsEnabled,
         // The authored (or default) receipt trim (Task 8) — the till app threads it to its ticket view.
         // Rides this same unauthenticated boot fetch, so the till makes no second request.
@@ -956,6 +961,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // 500 — the identical exposure to `/api/sales`'s `workingOrderId`. Screened here (before the
       // provider guard, so a malformed body is a 400 whatever the till's card config) as the 7b sibling.
       requireUuidParam(body.id, "WorkingOrderId");
+      if (
+        body.simulationOutcome !== undefined &&
+        (deps.cardProvider?.provider !== "simulator" ||
+          (body.simulationOutcome !== "captured" && body.simulationOutcome !== "declined"))
+      ) {
+        throw new AppError("management.request_invalid", { field: "simulationOutcome" });
+      }
       // `deps.cardProvider` is `undefined` on a till booted with `WAITRON_TILL_CARD_PROVIDER=none`
       // (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this route on EVERY till regardless of
       // `cardProvider` (`boot.ts` calls it unconditionally), so this branch stays reachable at the HTTP

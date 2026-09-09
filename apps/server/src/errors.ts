@@ -17,6 +17,8 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
+    /** The local capture inbox was requested while email uses SMTP or is not configured. */
+    "email.test_inbox_unavailable": Record<string, never>;
     /** A required environment variable is absent or empty. `variable` is our own declared name. */
     "server.config_missing": { variable: string };
     /**
@@ -1211,29 +1213,12 @@ declare module "@waitron/shared" {
      * fault → HTTP 400 by `setup-api.ts`'s provision route, matching `setup.request_invalid`.
      */
     "setup.provisioning_secret_required": { module: string };
-    /**
-     * A first-boot setup POST arrived while another is still in flight (onboarding slice 2b). One
-     * one-shot latch is SHARED across the provision and adopt (C2b Task 9) routes — a box is set up
-     * EITHER as a primary (provision) OR as a mirror (adopt), never both — and each route sets it
-     * SYNCHRONOUSLY before its first `await`, so two near-simultaneous starts of EITHER action cannot
-     * both pass it (provision-in-flight blocks adopt and vice-versa) — the loser gets THIS. The latch
-     * is the fiscal footgun guard's inner ring: `applyVenue` mints a fresh SIF/hash chain on every run
-     * (venue-apply.ts's own header) and the `provisionVenue` tenant-exists check is NOT atomic with
-     * `applyVenue`, so two concurrent first-boot actions on the same box could each pass that check and
-     * mint a second chain. The single setup process + this latch prevent the concurrent case; the
-     * tenant-exists check backstops the sequential re-POST.
-     *
-     * NO params: there is nothing non-secret to carry beyond the code, and the fix is simply to wait
-     * for the in-flight action to finish (on success the box restarts out of setup mode; on failure
-     * the latch resets and a corrected retry is accepted).
-     *
-     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding), never the throwing
-     * file; `server.*` is reserved for facts about the process itself, and "a first-boot action is
-     * already running" is a fact about the setup, the rule `tenant.not_found`'s note above gives. A
-     * state conflict → HTTP 409 by `setup-api.ts`'s provision and adopt routes (the same 409
-     * `setup.already_provisioned` takes). Never renamed once shipped.
-     */
+    /** First production activation lacks an accepted test submission bound to its fiscal inputs. */
+    "setup.fiscal_test_required": { module: string };
+    /** Another handler currently holds the persistent first-boot operation lease. */
     "setup.already_provisioning": Record<string, never>;
+    /** A different request owns the box's persisted incomplete first-boot operation. */
+    "setup.operation_conflict": Record<string, never>;
     /**
      * A first-boot setup POST arrived before the box wired the dependencies that action needs
      * (onboarding slice 2b). BOTH first-boot routes have a synchronous deps gate that returns THIS,

@@ -98,6 +98,52 @@ function setNativeInput(el: BackupScreen, sel: string, value: string): void {
 }
 
 describe("backup-screen", () => {
+  it("exports prepared configuration under a confirmed passphrase", async () => {
+    const api = stubApi({
+      exportConfiguration: vi
+        .fn()
+        .mockResolvedValue(new Blob(["artifact"], { type: "application/octet-stream" })),
+    });
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:configuration");
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    setInput(el, "[data-test=configuration-passphrase]", "a strong passphrase");
+    setInput(el, "[data-test=configuration-confirm]", "a strong passphrase");
+    (q(el, "[data-test=configuration-export]") as HTMLElement).click();
+    await flush(el);
+    expect(api.exportConfiguration).toHaveBeenCalledWith("a strong passphrase");
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+    createObjectURL.mockRestore();
+    click.mockRestore();
+  });
+
+  it("explains a configuration export passphrase mismatch beside both fields", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    await flush(el);
+    setInput(el, "[data-test=configuration-passphrase]", "a strong passphrase");
+    setInput(el, "[data-test=configuration-confirm]", "a different passphrase");
+    (q(el, "[data-test=configuration-export]") as HTMLElement).click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=configuration-error]")?.textContent?.trim()).not.toBe("");
+    const fields = el.shadowRoot!.querySelectorAll("[data-test=configuration-field-error]");
+    expect(fields).toHaveLength(2);
+    expect(fields[0]?.textContent).toBe(fields[1]?.textContent);
+  });
+
+  it("lets the operator reveal both configuration export passphrases", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    await flush(el);
+    const passphrase = q(el, "[data-test=configuration-passphrase]")!;
+    const confirmation = q(el, "[data-test=configuration-confirm]")!;
+    q(el, "[data-test=toggle-configuration-passphrase]")!.click();
+    q(el, "[data-test=toggle-configuration-confirm]")!.click();
+    await el.updateComplete;
+    expect(passphrase.getAttribute("type")).toBe("text");
+    expect(confirmation.getAttribute("type")).toBe("text");
+  });
+
   it("loads and renders the status view (off, then on)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });

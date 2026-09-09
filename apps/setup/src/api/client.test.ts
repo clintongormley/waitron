@@ -44,6 +44,23 @@ const provisionBody: ProvisionBody = {
 };
 
 describe("SetupApi", () => {
+  it("runs the explicit fiscal readiness test with the intended live body", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "accepted", testedAt: "2026-09-09T00:00:00Z" }), {
+        status: 200,
+      }),
+    );
+    const api = new SetupApi("", fetchImpl);
+    const body = provisionBody;
+    await expect(api.runFiscalTest(body)).resolves.toMatchObject({ status: "accepted" });
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/fiscal-test", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  });
+
   it("getStatus GETs /setup-api/status with credentials and returns the parsed status", async () => {
     const status = { provisioned: false, environment: "preproduction", needs: ["venue"] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(status));
@@ -128,6 +145,41 @@ describe("SetupApi", () => {
     const api = new SetupApi("", fetchImpl);
     await expect(api.adopt(adoptBody)).rejects.toMatchObject({
       code: "mirror.bundle_fetch_failed",
+    });
+  });
+
+  it("restore POSTs the encrypted artifact as binary with recovery metadata", async () => {
+    const result = { restoreStaged: true, restarting: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result, true, 202));
+    const api = new SetupApi("", fetchImpl);
+    const artifact = new Blob([Uint8Array.from([1, 2, 3])]);
+    expect(await api.restore(artifact, "recovery-key", "production")).toEqual(result);
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/restore", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": "recovery-key",
+        "x-waitron-restore-environment": "production",
+      },
+      body: artifact,
+    });
+  });
+
+  it("stages a preparation export as binary with its passphrase", async () => {
+    const preview = { venue: {}, counts: { products: 2 }, reconnect: ["printers"] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(preview));
+    const api = new SetupApi("", fetchImpl);
+    const artifact = new Blob([Uint8Array.from([4, 5])]);
+    expect(await api.stageConfiguration(artifact, "a strong passphrase")).toEqual(preview);
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/configuration", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-export-passphrase": "a strong passphrase",
+      },
+      body: artifact,
     });
   });
 });

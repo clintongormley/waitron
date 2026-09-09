@@ -186,6 +186,17 @@ export class TillApp extends LitElement {
         color: var(--wt-color-text-muted);
         text-align: center;
       }
+
+      .mode-indicator {
+        margin: 0;
+        padding: var(--wt-space-1) var(--wt-space-3);
+        border-bottom: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-align: center;
+      }
     `,
   ];
 
@@ -515,6 +526,7 @@ export class TillApp extends LitElement {
    * yet resolved (or a stub that omits it) never shows Modes I/T's Place/Collect controls by accident.
    */
   @state() private orderFlow: OrderFlow = "prepay";
+  @state() private onboardingIntent?: TillInfo["onboardingIntent"];
   /**
    * The till's integrated-card wiring (Task 9), read once from `GET /api/till` on boot alongside
    * {@link orderFlow} — threaded to `till-tender-pay` (via `till-counter-screen`) so it can choose
@@ -780,6 +792,7 @@ export class TillApp extends LitElement {
       // as `es-ES` in `till.locale`), which must never flip the printed legal ticket's language
       // (per-user-language spec, decision 2). Threaded to `till-ticket-view.invoiceLocale`.
       this.invoiceLocale = till.invoiceLocale;
+      this.onboardingIntent = till.onboardingIntent;
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
       this.bumpMode = till.bumpMode;
@@ -1137,6 +1150,9 @@ export class TillApp extends LitElement {
         lines,
         ...(detail.tip ? { tip: detail.tip } : {}),
         ...(detail.allowOffline ? { allowOffline: true } : {}),
+        ...(detail.simulationOutcome === undefined
+          ? {}
+          : { simulationOutcome: detail.simulationOutcome }),
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
@@ -2418,6 +2434,7 @@ export class TillApp extends LitElement {
           .issuer=${this.issuer}
           .invoiceLocale=${this.invoiceLocale}
           .receipt=${this.receipt}
+          .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
       case "schedule":
         return html`<till-schedule-screen
@@ -2504,6 +2521,13 @@ export class TillApp extends LitElement {
           this.#selectDiet(e.detail.predicate)}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
+        ${
+          this.onboardingIntent === undefined
+            ? nothing
+            : html`<p class="mode-indicator" data-test="mode-indicator">
+                ${t(`mode.${this.onboardingIntent}`)}
+              </p>`
+        }
         ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
         <!-- The waiting-for-promotion banner (till-reroute §4.4). On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same

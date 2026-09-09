@@ -26,6 +26,8 @@ const read = (path: string): string => readFileSync(`${ROOT}${path}`, "utf8");
 const DOCKERFILE = read("deploy/Dockerfile");
 const COMPOSE = read("deploy/compose.yml");
 const PREPARE = read("deploy/prepare.sh");
+const CI = read(".github/workflows/ci.yml");
+const IMAGE_SMOKE = read(".github/workflows/image-smoke.yml");
 const CONFIG_SOURCE = read("apps/server/src/config.ts");
 const SERVER_MANIFEST = JSON.parse(read("apps/server/package.json")) as {
   bin: Record<string, string>;
@@ -84,6 +86,12 @@ describe("the container image's environment", () => {
     expect(IMAGE_ENV.WAITRON_STATE_DIR).toBe("/var/lib/waitron/state");
   });
 
+  it("stamps the exact source revision into every CI-built image", () => {
+    expect(IMAGE_ENV.WAITRON_BUILD_ID).toBe("${WAITRON_BUILD_ID}");
+    expect(CI).toContain("build-args: WAITRON_BUILD_ID=${{ github.sha }}");
+    expect(IMAGE_SMOKE).toContain("build-args: WAITRON_BUILD_ID=${{ github.sha }}");
+  });
+
   it("binds every interface, not the container's own loopback", () => {
     // config.ts defaults httpHost to 127.0.0.1, which in a container serves nobody while the
     // loopback healthcheck still reports healthy.
@@ -140,6 +148,11 @@ describe("the container image's environment", () => {
     // The demo scripts write real sales through the real fiscal backend into an append-only,
     // hash-chained table. `dist/` holds them; the image must not.
     expect(copied).not.toContain("record-one-sale.js");
+  });
+
+  it("ships the sample images at the directory the installed Demo seed reads", () => {
+    expect(IMAGE_ENV.WAITRON_DEMO_MEDIA_SOURCE).toBe("/app/demo-media");
+    expect(DOCKERFILE).toContain("/src/apps/server/scripts/demo-seed/media/ /app/demo-media/");
   });
 });
 

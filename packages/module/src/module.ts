@@ -92,6 +92,19 @@ export interface ModuleBackupContribution {
   readonly restore?: RestoreHook;
 }
 
+/** One tenant-scoped table whose rows may cross from preparation into a fresh production database. */
+export interface ConfigurationTransferTable {
+  readonly name: string;
+  readonly omit?: readonly string[];
+  readonly locationColumns?: readonly string[];
+  readonly reconnect?: boolean;
+}
+
+/** Every module declares either its transferable configuration or that it has none. */
+export type ModuleConfigurationTransfer =
+  | { readonly kind: "none" }
+  | { readonly kind: "tables"; readonly tables: readonly ConfigurationTransferTable[] };
+
 /**
  * A module descriptor: a plain object the composition root collects into a list, deriving each surface
  * (migrations here; routes/workers/cards/… in later slices) by mapping over it. There is no global
@@ -151,6 +164,7 @@ export interface WaitronModule {
    * badge, so its timezone/grace/query concern leaves core (spec §4.3). */
   readonly floorAnnotations?: FloorAnnotator;
   readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
+  readonly configurationTransfer?: ModuleConfigurationTransfer;
 }
 
 /** The dependencies a module declares — its `requires.core` (a dep on "core") plus every

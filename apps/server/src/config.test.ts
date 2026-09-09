@@ -77,6 +77,9 @@ describe("loadConfig", () => {
       // MIN_ENV sets no WAITRON_ENV, so this is not a dev host — the dev device switcher (SP-C) is
       // off. `devMode` is `true` only for the literal WAITRON_ENV=dev.
       devMode: false,
+      onboardingIntent: undefined,
+      fiscalTestSubmissions: false,
+      paymentTestProviders: false,
       httpPort: 8080,
       // The plain-HTTP trust/landing listener defaults to port 80 (Task 3); `0` disables it.
       landingPort: 80,
@@ -957,6 +960,151 @@ describe("WAITRON_ENV=dev", () => {
   });
   it("an unknown value still throws server.config_invalid", () => {
     expect(() => deploymentEnvironment({ WAITRON_ENV: "staging" })).toThrow();
+  });
+});
+
+describe("WAITRON_ONBOARDING_INTENT", () => {
+  const productionRp = {
+    WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+    WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
+  };
+
+  it.each([
+    ["demo", "preproduction"],
+    ["prepare", "preproduction"],
+    ["live", "production"],
+  ] as const)("accepts %s with its required fiscal environment", (intent, environment) => {
+    const config = loadConfig(
+      {
+        ...MIN_ENV,
+        ...(environment === "production" ? productionRp : {}),
+        WAITRON_ENV: environment,
+        WAITRON_ONBOARDING_INTENT: intent,
+      },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.onboardingIntent).toBe(intent);
+  });
+
+  it("accepts the live UI intent in dev while retaining preproduction external services", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_ENV: "dev", WAITRON_ONBOARDING_INTENT: "live" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config).toMatchObject({
+      environment: "preproduction",
+      devMode: true,
+      onboardingIntent: "live",
+    });
+  });
+
+  it.each([
+    ["demo", "production"],
+    ["prepare", "production"],
+    ["live", "preproduction"],
+  ] as const)("refuses %s with %s", async (intent, environment) => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          {
+            ...MIN_ENV,
+            ...(environment === "production" ? productionRp : {}),
+            WAITRON_ENV: environment,
+            WAITRON_ONBOARDING_INTENT: intent,
+          },
+          ROOT,
+          MEDIA_ROOT,
+          STATE_ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_ONBOARDING_INTENT",
+      reason: "intent_environment_mismatch",
+    });
+  });
+
+  it("refuses an unknown intent", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          { ...MIN_ENV, WAITRON_ONBOARDING_INTENT: "training" },
+          ROOT,
+          MEDIA_ROOT,
+          STATE_ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_ONBOARDING_INTENT",
+      reason: "not_an_onboarding_intent",
+    });
+  });
+});
+
+describe("WAITRON_FISCAL_TEST_SUBMISSIONS", () => {
+  it("is disabled by default and enabled only by the explicit 'enabled' value", () => {
+    expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).fiscalTestSubmissions).toBe(false);
+    expect(
+      loadConfig(
+        { ...MIN_ENV, WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ).fiscalTestSubmissions,
+    ).toBe(true);
+  });
+
+  it("rejects an ambiguous value", () => {
+    expect(() =>
+      loadConfig(
+        { ...MIN_ENV, WAITRON_FISCAL_TEST_SUBMISSIONS: "true" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_FISCAL_TEST_SUBMISSIONS", reason: "not_enabled" },
+      }),
+    );
+  });
+});
+
+describe("WAITRON_PAYMENT_TEST_PROVIDERS", () => {
+  it("is disabled by default and enabled only by the explicit 'enabled' value", () => {
+    expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).paymentTestProviders).toBe(false);
+    expect(
+      loadConfig(
+        { ...MIN_ENV, WAITRON_PAYMENT_TEST_PROVIDERS: "enabled" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ).paymentTestProviders,
+    ).toBe(true);
+  });
+
+  it("rejects an ambiguous value", () => {
+    expect(() =>
+      loadConfig(
+        { ...MIN_ENV, WAITRON_PAYMENT_TEST_PROVIDERS: "true" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_PAYMENT_TEST_PROVIDERS", reason: "not_enabled" },
+      }),
+    );
   });
 });
 

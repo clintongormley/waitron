@@ -243,6 +243,8 @@ export interface IntegratedPayRequest {
   /** Per-transaction staff consent to accept the card offline if the network is down — meaningful only
    *  for a device-local offline queue (`StripeOnDeviceProvider`); a fixed-counter reader ignores it. */
   allowOffline?: boolean;
+  /** Test result selected by the practice UI. Only a server-mounted simulator may receive it. */
+  simulationOutcome?: "captured" | "declined";
 }
 
 /**
@@ -874,6 +876,7 @@ export async function payWorkingOrderIntegrated(
     workingOrderId: brandWorkingOrderId(req.id),
     amount: addDecimal(baseAmount, tip),
     allowOffline: req.allowOffline,
+    simulationOutcome: req.simulationOutcome,
   });
   if (result.state !== "captured" && result.state !== "accepted_offline") {
     return toPayOutcome(result, null);

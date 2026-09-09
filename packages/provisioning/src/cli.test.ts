@@ -1168,6 +1168,7 @@ describe("runCli venue", () => {
     // apply so verifactu's seed is never planned for a no-regime node.
     const contribution = (id: string): FiscalContribution => ({
       id,
+      activationReadiness: "not-applicable",
       makeBackend: () => ({ id }) as unknown as FiscalBackend,
       drain: () => Promise.reject(new Error("cli selection tests never run the drain seat")),
     });

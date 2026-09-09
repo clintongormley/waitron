@@ -11,13 +11,27 @@ describe("development account email", () => {
   };
 
   it("pins Mailpit and exposes SMTP plus its inbox only on loopback", () => {
-    expect(compose).toContain("image: axllent/mailpit:v1.27.4");
+    expect(compose).toContain("image: axllent/mailpit:v1.31.1");
     expect(compose).toContain('"127.0.0.1:1025:1025"');
     expect(compose).toContain('"127.0.0.1:8025:8025"');
   });
 
+  it("packages the same loopback-only capture service for installed nodes", () => {
+    const installed = readFileSync(join(REPO_ROOT, "deploy/compose.yml"), "utf8");
+    expect(installed).toContain("image: axllent/mailpit:v1.31.1");
+    expect(installed).toContain('"127.0.0.1:1025:1025"');
+    expect(installed).toContain('"127.0.0.1:8025:8025"');
+    expect(installed).toContain("mailpit:/data");
+  });
+
   it.each(["dev:setup", "dev:reset", "dev:onboard"])("starts Mailpit in %s", (script) => {
     expect(manifest.scripts[script]).toContain("docker compose up -d --wait db mailpit");
+  });
+
+  it("can reset directly to a fresh onboarding target", () => {
+    expect(manifest.scripts["dev:reset:onboard"]).toBe(
+      "docker compose down -v && docker compose up -d --wait db mailpit && pnpm --filter @waitron/server dev:onboard",
+    );
   });
 
   it("starts Mailpit with the shared database, never from the worktree-specific app process", () => {

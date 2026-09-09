@@ -9,6 +9,8 @@ export type {
   ModulePermission,
   FloorAnnotator,
   CoreServices,
+  ConfigurationTransferTable,
+  ModuleConfigurationTransfer,
 } from "./module.js";
 export { orderedMigrationSets, packageDirOf } from "./module.js";
 export type { VocabularyOwner } from "./vocabulary.js";

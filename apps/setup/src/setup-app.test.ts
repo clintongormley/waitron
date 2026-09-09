@@ -32,6 +32,9 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       breakGlassSecret: "bg-default",
       restarting: true,
     }),
+    restore: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
+    stageConfiguration: vi.fn(),
+    runFiscalTest: vi.fn().mockResolvedValue({ status: "accepted" }),
     ...overrides,
   } as unknown as SetupApi;
 }
@@ -82,13 +85,6 @@ async function screenHost(el: SetupApp, screen: Screen): Promise<HTMLElement> {
  * which has no DOM surface until the later `review` screen. TS-private is erased at runtime. */
 const readDraft = (el: SetupApp) => (el as unknown as { draft: DeepPartial<ProvisionBody> }).draft;
 
-/** Fires the composed `setup-role` the first `role` screen emits (primary | mirror), into the shell. */
-function role(el: SetupApp, choice: "primary" | "mirror"): void {
-  wizard(el).dispatchEvent(
-    new CustomEvent("setup-role", { detail: { role: choice }, bubbles: true, composed: true }),
-  );
-}
-
 function goto(el: SetupApp, screen: Screen): void {
   wizard(el).dispatchEvent(
     new CustomEvent("setup-goto", { detail: { screen }, bubbles: true, composed: true }),
@@ -120,6 +116,25 @@ function adoptRequest(el: SetupApp, body: unknown = adoptBody): void {
   );
 }
 
+function restoreRequest(
+  el: SetupApp,
+  request: { artifact: File; recoveryKey: string; environment: "production" | "preproduction" },
+): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("restore-requested", { detail: { request }, bubbles: true, composed: true }),
+  );
+}
+
+function configurationRequest(el: SetupApp, artifact: File, passphrase: string): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("configuration-requested", {
+      detail: { request: { artifact, passphrase } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
 /** Reads a `[data-test]` element's trimmed text out of a mounted screen's own shadow root. */
 async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<string | null> {
   const host = await screenHost(el, screen);
@@ -127,28 +142,20 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
 }
 
 describe("setup-app", () => {
-  it("renders the role screen with its heading on boot", async () => {
+  it("renders the four-choice onboarding screen on boot", async () => {
     const el = await mountSetupApp();
-    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).not.toBeNull();
-    const roleScreen = await screenHost(el, "role");
-    expect(roleScreen.shadowRoot!.querySelector("h1")?.textContent).toContain("What is this box?");
-  });
-
-  // The primary path: role=primary lands on `mode`, the head of the existing (unchanged) flow.
-  it("routes role=primary to the mode screen", async () => {
-    const el = await mountSetupApp();
-    role(el, "primary");
-    await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).toBeNull();
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain("Set up this Waitron box");
   });
 
-  // The mirror path: role=mirror lands on `connect` (Task 13 mounts the real screen there).
-  it("routes role=mirror to the connect screen", async () => {
+  it("routes Join or recover through its subchooser to the mirror connection form", async () => {
     const el = await mountSetupApp();
-    role(el, "mirror");
+    const mode = await screenHost(el, "mode");
+    mode.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-existing]")!.click();
+    await el.updateComplete;
+    const subchooser = await screenHost(el, "role");
+    subchooser.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-mirror]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
@@ -163,8 +170,6 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
     expect(getStatus).toHaveBeenCalledOnce();
-    role(el, "primary");
-    await el.updateComplete;
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
       "production",
@@ -175,10 +180,8 @@ describe("setup-app", () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
-    // The shell rendered its first screen despite the rejection, and no environment is shown on mode.
-    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).not.toBeNull();
-    role(el, "primary");
-    await el.updateComplete;
+    // The shell rendered its first screen despite the rejection, and no environment is shown on it.
+    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
   });
@@ -195,6 +198,10 @@ describe("setup-app", () => {
     const el = await mountSetupApp();
     const screens: Screen[] = [
       "connect",
+      "restore",
+      "live-source",
+      "configuration-preview",
+      "fiscal-test",
       "admin",
       "venue",
       "cert",
@@ -209,6 +216,85 @@ describe("setup-app", () => {
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector(`[data-test=screen-${screen}]`)).not.toBeNull();
     }
+  });
+
+  it("stages a preparation export and prefills the live venue draft", async () => {
+    const preview = {
+      venue: {
+        country: "ES",
+        taxId: "B12345678",
+        legalName: "Prepared SL",
+        location: {
+          id: "source-location",
+          name: "Prepared",
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Restaurant",
+          fiscalTerritory: "ES-common",
+          addressLine1: "Calle 1",
+          addressLine2: null,
+          postalCode: "28001",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00",
+        },
+        tillName: "Till",
+        seriesCode: "F",
+        rectificativeSeriesCode: "R",
+      },
+      counts: { products: 4 },
+      reconnect: ["printers"],
+    };
+    const stageConfiguration = vi.fn().mockResolvedValue(preview);
+    const el = await mountSetupApp(stubApi({ stageConfiguration }));
+    const artifact = new File(["encrypted"], "prepared.waitron-config");
+    configurationRequest(el, artifact, "a strong passphrase");
+    await flush(el);
+    expect(stageConfiguration).toHaveBeenCalledWith(artifact, "a strong passphrase");
+    expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).not.toBeNull();
+    expect(readDraft(el)).toMatchObject({
+      configurationImport: true,
+      venue: { taxId: "B12345678", location: { name: "Prepared" } },
+    });
+    expect((readDraft(el).venue?.location as Record<string, unknown>).id).toBeUndefined();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-configuration-preview]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!
+      .click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-admin]")).not.toBeNull();
+  });
+
+  it("stages the selected backup and advances to done", async () => {
+    const restore = vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true });
+    const el = await mountSetupApp(stubApi({ restore }));
+    const request = {
+      artifact: new File(["encrypted"], "waitron.backup"),
+      recoveryKey: "recovery-key",
+      environment: "production" as const,
+    };
+    restoreRequest(el, request);
+    await flush(el);
+    expect(restore).toHaveBeenCalledWith(
+      request.artifact,
+      request.recoveryKey,
+      request.environment,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it("routes a failed restore back to the restore form", async () => {
+    const restore = vi.fn().mockRejectedValue({ code: "server.internal", params: {} });
+    const el = await mountSetupApp(stubApi({ restore }));
+    restoreRequest(el, {
+      artifact: new File(["encrypted"], "waitron.backup"),
+      recoveryKey: "recovery-key",
+      environment: "production",
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-restore]")).not.toBeNull();
+    expect(await screenText(el, "restore", "[data-test=server-error]")).toContain(
+      "could not be staged",
+    );
   });
 
   // Fix (m): the venue→cert/review conditional lives in the SHELL now (it owns the merged draft), not
@@ -236,6 +322,45 @@ describe("setup-app", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).toBeNull();
+  });
+
+  it("skips certificate and fiscal services in the development onboarding target", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockResolvedValue({
+          provisioned: false,
+          environment: "preproduction",
+          developmentMode: true,
+          needs: ["venue"],
+        }),
+      }),
+    );
+    await flush(el);
+    goto(el, "venue");
+    patch(el, { mode: "live" });
+    advance(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+  });
+
+  it("runs the fiscal test and exposes Continue only after the server reports acceptance", async () => {
+    const runFiscalTest = vi.fn().mockResolvedValue({
+      status: "accepted",
+      testedAt: "2026-09-09T00:00:00.000Z",
+    });
+    const el = await mountSetupApp(stubApi({ runFiscalTest }));
+    goto(el, "fiscal-test");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-fiscal-test]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=run]")!
+      .click();
+    await flush(el);
+    expect(runFiscalTest).toHaveBeenCalledOnce();
+    expect(
+      el
+        .shadowRoot!.querySelector<HTMLElement>("[data-test=screen-fiscal-test]")!
+        .shadowRoot!.querySelector("[data-test=continue]"),
+    ).not.toBeNull();
   });
 
   // Prove-by-deletion of the `fiscalTerritory === "ES-common"` operand: drop it (leaving only
@@ -341,8 +466,8 @@ describe("setup-app", () => {
   // The done screen's first-run backup nudge (Task 8) is gated on the wizard's own DEMO/LIVE choice —
   // NOT `config.devMode` (`WAITRON_ENV=dev`), which this browser wizard never observes. `draft.mode`
   // is what the shell already holds by the time provisioning succeeds, so it is threaded straight
-  // through as the done screen's `devMode` property.
-  it("threads the demo/live choice through to the done screen as devMode", async () => {
+  // through as the done screen's `onboardingIntent` property.
+  it("threads demo intent through to the done screen", async () => {
     const el = await mountSetupApp(
       stubApi({
         provision: vi
@@ -354,7 +479,7 @@ describe("setup-app", () => {
     provisionRequest(el);
     await flush(el);
     const host = await screenHost(el, "done");
-    expect((host as unknown as { devMode: boolean }).devMode).toBe(true);
+    expect((host as unknown as { onboardingIntent: string }).onboardingIntent).toBe("demo");
   });
 
   it("does not treat a live provision as demo mode on the done screen", async () => {
@@ -369,7 +494,22 @@ describe("setup-app", () => {
     provisionRequest(el);
     await flush(el);
     const host = await screenHost(el, "done");
-    expect((host as unknown as { devMode: boolean }).devMode).toBe(false);
+    expect((host as unknown as { onboardingIntent: string }).onboardingIntent).toBe("live");
+  });
+
+  it("does not treat a prepared provision as demo mode on the done screen", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi
+          .fn()
+          .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+      }),
+    );
+    patch(el, { mode: "prepare" });
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "done");
+    expect((host as unknown as { onboardingIntent: string }).onboardingIntent).toBe("prepare");
   });
 
   it("shows the in-flight state with a DISABLED provision control while the POST is pending", async () => {
@@ -413,6 +553,15 @@ describe("setup-app", () => {
     expect(await screenText(el, "review", "[data-test=error]")).toContain("rejected the details");
   });
 
+  it("routes a server-rejected admin email back to review with an actionable message", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "person.email_invalid", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(await screenText(el, "review", "[data-test=error]")).toContain("admin email");
+  });
+
   it("routes setup.provisioning_secret_required back to the cert screen", async () => {
     const provision = vi.fn().mockRejectedValue({
       code: "setup.provisioning_secret_required",
@@ -436,6 +585,17 @@ describe("setup-app", () => {
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
+  });
+
+  it("maps a conflicting saved operation to a terminal recovery message", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.operation_conflict", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("saved setup");
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reload]")).not.toBeNull();
   });
 
   it.each(["setup.already_provisioned", "deployment.already_stamped"])(
@@ -616,7 +776,7 @@ describe("setup-app", () => {
 
   it("mounts the real connect screen on the mirror path", async () => {
     const el = await mountSetupApp();
-    role(el, "mirror");
+    goto(el, "connect");
     await el.updateComplete;
     const connect = await screenHost(el, "connect");
     expect(connect.shadowRoot!.querySelector("h1")?.textContent).toContain(
@@ -777,6 +937,14 @@ describe("setup-app", () => {
 describe("assembleBody", () => {
   it("omits the aeatCert key entirely for a demo draft (never null/empty)", () => {
     const body = assembleBody({ mode: "demo", venue: { taxId: "B1" } });
+    expect("aeatCert" in body).toBe(false);
+  });
+
+  it("drops a stale certificate from a Prepare draft", () => {
+    const body = assembleBody({
+      mode: "prepare",
+      aeatCert: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+    });
     expect("aeatCert" in body).toBe(false);
   });
 

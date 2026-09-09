@@ -4,6 +4,10 @@ import { baseStyles } from "@waitron/ui";
 // Side-effect imports register the screen custom elements this shell only names as tags below.
 import "./screens/role-screen.js";
 import "./screens/connect-screen.js";
+import "./screens/restore-screen.js";
+import "./screens/live-source-screen.js";
+import "./screens/configuration-preview-screen.js";
+import "./screens/fiscal-test-screen.js";
 import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
@@ -11,23 +15,41 @@ import "./screens/cert-screen.js";
 import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
 import "./screens/done-screen.js";
-import type { AdoptBody, ApiError, ProvisionBody, SetupApi } from "./api/client.js";
+import type {
+  AdoptBody,
+  ApiError,
+  ConfigurationPreview,
+  ProvisionBody,
+  SetupApi,
+} from "./api/client.js";
+import type { ConfigurationRequestDetail, RestoreRequestDetail } from "./events.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
- * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The FIRST screen is `role`
- * (primary | mirror), which forks the rest of the flow (spec §8, C2b):
+ * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The first screen is `mode`,
+ * which offers the four product journeys:
  *
- * - `role` = **primary** → the existing provisioning flow, unchanged: `mode` (demo/live) → `admin`
- *   (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
- *   `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). The venue step
- *   routes to `cert` only for a live ES-common venue, otherwise straight to `review`.
- * - `role` = **mirror** → `connect` (connect-to-primary), which reuses the shared `provisioning` /
- *   `done` terminal screens. The `connect` screen itself is built in Task 13; the name is in the
- *   union here so the shell can already route to it.
+ * - Demo or Prepare → `admin` (first operator) → `venue` (tenant + location + series) → `review`
+ *   (confirm + POST) → `provisioning` (in flight) → `done` (restarting).
+ * - Go live → `live-source`; importing a prepared configuration adds `configuration-preview`, then
+ *   both sources follow `admin` → `venue` → `cert` (AEAT, live ES-common only) → `fiscal-test` →
+ *   `review` → `provisioning` → `done`. Development onboarding skips the real external-service steps.
+ * - Join or recover → `role`, whose mirror branch opens `connect` and backup branch opens `restore`.
  */
 export type Screen =
-  "role" | "connect" | "mode" | "admin" | "venue" | "cert" | "review" | "provisioning" | "done";
+  | "role"
+  | "connect"
+  | "restore"
+  | "live-source"
+  | "configuration-preview"
+  | "fiscal-test"
+  | "mode"
+  | "admin"
+  | "venue"
+  | "cert"
+  | "review"
+  | "provisioning"
+  | "done";
 
 /**
  * A recursively-optional view of `T`: every field, at every depth, may be absent — an array is left
@@ -70,11 +92,10 @@ function deepMerge(base: unknown, patch: unknown): unknown {
  *
  * The one thing it does actively is the `aeatCert` gate, which is a FISCAL guard, not a tidiness one.
  * The cert is included ONLY for a LIVE provision that actually carries a PFX; otherwise the key is
- * DROPPED entirely (never sent as `null` or empty). Gating on `mode` — not just on "a PFX was read" —
- * is load-bearing: an operator can go live → cert (fill the PFX) → Back → mode → switch to Demo →
- * Provision, and the demo path skips the cert screen but the draft still holds the cert. Without the
- * mode gate, `assembleBody` would POST that stale certificate onto a DEMO/preproduction tenant and the
- * server would seal a real AEAT signing certificate into it — unrepairable (CLAUDE.md §5). The server
+ * DROPPED entirely (never sent as `null` or empty). The mode gate matters because an operator can go
+ * live → cert (fill the PFX) → Back → mode → switch to Demo → Provision. Without it, `assembleBody`
+ * would POST that stale certificate onto a DEMO/preproduction tenant and the server would seal a real
+ * AEAT signing certificate into it — unrepairable (CLAUDE.md §5). The server
  * distinguishes "no certificate" from "malformed" by the key's ABSENCE (the symmetric presence gate in
  * `apps/server/src/setup-api.ts`, which reaches the regime's secret validator through the fiscal
  * contribution's `provisioningSecret` seat) and answers a live production venue with no cert
@@ -166,8 +187,8 @@ export class SetupApp extends LitElement {
    * attribute string. */
   @property({ attribute: false }) api!: SetupApi;
 
-  /** Which screen is showing. Defaults to `role`, the wizard's first step (primary | mirror). */
-  @state() private screen: Screen = "role";
+  /** Which screen is showing. Defaults to `mode`, the four-choice onboarding entry point. */
+  @state() private screen: Screen = "mode";
 
   /**
    * The box's stamped deployment environment, read from `GET /setup-api/status` on boot. `undefined`
@@ -175,6 +196,7 @@ export class SetupApp extends LitElement {
    * before provisioning a real `production` venue.
    */
   @state() private environment?: "production" | "preproduction";
+  @state() private developmentMode = false;
 
   /**
    * The accumulated provision request, built up a screen at a time. Seeded with the defaults every
@@ -213,6 +235,12 @@ export class SetupApp extends LitElement {
    * normally; cleared before every new adopt POST. The mirror path's analogue of `venueError`.
    */
   @state() private connectError?: string;
+  @state() private restoreError?: string;
+  @state() private configurationError?: string;
+  @state() private configurationPreview?: ConfigurationPreview;
+  @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
+  @state() private fiscalTestRunning = false;
+  @state() private fiscalTestError?: string;
 
   /**
    * The break-glass secret the adopt path minted, captured from the 200 to hand to the `done` screen.
@@ -259,6 +287,7 @@ export class SetupApp extends LitElement {
       const status = await this.api.getStatus();
       if (!this.isConnected) return;
       this.environment = status.environment;
+      this.developmentMode = status.developmentMode === true;
     } catch {
       // Leave `environment` undefined — a failed status read is never a reason to block setup.
     }
@@ -272,22 +301,6 @@ export class SetupApp extends LitElement {
   #onPatch(event: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>): void {
     event.stopPropagation();
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
-  }
-
-  /**
-   * Resolve the first `role` screen's choice (spec §8, C2b). The role→next-screen conditional lives
-   * HERE, in the shell, not in the role screen — the same altitude fix (m) that lifted venue→`cert`/
-   * `review` out of a screen (backlog #149). A **primary** enters the existing provisioning flow at
-   * `mode` (unchanged); a **mirror** goes to the connect-to-primary screen, which skips
-   * `mode`/`admin`/`venue`/`cert`/`review` entirely (a mirror has no demo/live choice, seeds no
-   * admin, and files nothing). Same boundary `stopPropagation` as {@link SetupApp.#onPatch}.
-   */
-  #onRole(event: CustomEvent<{ role: "primary" | "mirror" }>): void {
-    event.stopPropagation();
-    // A fresh role choice starts a clean flow — drop any stale adopt banner from an earlier attempt so
-    // re-entering the connect screen doesn't show a rejection the operator has since navigated away from.
-    this.connectError = undefined;
-    this.screen = event.detail.role === "mirror" ? "connect" : "mode";
   }
 
   /**
@@ -305,6 +318,8 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.reviewError = undefined;
     this.connectError = undefined;
+    this.restoreError = undefined;
+    this.configurationError = undefined;
     this.screen = event.detail.screen;
   }
 
@@ -313,7 +328,7 @@ export class SetupApp extends LitElement {
    * {@link SetupApp.draft}. The venue→`cert`/`review` decision lives HERE, not in the venue screen: the
    * shell owns the draft, so it — mirroring `apps/dashboard/src/dashboard-app.ts`'s conditional routing
    * — is where the conditional belongs. A live ES-common venue still needs the AEAT certificate
-   * (`cert`); every other case (demo, or a non-ES-common territory) goes straight to `review`.
+   * (`cert`) unless this is the managed development walkthrough; every other case goes to `review`.
    *
    * Same boundary `stopPropagation` and stale-banner clear as {@link SetupApp.#onGoto}: advancing off
    * the venue form is a user-initiated navigation, so a routed-back `venueError` must not linger.
@@ -325,7 +340,9 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.reviewError = undefined;
     this.screen =
-      this.draft.mode === "live" && this.draft.venue?.location?.fiscalTerritory === "ES-common"
+      this.draft.mode === "live" &&
+      this.draft.venue?.location?.fiscalTerritory === "ES-common" &&
+      !this.developmentMode
         ? "cert"
         : "review";
   }
@@ -408,14 +425,29 @@ export class SetupApp extends LitElement {
         this.screen = "review";
         return;
       }
+      case "person.email_invalid":
+        this.reviewError = "The admin email address is invalid. Check it, then provision again.";
+        this.screen = "review";
+        return;
       case "setup.provisioning_secret_required":
         this.screen = "cert";
+        return;
+      case "setup.fiscal_test_required":
+        this.fiscalTestStatus = undefined;
+        this.fiscalTestError = "Run an accepted fiscal test before activating production.";
+        this.screen = "fiscal-test";
         return;
       case "setup.already_provisioning":
         this.provisionMessage = "Setup is already in progress on this box.";
         this.provisionCanRetry = false;
         // A provision is running elsewhere — no re-POST, but a reload re-reads status so the operator
         // isn't stranded on a dead-end alert.
+        this.provisionReloadLabel = "Reload";
+        return;
+      case "setup.operation_conflict":
+        this.provisionMessage =
+          "This box has saved setup work for a different request. Resume the original setup or contact support.";
+        this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":
@@ -468,6 +500,73 @@ export class SetupApp extends LitElement {
     }
   }
 
+  async #onRestoreRequested(event: CustomEvent<{ request: RestoreRequestDetail }>): Promise<void> {
+    event.stopPropagation();
+    this.restoreError = undefined;
+    this.provisionMessage = undefined;
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = undefined;
+    this.screen = "provisioning";
+    try {
+      const request = event.detail.request;
+      await this.api.restore(request.artifact, request.recoveryKey, request.environment);
+      if (!this.isConnected) return;
+      this.screen = "done";
+    } catch (error) {
+      if (!this.isConnected) return;
+      const code = (error as { code?: unknown }).code;
+      this.restoreError =
+        typeof code === "string"
+          ? `The backup could not be staged. Check the file, key and environment. (${code})`
+          : "The backup could not be staged. Check the connection and try again.";
+      this.screen = "restore";
+    }
+  }
+
+  async #onConfigurationRequested(
+    event: CustomEvent<{ request: ConfigurationRequestDetail }>,
+  ): Promise<void> {
+    event.stopPropagation();
+    this.configurationError = undefined;
+    try {
+      const preview = await this.api.stageConfiguration(
+        event.detail.request.artifact,
+        event.detail.request.passphrase,
+      );
+      if (!this.isConnected) return;
+      const location = Object.fromEntries(
+        Object.entries(preview.venue.location).filter(([key]) => key !== "id"),
+      ) as ProvisionBody["venue"]["location"];
+      this.draft = deepMerge(this.draft, {
+        configurationImport: true,
+        venue: { ...preview.venue, location },
+      }) as DeepPartial<ProvisionBody>;
+      this.configurationPreview = preview;
+      this.screen = "configuration-preview";
+    } catch {
+      if (!this.isConnected) return;
+      this.configurationError =
+        "The configuration export could not be opened. Check the file and passphrase.";
+      this.screen = "live-source";
+    }
+  }
+
+  async #onFiscalTestRequested(event: CustomEvent): Promise<void> {
+    event.stopPropagation();
+    this.fiscalTestRunning = true;
+    this.fiscalTestError = undefined;
+    try {
+      const result = await this.api.runFiscalTest(assembleBody(this.draft));
+      if (!this.isConnected) return;
+      this.fiscalTestStatus = result.status === "not-applicable" ? "accepted" : result.status;
+    } catch {
+      if (!this.isConnected) return;
+      this.fiscalTestError = "The fiscal test could not run. Check the connection and try again.";
+    } finally {
+      if (this.isConnected) this.fiscalTestRunning = false;
+    }
+  }
+
   /**
    * Map a rejected adopt to the wizard's next state (C2b). Two shapes:
    *
@@ -514,20 +613,23 @@ export class SetupApp extends LitElement {
   }
 
   override render(): TemplateResult {
-    // The screens emit these composed events UP to the shell: `setup-role` (the first screen's
-    // primary/mirror choice, routed here), `setup-patch` (merge a slice into the draft), `setup-goto`
+    // The screens emit these composed events UP to the shell: `setup-patch` (merge a slice into the draft), `setup-goto`
     // (flip the visible screen), `setup-advance` (the venue screen's conditional next-step, resolved
     // here against the draft), and `provision-requested` (review's Provision and the provisioning
     // screen's retry both fire it). Wiring them on the container means each screen talks back without
     // the shell knowing which one is mounted.
     return html`<div
       class="wizard"
-      @setup-role=${(e: CustomEvent<{ role: "primary" | "mirror" }>) => this.#onRole(e)}
       @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
       @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
       @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
       @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
       @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
+      @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
+        void this.#onRestoreRequested(e)}
+      @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
+        void this.#onConfigurationRequested(e)}
+      @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
     >
       ${this.#renderScreen()}
     </div>`;
@@ -536,20 +638,44 @@ export class SetupApp extends LitElement {
   /**
    * The mounted screen for the current {@link SetupApp.screen} — each real screen carries the
    * `data-test="screen-*"` hook on its own host so the shell's screen-switching tests stay uniform.
-   * The `role` screen (the wizard's first step) is the `default`.
+   * The four-choice `mode` screen is the default.
    *
-   * `role` forks the flow (primary → `mode`, mirror → `connect`); `mode` reads `environment` (to warn
+   * `mode` reads `environment` (to warn
    * on a production box); `admin`, `venue`, `cert` and `review` read the accumulated `draft` (to seed
    * their fields / summarise it, so stepping Back is non-destructive); `venue` and `review` also take a
    * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
    * retry flag + terminal reload label; `done` takes the `api` to poll during the restart, the
-   * `draft.mode`-derived `devMode` (see the `case "done"` comment below) to gate its first-run backup
+   * `draft.mode` (see the `case "done"` comment below) to label the result and gate its first-run backup
    * nudge, and — on the mirror path — the once-only `breakGlassSecret` to surface for the operator to
    * record. All are passed as properties, since neither an api nor a draft object can travel as an
    * attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
+      case "role":
+        return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
+      case "restore":
+        return html`<setup-restore-screen
+          data-test="screen-restore"
+          .errorMessage=${this.restoreError}
+        ></setup-restore-screen>`;
+      case "live-source":
+        return html`<setup-live-source-screen
+          data-test="screen-live-source"
+          .errorMessage=${this.configurationError}
+        ></setup-live-source-screen>`;
+      case "configuration-preview":
+        return html`<setup-configuration-preview-screen
+          data-test="screen-configuration-preview"
+          .preview=${this.configurationPreview}
+        ></setup-configuration-preview-screen>`;
+      case "fiscal-test":
+        return html`<setup-fiscal-test-screen
+          data-test="screen-fiscal-test"
+          .status=${this.fiscalTestStatus}
+          .running=${this.fiscalTestRunning}
+          .errorMessage=${this.fiscalTestError}
+        ></setup-fiscal-test-screen>`;
       case "mode":
         return html`<setup-mode-screen
           data-test="screen-mode"
@@ -592,7 +718,8 @@ export class SetupApp extends LitElement {
           .reloadLabel=${this.provisionReloadLabel}
         ></setup-provisioning-screen>`;
       case "done":
-        // `devMode` is the done screen's first-run backup-nudge gate. It is NOT `config.devMode`
+        // `draft.mode` is the done screen's visible result and first-run backup-nudge gate. It is not
+        // `config.devMode`
         // (`WAITRON_ENV=dev`, `apps/server/src/config.ts`'s `isDevMode`) — that flag governs the dev
         // per-tab device switcher and is never set on a box an operator runs this wizard against.
         // The wizard's own DEMO/LIVE choice (`draft.mode`, mode-screen.ts) is what "demo mode" means
@@ -604,10 +731,13 @@ export class SetupApp extends LitElement {
           data-test="screen-done"
           .api=${this.api}
           .breakGlassSecret=${this.breakGlassSecret}
-          .devMode=${this.draft.mode === "demo"}
+          .onboardingIntent=${this.draft.mode}
         ></setup-done-screen>`;
       default:
-        return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
+        return html`<setup-mode-screen
+          data-test="screen-mode"
+          .environment=${this.environment}
+        ></setup-mode-screen>`;
     }
   }
 }

@@ -52,6 +52,7 @@ export type {
   SettledInitiated,
 } from "./store.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
+export { SimulatorPaymentProvider } from "./simulator.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
 export { getPaymentPolicy, resolveOfflineDecision } from "./policy.js";
@@ -73,3 +74,4 @@ export type {
   SettlementReportSource,
 } from "./reconcile.js";
 export { PAYMENTS_CLASSIFICATION } from "./classification.js";
+export { PAYMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";

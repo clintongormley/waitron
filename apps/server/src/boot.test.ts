@@ -28,6 +28,7 @@ import {
 } from "@waitron/db/testing/lifecycle.js";
 import { isAppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { emptyDrainResult } from "@waitron/fiscal";
 // The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
 // `envios` row — mirroring the established cross-package convention (e.g.
 // `@waitron/payments/test/seed.js` from `packages/payments-stripe`'s suites): no `exports` map
@@ -1610,20 +1611,17 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  it("setup mode: a LIVE ES-common provision WITH an AEAT cert seals it into the tenant's fiscal.aeat vault, stamps production, restarts", async () => {
-    // The legitimate seal path end-to-end — the assertion the (now-inverted) demo+cert test used to
-    // make, moved onto the CORRECT path. A LIVE ES-common venue files to the real AEAT, so its cert
-    // IS expected (`expected` in setup-api.ts): the endpoint accepts it and seals it through the fiscal
+  it("setup mode: an accepted fiscal test lets LIVE ES-common seal its certificate, stamp production and restart", async () => {
+    // The legitimate readiness + seal path end-to-end. A LIVE ES-common venue files to AEAT, so its cert
+    // IS expected (`expected` in setup-api.ts): the fiscal-test endpoint records a sample through the
+    // real backend, an accepted contribution result authorizes activation, and provisioning seals the cert through the fiscal
     // contribution's `provisioningSecret.seal` seat, wired to boot.ts's real `db: ownerDb` + `ring`
     // injection — the ONLY full-boot exercise of that binding, and of the ring `boot.ts` reads back off
     // `secrets.env` (a broken recovery would
     // throw here). Reuses `mintMtlsMaterial`'s PKCS#12 fixture, as the mTLS-transport test does.
     //
-    // No real AEAT call is made and none can be: a FRESH provision seeds NO `envios`, and a box in
-    // SETUP mode never starts the drain worker (it enters trading mode only after the restart, which is
-    // mocked here) — so `resolveClient`/`mtlsFetch` are never reached even though a usable `fiscal.aeat`
-    // credential now exists (the transport-seam obstacle in this file's header is about the drain, not
-    // the SEAL). The module-mocked `undici` fetch is the belt-and-braces backstop.
+    // No real AEAT call is made: the contribution's drain result is replaced with one accepted record.
+    // Its normal transport behavior remains covered by the fiscal package and the explicit preproduction test.
     //
     // The box boots with `WAITRON_ENV: "preproduction"` (as the demo tests above) even though this
     // provision stamps PRODUCTION: `provisionVenue` stamps `req.environment` — the endpoint's
@@ -1637,6 +1635,10 @@ describe("startServer, against a real container as the deployment role", () => {
     const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
     const check = await pg.connect();
     const material = mintMtlsMaterial();
+    const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
+    const drain = vi
+      .spyOn(fiscal, "drain")
+      .mockResolvedValue({ ...emptyDrainResult(), recordsSubmitted: 1, recordsAccepted: 1 });
     try {
       await withMockedKill(async (kills) => {
         const server = await startServer({
@@ -1660,6 +1662,14 @@ describe("startServer, against a real container as the deployment role", () => {
               certKind: "representante",
             },
           };
+          const tested = await fetch(`https://127.0.0.1:${port}/setup-api/fiscal-test`, {
+            ...via,
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          expect(tested.status).toBe(200);
+          expect(await tested.json()).toMatchObject({ status: "accepted" });
           const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
             ...via,
             method: "POST",
@@ -1692,6 +1702,7 @@ describe("startServer, against a real container as the deployment role", () => {
         }
       });
     } finally {
+      drain.mockRestore();
       await check.close();
       await pg.stop();
       await rm(stateDir, { recursive: true, force: true });
@@ -2259,6 +2270,9 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIN_TICK_MS: "1000",
           // Comfortably above the distinctive skip-retry value below, so neither clamp can mask it.
           WAITRON_MAX_TICK_MS: "600000",
+          // Preparation intentionally performs no fiscal submissions. Use production here because
+          // this test exercises the live drain's missing-credential retry schedule.
+          WAITRON_ENV: "production",
           // Distinctive on purpose: not 5000 (`WAITRON_MIN_TICK_MS`'s own default — the old floor
           // this branch exists to stop reporting), not 300000 (`@waitron/scheduler`'s own
           // `DEFAULTS.skipRetryMs`, which this test must not pass by coincidence with the fallback),

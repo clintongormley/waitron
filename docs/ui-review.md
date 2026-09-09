@@ -11,7 +11,8 @@ walkthrough survives a context clear.
 <http://localhost:5191>, setup <http://localhost:5192>. The till enrols itself on first load in dev
 mode — no code, no approval step. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
 
-**Running the stack from a worktree.** Start it with `wa-wt <worktree-name>`
+**Running the stack from a worktree.** Start it with `wa-wt demo <worktree-name>` or
+`wa-wt onboarding <worktree-name>`
 (`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. The dev Postgres is ONE
 container for every checkout (`docker-compose.yml`, port 5432) and `apps/server/.env` is a
 per-DATABASE artefact (venue ids + the credentials key), not a per-checkout one, so a fresh worktree
@@ -19,12 +20,11 @@ has none and `worktree.py new` does not copy it. `wa-wt` brings the container up
 compose project `waitron` (an unqualified `docker compose up` from a worktree names the project after
 the directory and starts a second `db` with an empty volume on the same port; the stray
 `waitron-feat-onboarding-slice1b-setup-mode-boot_waitron-dev-db` volume is what that leaves behind),
-copies the newest sibling `.env` into a worktree that has none, runs `pnpm dev:setup` only when no
-checkout has one, and follows the log. The server migrates the shared DB forward at boot, so switching
-worktrees is fine; a venue seeded before the code's seed data (e.g. before device profiles) makes
-`dev:setup` refuse, and the fix is `wa-wt reset [name]` (throwaway preproduction data): it wipes the
-volume, re-provisions from that checkout's code, copies the new `.env` to every other checkout and
-restarts. In dev mode the till re-enrols itself on first load after that — no code, no approval step.
+copies the current target's `.env` to the other checkouts and follows the log. Changing between demo
+and onboarding wipes the throwaway application database, preserves the shared development CA, and
+rebuilds the selected target. Use `wa-wt reset demo [name]` or `wa-wt reset onboarding [name]` to
+rebuild without changing target. In demo mode the till re-enrols itself on first load after that — no
+code, no approval step.
 `/health` reports `ok:false` on the dev venue because the fiscal drain has no AEAT credentials; the
 till and API serve normally regardless.
 
