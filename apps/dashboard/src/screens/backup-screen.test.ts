@@ -278,15 +278,79 @@ describe("backup-screen", () => {
     expect(api.applyBackup).not.toHaveBeenCalled();
   });
 
-  it("rotate confirms with the new minted key and refreshes", async () => {
+  it("gates rotate on the old key being re-shown first, then confirms with the new minted key", async () => {
     const api = stubApi({}, ENABLED);
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
+    // Saved-it ticked but the OLD key not yet re-shown → rotate stays disabled (§8 step 1).
     tickCheckbox(el, "[data-test=saved-it]");
     await el.updateComplete;
+    expect(q(el, "[data-test=rotate-confirm]")!.hasAttribute("disabled")).toBe(true);
+    // Re-show the current key, then it enables and confirms with the new minted key.
+    q(el, "[data-test=show-old-key]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=rotate-confirm]")!.hasAttribute("disabled")).toBe(false);
     q(el, "[data-test=rotate-confirm]")!.click();
     await flush(el);
     expect(api.rotateBackupKey).toHaveBeenCalledWith({ recoveryKey: "MINTED-KEY-abcdef012345" });
+  });
+
+  it("lets an enabled box change its destination through applyBackup, reusing the current key", async () => {
+    const rotatedEnabled: BackupStatusView = {
+      ...ENABLED,
+      keyRotatedAt: "2026-09-05T09:00:00Z",
+    };
+    const api = stubApi({}, rotatedEnabled);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    // The configure form is not shown outright on an enabled box; an edit affordance is.
+    expect(q(el, "[data-test=destination]")).toBeNull();
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+    // Entering edit fetched the current key and prefilled the destination from status.
+    expect(api.getBackupRecoveryKey).toHaveBeenCalled();
+    expect((q(el, "[data-test=destination]") as HTMLElement & { value: string }).value).toBe(
+      "/mnt/usb/waitron",
+    );
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron-2");
+    await el.updateComplete;
+    q(el, "[data-test=save-settings]")!.click();
+    await flush(el);
+    // Re-applied under the SAME (current) key — the running schedule/retention are preserved.
+    expect(api.applyBackup).toHaveBeenCalledWith({
+      destinationDir: "/mnt/usb/waitron-2",
+      recoveryKey: "OLD-KEY-xyz789012345",
+      schedule: { kind: "wall-clock", days: "daily", at: "auto" },
+      retention: { count: 7, days: 30 },
+    });
+  });
+
+  it("surfaces keyRotatedAt and archiveUnderCurrentKey in the status view", async () => {
+    const status: BackupStatusView = {
+      ...ENABLED,
+      keyRotatedAt: "2026-09-05T09:00:00Z",
+      archiveUnderCurrentKey: false,
+    };
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, status),
+    });
+    await flush(el);
+    expect(q(el, "[data-test=key-rotated]")).not.toBeNull();
+    expect(q(el, "[data-test=archive-current]")!.textContent).toContain(
+      t("backup.status.archive_no"),
+    );
+  });
+
+  it("labels the minted key's download file with the minted key, not the running key's fingerprint", async () => {
+    // The running box already has key fingerprint "ab12cd34"; the freshly-minted key's download file
+    // must NOT carry that (finding 4 — the old key's fingerprint mislabelling the new key's file).
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, ENABLED),
+    });
+    await flush(el);
+    const download = q(el, "[data-test=download-key]") as HTMLAnchorElement;
+    expect(download.getAttribute("download")).toMatch(/^waitron-recovery-key-/);
+    expect(download.getAttribute("download")).not.toContain("ab12cd34");
   });
 
   it("is read-only on a non-primary node and does not mint a key", async () => {

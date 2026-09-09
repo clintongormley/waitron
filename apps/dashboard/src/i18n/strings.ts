@@ -322,6 +322,10 @@ export const en = {
   "backup.status.stale": "out of date",
   "backup.status.fresh": "up to date",
   "backup.status.fingerprint": "Key fingerprint",
+  "backup.status.rotated": "Key last changed",
+  "backup.status.archive_current": "Backup under the current key",
+  "backup.status.archive_yes": "yes",
+  "backup.status.archive_no": "not yet",
   "backup.status.managed":
     "Backups on this box are managed by its environment — there is nothing to change here.",
   "backup.status.not_primary":
@@ -354,6 +358,10 @@ export const en = {
   "backup.retention.count": "Keep at most (backups)",
   "backup.retention.days": "Delete anything older than (days)",
   "backup.apply": "Turn on backups",
+  "backup.edit.button": "Change destination or schedule",
+  "backup.edit.title": "Change backup settings",
+  "backup.edit.save": "Save changes",
+  "backup.edit.cancel": "Cancel",
   "backup.rotate.title": "Change the recovery key",
   "backup.rotate.warning":
     "Backups taken before now still need the OLD key — keep it safe too. Changing the key does not re-encrypt older backups.",
@@ -995,6 +1003,10 @@ export const es: Record<StringKey, string> = {
   "backup.status.stale": "desactualizada",
   "backup.status.fresh": "al día",
   "backup.status.fingerprint": "Huella de la clave",
+  "backup.status.rotated": "Última vez que cambió la clave",
+  "backup.status.archive_current": "Copia con la clave actual",
+  "backup.status.archive_yes": "sí",
+  "backup.status.archive_no": "todavía no",
   "backup.status.managed":
     "Las copias de seguridad de esta caja las gestiona su entorno; aquí no hay nada que cambiar.",
   "backup.status.not_primary":
@@ -1028,6 +1040,10 @@ export const es: Record<StringKey, string> = {
   "backup.retention.count": "Guardar como máximo (copias)",
   "backup.retention.days": "Borrar todo lo anterior a (días)",
   "backup.apply": "Activar las copias",
+  "backup.edit.button": "Cambiar el destino o la programación",
+  "backup.edit.title": "Cambiar los ajustes de copia",
+  "backup.edit.save": "Guardar cambios",
+  "backup.edit.cancel": "Cancelar",
   "backup.rotate.title": "Cambiar la clave de recuperación",
   "backup.rotate.warning":
     "Las copias hechas antes de ahora siguen necesitando la clave ANTIGUA; guárdala también. Cambiar la clave no vuelve a cifrar las copias anteriores.",

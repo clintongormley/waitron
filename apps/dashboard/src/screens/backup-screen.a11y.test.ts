@@ -117,6 +117,18 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("renders the enabled edit-settings form accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi(ENABLED) },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the error banner accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",

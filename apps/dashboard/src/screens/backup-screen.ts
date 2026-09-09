@@ -208,6 +208,13 @@ export class BackupScreen extends LitElement {
   // Rotate: the re-shown OLD key (null until the operator asks to see it).
   @state() private oldKey: string | null = null;
 
+  // Edit-settings (an ALREADY-ENABLED box): change destination + policy without touching the key.
+  @state() private editSettings = false;
+  /** The CURRENT running key, fetched when entering edit mode so a settings change re-applies under the
+   * SAME key (editing settings never re-mints or rotates — only `rotate` changes the key). Held off the
+   * reactive state so it is never rendered. */
+  #reuseKey: string | null = null;
+
   /** A stable per-instance timestamp for the downloaded key file's name + body, so an operator with
    * several boxes can tell the files apart and re-renders do not shift the name. */
   readonly #stamp = new Date().toISOString();
@@ -268,7 +275,13 @@ export class BackupScreen extends LitElement {
   }
 
   get #rotateDisabled(): boolean {
-    return this.submitting || !this.savedIt || this.#effectiveKey === "";
+    // The OLD key must be re-shown first (§8 step 1): rotating overwrites it, so the operator has to
+    // have had the chance to record it — `oldKey` is non-null only after they revealed it.
+    return this.submitting || !this.savedIt || this.#effectiveKey === "" || this.oldKey === null;
+  }
+
+  get #saveSettingsDisabled(): boolean {
+    return this.submitting || this.destinationDir.trim() === "" || this.#reuseKey === null;
   }
 
   #buildSchedule(): BackupSchedule {
@@ -350,20 +363,98 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** The download filename disambiguated by the box (its key fingerprint when known) and the session
-   * timestamp, so an operator holding several boxes' keys can tell the files apart. */
-  #nodeLabel(): string {
-    return this.status?.keyFingerprint ?? "box";
+  /** Enter edit mode for an ALREADY-ENABLED box: fetch the CURRENT key (so the re-apply keeps it) and
+   * PREFILL the destination + policy from the running status. A rejection becomes the `errorKey` banner. */
+  async #startEdit(): Promise<void> {
+    this.errorKey = null;
+    try {
+      const { key } = await this.api.getBackupRecoveryKey();
+      if (key === null) {
+        // An enabled box always has a key; a null here means nothing to re-apply against.
+        this.errorKey = "backup.recovery_key_missing";
+        return;
+      }
+      this.#reuseKey = key;
+      if (this.status) this.#prefillFromStatus(this.status);
+      this.editSettings = true;
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
   }
 
-  #keyFileName(): string {
-    return `waitron-recovery-key-${this.#nodeLabel()}-${this.#fileStamp}.txt`;
+  /** Change destination + policy on an enabled box, re-applying under the SAME (current) key — editing
+   * settings never re-mints or rotates. A rejection becomes the `errorKey` banner. */
+  async #saveSettings(): Promise<void> {
+    if (this.#saveSettingsDisabled || this.#reuseKey === null) return;
+    this.errorKey = null;
+    this.submitting = true;
+    const body: BackupApplyBody = {
+      destinationDir: this.destinationDir.trim(),
+      recoveryKey: this.#reuseKey,
+      schedule: this.#buildSchedule(),
+      retention: { count: this.retainCount, days: this.retainDays },
+    };
+    try {
+      this.status = await this.api.applyBackup(body);
+      this.editSettings = false;
+      this.#reuseKey = null;
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
+    }
+  }
+
+  #cancelEdit(): void {
+    this.editSettings = false;
+    this.#reuseKey = null;
+    this.errorKey = null;
+  }
+
+  /** Seed the destination + policy draft from the running status, so edit mode opens on the CURRENT
+   * settings rather than blank defaults. A non-`wall-clock` running schedule (the box-image `interval`
+   * form the UI cannot author) leaves the schedule controls at their defaults. */
+  #prefillFromStatus(s: BackupStatusView): void {
+    this.destinationDir = s.destinations[0]?.dir ?? "";
+    if (s.schedule?.kind === "wall-clock") {
+      this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
+      if (Array.isArray(s.schedule.days)) this.weekdays = [...s.schedule.days];
+      if (s.schedule.at === "auto") {
+        this.timeMode = "auto";
+      } else {
+        this.timeMode = "fixed";
+        const pad = (n: number) => String(n).padStart(2, "0");
+        this.atTime = `${pad(s.schedule.at.hour)}:${pad(s.schedule.at.minute)}`;
+      }
+    }
+    if (s.retention) {
+      this.retainCount = s.retention.count;
+      this.retainDays = s.retention.days;
+    }
+  }
+
+  /** A short, stable client-side fingerprint of a KEY (FNV-1a, 8 hex) — a disambiguator for the
+   * download filename so an operator holding several keys can tell the files apart. It is of the key
+   * BEING downloaded, NOT the running key's server fingerprint: on a rotate the new key's file must not
+   * carry the old key's fingerprint. Falls back to "box" for an (unexpected) empty key. */
+  #fingerprint(key: string): string {
+    if (key === "") return "box";
+    let h = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+      h ^= key.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, "0");
+  }
+
+  #keyFileName(key: string): string {
+    return `waitron-recovery-key-${this.#fingerprint(key)}-${this.#fileStamp}.txt`;
   }
 
   #keyFileBody(key: string): string {
     return (
       `${t("backup.key.file_heading")}\n` +
-      `${t("backup.status.where")}: ${this.#nodeLabel()}\n` +
+      `${t("backup.status.fingerprint")}: ${this.#fingerprint(key)}\n` +
       `${this.#stamp}\n\n` +
       `${t("backup.key.file_note")}\n\n` +
       `${key}\n`
@@ -431,7 +522,18 @@ export class BackupScreen extends LitElement {
               : nothing
         }
         ${writable && !s.enabled ? this.#renderConfigure() : nothing}
-        ${writable && s.enabled ? this.#renderRotate() : nothing}
+        ${writable && s.enabled && this.editSettings ? this.#renderEditSettings() : nothing}
+        ${
+          writable && s.enabled && !this.editSettings
+            ? html`<wt-button
+                  variant="secondary"
+                  data-test="edit-settings"
+                  @click=${() => void this.#startEdit()}
+                  >${t("backup.edit.button")}</wt-button
+                >
+                ${this.#renderRotate()}`
+            : nothing
+        }
       </div>
     `;
   }
@@ -461,6 +563,24 @@ export class BackupScreen extends LitElement {
                 <dd>${s.keyFingerprint}</dd>`
             : nothing
         }
+        ${
+          s.keyRotatedAt
+            ? html`<dt>${t("backup.status.rotated")}</dt>
+                <dd data-test="key-rotated">${new Date(s.keyRotatedAt).toLocaleString()}</dd>`
+            : nothing
+        }
+        ${
+          s.enabled
+            ? html`<dt>${t("backup.status.archive_current")}</dt>
+                <dd data-test="archive-current">
+                  ${
+                    s.archiveUnderCurrentKey
+                      ? t("backup.status.archive_yes")
+                      : t("backup.status.archive_no")
+                  }
+                </dd>`
+            : nothing
+        }
       </dl>
     `;
   }
@@ -476,7 +596,7 @@ export class BackupScreen extends LitElement {
       : html`${when} — ${t("backup.status.fresh")}`;
   }
 
-  #renderConfigure(): TemplateResult {
+  #renderDestinationField(): TemplateResult {
     return html`
       <h2>${t("backup.destination.title")}</h2>
       <wt-input
@@ -486,6 +606,12 @@ export class BackupScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
       ></wt-input>
       <p class="hint">${t("backup.destination.hint")}</p>
+    `;
+  }
+
+  #renderConfigure(): TemplateResult {
+    return html`
+      ${this.#renderDestinationField()}
 
       <h2>${t("backup.key.title")}</h2>
       ${this.#renderKeyStep()}
@@ -500,6 +626,31 @@ export class BackupScreen extends LitElement {
         @click=${() => void this.#apply()}
         >${t("backup.apply")}</wt-button
       >
+    `;
+  }
+
+  /** The edit-settings form for an already-enabled box: destination + policy, PREFILLED and re-applied
+   * under the current key. NO key step — editing settings never changes the key (that is `rotate`). */
+  #renderEditSettings(): TemplateResult {
+    return html`
+      <h2 data-test="edit-title">${t("backup.edit.title")}</h2>
+      ${this.#renderDestinationField()}
+
+      <h2>${t("backup.schedule.title")}</h2>
+      ${this.#renderPolicy()}
+
+      <div class="key-actions">
+        <wt-button
+          variant="primary"
+          data-test="save-settings"
+          ?disabled=${this.#saveSettingsDisabled}
+          @click=${() => void this.#saveSettings()}
+          >${t("backup.edit.save")}</wt-button
+        >
+        <wt-button variant="ghost" data-test="cancel-edit" @click=${() => this.#cancelEdit()}
+          >${t("backup.edit.cancel")}</wt-button
+        >
+      </div>
     `;
   }
 
@@ -531,7 +682,7 @@ export class BackupScreen extends LitElement {
                   <a
                     class="download"
                     data-test="download-key"
-                    download=${this.#keyFileName()}
+                    download=${this.#keyFileName(this.mintedKey)}
                     href=${this.#downloadHref(this.mintedKey)}
                     >${t("backup.key.download")}</a
                   >
@@ -673,7 +824,7 @@ export class BackupScreen extends LitElement {
                 <a
                   class="download"
                   data-test="download-old-key"
-                  download=${this.#keyFileName()}
+                  download=${this.#keyFileName(this.oldKey)}
                   href=${this.#downloadHref(this.oldKey)}
                   >${t("backup.key.download")}</a
                 >
