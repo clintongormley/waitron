@@ -211,3 +211,21 @@ be recorded on the next run and an iOS device still measured.
 | No service worker is required for Chrome install | belief from the same install-criteria page; the spike's "Install appears" row confirms |
 | Service-worker registration fails with `SecurityError` on a click-through (untrusted) HTTPS origin | **belief — not measurable headlessly (§6); a real-device row** |
 | HSTS disables the interstitial click-through | belief (documented Chrome/Safari behaviour); the spike confirms the box sends no HSTS |
+
+## 8. Inactivity timeout & wake lock — owner addition 2026-09-09
+
+The wake lock (§3.4) is extended with a per-device-profile **inactivity timeout**, set in the
+dashboard's device-profile editor:
+
+- A nullable `inactivity_timeout_seconds` column on `device_profiles` (NULL = never). The editor
+  works in whole minutes.
+- **KDS is exempt**: it holds the wake lock indefinitely (no operator session) and is never
+  idle-logged-out; the field is hidden for a `kds` form factor and forced NULL server-side.
+- A **session-bearing device** (handheld, counter till) holds the wake lock while an operator is
+  logged in and, when its profile carries a timeout, returns to the PIN/lock screen after that long
+  with no pointer/key interaction — reusing the existing drop-and-lock logout path. Seeded default:
+  handheld profiles 300 s, till/KDS NULL (owner to confirm at review).
+- The value rides the existing `GET /api/till` boot payload beside `capabilities`.
+- **Schema note:** the column is added via `db:generate:custom` (a hand-written
+  `ALTER TABLE … ADD COLUMN`), never `db:generate`, which proposes `DROP TABLE bookings` on the core
+  set (CLAUDE.md §6 hazard).
