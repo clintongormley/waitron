@@ -78,6 +78,22 @@ describe("mintSelfSignedServerCert", () => {
     expect(cert.subjectAltName).toContain("DNS:waitron.local");
   });
 
+  it("the CA carries a critical nameConstraints extension permitting waitron.local + loopback + RFC1918", () => {
+    const m = mintSelfSignedServerCert({
+      hostnames: ["waitron.local", "localhost"],
+      ipAddresses: ["127.0.0.1", "192.168.1.50"],
+      now: new Date("2026-09-09T00:00:00Z"),
+    });
+    const ca = forge.pki.certificateFromPem(m.caCertPem);
+    const nc = ca.getExtension("nameConstraints") as
+      { critical?: boolean; value?: string } | undefined;
+    expect(nc).toBeDefined();
+    expect(nc?.critical).toBe(true);
+    // pathLenConstraint 0 on basicConstraints
+    const bc = ca.getExtension("basicConstraints") as { pathLenConstraint?: number } | undefined;
+    expect(bc?.pathLenConstraint).toBe(0);
+  });
+
   // The property that actually matters: the minted material completes a real TLS handshake
   // when the client trusts the CA, and fails when it does not.
   it("serves a TLS handshake a CA-trusting client accepts and an untrusting one rejects", async () => {
