@@ -1067,8 +1067,8 @@ export interface DiscoveredPrinter {
 }
 
 /** The `PATCH /management-api/printers/:id` body — mirrors `@waitron/printing`'s `UpdatePrinterInput`.
- * Every key is optional (a PATCH touches only what it names); the connection fields + `agentId` accept
- * an explicit `null` to CLEAR them, which `undefined` (absent) does not. */
+ * Every key is optional (a PATCH touches only what it names); the connection fields (`host`, `port`,
+ * `localKey`, `pollId`) accept an explicit `null` to CLEAR them, which `undefined` (absent) does not. */
 export interface PrinterPatch {
   name?: string;
   transport?: PrintTransport;
@@ -2382,7 +2382,7 @@ export class DashboardApi {
     return this.#request<DiscoveredPrinter[]>("/management-api/discovered-printers", "GET");
   }
 
-  /** `PATCH /management-api/printers/:id` — patch a printer's mutable slice (name, transport, agent,
+  /** `PATCH /management-api/printers/:id` — patch a printer's mutable slice (name, transport,
    * connection fields, ticket scope, active). Answers an empty 204; an unknown id rejects
    * `{ code: "printer.not_found" }`, an edit that leaves a transport short of a required field
    * `{ code: "printer.invalid_config" }`. */
