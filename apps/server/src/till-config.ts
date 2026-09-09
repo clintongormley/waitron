@@ -27,7 +27,8 @@ export type OrderFlow = (typeof orderFlow.enumValues)[number];
  * only), `stripe_terminal` drives a specific server-side Stripe reader by id, and `stripe_on_device`
  * is the handheld Tap-to-Pay flow that mints its own connection token. It selects which
  * `PaymentProvider` (if any) `boot.ts` builds and which pay control the till UI renders (Task 8), so
- * it rides on the till's config beside the fiscal ids.
+ * it rides on the till's config beside the fiscal ids. Demo/Prepare override this operational value
+ * with the local simulator at boot; `simulator` is therefore not an accepted deployment value here.
  */
 export type CardProvider = "none" | "stripe_terminal" | "stripe_on_device";
 
@@ -91,6 +92,11 @@ export interface TillConfig {
    * the client shows or hides the tip affordance (Task 8).
    */
   tipsEnabled: boolean;
+  /**
+   * True for Demo and Prepare installations. Receipt renderers use it only to add an unmistakable
+   * practice warning; fiscal values and hashes never depend on it.
+   */
+  practiceMode?: boolean;
   /**
    * The venue's pay-timing / service mode, read from the till's LOCATION rather than the environment
    * (the env carries no `order_flow` — the location does), so it is NOT set by `loadTillConfig` and is

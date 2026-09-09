@@ -134,7 +134,13 @@ async function buildReceiptBytes(
   }
   /* v8 ignore stop */
   const receipt = await getReceipt(tx, cfg.tenantId);
-  return formatReceipt({ result: ticket, issuer, receipt, invoiceLocale: cfg.locale });
+  return formatReceipt({
+    result: ticket,
+    issuer,
+    receipt,
+    invoiceLocale: cfg.locale,
+    simulated: cfg.practiceMode,
+  });
 }
 
 /**

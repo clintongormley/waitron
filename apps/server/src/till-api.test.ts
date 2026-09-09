@@ -1079,6 +1079,21 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(body).toMatchObject({ cardProvider: "stripe_terminal", tipsEnabled: true });
   });
 
+  it("GET /api/till surfaces the local simulator selected by boot", async () => {
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        ...deps(suite.db),
+        cardProvider: { provider: "simulator" } as PaymentProvider,
+      },
+      collect([]),
+    );
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ cardProvider: "simulator" });
+  });
+
   it("GET /api/till echoes a non-default bump_mode from the location, proving it reads the column", async () => {
     // The default `line` above would pass even if the route hardcoded it, so drive the location's
     // `bump_mode` to `ticket` and prove the boot read reflects it. Restored in `finally` so the shared
@@ -1481,6 +1496,30 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     });
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+  });
+
+  it("refuses a browser-selected simulation outcome for a real provider", async () => {
+    const id = await openSession(suite.db);
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cardProvider: { provider: "stripe" } as PaymentProvider },
+      collect([]),
+    );
+
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      body: JSON.stringify({
+        id: randomUUID(),
+        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+        simulationOutcome: "captured",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "simulationOutcome" } },
+    });
   });
 
   it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b /api/pay sibling)", async () => {

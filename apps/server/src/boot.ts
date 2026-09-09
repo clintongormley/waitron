@@ -26,7 +26,7 @@ import {
   StripeReconciler,
   StripeTerminalProvider,
 } from "@waitron/payments-stripe";
-import type { PaymentProvider } from "@waitron/payments";
+import { SimulatorPaymentProvider, type PaymentProvider } from "@waitron/payments";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -116,7 +116,7 @@ import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
+import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
 import { ensureReplicationShape } from "./replication.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
@@ -276,24 +276,26 @@ const BOX_HOSTNAME = "waitron.local";
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /**
- * The one integrated card-payment provider this till drives (sub-project 7), or `undefined` when
- * `WAITRON_TILL_CARD_PROVIDER=none`. A till serves exactly ONE tenant (`cfg.tenantId`), so ONE
- * provider is built up front at boot rather than per request — the same "resolve provisioning-time
- * config once, not on the hot path" shape `readOrderFlow` follows. The collect-side client is built
- * from that tenant's own `payments.stripe` credential via the `cardClientResolver` /
- * `cardDeviceClientResolver` seams (which also apply the `sk_live_`/`sk_test_` environment guard), so
- * a missing or wrong-environment key fails the boot loudly here rather than on the first sale.
+ * The card-payment provider this till drives. Demo and Prepare installations receive the local
+ * simulator and never read a Stripe credential. A live till serves one tenant (`cfg.tenantId`), so
+ * its provider is built once at boot. Its collect-side client comes from that tenant's encrypted
+ * `payments.stripe` credential through the environment-key guard, so bad live credentials fail here
+ * rather than on the first sale.
  *
  * Exported, not inlined into `startServer`: `startServer`'s only test subject (`boot.test.ts`) boots
  * against a real container with `cardProvider=none`, so it exercises only the `undefined` branch —
  * unit-testing THIS function directly (`boot-card-provider.test.ts`, PGlite + a seeded credential) is
- * what reaches the terminal / on-device branches without a full boot per provider, the same
+ * what reaches the simulator, terminal, and on-device branches without a full boot per provider, the same
  * "exported for a direct test subject" reasoning `DEFAULT_MIGRATIONS_ROOT` below carries.
  */
 export async function buildCardProvider(
   cfg: TillConfig,
   deps: StripeAccountDeps,
+  onboardingIntent?: OnboardingIntent,
 ): Promise<PaymentProvider | undefined> {
+  if (onboardingIntent === "demo" || onboardingIntent === "prepare") {
+    return new SimulatorPaymentProvider(deps.db, cfg.tenantId);
+  }
   if (cfg.cardProvider === "none") return undefined;
   if (cfg.cardProvider === "stripe_terminal") {
     const client = await cardClientResolver(deps)(cfg.tenantId);
@@ -1485,7 +1487,11 @@ export async function startServer(
   // The regime's transport now lives behind this contribution's `drain`, so `boot.ts` names no regime
   // package (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
-  const till: TillConfig = { ...config.till, orderFlow };
+  const till: TillConfig = {
+    ...config.till,
+    orderFlow,
+    practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
+  };
   // The venue's DEFAULT UI locale, derived ONCE now the pool is open — the DISPLAY counterpart to the
   // fiscal `till.locale`/`invoiceLocales` (left untouched). `readVenueLocale` applies the shared
   // `override → province → country → English` chain, reading the tenant's country + the location's
@@ -1497,16 +1503,19 @@ export async function startServer(
     locationId: till.locationId,
     override: till.localeOverride,
   });
-  // The till's ONE integrated card provider (or none), built from its tenant's own Stripe credential
-  // — `makeStripe` is `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses. A
-  // missing or wrong-environment key fails the boot here (§8's "everything escapes"), never the first
-  // card sale. Tips read off `till.tipsEnabled` (part of `cfg`) wherever needed — no separate copy.
-  const cardProvider = await buildCardProvider(till, {
-    db,
-    ring,
-    environment: config.environment,
-    makeStripe: defaultMakeStripe,
-  });
+  // Demo/Prepare use the local simulator; live installations build from the tenant's Stripe
+  // credential. `makeStripe` is `defaultMakeStripe`, the same SDK factory `stripeAccountResolver`
+  // above uses. A live installation with bad credentials fails at boot, never on its first card sale.
+  const cardProvider = await buildCardProvider(
+    till,
+    {
+      db,
+      ring,
+      environment: config.environment,
+      makeStripe: defaultMakeStripe,
+    },
+    config.onboardingIntent,
+  );
   // The session cookie is `Secure` only when TLS is configured. Hoisted to ONE binding so the till
   // and management mounts below both read the same value — a shared local, not a duplicated literal.
   const secureCookies = config.tls !== undefined;

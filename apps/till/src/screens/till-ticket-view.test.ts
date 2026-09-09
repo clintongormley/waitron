@@ -57,6 +57,18 @@ describe("till-ticket-view", () => {
     expect(customElements.get("till-ticket-view")).toBe(TillTicketView);
   });
 
+  it("marks a practice receipt as a simulated payment with no real charge", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result,
+      issuer,
+      invoiceLocale: "es-ES",
+      simulated: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=simulation-notice]")?.textContent).toContain(
+      "SIN COBRO REAL",
+    );
+  });
+
   it("prints the issuer venue name and NIF (RD 1619/2012 art. 7.1.d)", async () => {
     const { el } = await mount();
     const t = text(el);

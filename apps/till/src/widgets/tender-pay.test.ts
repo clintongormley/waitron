@@ -695,6 +695,23 @@ describe("till-tender-pay", () => {
   // this whole file is the right one (CLAUDE.md §4), unchanged from every other test above.
   // -----------------------------------------------------------------------------------------------
   describe("integrated card terminal (Task 9)", () => {
+    it("shows local simulator outcomes and sends the selected decline scenario", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "simulator",
+      });
+      const collect = vi.fn();
+      el.addEventListener("collect-card", (event) => collect((event as CustomEvent).detail));
+
+      expect(el.shadowRoot!.textContent).toContain("No card will be charged");
+      click(el, "[data-test=simulation-declined]");
+      await el.updateComplete;
+      click(el, ".pay-card");
+      expect(collect).toHaveBeenCalledWith({ simulationOutcome: "declined" });
+    });
+
     it("with cardProvider 'none' (default), Card stays the #62 manual path — no collecting state", async () => {
       const store = new WorkingOrderStore();
       store.addProduct(cafe, "1"); // total 1.50

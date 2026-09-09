@@ -41,6 +41,10 @@ export const en = {
   "tender.cash": "Cash",
   "tender.card": "Card",
   "tender.card_ref": "Operation number (optional)",
+  "card.simulation_result": "Test payment result",
+  "card.simulation_help": "No card will be charged. Choose the result for this test payment.",
+  "card.simulation_captured": "Approve",
+  "card.simulation_declined": "Decline",
   // Numeric keypad (accessible names for the non-alphanumeric keys)
   "pad.decimal": "Decimal point",
   "pad.backspace": "Backspace",
@@ -453,6 +457,11 @@ export const es: Record<StringKey, string> = {
   "tender.cash": "Efectivo",
   "tender.card": "Tarjeta",
   "tender.card_ref": "Número de operación (opcional)",
+  "card.simulation_result": "Resultado del pago de prueba",
+  "card.simulation_help":
+    "No se cobrará ninguna tarjeta. Elige el resultado de este pago de prueba.",
+  "card.simulation_captured": "Aprobar",
+  "card.simulation_declined": "Rechazar",
   "pad.decimal": "Punto decimal",
   "pad.backspace": "Borrar",
   "label.change": "Cambio",

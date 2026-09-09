@@ -38,15 +38,16 @@ export interface ParkOrderDetail {
 export interface CollectCardDetail {
   tip?: string;
   allowOffline?: boolean;
+  simulationOutcome?: "captured" | "declined";
 }
 
 /**
  * The till's integrated-card wiring (Task 8/9), mirroring `GET /api/till`'s `cardProvider`
  * (`TillInfo`, `../api/client.js`) as a LOCAL type — same decoupling as every alias in that file.
- * `"none"` keeps the Card button on the #62 manual (datáfono) path; the other two make it emit
- * `collect-card` instead.
+ * `"none"` keeps the Card button on the #62 manual (datáfono) path; every other value makes it emit
+ * `collect-card` instead. `"simulator"` is selected by Demo/Prepare onboarding, never device config.
  */
-export type CardProvider = "none" | "stripe_terminal" | "stripe_on_device";
+export type CardProvider = "none" | "stripe_terminal" | "stripe_on_device" | "simulator";
 
 /**
  * The non-`captured` variants of `POST /api/pay`'s outcome (`PayOutcome`, `../api/client.js`) — the
@@ -245,6 +246,7 @@ export class TillTenderPay extends LitElement {
   /** Per-transaction staff consent to accept the card offline if the network is down (Task 9); read
    * at `#onCardTap` time, shown only for `cardProvider === "stripe_on_device"`. */
   @state() private allowOffline = false;
+  @state() private simulationOutcome: "captured" | "declined" = "captured";
   /** The detail of the most recent `collect-card` emission (Task 9) — replayed verbatim by
    * `#retryCard` so a retry doesn't silently drop a tip/offline-consent the operator already entered
    * on the idle screen, which is no longer on screen by the time Retry is tapped. Not `@state`: it
@@ -335,6 +337,7 @@ export class TillTenderPay extends LitElement {
       ...(this.cardProvider === "stripe_on_device" && this.allowOffline
         ? { allowOffline: true }
         : {}),
+      ...(this.cardProvider === "simulator" ? { simulationOutcome: this.simulationOutcome } : {}),
     });
   }
 
@@ -656,6 +659,31 @@ export class TillTenderPay extends LitElement {
     if (this.cardProvider === "none") return nothing;
     return html`
       <div class="card-extras">
+        ${
+          this.cardProvider === "simulator"
+            ? html`<div
+                class="simulation-options"
+                role="group"
+                aria-label=${t("card.simulation_result")}
+              >
+                <p>${t("card.simulation_help")}</p>
+                <wt-button
+                  variant=${this.simulationOutcome === "captured" ? "primary" : "secondary"}
+                  data-test="simulation-captured"
+                  aria-pressed=${this.simulationOutcome === "captured"}
+                  @click=${() => (this.simulationOutcome = "captured")}
+                  >${t("card.simulation_captured")}</wt-button
+                >
+                <wt-button
+                  variant=${this.simulationOutcome === "declined" ? "primary" : "secondary"}
+                  data-test="simulation-declined"
+                  aria-pressed=${this.simulationOutcome === "declined"}
+                  @click=${() => (this.simulationOutcome = "declined")}
+                  >${t("card.simulation_declined")}</wt-button
+                >
+              </div>`
+            : nothing
+        }
         ${
           this.tipsEnabled
             ? html`

@@ -1150,6 +1150,9 @@ export class TillApp extends LitElement {
         lines,
         ...(detail.tip ? { tip: detail.tip } : {}),
         ...(detail.allowOffline ? { allowOffline: true } : {}),
+        ...(detail.simulationOutcome === undefined
+          ? {}
+          : { simulationOutcome: detail.simulationOutcome }),
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
@@ -2431,6 +2434,7 @@ export class TillApp extends LitElement {
           .issuer=${this.issuer}
           .invoiceLocale=${this.invoiceLocale}
           .receipt=${this.receipt}
+          .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
       case "schedule":
         return html`<till-schedule-screen

@@ -1448,6 +1448,19 @@ describe("till-app", () => {
     expect(ticket(el)!.invoiceLocale).toBe("ca-ES");
   });
 
+  it("marks the ticket as simulated on a preparation installation", async () => {
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api: stubApi({
+        getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "prepare" }),
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "2.00" });
+    await flush(el);
+    expect(ticket(el)?.simulated).toBe(true);
+  });
+
   it("retrieve then pay: recordSale settles under the RETRIEVED order's own id, not a fresh one", async () => {
     // The Critical fix: paying a retrieved order must send that order's adopted id (wo-1), so the
     // server takes the pay-the-parked-order branch and settles it. The pre-fix `crypto.randomUUID()`
@@ -3245,6 +3258,21 @@ describe("till-app", () => {
   // ---------------------------------------------------------------------------------------------
 
   describe("collect-card (integrated card terminal, Task 8)", () => {
+    it("forwards the selected simulator outcome to POST /api/pay", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountWidget<TillApp>("till-app", {
+        api: stubApi({
+          getTill: vi.fn().mockResolvedValue({ ...till, cardProvider: "simulator" }),
+          pay,
+        }),
+      });
+      const c = await toCounter(el);
+      emit(c, "collect-card", { simulationOutcome: "declined" });
+      await flush(el);
+
+      expect(pay).toHaveBeenCalledWith(expect.objectContaining({ simulationOutcome: "declined" }));
+    });
+
     it("pays over the integrated terminal with the mapped lines(+tip+allowOffline), then shows the ticket", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ pay });

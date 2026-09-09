@@ -12,6 +12,7 @@ import {
 } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import { StripeOnDeviceProvider, StripeTerminalProvider } from "@waitron/payments-stripe";
+import { SimulatorPaymentProvider } from "@waitron/payments";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { buildCardProvider } from "./boot.js";
 import type { CardProvider, TillConfig } from "./till-config.js";
@@ -20,9 +21,9 @@ import type { CardProvider, TillConfig } from "./till-config.js";
 // no reader/network call — so PGlite (superuser, one backend) is the right target here: nothing on
 // this path depends on the deployment role or on concurrency (what the providers themselves do
 // against a real database, as a non-superuser member of `app_user`, is proven in
-// `packages/payments-stripe`'s `device.test.ts`, `hosted.test.ts` and `stripe.test.ts`). The two provider
-// branches (`stripe_terminal`, `stripe_on_device`) are the ones `boot.test.ts` — which boots against
-// a real container with `cardProvider=none` — cannot reach; the `none` branch is covered there.
+// `packages/payments-stripe`'s `device.test.ts`, `hosted.test.ts` and `stripe.test.ts`). The simulator
+// and two Stripe branches are the ones `boot.test.ts` — which boots against a real container with
+// `cardProvider=none` — cannot reach; the live `none` branch is covered there.
 const KEY_ENV = {
   // Task 3: keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
   // privileged, and a root CI container would otherwise stand up a live service on it. Its own
@@ -90,6 +91,16 @@ function deps() {
 }
 
 describe("buildCardProvider", () => {
+  it.each(["demo", "prepare"] as const)(
+    "builds the local simulator for %s without reading Stripe credentials",
+    async (intent) => {
+      const tenantId = await seedTenant(suite.db);
+      const provider = await buildCardProvider(cfgFor(tenantId, "none"), deps(), intent);
+      expect(provider).toBeInstanceOf(SimulatorPaymentProvider);
+      expect(provider?.provider).toBe("simulator");
+    },
+  );
+
   it("returns undefined for cardProvider 'none' (no credential read at all)", async () => {
     // A tenant with NO Stripe credential: proof the `none` branch short-circuits before any read —
     // a credential lookup here would throw `credentials.missing` instead of returning undefined.

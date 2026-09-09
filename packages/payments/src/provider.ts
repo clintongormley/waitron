@@ -58,6 +58,9 @@ export interface CollectParams {
    * false). Even when true, acceptance still requires the tenant policy to allow it and the amount
    * to be within the cap — offline is never automatic. */
   allowOffline?: boolean;
+  /** A local simulator result selected by the practice UI. The server only forwards this field to
+   * the simulator; real payment adapters never receive a browser-selected outcome. */
+  simulationOutcome?: "captured" | "declined";
 }
 
 /**
