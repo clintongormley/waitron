@@ -1,4 +1,9 @@
-import type { AdministrativeArea, CountryPack, ValidationResult } from "@waitron/country";
+import type {
+  AdministrativeArea,
+  CountryPack,
+  FiscalJurisdiction,
+  ValidationResult,
+} from "@waitron/country";
 
 export type SpanishNifKind = "personal" | "foreigner" | "tax-assigned-personal" | "entity";
 export type SpanishPhoneKind = "mobile" | "geographic";
@@ -45,6 +50,13 @@ export function validateSpanishNif(value: string): ValidationResult<SpanishNifKi
     const prefix = { X: "0", Y: "1", Z: "2" }[nie[1] as "X" | "Y" | "Z"];
     return nie[3] === personalControl(`${prefix}${nie[2]}`)
       ? { valid: true, normalized, kind: "foreigner" }
+      : { valid: false, reason: "checksum" };
+  }
+
+  const taxAssignedWithNumericBody = /^[KLM](\d{7})([A-Z])$/.exec(normalized);
+  if (taxAssignedWithNumericBody !== null) {
+    return taxAssignedWithNumericBody[2] === personalControl(taxAssignedWithNumericBody[1]!)
+      ? { valid: true, normalized, kind: "tax-assigned-personal" }
       : { valid: false, reason: "checksum" };
   }
 
@@ -147,14 +159,14 @@ const PROVINCES = [
   ["52", "Melilla"],
 ] as const;
 
-const CATALAN = new Set(["07", "08", "12", "17", "25", "43", "46"]);
+const CATALAN = new Set(["03", "07", "08", "12", "17", "25", "43", "46"]);
 const GALICIAN = new Set(["15", "27", "32", "36"]);
 const BASQUE = new Set(["01", "20", "48"]);
 
 function localeFor(code: string): string | undefined {
   if (CATALAN.has(code)) return "ca-ES";
   if (GALICIAN.has(code)) return "gl-ES";
-  if (BASQUE.has(code) || code === "31") return "eu-ES";
+  if (BASQUE.has(code)) return "eu-ES";
   return undefined;
 }
 
@@ -169,7 +181,17 @@ const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
   }),
 );
 
-const excludedFromCommon = new Set(["01", "20", "31", "35", "38", "48", "51", "52"]);
+const unsupportedFiscalJurisdictions = [
+  { id: "ES-foral-basque", areaCodes: ["01", "20", "48"], supported: false },
+  { id: "ES-foral-navarre", areaCodes: ["31"], supported: false },
+  { id: "ES-canary", areaCodes: ["35", "38"], supported: false },
+  { id: "ES-ceuta", areaCodes: ["51"], supported: false },
+  { id: "ES-melilla", areaCodes: ["52"], supported: false },
+] satisfies readonly FiscalJurisdiction[];
+
+const unsupportedAreaCodes = new Set(
+  unsupportedFiscalJurisdictions.flatMap(({ areaCodes }) => areaCodes),
+);
 
 export const SPAIN: CountryPack = {
   countryCode: "ES",
@@ -178,23 +200,20 @@ export const SPAIN: CountryPack = {
   defaultTimeZone: "Europe/Madrid",
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"],
   moduleIds: ["workforce-es"],
+  availableForVenueSetup: true,
   administrativeAreas,
   fiscalJurisdictions: [
     {
       id: "ES-common",
       areaCodes: administrativeAreas
         .map(({ code }) => code)
-        .filter((code) => !excludedFromCommon.has(code)),
+        .filter((code) => !unsupportedAreaCodes.has(code)),
       supported: true,
       modules: { filing: "verifactu", tax: "vat" },
     },
-    { id: "ES-foral-basque", areaCodes: ["01", "20", "48"], supported: false },
-    { id: "ES-foral-navarre", areaCodes: ["31"], supported: false },
-    { id: "ES-canary", areaCodes: ["35", "38"], supported: false },
-    { id: "ES-ceuta", areaCodes: ["51"], supported: false },
-    { id: "ES-melilla", areaCodes: ["52"], supported: false },
+    ...unsupportedFiscalJurisdictions,
   ],
   taxIdentifier: { label: "NIF", validate: validateSpanishNif },
-  postalCode: { label: "Código postal", validate: validateSpanishPostalCode },
-  telephone: { label: "Teléfono", validate: validateSpanishPhone },
+  postalCode: { validate: validateSpanishPostalCode },
+  telephone: { validate: validateSpanishPhone },
 };

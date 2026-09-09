@@ -149,7 +149,7 @@ describe("planVenue", () => {
   it("REFUSES an unimplemented territory (spec D4 input half) before emitting anything", () => {
     try {
       planVenue(
-        request({ location: { ...request().location, fiscalTerritory: "ES-PV-bizkaia" } }),
+        request({ location: { ...request().location, fiscalTerritory: "ES-canary" } }),
         MODULES,
       );
       expect.unreachable("should have refused");
@@ -236,8 +236,8 @@ describe("planVenue", () => {
   });
 
   it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES cannot mint two tenants (§5)", () => {
-    // The wizard emits a trimmed-but-not-uppercased country ("es") and never touches taxId casing;
-    // the CLI trims taxId but never uppercases it. Both paths go through planVenue, so canonicalizing
+    // The setup API currently emits the pack's canonical country and normalized tax ID, while the CLI
+    // accepts operator-entered casing and surrounding space. Both paths go through planVenue, so canonicalizing
     // HERE — once, at the top, via `.trim().toUpperCase()` — makes the derived id AND the stored
     // (country, tax_id) unique-index row canonical for both. Without it, a re-run of the SAME business
     // differing only in case or surrounding whitespace mints a second, permanent, unmergeable tenant

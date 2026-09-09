@@ -597,12 +597,15 @@ unchanged, so no new H2 receipt
    the country facts previously split between shared locale code, provisioning and setup. Spain owns
    checksum-valid NIFs, phone/postcode normalization, all province codes, regional locale/time-zone
    defaults and explicit fiscal jurisdictions. Setup derives province, fiscal territory and time zone
-   in the browser; the server repeats the checks before provisioning. Design/plan:
+   in the browser; the server repeats the checks before provisioning. The UK pack preserves the
+   CLI/test path but is excluded from setup until its tax behavior and validators are implemented.
+   Design/plan:
    `superpowers/{specs,plans}/2026-09-09-country-packs-and-address-entry*`.
    - **Follow-ons:** build the authenticated Waitron-hosted address relay and its first provider
      adapter (manual entry remains the offline path); apply phone normalization to bookings; add a
-     supplier country/identifier scheme before validating purchasing tax IDs; implement the currently
-     refused foral, Canary, Ceuta and Melilla fiscal jurisdictions.
+     supplier country/identifier scheme before validating purchasing tax IDs; apply a pack's declared
+     module preset when country-specific module toggling is needed; implement the currently refused
+     foral, Canary, Ceuta and Melilla fiscal jurisdictions.
 5. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron runs is a small control
    plane: accounts (a customer of ours — one customer may own several taxpayers), subscriptions,
@@ -615,7 +618,7 @@ unchanged, so no new H2 receipt
 7. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
    (`recordSale` / `recordCorrection` / `recordSubstitution`; also under *Debt → Fiscal*): needs the
    huella-invariance re-run across all three.
-8. **Tax-model system — BACK BURNER (no non-Spanish venue in scope; owner 2026-09-07).** Today the `tax` slot in provisioning's territory→module
+8. **Tax-model system — BACK BURNER (no non-Spanish venue in scope; owner 2026-09-07).** Today the `tax` slot in the country-pack territory→module
    registry (`ES-common → {filing:"verifactu", tax:"vat"}`) is an INERT label stamped into
    `nodes.tax_module` and copied at adoption — nothing branches on it. Intended shape: the tax MODEL
    (VAT / GST — calculation, receipt layout, inclusive-vs-exclusive pricing) is GENERIC and lives in
@@ -1466,9 +1469,10 @@ genuinely-decision-bearing.
   and **write-side header drift** (`sales.locale`/`sales.invoice_locales` are still stamped by
   `recordSale` from boot-time `cfg`, not from `locations.invoice_locales` like the line re-key — a config
   drift can file a header inconsistent with its lines). **Design:**
-  `docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md`. Also: **province →
-  language derivation** (`PROVINCE_DEFAULT_LOCALE` is empty, so a Cataluña venue shows Spanish not
-  Catalan — lands with the first regional catalogue; `locations.province` is the hook); the **venue
+  `docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md`. Also: the country
+  pack now supplies **province → language derivation**, but the apps ship only Spanish and English
+  catalogues, so a Catalan preference currently falls back to Spanish; add the regional catalogues.
+  The **venue
   default is derive-only, not admin-editable** yet; and the **dashboard's `es-ES` module default**
   (`apps/dashboard/src/i18n/t.ts` + `#venueLocale`) still needs the same flip the till got in #170
   (check whether the dashboard money formatter has the same "doesn't follow the UI locale" bug).

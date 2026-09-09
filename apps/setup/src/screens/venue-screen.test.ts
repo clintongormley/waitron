@@ -116,12 +116,12 @@ describe("setup-venue-screen", () => {
     ]);
   });
 
-  it("renders installed countries and all Spanish provinces as stable-code choices", async () => {
+  it("renders onboarding-ready countries and all Spanish provinces as stable-code choices", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const countries = [
       ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=country] option"),
     ];
-    expect(countries.map(({ value }) => value)).toEqual(["ES", "GB"]);
+    expect(countries.map(({ value }) => value)).toEqual(["ES"]);
     const provinces = [
       ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=province] option"),
     ];
@@ -145,27 +145,13 @@ describe("setup-venue-screen", () => {
     expect((q(el, "[data-test=province]") as HTMLSelectElement).value).toBe("08");
   });
 
-  it("switches to the UK pack and derives its country-wide defaults", async () => {
-    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
-    const events = collect(host);
-    await fillValid(el);
-    await type(el, "country", "GB");
-    await type(el, "postalCode", "SW1A 1AA");
-    await type(el, "province", "England");
-
-    q(el, "[data-test=next]")!.click();
-
-    const patch = (events[0]!.detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.venue).toMatchObject({
-      country: "GB",
-      location: {
-        fiscalTerritory: "GB-vat",
-        invoiceLocales: ["en-GB"],
-        postalCode: "SW1A 1AA",
-        province: "England",
-        timeZone: "Europe/London",
-      },
-    });
+  it("keeps an explicitly selected invoice language when the postcode changes", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await toggleLocale(el, "es-ES", false);
+    await toggleLocale(el, "es-ES", true);
+    await type(el, "postalCode", "08001");
+    expect((q(el, "[data-test=locale-es-ES]") as HTMLInputElement).checked).toBe(true);
+    expect((q(el, "[data-test=locale-ca-ES]") as HTMLInputElement).checked).toBe(false);
   });
 
   it("emits a blank addressLine2 as null, and a filled one as its string", async () => {
@@ -230,7 +216,7 @@ describe("setup-venue-screen", () => {
           postalCode: "08002",
           city: "Barcelona",
           province: "Barcelona",
-          timeZone: "Europe/Madrid",
+          timeZone: "Atlantic/Canary",
           dayCutover: "05:30",
         },
         tillName: "Barra",

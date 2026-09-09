@@ -8,7 +8,7 @@ import {
   findAdministrativeAreaByPostalCode,
   resolveFiscalJurisdiction,
 } from "@waitron/country";
-import { getCountryPack } from "@waitron/country-packs";
+import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
@@ -232,13 +232,13 @@ function parseVenue(venueRaw: unknown): VenueRequest {
   const admin = asObject(v.admin, "admin");
   const countryInput = asString(v.country, "country");
   const taxIdInput = asString(v.taxId, "taxId");
-  asString(loc.fiscalTerritory, "location.fiscalTerritory");
+  const fiscalTerritoryInput = asString(loc.fiscalTerritory, "location.fiscalTerritory");
   const invoiceLocales = asStringArray(loc.invoiceLocales, "location.invoiceLocales");
   const postalCodeInput = asString(loc.postalCode, "location.postalCode");
   const provinceInput = asString(loc.province, "location.province");
-  asString(loc.timeZone, "location.timeZone");
+  const timeZoneInput = asString(loc.timeZone, "location.timeZone");
 
-  const country = getCountryPack(countryInput);
+  const country = getVenueSetupCountryPack(countryInput);
   if (country === undefined) invalidRequest("country");
 
   const taxId = country.taxIdentifier?.validate(taxIdInput);
@@ -263,6 +263,10 @@ function parseVenue(venueRaw: unknown): VenueRequest {
   const jurisdiction = resolveFiscalJurisdiction(country, area?.code);
   if (jurisdiction === undefined || !jurisdiction.supported || jurisdiction.modules === undefined) {
     invalidRequest("location.fiscalTerritory");
+  }
+  if (fiscalTerritoryInput !== jurisdiction.id) invalidRequest("location.fiscalTerritory");
+  if (timeZoneInput !== (area?.timeZone ?? country.defaultTimeZone)) {
+    invalidRequest("location.timeZone");
   }
   if (invoiceLocales.some((locale) => !country.invoiceLocales.includes(locale))) {
     invalidRequest("location.invoiceLocales");

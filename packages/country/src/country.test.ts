@@ -14,6 +14,7 @@ const pack: CountryPack = {
   defaultTimeZone: "Europe/Example",
   invoiceLocales: ["xy-XY", "en-GB"],
   moduleIds: ["example"],
+  availableForVenueSetup: true,
   administrativeAreas: [
     {
       code: "01",
@@ -51,6 +52,17 @@ describe("country geography", () => {
     expect(findAdministrativeAreaByPostalCode(pack, "99999")).toBeUndefined();
   });
 
+  it("uses the longest matching postal prefix", () => {
+    const overlapping: CountryPack = {
+      ...pack,
+      administrativeAreas: [
+        { code: "01", name: "Broad", postalPrefixes: ["1"] },
+        { code: "02", name: "Specific", postalPrefixes: ["10"] },
+      ],
+    };
+    expect(findAdministrativeAreaByPostalCode(overlapping, "10000")?.code).toBe("02");
+  });
+
   it("resolves supported and explicitly unsupported fiscal jurisdictions", () => {
     expect(resolveFiscalJurisdiction(pack, "01")).toEqual(pack.fiscalJurisdictions[0]);
     expect(resolveFiscalJurisdiction(pack, "02")).toEqual(pack.fiscalJurisdictions[1]);
@@ -79,15 +91,25 @@ describe("country geography", () => {
 
 describe("resolveCountryLocale", () => {
   it("uses the first available override, area preference, country default, then fallback", () => {
-    expect(resolveCountryLocale(pack, ["en-GB", "xy-XY"], { override: "en-GB", area: "01" })).toBe(
-      "en-GB",
-    );
-    expect(resolveCountryLocale(pack, ["north-XY", "xy-XY"], { area: "01" })).toBe("north-XY");
-    expect(resolveCountryLocale(pack, ["xy-XY"], { area: "01" })).toBe("xy-XY");
+    expect(
+      resolveCountryLocale(pack, ["en-GB", "xy-XY"], {
+        override: "en-GB",
+        area: "01",
+        fallback: "en-GB",
+      }),
+    ).toBe("en-GB");
+    expect(
+      resolveCountryLocale(pack, ["north-XY", "xy-XY"], {
+        area: "01",
+        fallback: "en-GB",
+      }),
+    ).toBe("north-XY");
+    expect(resolveCountryLocale(pack, ["xy-XY"], { area: "01", fallback: "en-GB" })).toBe("xy-XY");
     expect(resolveCountryLocale(pack, ["en-GB"], { area: "01", fallback: "en-GB" })).toBe("en-GB");
-    expect(resolveCountryLocale(pack, ["xy-XY"], {})).toBe("xy-XY");
-    expect(resolveCountryLocale(pack, ["xy-XY"], { area: "missing" })).toBe("xy-XY");
+    expect(resolveCountryLocale(pack, ["xy-XY"], { fallback: "en-GB" })).toBe("xy-XY");
+    expect(resolveCountryLocale(pack, ["xy-XY"], { area: "missing", fallback: "en-GB" })).toBe(
+      "xy-XY",
+    );
     expect(resolveCountryLocale(pack, [], { fallback: "en-GB" })).toBe("en-GB");
-    expect(resolveCountryLocale(pack, [], {})).toBe("xy-XY");
   });
 });

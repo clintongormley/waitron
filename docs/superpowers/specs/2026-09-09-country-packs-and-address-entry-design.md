@@ -34,8 +34,8 @@ A pack owns:
 - administrative areas with stable codes, display names, postcode prefixes, default locale and time
   zone;
 - fiscal jurisdictions, including the filing and tax contribution IDs they require;
-- country-specific address validation and the parameters an online autocomplete adapter needs; and
-- module IDs which a deployment of that country normally enables.
+- country-specific address validation; and
+- module IDs that declare the pack's intended deployment preset.
 
 It does not own fiscal algorithms, tax calculations, translations or an external provider credential.
 Those stay in their respective modules or infrastructure.
@@ -45,8 +45,11 @@ Those stay in their respective modules or infrastructure.
 A local validator answers whether a value has a recognised shape and, where the published format makes
 it locally computable, checksum. It returns the normalised value and its classified kind. It never
 claims the identifier was issued, the telephone is connected, or the address receives post. In
-particular, AEAT-assigned personal NIFs beginning K, L or M may contain seven alphanumeric characters;
-their local check is necessarily structural rather than an issuance check.
+particular, AEAT specifies seven alphanumeric body characters and an alphabetic verification
+character for NIFs beginning K, L or M. This implementation applies the familiar modulo-23 check
+when all seven body characters are digits. When the body contains letters, the published material
+checked for this design does not give a locally computable algorithm, so validation checks the
+published structure only. Neither path claims that AEAT issued the identifier.
 
 ```ts
 type ValidationResult<Kind extends string> =
@@ -76,14 +79,15 @@ silently treated as common territory.
 then stores the result. A later country-pack update therefore cannot move an existing venue onto a
 different fiscal regime at boot.
 
-Locale and time-zone defaults are suggestions. The selected values remain explicit venue data. Locale
-resolution intersects a pack's preference with the catalogues this build actually ships, then falls
-back to the country default and finally English.
+Setup derives locale and time-zone defaults from the selected area and persists those resolved values
+as explicit venue data. Locale resolution intersects a pack's preference with the catalogues this
+build actually ships, then falls back to the country default and finally the caller's typed fallback.
 
 ## 5. Address autocomplete
 
-The country contract defines provider-neutral suggestion and resolved-address shapes. No Google code or
-credential ships in the country pack.
+The country contract defines provider-neutral suggestion and resolved-address shapes. Provider
+configuration will be added with the first adapter; no Google code or credential ships in the country
+pack.
 
 The always-available path is manual entry plus offline validation. An optional online path is:
 
@@ -116,6 +120,13 @@ screen. For Spain it:
 6. keeps every address field editable and manual.
 
 The setup API repeats the NIF, postcode, province and derived-jurisdiction checks before provisioning.
+It rejects a submitted fiscal territory or time zone that disagrees with the derived value instead of
+silently replacing it.
+
+The minimal UK pack preserves the existing `GB-vat` CLI and test path, but is not offered by setup:
+its `tax: "none"` selection is an unimplemented placeholder, not a UK tax implementation. Likewise,
+this first slice validates each declared `moduleIds` entry against composition but does not yet use the
+list to override an operator's module configuration.
 
 Bookings follow with telephone normalization. Purchase invoices follow only after their model carries
 the supplier's country or identifier scheme; applying the venue's Spanish validator to every supplier
@@ -123,8 +134,8 @@ would reject legitimate foreign suppliers.
 
 ## 7. Sources checked on 2026-09-09
 
-- AEAT, NIF composition for people and entities:
-  <https://sede.agenciatributaria.gob.es/Sede/ayuda/manuales-videos-folletos/manuales-practicos/guia-practica-cumplimentacion-modelo-censal-036/anexos/anexo-01-solicitud-nif-documentacion-aportar/informacion-sobre-numero-identificacion-fiscal.html>
+- AEAT, NIF composition for people:
+  <https://sede.agenciatributaria.gob.es/Sede/ayuda/manuales-videos-folletos/manuales-practicos/guia-practica-cumplimentacion-modelo-censal-036/anexos/anexo-01-solicitud-nif-documentacion-aportar/informacion-sobre-numero-identificacion-fiscal/composicion-nif/personas-fisicas.html>
 - BOE, Order EHA/451/2008: <https://www.boe.es/buscar/act.php?id=BOE-A-2008-3580>
 - INE, official province codes: <https://www.ine.es/daco/daco42/codmun/cod_provincia.htm>
 - AEAT, Veri*Factu territorial scope:

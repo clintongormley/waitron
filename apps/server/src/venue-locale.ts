@@ -4,7 +4,7 @@
 import { eq } from "drizzle-orm";
 import { asAppUser, locations, tenants, withTenant, type Database } from "@waitron/db";
 import { resolveInstalledCountryLocale } from "@waitron/country-packs";
-import { SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
+import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
 
 /**
  * The venue's default UI locale, resolved ONCE at boot from geography + an optional env override.
@@ -39,7 +39,7 @@ export async function readVenueLocale(
       override: params.override,
       area: loc?.province ?? null,
       country: t?.country ?? null,
-      fallback: "en-GB",
-    }) as SupportedLocale;
+      fallback: FALLBACK_LOCALE,
+    });
   });
 }

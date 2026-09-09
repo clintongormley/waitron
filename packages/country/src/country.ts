@@ -5,7 +5,7 @@ export type ValidationResult<Kind extends string> =
   | { readonly valid: false; readonly reason: ValidationFailureReason };
 
 export interface ValueValidator<Kind extends string> {
-  readonly label: string;
+  readonly label?: string;
   validate(value: string): ValidationResult<Kind>;
 }
 
@@ -37,6 +37,8 @@ export interface CountryPack {
   readonly defaultTimeZone: string;
   readonly invoiceLocales: readonly string[];
   readonly moduleIds: readonly string[];
+  /** Whether this pack has enough validated fiscal behavior to create a venue in the setup wizard. */
+  readonly availableForVenueSetup: boolean;
   readonly administrativeAreas: readonly AdministrativeArea[];
   readonly fiscalJurisdictions: readonly FiscalJurisdiction[];
   readonly defaultFiscalJurisdictionId?: string;
@@ -99,9 +101,15 @@ export function findAdministrativeAreaByPostalCode(
   postalCode: string,
 ): AdministrativeArea | undefined {
   const normalized = postalCode.trim();
-  return pack.administrativeAreas.find((area) =>
-    area.postalPrefixes.some((prefix) => normalized.startsWith(prefix)),
-  );
+  let match: { readonly area: AdministrativeArea; readonly prefixLength: number } | undefined;
+  for (const area of pack.administrativeAreas) {
+    for (const prefix of area.postalPrefixes) {
+      if (normalized.startsWith(prefix) && prefix.length > (match?.prefixLength ?? -1)) {
+        match = { area, prefixLength: prefix.length };
+      }
+    }
+  }
+  return match?.area;
 }
 
 export function resolveFiscalJurisdiction(
@@ -116,15 +124,15 @@ export function resolveFiscalJurisdiction(
   return pack.fiscalJurisdictions.find(({ id }) => id === pack.defaultFiscalJurisdictionId);
 }
 
-export function resolveCountryLocale(
+export function resolveCountryLocale<Locale extends string>(
   pack: CountryPack,
-  availableLocales: readonly string[],
+  availableLocales: readonly Locale[],
   input: {
     readonly override?: string | null;
     readonly area?: string | null;
-    readonly fallback?: string;
+    readonly fallback: Locale;
   },
-): string {
+): Locale {
   const area = input.area == null ? undefined : findAdministrativeArea(pack, input.area);
   const candidates = [
     input.override ?? undefined,
@@ -133,11 +141,10 @@ export function resolveCountryLocale(
     input.fallback,
   ];
   return (
-    candidates.find((candidate): candidate is string =>
-      candidate === undefined ? false : availableLocales.includes(candidate),
+    candidates.find((candidate): candidate is Locale =>
+      candidate === undefined ? false : (availableLocales as readonly string[]).includes(candidate),
     ) ??
     availableLocales[0] ??
-    input.fallback ??
-    pack.defaultLocale
+    input.fallback
   );
 }

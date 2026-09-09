@@ -107,10 +107,10 @@ export type VenueAction =
 export function planVenue(request: VenueRequest, modules: readonly WaitronModule[]): VenueAction[] {
   // Canonicalize the fiscal identity ONCE, at the top, and use these values for BOTH the derived id
   // AND the stored `tenants (country, tax_id)` row. This is the functional fix for the §5 footgun:
-  // both provisioning paths go through here — the wizard (setup-api → provisionVenue) emits a
-  // trimmed-but-not-uppercased country ("es") and never touches taxId casing, and the CLI trims
-  // taxId but never uppercases it (its `assertCountry` already upper-cases country, now belt-and-
-  // suspenders). Deriving the id from a raw casing, OR storing a raw (country, tax_id) row, would let
+  // both provisioning paths go through here — setup currently sends the pack's canonical country
+  // code and normalized tax id, while the CLI accepts operator-entered casing and surrounding space.
+  // Keeping canonicalization at this generic boundary prevents a future caller from bypassing that
+  // normalization. Deriving the id from a raw casing, OR storing a raw (country, tax_id) row, would let
   // `es`/`ES` (or a taxId that differs only in letter case or in leading/trailing whitespace) for the
   // same business mint a second, permanent, unmergeable tenant — a re-run meant to add a shop would
   // silently start a second SIF/hash chain. `.trim().toUpperCase()` collapses exactly those two
@@ -133,7 +133,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   }
   const fiscal = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
   // The territory must belong to the tenant's country. Fiscal territories are country-prefixed
-  // (`ES-common`, `ES-PV-bizkaia`, …), and applyVenue writes tax_id into `registro_sif.nif` (a
+  // (`ES-common`, `GB-vat`, …), and applyVenue writes tax_id into `registro_sif.nif` (a
   // Spanish-NIF field), so `country=PT` + `ES-common` would file under a non-NIF identity — a
   // mis-filing under the wrong country that a hash-chained record cannot take back (spec §8). Checked
   // AFTER resolveFiscalModules so an unimplemented territory fails first with the more specific

@@ -336,8 +336,8 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     const venue = asRec(body.venue);
     const location = asRec(venue.location);
     venue.taxId = " b 1234567 4 ";
-    location.fiscalTerritory = "GB-vat";
-    location.timeZone = "Atlantic/Canary";
+    location.postalCode = " 28013 ";
+    location.province = "madrid";
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(200);
@@ -354,34 +354,44 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     });
   });
 
-  it("provisions the installed country-wide UK pack without applying Spanish validators", async () => {
+  it("refuses a country pack that is not ready for venue onboarding", async () => {
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
     mountSetup(app, deps, noopLog);
     const body = demoBody();
     const venue = asRec(body.venue);
-    const location = asRec(venue.location);
     venue.country = "gb";
-    venue.taxId = "GB 123";
-    location.postalCode = "SW1A 1AA";
-    location.province = "England";
-    location.invoiceLocales = ["en-GB"];
-
     const res = await postProvision(app, body);
 
-    expect(res.status).toBe(200);
-    await tick();
-    expect(provisionRequests[0]!.venue).toMatchObject({
-      country: "GB",
-      taxId: "GB 123",
-      location: {
-        fiscalTerritory: "GB-vat",
-        postalCode: "SW1A 1AA",
-        province: "England",
-        timeZone: "Europe/London",
-      },
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "country" } },
     });
+    expect(provisionRequests).toEqual([]);
   });
+
+  it.each([
+    ["fiscal territory", "fiscalTerritory", "GB-vat", "location.fiscalTerritory"],
+    ["time zone", "timeZone", "Atlantic/Canary", "location.timeZone"],
+  ] as const)(
+    "refuses a supplied %s that disagrees with the country pack",
+    async (_label, key, value, field) => {
+      const app = new Hono();
+      const { deps, provision } = makeDeps();
+      mountSetup(app, deps, noopLog);
+      const body = demoBody();
+      asRec(asRec(body.venue).location)[key] = value;
+
+      const res = await postProvision(app, body);
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toEqual({
+        code: "setup.request_invalid",
+        params: { field },
+      });
+      expect(provision).not.toHaveBeenCalled();
+    },
+  );
 
   it.each<[string, string, (body: Record<string, unknown>) => void]>([
     ["a bad NIF checksum", "taxId", (body) => void (asRec(body.venue).taxId = "B12345678")],

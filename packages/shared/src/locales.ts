@@ -12,14 +12,15 @@ export const SUPPORTED_LOCALES = [
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]["code"];
 
-export const SUPPORTED_LOCALE_CODES: readonly string[] = SUPPORTED_LOCALES.map((l) => l.code);
+export const SUPPORTED_LOCALE_CODES: readonly SupportedLocale[] = SUPPORTED_LOCALES.map(
+  ({ code }) => code,
+);
 
-/** The absolute floor — reached only when neither province nor country yields
- * an available language. */
+/** The locale resolver's typed floor when no configured preference is available. */
 export const FALLBACK_LOCALE: SupportedLocale = "en-GB";
 
 export function isSupportedLocale(code: string | null | undefined): code is SupportedLocale {
-  return code != null && SUPPORTED_LOCALE_CODES.includes(code);
+  return code != null && SUPPORTED_LOCALE_CODES.some((candidate) => candidate === code);
 }
 
 /** Validate a locale being written. Throws rather than falls back — a write of

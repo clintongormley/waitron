@@ -11,6 +11,7 @@ export const UNITED_KINGDOM: CountryPack = {
   defaultTimeZone: "Europe/London",
   invoiceLocales: ["en-GB"],
   moduleIds: [],
+  availableForVenueSetup: false,
   administrativeAreas: [],
   defaultFiscalJurisdictionId: "GB-vat",
   fiscalJurisdictions: [

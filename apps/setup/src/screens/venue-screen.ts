@@ -9,7 +9,7 @@ import {
   type CountryPack,
   type FiscalJurisdiction,
 } from "@waitron/country";
-import { COUNTRY_PACKS, getCountryPack } from "@waitron/country-packs";
+import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/country-packs";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -19,25 +19,26 @@ import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
 /**
- * The wizard's field-heavy step: the tenant (country, tax id, legal name), its location (name, fiscal
- * territory, invoice languages, address, time zone, day cutover…) and the two invoice series codes —
+ * The wizard's field-heavy step: the tenant (country, tax id, legal name), its location (name,
+ * invoice languages, address and day cutover…) and the two invoice series codes —
  * one logical "your shop" form. Every field name matches the server's `parseVenue` / `VenueRequest`
  * exactly (`apps/server/src/setup-api.ts`, `packages/provisioning/src/venue-plan.ts`), so the emitted
  * patch slots straight into `venue` / `venue.location`.
  *
- * On `Next` it client-validates (every field except `addressLine2` non-empty; `seriesCode` differs
- * from `rectificativeSeriesCode`; one or two invoice languages) — a failure shows a SINGLE
- * `role="alert"` banner and marks the offending fields `invalid`, and nothing is emitted. On success it
+ * On `Next` it validates required fields, the tax identifier and postcode, postcode/province
+ * agreement, supported fiscal jurisdiction, distinct series codes, and one or two invoice languages.
+ * A failure shows a SINGLE `role="alert"` banner and marks the offending fields `invalid`, and nothing
+ * is emitted. On success it
  * emits the `venue` slice as a `setup-patch`, then a screen-agnostic `setup-advance` for the SHELL to
- * route: the venue→`cert`/`review` decision (live ES-common needs the AEAT cert, everything else goes
+ * route: the venue→`cert`/`review` decision (live ES-common needs the AEAT cert; demo goes
  * straight to `review`) lives in `apps/setup/src/setup-app.ts`, which owns the merged draft — this
  * screen no longer reads `mode` for routing. `Back` returns to `admin` (a fixed `setup-goto`). All nav
  * events are composed/bubbling, the pair the shell listens for.
  *
  * The form seeds its local state from the shell's `draft` ONCE on mount, so stepping Back then forward
- * is non-destructive on all fifteen fields. Following `apps/setup/src/screens/admin-screen.ts` for the
- * field/`wt-change`/banner idiom, and `@waitron/ui`'s shared native-`<select>` (`selectStyles`) idiom
- * for the two dropdowns (there is no `wt-select` primitive).
+ * is non-destructive across all editable fields. Following `apps/setup/src/screens/admin-screen.ts`
+ * for the field/`wt-change`/banner idiom, and `@waitron/ui`'s shared native-`<select>`
+ * (`selectStyles`) idiom for the native dropdowns (there is no `wt-select` primitive).
  */
 
 /** The text fields, each a `wt-input`. Everything here is required except `addressLine2`. */
@@ -137,9 +138,8 @@ export class SetupVenueScreen extends LitElement {
   /** The accumulated draft, passed down from the shell. Read ONCE on mount to seed the local fields. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
 
-  /** A server-side venue-validation error the shell routed back here (a `planVenue` refusal, e.g.
-   * `provisioning.territory_country_mismatch`), shown as a banner so the operator can correct the
-   * offending detail and re-submit. `undefined` normally. */
+  /** A server-side venue-validation error the shell routed back here, shown as a banner so the
+   * operator can correct the offending detail and re-submit. `undefined` normally. */
   @property() errorMessage?: string;
 
   /** The editable text fields. Defaults match the shell's seeded draft; seeding overlays what it holds. */
@@ -170,6 +170,8 @@ export class SetupVenueScreen extends LitElement {
 
   /** Guards {@link SetupVenueScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
+  /** True until the operator changes the invoice-language selection themselves. */
+  #invoiceLocalesFollowAreaDefault = true;
 
   override willUpdate(): void {
     if (this.#seeded) return;
@@ -202,6 +204,17 @@ export class SetupVenueScreen extends LitElement {
       rectificativeSeriesCode: venue.rectificativeSeriesCode ?? this.values.rectificativeSeriesCode,
     };
     this.invoiceLocales = loc.invoiceLocales ?? this.invoiceLocales;
+    if (loc.invoiceLocales !== undefined) {
+      const pack = getVenueSetupCountryPack(venue.country ?? this.values.country);
+      const area =
+        pack === undefined || loc.province === undefined
+          ? undefined
+          : findAdministrativeArea(pack, loc.province);
+      this.#invoiceLocalesFollowAreaDefault =
+        pack !== undefined &&
+        loc.invoiceLocales.length === 1 &&
+        loc.invoiceLocales[0] === (area?.defaultLocale ?? pack.defaultLocale);
+    }
   }
 
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
@@ -219,7 +232,7 @@ export class SetupVenueScreen extends LitElement {
         postalCode: value,
         ...(area === undefined ? {} : { province: area.name }),
       };
-      if (pack !== undefined && area !== undefined && this.invoiceLocales.length === 1) {
+      if (pack !== undefined && area !== undefined && this.#invoiceLocalesFollowAreaDefault) {
         this.invoiceLocales = [area.defaultLocale ?? pack.defaultLocale];
       }
       return;
@@ -230,9 +243,12 @@ export class SetupVenueScreen extends LitElement {
   #onCountry(event: Event): void {
     event.stopPropagation();
     const country = (event.target as HTMLSelectElement).value;
-    const pack = getCountryPack(country);
+    const pack = getVenueSetupCountryPack(country);
     this.values = { ...this.values, country, postalCode: "", province: "" };
-    if (pack !== undefined) this.invoiceLocales = [pack.defaultLocale];
+    if (pack !== undefined) {
+      this.invoiceLocales = [pack.defaultLocale];
+      this.#invoiceLocalesFollowAreaDefault = true;
+    }
   }
 
   #onProvince(event: Event): void {
@@ -242,13 +258,13 @@ export class SetupVenueScreen extends LitElement {
     const area = findAdministrativeArea(pack, (event.target as HTMLSelectElement).value);
     if (area === undefined) return;
     this.values = { ...this.values, province: area.name };
-    if (this.invoiceLocales.length === 1) {
+    if (this.#invoiceLocalesFollowAreaDefault) {
       this.invoiceLocales = [area.defaultLocale ?? pack.defaultLocale];
     }
   }
 
   #pack(): CountryPack | undefined {
-    return getCountryPack(this.values.country);
+    return getVenueSetupCountryPack(this.values.country);
   }
 
   #area(pack = this.#pack()): AdministrativeArea | undefined {
@@ -262,6 +278,7 @@ export class SetupVenueScreen extends LitElement {
   /** A locale checkbox toggled: add it to (or drop it from) the selected set, preserving the order. */
   #onLocaleToggle(locale: string, event: Event): void {
     event.stopPropagation();
+    this.#invoiceLocalesFollowAreaDefault = false;
     const checked = (event.target as HTMLInputElement).checked;
     this.invoiceLocales = checked
       ? [...this.invoiceLocales, locale]
@@ -402,7 +419,7 @@ export class SetupVenueScreen extends LitElement {
             ?invalid=${this.invalid.has("country")}
             @change=${(event: Event) => this.#onCountry(event)}
           >
-            ${COUNTRY_PACKS.map(
+            ${VENUE_SETUP_COUNTRY_PACKS.map(
               (country) =>
                 html`<option
                   value=${country.countryCode}

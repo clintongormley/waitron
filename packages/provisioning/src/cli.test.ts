@@ -1287,7 +1287,7 @@ describe("runCli venue", () => {
   });
 
   it("refuses an unimplemented territory and applies nothing", async () => {
-    const args = VENUE_ARGS.map((arg) => (arg === "ES-common" ? "ES-PV-bizkaia" : arg));
+    const args = VENUE_ARGS.map((arg) => (arg === "ES-common" ? "ES-canary" : arg));
     const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(1);

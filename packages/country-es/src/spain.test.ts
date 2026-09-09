@@ -31,6 +31,7 @@ describe("validateSpanishNif", () => {
     ["A1234567D", "checksum"],
     ["N12345674", "checksum"],
     ["P12345674", "checksum"],
+    ["K1234567A", "checksum"],
   ] as const)("rejects %s with reason %s", (input, reason) => {
     expect(validateSpanishNif(input)).toEqual({ valid: false, reason });
   });
@@ -83,6 +84,12 @@ describe("Spanish postcodes and provinces", () => {
     expect(SPAIN.administrativeAreas.find(({ code }) => code === "48")?.defaultLocale).toBe(
       "eu-ES",
     );
+    expect(SPAIN.administrativeAreas.find(({ code }) => code === "03")?.defaultLocale).toBe(
+      "ca-ES",
+    );
+    expect(
+      SPAIN.administrativeAreas.find(({ code }) => code === "31")?.defaultLocale,
+    ).toBeUndefined();
     expect(
       SPAIN.administrativeAreas.find(({ code }) => code === "28")?.defaultLocale,
     ).toBeUndefined();
@@ -99,6 +106,8 @@ describe("Spanish postcodes and provinces", () => {
       id: "ES-foral-basque",
       supported: false,
     });
+    expect(resolveFiscalJurisdiction(SPAIN, "01")?.id).toBe("ES-foral-basque");
+    expect(resolveFiscalJurisdiction(SPAIN, "20")?.id).toBe("ES-foral-basque");
     expect(resolveFiscalJurisdiction(SPAIN, "31")).toMatchObject({
       id: "ES-foral-navarre",
       supported: false,
@@ -107,6 +116,7 @@ describe("Spanish postcodes and provinces", () => {
       id: "ES-canary",
       supported: false,
     });
+    expect(resolveFiscalJurisdiction(SPAIN, "38")?.id).toBe("ES-canary");
     expect(resolveFiscalJurisdiction(SPAIN, "51")).toMatchObject({
       id: "ES-ceuta",
       supported: false,
@@ -115,6 +125,14 @@ describe("Spanish postcodes and provinces", () => {
       id: "ES-melilla",
       supported: false,
     });
+
+    for (const { code } of SPAIN.administrativeAreas) {
+      const matching = SPAIN.fiscalJurisdictions.filter(({ areaCodes }) =>
+        areaCodes.includes(code),
+      );
+      expect(matching, code).toHaveLength(1);
+      expect(resolveFiscalJurisdiction(SPAIN, code), code).toBe(matching[0]);
+    }
   });
 });
 

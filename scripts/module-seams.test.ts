@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -41,7 +41,30 @@ const DEFERRED_RUNTIME_PASS = new Map<string, string>([]);
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const REGIME_PACKAGES = ["@waitron/fiscal-verifactu", "@waitron/verifactu"];
-const COUNTRY_IMPLEMENTATIONS = ["@waitron/country-es", "@waitron/country-gb"];
+
+function workspaceSourceFiles(parent: "apps" | "packages"): string[] {
+  return readdirSync(join(REPO_ROOT, parent), { withFileTypes: true }).flatMap((entry) => {
+    const src = join(REPO_ROOT, parent, entry.name, "src");
+    return entry.isDirectory() && existsSync(src) ? sourceFiles(src) : [];
+  });
+}
+
+function countryImplementationPackages(): string[] {
+  return readdirSync(join(REPO_ROOT, "packages"), { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() && entry.name.startsWith("country-") && entry.name !== "country-packs",
+    )
+    .map((entry) => {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "packages", entry.name, "package.json"), "utf8"),
+      ) as { name: string };
+      return manifest.name;
+    })
+    .sort();
+}
+
+const COUNTRY_IMPLEMENTATIONS = countryImplementationPackages();
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -175,7 +198,7 @@ describe("the territory registry and the fiscal slot agree", () => {
 });
 
 describe("country implementations are named only by the browser-safe country registry", () => {
-  const files = [join(REPO_ROOT, "apps"), join(REPO_ROOT, "packages")].flatMap(sourceFiles);
+  const files = [...workspaceSourceFiles("apps"), ...workspaceSourceFiles("packages")];
   const registry = "packages/country-packs/src/registry.ts";
 
   it("scans production sources and finds the registry's implementation imports", () => {
@@ -186,13 +209,18 @@ describe("country implementations are named only by the browser-safe country reg
   });
 
   it.each(files.map((file) => [relative(REPO_ROOT, file), file]))("%s", (rel, file) => {
-    if (
-      rel === registry ||
-      rel.startsWith("packages/country-es/") ||
-      rel.startsWith("packages/country-gb/")
-    ) {
-      return;
-    }
+    if (rel === registry) return;
     expect(imports(file, COUNTRY_IMPLEMENTATIONS)).toEqual([]);
+  });
+
+  it("finds a planted cross-import from one country implementation to another", () => {
+    const dir = mkdtempSync(join(tmpdir(), "country-seams-"));
+    try {
+      const bad = join(dir, "bad.ts");
+      writeFileSync(bad, 'import { SPAIN } from "@waitron/country-es";\n');
+      expect(imports(bad, COUNTRY_IMPLEMENTATIONS)).toEqual(["@waitron/country-es"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
