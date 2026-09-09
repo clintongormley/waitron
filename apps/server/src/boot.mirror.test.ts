@@ -261,13 +261,14 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(await bundle.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
       // The operational agent/device groups are NOT mounted on a mirror — boot.ts wraps both mounts in
-      // its `if (!isMirror)` mount guard (boot.ts, Task 4). These are GETs, so the read-only gate would pass them
-      // through; the guarantee that a mirror never runs their write-behind-a-GET (`GET /print-api/agent/
-      // jobs` → claimPrintJobs, a locking UPDATE — read-only-gate.ts's own comment flags exactly this)
-      // rests on the route being ABSENT (404), not on the verb. The primary control below reaches each
-      // route's agent/device auth (NOT 404) — the A/B that these 404s are the guard, not a missing route.
-      const printJobs = await fetch(`${base}/print-api/agent/jobs`);
-      expect(printJobs.status).toBe(404);
+      // its `if (!fencedOrMirror)` mount guard. The mount/unmount WITNESS is a SAFE-verb route of the
+      // group (`GET /print-api/agent/join/status`): a GET bypasses the read-only gate, so a 404 means the
+      // route is ABSENT (the group unmounted), not gated — and on a primary the same GET is 200 (mounted),
+      // so the two answers differ (the A/B, CLAUDE.md §1). The pull itself (`POST /print-api/agent/jobs`)
+      // is now an honest write verb the read-only gate would refuse anyway; it is no longer a probe here
+      // because a POST would 403 on the mirror whether the route exists or not.
+      const printStatus = await fetch(`${base}/print-api/agent/join/status`);
+      expect(printStatus.status).toBe(404);
       const deviceStation = await fetch(`${base}/api/device/station`);
       expect(deviceStation.status).toBe(404);
 
@@ -439,11 +440,14 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(bundle.status).toBe(401);
       expect((await bundle.json()).error.code).toBe("password.invalid");
 
-      // The operational agent/device groups DO mount on a primary (CLAUDE.md §1's other direction):
-      // each GET reaches its own agent/device auth (401 — a missing Bearer / device cookie), never a
-      // 404. This is what makes the mirror's 404s above the guard rather than a route that never
-      // existed.
-      const printJobs = await fetch(`${base}/print-api/agent/jobs`);
+      // The operational agent/device groups DO mount on a primary (CLAUDE.md §1's other direction): the
+      // print group's safe-verb witness (`GET /print-api/agent/join/status`) is a live 200 here (mounted),
+      // and the pull (`POST /print-api/agent/jobs`) reaches its agent auth (401 — a missing Bearer),
+      // never a 404. This is what makes the mirror's 404 above the guard rather than a route that never
+      // existed. The device GET reaches its own auth likewise.
+      const printStatus = await fetch(`${base}/print-api/agent/join/status`);
+      expect(printStatus.status).toBe(200);
+      const printJobs = await fetch(`${base}/print-api/agent/jobs`, { method: "POST" });
       expect(printJobs.status).not.toBe(404);
       const deviceStation = await fetch(`${base}/api/device/station`);
       expect(deviceStation.status).not.toBe(404);

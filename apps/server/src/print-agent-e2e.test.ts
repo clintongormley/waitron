@@ -10,6 +10,7 @@ import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/i
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import {
+  BluetoothTransport,
   NetworkTcpTransport,
   RoutingTransport,
   UsbTransport,
@@ -188,6 +189,7 @@ describe("print-agent end to end", () => {
     const transport = new RoutingTransport({
       network_tcp: new NetworkTcpTransport(),
       usb: new UsbTransport(),
+      bluetooth: new BluetoothTransport(),
     });
     const host = fakeHost({
       config: { serverUrl: BASE, name: "e2e" },

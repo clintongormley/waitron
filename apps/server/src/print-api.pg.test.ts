@@ -167,6 +167,16 @@ async function createPrinter(app: Hono, agentId: string, name: string): Promise<
   return ((await res.json()) as { id: string }).id;
 }
 
+/** Create a usb printer keyed on `localKey` (the USB serial) via the management route. */
+async function createUsbPrinter(app: Hono, localKey: string, name: string): Promise<string> {
+  const res = await send(app, "POST", "/management-api/printers", {
+    cookie: managerCookie,
+    body: { name, transport: "usb", localKey },
+  });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
 async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): Promise<string> {
   return withTenant(suite.admin, tenant.tenantId, async (tx) => {
     await asAppUser(tx);
@@ -192,7 +202,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     const printerId = await createPrinter(app, agentId, "Cocina real");
     const jobId = await enqueue(tenantA, printerId, new Uint8Array([0x41, 0x42]));
 
-    const claim = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    const claim = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(claim.status).toBe(200);
     expect(((await claim.json()) as { jobs: { id: string }[] }).jobs.map((j) => j.id)).toEqual([
       jobId,
@@ -218,14 +228,22 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(done.rows[0]!.delivered_at).not.toBeNull();
   });
 
-  it("agent scope: claims ONLY the calling agent's own printers' jobs (cross-agent → empty)", async () => {
+  it("derived eligibility as the app role: a usb job is NOT claimed by a box that cannot see its key", async () => {
+    // The key-scoped isolation (design §3/§5) run as the REAL app role: a usb printer's job is claimed
+    // only by the box currently seeing its local_key. `mine` pulls WITHOUT the key visible, so the job
+    // stays queued. (This replaces the old agent-bound scope — network_tcp is now location-scoped, so a
+    // cross-agent claim of a network printer is expected; key visibility is the isolation.) The positive
+    // key-claim path is proven under PGlite; here the point is the negative branch under the app grants.
     const app = mountApp(tenantA);
     const mine = await joinAndAccept(app, "Mine");
-    const other = await joinAndAccept(app, "Other");
-    const otherPrinter = await createPrinter(app, other.agentId, "Other printer");
-    const jobId = await enqueue(tenantA, otherPrinter, new Uint8Array([1]));
+    const serial = `SN-${randomUUID()}`;
+    const usbPrinter = await createUsbPrinter(app, serial, "Other USB");
+    const jobId = await enqueue(tenantA, usbPrinter, new Uint8Array([1]));
 
-    const res = await send(app, "GET", "/print-api/agent/jobs", { bearer: mine.token });
+    const res = await send(app, "POST", "/print-api/agent/jobs", {
+      bearer: mine.token,
+      body: { visible: [], scanned: [] },
+    });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { jobs: unknown[] }).jobs).toHaveLength(0);
     const untouched = await suite.admin.execute<{ status: string }>(
@@ -234,17 +252,58 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(untouched.rows[0]!.status).toBe("queued");
   });
 
+  it("discovered-printers reads registered keys + agent names as the app role (grants)", async () => {
+    // The two new management routes run their reads through the same `gated` (asAppUser) transaction as
+    // the sibling list routes. This proves the discovered-printers merge — a SELECT on `printers` +
+    // `print_agents` — succeeds under the real app grants, and that a device the agent reports appears in
+    // the list marked against the registered set (registered → true, unregistered → false).
+    const app = mountApp(tenantA);
+    const { agentId, token } = await joinAndAccept(app, "Inventory");
+    const registered = `SN-${randomUUID()}`;
+    const unregistered = `SN-${randomUUID()}`;
+    await send(app, "POST", "/print-api/agent/jobs", {
+      bearer: token,
+      body: {
+        visible: [
+          { transport: "usb", localKey: registered, make: "Epson" },
+          { transport: "usb", localKey: unregistered },
+        ],
+        scanned: [],
+      },
+    });
+    await createUsbPrinter(app, registered, "Registered");
+
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as {
+      agentId: string;
+      agentName: string | null;
+      localKey?: string;
+      alreadyRegistered: boolean;
+    }[];
+    expect(rows.find((r) => r.localKey === registered)).toMatchObject({
+      agentId,
+      agentName: "Inventory",
+      alreadyRegistered: true,
+    });
+    expect(rows.find((r) => r.localKey === unregistered)).toMatchObject({
+      alreadyRegistered: false,
+    });
+  });
+
   it("a REVOKED agent fails the claim instantly (401)", async () => {
     const app = mountApp(tenantA);
     const { agentId, token } = await joinAndAccept(app, "Revocable");
     await createPrinter(app, agentId, "Revocable printer");
-    expect((await send(app, "GET", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
+    expect((await send(app, "POST", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
 
     const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
       cookie: managerCookie,
     });
     expect(revoke.status).toBe(204);
-    const afterRevoke = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    const afterRevoke = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(afterRevoke.status).toBe(401);
   });
 

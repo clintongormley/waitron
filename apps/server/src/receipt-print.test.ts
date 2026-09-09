@@ -172,20 +172,8 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
   return { cfg, each: available.find((p) => p.pricingUnit === "each")! };
 }
 
-/** Seed a print agent (raw insert — the `outbox.test.ts` shape) so a `network_tcp` printer has an agent
- *  to belong to. The token hash is a fixture — the agent is never authenticated here. */
-async function seedAgent(cfg: TillConfig): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const { rows } = await tx.execute<{ id: string }>(sql`
-      insert into print_agents (tenant_id, location_id, name, token_hash)
-      values (${cfg.tenantId}, ${cfg.locationId}, 'Recibos agent', 'scrypt$fixture') returning id`);
-    return rows[0]!.id;
-  });
-}
-
 /**
- * Create a receipt printer and return its id. `transport: "network_tcp"` gives it an agent + host so the
+ * Create a receipt printer and return its id. `transport: "network_tcp"` gives it a host so the
  * never-block transport spy (`NetworkTcpTransport.prototype.send`) actually covers ITS delivery path — a
  * `cloud_poll` printer is driven by neither adapter, which would make the spy vacuous. `192.0.2.1` is
  * TEST-NET-1 (RFC 5737, unroutable): if delivery ever ran inline it would route through the spied
@@ -196,14 +184,13 @@ async function makePrinter(
   cfg: TillConfig,
   { active = true, transport = "cloud_poll" as "cloud_poll" | "network_tcp" } = {},
 ): Promise<string> {
-  const agentId = transport === "network_tcp" ? await seedAgent(cfg) : undefined;
   return withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
       printCfg(cfg),
       transport === "network_tcp"
-        ? { name: "Recibos", transport: "network_tcp", agentId: agentId!, host: "192.0.2.1" }
+        ? { name: "Recibos", transport: "network_tcp", host: "192.0.2.1" }
         : { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
     if (!active) await deactivatePrinter(tx, printCfg(cfg), id);

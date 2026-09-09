@@ -12,22 +12,23 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * `update management_sessions set last_seen_at = now()` on a mirror's own GETs. That is intended: the gate
  * refuses a CLIENT'S write verb, not the server's own bookkeeping (`mirror-session.ts:49` spells this out).
  *
- * The operational agent/device groups are no longer mounted under `mode='mirror'`: boot.ts wraps both
+ * The operational agent/device groups are not mounted under `mode='mirror'`: boot.ts wraps both
  * `mountDeviceApi`/`mountPrintApi` in its `if (!fencedOrMirror)` mount guard (boot.ts, where
- * `fencedOrMirror = isMirror || fenced`). That closes the one actual
- * write-behind-a-GET on this surface — `GET /print-api/agent/jobs`, whose `claimPrintJobs` runs a locking
- * `SELECT … FOR UPDATE … SKIP LOCKED` + `UPDATE` (packages/printing/src/runtime.ts:145-179) that the verb
- * gate cannot catch. (The device group's own writes are all non-safe verbs the gate already refuses; it is
- * dropped from a mirror as part of the same operational surface, not because it hid a write behind a GET.)
- * So on a mirror that print write-GET is UNREACHABLE (404 — no route), not merely inert because its backing
- * tables (`print_*`) are unprovisioned. A FENCED node (membership rejoin R1) is `mode='primary'`, so this
- * verb gate alone would let that write-GET through; the `fenced` case of that same mount guard un-mounts the
- * operational device/print groups on a fenced node too, so the write-behind-a-GET stays closed (404) for a
- * fenced node exactly as it is for a mirror. This gate is unchanged; only the surface behind it shrank. A future
- * slice that RE-MOUNTS those groups on a mirror (kitchen-sync, promotion) revives the write-behind-a-GET
- * concern — keep them gated by `if (!fencedOrMirror)` (NOT the narrower `!isMirror`, which would re-expose
- * the write-GET on a fenced node), or allow-list the write-GETs here. The dashboard read surface a mirror
- * or fenced node serves stays fully covered.
+ * `fencedOrMirror = isMirror || fenced`). The agent pull — `POST /print-api/agent/jobs`, whose
+ * `claimPrintJobs` runs a locking `SELECT … FOR UPDATE … SKIP LOCKED` + `UPDATE`
+ * (packages/printing/src/runtime.ts) — is an HONEST write verb the method gate below already refuses, so
+ * the mount guard is belt-and-braces for it rather than the sole protection (it used to be a GET, a
+ * write-behind-a-GET the verb gate could not catch — the pull moved to POST in the central-printer
+ * inventory work). The device group's own writes are likewise non-safe verbs the gate refuses. Both are
+ * dropped from a mirror as the whole operational surface — the tighter read-only-mirror posture — so on a
+ * mirror the print/device routes are UNREACHABLE (404 — no route), not merely inert because their backing
+ * tables (`print_*`, `devices`) are unprovisioned. A FENCED node (membership rejoin R1) is
+ * `mode='primary'`, so the same mount guard un-mounts these groups on a fenced node too. This gate is
+ * unchanged; only the surface behind it shrank. A future slice that RE-MOUNTS those groups on a mirror
+ * (kitchen-sync, promotion) must keep them gated by `if (!fencedOrMirror)` (NOT the narrower `!isMirror`);
+ * the pull's POST would then be refused by the verb gate on a fenced node, but any safe-verb read the
+ * group exposes still needs care. The dashboard read surface a mirror or fenced node serves stays fully
+ * covered.
  *
  * ALTITUDE (deliberate, deferred to promotion Slice 3): the landed promotion design
  * (docs/superpowers/specs/2026-08-29-promotion-runbook-design.md §3a "Mount-and-gate everything") sets the

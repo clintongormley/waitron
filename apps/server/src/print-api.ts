@@ -13,7 +13,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   asAppUser,
@@ -123,8 +123,9 @@ const TEST_PRINT_PAYLOAD = esc().init().line("Waitron").line("Test print").feed(
  *    reads the HTTP status, not the code string, so there is no `agent.*` sibling to mint.
  *  - Printer/agent management: `printer.not_found` (an absent printer id, 404),
  *    `printer.invalid_config` (a transport short of its required fields, 422 Unprocessable — the config
- *    is well-formed JSON but semantically invalid), `agent.not_found` (an absent agent id on revoke, or
- *    a printer bound to an unknown agent — the composite FK mapped friendly, 404).
+ *    is well-formed JSON but semantically invalid), `printer.already_registered` (a second registration
+ *    of a device already keyed in this venue — the partial local_key UNIQUE mapped friendly, 409), and
+ *    `agent.not_found` (an absent agent id on revoke, 404 — printers no longer store an agent binding).
  *  - Station ↔ printer mapping (KDS-4 §3e): `station.not_found` (an absent/deactivated station on
  *    attach, 404 — the KDS-1 code, param `{ stationId }`) and `printer.not_found` (an absent/inactive
  *    printer on attach, 404, reused from above). Detach/list never live-check, so they throw neither.
@@ -141,6 +142,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_rate_limited": 429,
   "printer.not_found": 404,
   "printer.invalid_config": 422,
+  // A second registration of a physical device already registered in this venue — the partial UNIQUE
+  // (tenant_id, location_id, local_key), mapped friendly by `createPrinter`/`updatePrinter` (§9).
+  "printer.already_registered": 409,
   "agent.not_found": 404,
   "station.not_found": 404,
   "management_session.required": 401,
@@ -181,15 +185,6 @@ function nullableOptionalInt(v: unknown, field: string): number | null | undefin
   return v;
 }
 
-/** Screen an OPTIONAL, NULLABLE body UUID (an update that may re-bind or clear `agentId`): `undefined`
- * passes untouched, `null` clears, any other value must be a UUID-shaped string (else a non-uuid would
- * `22P02` in the `uuid` column → an opaque 500) via `requireBodyUuid`. */
-function nullableOptionalUuid(v: unknown, field: string): string | null | undefined {
-  if (v === undefined) return undefined;
-  if (v === null) return null;
-  return requireBodyUuid(v, field);
-}
-
 /** Screen an OPTIONAL body boolean: `undefined` passes untouched; any present value must be a boolean. */
 function optionalBool(v: unknown, field: string): boolean | undefined {
   if (v === undefined) return undefined;
@@ -197,12 +192,84 @@ function optionalBool(v: unknown, field: string): boolean | undefined {
   return v;
 }
 
-/** Screen an OPTIONAL body UUID (a create's `agentId`, which is either present-and-well-formed or
- * absent — never an explicit `null` on create): `undefined` passes untouched, any present value must be
- * UUID-shaped (else a non-uuid would `22P02` the `uuid` column → an opaque 500) via `requireBodyUuid`. */
-function optionalUuid(v: unknown, field: string): string | undefined {
-  if (v === undefined) return undefined;
-  return requireBodyUuid(v, field);
+/**
+ * The inventory the agent posts on every pull (design §8, mirroring `@waitron/print-agent`'s wire
+ * shapes — kept as LOCAL interfaces because `@waitron/print-agent` is a database-free process this
+ * server must not import at runtime). `visible` is the box's cheap always-on presence (attached USB
+ * serials, paired Bluetooth MACs — each carries a `localKey`); `scanned` is the expensive windowed
+ * discovery result, which may be any transport and need not carry a `localKey` (a fresh network printer
+ * answers with host/port, an unpaired Bluetooth device with a name). Both feed the in-memory discovered
+ * inventory; only `visible` keys feed the claim's eligibility (§5).
+ */
+interface VisibleDeviceWire {
+  transport: "usb" | "bluetooth";
+  localKey: string;
+  make?: string;
+  model?: string;
+  name?: string;
+}
+interface DiscoveredDeviceWire {
+  transport: string;
+  localKey?: string;
+  host?: string;
+  port?: number;
+  make?: string;
+  model?: string;
+  name?: string;
+}
+
+/** An optional string on a wire object: present-and-a-string passes through, anything else is dropped
+ * (the wire is untrusted; a malformed field is discarded, not a 400 — the agent is a first-party box
+ * but the screen keeps a bad report from poisoning the in-memory store). */
+function wireString(v: unknown): string | undefined {
+  return typeof v === "string" ? v : undefined;
+}
+
+/** Shape-screen the posted `visible` array into `VisibleDeviceWire[]`, DROPPING malformed entries: a
+ * present `transport` of exactly `usb`/`bluetooth` and a string `localKey` are required (an entry short
+ * of either is discarded). */
+function screenVisible(raw: unknown): VisibleDeviceWire[] {
+  if (!Array.isArray(raw)) return [];
+  const out: VisibleDeviceWire[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const d = entry as Record<string, unknown>;
+    if ((d.transport !== "usb" && d.transport !== "bluetooth") || typeof d.localKey !== "string") {
+      continue;
+    }
+    out.push({
+      transport: d.transport,
+      localKey: d.localKey,
+      make: wireString(d.make),
+      model: wireString(d.model),
+      name: wireString(d.name),
+    });
+  }
+  return out;
+}
+
+/** Shape-screen the posted `scanned` array into `DiscoveredDeviceWire[]`, DROPPING malformed entries: a
+ * present `transport` that is one of the known `print_transport` members is required; `localKey`/`host`
+ * (strings) and `port` (an integer) are optional and dropped when malformed. */
+function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
+  if (!Array.isArray(raw)) return [];
+  const members = printTransport.enumValues as readonly string[];
+  const out: DiscoveredDeviceWire[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const d = entry as Record<string, unknown>;
+    if (typeof d.transport !== "string" || !members.includes(d.transport)) continue;
+    out.push({
+      transport: d.transport,
+      localKey: wireString(d.localKey),
+      host: wireString(d.host),
+      port: typeof d.port === "number" && Number.isInteger(d.port) ? d.port : undefined,
+      make: wireString(d.make),
+      model: wireString(d.model),
+      name: wireString(d.name),
+    });
+  }
+  return out;
 }
 
 /**
@@ -218,12 +285,15 @@ function optionalUuid(v: unknown, field: string): string | undefined {
  *     `GET /print-api/agent/join/status` is the joiner asking whether it is in yet, on that Bearer.
  *     Approval is an ADMIN act on another surface (`join-api.ts`'s accept route), never anything the
  *     agent does for itself. The knock is rate-limited FIRST, then window-gated, both before any DB work.
- *  2. AGENT-GATED routes (`GET /print-api/agent/jobs`, `POST /print-api/agent/jobs/:id/result`) — each
- *     calls `requireAgent` (Bearer, 401 otherwise; a REVOKED agent fails instantly) and then acts only
- *     within the authenticated agent's OWN printers' scope. The claim CLAIMS-and-COMMITS within the
- *     request (Controller Ruling 6): the server holds NO lock or transaction across the remote agent's
- *     push — the agent pushes the bytes itself and REPORTs the outcome in a separate request. The pull
- *     also carries the venue's `nodeId` + routable `servers` so the agent follows the primary.
+ *  2. AGENT-GATED routes (`POST /print-api/agent/jobs`, `POST /print-api/agent/jobs/:id/result`) — each
+ *     calls `requireAgent` (Bearer, 401 otherwise; a REVOKED agent fails instantly). The pull is a POST
+ *     carrying the box's live inventory (`visible`/`scanned`, design §8): the server records it and
+ *     claims by DERIVED eligibility (§5) — a usb/bluetooth printer only for the box that sees its
+ *     `local_key`, a network_tcp printer for any box at its location. The claim CLAIMS-and-COMMITS within
+ *     the request (Controller Ruling 6): the server holds NO lock or transaction across the remote
+ *     agent's push — the agent pushes the bytes itself and REPORTs the outcome in a separate request.
+ *     The pull also carries the venue's `nodeId` + routable `servers` so the agent follows the primary,
+ *     and `discoveryUntil` so the box knows to actively scan while the window is open.
  *  3. `printer.manage`-GATED management routes (the agents list/revoke, the printers CRUD, the job list) —
  *     each calls `requireManagementSession` (401) then funnels its DB work through the local `gated`
  *     helper, which `authorizeManager`s `printer.manage` (403) before the op runs, in exactly one place.
@@ -234,6 +304,24 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // over a controllable clock, production omits it and gets the default `createEnrolRateLimiter()`
   // throwing the shared `device.join_rate_limited` (429).
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
+
+  // Transient venue state (spec §6): the discovered inventory + the discovery window live in memory — no
+  // table (owner, 2026-09-09). Agent polls rebuild them within ~2s of a restart.
+  interface DiscoveredEntry {
+    agentId: string;
+    transport: string;
+    localKey?: string;
+    host?: string;
+    port?: number;
+    make?: string;
+    model?: string;
+    name?: string;
+    lastSeenAt: number;
+  }
+  const discovered = new Map<string, DiscoveredEntry>(); // key: `${agentId}:${transport}:${localKey ?? host+":"+port}`
+  let discoveryUntil = 0; // epoch ms; 0 = closed
+  const DISCOVERY_WINDOW_MS = 3 * 60_000;
+  const DISCOVERED_TTL_MS = 15_000;
 
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // `printer.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
@@ -300,23 +388,61 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // ── Claim this agent's queued jobs (AGENT-GATED) ─────────────────────────────────────────────────
-  app.get("/print-api/agent/jobs", (c) =>
+  // ── Claim this agent's due jobs, carrying the box's live inventory (AGENT-GATED) ─────────────────
+  // A POST, not a GET (design §8): the body carries the box's current inventory — the devices it can
+  // already reach (`visible`) and, while a discovery window is open, what an active scan turned up
+  // (`scanned`). The server records both in its in-memory discovered store and uses the visible USB/BT
+  // keys as the claim's eligibility set (§5): a usb/bluetooth printer is claimed only by the box that
+  // currently SEES its `local_key`, while a network_tcp printer is claimed by any box at the printer's
+  // location.
+  app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db, cfg: deps.cfg }, c);
+      const body = await readJsonBody<{ visible?: unknown; scanned?: unknown }>(c);
+      const visible = screenVisible(body.visible);
+      const scanned = screenScanned(body.scanned);
+
+      // Upsert the reported devices into the in-memory discovered inventory, stamping `lastSeenAt` so a
+      // device the box stops reporting ages out of the dashboard's list by the TTL (read side below).
+      const now = Date.now();
+      const remember = (d: DiscoveredEntry): void => {
+        const locator = d.localKey ?? `${d.host}:${d.port}`;
+        discovered.set(`${agentId}:${d.transport}:${locator}`, d);
+      };
+      for (const v of visible) {
+        remember({ agentId, ...v, lastSeenAt: now });
+      }
+      for (const s of scanned) {
+        remember({ agentId, ...s, lastSeenAt: now });
+      }
+
+      // The eligibility keys: the local ids of the usb/bluetooth devices the box currently SEES. A
+      // network printer's `scanned`/`visible` entry never contributes a claim key (network_tcp is
+      // location-scoped, not key-scoped, §5).
+      const visibleKeys = visible
+        .filter((v) => v.transport === "usb" || v.transport === "bluetooth")
+        .map((v) => v.localKey);
+
       // CLAIM-and-COMMIT within the request (Controller Ruling 6): the locking claim runs inside this
       // `withTenant` transaction, which COMMITS when the handler returns — the HTTP response is the
       // commit boundary. The server then holds NO lock or transaction across the remote agent's socket
-      // write; the agent pushes the bytes and REPORTs via `/result`. `claimPrintJobs` scopes to the
-      // authenticated agent's OWN printers, so a cross-agent claim returns an empty batch.
+      // write; the agent pushes the bytes and REPORTs via `/result`.
+      // TODO(multi-location): `deps.cfg.locationId` is THIS server's location, which equals the agent's
+      // under one-location-per-DB. A future multi-location tenant reads the agent's own
+      // `print_agents.location_id` instead of the server's.
       const claimed = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return claimPrintJobs(tx, deps.cfg, agentId);
+        return claimPrintJobs(tx, deps.cfg, agentId, {
+          locationId: deps.cfg.locationId,
+          visibleKeys,
+        });
       });
       // The OPAQUE payload bytes ride as base64 over JSON (the agent decodes and pushes them verbatim);
-      // the printer connection facts travel alongside so the agent's transport knows where to send.
-      // `nodeId` + `servers` mirror the till's `GET /api/till` pull (till-api.ts): the agent polls each
-      // routable server to follow the primary across a failover, and `nodeId` tells which it is now on.
+      // the printer connection facts travel alongside so the agent's transport knows where to send — for
+      // a usb/bluetooth job the box `resolve`s `localKey` to a device sink, for network_tcp it uses
+      // host/port. `nodeId` + `servers` mirror the till's `GET /api/till` pull (till-api.ts): the agent
+      // polls each routable server to follow the primary across a failover, and `nodeId` tells which it
+      // is now on. `discoveryUntil` echoes the open window (null when shut) so the box knows to scan.
       const held = await deps.readMembership();
       return c.json({
         nodeId: deps.cfg.nodeId,
@@ -327,9 +453,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           transport: job.transport,
           host: job.host,
           port: job.port,
-          usbPath: job.usb_path,
+          localKey: job.local_key,
           payload: Buffer.from(job.payload).toString("base64"),
         })),
+        discoveryUntil: discoveryUntil > Date.now() ? discoveryUntil : null,
       });
     }),
   );
@@ -404,26 +531,80 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
+  // ── Open the venue discovery window (printer.manage) ─────────────────────────────────────────────
+  // The operator clicks "Scan for printers" (design §6): opens a short venue-wide window, held as a
+  // `discoveryUntil` timestamp in server memory (like the pairing window), which the agent pull echoes so
+  // each box runs its expensive active scan `while now < discoveryUntil`. `gated` authorises
+  // `printer.manage` (a session DB read) but does no printer/job work; the window is a memory write.
+  app.post("/management-api/printer-discovery/start", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      await gated(sessionId, async () => {}); // authorises printer.manage; no printer/job work
+      discoveryUntil = Date.now() + DISCOVERY_WINDOW_MS;
+      return c.json({ discoveryUntil });
+    }),
+  );
+
+  // ── The merged discovered-printer list (printer.manage) ──────────────────────────────────────────
+  // The dashboard's create flow (design §6/§10): every device the agents currently report, each marked
+  // whether it is ALREADY a registered printer (its `local_key` matches one). Stale entries (a device
+  // the box stopped reporting) are pruned by the TTL first. Two tenant-scoped reads back the merge —
+  // registered printers' `local_key`s and the agents' names — both under an explicit `tenant_id`
+  // predicate (CLAUDE.md §3: a list read carries its own, one-tenant-per-db is not the query boundary).
+  app.get("/management-api/discovered-printers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const now = Date.now();
+      for (const [k, e] of discovered)
+        if (now - e.lastSeenAt > DISCOVERED_TTL_MS) discovered.delete(k);
+      const { registered, agents } = await gated(sessionId, async (tx) => ({
+        registered: await tx
+          .select({ localKey: printers.localKey })
+          .from(printers)
+          .where(and(eq(printers.tenantId, deps.cfg.tenantId), isNotNull(printers.localKey))),
+        agents: await tx
+          .select({ id: printAgents.id, name: printAgents.name })
+          .from(printAgents)
+          .where(eq(printAgents.tenantId, deps.cfg.tenantId)), // tenant predicate — CLAUDE.md §3
+      }));
+      const names = new Map(agents.map((a) => [a.id, a.name]));
+      const keys = new Set(registered.map((r) => r.localKey));
+      return c.json(
+        [...discovered.values()].map((e) => ({
+          agentId: e.agentId,
+          agentName: names.get(e.agentId) ?? null,
+          transport: e.transport,
+          localKey: e.localKey,
+          host: e.host,
+          port: e.port,
+          make: e.make,
+          model: e.model,
+          name: e.name,
+          alreadyRegistered: e.localKey !== undefined && keys.has(e.localKey),
+        })),
+      );
+    }),
+  );
+
   // ── Create a printer (printer.manage) ────────────────────────────────────────────────────────────
   app.post("/management-api/printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       // Screen the SHAPE here; `createPrinter` owns the required-field check (`printer.invalid_config`)
-      // and the DB owns the transport CHECK + agent FK (mapped friendly). A non-uuid `agentId` is
-      // screened here so it never `22P02`s the `uuid` column.
+      // and the DB owns the transport CHECK + the partial `local_key` UNIQUE (mapped friendly to
+      // `printer.already_registered`). Which agent serves a printer is DERIVED at run time from the
+      // devices it sees (design §3), never stored — the body carries no `agentId`.
       const input: CreatePrinterInput = {
         name: requireString(body.name, "name"),
         transport: requireEnum(body.transport, "transport", printTransport.enumValues),
       };
-      const agentId = optionalUuid(body.agentId, "agentId");
-      if (agentId !== undefined) input.agentId = agentId;
       const host = optionalString(body.host, "host");
       if (host !== undefined) input.host = host;
       const port = nullableOptionalInt(body.port, "port");
       if (port !== undefined && port !== null) input.port = port;
-      const usbPath = optionalString(body.usbPath, "usbPath");
-      if (usbPath !== undefined) input.usbPath = usbPath;
+      const localKey = optionalString(body.localKey, "localKey");
+      if (localKey !== undefined) input.localKey = localKey;
       const pollId = optionalString(body.pollId, "pollId");
       if (pollId !== undefined) input.pollId = pollId;
       const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
@@ -446,23 +627,22 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
       const body = await readJsonBody<Record<string, unknown>>(c);
-      // Every field OPTIONAL (a PATCH touches only what it names); the connection fields + `agentId`
-      // accept an explicit `null` to CLEAR them. `updatePrinter` 404s a missing id and maps the DB
-      // CHECK / agent FK to `printer.invalid_config` / `agent.not_found`.
+      // Every field OPTIONAL (a PATCH touches only what it names); the connection fields accept an
+      // explicit `null` to CLEAR them. `updatePrinter` 404s a missing id and maps the DB CHECK / the
+      // partial `local_key` UNIQUE to `printer.invalid_config` / `printer.already_registered`. No
+      // `agentId`: which agent serves a printer is derived at run time (design §3), never stored.
       const patch: UpdatePrinterInput = {};
       const name = optionalString(body.name, "name");
       if (name !== undefined) patch.name = name;
       if (body.transport !== undefined) {
         patch.transport = requireEnum(body.transport, "transport", printTransport.enumValues);
       }
-      const agentId = nullableOptionalUuid(body.agentId, "agentId");
-      if (agentId !== undefined) patch.agentId = agentId;
       const host = nullableOptionalString(body.host, "host");
       if (host !== undefined) patch.host = host;
       const port = nullableOptionalInt(body.port, "port");
       if (port !== undefined) patch.port = port;
-      const usbPath = nullableOptionalString(body.usbPath, "usbPath");
-      if (usbPath !== undefined) patch.usbPath = usbPath;
+      const localKey = nullableOptionalString(body.localKey, "localKey");
+      if (localKey !== undefined) patch.localKey = localKey;
       const pollId = nullableOptionalString(body.pollId, "pollId");
       if (pollId !== undefined) patch.pollId = pollId;
       if (body.ticketScope !== undefined) {
