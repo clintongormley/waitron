@@ -174,6 +174,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   calls: string[];
   provisionRequests: ProvisionRequest[];
   provision: ReturnType<typeof vi.fn>;
+  seedDemo: ReturnType<typeof vi.fn>;
   establishIdentity: ReturnType<typeof vi.fn>;
   seedMembership: ReturnType<typeof vi.fn>;
   persistTrading: ReturnType<typeof vi.fn>;
@@ -185,6 +186,9 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     provisionRequests.push(req);
     calls.push("provision");
     return makeVenueResult();
+  });
+  const seedDemo = vi.fn(async () => {
+    calls.push("seedDemo");
   });
   const establishIdentity = vi.fn(async () => {
     calls.push("establishIdentity");
@@ -213,6 +217,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   const deps: SetupDeps = {
     environment: "preproduction",
     provision,
+    seedDemo,
     establishIdentity,
     seedMembership,
     db,
@@ -228,6 +233,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     calls,
     provisionRequests,
     provision,
+    seedDemo,
     establishIdentity,
     seedMembership,
     persistTrading,
@@ -250,7 +256,7 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 const asRec = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
 
 describe("POST /setup-api/provision — orchestration, onboarding intent, cert gate, latch", () => {
-  it("provisions a demo venue: 200, orchestrates in order, defers restart, seals no cert", async () => {
+  it("provisions and seeds a demo venue: 200, orchestrates in order, defers restart, seals no cert", async () => {
     const app = new Hono();
     const {
       deps,
@@ -270,10 +276,17 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
 
     // The restart is scheduled on the NEXT tick, so it has NOT fired by the time the 200 is returned.
     expect(requestRestart).not.toHaveBeenCalled();
-    expect(calls).toEqual(["provision", "establishIdentity", "seedMembership", "persistTrading"]);
+    expect(calls).toEqual([
+      "provision",
+      "seedDemo",
+      "establishIdentity",
+      "seedMembership",
+      "persistTrading",
+    ]);
     await tick();
     expect(calls).toEqual([
       "provision",
+      "seedDemo",
       "establishIdentity",
       "seedMembership",
       "persistTrading",
@@ -323,6 +336,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     await tick();
     expect(provisionRequests[0].environment).toBe("preproduction");
     expect(calls).not.toContain("sealAeat");
+    expect(calls).not.toContain("seedDemo");
     expect(persistTrading.mock.calls[0][0]).toMatchObject({
       environment: "preproduction",
       onboardingIntent: "prepare",
@@ -825,6 +839,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   // box is up but not ready to provision. Also covers each arm of the synchronous deps gate.
   it.each([
     ["provision"],
+    ["seedDemo"],
     ["establishIdentity"],
     ["seedMembership"],
     ["db"],

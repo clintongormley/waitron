@@ -110,6 +110,7 @@ import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
 import { provisionVenue, venueModuleConfig } from "./provision.js";
+import { seedInstalledDemo } from "./demo-seed.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -802,7 +803,8 @@ export async function startServer(
     // `applyMigrations`), ready for the provisioning wizard. The till/dashboard SPAs are deliberately
     // NOT mounted — they are useless without a venue; the built setup wizard IS served (slice 2c) when
     // `config.setupAppDir` is set, threaded into `mountSetup` below as its root catch-all (else the
-    // inline placeholder). The media store is trading-only, so it is not created here either.
+    // inline placeholder). A Demo provision writes its sample product images into the configured
+    // media store before restart; Prepare, Live, mirror and restore leave it untouched.
     //
     // Slice 2b wires the provisioning surface: `ensureBoxSecrets` (2a) runs first (below), then this
     // branch recovers the vault key ring and opens an OWNER connection, and passes both — plus the
@@ -925,6 +927,7 @@ export async function startServer(
                 },
                 req,
               ),
+            seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
             adopt: async (req) => {
               // Adopt establishes a NATIVE subscription (swap step 4), so it needs the MIGRATOR
               // connection that holds `pg_create_subscription` and owns the subscription it creates —

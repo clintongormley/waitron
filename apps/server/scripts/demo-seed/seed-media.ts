@@ -9,8 +9,9 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 
-/** The committed source tiles live beside this module, in `demo-seed/media/`. */
-const SRC_DIR = fileURLToPath(new URL("media", import.meta.url));
+/** The installed image supplies a copied asset directory; source/dev falls back beside this module. */
+const SRC_DIR =
+  process.env.WAITRON_DEMO_MEDIA_SOURCE || fileURLToPath(new URL("media", import.meta.url));
 
 export interface SeedMediaInput {
   /** Absolute directory the served media files are written into — Task 11 passes boot's

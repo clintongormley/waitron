@@ -92,6 +92,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/dist/drizzle/ /app/dr
 COPY --from=build --chown=waitron:waitron /src/apps/till/dist/ /app/web/till/
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/ /app/web/dashboard/
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
+COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/media/ /app/demo-media/
 
 # Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,
 # which is a read-only layer — every writable path is a volume. WAITRON_BACKUP_DIR is deliberately
@@ -122,6 +123,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
   WAITRON_MEDIA_DIR=/var/lib/waitron/media \
+  WAITRON_DEMO_MEDIA_SOURCE=/app/demo-media \
   WAITRON_MIGRATIONS_DIR=/app/drizzle \
   WAITRON_TILL_APP_DIR=/app/web/till \
   WAITRON_DASHBOARD_APP_DIR=/app/web/dashboard \

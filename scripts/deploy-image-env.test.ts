@@ -141,6 +141,11 @@ describe("the container image's environment", () => {
     // hash-chained table. `dist/` holds them; the image must not.
     expect(copied).not.toContain("record-one-sale.js");
   });
+
+  it("ships the sample images at the directory the installed Demo seed reads", () => {
+    expect(IMAGE_ENV.WAITRON_DEMO_MEDIA_SOURCE).toBe("/app/demo-media");
+    expect(DOCKERFILE).toContain("/src/apps/server/scripts/demo-seed/media/ /app/demo-media/");
+  });
 });
 
 describe("every copy of the box's hostname", () => {

@@ -45,6 +45,10 @@ export interface SetupDeps {
    * the trading boot needs. Plaintext admin secrets never reach it — the provision route hashes them at
    * the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  /** Adds the installed sample restaurant after a Demo venue is minted. Prepare and Live never call
+   * it. Boot binds the runtime seed; keeping it injected lets the route prove the mode fork without
+   * touching external files or a database in its orchestration tests. */
+  seedDemo?: (result: VenueResult, req: ProvisionRequest) => Promise<void>;
   /** `adoptFromPrimary({ ownerDb, ring, fetchBundle, persistTrading, … })` bound in boot: the
    * mirror-side sibling of `provision`. Fetches the primary's bundle SERVER-SIDE (so the admin
    * credential never touches a browser→primary hop), adopts the venue into this box's own database,
@@ -371,6 +375,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Captured as
     // consts so TypeScript narrows them non-undefined for the async closure below.
     const provision = deps.provision;
+    const seedDemo = deps.seedDemo;
     const establishIdentity = deps.establishIdentity;
     const seedMembership = deps.seedMembership;
     const db = deps.db;
@@ -381,6 +386,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     const migrationsDatabaseUrl = deps.migrationsDatabaseUrl;
     if (
       provision === undefined ||
+      seedDemo === undefined ||
       establishIdentity === undefined ||
       seedMembership === undefined ||
       db === undefined ||
@@ -456,6 +462,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (expected) secret!.validate(body.aeatCert);
 
         const result = await provision({ environment, venue });
+
+        if (mode === "demo") {
+          await seedDemo(result, { environment, venue });
+        }
 
         // Establish this node's membership identity (design §4): after the tenant/node are minted (the
         // vault row is FK-restricted to the tenant) and before the trading config is persisted. A fresh
