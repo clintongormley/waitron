@@ -44,9 +44,10 @@ export async function startManagementSession(
 export async function resolveManagementSession(
   tx: Transaction,
   sessionId: string,
-): Promise<{ personId: string; role: PersonRoleValue; locale: string | null }> {
+): Promise<{ tenantId: string; personId: string; role: PersonRoleValue; locale: string | null }> {
   const [row] = await tx
     .select({
+      tenantId: managementSessions.tenantId,
       personId: managementSessions.personId,
       lastSeenAt: managementSessions.lastSeenAt,
       role: persons.role,
@@ -63,11 +64,17 @@ export async function resolveManagementSession(
   if (row.status === "suspended") {
     throw new AppError("person.suspended", { personId: row.personId });
   }
+  if (row.status !== "active") throw new AppError("management_session.required", {});
   await tx
     .update(managementSessions)
     .set({ lastSeenAt: sql`now()` })
     .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
-  return { personId: row.personId, role: row.role as PersonRoleValue, locale: row.locale };
+  return {
+    tenantId: row.tenantId,
+    personId: row.personId,
+    role: row.role as PersonRoleValue,
+    locale: row.locale,
+  };
 }
 
 /** Stamp `ended_at` on a live session. Returns true if one was ended, false if none was live. */

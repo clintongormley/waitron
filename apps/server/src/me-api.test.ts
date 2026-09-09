@@ -12,6 +12,7 @@ import {
 } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
+import { IDLE_TIMEOUT_MS } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -174,6 +175,7 @@ describe("mountMeApi — whoami", () => {
         onboardingIntent: string;
         permissions: string[];
         modules: string[];
+        sessionExpiresInSeconds: number;
       },
     ).toEqual({
       personId: me,
@@ -184,6 +186,7 @@ describe("mountMeApi — whoami", () => {
       onboardingIntent: "prepare",
       permissions: [],
       modules: MODULES,
+      sessionExpiresInSeconds: IDLE_TIMEOUT_MS / 1000,
     });
   });
 
@@ -206,6 +209,7 @@ describe("mountMeApi — whoami", () => {
         onboardingIntent: string;
         permissions: string[];
         modules: string[];
+        sessionExpiresInSeconds: number;
       },
     ).toEqual({
       personId: localed,
@@ -216,6 +220,7 @@ describe("mountMeApi — whoami", () => {
       onboardingIntent: "prepare",
       permissions: [],
       modules: MODULES,
+      sessionExpiresInSeconds: IDLE_TIMEOUT_MS / 1000,
     });
   });
 

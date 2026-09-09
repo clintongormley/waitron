@@ -26,8 +26,9 @@ const ROLE_NAMES: NameTable = {
 };
 
 const STATUS_NAMES: NameTable = {
+  pending: { en: "Pending", es: "Pendiente" },
   active: { en: "Active", es: "Activo" },
-  suspended: { en: "Suspended", es: "Suspendido" },
+  suspended: { en: "Inactive", es: "Inactivo" },
 };
 
 const VAT_CLASS_NAMES: NameTable = {

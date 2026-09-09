@@ -26,6 +26,18 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 describe("loginWithPin", () => {
+  it("does not accept a person from another tenant", async () => {
+    const otherTenantId = await seedTenant(suite.db);
+    const tillId = await seedTill(suite.db, tenantId);
+    const personId = await seedPerson(suite.db, otherTenantId);
+
+    const code = await codeOf(() =>
+      run((tx) => loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" })),
+    );
+
+    expect(code).toBe("person.not_found");
+  });
+
   it("opens a session for a person who supplies the right PIN, left open (ended_at IS NULL)", async () => {
     const tillId = await seedTill(suite.db, tenantId);
     const personId = await seedPerson(suite.db, tenantId);

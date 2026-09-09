@@ -1,14 +1,22 @@
 import "./errors.js";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { isUniqueViolation, uniqueViolationConstraint } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, assertSupportedLocale } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
+import { managementSessions } from "./schema/management-sessions.js";
+import { managementAccountActions } from "./schema/management-account-actions.js";
+import { sessions } from "./schema/sessions.js";
+import { webauthnCredentials } from "./schema/webauthn.js";
+import { recoveryCodes } from "./schema/recovery-codes.js";
+import { totpEnrollments } from "./schema/totp-enrollments.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { authorizeManager } from "./manager-login.js";
-import { hashPin } from "./verify-pin.js";
+import { assertPinLength, hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
+
+export { MIN_PIN_LENGTH } from "./verify-pin.js";
 
 /**
  * Translate the ONE driver error the email write paths care about — a `persons_tenant_email_uq`
@@ -46,14 +54,321 @@ export function normalizeAndValidateEmail(raw: string): string {
   return email;
 }
 
-/** The shortest PIN accepted. Four digits is the floor a POS keypad expects; longer is allowed. */
-export const MIN_PIN_LENGTH = 4;
+function requiredText(value: string, field: string): string {
+  const normalized = value.trim();
+  if (normalized === "") throw new AppError("profile.invalid", { field });
+  return normalized;
+}
 
-/** Refuses a PIN below `MIN_PIN_LENGTH` with `pin.too_short` (carrying only the policy `min`, never
- * the PIN). Exported because provisioning's `venue` CLI seeds the FIRST admin outside this gated
- * path and applies the same floor — one implementation of the check, not two that can drift. */
-export function assertPinLength(pin: string): void {
-  if (pin.length < MIN_PIN_LENGTH) throw new AppError("pin.too_short", { min: MIN_PIN_LENGTH });
+async function assertDisplayNameAvailable(
+  tx: Transaction,
+  tenantId: string,
+  displayName: string,
+  excludedPersonId?: string,
+): Promise<void> {
+  const [existing] = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(
+      and(
+        eq(persons.tenantId, tenantId),
+        eq(sql`lower(btrim(${persons.displayName}))`, displayName.toLocaleLowerCase()),
+        ne(persons.status, "suspended"),
+        excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
+      ),
+    );
+  if (existing !== undefined) throw new AppError("person.display_name_taken", { displayName });
+}
+
+/** Saves one complete administrative edit after serializing the active-admin invariant. */
+export async function updatePersonDetails(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    personId: string;
+    displayName: string;
+    firstNames: string;
+    lastNames: string;
+    telephone: string | null;
+    email: string;
+    role: PersonRoleValue;
+    status: "pending" | "active" | "suspended";
+  },
+): Promise<void> {
+  const { authorizedBy, tenantId } = await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  const activeAdmins = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(
+      and(eq(persons.tenantId, tenantId), eq(persons.role, "admin"), eq(persons.status, "active")),
+    )
+    .orderBy(persons.id)
+    .for("update");
+  const [person] = await tx
+    .select()
+    .from(persons)
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .for("update");
+  if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
+  if (input.status === "suspended" && authorizedBy === input.personId.toLowerCase()) {
+    throw new AppError("person.self_deactivation", {});
+  }
+  if (person.status === "suspended" && input.status !== "suspended") {
+    throw new AppError("person.transition_invalid", {});
+  }
+  if (person.status === "pending" && input.status === "active") {
+    throw new AppError("person.transition_invalid", {});
+  }
+  if (
+    person.role === "admin" &&
+    person.status === "active" &&
+    (input.role !== "admin" || input.status !== "active") &&
+    activeAdmins.length === 1
+  ) {
+    throw new AppError("person.last_admin", {});
+  }
+
+  const displayName = requiredText(input.displayName, "displayName");
+  const firstNames = requiredText(input.firstNames, "firstNames");
+  const lastNames = requiredText(input.lastNames, "lastNames");
+  const telephone = input.telephone?.trim() || null;
+  const email = normalizeAndValidateEmail(input.email);
+  await assertDisplayNameAvailable(tx, tenantId, displayName, person.id);
+  try {
+    await tx
+      .update(persons)
+      .set({
+        displayName,
+        firstNames,
+        lastNames,
+        telephone,
+        email,
+        emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
+        role: input.role,
+        status: input.status,
+      })
+      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+  } catch (error) {
+    if (
+      isUniqueViolation(error) &&
+      uniqueViolationConstraint(error) === "persons_tenant_live_display_name_uq"
+    ) {
+      throw new AppError("person.display_name_taken", { displayName });
+    }
+    asEmailTaken(error, email);
+  }
+  if (input.status === "suspended" && person.status !== "suspended") {
+    await tx
+      .update(sessions)
+      .set({ endedAt: sql`now()` })
+      .where(
+        and(
+          eq(sessions.tenantId, tenantId),
+          eq(sessions.personId, person.id),
+          isNull(sessions.endedAt),
+        ),
+      );
+    await tx
+      .update(managementSessions)
+      .set({ endedAt: sql`now()` })
+      .where(
+        and(
+          eq(managementSessions.tenantId, tenantId),
+          eq(managementSessions.personId, person.id),
+          isNull(managementSessions.endedAt),
+        ),
+      );
+    await tx
+      .update(managementAccountActions)
+      .set({ usedAt: sql`now()` })
+      .where(
+        and(
+          eq(managementAccountActions.tenantId, tenantId),
+          eq(managementAccountActions.personId, person.id),
+          isNull(managementAccountActions.usedAt),
+        ),
+      );
+  }
+}
+
+/** Invalidates a person's device PIN so only that person can choose its replacement. */
+export async function clearPersonPin(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string },
+): Promise<void> {
+  const { tenantId } = await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  const updated = await tx
+    .update(persons)
+    .set({ pinHash: null })
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .returning({ id: persons.id });
+  if (updated.length !== 1) throw new AppError("person.not_found", { personId: input.personId });
+  await tx
+    .update(sessions)
+    .set({ endedAt: sql`now()` })
+    .where(
+      and(
+        eq(sessions.tenantId, tenantId),
+        eq(sessions.personId, input.personId),
+        isNull(sessions.endedAt),
+      ),
+    );
+}
+
+/** Clears every login method and returns an account to Pending before issuing a new invitation. */
+export async function resetPersonLogin(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string },
+): Promise<void> {
+  const { tenantId } = await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  const activeAdmins = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(
+      and(eq(persons.tenantId, tenantId), eq(persons.role, "admin"), eq(persons.status, "active")),
+    )
+    .orderBy(persons.id)
+    .for("update");
+  const [person] = await tx
+    .select({
+      id: persons.id,
+      displayName: persons.displayName,
+      role: persons.role,
+      status: persons.status,
+    })
+    .from(persons)
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .for("update");
+  if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
+  if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
+    throw new AppError("person.last_admin", {});
+  }
+  try {
+    await tx
+      .update(persons)
+      .set({
+        pinHash: null,
+        passwordHash: null,
+        totpSecret: null,
+        googleSubject: null,
+        emailVerifiedAt: null,
+        status: "pending",
+      })
+      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+  } catch (error) {
+    if (
+      isUniqueViolation(error) &&
+      (uniqueViolationConstraint(error) === undefined ||
+        uniqueViolationConstraint(error) === "persons_tenant_live_display_name_uq")
+    ) {
+      throw new AppError("person.display_name_taken", { displayName: person.displayName });
+    }
+    throw error;
+  }
+  await tx
+    .delete(webauthnCredentials)
+    .where(
+      and(eq(webauthnCredentials.tenantId, tenantId), eq(webauthnCredentials.personId, person.id)),
+    );
+  await tx
+    .delete(recoveryCodes)
+    .where(and(eq(recoveryCodes.tenantId, tenantId), eq(recoveryCodes.personId, input.personId)));
+  await tx
+    .delete(totpEnrollments)
+    .where(
+      and(eq(totpEnrollments.tenantId, tenantId), eq(totpEnrollments.personId, input.personId)),
+    );
+  await tx
+    .update(sessions)
+    .set({ endedAt: sql`now()` })
+    .where(
+      and(
+        eq(sessions.tenantId, tenantId),
+        eq(sessions.personId, person.id),
+        isNull(sessions.endedAt),
+      ),
+    );
+  await tx
+    .update(managementSessions)
+    .set({ endedAt: sql`now()` })
+    .where(
+      and(
+        eq(managementSessions.tenantId, tenantId),
+        eq(managementSessions.personId, person.id),
+        isNull(managementSessions.endedAt),
+      ),
+    );
+  await tx
+    .update(managementAccountActions)
+    .set({ usedAt: sql`now()` })
+    .where(
+      and(
+        eq(managementAccountActions.tenantId, tenantId),
+        eq(managementAccountActions.personId, person.id),
+        isNull(managementAccountActions.usedAt),
+      ),
+    );
+}
+
+/** Creates the pending account an administrator has invited. Credentials are chosen by its owner. */
+export async function invitePerson(
+  tx: Transaction,
+  input: {
+    tenantId: string;
+    managementSessionId: string;
+    displayName: string;
+    firstNames: string;
+    lastNames: string;
+    telephone: string | null;
+    role: PersonRoleValue;
+    email: string;
+  },
+): Promise<{ id: string }> {
+  const { tenantId } = await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  const displayName = requiredText(input.displayName, "displayName");
+  const firstNames = requiredText(input.firstNames, "firstNames");
+  const lastNames = requiredText(input.lastNames, "lastNames");
+  const telephone = input.telephone?.trim() || null;
+  const email = normalizeAndValidateEmail(input.email);
+  await assertDisplayNameAvailable(tx, tenantId, displayName);
+  try {
+    const [row] = await tx
+      .insert(persons)
+      .values({
+        tenantId,
+        displayName,
+        firstNames,
+        lastNames,
+        telephone,
+        pinHash: null,
+        passwordHash: null,
+        role: input.role,
+        status: "pending",
+        email,
+      })
+      .returning({ id: persons.id });
+    return { id: row!.id };
+  } catch (error) {
+    if (
+      isUniqueViolation(error) &&
+      uniqueViolationConstraint(error) === "persons_tenant_live_display_name_uq"
+    ) {
+      throw new AppError("person.display_name_taken", { displayName });
+    }
+    asEmailTaken(error, email);
+  }
 }
 
 /**
@@ -72,7 +387,7 @@ export async function createPerson(
     email: string;
   },
 ): Promise<{ id: string }> {
-  await authorizeManager(tx, {
+  const { tenantId } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -82,7 +397,7 @@ export async function createPerson(
     const [row] = await tx
       .insert(persons)
       .values({
-        tenantId: input.tenantId,
+        tenantId,
         displayName: input.displayName,
         pinHash: hashPin(input.pin),
         role: input.role,
@@ -107,11 +422,14 @@ export async function setRole(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; role: PersonRoleValue },
 ): Promise<void> {
-  await authorizeManager(tx, {
+  const { tenantId } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  await tx.update(persons).set({ role: input.role }).where(eq(persons.id, input.personId));
+  await tx
+    .update(persons)
+    .set({ role: input.role })
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
 }
 
 /** Resets a person's PIN. Gated on `person.manage`; the new PIN is length-checked, then stored
@@ -120,7 +438,7 @@ export async function resetPin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; pin: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
+  const { tenantId } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -128,7 +446,7 @@ export async function resetPin(
   await tx
     .update(persons)
     .set({ pinHash: hashPin(input.pin) })
-    .where(eq(persons.id, input.personId));
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
 }
 
 /** Grants (or replaces) a person's dashboard password. Gated on `person.manage`:
@@ -139,7 +457,7 @@ export async function setPassword(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; password: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
+  const { tenantId } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -147,7 +465,7 @@ export async function setPassword(
   await tx
     .update(persons)
     .set({ passwordHash: hashPassword(input.password) })
-    .where(eq(persons.id, input.personId));
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
 }
 
 /** Sets (or replaces) a person's login email — the identifier for dashboard sign-in. Gated on
@@ -159,7 +477,7 @@ export async function setEmail(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; email: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
+  const { tenantId } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -168,7 +486,7 @@ export async function setEmail(
     await tx
       .update(persons)
       .set({ email, emailVerifiedAt: null })
-      .where(eq(persons.id, input.personId));
+      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
   } catch (err) {
     asEmailTaken(err, email);
   }
@@ -186,7 +504,10 @@ export async function setPersonLocale(
   input: { tenantId: string; personId: string; locale: string },
 ): Promise<void> {
   const locale = assertSupportedLocale(input.locale);
-  await tx.update(persons).set({ locale }).where(eq(persons.id, input.personId));
+  await tx
+    .update(persons)
+    .set({ locale })
+    .where(and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)));
 }
 
 /** Suspends a person: keeps the row (and its history) while refusing login. Gated on
@@ -195,11 +516,16 @@ export async function suspendPerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
+  const { authorizedBy, tenantId } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, input.personId));
+  if (authorizedBy === input.personId.toLowerCase())
+    throw new AppError("person.self_deactivation", {});
+  await tx
+    .update(persons)
+    .set({ status: "suspended" })
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
 }
 
 /** Reactivates a suspended person, restoring login. Gated on `person.manage`. */
@@ -207,11 +533,14 @@ export async function reactivatePerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
+  const { tenantId } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  await tx.update(persons).set({ status: "active" }).where(eq(persons.id, input.personId));
+  await tx
+    .update(persons)
+    .set({ status: "active" })
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
 }
 
 /** One entry in the pre-login roster: the id the lock screen logs in with, and the name it shows. */
@@ -270,10 +599,13 @@ export async function listActivePersonsWithPermission(
 export interface PersonSummary {
   personId: string;
   displayName: string;
+  firstNames: string | null;
+  lastNames: string | null;
+  telephone: string | null;
   /** The person's login email. Null is reserved for internal principals and low-level fixtures. */
   email: string | null;
   role: PersonRoleValue;
-  status: "active" | "suspended";
+  status: "pending" | "active" | "suspended";
   hasPassword: boolean;
   hasTotp: boolean;
 }
@@ -291,7 +623,7 @@ export async function listPersons(
   tx: Transaction,
   args: { managementSessionId: string },
 ): Promise<PersonSummary[]> {
-  await authorizeManager(tx, {
+  const { tenantId } = await authorizeManager(tx, {
     managementSessionId: args.managementSessionId,
     permission: "person.manage",
   });
@@ -299,6 +631,9 @@ export async function listPersons(
     .select({
       personId: persons.id,
       displayName: persons.displayName,
+      firstNames: persons.firstNames,
+      lastNames: persons.lastNames,
+      telephone: persons.telephone,
       email: persons.email,
       role: persons.role,
       status: persons.status,
@@ -306,13 +641,17 @@ export async function listPersons(
       totpSecret: persons.totpSecret,
     })
     .from(persons)
+    .where(eq(persons.tenantId, tenantId))
     .orderBy(persons.displayName);
   return rows.map((r) => ({
     personId: r.personId,
     displayName: r.displayName,
+    firstNames: r.firstNames,
+    lastNames: r.lastNames,
+    telephone: r.telephone,
     email: r.email,
     role: r.role as PersonRoleValue,
-    status: r.status as "active" | "suspended",
+    status: r.status as "pending" | "active" | "suspended",
     hasPassword: r.passwordHash !== null,
     hasTotp: r.totpSecret !== null,
   }));

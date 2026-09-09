@@ -27,7 +27,7 @@ function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promis
 async function seedSession(tenantId: string, role: PersonRoleValue): Promise<string> {
   const person = await suite.admin.execute<{ id: string }>(sql`
     insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, 'Operator', 'seed-pin-hash', ${role}) returning id`);
+    values (${tenantId}, ${`${role} operator`}, 'seed-pin-hash', ${role}) returning id`);
   const session = await withTenant(suite.admin, tenantId, (tx) =>
     startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
   );

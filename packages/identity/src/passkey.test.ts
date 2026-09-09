@@ -365,29 +365,16 @@ describe("passkey registration", () => {
 
   it("rethrows a non-unique insert failure untranslated, never masked as passkey.already_registered", async () => {
     // The negative control for the isUniqueViolation catch: a NON-unique insert failure must propagate
-    // untranslated. finishPasskeyRegistration inserts with `input.tenantId`; a tenant id with no
-    // `tenants` row makes `webauthn_credentials_tenant_fk` raise 23503 (foreign_key_violation), not
-    // 23505 — so `isUniqueViolation` is false and the raw error is rethrown, never masked as
-    // passkey.already_registered.
+    // untranslated. A forged verifier result with no credential id violates the NOT NULL constraint,
+    // so `isUniqueViolation` is false and the raw error is rethrown.
     const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
-    mockVerify.mockResolvedValue(verified("cred-fk"));
+    mockVerify.mockResolvedValue(verified(null as never));
     const begun = await begin(sessionId);
 
-    const error = await captureError(() =>
-      run((tx) =>
-        finishPasskeyRegistration(tx, {
-          managementSessionId: sessionId,
-          tenantId: "99999999-9999-4999-8999-999999999999",
-          challengeHandle: begun.challengeHandle,
-          response: {} as never,
-          rpId: "localhost",
-          origin: "http://localhost",
-        }),
-      ),
-    );
+    const error = await captureError(() => finish(sessionId, begun.challengeHandle));
     // pgErrorCode reads the SQLSTATE off the raw driver error; an AppError would carry none, so this
     // both proves the error is the 23503 FK violation AND that it was not translated into any AppError.
-    expect(pgErrorCode(error)).toBe("23503");
+    expect(pgErrorCode(error)).toBe("23502");
   });
 });
 

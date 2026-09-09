@@ -172,6 +172,9 @@ export interface ServerConfig {
    * validated as a bare http(s) origin (`bareOrigin`) in EVERY environment — a trailing slash, a path
    * or an explicit default port is refused as `server.config_invalid`, not merely absent-checked. */
   managementOrigin: string;
+  /** Optional Google login client. The callback is derived from the validated management origin so
+   * the configured Google redirect and the server route cannot drift. */
+  googleOidc?: { clientId: string; clientSecret: string; redirectUri: string };
   /**
    * The origin tills route on for THIS node (till-reroute design §3.3): what the node publishes as
    * its `contactUrl` in the membership document, and what the CORS allow-list treats as "self". From
@@ -769,6 +772,16 @@ export function loadConfig(
   const managementOrigin = secureManagementOrigin(
     requiredInProduction(env, "WAITRON_MANAGEMENT_ORIGIN", environment, DEFAULT_MANAGEMENT_ORIGIN),
   );
+  const googleClientId = env.WAITRON_GOOGLE_CLIENT_ID;
+  const googleClientSecret = env.WAITRON_GOOGLE_CLIENT_SECRET;
+  const hasGoogleId = !isUnset(googleClientId);
+  const hasGoogleSecret = !isUnset(googleClientSecret);
+  if (hasGoogleId !== hasGoogleSecret) {
+    throw new AppError("server.config_invalid", {
+      variable: hasGoogleId ? "WAITRON_GOOGLE_CLIENT_SECRET" : "WAITRON_GOOGLE_CLIENT_ID",
+      reason: "google_requires_client_id_and_secret",
+    });
+  }
   return {
     databaseUrl,
     migrationsDatabaseUrl: resolvedMigrations,
@@ -828,6 +841,15 @@ export function loadConfig(
     // `httpHost` above follows, applied inside the helper.
     managementRpId,
     managementOrigin,
+    ...(hasGoogleId && hasGoogleSecret
+      ? {
+          googleOidc: {
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
+            redirectUri: `${managementOrigin}/management-api/google/callback`,
+          },
+        }
+      : {}),
     // The origin tills route on for this node — defaulting to the origin the dashboard is already
     // served from, so a box that configures nothing still advertises a reachable address. Both
     // variables are validated as bare origins under their own names, so neither can reach a till

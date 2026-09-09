@@ -16,7 +16,12 @@ export type DashboardRequest = <T>(path: string, method: string, body?: unknown)
  * on 401 — it only decodes and throws the code.
  */
 export function createRequest(
-  opts: { baseUrl?: string; fetchImpl?: FetchLike } = {},
+  opts: {
+    baseUrl?: string;
+    fetchImpl?: FetchLike;
+    onError?: (code: string) => void;
+    onSuccess?: (path: string) => void;
+  } = {},
 ): DashboardRequest {
   const baseUrl = opts.baseUrl ?? "";
   const fetchImpl = opts.fetchImpl ?? fetch;
@@ -35,9 +40,12 @@ export function createRequest(
     const res = await fetchImpl(baseUrl + path, init);
     if (!res.ok) {
       const envelope = (await res.json()) as { error?: { code?: string } };
-      throw { code: envelope.error?.code ?? "server.internal" };
+      const code = envelope.error?.code ?? "server.internal";
+      opts.onError?.(code);
+      throw { code };
     }
     const text = await res.text();
+    opts.onSuccess?.(path);
     return (text === "" ? undefined : JSON.parse(text)) as T;
   };
 }

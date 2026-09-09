@@ -23,6 +23,13 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 - **[superpowers/specs/2026-07-18-pos-architecture-design.md](superpowers/specs/2026-07-18-pos-architecture-design.md)
   §2** — the twenty numbered sub-projects (the strategy; changes rarely).
 
+**User management is complete** (owner walkthrough, 2026-09-09):
+the reusable table, searchable/filterable admin list, invitation setup, account lifecycle controls,
+self-service profile and login methods, password backoff, login/recovery polish and automatic return
+to login at session expiry are implemented under the
+[account setup and user management plan](superpowers/plans/2026-09-09-user-management-and-account-setup.md).
+Turnstile and SMS verification remain part of the later optional cloud/remote offering.
+
 **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
 bypass, so a docs-only change is pushed straight to `main` — no PR, no CI wait. Branch, `commit -s`,
 fast-forward `main`, push. Feature/code still goes through a PR.
@@ -1417,7 +1424,23 @@ genuinely-decision-bearing.
   password-reset email; the [account design](superpowers/specs/2026-09-08-dashboard-account-activation-design.md)
   defers automatic delivery retries and forbids storing raw bearer tokens in a plain queue. Track 1:
   scope routine passwordless email login and SMS before adding either; the shipped email flow is
-  activation/recovery. TOTP enrolment still requires the at-rest encryption listed below.
+  activation/recovery. Verify replacement email addresses before switching the login address; the
+  current profile flow marks a changed address unverified but applies it immediately. Add a
+  tenant-configured privacy-notice link to invitations, account setup and Your profile once the data
+  protection track below defines the restaurant's notice and contact. Add passkey-backed
+  reauthentication, names/removal for passkeys on passwordless accounts, and Google unlinking before
+  treating profile login-method management as complete for passwordless-only users.
+- **Remote-access bot protection (owner, 2026-09-09).** Add Cloudflare Turnstile as part of the
+  optional remote-access offering. Protect internet-facing login and recovery, validate tokens on
+  the server, and preserve restaurant-local login during internet outages. Do not infer trusted
+  local access from caller-controlled headers. No Turnstile integration in the local-only product;
+  remote hostnames and credentials are deployment work for that offering.
+- **Permission-based dashboard navigation (owner, 2026-09-09).** Module navigation already filters
+  by `me.permissions`, but built-in `NAV_GROUPS` in `apps/dashboard/src/dashboard-app.ts` mostly
+  use role checks. The browser test "hides the diagnostics nav from a supervisor and shows it to a
+  manager" also asserts that the supervisor sees Devices. Map every built-in destination to its
+  server permission, hide unavailable items and empty groups, and use the same rule for direct URLs
+  and the initial landing screen. Keep Your profile available to every signed-in person.
 - **Dashboard-wide location context.** The dashboard can manage several locations, but location choice
   currently lives inside individual screens: menus, roster and planned-vs-actual each mount their own
   `dashboard-location-picker`. Add one persistent location dropdown to the authenticated dashboard

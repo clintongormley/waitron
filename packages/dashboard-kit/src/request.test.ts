@@ -25,6 +25,18 @@ it("prefixes baseUrl, sends credentials, and resolves the parsed JSON body of a 
   });
 });
 
+it("reports a successful request after the server accepts it", async () => {
+  const onSuccess = vi.fn();
+  const request = createRequest({
+    fetchImpl: vi.fn<FetchLike>().mockResolvedValue(jsonResponse({ ok: true })),
+    onSuccess,
+  });
+
+  await request("/management-api/staff", "GET");
+
+  expect(onSuccess).toHaveBeenCalledWith("/management-api/staff");
+});
+
 it("resolves undefined for a 2xx with an empty body (the 204 mutation routes)", async () => {
   // The empty-body branch keys off `res.text() === ""`, NOT the status (see createRequest's header);
   // the WHATWG Response constructor forbids a body on a 204, so a 200 with an empty body exercises
@@ -73,6 +85,19 @@ it("rejects with { code } read from the server's { error: { code } } envelope on
   const request = createRequest({ fetchImpl });
 
   await expect(request("/session", "POST", {})).rejects.toEqual({ code: "password.invalid" });
+});
+
+it("reports a rejected session before rejecting the request", async () => {
+  const onError = vi.fn();
+  const fetchImpl = vi
+    .fn<FetchLike>()
+    .mockResolvedValue(jsonResponse({ error: { code: "management_session.expired" } }, 401));
+  const request = createRequest({ fetchImpl, onError });
+
+  await expect(request("/management-api/staff", "GET")).rejects.toEqual({
+    code: "management_session.expired",
+  });
+  expect(onError).toHaveBeenCalledWith("management_session.expired");
 });
 
 it("rejects with server.internal when a non-2xx envelope names no code", async () => {

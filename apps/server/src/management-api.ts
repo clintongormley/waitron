@@ -8,8 +8,10 @@
 // `import "@waitron/identity"` is needed on top of them.
 import "./errors.js";
 import type { Context, Hono } from "hono";
+import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
+import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import {
   asAppUser,
   fireControlMode,
@@ -20,10 +22,15 @@ import {
 } from "@waitron/db";
 import {
   authorizeManager,
+  beginGoogleLink,
+  beginGoogleLogin,
   beginPasskeyAuthentication,
   beginPasskeyRegistration,
+  clearPersonPin,
+  claimGoogleState,
   completeAccountAction,
-  createPerson,
+  completeAccountActionByCode,
+  completeGoogleLink,
   endManagementSession,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
@@ -31,14 +38,18 @@ import {
   listPersons,
   loginManager,
   loginManagerById,
+  loginWithGoogle,
   issueAccountAction,
+  invitePerson,
   reactivatePerson,
-  resetPin,
+  resetPersonLogin,
   requestPasswordResetAction,
+  readOwnProfile,
   setEmail,
   setPassword,
   setRole,
   suspendPerson,
+  updatePersonDetails,
   type PersonRoleValue,
 } from "@waitron/identity";
 import type { IssuedAccountAction } from "@waitron/identity";
@@ -108,8 +119,10 @@ import {
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js"; // the same Logger till-api.ts's routes take
 import type { AccountEmailSender } from "./account-email.js";
+import { exchangeGoogleCode, type GoogleOidcConfig } from "./google-oidc.js";
 import {
   createAccountActionRateLimiter,
+  createPasswordResetCooldown,
   type AccountActionRateLimiter,
 } from "./account-rate-limit.js";
 
@@ -152,10 +165,14 @@ export interface ManagementApiDeps {
   /** Outbound delivery for invitation and password-reset links. Omitted in harnesses and when an
    * on-prem installation has not configured SMTP yet. */
   sendAccountEmail?: AccountEmailSender;
+  passwordThrottle?: PasswordThrottle;
   accountActionRateLimiters?: {
     passwordReset: AccountActionRateLimiter;
     completion: AccountActionRateLimiter;
   };
+  accountActionCodeKey?: Buffer;
+  googleOidc?: GoogleOidcConfig;
+  googleCodeExchange?: typeof exchangeGoogleCode;
 }
 
 async function deliverAccountAction(
@@ -176,6 +193,7 @@ async function deliverAccountAction(
       email: issued.email,
       displayName: issued.displayName,
       actionUrl: actionUrl.toString(),
+      code: issued.code,
       expiresAt: issued.expiresAt,
       locale: issued.locale ?? deps.venueLocale ?? "en-GB",
     });
@@ -211,7 +229,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
   "password.invalid": 401,
+  "password.throttled": 429,
   "totp.invalid": 401,
+  "google.invalid": 401,
+  "google.already_linked": 409,
+  "google.second_factor_required": 401,
   "account_action.invalid": 400,
   "account_action.rate_limited": 429,
   // Passkey (WebAuthn) ceremony faults, thrown by the two `finishPasskey*` calls the verify routes
@@ -252,6 +274,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // credential owner), and provoking it there is HARDER still: it needs the owner's random
   // `credential_id`, not merely their email.
   "person.suspended": 403,
+  "person.self_deactivation": 403,
   "person.not_found": 404,
   // The email write boundary (`createPerson`/`setEmail`): a malformed address is a request-shape
   // fault (400), a per-tenant `persons_tenant_email_uq` collision is a "already exists" conflict
@@ -259,6 +282,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // not the `?? 400` default).
   "person.email_invalid": 400,
   "person.email_taken": 409,
+  "person.display_name_taken": 409,
+  "person.last_admin": 409,
+  "person.transition_invalid": 409,
   "authorization.not_permitted": 403,
   "pin.too_short": 400,
   "password.too_short": 400,
@@ -608,10 +634,93 @@ async function parsePasskeyVerifyBody(
  * dashboard's tenant.
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
+  const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
+  const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
+  const acceptPasswordReset = createPasswordResetCooldown();
   const passwordResetRateLimiter =
     deps.accountActionRateLimiters?.passwordReset ?? createAccountActionRateLimiter();
   const completionRateLimiter =
     deps.accountActionRateLimiters?.completion ?? createAccountActionRateLimiter();
+  const googleCodeExchange = deps.googleCodeExchange ?? exchangeGoogleCode;
+
+  app.get("/management-api/google/config", (c) =>
+    c.json({ configured: deps.googleOidc !== undefined }),
+  );
+
+  app.post("/management-api/google/login", (c) =>
+    run(c, log, async () => {
+      if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
+      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return beginGoogleLogin(tx, {
+          tenantId: deps.cfg.tenantId,
+          clientId: deps.googleOidc!.clientId,
+          redirectUri: deps.googleOidc!.redirectUri,
+        });
+      });
+      return c.json({ authorizationUrl: out.authorizationUrl });
+    }),
+  );
+
+  app.post("/management-api/session/me/google", (c) =>
+    run(c, log, async () => {
+      if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
+      const sessionId = requireManagementSession(c);
+      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return beginGoogleLink(tx, {
+          tenantId: deps.cfg.tenantId,
+          managementSessionId: sessionId,
+          clientId: deps.googleOidc!.clientId,
+          redirectUri: deps.googleOidc!.redirectUri,
+        });
+      });
+      return c.json({ authorizationUrl: out.authorizationUrl });
+    }),
+  );
+
+  app.get("/management-api/google/callback", (c) =>
+    run(c, log, async () => {
+      if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
+      const state = c.req.query("state");
+      const code = c.req.query("code");
+      if (typeof state !== "string" || state === "" || typeof code !== "string" || code === "") {
+        throw new AppError("google.invalid", {});
+      }
+      const claimed = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return claimGoogleState(tx, { tenantId: deps.cfg.tenantId, state });
+      });
+      let subject: string;
+      try {
+        ({ subject } = await googleCodeExchange(deps.googleOidc, {
+          code,
+          verifier: claimed.verifier,
+          nonce: claimed.nonce,
+        }));
+      } catch {
+        throw new AppError("google.invalid", {});
+      }
+      if (claimed.mode === "link") {
+        if (claimed.personId === null) throw new AppError("google.invalid", {});
+        await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await completeGoogleLink(tx, {
+            tenantId: deps.cfg.tenantId,
+            personId: claimed.personId!,
+            subject,
+          });
+        });
+        return c.redirect(`${deps.origin}/manage/profile?google=linked`);
+      }
+      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return loginWithGoogle(tx, { tenantId: deps.cfg.tenantId, subject });
+      });
+      setManagementCookie(c, session.id, deps.secureCookies);
+      return c.redirect(`${deps.origin}/manage/`);
+    }),
+  );
   // The deployment holds one tenant per database. Roster of active persons. Deliberately
   // UNAUTHENTICATED — it exposes no secret, so it calls `listActiveStaff` under `withTenant` +
   // `asAppUser` rather than `requireManagementSession`. One dashboard screen fetches it via
@@ -662,28 +771,48 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // 500" claim.)
   app.post("/management-api/session", (c) =>
     run(c, log, async () => {
-      const body = await readJsonBody<{ email?: string; password?: string; totp?: string }>(c);
+      const body = await readJsonBody<{
+        email?: string;
+        password?: string;
+        totp?: string;
+        recoveryCode?: string;
+      }>(c);
       if (
         typeof body.email !== "string" ||
         body.email.trim() === "" ||
         typeof body.password !== "string" ||
-        (body.totp !== undefined && typeof body.totp !== "string")
+        (body.totp !== undefined && typeof body.totp !== "string") ||
+        (body.recoveryCode !== undefined && typeof body.recoveryCode !== "string")
       ) {
         throw new AppError("password.invalid", {});
       }
       // Bind the validated fields to locals: the guard narrows `body.email`/`body.password` to
       // `string` HERE, but that narrowing does not survive into the `withTenant` closure below (TS
       // resets a captured property to its declared `string | undefined`), so the closure reads these.
-      const { email, password, totp } = body;
-      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return loginManager(tx, {
-          tenantId: deps.cfg.tenantId,
-          email,
-          password,
-          totp,
+      const { email, password, totp, recoveryCode } = body;
+      const finishAttempt = passwordThrottle.begin(email);
+      let session;
+      try {
+        session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          return loginManager(tx, {
+            tenantId: deps.cfg.tenantId,
+            email,
+            password,
+            totp,
+            recoveryCode,
+            totpKey: accountActionCodeKey,
+          });
         });
-      });
+      } catch (error) {
+        finishAttempt(
+          isAppError(error) && (error.code === "password.invalid" || error.code === "totp.invalid")
+            ? "invalid"
+            : "error",
+        );
+        throw error;
+      }
+      finishAttempt("success");
       setManagementCookie(c, session.id, deps.secureCookies);
       return c.json({ personId: session.personId });
     }),
@@ -697,6 +826,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       passwordResetRateLimiter.check(
         typeof body.email === "string" ? body.email.trim().toLowerCase() : "invalid-email",
       );
+      if (typeof body.email === "string" && !acceptPasswordReset(body.email)) {
+        return c.body(null, 202);
+      }
       if (typeof body.email === "string") {
         const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
           await asAppUser(tx);
@@ -717,27 +849,51 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // A scanner-safe action link: GET merely loads the SPA; only this explicit POST consumes the token.
   app.post("/management-api/account-actions/complete", (c) =>
     run(c, log, async () => {
-      const body = await readJsonBody<{ token?: unknown; purpose?: unknown; password?: unknown }>(
-        c,
+      const body = await readJsonBody<{
+        token?: unknown;
+        email?: unknown;
+        code?: unknown;
+        purpose?: unknown;
+        password?: unknown;
+        pin?: unknown;
+      }>(c);
+      completionRateLimiter.check(
+        typeof body.token === "string"
+          ? body.token
+          : typeof body.email === "string"
+            ? body.email
+            : "invalid-token",
       );
-      completionRateLimiter.check(typeof body.token === "string" ? body.token : "invalid-token");
       if (
-        typeof body.token !== "string" ||
+        (typeof body.token !== "string" &&
+          (typeof body.email !== "string" || typeof body.code !== "string")) ||
         (body.purpose !== "invitation" && body.purpose !== "password_reset") ||
-        typeof body.password !== "string"
+        typeof body.password !== "string" ||
+        (body.purpose === "invitation" && typeof body.pin !== "string")
       ) {
         throw new AppError("account_action.invalid", {});
       }
-      const { token, purpose, password } = body;
+      const purpose: "invitation" | "password_reset" = body.purpose;
+      const password = body.password;
       const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return completeAccountAction(tx, {
+        const common = {
           tenantId: deps.cfg.tenantId,
-          token,
           purpose,
           password,
+          ...(purpose === "invitation" ? { pin: body.pin as string } : {}),
+        };
+        if (typeof body.token === "string") {
+          return completeAccountAction(tx, { ...common, token: body.token });
+        }
+        return completeAccountActionByCode(tx, {
+          ...common,
+          email: body.email as string,
+          code: body.code as string,
+          codeKey: accountActionCodeKey,
         });
       });
+      if (session === null) throw new AppError("account_action.invalid", {});
       setManagementCookie(c, session.id, deps.secureCookies);
       return c.json({ personId: session.personId });
     }),
@@ -851,35 +1007,46 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{
         displayName?: string;
+        firstNames?: string;
+        lastNames?: string;
+        telephone?: string | null;
         role?: PersonRoleValue;
-        pin?: string;
         email?: string;
       }>(c);
       if (
         typeof body.displayName !== "string" ||
+        typeof body.firstNames !== "string" ||
+        typeof body.lastNames !== "string" ||
         typeof body.role !== "string" ||
-        typeof body.pin !== "string"
+        (body.telephone !== undefined &&
+          body.telephone !== null &&
+          typeof body.telephone !== "string")
       ) {
-        throw new AppError("management.request_invalid", { field: "displayName|role|pin" });
+        throw new AppError("management.request_invalid", {
+          field: "displayName|firstNames|lastNames|role|telephone",
+        });
       }
       if (typeof body.email !== "string") {
         throw new AppError("management.request_invalid", { field: "email" });
       }
-      const { displayName, role, pin, email } = body;
+      const { displayName, firstNames, lastNames, telephone = null, role, email } = body;
       const { created, issued } = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        const created = await createPerson(tx, {
+        const created = await invitePerson(tx, {
           tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
           displayName,
+          firstNames,
+          lastNames,
+          telephone,
           role,
-          pin,
           email,
         });
         const issued = await issueAccountAction(tx, {
           tenantId: deps.cfg.tenantId,
           personId: created.id,
           purpose: "invitation",
+          codeKey: accountActionCodeKey,
         });
         return { created, issued };
       });
@@ -902,9 +1069,51 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
+          codeKey: accountActionCodeKey,
         });
       });
       return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
+    }),
+  );
+
+  app.put("/management-api/staff/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const personId = requirePersonId(c.req.param("id"));
+      const body = await readJsonBody<{
+        displayName?: unknown;
+        firstNames?: unknown;
+        lastNames?: unknown;
+        telephone?: unknown;
+        email?: unknown;
+        role?: unknown;
+        status?: unknown;
+      }>(c);
+      for (const field of ["displayName", "firstNames", "lastNames", "email"] as const) {
+        if (typeof body[field] !== "string") {
+          throw new AppError("management.request_invalid", { field });
+        }
+      }
+      if (body.telephone !== null && typeof body.telephone !== "string") {
+        throw new AppError("management.request_invalid", { field: "telephone" });
+      }
+      const role = requireEnum(body.role, "role", ["staff", "supervisor", "manager", "admin"]);
+      const status = requireEnum(body.status, "status", ["pending", "active", "suspended"]);
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await updatePersonDetails(tx, {
+          managementSessionId: sessionId,
+          personId,
+          displayName: body.displayName as string,
+          firstNames: body.firstNames as string,
+          lastNames: body.lastNames as string,
+          telephone: body.telephone as string | null,
+          email: body.email as string,
+          role,
+          status,
+        });
+      });
+      return c.body(null, 204);
     }),
   );
 
@@ -986,16 +1195,47 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body = await readJsonBody<{ pin?: string }>(c);
-      if (typeof body.pin !== "string") {
-        throw new AppError("management.request_invalid", { field: "pin" });
-      }
-      const { pin } = body;
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        await resetPin(tx, { managementSessionId: sessionId, personId: id, pin });
+        await clearPersonPin(tx, { managementSessionId: sessionId, personId: id });
       });
       return c.body(null, 204);
+    }),
+  );
+
+  app.post("/management-api/staff/:id/reset-login", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const personId = requirePersonId(c.req.param("id"));
+      const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
+        return issueAccountAction(tx, {
+          tenantId: deps.cfg.tenantId,
+          personId,
+          purpose: "invitation",
+          codeKey: accountActionCodeKey,
+        });
+      });
+      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
+    }),
+  );
+
+  app.post("/management-api/staff/:id/reactivate", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const personId = requirePersonId(c.req.param("id"));
+      const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
+        return issueAccountAction(tx, {
+          tenantId: deps.cfg.tenantId,
+          personId,
+          purpose: "invitation",
+          codeKey: accountActionCodeKey,
+        });
+      });
+      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
     }),
   );
 
@@ -2268,6 +2508,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
+        await readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId: sessionId });
         return beginPasskeyRegistration(tx, {
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,
@@ -2283,7 +2524,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // persist the credential. The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why a
   // `null`/non-object body must not TypeError → 500) and `challengeHandle` is screened to a UUID (else
   // `management.request_invalid` naming the FIELD, matching the sibling write routes). The UUID screen
-  // is load-bearing, not cosmetic: `challengeHandle` flows into `eq(webauthnChallenges.id, …)` against
+  // prevents a database cast error: `challengeHandle` flows into `eq(webauthnChallenges.id, …)` against
   // a `uuid` PK column, so a well-formed-string-but-non-UUID value would `22P02` → opaque 500 — the
   // same failure `requirePersonId`'s `isUuid` screen above exists to prevent, keeping `run`'s
   // "every surfaced code is a client 4xx" invariant true. `response` is then required to be a non-null
@@ -2301,6 +2542,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
       const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
+        await readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId: sessionId });
         return finishPasskeyRegistration(tx, {
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,

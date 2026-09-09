@@ -37,8 +37,10 @@ it("resolves a role token to Spanish, to English, and passes an unknown value th
 });
 
 it("resolves a status token to Spanish and English, unknown value raw", () => {
+  expect(statusName("pending", "es")).toBe("Pendiente");
   expect(statusName("active", "es")).toBe("Activo");
-  expect(statusName("suspended", "es")).toBe("Suspendido");
+  expect(statusName("suspended", "es")).toBe("Inactivo");
+  expect(statusName("suspended", "en")).toBe("Inactive");
   expect(statusName("active", "en")).toBe("Active");
   expect(statusName("frozen", "es")).toBe("frozen");
 });

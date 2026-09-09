@@ -7,6 +7,7 @@ import { baseStyles, UrlStateController } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeOf } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
 import type { StringKey } from "./i18n/strings.js";
 // The module-UI seam: modules are mounted generically from the browser-safe registry, never named here.
@@ -27,6 +28,7 @@ import { LocaleChangeController } from "./state/locale-controller.js";
 // tags below, so the wiring — not the screens — is what lives here.
 import "./widgets/language-chooser.js";
 import "./screens/login-screen.js";
+import "./screens/profile-screen.js";
 import "./screens/my-schedule-screen.js";
 import "./screens/dashboard-overview-screen.js";
 import "./screens/dashboard-sales-screen.js";
@@ -59,12 +61,13 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * purchase invoices, author ingredients and product recipes, manage enrolled devices, manage printing
  * (agents + printers + status), see today's business overview, or review sales & takings over a date
  * range. Exactly one permitted destination shows at a time. Non-staff sessions restore a permitted
- * path or fall back to overview; staff sessions show only my-schedule. Logged-in faces share logout
+ * path or fall back to overview; staff sessions can open their schedule and profile. Logged-in faces share logout
  * and language controls, with navigation available to non-staff sessions.
  */
 type CoreScreen =
   | "login"
   | "my-schedule"
+  | "profile"
   | "overview"
   | "sales"
   | "staff"
@@ -176,8 +179,8 @@ const NAV_GROUPS: NavGroup[] = [
 
 /**
  * Owns session discovery, permitted URL navigation and language preferences.
- * The login screen stays visible until getMe confirms a session. Staff have only their own
- * schedule; other roles can restore a destination from their visible sidebar entries.
+ * The login screen stays visible until getMe confirms a session. Staff have their own
+ * schedule and profile; other roles can restore a destination from their visible sidebar entries.
  *
  * A locale change recreates the screen subtree so translated text updates. Disconnect guards
  * prevent late responses from changing browser history or the shared locale after teardown.
@@ -414,6 +417,31 @@ export class DashboardApp extends LitElement {
    * this out, and it names a swap's counterparty). Empty until a probe/login resolves. */
   @state() private myPersonId = "";
 
+  @state() private sessionNoticeCode: string | null = null;
+  private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
+  private sessionLifetimeSeconds = 30 * 60;
+
+  readonly #onSessionInvalid = (event: Event): void => {
+    const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
+    if (
+      code === "management_session.expired" ||
+      code === "management_session.required" ||
+      code === "person.suspended"
+    ) {
+      this.#returnToLogin(code);
+    }
+  };
+
+  readonly #onVisibilityChange = (): void => {
+    if (document.visibilityState === "visible" && this.screen !== "login") {
+      void this.#probeSession();
+    }
+  };
+
+  readonly #onSessionActive = (): void => {
+    if (this.sessionRole !== undefined) this.#scheduleSessionExpiry(this.sessionLifetimeSeconds);
+  };
+
   /** The one tenant/business this deployment database represents. It remains visible across login
    * and every dashboard location, because a tenant can contain several locations. */
   @state() private venueName = "";
@@ -444,11 +472,19 @@ export class DashboardApp extends LitElement {
     this.#breakpoint = window.matchMedia(DRAWER_BREAKPOINT);
     this.narrow = this.#breakpoint.matches;
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
+    window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
+    window.addEventListener("waitron-session-active", this.#onSessionActive);
+    document.addEventListener("visibilitychange", this.#onVisibilityChange);
   }
 
   override disconnectedCallback(): void {
     this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
     this.#breakpoint = undefined;
+    window.removeEventListener("waitron-session-invalid", this.#onSessionInvalid);
+    window.removeEventListener("waitron-session-active", this.#onSessionActive);
+    document.removeEventListener("visibilitychange", this.#onVisibilityChange);
+    clearTimeout(this.sessionExpiryTimer);
+    this.sessionExpiryTimer = undefined;
     super.disconnectedCallback();
   }
 
@@ -511,10 +547,22 @@ export class DashboardApp extends LitElement {
    * to login is the safe default for every failure anyway.
    */
   async #probeSession(): Promise<void> {
+    const wasAuthenticated = this.sessionRole !== undefined;
     try {
       this.#applyMe(await this.api.getMe());
-    } catch {
-      this.screen = "login";
+    } catch (error) {
+      const code = codeOf(error);
+      if (
+        wasAuthenticated ||
+        code === "management_session.expired" ||
+        code === "person.suspended"
+      ) {
+        this.#returnToLogin(
+          code === "management_session.expired" || code === "person.suspended" ? code : null,
+        );
+      } else {
+        this.screen = "login";
+      }
     }
   }
 
@@ -529,7 +577,9 @@ export class DashboardApp extends LitElement {
     modules: string[];
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
+    sessionExpiresInSeconds?: number;
   }): void {
+    this.sessionNoticeCode = null;
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
     this.#sessionPermissions = me.permissions;
@@ -542,8 +592,36 @@ export class DashboardApp extends LitElement {
     this.venueName = me.venueName;
     this.onboardingIntent = me.onboardingIntent;
     if (!this.isConnected) return;
+    this.sessionLifetimeSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
+    this.#scheduleSessionExpiry(this.sessionLifetimeSeconds);
     this.#writeScreenUrl(this.screen, true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
+  }
+
+  #scheduleSessionExpiry(seconds: number): void {
+    clearTimeout(this.sessionExpiryTimer);
+    this.sessionExpiryTimer = setTimeout(
+      () => this.#returnToLogin("management_session.expired"),
+      Math.max(0, seconds * 1000),
+    );
+  }
+
+  #returnToLogin(code: string | null): void {
+    clearTimeout(this.sessionExpiryTimer);
+    this.sessionExpiryTimer = undefined;
+    this.sessionNoticeCode = code;
+    this.screen = "login";
+    this.sessionRole = undefined;
+    this.myPersonId = "";
+    this.#sessionPermissions = [];
+    this.#activeScreens.clear();
+    this.#navGroups.clear();
+    this.drawerOpen = false;
+    this.#url.write(
+      { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
+      true,
+    );
+    if (this.isConnected) setLocale(this.#venueLocale);
   }
 
   /**
@@ -588,9 +666,14 @@ export class DashboardApp extends LitElement {
    * leak on to the document past the shadow boundary). The login route returns only `{ personId }`, so
    * the shell re-probes `getMe()` to learn the freshly-authenticated role and land on the right face.
    */
-  #onLoggedIn(event: Event): void {
+  async #onLoggedIn(event: Event): Promise<void> {
     event.stopPropagation();
-    void this.#probeSession();
+    const accountSetup =
+      (event as CustomEvent<{ accountSetup?: boolean }>).detail?.accountSetup === true;
+    await this.#probeSession();
+    if (accountSetup && this.sessionRole !== undefined && this.isConnected) {
+      this.#selectScreen("profile");
+    }
   }
 
   /**
@@ -605,12 +688,7 @@ export class DashboardApp extends LitElement {
     } catch {
       // A failed logout must still drop to login; the reason it failed is not actionable here.
     }
-    this.screen = "login";
-    this.sessionRole = undefined;
-    this.#url.write(
-      { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
-      true,
-    );
+    this.#returnToLogin(null);
     // Revert the UI to the venue default (per-user-language-preference): the previous operator's chosen
     // language must not linger into the login screen the next person meets — their own login re-applies
     // their stored preference. Guard the post-await module-global `setLocale` (the DISCONNECT SAFETY
@@ -662,13 +740,14 @@ export class DashboardApp extends LitElement {
             currentLocale(),
             html`<dashboard-login-screen
               .api=${this.api}
-              @logged-in=${(event: Event) => this.#onLoggedIn(event)}
+              .noticeCode=${this.sessionNoticeCode}
+              @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
             ></dashboard-login-screen>`,
           )}
         </div>
       `;
     }
-    // A non-staff session carries the nav; a staff person has only the self-service view, so it gets no
+    // A non-staff session carries the nav; a staff person has self-service and profile access, so it gets no
     // sidebar, no hamburger and no drawer at all.
     const hasNav = this.sessionRole !== "staff";
     return html`
@@ -750,6 +829,12 @@ export class DashboardApp extends LitElement {
           ? html`<div class="banner-actions">
               <wt-button
                 variant="secondary"
+                data-test="profile"
+                @click=${() => this.#selectScreen("profile")}
+                >${t("profile.title")}</wt-button
+              >
+              <wt-button
+                variant="secondary"
                 data-test="logout"
                 @click=${() => void this.#onLogout()}
                 >${t("action.logout")}</wt-button
@@ -775,6 +860,7 @@ export class DashboardApp extends LitElement {
    * holds. A module that is enabled (active) but whose permission the person lacks is denied here, just
    * as it is hidden from the nav — the two gates agree. */
   #permittedScreen(requested: string | null): ScreenId {
+    if (requested === "profile") return "profile";
     if (this.sessionRole === "staff") return "my-schedule";
     const item = NAV_GROUPS.flatMap((group) => group.items).find(
       (entry) => entry.screen === requested,
@@ -817,8 +903,7 @@ export class DashboardApp extends LitElement {
     if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
   }
 
-  /** The manager nav, shown only for a NON-staff session (a `staff` person has just the self-service
-   * view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the pinned first group (overview +
+  /** The manager nav, shown only for a NON-staff session (a `staff` person opens their schedule or profile without a sidebar). Rendered data-driven from {@link NAV_GROUPS}: the pinned first group (overview +
    * sales, the two reporting faces) leads with no header, then the Menu / Service / Team / Purchasing /
    * Configuration groups, each headed by an `<h2 class="nav-group">`. Each active MODULE contribution
    * appends its own item into the group whose `id` matches its `screen.group`, sorted by `order`.
@@ -872,6 +957,11 @@ export class DashboardApp extends LitElement {
    * that branch covered rather than leaving an unreachable exhaustive `default`.
    */
   #renderScreen(): TemplateResult {
+    if (this.screen === "profile")
+      return html`<dashboard-profile-screen
+        .api=${this.api}
+        @profile-updated=${() => void this.#probeSession()}
+      ></dashboard-profile-screen>`;
     // An active module owns its own screen — paint it before the core switch.
     const mod = this.#activeScreens.get(this.screen);
     if (mod) return mod.handle.render();
@@ -884,7 +974,10 @@ export class DashboardApp extends LitElement {
       case "sales":
         return html`<dashboard-sales-screen .api=${this.api}></dashboard-sales-screen>`;
       case "staff":
-        return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
+        return html`<dashboard-staff-screen
+          .api=${this.api}
+          .currentPersonId=${this.myPersonId}
+        ></dashboard-staff-screen>`;
       case "catalogue":
         return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
       case "location-menus":

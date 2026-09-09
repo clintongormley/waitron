@@ -18,6 +18,7 @@ vi.mock("@simplewebauthn/browser", () => ({
 afterEach(cleanupWidgets);
 // Shared across tests (the module mock is file-scoped), so clear its call log between them.
 afterEach(() => vi.mocked(startAuthentication).mockClear());
+afterEach(() => vi.useRealTimers());
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
@@ -31,6 +32,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       .fn()
       .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "abc" } }),
     passkeyAuthVerify: vi.fn().mockResolvedValue({ personId: "p9" }),
+    getGoogleConfig: vi.fn().mockResolvedValue({ configured: true }),
+    beginGoogleLogin: vi.fn().mockResolvedValue({
+      authorizationUrl: "https://accounts.google.test/login",
+    }),
     // The language chooser reads this only when opened; the screen just passes it through.
     getLocales: vi
       .fn()
@@ -65,13 +70,13 @@ async function openPassword(el: LoginScreen, email = "owner@x.com"): Promise<voi
 }
 
 describe("login-screen", () => {
-  it("centres the login form in the same width-bounded container as the device login", async () => {
+  it("centres the login form in a wider, width-bounded container", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     const screen = el.shadowRoot!.querySelector<HTMLElement>(".screen");
 
     expect(getComputedStyle(el).display).toBe("block");
     expect(screen).not.toBeNull();
-    expect(getComputedStyle(screen!).maxWidth).toBe("384px");
+    expect(getComputedStyle(screen!).maxWidth).toBe("480px");
     expect(getComputedStyle(screen!).marginInlineStart).toBe(
       getComputedStyle(screen!).marginInlineEnd,
     );
@@ -192,7 +197,7 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=submit]")).toBeNull();
   });
 
-  it("places the step's primary action at the right and Back at the left", async () => {
+  it("places the step's primary action at the right and Cancel at the left", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     let actions = el.shadowRoot!.querySelector("wt-form-actions")!;
     expect(actions.querySelector("wt-button:not([slot])")?.getAttribute("data-test")).toBe(
@@ -202,10 +207,11 @@ describe("login-screen", () => {
     await continueWithEmail(el);
     actions = el.shadowRoot!.querySelector("wt-form-actions")!;
     expect(actions.querySelector('[slot="cancel"]')?.getAttribute("data-test")).toBe("back");
+    expect(actions.querySelector('[slot="cancel"]')?.textContent?.trim()).toBe(t("action.cancel"));
     expect(actions.querySelector("wt-button:not([slot])")?.getAttribute("data-test")).toBe(
       "passkey-login",
     );
-    expect(el.shadowRoot!.querySelector(".screen")!.lastElementChild).toBe(actions);
+    expect(actions.nextElementSibling?.getAttribute("data-test")).toBe("try-another-way");
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=try-another-way]")!.click();
     await el.updateComplete;
@@ -213,10 +219,11 @@ describe("login-screen", () => {
     await el.updateComplete;
     actions = el.shadowRoot!.querySelector("wt-form-actions")!;
     expect(actions.querySelector('[slot="cancel"]')?.getAttribute("data-test")).toBe("back");
+    expect(actions.querySelector('[slot="cancel"]')?.textContent?.trim()).toBe(t("action.cancel"));
     expect(actions.querySelector("wt-button:not([slot])")?.getAttribute("data-test")).toBe(
       "submit",
     );
-    expect(el.shadowRoot!.querySelector(".screen")!.lastElementChild).toBe(actions);
+    expect(actions.nextElementSibling?.getAttribute("data-test")).toBe("try-another-way");
   });
 
   it("names account-setup passwords for password managers", async () => {
@@ -233,6 +240,8 @@ describe("login-screen", () => {
     });
     expect(inputs).toEqual([
       { name: "new-password", autocomplete: "new-password", required: true },
+      { name: "new-pin", autocomplete: "off", required: true },
+      { name: "confirm-pin", autocomplete: "off", required: true },
       { name: "confirm-password", autocomplete: "new-password", required: true },
     ]);
     const username = el.shadowRoot!.querySelector<HTMLInputElement>("[data-autofill-username]")!;
@@ -291,6 +300,35 @@ describe("login-screen", () => {
     });
   });
 
+  it.each(["wrong", ""])(
+    "clears password errors when cancelling a rejected submission (%j)",
+    async (password) => {
+      const api = stubApi({ login: vi.fn().mockRejectedValue({ code: "password.invalid" }) });
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      await openPassword(el);
+      el.shadowRoot!.querySelector("wt-input")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: password } }),
+      );
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+      await flush(el);
+      const errors = () =>
+        el
+          .shadowRoot!.querySelector("wt-form-error-summary")!
+          .shadowRoot!.querySelector('[role="alert"]');
+      expect(errors()).not.toBeNull();
+
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
+      await el.updateComplete;
+      expect(errors()).toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-input")!.name).toBe("email");
+      expect(el.shadowRoot!.querySelector("wt-input")!.value).toBe("");
+      await openPassword(el);
+      expect(errors()).toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-input")!.error).toBe("");
+      expect(el.shadowRoot!.querySelector("wt-input")!.value).toBe("");
+    },
+  );
+
   it("falls back to server.internal when the rejection carries no code", async () => {
     const api = stubApi({ login: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
@@ -323,6 +361,58 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")).not.toBeNull();
   });
 
+  it("offers configured Google login without asking Google for an email", async () => {
+    const api = stubApi();
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    await flush(el);
+    await openOtherWays(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=google-login]")!.click();
+    await flush(el);
+    expect(api.beginGoogleLogin).toHaveBeenCalledWith();
+    expect(navigate).toHaveBeenCalledWith("https://accounts.google.test/login");
+  });
+
+  it("shows a separate email confirmation and allows resending only after a minute", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await openOtherWays(el, "bea@x.com");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=use-password]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")?.textContent).toContain(
+      "bea@x.com",
+    );
+    const resend = () =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-test=resend-reset]",
+      )!;
+    expect(resend().disabled).toBe(true);
+    expect(resend().textContent).toContain("60");
+    resend().click();
+    await flush(el);
+    expect(api.requestPasswordReset).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(resend().disabled).toBe(true);
+    expect(resend().textContent).toContain("1");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-reset]")!.click();
+    await el.updateComplete;
+    await openOtherWays(el, "bea@x.com");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!.click();
+    await flush(el);
+    expect(api.requestPasswordReset).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(resend().disabled).toBe(false);
+    resend().click();
+    await flush(el);
+    expect(api.requestPasswordReset).toHaveBeenCalledTimes(2);
+    expect(resend().textContent).toContain("60");
+    expect(resend().disabled).toBe(true);
+    el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("opens a hidden password field from the alternative choices", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await openOtherWays(el);
@@ -351,6 +441,8 @@ describe("login-screen", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     (el as unknown as { password: string }).password = "a replacement password";
     (el as unknown as { confirmPassword: string }).confirmPassword = "a replacement password";
+    (el as unknown as { pin: string }).pin = "4321";
+    (el as unknown as { confirmPin: string }).confirmPin = "4321";
     await el.updateComplete;
     const loggedIn = new Promise<{ personId: string }>((resolve) =>
       el.addEventListener("logged-in", (e) => resolve((e as CustomEvent).detail)),
@@ -361,6 +453,7 @@ describe("login-screen", () => {
       "token-1",
       "invitation",
       "a replacement password",
+      "4321",
     );
   });
 

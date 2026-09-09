@@ -312,6 +312,42 @@ describe("loadConfig", () => {
     });
   });
 
+  it("derives the Google callback from the configured management origin", () => {
+    const config = loadConfig(
+      {
+        ...MIN_ENV,
+        WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
+        WAITRON_GOOGLE_CLIENT_ID: "client.apps.googleusercontent.com",
+        WAITRON_GOOGLE_CLIENT_SECRET: "secret",
+      },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.googleOidc).toEqual({
+      clientId: "client.apps.googleusercontent.com",
+      clientSecret: "secret",
+      redirectUri: "https://dashboard.example.com/management-api/google/callback",
+    });
+  });
+
+  it("refuses a partial Google login configuration", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          { ...MIN_ENV, WAITRON_GOOGLE_CLIENT_ID: "client.apps.googleusercontent.com" },
+          ROOT,
+          MEDIA_ROOT,
+          STATE_ROOT,
+        ),
+      ),
+    );
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_GOOGLE_CLIENT_SECRET",
+      reason: "google_requires_client_id_and_secret",
+    });
+  });
+
   // In PRODUCTION the passkey Relying Party ID and origin are REQUIRED, not defaulted: shipping the
   // loopback defaults to a real deployment binds every passkey ceremony to `localhost`, so a browser
   // served from the real domain fails its origin check with an opaque 401 at LOGIN time rather than a

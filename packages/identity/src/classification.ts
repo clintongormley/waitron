@@ -21,6 +21,7 @@ export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "a person's registered authenticators; copied to a standby, never drained back",
   ),
+  classify("recovery_codes", "state", "single-use account recovery proofs"),
 
   // This node's own live login records; not copied, not drained.
   classify("sessions", "local", "this node's own live login sessions; not copied"),
@@ -34,4 +35,6 @@ export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [
     "local",
     "this node's own pending WebAuthn challenges; not copied",
   ),
+  classify("totp_enrollments", "local", "short-lived authenticator setup challenges"),
+  classify("google_oidc_states", "local", "short-lived Google sign-in and linking ceremonies"),
 ];

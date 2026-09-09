@@ -28,7 +28,12 @@ export async function loginWithPin(
   // The shared credential gate (not_found → suspended → pin.invalid). Login does not GATE on the role,
   // but it surfaces it in the returned session (see {@link Session.role}). `authorize`'s override
   // branch runs the identical credential sequence.
-  const { role, locale } = await verifyPersonCredential(tx, input.personId, input.pin);
+  const { role, locale } = await verifyPersonCredential(
+    tx,
+    input.tenantId,
+    input.personId,
+    input.pin,
+  );
 
   const [row] = await tx
     .insert(sessions)

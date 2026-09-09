@@ -34,7 +34,7 @@ describe("management session lifecycle", () => {
     const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
     const resolved = await run((tx) => resolveManagementSession(tx, session.id));
     // toEqual pins every field: `locale` is null for a seedPerson with no preference set.
-    expect(resolved).toEqual({ personId, role: "manager", locale: null });
+    expect(resolved).toEqual({ personId, role: "manager", locale: null, tenantId });
   });
 
   it("returns the person's set locale, not just the null default", async () => {

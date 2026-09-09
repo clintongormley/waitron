@@ -25,6 +25,31 @@ import { createRequest, type DashboardRequest, type FetchLike } from "@waitron/d
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 
+export interface OwnProfile {
+  displayName: string;
+  firstNames: string | null;
+  lastNames: string | null;
+  telephone: string | null;
+  email: string | null;
+  locale: string | null;
+  hasPassword: boolean;
+  hasTotp: boolean;
+  hasGoogle: boolean;
+  passkeys: Array<{ id: string; createdAt: string }>;
+}
+export interface ProfileCredentials {
+  currentPassword?: string;
+  totp?: string;
+}
+export interface ProfileDetails extends ProfileCredentials {
+  displayName: string;
+  firstNames: string;
+  lastNames: string;
+  telephone: string | null;
+  email: string;
+  locale: string;
+}
+
 /** One `GET /management-api/staff-roster` entry — the colleague-picker list, no role or status. */
 export interface RosterEntry {
   personId: string;
@@ -35,12 +60,25 @@ export interface RosterEntry {
 export interface PersonSummary {
   personId: string;
   displayName: string;
+  firstNames?: string | null;
+  lastNames?: string | null;
+  telephone?: string | null;
   role: PersonRole;
-  status: "active" | "suspended";
+  status: "pending" | "active" | "suspended";
   hasPassword: boolean;
   hasTotp: boolean;
   /** The person's login email, or null when none is set. */
   email: string | null;
+}
+
+export interface PersonEditDetails {
+  displayName: string;
+  firstNames: string;
+  lastNames: string;
+  telephone: string | null;
+  email: string;
+  role: PersonRole;
+  status: "pending" | "active" | "suspended";
 }
 
 /**
@@ -1277,10 +1315,15 @@ export class DashboardApi {
    *   `/management-api/...` from the origin serving the app).
    * @param fetchImpl the `fetch` to use (default the global; a test injects a stub).
    */
-  constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
+  constructor(
+    baseUrl = "",
+    fetchImpl: FetchLike = fetch,
+    onError?: (code: string) => void,
+    onSuccess?: (path: string) => void,
+  ) {
     this.#baseUrl = baseUrl;
     this.#fetch = fetchImpl;
-    this.#request = createRequest({ baseUrl, fetchImpl });
+    this.#request = createRequest({ baseUrl, fetchImpl, onError, onSuccess });
   }
 
   /** `GET /management-api/staff-roster` — the staff self-service colleague picker in
@@ -1321,7 +1364,12 @@ export class DashboardApi {
    * `POST /management-api/session` — log in with an email + password. Returns who is now logged in;
    * a bad credential rejects with the server's `{ code }`.
    */
-  login(input: { email: string; password: string }): Promise<{ personId: string }> {
+  login(input: {
+    email: string;
+    password: string;
+    totp?: string;
+    recoveryCode?: string;
+  }): Promise<{ personId: string }> {
     return this.#request<{ personId: string }>("/management-api/session", "POST", input);
   }
 
@@ -1329,15 +1377,79 @@ export class DashboardApi {
     return this.#request<void>("/management-api/password-reset", "POST", { email });
   }
 
+  getProfile(): Promise<OwnProfile> {
+    return this.#request<OwnProfile>("/management-api/session/me/profile", "GET");
+  }
+  getGoogleConfig(): Promise<{ configured: boolean }> {
+    return this.#request<{ configured: boolean }>("/management-api/google/config", "GET");
+  }
+  beginGoogleLogin(): Promise<{ authorizationUrl: string }> {
+    return this.#request<{ authorizationUrl: string }>("/management-api/google/login", "POST");
+  }
+  beginGoogleLink(): Promise<{ authorizationUrl: string }> {
+    return this.#request<{ authorizationUrl: string }>("/management-api/session/me/google", "POST");
+  }
+  saveProfile(input: ProfileDetails): Promise<void> {
+    return this.#request<void>("/management-api/session/me/profile", "PUT", input);
+  }
+  changePassword(input: ProfileCredentials & { password: string }): Promise<void> {
+    return this.#request<void>("/management-api/session/me/password", "PUT", input);
+  }
+  changePin(input: ProfileCredentials & { pin: string }): Promise<void> {
+    return this.#request<void>("/management-api/session/me/pin", "PUT", input);
+  }
+  beginTotp(input: ProfileCredentials): Promise<{
+    enrollmentId: string;
+    secret: string;
+    uri: string;
+    expiresAt: string;
+  }> {
+    return this.#request("/management-api/session/me/totp/begin", "POST", input);
+  }
+  finishTotp(enrollmentId: string, code: string): Promise<{ codes: string[] }> {
+    return this.#request("/management-api/session/me/totp/finish", "POST", {
+      enrollmentId,
+      code,
+    });
+  }
+  regenerateRecoveryCodes(input: ProfileCredentials): Promise<{ codes: string[] }> {
+    return this.#request("/management-api/session/me/recovery-codes", "POST", input);
+  }
+  removePasskey(id: string, input: ProfileCredentials): Promise<void> {
+    return this.#request<void>(
+      `/management-api/session/me/passkeys/${encodeURIComponent(id)}`,
+      "DELETE",
+      input,
+    );
+  }
+
   completeAccountAction(
     token: string,
     purpose: "invitation" | "password_reset",
     password: string,
+    pin?: string,
   ): Promise<{ personId: string }> {
     return this.#request<{ personId: string }>("/management-api/account-actions/complete", "POST", {
       token,
       purpose,
       password,
+      ...(pin === undefined ? {} : { pin }),
+    });
+  }
+
+  completeAccountActionByCode(
+    email: string,
+    code: string,
+    purpose: "invitation" | "password_reset",
+    password: string,
+    pin?: string,
+  ): Promise<{ personId: string }> {
+    return this.#request<{ personId: string }>("/management-api/account-actions/complete", "POST", {
+      email,
+      code,
+      purpose,
+      password,
+      ...(pin === undefined ? {} : { pin }),
     });
   }
 
@@ -1365,8 +1477,10 @@ export class DashboardApi {
   /** Create a person with their required dashboard email and device PIN. */
   createPerson(input: {
     displayName: string;
+    firstNames: string;
+    lastNames: string;
+    telephone: string | null;
     role: PersonRole;
-    pin: string;
     email: string;
   }): Promise<{ id: string; invitationSent: boolean }> {
     return this.#request<{ id: string; invitationSent: boolean }>(
@@ -1394,9 +1508,27 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/staff/${id}`, "PATCH", patch);
   }
 
+  savePerson(id: string, details: PersonEditDetails): Promise<void> {
+    return this.#request<void>(`/management-api/staff/${id}`, "PUT", details);
+  }
+
   /** `POST /management-api/staff/:id/reset-pin` — set a person's new PIN. Answers an empty 204. */
-  resetPin(id: string, pin: string): Promise<void> {
-    return this.#request<void>(`/management-api/staff/${id}/reset-pin`, "POST", { pin });
+  resetPin(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/staff/${id}/reset-pin`, "POST");
+  }
+
+  resetLogin(id: string): Promise<{ invitationSent: boolean }> {
+    return this.#request<{ invitationSent: boolean }>(
+      `/management-api/staff/${id}/reset-login`,
+      "POST",
+    );
+  }
+
+  reactivatePerson(id: string): Promise<{ invitationSent: boolean }> {
+    return this.#request<{ invitationSent: boolean }>(
+      `/management-api/staff/${id}/reactivate`,
+      "POST",
+    );
   }
 
   /**
@@ -2399,6 +2531,7 @@ export class DashboardApi {
     modules: string[];
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
+    sessionExpiresInSeconds?: number;
   }> {
     return this.#request<{
       personId: string;
@@ -2409,6 +2542,7 @@ export class DashboardApi {
       modules: string[];
       venueName: string;
       onboardingIntent?: "demo" | "prepare" | "live";
+      sessionExpiresInSeconds?: number;
     }>("/management-api/session/me", "GET");
   }
 

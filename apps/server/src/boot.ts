@@ -1830,7 +1830,9 @@ export async function startServer(
       secureCookies,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
+      googleOidc: config.googleOidc,
       venueLocale,
+      accountActionCodeKey: ring.current.key,
       // Resolve on every send so a newly configured or rotated SMTP gateway takes effect immediately.
       // Configured SMTP wins; practice/dev falls back to the loopback-only Mailpit service.
       sendAccountEmail: async (message) => {
@@ -1965,6 +1967,7 @@ export async function startServer(
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       modules: setsToMigrate.map((m) => m.name),
+      credentialKey: ring.current.key,
     },
     log,
   );

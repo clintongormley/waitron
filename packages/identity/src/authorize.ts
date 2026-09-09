@@ -45,7 +45,7 @@ export async function authorize(
   // person, so the join matches whenever the session does
   // — the row is absent ONLY when there is no open session, which is exactly `session.not_open`.
   const [row] = await tx
-    .select({ personId: sessions.personId, role: persons.role })
+    .select({ tenantId: sessions.tenantId, personId: sessions.personId, role: persons.role })
     .from(sessions)
     .innerJoin(persons, eq(persons.id, sessions.personId))
     .where(and(eq(sessions.id, args.sessionId), isNull(sessions.endedAt)));
@@ -60,7 +60,12 @@ export async function authorize(
   }
   // Same credential gate as login (not_found → suspended → pin.invalid), then the override person
   // must ALSO hold the permission. `verifyPersonCredential` owns the first three checks in order.
-  const cred = await verifyPersonCredential(tx, args.override.personId, args.override.pin);
+  const cred = await verifyPersonCredential(
+    tx,
+    row.tenantId,
+    args.override.personId,
+    args.override.pin,
+  );
   if (!roleHasPermission(cred.role, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }

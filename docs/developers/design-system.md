@@ -303,6 +303,14 @@ step for every valid address: choosing the next screen from server-side passkey 
 reveal whether an account has a passkey. The WebAuthn ceremony itself determines whether the user can
 provide an enrolled passkey.
 
+On login, put **Try another way** below the Cancel and primary action buttons. **Cancel** ends the
+whole sign-in attempt and returns to an empty email form, clearing credentials and errors. Password
+recovery opens a separate **Check your email** screen with the address, delivery guidance, and a
+one-minute resend countdown. Keep the same confirmation for known and unknown addresses.
+
+Every authenticated dashboard banner includes **Your profile**, including for staff without a
+sidebar. Profile edits cannot expose role or suspension controls.
+
 ### Empty slots don't reserve space
 
 `wt-card`'s `header` slot and `wt-dialog`'s `footer` slot only add their spacing/divider when

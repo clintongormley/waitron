@@ -6,6 +6,7 @@ export interface AccountEmail {
   email: string;
   displayName: string;
   actionUrl: string;
+  code?: string;
   expiresAt: string;
   locale: string;
 }
@@ -41,6 +42,7 @@ const COPY = {
     invitationLink: "Set up your account",
     resetLink: "Reset your password",
     expires: (expiry: string) => `This single-use link expires at ${expiry}.`,
+    code: (code: string) => `Or enter this code in Waitron: ${code}`,
     ignore: "If you did not expect this email, you can ignore it.",
   },
   es: {
@@ -52,6 +54,7 @@ const COPY = {
     invitationLink: "Configura tu cuenta",
     resetLink: "Restablece tu contraseña",
     expires: (expiry: string) => `Este enlace de un solo uso caduca el ${expiry}.`,
+    code: (code: string) => `O introduce este código en Waitron: ${code}`,
     ignore: "Si no esperabas este correo, puedes ignorarlo.",
   },
 } as const;
@@ -83,12 +86,14 @@ export function createAccountEmailSender(
       "",
       `${message.locale.startsWith("es") ? "Usa este enlace para" : "Use this link to"} ${action}:`,
       message.actionUrl,
+      ...(message.code === undefined ? [] : ["", copy.code(message.code)]),
       "",
       copy.expires(expiry),
       copy.ignore,
     ].join("\n");
     const html = `<p>${escapeHtml(copy.hello(message.displayName))}</p>
 <p><a href="${escapeHtml(message.actionUrl)}">${link}</a></p>
+${message.code === undefined ? "" : `<p>${escapeHtml(copy.code(message.code))}</p>`}
 <p>${escapeHtml(copy.expires(expiry))}</p>
 <p>${copy.ignore}</p>`;
     await transport.sendMail({

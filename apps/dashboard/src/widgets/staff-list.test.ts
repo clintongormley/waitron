@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { t } from "../i18n/t.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonSummary } from "../api/client.js";
 import { StaffList } from "./staff-list.js";
@@ -27,10 +26,18 @@ const people: PersonSummary[] = [
   },
 ];
 
+async function editButton(el: StaffList, personId: string): Promise<HTMLElement> {
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  return table.shadowRoot!.querySelector<HTMLElement>(`[data-test=edit-${personId}]`)!;
+}
+
 describe("staff-list", () => {
   it("renders one row per person with role and status", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
-    const rows = el.shadowRoot!.querySelectorAll("[data-test=row]");
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const rows = table.shadowRoot!.querySelectorAll("tbody tr");
     expect(rows.length).toBe(2);
     expect(rows[0]!.textContent).toContain("Ada");
     // Role and status render through the i18n layer as localised display names, never the raw token.
@@ -45,11 +52,13 @@ describe("staff-list", () => {
   // the literal "null".
   it("shows the person's email, and an em-dash when there is none", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
-    const rows = el.shadowRoot!.querySelectorAll("[data-test=row]");
-    expect(rows[0]!.querySelector(".email")!.textContent).toContain("ada@x.com");
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const rows = table.shadowRoot!.querySelectorAll("tbody tr");
+    expect(rows[0]!.textContent).toContain("ada@x.com");
     // The email-less person shows the em-dash placeholder, not the raw null.
-    expect(rows[1]!.querySelector(".email")!.textContent).toContain("—");
-    expect(rows[1]!.querySelector(".email")!.textContent).not.toContain("null");
+    expect(rows[1]!.textContent).toContain("—");
+    expect(rows[1]!.textContent).not.toContain("null");
   });
 
   it("emits edit-person when a row's edit control is clicked", async () => {
@@ -57,7 +66,7 @@ describe("staff-list", () => {
     const detail = new Promise<{ personId: string }>((resolve) =>
       el.addEventListener("edit-person", (e) => resolve((e as CustomEvent).detail)),
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    (await editButton(el, "p1")).click();
     expect((await detail).personId).toBe("p1");
   });
 
@@ -67,39 +76,35 @@ describe("staff-list", () => {
   it("emits edit-person as a bubbling, composed event", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
     const seen = new Promise<Event>((resolve) => el.addEventListener("edit-person", resolve));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+    (await editButton(el, "p2")).click();
     const event = await seen;
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
   });
 
-  // The hasTotp=true credential branch: the two spec people above are both hasTotp=false, so without
-  // this the true arm of that badge is never rendered (the coverage gate would fail on it).
-  it("renders a credential badge for each of hasPassword and hasTotp", async () => {
-    const withBoth: PersonSummary[] = [
+  it("shows legal names and phone in the administrative columns", async () => {
+    const detailed: PersonSummary[] = [
       {
-        personId: "p3",
-        displayName: "Cy",
-        role: "admin",
-        status: "active",
-        hasPassword: true,
-        hasTotp: true,
-        email: "cy@x.com",
+        ...people[0]!,
+        firstNames: "Ada Augusta",
+        lastNames: "Lovelace",
+        telephone: "+44 20 1234",
       },
     ];
-    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: withBoth });
-    const badges = el.shadowRoot!.querySelectorAll("[data-test=row] .badge");
-    // both credential badges present, and each carries text (not colour alone) naming the credential.
-    expect(badges.length).toBe(2);
-    const text = Array.from(badges, (b) => b.textContent ?? "").join(" ");
-    expect(text).toContain(t("staff.badge_password", "es-ES"));
-    expect(text).toContain(t("staff.badge_totp", "es-ES"));
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: detailed });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const text = table.shadowRoot!.querySelector("tbody tr")!.textContent!;
+    expect(text).toContain("Lovelace, Ada Augusta");
+    expect(text).toContain("+44 20 1234");
   });
 
   // An empty roster renders no rows (and does not throw) — the widget defaults `people` to `[]`, so
   // it is safe to render before the app assigns the list.
   it("renders no rows for an empty people list", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: [] });
-    expect(el.shadowRoot!.querySelectorAll("[data-test=row]").length).toBe(0);
+    expect(
+      el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelectorAll("tbody tr"),
+    ).toHaveLength(0);
   });
 });

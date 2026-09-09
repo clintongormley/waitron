@@ -54,6 +54,13 @@ it("defaults to the active locale when none is passed", () => {
   expect(codeMessage("passkey.registered")).toBe("Passkey added");
 });
 
+it("has actionable copy for Google login failures", () => {
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  for (const code of ["google.invalid", "google.already_linked", "google.second_factor_required"]) {
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+  }
+});
+
 it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)", () => {
   // Every code the roster surface can surface must map to real copy, never the raw wire code and never
   // the GENERIC "something went wrong" fallback — so the banner reads as an actionable message. Proven

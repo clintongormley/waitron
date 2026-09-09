@@ -384,6 +384,20 @@ Once SMTP is restored, request another reset or resend the invitation from Users
 `WAITRON_MANAGEMENT_ORIGIN` determines the link host. It must use HTTPS unless it is a loopback
 development origin; the server refuses an insecure LAN or public origin at boot.
 
+### Optional Google login
+
+Set `WAITRON_GOOGLE_CLIENT_ID` and `WAITRON_GOOGLE_CLIENT_SECRET` together to offer Google login.
+Create a web OAuth client in Google and register this exact redirect URI:
+
+```text
+<WAITRON_MANAGEMENT_ORIGIN>/management-api/google/callback
+```
+
+The server refuses a partial client configuration. A person links Google from Your profile before
+the public Google button can identify their Waitron account. Waitron stores Google's stable subject
+identifier and does not retain Google access or refresh tokens. Password, passkey and PIN login keep
+working when Google is unavailable.
+
 ## What `/health` means
 
 `GET /health` is unauthenticated — no metrics, no auth, no readiness/liveness split (spec §9). It is

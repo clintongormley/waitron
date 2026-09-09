@@ -32,6 +32,68 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("uses session-scoped profile endpoints without a person id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.getProfile();
+    const details = {
+      displayName: "Alex",
+      firstNames: "Alex",
+      lastNames: "Rivera",
+      telephone: null,
+      email: "alex@example.com",
+      locale: "en-GB",
+    };
+    await api.saveProfile(details);
+    await api.changePassword({ currentPassword: "current", password: "replacement" });
+    await api.changePin({ currentPassword: "current", pin: "4321" });
+    await api.removePasskey("credential-id", { currentPassword: "current" });
+    expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+      ["/management-api/session/me/profile", "GET", undefined],
+      ["/management-api/session/me/profile", "PUT", JSON.stringify(details)],
+      [
+        "/management-api/session/me/password",
+        "PUT",
+        JSON.stringify({ currentPassword: "current", password: "replacement" }),
+      ],
+      [
+        "/management-api/session/me/pin",
+        "PUT",
+        JSON.stringify({ currentPassword: "current", pin: "4321" }),
+      ],
+      [
+        "/management-api/session/me/passkeys/credential-id",
+        "DELETE",
+        JSON.stringify({ currentPassword: "current" }),
+      ],
+    ]);
+  });
+
+  it("starts public Google login and session-scoped Google linking", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ configured: true }))
+      .mockResolvedValueOnce(
+        jsonResponse({ authorizationUrl: "https://accounts.google.test/login" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ authorizationUrl: "https://accounts.google.test/link" }),
+      );
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getGoogleConfig()).resolves.toEqual({ configured: true });
+    await expect(api.beginGoogleLogin()).resolves.toEqual({
+      authorizationUrl: "https://accounts.google.test/login",
+    });
+    await expect(api.beginGoogleLink()).resolves.toEqual({
+      authorizationUrl: "https://accounts.google.test/link",
+    });
+    expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
+      ["/management-api/google/config", "GET"],
+      ["/management-api/google/login", "POST"],
+      ["/management-api/session/me/google", "POST"],
+    ]);
+  });
   it("posts login credentials with cookies included", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1" }));
     const api = new DashboardApi("", fetchImpl);
@@ -114,8 +176,10 @@ describe("DashboardApi", () => {
     const api = new DashboardApi("", fetchImpl);
     const out = await api.createPerson({
       displayName: "Bea",
+      firstNames: "Beatrice",
+      lastNames: "Jones",
+      telephone: null,
       role: "staff",
-      pin: "4321",
       email: "bea@x.com",
     });
     expect(out).toEqual({ id: "p2", invitationSent: true });
@@ -125,8 +189,10 @@ describe("DashboardApi", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         displayName: "Bea",
+        firstNames: "Beatrice",
+        lastNames: "Jones",
+        telephone: null,
         role: "staff",
-        pin: "4321",
         email: "bea@x.com",
       }),
     });
@@ -193,6 +259,27 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("savePerson PUTs the complete administrative edit", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const details = {
+      displayName: "Ada",
+      firstNames: "Ada Augusta",
+      lastNames: "Lovelace",
+      telephone: "+44 20",
+      email: "ada@example.com",
+      role: "admin" as const,
+      status: "active" as const,
+    };
+    await api.savePerson("p1", details);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(details),
+    });
+  });
+
   it("updatePerson carries an email in the PATCH body when supplied", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -205,15 +292,23 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("resetPin POSTs the new pin to the addressed person's reset-pin route (empty 204 body)", async () => {
+  it("resetPin POSTs without exposing a replacement PIN to the administrator", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.resetPin("p1", "9999")).resolves.toBeUndefined();
+    await expect(api.resetPin("p1")).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1/reset-pin", {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pin: "9999" }),
+    });
+  });
+
+  it("resetLogin removes credentials and returns invitation delivery status", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ invitationSent: true }));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.resetLogin("p1")).resolves.toEqual({ invitationSent: true });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1/reset-login", {
+      method: "POST",
+      credentials: "include",
     });
   });
 

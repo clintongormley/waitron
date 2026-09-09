@@ -5,6 +5,7 @@ import {
   ACCOUNT_ACTION_RATE_MAX,
   ACCOUNT_ACTION_RATE_WINDOW_MS,
   createAccountActionRateLimiter,
+  createPasswordResetCooldown,
 } from "./account-rate-limit.js";
 
 describe("account action rate limiter", () => {
@@ -34,5 +35,21 @@ describe("account action rate limiter", () => {
     expect(() => limiter.check("one-more-account")).toThrowError(
       expect.objectContaining({ code: "account_action.rate_limited" }),
     );
+  });
+});
+
+describe("password reset cooldown", () => {
+  it("waits a full minute per normalized email without delaying other addresses", () => {
+    let now = 59_000;
+    const accept = createPasswordResetCooldown(() => now);
+    expect(accept("  PERSON@example.com ")).toBe(true);
+    now = 60_000;
+    expect(accept("person@example.com")).toBe(false);
+    expect(accept("other@example.com")).toBe(true);
+    now = 118_999;
+    expect(accept("person@example.com")).toBe(false);
+    now = 119_000;
+    expect(accept("person@example.com")).toBe(true);
+    expect(accept("other@example.com")).toBe(false);
   });
 });

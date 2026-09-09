@@ -24,6 +24,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Incorrect password, try again",
     es: "Contraseña incorrecta, inténtalo de nuevo",
   },
+  "password.throttled": {
+    en: "Too many incorrect attempts. Wait a moment before trying again.",
+    es: "Demasiados intentos incorrectos. Espera un momento antes de volver a intentarlo.",
+  },
+  "profile.invalid": {
+    en: "Check your profile details and try again.",
+    es: "Revisa los datos de tu perfil y vuelve a intentarlo.",
+  },
   "totp.invalid": {
     en: "Incorrect code, try again",
     es: "Código incorrecto, inténtalo de nuevo",
@@ -43,6 +51,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "passkey.registered": {
     en: "Passkey added",
     es: "Passkey añadida",
+  },
+  "google.invalid": {
+    en: "Google could not complete the login. Try again or use another login method.",
+    es: "Google no pudo completar el inicio de sesión. Inténtalo de nuevo o usa otro método.",
+  },
+  "google.already_linked": {
+    en: "That Google account is already linked to another user.",
+    es: "Esa cuenta de Google ya está vinculada a otro usuario.",
+  },
+  "google.second_factor_required": {
+    en: "This account also requires an authenticator code. Log in with your password instead.",
+    es: "Esta cuenta también requiere un código de autenticación. Inicia sesión con tu contraseña.",
+  },
+  "person.self_deactivation": {
+    en: "You cannot mark your own account inactive. Ask another administrator.",
+    es: "No puedes desactivar tu propia cuenta. Pídeselo a otro administrador.",
   },
   "person.suspended": {
     en: "This account is suspended — ask a manager",

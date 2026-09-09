@@ -32,11 +32,12 @@ export async function seedPerson(
   db: Database,
   tenantId: string,
   role: "staff" | "supervisor" | "manager" | "admin" = "staff",
-  status: "active" | "suspended" = "active",
+  status: "pending" | "active" | "suspended" = "active",
 ): Promise<string> {
+  const displayName = `P-${crypto.randomUUID()}`;
   const rows = await db.execute<{ id: string }>(sql`
     insert into persons (tenant_id, display_name, pin_hash, role, status)
-    values (${tenantId}, 'P', ${hashPin("1234")}, ${role}, ${status}) returning id`);
+    values (${tenantId}, ${displayName}, ${hashPin("1234")}, ${role}, ${status}) returning id`);
   return rows.rows[0]!.id;
 }
 
@@ -83,7 +84,7 @@ export async function seedPersonWithPassword(
 export async function seedManager(
   db: Database,
   tenantId: string,
-  opts: { email: string; role?: PersonRoleValue; status?: "active" | "suspended" },
+  opts: { email: string; role?: PersonRoleValue; status?: "pending" | "active" | "suspended" },
 ): Promise<string> {
   const personId = await seedPerson(db, tenantId, opts.role ?? "manager", opts.status ?? "active");
   await withTenant(db, tenantId, (tx) =>

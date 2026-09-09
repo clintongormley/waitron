@@ -166,6 +166,27 @@ function mountApp(tenantId: string): Hono {
   return app;
 }
 
+it("refuses another tenant's session on both passkey registration endpoints", async () => {
+  const first = await setupTenant();
+  const second = await setupTenant();
+  const cookie = await login(mountApp(first.tenantId), MANAGER_EMAIL);
+  const app = mountApp(second.tenantId);
+  for (const stage of ["options", "verify"]) {
+    const response = await app.request(`/management-api/passkey/register/${stage}`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        challengeHandle: "11111111-1111-4111-8111-111111111111",
+        response: {},
+      }),
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.required", params: {} },
+    });
+  }
+});
+
 /** Log in over HTTP by `email` with `password`, returning just the `waitron_management_session=…`
  * cookie pair (the part a browser echoes back). Asserts the 200 so a caller never carries a stale or
  * absent cookie forward silently. */

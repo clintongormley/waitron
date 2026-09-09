@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACCOUNT_ACTION_TTL_MS,
   completeAccountAction,
+  completeAccountActionByCode,
   issueAccountAction,
   requestPasswordResetAction,
 } from "./account-action.js";
@@ -28,7 +29,102 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(suite.db, tenantId, fn);
 }
 
+async function makePending(personId: string): Promise<void> {
+  await suite.db.execute(
+    sql`update persons set status = 'pending', password_hash = null, pin_hash = null where id = ${personId}`,
+  );
+}
+
 describe("management account actions", () => {
+  it("accepts the invitation's short-lived email code once and counts wrong guesses", async () => {
+    const codeKey = Buffer.alloc(32, 7);
+    const personId = await seedManager(suite.db, tenantId, { email: "code@x.com" });
+    await makePending(personId);
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { tenantId, personId, purpose: "invitation", codeKey }),
+    );
+    expect(issued.code).toMatch(/^\d{6}$/);
+
+    await expect(
+      run((tx) =>
+        completeAccountActionByCode(tx, {
+          tenantId,
+          email: "code@x.com",
+          code: "000000",
+          purpose: "invitation",
+          password: "a new secure password",
+          pin: "4321",
+          codeKey,
+        }),
+      ),
+    ).resolves.toBeNull();
+    const attempts = await suite.db.execute<{ code_attempts: number }>(
+      sql`select code_attempts from management_account_actions where id = ${issued.id}`,
+    );
+    expect(attempts.rows[0]!.code_attempts).toBe(1);
+
+    await expect(
+      run((tx) =>
+        completeAccountActionByCode(tx, {
+          tenantId,
+          email: " CODE@X.COM ",
+          code: issued.code!,
+          purpose: "invitation",
+          password: "a new secure password",
+          pin: "4321",
+          codeKey,
+        }),
+      ),
+    ).resolves.toMatchObject({ personId });
+    await expect(
+      run((tx) =>
+        completeAccountActionByCode(tx, {
+          tenantId,
+          email: "code@x.com",
+          code: issued.code!,
+          purpose: "invitation",
+          password: "another secure password",
+          pin: "9876",
+          codeKey,
+        }),
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it("requires an invitation PIN and activates a pending account only after complete setup", async () => {
+    const personId = await seedManager(suite.db, tenantId, { email: "pending@x.com" });
+    await makePending(personId);
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { tenantId, personId, purpose: "invitation" }),
+    );
+
+    await expect(
+      run((tx) =>
+        completeAccountAction(tx, {
+          tenantId,
+          token: issued.token,
+          purpose: "invitation",
+          password: "a new secure password",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "pin.too_short" });
+
+    const session = await run((tx) =>
+      completeAccountAction(tx, {
+        tenantId,
+        token: issued.token,
+        purpose: "invitation",
+        password: "a new secure password",
+        pin: "4321",
+      }),
+    );
+    expect(session.personId).toBe(personId);
+    const rows = await suite.db.execute<{ status: string; pin_hash: string | null }>(
+      sql`select status, pin_hash from persons where id = ${personId}`,
+    );
+    expect(rows.rows[0]).toMatchObject({ status: "active", pin_hash: expect.any(String) });
+  });
+
   it("stores only a token hash and consumes an invitation into a fresh session", async () => {
     const personId = await seedManager(suite.db, tenantId, {
       email: "new-person@x.com",
@@ -40,6 +136,7 @@ describe("management account actions", () => {
         password: "correct horse",
       }),
     );
+    await makePending(personId);
     const issued = await run((tx) =>
       issueAccountAction(tx, { tenantId, personId, purpose: "invitation" }),
     );
@@ -56,6 +153,7 @@ describe("management account actions", () => {
         token: issued.token,
         purpose: "invitation",
         password: "a new secure password",
+        pin: "4321",
       }),
     );
     expect(session.personId).toBe(personId);
@@ -102,6 +200,7 @@ describe("management account actions", () => {
             token: issued.token,
             purpose: "invitation",
             password: "another secure password",
+            pin: "4321",
           }),
         ),
       ),
@@ -110,6 +209,7 @@ describe("management account actions", () => {
 
   it("invalidates an earlier action of the same purpose", async () => {
     const personId = await seedManager(suite.db, tenantId, { email: "resend@x.com" });
+    await makePending(personId);
     const first = await run((tx) =>
       issueAccountAction(tx, { tenantId, personId, purpose: "invitation" }),
     );
@@ -124,6 +224,7 @@ describe("management account actions", () => {
             token: first.token,
             purpose: "invitation",
             password: "a new secure password",
+            pin: "4321",
           }),
         ),
       ),
@@ -135,6 +236,7 @@ describe("management account actions", () => {
           token: second.token,
           purpose: "invitation",
           password: "a new secure password",
+          pin: "4321",
         }),
       ),
     ).resolves.toMatchObject({ personId });
@@ -179,6 +281,7 @@ describe("management account actions", () => {
 
   it("refuses a valid token presented for the wrong purpose without consuming it", async () => {
     const personId = await seedManager(suite.db, tenantId, { email: "purpose@x.com" });
+    await makePending(personId);
     const issued = await run((tx) =>
       issueAccountAction(tx, { tenantId, personId, purpose: "invitation" }),
     );
@@ -201,6 +304,7 @@ describe("management account actions", () => {
           token: issued.token,
           purpose: "invitation",
           password: "a new secure password",
+          pin: "4321",
         }),
       ),
     ).resolves.toMatchObject({ personId });

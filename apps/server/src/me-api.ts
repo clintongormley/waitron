@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
 import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
@@ -11,8 +12,23 @@ import {
   requestSwap,
   absenceKind,
 } from "@waitron/workforce";
-import { permissionsForRole, resolveManagementSession, setPersonLocale } from "@waitron/identity";
-import { SUPPORTED_LOCALES } from "@waitron/shared";
+import {
+  permissionsForRole,
+  resolveManagementSession,
+  IDLE_TIMEOUT_MS,
+  setPersonLocale,
+  readOwnProfile,
+  saveOwnProfile,
+  changeOwnPassword,
+  changeOwnPin,
+  removeOwnPasskey,
+  beginOwnTotpEnrollment,
+  finishOwnTotpEnrollment,
+  regenerateOwnRecoveryCodes,
+} from "@waitron/identity";
+import { SUPPORTED_LOCALES, AppError, isAppError } from "@waitron/shared";
+import { createPasswordThrottle } from "./password-throttle.js";
+import "./errors.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -57,6 +73,7 @@ export interface MeApiDeps {
    * the module is enabled AND the signed-in person holds its permission — the two runtime gates.
    */
   modules: string[];
+  credentialKey?: Buffer;
 }
 
 /**
@@ -74,6 +91,11 @@ export interface MeApiDeps {
  * enumerated anyway so this map is the surface's whole 4xx contract.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
+  "password.invalid": 401,
+  "password.throttled": 429,
+  "totp.invalid": 401,
+  "passkey.not_registered": 404,
+  "person.email_taken": 409,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -107,6 +129,8 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * the operation to the requester.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
+  const credentialKey = deps.credentialKey ?? randomBytes(32);
+  const profileThrottle = createPasswordThrottle();
   /** Run `fn` on the app role under this venue's tenant — the one place the withTenant/asAppUser pair
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
@@ -114,6 +138,154 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       await asAppUser(tx);
       return fn(tx);
     });
+
+  const updateProfile = async (
+    sessionId: string,
+    fn: (tx: Transaction) => Promise<void>,
+  ): Promise<void> => {
+    const finish = profileThrottle.begin(sessionId);
+    try {
+      await asStaff(fn);
+    } catch (error) {
+      finish(
+        isAppError(error) && (error.code === "password.invalid" || error.code === "totp.invalid")
+          ? "invalid"
+          : "error",
+      );
+      throw error;
+    }
+    finish("success");
+  };
+  const textField = (body: Record<string, unknown>, field: string): string => {
+    if (typeof body[field] !== "string")
+      throw new AppError("management.request_invalid", { field });
+    return body[field];
+  };
+  const credentials = (body: Record<string, unknown>) => ({
+    currentPassword:
+      body.currentPassword === undefined ? undefined : textField(body, "currentPassword"),
+    totp: body.totp === undefined ? undefined : textField(body, "totp"),
+  });
+
+  app.get("/management-api/session/me/profile", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      return c.json(
+        await asStaff((tx) =>
+          readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId }),
+        ),
+      );
+    }),
+  );
+  app.put("/management-api/session/me/profile", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const input = {
+        tenantId: deps.cfg.tenantId,
+        managementSessionId,
+        displayName: textField(body, "displayName"),
+        firstNames: textField(body, "firstNames"),
+        lastNames: textField(body, "lastNames"),
+        telephone: body.telephone === null ? null : textField(body, "telephone"),
+        email: textField(body, "email"),
+        locale: textField(body, "locale"),
+        ...credentials(body),
+      };
+      await updateProfile(managementSessionId, (tx) => saveOwnProfile(tx, input));
+      return c.body(null, 204);
+    }),
+  );
+  app.put("/management-api/session/me/password", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const input = {
+        tenantId: deps.cfg.tenantId,
+        managementSessionId,
+        password: textField(body, "password"),
+        ...credentials(body),
+      };
+      await updateProfile(managementSessionId, (tx) => changeOwnPassword(tx, input));
+      return c.body(null, 204);
+    }),
+  );
+  app.put("/management-api/session/me/pin", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const input = {
+        tenantId: deps.cfg.tenantId,
+        managementSessionId,
+        pin: textField(body, "pin"),
+        ...credentials(body),
+      };
+      await updateProfile(managementSessionId, (tx) => changeOwnPin(tx, input));
+      return c.body(null, 204);
+    }),
+  );
+  app.delete("/management-api/session/me/passkeys/:id", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const input = {
+        tenantId: deps.cfg.tenantId,
+        managementSessionId,
+        id: requireUuidParam(c.req.param("id"), "passkey"),
+        ...credentials(body),
+      };
+      await updateProfile(managementSessionId, (tx) => removeOwnPasskey(tx, input));
+      return c.body(null, 204);
+    }),
+  );
+  app.post("/management-api/session/me/totp/begin", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      return c.json(
+        await asStaff((tx) =>
+          beginOwnTotpEnrollment(tx, {
+            tenantId: deps.cfg.tenantId,
+            managementSessionId,
+            encryptionKey: credentialKey,
+            ...credentials(body),
+          }),
+        ),
+      );
+    }),
+  );
+  app.post("/management-api/session/me/totp/finish", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const result = await asStaff((tx) =>
+        finishOwnTotpEnrollment(tx, {
+          tenantId: deps.cfg.tenantId,
+          managementSessionId,
+          enrollmentId: requireBodyUuid(body.enrollmentId, "enrollmentId"),
+          code: textField(body, "code"),
+          encryptionKey: credentialKey,
+        }),
+      );
+      return c.json(result);
+    }),
+  );
+  app.post("/management-api/session/me/recovery-codes", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      return c.json(
+        await asStaff((tx) =>
+          regenerateOwnRecoveryCodes(tx, {
+            tenantId: deps.cfg.tenantId,
+            managementSessionId,
+            encryptionKey: credentialKey,
+            ...credentials(body),
+          }),
+        ),
+      );
+    }),
+  );
 
   /** Read the configured tenant's public display identity inside the same tenant-scoped app-role
    * transaction as its caller. A missing row means the boot configuration names no tenant. */
@@ -173,6 +345,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         onboardingIntent: deps.onboardingIntent,
         permissions: permissionsForRole(role),
         modules: deps.modules,
+        sessionExpiresInSeconds: IDLE_TIMEOUT_MS / 1000,
       });
     }),
   );
