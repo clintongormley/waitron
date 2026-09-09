@@ -79,8 +79,8 @@ mechanism reached over WireGuard, when Waitron Cloud exists.
 **The on-prem push, in order** (each step its own brainstorm → spec → plan → PR; fiscal-adjacent
 steps take owner sign-off at land):
 
-1. **A node as containers, and a from-scratch primary. Container packaging DELIVERED on
-   `feat/node-containers` (PR at land)** — the two containers + `deploy/compose.yml` + named volumes,
+1. **A node as containers, and a from-scratch primary. Container packaging LANDED #285** — the
+   two containers + `deploy/compose.yml` + named volumes,
    `deploy/prepare.sh`, the entrypoint that ensures the database shape on every boot, the
    recovery-supervisor half (an escalating failure counter that serves a page over the box's own leaf
    when boot fails), the box serving its own leaf over HTTPS in ALL modes (setup, recovery AND
@@ -140,7 +140,7 @@ design-review section apply.
   sale path themselves worked).
 - **Track P — platform & packaging** (push step 1). Owns the Dockerfiles/compose, `packages/provisioning`,
   `apps/server`'s config/boot wiring/backup-*/media/tls + certificate code, `packages/credentials`.
-  Work: the two containers + volumes **DELIVERED on `feat/node-containers`** (see Priorities item 1);
+  Work: the two containers + volumes **LANDED #285** (see Priorities item 1);
   the named next Track P specs are **the recovery spec** (a degraded-but-trading mode + the
   module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
   installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick
