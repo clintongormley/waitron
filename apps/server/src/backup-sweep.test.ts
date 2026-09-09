@@ -163,6 +163,37 @@ describe("runOnce (fan-out)", () => {
     expect(JSON.parse(entries.get("manifest.json")!.toString())).toEqual(FIXED_MANIFEST);
   });
 
+  it("captures backup.env + modules.json as secrets/<name> when present, skips them when absent", async () => {
+    // The optional on-disk config a cold restore must bring back. Present in the state dir → packed as
+    // `secrets/backup.env` / `secrets/modules.json` beside the RECOVERY_FILES secrets; absent → skipped
+    // WITHOUT failing the tick (backups off / all-modules-default is a valid box). `makeStateDir` writes
+    // only RECOVERY_FILES, so this test adds the two optional files itself.
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
+    await writeFile(join(stateDir, "modules.json"), '{"modules":{"fiscal-none":false}}\n');
+    const a = new FakeBackend("a");
+    await runOnce(deps([a]));
+    const entries = entriesOf(a);
+    expect(entries.get("secrets/backup.env")!.toString()).toBe("WAITRON_BACKUP_DIR=/mnt/usb\n");
+    expect(entries.get("secrets/modules.json")!.toString()).toBe(
+      '{"modules":{"fiscal-none":false}}\n',
+    );
+
+    // A SECOND state dir with neither optional file (only RECOVERY_FILES) → archive carries neither,
+    // and the tick still succeeds. Proves absent-is-fine rather than a fatal short archive.
+    const bare = await makeStateDir();
+    try {
+      const b = new FakeBackend("b");
+      await runOnce({ ...deps([b]), stateDir: bare });
+      const bareEntries = entriesOf(b);
+      expect(bareEntries.has("secrets/backup.env")).toBe(false);
+      expect(bareEntries.has("secrets/modules.json")).toBe(false);
+      // The RECOVERY_FILES secrets are still there — only the optional ones were skipped.
+      expect(bareEntries.has("secrets/secrets.env")).toBe(true);
+    } finally {
+      await rm(bare, { recursive: true, force: true });
+    }
+  });
+
   it("fail-visible: a throwing manifest build ships NO partial archive and never dumps", async () => {
     const a = new FakeBackend("a");
     const boom = new Error("journal unreadable");

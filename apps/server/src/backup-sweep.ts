@@ -47,6 +47,7 @@ import {
   type PgDumpRunner,
 } from "./pg-dump.js";
 import { collectStateSecrets } from "./state-secrets.js";
+import { OPTIONAL_BACKUP_STATE, collectOptionalStateFiles } from "./backup-optional-state.js";
 import type { StorageBackend } from "./storage-backend.js";
 import "./errors.js";
 
@@ -143,12 +144,13 @@ export async function runOnce(
   let dumped = false;
   try {
     // Collect the cheap, throw-prone pieces FIRST — the manifest, the module non-DB state
-    // (`media/<sha>`), and the state secrets (`secrets/<path>`). A misconfigured box fails here
-    // before the whole-DB dump is wasted (see the FAIL-FAST note above). The three are independent,
-    // so they run concurrently; `Promise.all` still rejects (and the tick still fails BEFORE the
-    // dump) if ANY of them throws. This changes only the COLLECTION order; the packed ENTRY order
-    // below is unchanged.
-    const [manifest, secrets, nonDbState] = await Promise.all([
+    // (`media/<sha>`), the required state secrets (`secrets/<path>`), and the OPTIONAL state config
+    // (`backup.env`/`modules.json`, absent-is-fine). A misconfigured box fails here before the
+    // whole-DB dump is wasted (see the FAIL-FAST note above). They are independent, so they run
+    // concurrently; `Promise.all` still rejects (and the tick still fails BEFORE the dump) if any
+    // REQUIRED collector throws — the optional one only rejects on a non-ENOENT read fault, never on
+    // a missing file. This changes only the COLLECTION order; the packed ENTRY order below is unchanged.
+    const [manifest, secrets, nonDbState, optionalState] = await Promise.all([
       buildBackupManifest({
         db: deps.db,
         modules: deps.modules,
@@ -157,6 +159,7 @@ export async function runOnce(
       }),
       collectStateSecrets(deps.stateDir),
       collectModuleNonDbState(deps.modules, deps.resolvers),
+      collectOptionalStateFiles(deps.stateDir, OPTIONAL_BACKUP_STATE),
     ]);
 
     // Cheap collection passed — now take the expensive dump into the staging file.
@@ -169,13 +172,19 @@ export async function runOnce(
     await chmod(staged, 0o600);
     const dumpBytes = await readFile(staged);
     // Pack the archive in its fixed ENTRY order: index first, then the dump, then the module non-DB
-    // state (`media/<sha>`), then the secrets (`secrets/<path>`).
+    // state (`media/<sha>`), then the secrets (`secrets/<path>`) — the required RECOVERY_FILES first,
+    // then any present OPTIONAL_BACKUP_STATE (`backup.env`/`modules.json`), also under `secrets/` so
+    // the restore writes them back with no restore-side change.
     const entries: ArchiveEntry[] = [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: dumpBytes },
       ...nonDbState,
       ...Object.entries(secrets).map(([path, contents]) => ({
         name: `secrets/${path}`,
+        bytes: Buffer.from(contents),
+      })),
+      ...Object.entries(optionalState).map(([name, contents]) => ({
+        name: `secrets/${name}`,
         bytes: Buffer.from(contents),
       })),
     ];
