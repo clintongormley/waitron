@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { assertStorableKey } from "./backup-api.js";
-import { writeBackupEnv } from "./backup-env-writer.js";
+import { assertStorableRecord, backupEnvRecord, writeBackupEnv } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 
 describe("assertStorableKey", () => {
@@ -61,5 +61,46 @@ describe("writeBackupEnv", () => {
     expect(parsed.WAITRON_BACKUP_SCHEDULE_DAYS).toBeUndefined();
     expect(parsed.WAITRON_BACKUP_AT).toBeUndefined();
     expect(parsed.WAITRON_BACKUP_KEY_ROTATED_AT).toBeUndefined();
+  });
+
+  it("rejects a destinationDir with an embedded newline and injects NOTHING", async () => {
+    // Security: only the recovery key was round-trip guarded, so a destinationDir carrying a newline
+    // slipped through validation and `formatEnvFile` wrote it verbatim — the injected second line
+    // `WAITRON_BACKUP_DATABASE_URL=…` then parsed back as a REAL env var, pointing the dump at a
+    // wrong database. Every free string must be guarded, and no env file may be written that does not
+    // round-trip.
+    const dir = mkdtempSync(join(tmpdir(), "backup-env-"));
+    await expect(
+      writeBackupEnv(dir, {
+        destinationDir: "/mnt/usb\nWAITRON_BACKUP_DATABASE_URL=postgresql://wrong-host/wrong-db",
+        recoveryKey: "abcDEF-_1234567890",
+        schedule: { kind: "interval", ms: 3_600_000 },
+        retention: { count: 7, days: 30 },
+        keyRotatedAt: undefined,
+      }),
+    ).rejects.toMatchObject({ code: "backup.destinations_invalid" });
+    // The guard fires BEFORE the write, so there is no file at all — hence no injected DB url.
+    await expect(readFile(join(dir, "backup.env"), "utf8")).rejects.toThrow();
+  });
+});
+
+describe("assertStorableRecord", () => {
+  it("passes a clean record and rejects any value carrying a control char / newline", () => {
+    const clean = backupEnvRecord({
+      destinationDir: "/srv/backups",
+      recoveryKey: "abcDEF-_1234567890",
+      schedule: { kind: "interval", ms: 3_600_000 },
+      retention: { count: 7, days: 30 },
+      keyRotatedAt: undefined,
+    });
+    expect(() => assertStorableRecord(clean)).not.toThrow();
+    // A newline in ANY value injects a second KEY=value line on the round-trip.
+    expect(() => assertStorableRecord({ ...clean, WAITRON_BACKUP_DIR: "/srv\nEVIL=1" })).toThrow(
+      /destinations_invalid/,
+    );
+    // A bare carriage return / control char is refused too.
+    expect(() => assertStorableRecord({ ...clean, WAITRON_BACKUP_DIR: "/srv\rx" })).toThrow(
+      /destinations_invalid/,
+    );
   });
 });
