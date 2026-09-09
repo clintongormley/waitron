@@ -334,6 +334,40 @@ describe("Print API over real Postgres (as the app role)", () => {
     });
     expect(manager.status).toBe(200);
   });
+
+  it("the discovery routes require printer.manage — 401 unauth, 403 staff, 2xx manager (gate proven by deletion)", async () => {
+    // Design §11: the discovered list and the discovery WINDOW are readable/openable only with a
+    // `printer.manage` session (the agent setup page stays LAN + unauthenticated, but these operator
+    // surfaces are gated). Both routes funnel through print-api's shared `gated` helper, so deleting the
+    // `authorizeManager(...)` call from it flips every staff case below from 403 to a 2xx, turning the
+    // 403 assertions red; restoring it turns them green. Proven as the app role on real Postgres.
+    const app = mountApp(tenantA);
+    const routes = [
+      { method: "POST", path: "/management-api/printer-discovery/start" },
+      { method: "GET", path: "/management-api/discovered-printers" },
+    ] as const;
+
+    for (const { method, path } of routes) {
+      // Unauthenticated → 401 (no session) BEFORE any window mutation or DB read.
+      const unauth = await send(app, method, path);
+      expect(unauth.status).toBe(401);
+      expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "management_session.required" },
+      });
+
+      // Staff session → 403 (`printer.manage` refused) — a staff clerk cannot open a discovery window
+      // or read the discovered list.
+      const staff = await send(app, method, path, { cookie: staffCookie });
+      expect(staff.status).toBe(403);
+      expect((await staff.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+
+      // Manager session → 200 (the gate admits it).
+      const manager = await send(app, method, path, { cookie: managerCookie });
+      expect(manager.status).toBe(200);
+    }
+  });
 });
 
 describe("Station ↔ printer mapping routes over real Postgres (printer.manage)", () => {

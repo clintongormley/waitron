@@ -96,12 +96,18 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
     const agentId = await seedAgent(cfg, "Kitchen");
     await asApp(suite.admin, cfg, async (tx) => {
       const p = await createPrinter(tx, cfg, { name: "USB", transport: "usb", localKey: "SN-9" });
-      await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
+      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
       // The agent that does NOT see SN-9 claims nothing — the empty-visibleKeys guard degenerates the
-      // usb/bt branch to `false` rather than an `in ()`.
+      // usb/bt branch to `false` rather than an `in ()`. The FAILING case (the guard gone, or the branch
+      // matching a printer whose key nobody reported) would return the job and flip it to `printing`; so
+      // the job must be claimed 0 times AND left `queued` for another box that CAN see the device.
       expect(
         await claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
       ).toHaveLength(0);
+      const afterMiss = await tx.execute<{ status: string }>(
+        sql`select status from print_jobs where id = ${jobId}`,
+      );
+      expect(afterMiss.rows[0]!.status).toBe("queued");
       // The agent that reports SN-9 claims it, and the RETURNING carries the device key.
       const claimed = await claimPrintJobs(tx, cfg, agentId, {
         locationId: cfg.locationId,
