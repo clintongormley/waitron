@@ -13,6 +13,7 @@ import { drawerPolicyName, jobStatusName, printModeName, transportName } from ".
 import { formatIsoMinute } from "../date-utils.js";
 import type {
   DashboardApi,
+  DiscoveredPrinter,
   DrawerOpenPolicy,
   JoinRequestRow,
   LocationSummary,
@@ -40,31 +41,35 @@ const DRAWER_POLICIES: readonly DrawerOpenPolicy[] = ["gated", "open"];
 
 /** A printer the row editor holds in local, editable state — a defensive copy of the loaded {@link Printer}
  * with the nullable connection columns flattened to STRINGS (`null` → `""`), so a `wt-input` can bind them
- * and `#savePrinter` maps an empty string back to a clearing `null`. `transport`/`agentId` are display-only
- * here (the row shows them but does not edit them; the create form owns the transport/agent choice). */
+ * and `#savePrinter` maps an empty string back to a clearing `null`. `localKey` is the stable device id
+ * (USB serial / Bluetooth MAC) for `usb`/`bluetooth`. `transport` is display-only here (the row shows it
+ * but does not edit it; the create surface owns the transport choice). There is no serving-agent column —
+ * eligibility is derived at run time (central printer provisioning §3). */
 interface EditablePrinter {
   id: string;
   name: string;
   transport: PrintTransport;
-  agentId: string | null;
   host: string;
   port: string;
-  usbPath: string;
+  localKey: string;
   pollId: string;
   ticketScope: PrintTicketScope;
   active: boolean;
 }
 
-/** The transport options the create form offers, in the order they render. `network_tcp` leads so the
- * form's default (the first option) is the venue's most common printer; the reconcile in {@link
- * PrintersScreen.updated} keeps the native select's live value pinned to `newTransport`.
+/** The transport options the create surface offers, in the order they render. `network_tcp` leads so the
+ * default (the first option) is the venue's most common printer.
  *
- * `cloud_poll` is deliberately EXCLUDED here: it has no delivery path in this slice (the agent router
- * rejects it — a documented fast-follow), so offering it would let an operator create a printer that
- * accepts undeliverable jobs. The `PrintTransport` enum, the API schema and the row DISPLAY still
- * forward-carry `cloud_poll` (an existing one, e.g. created via the API, renders and reads normally —
- * see `#renderPrinter`/`transportName`); only this CREATE dropdown drops it. */
-const TRANSPORTS: readonly PrintTransport[] = ["network_tcp", "usb"];
+ * `cloud_poll` is deliberately EXCLUDED: it is provisioned by Waitron Cloud, not added on this screen.
+ * The `PrintTransport` enum, the API schema and the row DISPLAY still forward-carry `cloud_poll` (an
+ * existing one renders and reads normally — see `#renderPrinter`/`transportName`); only this create
+ * surface drops it. `usb`/`bluetooth` are NOT added by hand — a physical device is keyed by a stable id
+ * only the box can read, so those transports register from the discovered list (§10). */
+const TRANSPORTS: readonly PrintTransport[] = ["network_tcp", "usb", "bluetooth"];
+
+/** The transports registered from the discovered-devices list rather than a manual form — a physical USB
+ * or Bluetooth device is keyed by a stable id (USB serial / MAC) that only the box can read. */
+const DISCOVERED_TRANSPORTS: readonly PrintTransport[] = ["usb", "bluetooth"];
 
 /**
  * The management dashboard's IMPRESORAS (printers) screen (printing subsystem §6): the venue's central
@@ -258,37 +263,39 @@ export class PrintersScreen extends LitElement {
   @state() private challenges: Record<string, string[]> = {};
   @state() private armedDenyId: string | null = null;
 
-  // The new-printer form's fields. `newTransport` seeds to the first option; the connection fields are
-  // all optional strings, sent only when non-empty (the server owns the per-transport required check).
+  // The new-printer form's fields. `newTransport` seeds to the first option; for network_tcp the host +
+  // port are optional strings, sent only when non-empty (the server owns the per-transport required
+  // check). usb/bluetooth carry no manual connection fields — they register from `discovered`.
   @state() private newPrinterName = "";
   @state() private newTransport: PrintTransport = TRANSPORTS[0];
-  @state() private newAgentId = "";
   @state() private newHost = "";
   @state() private newPort = "";
-  @state() private newUsbPath = "";
-  @state() private newPollId = "";
+
+  // The discovered-devices inventory the usb/bluetooth create surface offers, and the network_tcp Scan
+  // pre-fill offers (filtered to the current transport). Loaded on switching to a discovered transport,
+  // on Scan, and on Refresh — never at connect (discovery is on-demand). `registerNames` holds the name
+  // typed against each unregistered row, keyed by the device's `localKey`.
+  @state() private discovered: DiscoveredPrinter[] = [];
+  @state() private registerNames: Record<string, string> = {};
 
   @state() private errorKey: string | null = null;
 
-  // Handles to the create form's two native <select>s, reconciled to their state in `updated()` — a
+  // Handle to the create form's transport native <select>, reconciled to its state in `updated()` — a
   // native select's `.value` bound in the template commits before its <option> children exist, so a
   // non-first selection would fall back to the first (the devices/login screens document the same bug).
   #transportSelect = createRef<HTMLSelectElement>();
-  #agentSelect = createRef<HTMLSelectElement>();
 
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
   }
 
-  /** Reconcile both create-form selects' live values to their state after every render, once their
-   * <option> children are in the DOM. Both selects are rendered unconditionally, so the refs are always
+  /** Reconcile the create-form transport select's live value to its state after every render, once its
+   * <option> children are in the DOM. The select is rendered unconditionally, so the ref is always
    * populated; setting `.value` imperatively does not trigger a reactive update. */
   override updated(): void {
     const transport = this.#transportSelect.value;
     if (transport) transport.value = this.newTransport;
-    const agent = this.#agentSelect.value;
-    if (agent) agent.value = this.newAgentId;
     // Reconcile each per-till receipt-printer <select> to the till's PERSISTED printer id (loaded from
     // the tills route, or "" for none) — the same native-select-value-before-<option>-children fix the two
     // create-form selects above use, applied to the dynamic per-till selects via a shadow-DOM query (the
@@ -354,10 +361,9 @@ export class PrintersScreen extends LitElement {
         id: p.id,
         name: p.name,
         transport: p.transport,
-        agentId: p.agentId,
         host: p.host ?? "",
         port: p.port === null ? "" : String(p.port),
-        usbPath: p.usbPath ?? "",
+        localKey: p.localKey ?? "",
         pollId: p.pollId ?? "",
         ticketScope: p.ticketScope,
         active: p.active,
@@ -547,16 +553,14 @@ export class PrintersScreen extends LitElement {
   // ── Printers ───────────────────────────────────────────────────────────────────────────────────
 
   /** Capture the picked transport. A native `<select>` `change` is `composed: false`, so `stopPropagation`
-   * is defensive consistency with the composed `wt-change` handlers, not a boundary guard. */
+   * is defensive consistency with the composed `wt-change` handlers, not a boundary guard. Switching to a
+   * usb/bluetooth transport reads the discovered inventory (there is no manual form for those); switching
+   * to network_tcp clears the list (its results only appear on an explicit Scan). */
   #onNewTransport(event: Event): void {
     event.stopPropagation();
     this.newTransport = (event.target as HTMLSelectElement).value as PrintTransport;
-  }
-
-  /** Capture the picked serving agent (`""` = none, for a self-polling cloud printer). */
-  #onNewAgent(event: Event): void {
-    event.stopPropagation();
-    this.newAgentId = (event.target as HTMLSelectElement).value;
+    this.discovered = [];
+    if (DISCOVERED_TRANSPORTS.includes(this.newTransport)) void this.#refreshDiscovered();
   }
 
   /** A create-form text field's composed `wt-change` → the named `new*` state slot. */
@@ -565,35 +569,90 @@ export class PrintersScreen extends LitElement {
     field(event.detail.value);
   }
 
-  /** Create a printer from the new-printer form, then reload. A blank name is a no-op. Only the
-   * connection fields relevant to the chosen TRANSPORT are sent, and only when non-empty — the server
-   * owns the per-transport required-field check (`printer.invalid_config`), so the screen stays a thin
-   * sender, but the DB CHECK asserts only that the required fields are PRESENT (it does not forbid
-   * extras), so a stray field from another transport would persist as meaningless config. The create
-   * form only ever offers `usb`/`network_tcp` (`cloud_poll` is dropped from the dropdown), so `pollId`
-   * is never sent here. On success the form's name + connection fields reset; on rejection the
-   * `errorKey` banner shows and the form is left for a retry. */
+  /** Read the current discovered inventory into state; throws like the verb it calls (callers wrap). */
+  async #loadDiscovered(): Promise<void> {
+    this.discovered = await this.api.listDiscoveredPrinters();
+  }
+
+  /** Re-read the discovered inventory (the usb/bluetooth Refresh, and after a switch to one of those
+   * transports). A rejection becomes the `errorKey` banner rather than an unhandled rejection. */
+  async #refreshDiscovered(): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.#loadDiscovered();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** Open the venue discovery window (the expensive LAN sweep / Bluetooth inquiry the agents run), then
+   * read what turned up so the network_tcp form can offer a found IP printer to pre-fill. A rejection
+   * becomes the `errorKey` banner. */
+  async #scan(): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.startPrinterDiscovery();
+      await this.#loadDiscovered();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** Capture the name typed against one discovered row (keyed by its stable device id). */
+  #onRegisterName(localKey: string, value: string): void {
+    this.registerNames = { ...this.registerNames, [localKey]: value };
+  }
+
+  /** Stamp a scanned network_tcp result's host + port into the manual IP form. */
+  #useResult(result: DiscoveredPrinter): void {
+    this.newHost = result.host ?? "";
+    this.newPort = result.port == null ? "" : String(result.port);
+  }
+
+  /** Add a network_tcp printer from the manual IP form, then reload. A blank name is a no-op. Host + port
+   * are sent only when non-empty — the server owns the required-field check (`printer.invalid_config`,
+   * network_tcp needs a host), so the screen stays a thin sender; no other transport's fields are sent
+   * (usb/bluetooth register from the discovered list, cloud_poll is not offered). On success the form
+   * resets; on rejection the `errorKey` banner shows and the form is left for a retry. */
   async #createPrinter(): Promise<void> {
     this.errorKey = null; // also dismisses a prior banner on the blank-name early return below
     const name = this.newPrinterName.trim();
     if (name === "") return;
-    const input: PrinterInput = { name, transport: this.newTransport };
-    if (this.newAgentId !== "") input.agentId = this.newAgentId;
-    if (this.newTransport === "usb") {
-      if (this.newUsbPath.trim() !== "") input.usbPath = this.newUsbPath.trim();
-    } else {
-      // network_tcp — the only other transport the create dropdown offers (never cloud_poll).
-      if (this.newHost.trim() !== "") input.host = this.newHost.trim();
-      if (this.newPort.trim() !== "") input.port = Number(this.newPort);
-    }
+    const input: PrinterInput = { name, transport: "network_tcp" };
+    if (this.newHost.trim() !== "") input.host = this.newHost.trim();
+    if (this.newPort.trim() !== "") input.port = Number(this.newPort);
     await this.#submit(async () => {
       await this.api.createPrinter(input);
       this.newPrinterName = "";
       this.newHost = "";
       this.newPort = "";
-      this.newUsbPath = "";
-      this.newPollId = "";
     });
+  }
+
+  /** Register a discovered usb/bluetooth device as a printer: create it with the row's transport + its
+   * stable `localKey` and the name typed against the row. A blank name is a no-op. On success the row's
+   * typed name clears and both the printer list and the discovered inventory reload (so the row flips to
+   * "registered"); a rejection (a device already registered → `printer.already_registered`) becomes the
+   * `errorKey` banner, and the discovered list is NOT reloaded so the banner survives. Shares the
+   * `submitting` gate with the other form submissions. */
+  async #registerDiscovered(device: DiscoveredPrinter): Promise<void> {
+    if (this.submitting) return;
+    const localKey = device.localKey;
+    if (localKey === undefined) return;
+    const name = (this.registerNames[localKey] ?? "").trim();
+    if (name === "") return;
+    this.errorKey = null;
+    this.submitting = true;
+    try {
+      await this.api.createPrinter({ name, transport: device.transport, localKey });
+      this.registerNames = { ...this.registerNames, [localKey]: "" };
+      await this.#load();
+      await this.#loadDiscovered();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
+    }
   }
 
   /** Apply a partial edit to the printer row `id` holds, replacing it in state with a fresh object (so a
@@ -606,7 +665,7 @@ export class PrintersScreen extends LitElement {
    * `#onNewField`. Returns a handler that stops the composed event at this shadow boundary and writes
    * `field` on the row `id` holds. `field` is one of the STRING-valued editable columns (name + the four
    * connection fields); the two switches (ticket scope, active) carry `checked` and keep inline handlers. */
-  #editHandler<K extends "name" | "host" | "port" | "usbPath" | "pollId">(
+  #editHandler<K extends "name" | "host" | "port" | "localKey" | "pollId">(
     id: string,
     field: K,
   ): (event: CustomEvent<{ value: string }>) => void {
@@ -632,8 +691,8 @@ export class PrintersScreen extends LitElement {
       ticketScope: row.ticketScope,
       active: row.active,
     };
-    if (row.transport === "usb") {
-      patch.usbPath = row.usbPath === "" ? null : row.usbPath;
+    if (row.transport === "usb" || row.transport === "bluetooth") {
+      patch.localKey = row.localKey === "" ? null : row.localKey;
     } else if (row.transport === "network_tcp") {
       patch.host = row.host === "" ? null : row.host;
       patch.port = row.port.trim() === "" ? null : Number(row.port);
@@ -712,13 +771,6 @@ export class PrintersScreen extends LitElement {
   /** Resolve a printer id to its display name; an id no longer in the list falls back to the raw id. */
   #printerName(printerId: string): string {
     return this.printers.find((p) => p.id === printerId)?.name ?? printerId;
-  }
-
-  /** Resolve an agent id to its display name; a null id (a cloud printer with no agent) or an id no
-   * longer in the active list falls back to the neutral placeholder. */
-  #agentName(agentId: string | null): string {
-    if (agentId === null) return t("printers.no_agent");
-    return this.agents.find((a) => a.id === agentId)?.name ?? t("printers.no_agent");
   }
 
   /** Format an ISO instant to the minute (UTC — no per-venue timezone yet, matching the devices screen);
@@ -910,7 +962,6 @@ export class PrintersScreen extends LitElement {
         <div class="details" style="margin-bottom: var(--wt-space-3)">
           <span class="meta">
             <span data-test="printer-transport-${p.id}">${transportName(p.transport)}</span>
-            <span data-test="printer-agent-${p.id}">${this.#agentName(p.agentId)}</span>
           </span>
         </div>
         <div class="row">
@@ -938,10 +989,10 @@ export class PrintersScreen extends LitElement {
           ></wt-input>
           <wt-input
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-printer-${p.id}"]`))}
-            label=${t("printers.usb_path")}
-            data-test="printer-usb-path-${p.id}"
-            .value=${p.usbPath}
-            @wt-change=${this.#editHandler(p.id, "usbPath")}
+            label=${t("printers.local_key")}
+            data-test="printer-local-key-${p.id}"
+            .value=${p.localKey}
+            @wt-change=${this.#editHandler(p.id, "localKey")}
           ></wt-input>
           <wt-input
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-printer-${p.id}"]`))}
@@ -1086,6 +1137,162 @@ export class PrintersScreen extends LitElement {
     `;
   }
 
+  /** A discovered device's display name: its self-reported name, else make + model, else its stable id. */
+  #discoveredLabel(device: DiscoveredPrinter): string {
+    if (device.name != null && device.name !== "") return device.name;
+    const parts = [device.make, device.model].filter((x): x is string => x != null && x !== "");
+    if (parts.length > 0) return parts.join(" ");
+    return device.localKey ?? device.host ?? "";
+  }
+
+  /** The manual IP (network_tcp) add form: name + host + port + Add, plus a Scan that opens the
+   * discovery window and offers any found IP printer to pre-fill host + port. */
+  #renderNetworkForm(): TemplateResult {
+    const found = this.discovered.filter((d) => d.transport === "network_tcp");
+    return html`
+      <div class="new">
+        <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
+          label=${t("printers.name")}
+          data-test="new-printer-name"
+          .value=${this.newPrinterName}
+          @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            this.#onNewField(e, (v) => (this.newPrinterName = v))}
+        ></wt-input>
+        <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
+          label=${t("printers.host")}
+          data-test="new-host"
+          .value=${this.newHost}
+          @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            this.#onNewField(e, (v) => (this.newHost = v))}
+        ></wt-input>
+        <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
+          type="number"
+          label=${t("printers.port")}
+          data-test="new-port"
+          .value=${this.newPort}
+          @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            this.#onNewField(e, (v) => (this.newPort = v))}
+        ></wt-input>
+        <wt-button
+          variant="primary"
+          data-test="add-printer"
+          ?disabled=${this.submitting}
+          @click=${() => void this.#createPrinter()}
+          >${t("printers.add_printer")}</wt-button
+        >
+        <wt-button variant="secondary" data-test="scan-printers" @click=${() => void this.#scan()}
+          >${t("printers.scan")}</wt-button
+        >
+      </div>
+      ${
+        found.length === 0
+          ? nothing
+          : html`<ol>
+              ${found.map(
+                (d, i) =>
+                  html`<li data-test="discovered-row-net-${i}">
+                    <wt-card>
+                      <div class="row">
+                        <div class="details">
+                          <span class="label">${this.#discoveredLabel(d)}</span>
+                          <span class="meta"><span>${d.host}:${d.port}</span></span>
+                        </div>
+                        <wt-button
+                          variant="secondary"
+                          size="sm"
+                          data-test="use-result-${i}"
+                          @click=${() => this.#useResult(d)}
+                          >${t("printers.use_result")}</wt-button
+                        >
+                      </div>
+                    </wt-card>
+                  </li>`,
+              )}
+            </ol>`
+      }
+    `;
+  }
+
+  /** One discovered usb/bluetooth device row — its identity + stable id, and either a "registered"
+   * marker (an existing printer already keys on it) or a name field + Register action. */
+  #renderDiscoveredRow(device: DiscoveredPrinter): TemplateResult {
+    const localKey = device.localKey ?? "";
+    return html`<li data-test="discovered-row-${localKey}">
+      <wt-card>
+        <div class="row">
+          <div class="details">
+            <span class="label">${this.#discoveredLabel(device)}</span>
+            <span class="meta">
+              <span>${localKey}</span>
+              ${
+                device.agentName == null
+                  ? nothing
+                  : html`<span
+                      >${t("printers.discovered_seen_on").replace("{agent}", device.agentName)}</span
+                    >`
+              }
+            </span>
+          </div>
+          ${
+            device.alreadyRegistered
+              ? html`<span class="label" data-test="discovered-registered-${localKey}"
+                  >${t("printers.registered")}</span
+                >`
+              : html`<wt-input
+                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="register-${localKey}"]`))}
+                    label=${t("printers.name")}
+                    data-test="register-name-${localKey}"
+                    .value=${this.registerNames[localKey] ?? ""}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                      this.#onNewField(e, (v) => this.#onRegisterName(localKey, v))}
+                  ></wt-input>
+                  <wt-button
+                    variant="primary"
+                    size="sm"
+                    data-test="register-${localKey}"
+                    ?disabled=${this.submitting}
+                    @click=${() => void this.#registerDiscovered(device)}
+                    >${t("printers.register")}</wt-button
+                  >`
+          }
+        </div>
+      </wt-card>
+    </li>`;
+  }
+
+  /** The usb/bluetooth register surface: the discovered inventory (filtered to the current transport)
+   * with a per-row Register, a Refresh, and — for bluetooth — a one-line note to pair on the box first. */
+  #renderDiscoveredSection(): TemplateResult {
+    const found = this.discovered.filter((d) => d.transport === this.newTransport);
+    return html`
+      ${
+        this.newTransport === "bluetooth"
+          ? html`<p class="hint" data-test="bluetooth-pair-note">
+              ${t("printers.bluetooth_pair_note")}
+            </p>`
+          : nothing
+      }
+      <div class="actions">
+        <wt-button
+          variant="secondary"
+          data-test="refresh-discovered"
+          @click=${() => void this.#refreshDiscovered()}
+          >${t("printers.refresh")}</wt-button
+        >
+      </div>
+      ${
+        found.length === 0
+          ? html`<p class="empty" data-test="no-discovered">${t("printers.no_discovered")}</p>`
+          : html`<ol>
+              ${found.map((d) => this.#renderDiscoveredRow(d))}
+            </ol>`
+      }
+    `;
+  }
+
   #renderPrintersSection(): TemplateResult {
     return html`
       <section>
@@ -1099,14 +1306,6 @@ export class PrintersScreen extends LitElement {
         }
         <h3 class="panel-title">${t("printers.new_printer")}</h3>
         <div class="new">
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
-            label=${t("printers.name")}
-            data-test="new-printer-name"
-            .value=${this.newPrinterName}
-            @wt-change=${(e: CustomEvent<{ value: string }>) =>
-              this.#onNewField(e, (v) => (this.newPrinterName = v))}
-          ></wt-input>
           <label class="field"
             >${t("printers.transport")}
             <select
@@ -1117,58 +1316,8 @@ export class PrintersScreen extends LitElement {
               ${TRANSPORTS.map((tr) => html`<option value=${tr}>${transportName(tr)}</option>`)}
             </select>
           </label>
-          <label class="field"
-            >${t("printers.agent")}
-            <select
-              ${ref(this.#agentSelect)}
-              data-test="new-agent"
-              @change=${(e: Event) => this.#onNewAgent(e)}
-            >
-              <option value="">${t("printers.no_agent")}</option>
-              ${this.agents.map((a) => html`<option value=${a.id}>${a.name}</option>`)}
-            </select>
-          </label>
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
-            label=${t("printers.host")}
-            data-test="new-host"
-            .value=${this.newHost}
-            @wt-change=${(e: CustomEvent<{ value: string }>) =>
-              this.#onNewField(e, (v) => (this.newHost = v))}
-          ></wt-input>
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
-            type="number"
-            label=${t("printers.port")}
-            data-test="new-port"
-            .value=${this.newPort}
-            @wt-change=${(e: CustomEvent<{ value: string }>) =>
-              this.#onNewField(e, (v) => (this.newPort = v))}
-          ></wt-input>
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
-            label=${t("printers.usb_path")}
-            data-test="new-usb-path"
-            .value=${this.newUsbPath}
-            @wt-change=${(e: CustomEvent<{ value: string }>) =>
-              this.#onNewField(e, (v) => (this.newUsbPath = v))}
-          ></wt-input>
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
-            label=${t("printers.poll_id")}
-            data-test="new-poll-id"
-            .value=${this.newPollId}
-            @wt-change=${(e: CustomEvent<{ value: string }>) =>
-              this.#onNewField(e, (v) => (this.newPollId = v))}
-          ></wt-input>
-          <wt-button
-            variant="primary"
-            data-test="add-printer"
-            ?disabled=${this.submitting}
-            @click=${() => void this.#createPrinter()}
-            >${t("printers.add_printer")}</wt-button
-          >
         </div>
+        ${this.newTransport === "network_tcp" ? this.#renderNetworkForm() : this.#renderDiscoveredSection()}
       </section>
     `;
   }

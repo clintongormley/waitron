@@ -993,8 +993,11 @@ export interface PurchaseInvoicePatch {
 // every shape above does). These are the CONTRACT the Impresoras screen builds on; if the server
 // shapes change these follow, and a mismatch surfaces as a runtime shape error a view test catches.
 
-/** How a printer is reached — the `print_transport` pgEnum (schema/printers.ts). */
-export type PrintTransport = "usb" | "network_tcp" | "cloud_poll";
+/** How a printer is reached — the `print_transport` pgEnum (schema/printers.ts). `usb`/`bluetooth`
+ * printers are keyed by a stable `localKey` (USB serial / Bluetooth MAC); `network_tcp` by host+port;
+ * `cloud_poll` self-polls. No transport stores a serving agent — which box serves a printer is derived
+ * at run time from the devices it can currently see (central printer provisioning §3). */
+export type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
 
 /** A printer's kitchen-ticket grouping — the `print_ticket_scope` pgEnum (Slice B). */
 export type PrintTicketScope = "station" | "order";
@@ -1014,15 +1017,16 @@ export interface PrintAgentRow {
 }
 
 /** One `GET /management-api/printers` row — mirrors `@waitron/printing`'s `PrinterRow`. The connection
- * fields are transport-specific and null when unused; both active and deactivated printers are listed. */
+ * fields are transport-specific and null when unused (`localKey` = the USB serial / Bluetooth MAC for
+ * `usb`/`bluetooth`); both active and deactivated printers are listed. There is no serving-agent column
+ * any more — eligibility is derived at run time (central printer provisioning §3). */
 export interface Printer {
   id: string;
   name: string;
   transport: PrintTransport;
-  agentId: string | null;
   host: string | null;
   port: number | null;
-  usbPath: string | null;
+  localKey: string | null;
   pollId: string | null;
   ticketScope: PrintTicketScope;
   active: boolean;
@@ -1034,11 +1038,32 @@ export interface Printer {
 export interface PrinterInput {
   name: string;
   transport: PrintTransport;
-  agentId?: string;
   host?: string;
   port?: number;
-  usbPath?: string;
+  /** The stable device id — the USB serial (`usb`) or Bluetooth MAC (`bluetooth`). Absent for
+   * `network_tcp`/`cloud_poll`. A create whose `localKey` already names a printer in this venue rejects
+   * `printer.already_registered`. */
+  localKey?: string;
   pollId?: string;
+}
+
+/** One `GET /management-api/discovered-printers` row — a device an agent currently sees or found in a
+ * scan (central printer provisioning §9). `usb`/`bluetooth` devices carry a stable `localKey`; a freshly
+ * scanned `network_tcp` printer carries `host`/`port` and may have no `localKey`. `agentName` is the box
+ * that reported it (null if it since went away), `make`/`model`/`name` its self-reported identity when
+ * known, and `alreadyRegistered` is true when its `localKey` already names a registered printer — those
+ * rows are shown marked, with no Register action. Unregistered devices come first (server order). */
+export interface DiscoveredPrinter {
+  agentId: string;
+  agentName: string | null;
+  transport: PrintTransport;
+  localKey?: string;
+  host?: string | null;
+  port?: number | null;
+  make?: string | null;
+  model?: string | null;
+  name?: string | null;
+  alreadyRegistered: boolean;
 }
 
 /** The `PATCH /management-api/printers/:id` body — mirrors `@waitron/printing`'s `UpdatePrinterInput`.
@@ -1047,10 +1072,11 @@ export interface PrinterInput {
 export interface PrinterPatch {
   name?: string;
   transport?: PrintTransport;
-  agentId?: string | null;
   host?: string | null;
   port?: number | null;
-  usbPath?: string | null;
+  /** The stable device id (USB serial / Bluetooth MAC); `null` clears it. A re-key to a device already
+   * registered in this venue rejects `printer.already_registered`. */
+  localKey?: string | null;
   pollId?: string | null;
   ticketScope?: PrintTicketScope;
   active?: boolean;
@@ -2335,6 +2361,25 @@ export class DashboardApi {
    * unknown agent `{ code: "agent.not_found" }` (404). */
   createPrinter(input: PrinterInput): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/printers", "POST", input);
+  }
+
+  /** `POST /management-api/printer-discovery/start` — open the venue's short discovery window so the
+   * agents run their active scans (LAN/mDNS sweep for IP, Bluetooth inquiry) and report what they find.
+   * Returns the window's end (`discoveryUntil`, epoch ms). The screen then reads {@link
+   * listDiscoveredPrinters} to show the results. */
+  startPrinterDiscovery(): Promise<{ discoveryUntil: number }> {
+    return this.#request<{ discoveryUntil: number }>(
+      "/management-api/printer-discovery/start",
+      "POST",
+    );
+  }
+
+  /** `GET /management-api/discovered-printers` — the merged in-memory list of devices the agents
+   * currently see (always-on USB/BT presence) or found in an open discovery window, unregistered first.
+   * Each carries whether its stable id already names a registered printer, so the create surface can
+   * offer a Register action on the new ones and mark the rest. */
+  listDiscoveredPrinters(): Promise<DiscoveredPrinter[]> {
+    return this.#request<DiscoveredPrinter[]>("/management-api/discovered-printers", "GET");
   }
 
   /** `PATCH /management-api/printers/:id` — patch a printer's mutable slice (name, transport, agent,

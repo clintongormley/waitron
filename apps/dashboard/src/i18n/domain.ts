@@ -145,6 +145,7 @@ const PURCHASE_VAT_KIND_NAMES: NameTable = {
 const PRINT_TRANSPORT_NAMES: NameTable = {
   usb: { en: "USB", es: "USB" },
   network_tcp: { en: "Network (TCP)", es: "Red (TCP)" },
+  bluetooth: { en: "Bluetooth", es: "Bluetooth" },
   cloud_poll: { en: "Cloud poll", es: "Sondeo en la nube" },
 };
 
@@ -180,7 +181,7 @@ export function roleName(value: string, locale: string = currentLocale()): strin
   return resolveNameTable(ROLE_NAMES, value, locale);
 }
 
-/** A printer transport (usb / network_tcp / cloud_poll) → its display name (raw-value fallback). */
+/** A printer transport (usb / network_tcp / bluetooth / cloud_poll) → its display name (raw-value fallback). */
 export function transportName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PRINT_TRANSPORT_NAMES, value, locale);
 }

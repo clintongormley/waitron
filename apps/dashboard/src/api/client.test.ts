@@ -2168,10 +2168,9 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       id: "p1",
       name: "Cocina",
       transport: "network_tcp",
-      agentId: "a1",
       host: "10.0.0.9",
       port: 9100,
-      usbPath: null,
+      localKey: null,
       pollId: null,
       ticketScope: "station",
       active: true,
@@ -2247,8 +2246,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     const input = {
       name: "USB",
       transport: "usb" as const,
-      agentId: "a1",
-      usbPath: "/dev/usb/lp0",
+      localKey: "SN-1",
     };
     expect(await api.createPrinter(input)).toEqual({ id: "p9" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers", {
@@ -2264,9 +2262,53 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "printer.invalid_config" } }, false, 422));
     const api = new DashboardApi("", fetchImpl);
+    await expect(api.createPrinter({ name: "Bad", transport: "usb" })).rejects.toMatchObject({
+      code: "printer.invalid_config",
+    });
+  });
+
+  it("createPrinter rejects with { code } when a device is already registered (409)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "printer.already_registered" } }, false, 409),
+      );
+    const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.createPrinter({ name: "Bad", transport: "usb", agentId: "a1" }),
-    ).rejects.toMatchObject({ code: "printer.invalid_config" });
+      api.createPrinter({ name: "Dup", transport: "usb", localKey: "SN-1" }),
+    ).rejects.toMatchObject({ code: "printer.already_registered" });
+  });
+
+  it("startPrinterDiscovery POSTs the discovery-start route and returns the window end", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ discoveryUntil: 1234 }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.startPrinterDiscovery()).toEqual({ discoveryUntil: 1234 });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printer-discovery/start", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("listDiscoveredPrinters GETs the discovered-printers route and decodes the rows", async () => {
+    const rows = [
+      {
+        agentId: "a1",
+        agentName: "Cocina agent",
+        transport: "usb",
+        localKey: "SN-1",
+        make: "Epson",
+        model: "TM-T20",
+        name: "EPSON TM-T20",
+        alreadyRegistered: false,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listDiscoveredPrinters()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/discovered-printers", {
+      method: "GET",
+      credentials: "include",
+    });
   });
 
   it("updatePrinter PATCHes the printer's route and resolves undefined on an empty 204", async () => {
