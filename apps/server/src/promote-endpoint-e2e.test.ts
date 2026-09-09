@@ -85,6 +85,10 @@ writeFileSync(join(STATE_ROOT, "modules.json"), FISCAL_NONE_OFF);
 
 const CREDENTIALS_KEY = Buffer.alloc(32, 5).toString("base64");
 const KEY_ENV = {
+  // Task 3: keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
+  // privileged, and a root CI container would otherwise stand up a live service on it. Its own
+  // behaviour is proven directly in landing-listener.test.ts.
+  WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: CREDENTIALS_KEY,
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_MEDIA_DIR: MEDIA_ROOT,

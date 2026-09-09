@@ -12,8 +12,9 @@ export interface NavigatorLike {
   serviceWorker?: { register(scriptURL: string): Promise<unknown> };
 }
 
-/** True only when the rejection carries `name === "SecurityError"`, checked without relying on
- * `instanceof Error` — a `DOMException` is not always an `Error` subclass across browsers. */
+/** True only when the rejection carries `name === "SecurityError"`. Duck-types the check on `name`
+ * rather than requiring `err instanceof Error`, so any thrown value shaped that way is recognised
+ * without assuming the rejection is an `Error` instance. */
 function isSecurityError(err: unknown): boolean {
   return (
     typeof err === "object" &&
