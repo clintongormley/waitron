@@ -208,7 +208,10 @@ export interface EntryDeps {
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
   readRecoveryState: (stateDir: string) => Promise<RecoveryState>;
   writeRecoveryState: (stateDir: string, state: RecoveryState) => Promise<void>;
-  startServer: (env: NodeJS.ProcessEnv) => Promise<{ close(): Promise<void> }>;
+  startServer: (
+    env: NodeJS.ProcessEnv,
+    base?: NodeJS.ProcessEnv,
+  ) => Promise<{ close(): Promise<void> }>;
   serveRecovery: (app: Hono, opts: RecoveryServeOptions) => Promise<unknown>;
   installShutdownHandlers: (server: { close(): Promise<void> }) => void;
   /** Runs `onStayedUp` once the process has survived `ms` — see the counter rule in `runEntry`. */
@@ -372,7 +375,10 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     delete env[BOOTSTRAP_URL];
     env.WAITRON_ADMIN_DATABASE_URL = urls.migrationsDatabaseUrl;
 
-    server = await deps.startServer(env);
+    // The RAW base env goes alongside the merged `env`: boot re-reads the box-env files off disk on
+    // every backup reload (so the wizard's `backup.env` takes effect without a restart) and needs the
+    // unmerged base to tell a file-sourced value from an env-sourced one (spec §3.2 provenance).
+    server = await deps.startServer(env, deps.baseEnv);
   } catch (error) {
     // Same count as the pre-boot write — one attempt is one failure, not two — now carrying the
     // real classification for the page. Rethrown so the process exits non-zero and Docker restarts.

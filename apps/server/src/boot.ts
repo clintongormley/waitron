@@ -5,6 +5,7 @@ import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
+  asAppUser,
   createPostgresDb,
   persistNodeMembershipIfNewer,
   readDeploymentAxes,
@@ -14,6 +15,7 @@ import {
   setFenceLsnTx,
   setSingletonRoleTx,
   readMirrorConfig,
+  withTenant,
   type Database,
 } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
@@ -97,7 +99,7 @@ import { readCredential } from "./credentials.js";
 import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
-import { mountReportApi } from "./report-api.js";
+import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { mountRecipeApi } from "./recipe-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
@@ -124,11 +126,10 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { loadBackupConfig } from "./backup-config.js";
-import { assertBackupCanReadFiscal } from "./backup-probe.js";
-import { runBackupSweep } from "./backup-sweep.js";
+import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
-import { readBackupStatus } from "./backup-status.js";
-import { buildBackend } from "./local-fs-backend.js";
+import { loadBoxEnv } from "./box-env.js";
+import { isUnset } from "./env-value.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isFenced } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
@@ -232,6 +233,22 @@ export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url
  * `defaultStateRoot` argument, the same way this file supplies `DEFAULT_MEDIA_ROOT`.
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
+
+/** Every `WAITRON_BACKUP_*` env var `loadBackupConfig` reads. The supervisor's `isManagedByEnvironment`
+ * reports true iff any is non-empty in the RAW base env — the provenance signal that distinguishes an
+ * env-injected backup config (a cloud profile) from a file-sourced one written by the wizard (spec
+ * §3.2). Only presence matters here; the parse/validation of the values lives in `loadBackupConfig`. */
+const BACKUP_ENV_KEYS = [
+  "WAITRON_BACKUP_DIR",
+  "WAITRON_BACKUP_DESTINATIONS",
+  "WAITRON_BACKUP_DATABASE_URL",
+  "WAITRON_BACKUP_RECOVERY_KEY",
+  "WAITRON_BACKUP_SCHEDULE_DAYS",
+  "WAITRON_BACKUP_AT",
+  "WAITRON_BACKUP_INTERVAL_MS",
+  "WAITRON_BACKUP_RETAIN",
+  "WAITRON_BACKUP_RETAIN_DAYS",
+] as const;
 
 /**
  * The box's canonical mDNS / self-hosted hostname. ONE source of truth so the wirings that MUST
@@ -596,7 +613,10 @@ function makeStartedServer(
  * an unreachable database exit non-zero and let the supervisor decide. A host that boots
  * half-configured and retries in the background is a host whose operator believes it is working.
  */
-export async function startServer(env: Record<string, string | undefined>): Promise<StartedServer> {
+export async function startServer(
+  env: Record<string, string | undefined>,
+  base: NodeJS.ProcessEnv = {},
+): Promise<StartedServer> {
   const now = () => new Date();
   // Config is loaded FIRST so `config.logDir` + the rotation knobs are available when the file sink is
   // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
@@ -1740,90 +1760,34 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the gated groups purely for reading order; route registration only, no database work at boot.
   mountMedia(app, { mediaDir: config.mediaDir }, log);
 
-  // Start backups only on a singleton primary after the configured backup connection
-  // passes assertBackupCanReadFiscal. The worker reuses that pool for manifest reads;
-  // pg_dump opens its own connection with the same URL. A probe failure leaves backup
-  // disabled and is logged without stopping sales. Close any pool not handed to the worker.
-  const backupConfig = loadBackupConfig(env);
-  const backupController = new AbortController();
-  // Build the `StorageBackend`s ONCE, here in boot scope, so the sweep worker below and the
-  // box-status freshness reader further down share the SAME array — one `buildBackend` per configured
-  // destination, not two divergent lists. Empty when backup is off (`backupConfig === undefined`), in
-  // which case the sweep block is skipped and the reader is never wired (`backupWorker` stays
-  // undefined), so the empty array is never read.
-  const backupBackends = backupConfig?.destinations.map(buildBackend) ?? [];
-  // The pre-encryption dump is staged under `<stateDir>/backup-staging`, NOT an OS tmp dir: it must
-  // never sit (even briefly) inside a directory a destination's `list("waitron-")` scan walks, or a
-  // stray plaintext dump could be read back as if it were a stored artifact — and under stateDir it
-  // lives on the box's persistent volume beside its other state, not on a tmpfs that may be wiped
-  // mid-dump. `runBackupSweep` re-creates it (recursively) each tick, so a wiped dir self-heals.
-  const backupStagingDir = join(config.stateDir, "backup-staging");
-  let backupWorker: Promise<void> | undefined;
-  // The backup read pool the sweep's `buildManifest` reads the drizzle journal off. Assigned ONLY
-  // on the probe's success path (the probe pool is reused), so it is `undefined` whenever backup
-  // is off/fenced; closed in `closePools` below, AFTER `stopWork` has aborted + awaited
-  // `backupWorker`, so no tick can touch it mid-close.
-  let backupDb: Database | undefined;
-  if (isSingletonPrimary && backupConfig !== undefined && backupConfig.databaseUrl !== undefined) {
-    let probeDb: Database | undefined;
-    try {
-      probeDb = await createPostgresDb(backupConfig.databaseUrl);
-      await assertBackupCanReadFiscal(probeDb);
-      // The probe just validated this exact backup read connection; hand it to the worker as
-      // `backupDb` (rather than opening a SECOND pool to the same role) and null `probeDb` so the
-      // `finally` no longer closes it — ownership has passed to `backupDb`, closed in
-      // `closePools`.
-      backupDb = probeDb;
-      probeDb = undefined;
-      backupWorker = runBackupSweep({
-        // The full fan-out: the same encrypted archive is `put` to EVERY configured destination each
-        // tick (`WAITRON_BACKUP_DIR`'s "primary" entry plus any in `WAITRON_BACKUP_DESTINATIONS`).
-        backends: backupBackends,
-        // The backup read pool for the manifest's schema-version reads (NOT the app pool —
-        // app_user has no SELECT on the `__drizzle_migrations_*` journal), plus the composition
-        // the archive captures: every module's non-DB state + schema versions, this box's
-        // environment, the media resolver, and the state dir the recovery secrets are read from.
-        db: backupDb,
-        modules: ALL_MODULES,
-        environment: config.environment,
-        resolvers: { media: config.mediaDir },
-        stateDir: config.stateDir,
-        stagingDir: backupStagingDir,
-        databaseUrl: backupConfig.databaseUrl,
-        recoveryKey: backupConfig.recoveryKey,
-        schedule: backupConfig.schedule,
-        retain: backupConfig.retain,
-        retainDays: backupConfig.retainDays,
-        jitterSeed: till.nodeId,
-        // interim — Task 4 replaces this whole block and wires the real tenant-scoped resolveVenueClock
-        // (a wall-clock schedule currently resolves against UTC + a 00:00 cutover regardless of the
-        // venue's timezone).
-        readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
-        signal: backupController.signal,
-        sleep: realSleep,
-        log,
-      });
-      backupWorker.catch((err) =>
-        log("error", "backup.worker_rejected", { errorCode: codeOf(err) }),
-      );
-    } catch (err) {
-      log("error", "backup.disabled_probe_failed", { errorCode: codeOf(err) });
-    } finally {
-      // `.catch(() => {})`: a throw in this `finally` would ESCAPE the surrounding try/catch, so a
-      // pool-close rejection on the strict §5 path must never become a boot-aborting throw. Only a
-      // FAILURE path reaches here with `probeDb` still set — on success it was nulled after handoff to
-      // `backupDb`. The probe's own errors are already handled by the `catch` above.
-      if (probeDb !== undefined) await probeDb.close().catch(() => {});
-    }
-  } else if (isSingletonPrimary && backupConfig !== undefined) {
-    // BR-1 Task 2 bridge: a destination + recovery key are configured but no
-    // `WAITRON_BACKUP_DATABASE_URL`. The supervisor that derives the read connection from the box's
-    // own owner connection lands in a later task; until then backup stays off rather than dumping
-    // over a guessed connection. This branch is removed when the supervisor is wired in.
-    log("warn", "backup.disabled_no_database_url", {});
-  } else if (isSingletonPrimary) {
-    log("info", "backup.disabled", {});
-  }
+  // The backup duty's lifecycle owner (BR-1 Task 4). It re-reads the box-env files from DISK on every
+  // `reload()` (so the wizard's `backup.env` takes effect without a restart), derives the read
+  // connection — the config's explicit `WAITRON_BACKUP_DATABASE_URL` or, when unset, the box's own
+  // OWNER connection (`config.adminDatabaseUrl`) — probes it, and starts the sweep ONLY on a singleton
+  // primary whose probe passes. A probe failure or a non-primary role leaves backup off and is logged,
+  // never stopping sales (§5). Provenance and the disk re-read both read the RAW `base` env, not the
+  // merged `env`, so a file-sourced value is distinguishable from an env-sourced one (spec §3.2).
+  const backupSupervisor = new BackupSupervisor({
+    buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
+    isManagedByEnvironment: () => BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),
+    readSingletonRole: () => holders.singletonRole.current,
+    adminDatabaseUrl: config.adminDatabaseUrl,
+    modules: ALL_MODULES,
+    environment: config.environment,
+    stateDir: config.stateDir,
+    mediaDir: config.mediaDir,
+    jitterSeed: till.nodeId,
+    // The venue's real wall clock (tz + business-day cutover), tenant-scoped and keyed by this node —
+    // the same read `report-api` uses, so an `at: "auto"` / wall-clock schedule fires in the venue's
+    // local time rather than the interim UTC placeholder the previous task carried.
+    readClock: () =>
+      withTenant(db, till.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return resolveVenueClock(tx, till.tenantId, till.nodeId);
+      }),
+    log,
+  });
+  await backupSupervisor.reload();
 
   // The carrier that would drain this node's fenced tail (`servingPrimaryNodeId` of the held chart),
   // captured at boot. The carrier's publisher-side slot on THIS node is named by the CARRIER (the
@@ -1876,10 +1840,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
               };
             }
           : undefined,
-      readBackup:
-        backupWorker !== undefined
-          ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
-          : undefined,
+      // The live backup freshness, read through the supervisor's async `status()` so box-status and the
+      // duty share one view (B3). Backup-off is not a distinct wiring: `status()` reports
+      // `configured: false` when no destination is configured, exactly the N/A placeholder box-status
+      // expects for the undefined-reader case.
+      readBackup: () => backupSupervisor.status().then((s) => s.backupStatus),
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.
@@ -2232,10 +2197,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // dialing; runTunnelClient resolves promptly on abort (it destroys every live socket and
         // cancels every pending backoff nap). Aborted alongside the others, awaited below.
         tunnelController.abort();
-        // Stop the scheduled backup sweep the same way — its own controller, aborted here so close()
-        // never leaves it mid-cadence; runBackupSweep's abort-aware sleep returns promptly rather than
-        // waiting out its (up to daily) interval. Aborted alongside the others, awaited below.
-        backupController.abort();
         await loop;
         // The outbound tunnel worker, torn down the identical way: tunnelController.abort() above
         // already signalled it, so this only awaits its settle, swallowing a settle-by-rejection so it
@@ -2243,23 +2204,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // back off every error), and holds no connection pool of its own — nothing to add to
         // closePools.
         if (tunnelWorker !== undefined) await tunnelWorker.catch(() => {});
-        // The scheduled backup sweep worker, torn down the identical way:
-        // backupController.abort() above already signalled it, so this only awaits its settle,
-        // swallowing a settle-by-rejection so it can never skip the guaranteed pool teardown
-        // below. runBackupSweep swallows its own per-tick faults (a wedged pg_dump, a full disk)
-        // so it never rejects in production. Awaiting it HERE before `closePools` is what lets
-        // `closePools` close its backup manifest read pool (`backupDb`) safely — no tick is left
-        // mid-flight reading the journal off it.
-        if (backupWorker !== undefined) await backupWorker.catch(() => {});
+        // The scheduled backup duty: the supervisor OWNS its sweep controller and its backup read
+        // pool, so `stop()` aborts the sweep, awaits its settle (runBackupSweep swallows its own
+        // per-tick faults, so it never rejects in production), AND closes that pool — there is no
+        // separate `backupDb` for `closePools` to reach. Done here, before `closePools`, for the same
+        // ordering guarantee the tunnel above keeps.
+        await backupSupervisor.stop();
       },
       closePools: async () => {
         await db.close();
         // The replication owner pool (M8), opened after the mirror-config read above and closed here
         // beside the app pool.
         await replicationDb.close();
-        // The backup sweep's backup manifest read pool. `stopWork` above already aborted +
-        // awaited `backupWorker`, so no tick can be reading the journal off it as it closes.
-        if (backupDb !== undefined) await backupDb.close();
       },
     },
     mdns,

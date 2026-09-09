@@ -251,15 +251,6 @@ describe("runOnce (fan-out)", () => {
     expect(a.objects.has("waitron-20260905T000000Z.backup.enc")).toBe(true);
   });
 
-  it("calls onDump once after a successful fan-out", async () => {
-    const a = new FakeBackend("a");
-    const onDump = vi.fn();
-    await runOnce({ ...deps([a]), onDump });
-    expect(onDump).toHaveBeenCalledTimes(1);
-    // It fires AFTER the artifact is on the backend (the supervisor flips archiveUnderCurrentKey).
-    expect(a.objects.has("waitron-20260905T000000Z.backup.enc")).toBe(true);
-  });
-
   it("chmods the staging plaintext dump to 0600 before it is read/encrypted", async () => {
     // pg_dump writes with the process umask, which can leave the whole-DB plaintext
     // group/other-readable. runOnce chmods it to 0600 (owner-only) right after the dump and before

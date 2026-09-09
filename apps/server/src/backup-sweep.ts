@@ -103,9 +103,6 @@ export interface BackupSweepDeps {
    * next fire, so an operator's tz/cutover change is picked up. Consulted ONLY for a `wall-clock`
    * schedule; an `interval` schedule never calls it. */
   readClock: () => Promise<ScheduleClock>;
-  /** Called after a tick's fan-out completes successfully — the supervisor uses it to flip
-   * `archiveUnderCurrentKey` (Task 4/I7). Not called on a failed/aborted tick. */
-  onDump?: () => void;
   signal: AbortSignal;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   log: Logger;
@@ -208,10 +205,6 @@ export async function runOnce(
         }
       }),
     );
-    // The fan-out completed (every backend settled). Signal a successful dump so the supervisor can
-    // flip `archiveUnderCurrentKey` (Task 4/I7). A throw above skips this — an incomplete tick is not
-    // a dump — and the per-destination try/catch means one bad backend does not suppress it.
-    deps.onDump?.();
   } finally {
     // Only the dump creates the staged file; a fail-fast tick that threw before it never staged
     // anything, so guard the cleanup on `dumped` rather than issuing a spurious `rm`.

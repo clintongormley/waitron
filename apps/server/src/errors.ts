@@ -1604,6 +1604,10 @@ declare module "@waitron/shared" {
      * dump needs, including migration journals. Ownership or effective read grants suffice.
      * Refused at boot so a recurring backup failure has one clear cause. No params. */
     "backup.role_rls_fenced": Record<string, never>;
+    /** A `BackupSupervisor.reload()` was called while another reload was still in flight. The
+     * lifecycle is latched (stop→close→re-read→probe→start), so two concurrent reloads would race two
+     * teardowns of the same pool; the second is refused rather than allowed to interleave. No params. */
+    "backup.reload_in_progress": Record<string, never>;
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */
     "backup.artifact_invalid": { reason: string };
