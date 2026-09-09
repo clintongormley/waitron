@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -188,6 +189,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     calls.push("provision");
     return makeVenueResult();
   });
+  const recoverProvision = vi.fn(async () => makeVenueResult());
   const seedDemo = vi.fn(async () => {
     calls.push("seedDemo");
   });
@@ -218,6 +220,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   const deps: SetupDeps = {
     environment: "preproduction",
     provision,
+    recoverProvision,
     seedDemo,
     establishIdentity,
     seedMembership,
@@ -277,6 +280,36 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       expect(replay.status).toBe(200);
       expect(await replay.json()).toMatchObject({ provisioned: true, tenantId: TENANT_ID });
       expect(next.provision).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("recovers a venue committed before operation progress reached disk", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-recovery-"));
+    const body = demoBody();
+    const requestHash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+    try {
+      const operations = createSetupOperationStore(dir);
+      await expect(
+        operations.run("provision", requestHash, async () => {
+          throw new Error("process stopped after the database commit");
+        }),
+      ).rejects.toThrow("process stopped");
+
+      const recoverProvision = vi.fn(async () => makeVenueResult());
+      const provision = vi.fn(async () => {
+        throw new AppError("setup.already_provisioned", { tenantId: TENANT_ID });
+      });
+      const app = new Hono();
+      const deps = makeDeps({ operations, provision, recoverProvision });
+      mountSetup(app, deps.deps, noopLog);
+
+      expect((await postProvision(app, body)).status).toBe(200);
+      expect(provision).toHaveBeenCalledOnce();
+      expect(recoverProvision).toHaveBeenCalledOnce();
+      expect(deps.establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
+      expect((await operations.read())?.phase).toBe("complete");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -11,7 +11,7 @@ import {
 } from "@waitron/country";
 import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
@@ -23,7 +23,7 @@ import { readJsonBody } from "@waitron/server-kit";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
-import type { SetupOperationStore } from "./setup-operation.js";
+import type { ActiveSetupOperation, SetupOperationStore } from "./setup-operation.js";
 import "./errors.js";
 
 /**
@@ -47,6 +47,8 @@ export interface SetupDeps {
    * the trading boot needs. Plaintext admin secrets never reach it — the provision route hashes them at
    * the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  /** Reconstructs the one venue committed by this persisted request after a process interruption. */
+  recoverProvision?: (req: ProvisionRequest) => Promise<VenueResult>;
   /** Adds the installed sample restaurant after a Demo venue is minted. Prepare and Live never call
    * it. Boot binds the runtime seed; keeping it injected lets the route prove the mode fork without
    * touching external files or a database in its orchestration tests. */
@@ -398,6 +400,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Captured as
     // consts so TypeScript narrows them non-undefined for the async closure below.
     const provision = deps.provision;
+    const recoverProvision = deps.recoverProvision;
     const seedDemo = deps.seedDemo;
     const establishIdentity = deps.establishIdentity;
     const seedMembership = deps.seedMembership;
@@ -409,6 +412,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     const migrationsDatabaseUrl = deps.migrationsDatabaseUrl;
     if (
       provision === undefined ||
+      (deps.operations !== undefined && recoverProvision === undefined) ||
       seedDemo === undefined ||
       establishIdentity === undefined ||
       seedMembership === undefined ||
@@ -434,7 +438,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     const requestHash = createHash("sha256")
       .update(await c.req.raw.clone().text())
       .digest("hex");
-    const execute = async (): Promise<Response> => {
+    const execute = async (operation?: ActiveSetupOperation): Promise<Response> => {
       try {
         // Parse defensively: `c.req.json()` throws on a malformed body and returns `null` for a
         // literal JSON `null` — both are a bad request, not a 500.
@@ -487,7 +491,26 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // re-validates as defense-in-depth for a direct caller.
         if (expected) secret!.validate(body.aeatCert);
 
-        const result = await provision({ environment, venue });
+        const request = { environment, venue };
+        let result: VenueResult;
+        if (operation !== undefined && operation.phase !== "started") {
+          result = operation.data.result as VenueResult;
+        } else {
+          try {
+            result = await provision(request);
+          } catch (error) {
+            if (
+              operation === undefined ||
+              recoverProvision === undefined ||
+              !isAppError(error) ||
+              error.code !== "setup.already_provisioned"
+            ) {
+              throw error;
+            }
+            result = await recoverProvision(request);
+          }
+          await operation?.advance("venue_committed", { result });
+        }
 
         if (mode === "demo") {
           await seedDemo(result, { environment, venue });
@@ -544,7 +567,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             operation.data as { provisioned: true; tenantId: string; restarting: true },
           );
         }
-        const response = await execute();
+        const response = await execute(operation);
         if (response.ok) {
           await operation.complete((await response.clone().json()) as Record<string, unknown>);
         }

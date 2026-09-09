@@ -112,7 +112,7 @@ import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
-import { provisionVenue, venueModuleConfig } from "./provision.js";
+import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
 import { runFiscalDrain } from "./onboarding-policy.js";
 import { adoptFromPrimary } from "./adopt.js";
@@ -934,6 +934,7 @@ export async function startServer(
                 },
                 req,
               ),
+            recoverProvision: (req) => recoverProvisionedVenue(ownerDb, req),
             seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
             adopt: async (req) => {
               // Adopt establishes a NATIVE subscription (swap step 4), so it needs the MIGRATOR

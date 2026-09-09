@@ -2259,6 +2259,9 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIN_TICK_MS: "1000",
           // Comfortably above the distinctive skip-retry value below, so neither clamp can mask it.
           WAITRON_MAX_TICK_MS: "600000",
+          // Preparation intentionally performs no fiscal submissions. Use production here because
+          // this test exercises the live drain's missing-credential retry schedule.
+          WAITRON_ENV: "production",
           // Distinctive on purpose: not 5000 (`WAITRON_MIN_TICK_MS`'s own default — the old floor
           // this branch exists to stop reporting), not 300000 (`@waitron/scheduler`'s own
           // `DEFAULTS.skipRetryMs`, which this test must not pass by coincidence with the fallback),
