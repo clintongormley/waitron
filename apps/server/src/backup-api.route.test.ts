@@ -140,6 +140,7 @@ async function setupTenant(): Promise<string> {
           displayName: "Administradora",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
+          email: "admin@x.com",
         },
       },
       ALL_MODULES,
