@@ -97,7 +97,8 @@ describe("nextFireMs", () => {
   it("never fires in the skipped hour of the Madrid spring-forward night", () => {
     // Europe/Madrid springs forward 2026-03-29: 02:00 local jumps to 03:00, so 02:00–02:59 local
     // does not exist that night. A daily fire configured for 02:30 must NOT resolve to an instant
-    // whose local wall-clock reads 02:xx on 2026-03-29 — that hour is skipped.
+    // whose local wall-clock reads 02:xx on 2026-03-29 — the fixed-point resolver pushes the skipped
+    // wall time forward to 03:30 local. Assert the EXACT resolved instant, not just "hour !== 2".
     const now = new Date("2026-03-28T23:00:00Z"); // before the transition
     const fire = nextFireMs(
       { kind: "wall-clock", days: "daily", at: { hour: 2, minute: 30 } },
@@ -105,9 +106,25 @@ describe("nextFireMs", () => {
       now,
       "n1",
     );
+    // 03:30 Madrid on 2026-03-29 (CEST, +2) — the skipped 02:30 resolved forward by one hour.
+    expect(new Date(fire).toISOString()).toBe("2026-03-29T01:30:00.000Z");
     const local = localHour(fire, MADRID.timeZone);
-    // The fire is a real instant strictly after `now` and never lands inside the non-existent hour.
-    expect(fire).toBeGreaterThan(now.getTime());
-    if (local.day === 29) expect(local.hour).not.toBe(2);
+    expect(local).toMatchObject({ day: 29, hour: 3, minute: 30 });
+  });
+
+  it("a non-DST night resolves 02:30 to exactly 02:30 local (the control direction)", () => {
+    // The paired control that makes the spring-forward assertion two-directional: on an ordinary
+    // June night there is no gap, so 02:30 local resolves to exactly 02:30 — proving the DST push
+    // above is the transition's doing, not a constant off-by-one in the resolver.
+    const now = new Date("2026-06-01T00:00:00Z");
+    const fire = nextFireMs(
+      { kind: "wall-clock", days: "daily", at: { hour: 2, minute: 30 } },
+      MADRID,
+      now,
+      "n1",
+    );
+    // 02:30 Madrid on 2026-06-01 (CEST, +2) = 00:30Z — an exact, un-shifted local time.
+    expect(new Date(fire).toISOString()).toBe("2026-06-01T00:30:00.000Z");
+    expect(localHour(fire, MADRID.timeZone)).toMatchObject({ hour: 2, minute: 30 });
   });
 });

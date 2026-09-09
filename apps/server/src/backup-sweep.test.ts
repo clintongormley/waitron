@@ -453,6 +453,30 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it("a tick that THROWS while aborted is a cancellation, not a backup.failed", async () => {
+    // Pins tick()'s catch branch: the dump throws AND the signal is aborted (a shutdown that killed
+    // an in-flight tick). That throw is a cancellation of the interrupted dump, so it must NOT be
+    // logged as backup.failed — otherwise every routine shutdown mid-dump would emit a false failure.
+    const controller = new AbortController();
+    const backend = new FakeBackend("only");
+    const log = vi.fn();
+
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        log,
+        // Abort first, THEN throw — so the catch sees `signal.aborted === true`.
+        runDump: async () => {
+          controller.abort();
+          throw new Error("pg_dump killed by SIGTERM during shutdown");
+        },
+        sleep: vi.fn(),
+      }),
+    );
+
+    expect(log).not.toHaveBeenCalledWith("warn", "backup.failed", expect.anything());
+  });
+
   it("an already-aborted signal ends the loop without a dump or a backup.failed", async () => {
     const backend = new FakeBackend("only");
     const log = vi.fn();

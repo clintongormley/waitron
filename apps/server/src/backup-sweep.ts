@@ -5,8 +5,9 @@
 // operator's recovery key, then `put`s the SAME ciphertext to EVERY configured `StorageBackend` as
 // `waitron-<stamp>.backup.enc` and prunes each by BOTH a count cap (`retain`) and an age cap
 // (`retainDays`, measured off each artifact's own key stamp). The loop takes an immediate first dump
-// on start, then waits to the schedule's next fire (`nextFireMs`) — sleeping in <=1h chunks and
-// recomputing so a clock/tz/cutover change is picked up. It MIRRORS `packages/sync/src/retention.ts`'s
+// on start, then waits to the schedule's next fire (`nextFireMs`) — sleeping in <=1h chunks so a
+// clock/NTP jump is caught within ~1h (the fire instant is computed once per cycle, so a tz/cutover
+// config change takes effect at the next fire, not mid-wait). It MIRRORS `packages/sync/src/retention.ts`'s
 // `runRetentionSweep`: a wedged pg_dump or an unreachable backend is logged and swallowed and must
 // never kill the loop and, with it, the box's only backup duty; an abort mid-tick is a cancellation,
 // not a `backup.failed`.
@@ -241,9 +242,10 @@ export async function pruneBackend(
 /**
  * Runs the scheduled backup loop until `signal` aborts. It takes an immediate first dump on start
  * (enable/rotate/boot — preserving the pre-scheduler "runOnce first"), then repeatedly resolves the
- * schedule's next fire (`nextFireMs`) and sleeps toward it in <=`MAX_SLEEP_MS` (1h) chunks, recomputing
- * each cycle so a clock/tz/cutover change is picked up rather than slept through. A wall-clock schedule
- * reads the venue clock (`readClock`) fresh each cycle; an interval schedule needs none, so it uses a
+ * schedule's next fire (`nextFireMs`) and sleeps toward it in <=`MAX_SLEEP_MS` (1h) chunks. The <=1h
+ * wake catches a clock/NTP jump within ~1h; `fireAt` is captured once per cycle (before the wait, not
+ * inside it), so a tz/day_cutover CONFIG change takes effect at the NEXT scheduled fire, not mid-wait.
+ * A wall-clock schedule reads the venue clock (`readClock`) fresh each cycle; an interval needs none, so it uses a
  * UTC placeholder that `nextFireMs` ignores. A throw anywhere in a tick — including one that escaped
  * `runOnce`'s per-destination handling, e.g. the dump itself failing — is logged as `backup.failed`
  * (structured `errorCode`, never a raw message that could carry the connection string) and swallowed
@@ -259,7 +261,8 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
         ? await deps.readClock()
         : { timeZone: "UTC", dayCutover: "00:00" };
     const fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
-    // Sleep in <=1h chunks, recomputing, so a clock/tz/cutover change is picked up between chunks.
+    // Sleep toward `fireAt` in <=1h chunks: each chunk re-checks `now()`, so a clock/NTP jump is
+    // caught within ~1h. `fireAt` is fixed for this cycle (a tz/cutover change lands at the next fire).
     while (!deps.signal.aborted && now().getTime() < fireAt) {
       const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
       await deps.sleep(chunk, deps.signal);

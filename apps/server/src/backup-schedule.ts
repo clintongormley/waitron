@@ -17,8 +17,11 @@ export interface ScheduleClock {
 }
 
 export const AUTO_MARGIN_MINUTES = 30;
-/** 1h cap on a single sleep: the loop wakes at least hourly to recompute the next fire, so a clock,
- * timezone or cutover change mid-wait is picked up rather than slept through. */
+/** 1h cap on a single sleep so a clock/NTP jump is caught within ~1h: the loop re-checks `now()`
+ * against the target at least hourly. The fire instant is computed once per cycle (the loop captures
+ * `fireAt` before the wait, not inside it), so a tz/day_cutover CONFIG change takes effect at the next
+ * scheduled fire, not mid-wait — recomputing mid-wait could skip a fire, since the next fire is always
+ * strictly in the future. */
 export const MAX_SLEEP_MS = 60 * 60 * 1000;
 const AUTO_JITTER_MINUTES = 10;
 
