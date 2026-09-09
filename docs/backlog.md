@@ -884,7 +884,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations (Debt); cert distribution to a promoted node (Track B item 3) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
-| 5 | Identity | persons/sessions, PIN (+ per-device throttle #269), `authorize()`, roles/permissions, passkeys, email login; `persons` + `webauthn_credentials` are `state` (replicate to a standby) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (a hard dep of the TOTP-enrollment slice — the column replicates) |
+| 5 | Identity | persons/sessions, PIN (+ per-device throttle #269), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets (#294); `persons` + `webauthn_credentials` are `state` (replicate to a standby) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (a hard dep of the TOTP-enrollment slice — the column replicates) |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home (#167) | fiscal filing remainder parked |
@@ -1375,6 +1375,11 @@ genuinely-decision-bearing.
   (`Promise.all([computeDailyClose(tx), computeTopSellers(tx), countOpenTables(tx)])`, also
   `daily-close`). pg@8 queues them (serial, correct, no speedup, a deprecation warning); it BREAKS in
   pg@9. Replace with sequential awaits or one combined query before pg@9 lands.
+- **Account follow-ups after #294.** Track P: design an encrypted retry queue for invitation and
+  password-reset email; the [account design](superpowers/specs/2026-09-08-dashboard-account-activation-design.md)
+  defers automatic delivery retries and forbids storing raw bearer tokens in a plain queue. Track 1:
+  scope routine passwordless email login and SMS before adding either; the shipped email flow is
+  activation/recovery. TOTP enrolment still requires the at-rest encryption listed below.
 - **Dashboard-wide location context.** The dashboard can manage several locations, but location choice
   currently lives inside individual screens: menus, roster and planned-vs-actual each mount their own
   `dashboard-location-picker`. Add one persistent location dropdown to the authenticated dashboard
