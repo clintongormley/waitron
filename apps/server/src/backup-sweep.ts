@@ -1,12 +1,15 @@
 // The scheduled backup worker (onboarding slice 4b-ii, widened for BR-1 storage fan-out, then BR-2's
-// full-archive assembly). Each tick takes ONE `pg_dump` into a STAGING temp file, assembles the FULL
-// backup archive around it (manifest.json + db.dump + module non-DB state + state secrets, packed by
-// `packArchive`), encrypts the WHOLE archive ONCE under the operator's recovery key, then `put`s the
-// SAME ciphertext to EVERY configured `StorageBackend` as `waitron-<stamp>.backup.enc` and prunes each
-// to `retain` — then sleeps `intervalMs` before the next. The loop shell (abort-checked at the top and again before
-// each sleep, a failed tick logged and swallowed) is unchanged from the pre-fan-out version and still
-// MIRRORS `packages/sync/src/retention.ts`'s `runRetentionSweep`: a wedged pg_dump or an unreachable
-// backend must never kill the loop and, with it, the box's only backup duty.
+// full-archive assembly, then BR-1 Task 3's wall-clock scheduler). Each tick takes ONE `pg_dump` into
+// a STAGING temp file, assembles the FULL backup archive around it (manifest.json + db.dump + module
+// non-DB state + state secrets, packed by `packArchive`), encrypts the WHOLE archive ONCE under the
+// operator's recovery key, then `put`s the SAME ciphertext to EVERY configured `StorageBackend` as
+// `waitron-<stamp>.backup.enc` and prunes each by BOTH a count cap (`retain`) and an age cap
+// (`retainDays`, measured off each artifact's own key stamp). The loop takes an immediate first dump
+// on start, then waits to the schedule's next fire (`nextFireMs`) — sleeping in <=1h chunks and
+// recomputing so a clock/tz/cutover change is picked up. It MIRRORS `packages/sync/src/retention.ts`'s
+// `runRetentionSweep`: a wedged pg_dump or an unreachable backend is logged and swallowed and must
+// never kill the loop and, with it, the box's only backup duty; an abort mid-tick is a cancellation,
+// not a `backup.failed`.
 //
 // A per-destination fault that THROWS (a bad backend, a full disk, a network fault) is caught, logged
 // as `backup.destination_failed`, and does NOT stop the remaining destinations — a throwing backend
@@ -29,12 +32,15 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import { collectModuleNonDbState } from "./backup-sources.js";
+import type { BackupSchedule } from "./backup-config.js";
+import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import {
   BACKUP_KEY_PREFIX,
   backupArchiveKey,
+  backupArchiveTimestamp,
   dumpFileName,
   realPgDump,
   type PgDumpRunner,
@@ -79,10 +85,26 @@ export interface BackupSweepDeps {
   /** Where the pre-encryption dump is staged. Created (recursively) each tick, so a wiped staging dir
    * self-heals; the staged file is always removed again before this tick returns. */
   stagingDir: string;
-  /** Idle interval between dumps (WAITRON_BACKUP_INTERVAL_MS). */
-  intervalMs: number;
-  /** How many newest `waitron-*` artifacts to keep per backend; older ones are deleted each tick. */
+  /** When the next dump fires: a fixed interval or a wall-clock cadence (`backup-config.ts`). The
+   * loop resolves it through `nextFireMs` after each tick. */
+  schedule: BackupSchedule;
+  /** The count cap of the dual-retention policy: how many newest `waitron-*` artifacts to keep per
+   * backend by count; older-than-`retain` ones are deleted each tick. */
   retain: number;
+  /** The age cap of the dual-retention policy: an artifact older than this many days is deleted even
+   * if it is within the count cap. Age is read off the artifact's OWN key stamp
+   * (`backupArchiveTimestamp`), never the filesystem mtime, so a clock jump cannot revive it. */
+  retainDays: number;
+  /** Node-stable seed for the `at: "auto"` jitter, so a fleet of boxes spreads its auto dumps across a
+   * small window rather than firing in lockstep (the box's node id in production). */
+  jitterSeed: string;
+  /** The venue's wall clock (tz + business-day cutover) resolved fresh each cycle before computing the
+   * next fire, so an operator's tz/cutover change is picked up. Consulted ONLY for a `wall-clock`
+   * schedule; an `interval` schedule never calls it. */
+  readClock: () => Promise<ScheduleClock>;
+  /** Called after a tick's fan-out completes successfully — the supervisor uses it to flip
+   * `archiveUnderCurrentKey` (Task 4/I7). Not called on a failed/aborted tick. */
+  onDump?: () => void;
   signal: AbortSignal;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   log: Logger;
@@ -109,8 +131,11 @@ export interface BackupSweepDeps {
  * and NO partial archive is fanned out — an incomplete backup must never masquerade as a
  * recovery-ready one (CLAUDE.md §5, backup IS the cold-recovery path).
  */
-export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep">): Promise<void> {
+export async function runOnce(
+  deps: Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock">,
+): Promise<void> {
   const runDump = deps.runDump ?? realPgDump;
+  const nowMs = (deps.now ?? (() => new Date()))().getTime();
   const buildBackupManifest = deps.buildManifest ?? buildManifest;
   const stamp = (deps.now ?? (() => new Date()))();
   const dumpName = dumpFileName(stamp);
@@ -167,7 +192,7 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
       deps.backends.map(async (backend) => {
         try {
           await backend.put(key, ciphertext);
-          await pruneBackend(backend, deps.retain);
+          await pruneBackend(backend, deps.retain, deps.retainDays, nowMs);
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
           // A `LocalFsBackend` fault is a `NodeJS.ErrnoException` (ENOSPC/EACCES/EROFS), for which
@@ -182,6 +207,10 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
         }
       }),
     );
+    // The fan-out completed (every backend settled). Signal a successful dump so the supervisor can
+    // flip `archiveUnderCurrentKey` (Task 4/I7). A throw above skips this — an incomplete tick is not
+    // a dump — and the per-destination try/catch means one bad backend does not suppress it.
+    deps.onDump?.();
   } finally {
     // Only the dump creates the staged file; a fail-fast tick that threw before it never staged
     // anything, so guard the cleanup on `dumped` rather than issuing a spurious `rm`.
@@ -189,27 +218,65 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
   }
 }
 
-/** Keep the newest `retain` `waitron-*` artifacts on `backend` and delete the rest. `list` returns
- * newest-first (the `StorageBackend` contract), so the surplus is simply everything past `retain`. */
-async function pruneBackend(backend: StorageBackend, retain: number): Promise<void> {
+/** Dual-retention prune: delete a `waitron-*` artifact when it is EITHER past the count cap (`retain`
+ * newest kept — `list` returns newest-first per the `StorageBackend` contract) OR older than
+ * `retainDays`, whichever bites first. Age is measured off the artifact's OWN embedded key stamp
+ * (`backupArchiveTimestamp`), NOT the filesystem `mtimeMs`: the stamp is the immutable dump time, so a
+ * later clock change can never resurrect a window already past the age cap (spec §3.3). Exported so
+ * the dual-cap policy is unit-tested directly without driving a full fan-out. */
+export async function pruneBackend(
+  backend: StorageBackend,
+  retain: number,
+  retainDays: number,
+  nowMs: number,
+): Promise<void> {
   const objects = await backend.list(BACKUP_KEY_PREFIX);
-  await Promise.all(objects.slice(retain).map((obj) => backend.delete(obj.key)));
+  const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
+  const toDelete = objects.filter(
+    (obj, i) => i >= retain || nowMs - backupArchiveTimestamp(obj.key).getTime() > maxAgeMs,
+  );
+  await Promise.all(toDelete.map((obj) => backend.delete(obj.key)));
 }
 
 /**
- * Runs the scheduled backup loop until `signal` aborts, calling `runOnce` each tick. A throw anywhere
- * in the tick — including one that escaped `runOnce`'s own per-destination handling, e.g. the dump
- * itself failing — is logged as `backup.failed` (with the structured `errorCode`, never a raw message
- * that could carry the connection string) and swallowed so the next tick still runs.
+ * Runs the scheduled backup loop until `signal` aborts. It takes an immediate first dump on start
+ * (enable/rotate/boot — preserving the pre-scheduler "runOnce first"), then repeatedly resolves the
+ * schedule's next fire (`nextFireMs`) and sleeps toward it in <=`MAX_SLEEP_MS` (1h) chunks, recomputing
+ * each cycle so a clock/tz/cutover change is picked up rather than slept through. A wall-clock schedule
+ * reads the venue clock (`readClock`) fresh each cycle; an interval schedule needs none, so it uses a
+ * UTC placeholder that `nextFireMs` ignores. A throw anywhere in a tick — including one that escaped
+ * `runOnce`'s per-destination handling, e.g. the dump itself failing — is logged as `backup.failed`
+ * (structured `errorCode`, never a raw message that could carry the connection string) and swallowed
+ * so the next tick still runs; but an abort MID-tick is a cancellation, not a failure (M15).
  */
 export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
+  const now = deps.now ?? (() => new Date());
+  if (deps.signal.aborted) return; // don't fire a dump into a shutting-down box (M15)
+  await tick(deps);
   while (!deps.signal.aborted) {
-    try {
-      await runOnce(deps);
-    } catch (err) {
-      deps.log("warn", "backup.failed", { errorCode: codeOf(err) });
+    const clock =
+      deps.schedule.kind === "wall-clock"
+        ? await deps.readClock()
+        : { timeZone: "UTC", dayCutover: "00:00" };
+    const fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
+    // Sleep in <=1h chunks, recomputing, so a clock/tz/cutover change is picked up between chunks.
+    while (!deps.signal.aborted && now().getTime() < fireAt) {
+      const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
+      await deps.sleep(chunk, deps.signal);
     }
     if (deps.signal.aborted) break;
-    await deps.sleep(deps.intervalMs, deps.signal);
+    await tick(deps);
+  }
+}
+
+/** One loop iteration: run the tick, and translate its outcome into the loop's contract. A throw is
+ * logged as `backup.failed` and swallowed UNLESS the signal aborted mid-tick, in which case the throw
+ * is a cancellation of the in-flight dump, not a failure to record. */
+async function tick(deps: BackupSweepDeps): Promise<void> {
+  try {
+    await runOnce(deps);
+  } catch (err) {
+    if (deps.signal.aborted) return; // an abort mid-tick is a cancellation, not a failure
+    deps.log("warn", "backup.failed", { errorCode: codeOf(err) });
   }
 }

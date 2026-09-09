@@ -1791,16 +1791,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         stagingDir: backupStagingDir,
         databaseUrl: backupConfig.databaseUrl,
         recoveryKey: backupConfig.recoveryKey,
-        // BR-1 Task 2 bridge: the sweep still takes a fixed `intervalMs` at this point in the branch
-        // (Task 3 replaces it with `schedule`). An interval schedule passes its ms straight through.
-        // A wall-clock schedule IS reachable now — an operator can set WAITRON_BACKUP_SCHEDULE_DAYS /
-        // WAITRON_BACKUP_AT today — but until Task 3/4 land this bridge IGNORES it and runs a plain
-        // 24h-from-boot interval regardless of the configured time. Task 4 removes this derivation.
-        intervalMs:
-          backupConfig.schedule.kind === "interval"
-            ? backupConfig.schedule.ms
-            : 24 * 60 * 60 * 1000,
+        schedule: backupConfig.schedule,
         retain: backupConfig.retain,
+        retainDays: backupConfig.retainDays,
+        jitterSeed: till.nodeId,
+        // interim — Task 4 replaces this whole block and wires the real tenant-scoped resolveVenueClock
+        // (a wall-clock schedule currently resolves against UTC + a 00:00 cutover regardless of the
+        // venue's timezone).
+        readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
         signal: backupController.signal,
         sleep: realSleep,
         log,

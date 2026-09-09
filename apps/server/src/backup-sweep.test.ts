@@ -13,9 +13,11 @@ import type { BackupManifest } from "./backup-manifest.js";
 import {
   type BackupSweepDeps,
   type ManifestBuilder,
+  pruneBackend,
   runBackupSweep,
   runOnce,
 } from "./backup-sweep.js";
+import { backupArchiveKey } from "./pg-dump.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
@@ -111,6 +113,9 @@ describe("runOnce (fan-out)", () => {
     recoveryKey: "recovery-key-1",
     stagingDir: staging,
     retain: 7,
+    // A far age cap so these fan-out/count tests exercise the COUNT arm alone; the dual-retention
+    // age arm is pinned by pruneBackend's own unit test below.
+    retainDays: 3650,
     signal: new AbortController().signal,
     sleep: vi.fn(),
     log,
@@ -236,11 +241,22 @@ describe("runOnce (fan-out)", () => {
 
   it("prunes each backend to retain", async () => {
     const a = new FakeBackend("a");
-    for (const t of ["waitron-1.backup.enc", "waitron-2.backup.enc"])
-      a.objects.set(t, Buffer.from("old"));
+    // Real stamped keys (a day or two before the run) so the age arm can read each object's own
+    // timestamp; with retainDays far off, only the COUNT arm bites here.
+    for (const d of ["2026-09-03T00:00:00Z", "2026-09-04T00:00:00Z"])
+      a.objects.set(backupArchiveKey(new Date(d)), Buffer.from("old"));
     await runOnce({ ...deps([a]), retain: 1 });
     expect(a.objects.size).toBe(1); // only the newest survives
     // The newest is the archive this very run just wrote, not either pre-seeded fixture.
+    expect(a.objects.has("waitron-20260905T000000Z.backup.enc")).toBe(true);
+  });
+
+  it("calls onDump once after a successful fan-out", async () => {
+    const a = new FakeBackend("a");
+    const onDump = vi.fn();
+    await runOnce({ ...deps([a]), onDump });
+    expect(onDump).toHaveBeenCalledTimes(1);
+    // It fires AFTER the artifact is on the backend (the supervisor flips archiveUnderCurrentKey).
     expect(a.objects.has("waitron-20260905T000000Z.backup.enc")).toBe(true);
   });
 
@@ -320,8 +336,14 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     databaseUrl: "postgres://x",
     recoveryKey: "recovery-key-1",
     stagingDir: staging,
-    intervalMs: 10,
+    // The loop now waits to a schedule, not a fixed `intervalMs`; a short interval keeps `nextFireMs`
+    // close so the injected `sleep` drives the wait deterministically.
+    schedule: { kind: "interval", ms: 10 },
     retain: 7,
+    retainDays: 30,
+    jitterSeed: "loop-node",
+    // Only consulted for a wall-clock schedule; the interval loop tests never call it.
+    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
     ...overrides,
   });
 
@@ -358,16 +380,21 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
 
     // The loop must NOT die on a dump failure: the throw is caught, logged as a warn, and a second
     // iteration runs before the abort — the same "logged and swallowed" contract runRetentionSweep has.
+    // A mutable clock the injected `sleep` advances by the chunk it is handed, so the schedule wait
+    // completes deterministically and the next tick fires (no reliance on real wall-clock passing).
+    let nowMs = Date.parse("2026-09-05T00:00:00Z");
     await runBackupSweep(
       loopDeps(backend, {
         signal: controller.signal,
         log: (level, event) => logged.push([level, event]),
+        now: () => new Date(nowMs),
         runDump: async () => {
           dumpCalls += 1;
           throw new Error("pg_dump exploded");
         },
-        sleep: async () => {
+        sleep: async (chunk: number) => {
           ticks += 1;
+          nowMs += chunk; // advance toward fireAt so the wait completes and the next tick runs
           if (ticks >= 2) controller.abort();
         },
       }),
@@ -425,6 +452,123 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     expect(backend.objects.size).toBe(1); // the in-flight tick still completed
     expect(sleep).not.toHaveBeenCalled();
   });
+
+  it("an already-aborted signal ends the loop without a dump or a backup.failed", async () => {
+    const backend = new FakeBackend("only");
+    const log = vi.fn();
+    const runDump = vi.fn(async ({ outFile }: { outFile: string }) => {
+      await writeFile(outFile, "DUMP-BYTES");
+    });
+
+    // A signal aborted before the loop even starts (shutdown raced boot) must not fire a dump into a
+    // shutting-down box (M15), and must not log a spurious backup.failed.
+    await runBackupSweep(
+      loopDeps(backend, { signal: AbortSignal.abort(), log, sleep: vi.fn(), runDump }),
+    );
+
+    expect(runDump).not.toHaveBeenCalled();
+    expect(backend.objects.size).toBe(0);
+    expect(log).not.toHaveBeenCalledWith("warn", "backup.failed", expect.anything());
+  });
+
+  it("takes one dump immediately on start, then waits for the next fire", async () => {
+    const controller = new AbortController();
+    const backend = new FakeBackend("only");
+    const runDump = vi.fn(async ({ outFile }: { outFile: string }) => {
+      await writeFile(outFile, "DUMP-BYTES");
+    });
+
+    // The immediate first dump runs BEFORE any nextFire wait: the very first `sleep` (the schedule
+    // wait after the first tick) aborts the loop, so exactly one dump has happened by the time any
+    // wait resolves.
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        log: vi.fn(),
+        now: () => new Date("2026-09-05T00:00:00Z"),
+        runDump,
+        sleep: async () => {
+          expect(runDump).toHaveBeenCalledTimes(1); // dumped once already, before this first wait
+          controller.abort();
+        },
+      }),
+    );
+
+    expect(runDump).toHaveBeenCalledTimes(1);
+    expect(backend.objects.size).toBe(1);
+  });
+
+  it("waits to a wall-clock schedule's nextFireMs, reading the clock each cycle", async () => {
+    const controller = new AbortController();
+    const backend = new FakeBackend("only");
+    let clockReads = 0;
+
+    // A wall-clock schedule makes the loop call readClock before computing nextFireMs. Abort on the
+    // first schedule wait so exactly one clock read + one tick happen.
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        log: vi.fn(),
+        now: () => new Date("2026-09-05T00:00:00Z"),
+        schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
+        readClock: async () => {
+          clockReads += 1;
+          return { timeZone: "Europe/Madrid", dayCutover: "05:00" };
+        },
+        runDump: async ({ outFile }) => {
+          await writeFile(outFile, "DUMP-BYTES");
+        },
+        sleep: async () => {
+          controller.abort();
+        },
+      }),
+    );
+
+    expect(clockReads).toBe(1);
+    expect(backend.objects.size).toBe(1);
+  });
+});
+
+describe("pruneBackend (dual count + age retention)", () => {
+  it("prunes by count AND age, whichever bites first", async () => {
+    const backend = new FakeBackend("dual");
+    const nowMs = Date.parse("2026-09-20T00:00:00Z");
+    const day = 24 * 60 * 60 * 1000;
+    // Seed oldest-first so FakeBackend.list's reverse gives the newest-first the contract promises.
+    // Ages from now: 20d, 10d, 2d, 1d, 0d.
+    const ages = [20, 10, 2, 1, 0];
+    for (const d of ages)
+      backend.objects.set(backupArchiveKey(new Date(nowMs - d * day)), Buffer.from(`age-${d}`));
+
+    // retain=3 keeps the newest 3 by COUNT (ages 0,1,2); retainDays=1 additionally prunes anything
+    // strictly older than 1 day. Age 2d is WITHIN the count cap yet too old → it must still be pruned.
+    await pruneBackend(backend, 3, 1, nowMs);
+
+    const survivors = [...backend.objects.keys()].sort();
+    expect(survivors).toEqual(
+      [
+        backupArchiveKey(new Date(nowMs)), // age 0 — within count, fresh
+        backupArchiveKey(new Date(nowMs - 1 * day)), // age 1d — within count, exactly the cap (not >)
+      ].sort(),
+    );
+    // The age-2d object sat at count index 2 (< retain 3) but was pruned by the AGE arm.
+    expect(backend.objects.has(backupArchiveKey(new Date(nowMs - 2 * day)))).toBe(false);
+    // The two over the count cap are gone too.
+    expect(backend.objects.has(backupArchiveKey(new Date(nowMs - 10 * day)))).toBe(false);
+    expect(backend.objects.has(backupArchiveKey(new Date(nowMs - 20 * day)))).toBe(false);
+  });
+
+  it("age is read from each key's own stamp, not filesystem mtime", async () => {
+    // Every seeded object carries mtimeMs: 0 (FakeBackend), i.e. epoch — if prune used mtime, all
+    // would read as ancient and be purged. It must instead read the age off the KEY's stamp, so a
+    // fresh object survives despite the zero mtime.
+    const backend = new FakeBackend("mtime");
+    const nowMs = Date.parse("2026-09-20T00:00:00Z");
+    const freshKey = backupArchiveKey(new Date(nowMs));
+    backend.objects.set(freshKey, Buffer.from("fresh"));
+    await pruneBackend(backend, 7, 1, nowMs);
+    expect(backend.objects.has(freshKey)).toBe(true);
+  });
 });
 
 // A real pg_dump against the shared test container — proves the custom-format invocation realPgDump
@@ -470,6 +614,7 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
       recoveryKey: "recovery-key-1",
       stagingDir: staging,
       retain: 7,
+      retainDays: 3650,
       signal: new AbortController().signal,
       log: vi.fn(),
       now: () => new Date("2026-09-05T00:00:00Z"),
