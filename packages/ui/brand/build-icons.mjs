@@ -156,6 +156,11 @@ try {
   render(appleSrc, join(pub, "apple-touch-icon.png"), 180, { opaque: true });
   written.push("public/apple-touch-icon.png");
 
+  for (const size of [192, 512]) {
+    render(appleSrc, join(pub, `icon-${size}.png`), size, { opaque: true });
+    written.push(`public/icon-${size}.png`);
+  }
+
   const markSquare = join(scratch, "mark-square.svg");
   writeFileSync(markSquare, square(mark.fill));
   const icoSizes = [16, 32, 48];

@@ -744,12 +744,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         //    already refuses their actions — this makes render and firewall agree, design §5.3).
         let canvas: CanvasDef;
         let capabilities: CapabilityFlag[] = [];
+        // The device's per-profile inactivity auto-logout, in seconds, or null for the app default —
+        // resolved through the profile like `capabilities`, so `null` for a no-profile or cookieless
+        // request (`profile` is only in scope inside the `device != null` block below).
+        let inactivityTimeoutSeconds: number | null = null;
         if (device != null) {
           const profile =
             device.deviceProfileId != null
               ? await getDeviceProfile(tx, deps.cfg.tenantId, device.deviceProfileId)
               : undefined;
           capabilities = profile?.capabilities ?? [];
+          inactivityTimeoutSeconds = profile?.inactivityTimeoutSeconds ?? null;
           let assigned: CanvasDef | undefined;
           if (profile?.canvasId != null) {
             assigned = (await getCanvas(tx, deps.cfg.tenantId, profile.canvasId))?.definition;
@@ -775,6 +780,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           receipt,
           canvas,
           capabilities,
+          inactivityTimeoutSeconds,
         };
       });
       /* v8 ignore start */
@@ -837,6 +843,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // `profile.capabilities` for an enrolled device with a profile; `[]` for a no-profile or cookieless
         // request — the render axis hides `tender-pay`/`kds-board` when the flag is absent (`card-grid.ts`).
         capabilities: boot.capabilities,
+        // The device profile's inactivity auto-logout in seconds (device-profile timeout), or `null` for
+        // the app's built-in default. Resolved through the profile like `capabilities`; `null` for a
+        // no-profile or cookieless request. The till app arms its idle timer from this.
+        inactivityTimeoutSeconds: boot.inactivityTimeoutSeconds,
         // The node answering this request, and the venue's routable servers (till-reroute §3.2) — the
         // till polls `GET /api/node` on each of them to follow the primary across a failover, and needs
         // `nodeId` to tell which one it is currently talking to. `[]` while no document is held.

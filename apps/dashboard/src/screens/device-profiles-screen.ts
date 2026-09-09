@@ -159,6 +159,10 @@ export class DeviceProfilesScreen extends LitElement {
   // The form factor the profile targets. A fresh draft defaults to `till` (the cash register), the
   // first `FORM_FACTORS` entry; editing seeds it from the loaded profile.
   @state() private draftFormFactor: FormFactor = FORM_FACTORS[0];
+  // The auto-logout idle timeout the operator edits, in whole MINUTES (`null` = never). The wire value
+  // is SECONDS; this screen is the only place the ×60 / ÷60 conversion lives. Hidden and forced to null
+  // for a `kds` profile, which never idle-logs out.
+  @state() private draftInactivityMinutes: number | null = null;
 
   /** True while a `#save` write is in flight, so Save disables itself and no second write races. */
   @state() private saving = false;
@@ -228,6 +232,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftCanvasId = null;
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
+    this.draftInactivityMinutes = null;
     this.errorKey = null;
     this.mode = "editor";
   }
@@ -248,6 +253,8 @@ export class DeviceProfilesScreen extends LitElement {
         profile.capabilities.includes(flag),
       );
       this.draftFormFactor = profile.formFactor;
+      this.draftInactivityMinutes =
+        profile.inactivityTimeoutSeconds == null ? null : profile.inactivityTimeoutSeconds / 60;
       this.mode = "editor";
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -274,6 +281,15 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftFormFactor = (event.target as HTMLSelectElement).value as FormFactor;
   }
 
+  /** The inactivity-timeout input's change handler. The field carries WHOLE MINUTES; a blank or
+   * non-numeric value clears the timeout (`null` = never). */
+  #onInactivity(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    const raw = event.detail.value.trim();
+    const minutes = Number(raw);
+    this.draftInactivityMinutes = raw === "" || Number.isNaN(minutes) ? null : minutes;
+  }
+
   /** Toggle a capability flag, rebuilt in the declared flag order (deterministic, not click order). */
   #onCapToggle(event: CustomEvent<{ checked: boolean }>, flag: CapabilityFlag): void {
     event.stopPropagation();
@@ -293,6 +309,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftCanvasId = null;
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
+    this.draftInactivityMinutes = null;
     this.errorKey = null;
   }
 
@@ -314,18 +331,39 @@ export class DeviceProfilesScreen extends LitElement {
     const canvasId = this.draftCanvasId;
     const capabilities = [...this.draftCapabilities];
     const formFactor = this.draftFormFactor;
+    // Minutes → seconds at the wire edge. A `kds` profile never idle-logs out, so its timeout is always
+    // null regardless of any minutes left in the draft (the input is hidden for kds).
+    const inactivityTimeoutSeconds =
+      formFactor === "kds" || this.draftInactivityMinutes == null
+        ? null
+        : this.draftInactivityMinutes * 60;
     this.saving = true;
     try {
       await this.#mutate(async () => {
         if (id !== null)
-          await this.api.updateDeviceProfile(id, name, canvasId, capabilities, formFactor);
-        else await this.api.createDeviceProfile(name, canvasId, capabilities, formFactor);
+          await this.api.updateDeviceProfile(
+            id,
+            name,
+            canvasId,
+            capabilities,
+            formFactor,
+            inactivityTimeoutSeconds,
+          );
+        else
+          await this.api.createDeviceProfile(
+            name,
+            canvasId,
+            capabilities,
+            formFactor,
+            inactivityTimeoutSeconds,
+          );
         this.mode = "list";
         this.editingId = null;
         this.draftName = "";
         this.draftCanvasId = null;
         this.draftCapabilities = [];
         this.draftFormFactor = FORM_FACTORS[0];
+        this.draftInactivityMinutes = null;
       });
     } finally {
       this.saving = false;
@@ -344,6 +382,7 @@ export class DeviceProfilesScreen extends LitElement {
         profile.canvasId,
         profile.capabilities,
         profile.formFactor,
+        profile.inactivityTimeoutSeconds,
       ),
     );
   }
@@ -498,6 +537,20 @@ export class DeviceProfilesScreen extends LitElement {
             )}
           </select>
         </label>
+        ${
+          this.draftFormFactor === "kds"
+            ? nothing
+            : html`<wt-input
+                @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
+                class="field"
+                type="number"
+                min="1"
+                data-test="profile-inactivity"
+                label=${t("device_profiles.inactivity_timeout_label")}
+                .value=${this.draftInactivityMinutes == null ? "" : String(this.draftInactivityMinutes)}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInactivity(e)}
+              ></wt-input>`
+        }
         <div class="field" data-test="capabilities">
           <span class="panel-subtitle">${t("device_profiles.capabilities")}</span>
           <div class="toggles">

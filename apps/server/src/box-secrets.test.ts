@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -137,6 +138,27 @@ describe("ensureBoxSecrets", () => {
     expect(san.split("127.0.0.1").length - 1).toBe(1);
   });
 
+  it("drops candidate IP SANs outside the CA's permitted set, keeping loopback + a permitted LAN IP", async () => {
+    const d = await newDir();
+    // listBoxIpv4 (or the operator override) can surface addresses the box CA cannot vouch for — a
+    // Tailscale CGNAT 100.64/10, a 169.254/16 link-local. Left unfiltered they would poison the whole
+    // leaf: the CA's nameConstraints make ca.verify FAIL on a permitted-subtree violation, so the box
+    // could not serve HTTPS at all. They must be dropped before minting; the permitted LAN IP stays.
+    await ensureBoxSecrets({
+      ...deps(d),
+      listIpv4: () => ["192.168.1.50", "100.64.1.2", "169.254.1.2"],
+    });
+    const { X509Certificate } = await import("node:crypto");
+    const cert = new X509Certificate(await readFile(join(d, "tls", "server.crt"), "utf8"));
+    const san = cert.subjectAltName ?? "";
+    expect(san).toContain("127.0.0.1"); // loopback — inside 127.0.0.0/8
+    expect(san).toContain("192.168.1.50"); // a permitted RFC1918 LAN IP is retained
+    expect(san).not.toContain("100.64.1.2"); // CGNAT — outside the permitted subtrees
+    expect(san).not.toContain("169.254.1.2"); // link-local — outside the permitted subtrees
+    // The name-based reach still works even after IP filtering.
+    expect(san).toContain("DNS:waitron.local");
+  });
+
   // Every case above injects mint/makeKeyRing/listIpv4, which leaves the REAL default
   // branches (mintSelfSignedServerCert, generateKeyRing, listBoxIpv4) unexercised. This one case
   // runs ensureBoxSecrets with ONLY the required deps, exercising real keygen/entropy/os in a
@@ -213,5 +235,35 @@ describe("mintedBoxLeaf", () => {
       certFile: join(d, "tls", "server.crt"),
       keyFile: join(d, "tls", "server.key"),
     });
+  });
+});
+
+function haveOpenssl(): boolean {
+  try {
+    execFileSync("openssl", ["version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// node-forge's verifyCertificateChain does NOT enforce nameConstraints (lib/x509.js §"check names
+// with permitted names tree" is a TODO), so openssl is the only local proof that the filtered leaf
+// carries no SAN the CA refuses. Skips cleanly where openssl is absent; mirrors name-constraints.test.ts.
+describe.runIf(haveOpenssl())("ensureBoxSecrets leaf verifies against its own CA (openssl)", () => {
+  it("mints a leaf that verifies even when the interface list carries out-of-set addresses", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets({
+      ...deps(d),
+      listIpv4: () => ["192.168.1.50", "100.64.1.2", "169.254.1.2"],
+    });
+    // Before the filter these out-of-set SANs made this verify FAIL with "error 47 … permitted subtree
+    // violation" (the run-it reviewer's reproduction). With the filter the leaf is a clean subset.
+    const out = execFileSync(
+      "openssl",
+      ["verify", "-CAfile", join(d, "tls", "ca.crt"), join(d, "tls", "server.crt")],
+      { encoding: "utf8" },
+    );
+    expect(out).toMatch(/OK/);
   });
 });

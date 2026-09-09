@@ -22,6 +22,7 @@ const profiles: DeviceProfile[] = [
     canvasId: "c1",
     capabilities: ["integrated-card-payment"],
     formFactor: "till",
+    inactivityTimeoutSeconds: null,
   },
 ];
 

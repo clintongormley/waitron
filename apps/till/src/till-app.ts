@@ -62,7 +62,8 @@ import type {
   TillSaleResult,
 } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
-import type { CanvasDef, CapabilityFlag, ReceiptConfig, TabDef } from "./layout.js";
+import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
+import { SessionActivity } from "./session-activity.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
@@ -196,6 +197,17 @@ export class TillApp extends LitElement {
    * events. Undefined in tests that do not inject one. */
   @property({ attribute: false }) router?: ServerRouter;
 
+  /** The screen-wake-lock + idle-logout controller (installable-till Task 9). Defaults to the real Wake
+   * Lock API + timers; a test injects a fake. Configured from {@link #boot}, {@link #onLoggedIn} and
+   * {@link #onLogout} with the device kind, login state and profile timeout. */
+  sessionActivity: SessionActivity = new SessionActivity();
+
+  /** The device kind the boot probe resolved (S2), the ONE source of the form-factor→kind mapping for
+   * {@link #configureSessionActivity}. Set in {@link #boot} from `kindOfFormFactor` (an unknown form
+   * factor falls back to `"till"`); default `"till"` covers a cookieless / pre-boot till. Kept distinct
+   * from the render-state {@link deviceMode}/{@link handheldMode} booleans so the kind is mapped once. */
+  #deviceKind: DeviceKind = "till";
+
   /** The router this app is currently subscribed to, or undefined when subscribed to none. The subscribe
    * point is idempotent ({@link #subscribeRouter}): `router` is a `@property` set AFTER `connectedCallback`
    * in some mounts, so both `connectedCallback` and `willUpdate` try to subscribe — a doubled
@@ -244,13 +256,55 @@ export class TillApp extends LitElement {
     this.#subscribedRouter = undefined;
   }
 
+  /**
+   * The device profile's inactivity auto-logout in seconds, or `null` for the app default (no idle
+   * logout). Read from the boot payload in {@link #boot} and fed to {@link sessionActivity} alongside the
+   * device kind and login state.
+   */
+  #inactivityTimeoutSeconds: number | null = null;
+
+  /** Any operator input — feed the session controller so its idle countdown restarts. Composed native
+   * events bubble out of the screens' shadow roots to this host. */
+  readonly #onInteraction = (): void => this.sessionActivity.noteInteraction();
+
+  /** The tab's visibility changed — the browser drops a screen wake lock when the tab hides, so ask the
+   * controller to re-request it when we come back. */
+  readonly #onVisibility = (): void => this.sessionActivity.reacquire();
+
+  /** The idle-logout target: the existing drop-and-lock path. Wired as the controller's `onIdle`. */
+  readonly #onIdle = (): void => void this.#onLogout();
+
+  /** (Re)configure {@link sessionActivity} from the current device kind, login state and profile timeout.
+   * Called after boot resolves the device, and on every login/logout. */
+  #configureSessionActivity(): void {
+    this.sessionActivity.configure({
+      // `operatorName` is the login lifecycle signal: set to the operator's name on login
+      // ({@link #onLoggedIn}) and cleared to "" on logout ({@link #onLogout}). (`operatorPersonId`
+      // is not cleared on logout, so it would keep a stale session looking logged in.)
+      loggedIn: this.operatorName !== "",
+      kind: this.#deviceKind,
+      timeoutSeconds: this.#inactivityTimeoutSeconds,
+      onIdle: this.#onIdle,
+    });
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     this.#subscribeRouter();
+    // Session-activity wiring (installable-till Task 9). pointerdown/keydown are composed, so they reach
+    // this host from inside the screens' shadow roots; visibilitychange is a document event.
+    this.addEventListener("pointerdown", this.#onInteraction);
+    this.addEventListener("keydown", this.#onInteraction);
+    document.addEventListener("visibilitychange", this.#onVisibility);
+    void this.sessionActivity.start();
   }
 
   override disconnectedCallback(): void {
     this.#detach();
+    this.removeEventListener("pointerdown", this.#onInteraction);
+    this.removeEventListener("keydown", this.#onInteraction);
+    document.removeEventListener("visibilitychange", this.#onVisibility);
+    void this.sessionActivity.stop();
     super.disconnectedCallback();
   }
 
@@ -742,6 +796,10 @@ export class TillApp extends LitElement {
       // The device's capability set (device-profile §5.3, Task 9) — relocated off the canvas onto the
       // profile, now an explicit payload sibling. Threaded to the card grid's render axis.
       this.capabilities = till.capabilities;
+      // The device profile's inactivity auto-logout in seconds (Task 9), or null for the app default (no
+      // idle logout). Fed to the session-activity controller after the device kind resolves below. `?? null`
+      // tolerates an older server that omits the field.
+      this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
       // Validate the requested tab against the device's resolved canvas before retaining it.
       this.#setActiveTab(this.#requestedTab(), true, true);
     } catch {
@@ -760,6 +818,7 @@ export class TillApp extends LitElement {
     // to `lock` and the front door to `undefined`, then the decision below re-establishes the correct one.
     this.handheldMode = false;
     this.deviceMode = false;
+    this.#deviceKind = "till";
     this.deviceName = undefined;
     this.deviceId = undefined;
     this.frontDoor = undefined;
@@ -807,6 +866,9 @@ export class TillApp extends LitElement {
       // The device kind is DERIVED from its profile's form factor (there is no kind field any more); an
       // unknown form factor maps to `undefined` and stays a normal operator till on the login screen.
       const kind = kindOfFormFactor(identity.formFactor);
+      // Store the resolved kind once (S2) — the session-activity source of truth. An unknown form
+      // factor stays a normal operator till.
+      this.#deviceKind = kind ?? "till";
       if (kind === "handheld") {
         this.handheldMode = true;
       } else if (kind === "kds_station") {
@@ -828,6 +890,10 @@ export class TillApp extends LitElement {
       // a device probe failure was never a boot failure (that is getTill's alone).
       if ((error as { code?: string }).code === "device.unauthorized") this.frontDoor = "enrol";
     }
+    // The device kind is now resolved (`deviceMode`/`handheldMode` set above): configure the
+    // session-activity controller so a KDS holds the wake lock straight away and a session device arms
+    // its idle timer once an operator logs in. Login/logout reconfigure it as the login state flips.
+    this.#configureSessionActivity();
   }
 
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
@@ -858,6 +924,8 @@ export class TillApp extends LitElement {
     // in the session response. Convenience only — the placement route re-checks server-side.
     this.canEdit = canConfigureTill;
     this.errorKey = undefined;
+    // An operator is now logged in — hold the screen awake and arm the idle-logout timer (Task 9).
+    this.#configureSessionActivity();
     // Where the operator lands after login: a handheld waiter goes to the face-set's post-lock face
     // (HANDHELD_FACES[1], the live floor); a normal operator till opens the counter POS.
     const landingFace = this.handheldMode ? HANDHELD_FACES[1] : "counter";
@@ -2117,17 +2185,12 @@ export class TillApp extends LitElement {
 
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
   async #onLogout(): Promise<void> {
-    await this.api.logout();
-    // Guard the post-await module-global `setLocale` below against a teardown during the logout round
-    // trip — the same shape #boot uses. A detached till never legitimately wants a locale switch, and
-    // this one would repaint a live sibling's UI. Returns before the state writes too (harmless to skip
-    // on a detached element); pinned by "does not revert the locale if the app disconnects mid-logout".
-    if (!this.isConnected) return;
+    // LOCK LOCALLY FIRST (C2): a rejecting OR hanging `api.logout()` is the exact offline/failover
+    // case, and it must never leave the till logged in and unlocked. Drop the operator identity, return
+    // to the lock screen, and release the wake lock + idle timer BEFORE the server round trip below;
+    // the server logout is then best-effort. This ordering serves both the idle-expiry path
+    // ({@link #onIdle}) and the manual logout affordance — both reach here.
     this.operatorName = "";
-    // Revert the UI to the venue default (per-user-language-preference): the previous operator's
-    // language must not linger into the lock screen the next operator meets. Their own login re-applies
-    // their preference, exactly as `canEdit` is dropped and re-supplied below.
-    setLocale(this.#venueLocale);
     // Drop the floor-editor privilege — the next operator starts un-privileged until their own login
     // recomputes it (FP-2).
     this.canEdit = false;
@@ -2144,6 +2207,23 @@ export class TillApp extends LitElement {
     this.#floorLoaded = false;
     this.errorKey = undefined;
     this.#setScreen("lock");
+    // No operator is logged in now — release the wake lock and cancel the idle timer on a session device
+    // (a KDS never reaches logout). Task 9. `operatorName` is cleared above, so this configures loggedIn:false.
+    this.#configureSessionActivity();
+    // Best-effort server logout: the local lock above already stands, so a rejection (an offline till,
+    // the exact failover case) must not be fatal and must never leave the device unlocked. Swallow it —
+    // the session row on an unreachable server is reconciled when the server is next reachable.
+    try {
+      await this.api.logout();
+    } catch {
+      // Offline / server-unreachable: nothing more to do, the device is already locked locally.
+    }
+    // Revert the UI to the venue default (per-user-language-preference) AFTER the round trip, guarded
+    // against a teardown during it — a detached till must not repaint a live sibling's module-global
+    // locale (#boot carries the same guard). The previous operator's language must not linger into the
+    // lock screen the next operator meets; their own login re-applies their preference regardless.
+    if (!this.isConnected) return;
+    setLocale(this.#venueLocale);
   }
 
   /**

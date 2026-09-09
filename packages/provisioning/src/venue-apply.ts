@@ -225,7 +225,12 @@ export async function applyVenue(
 async function seedDeviceProfiles(
   tx: Transaction,
   tenantId: string,
-  profiles: { name: string; formFactor: FormFactor; capabilities: CapabilityFlag[] }[],
+  profiles: {
+    name: string;
+    formFactor: FormFactor;
+    capabilities: CapabilityFlag[];
+    inactivityTimeoutSeconds: number | null;
+  }[],
 ): Promise<void> {
   // Find-or-create is NAME-based, so idempotency is scoped to a SAME-LOCALE, same-names re-provision: a
   // different-locale re-run would seed a second, differently-named set, and a tenant who renamed a
@@ -254,6 +259,7 @@ async function seedDeviceProfiles(
       formFactor: profile.formFactor,
       canvasId: null,
       capabilities: profile.capabilities,
+      inactivityTimeoutSeconds: profile.inactivityTimeoutSeconds,
     });
   }
 }

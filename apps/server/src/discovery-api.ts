@@ -5,6 +5,7 @@ import { buildReachInfo } from "./box-reach.js";
 import type { ReachInfo } from "./box-reach.js";
 import { caCertPath } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
+import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 
 /**
  * The one HTTP surface onboarding slice 3 adds: it lets a device on the LAN discover and trust this
@@ -30,8 +31,9 @@ export interface DiscoveryDeps {
   renderQrSvg?: (text: string) => Promise<string>;
 }
 
-/** The download path the trust page links and the discovery document advertises — a stable contract,
- *  not a per-request value, so it lives here as one constant both routes read. */
+/** This origin's CA download path — the route this API registers and advertises in its discovery
+ *  document, and the link it passes to the shared trust page. The plain-HTTP landing origin (Task 3)
+ *  serves the same page with a different path, which is why `renderTrustPage` takes it as a parameter. */
 const CA_DOWNLOAD_PATH = "/setup-api/ca.crt";
 
 /**
@@ -106,8 +108,8 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       );
     }
     return c.body(pem, 200, {
-      "Content-Type": "application/x-x509-ca-cert",
-      "Content-Disposition": 'attachment; filename="waitron-ca.crt"',
+      "Content-Type": CA_CONTENT_TYPE,
+      "Content-Disposition": `attachment; filename="${CA_FILENAME}"`,
       "Cache-Control": "no-store",
     });
   });
@@ -129,77 +131,17 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       reach.qrTarget ? renderQrSvg(reach.qrTarget) : Promise.resolve(null),
       caExists(),
     ]);
-    const html = renderTrustPage(reach, caAvailable, qr);
+    const html = renderTrustPage({
+      reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
+      caAvailable,
+      caDownloadPath: CA_DOWNLOAD_PATH,
+      qrSvg: qr ?? undefined,
+      httpsUrl: reach.hostnameUrl,
+    });
     return c.html(html, 200, { "Cache-Control": "no-cache" });
   });
 
   // One line at mount, mirroring `mountSetup`/`mountMedia`: an operator scanning logs sees the
   // discovery surface came up. Fires once, not per request.
   log("info", "discovery.mounted", { hostname: deps.hostname });
-}
-
-/**
- * The self-contained trust page — a deliberately short inline string, NOT a built front end, matching
- * `setup-api.ts`'s placeholder style: this page is served while the box is unprovisioned and must
- * render with no external asset. It shows how to reach the box, how to obtain and trust its
- * certificate, and (when a LAN address exists) an inline SVG QR to open it on a phone.
- *
- * `qrSvg` and the per-OS copy are static/server-derived, so they are embedded directly; the reach
- * URLs come from config and the box's own interfaces (never request input), so no escaping is needed.
- */
-function renderTrustPage(reach: ReachInfo, caAvailable: boolean, qrSvg: string | null): string {
-  const urlItems = [reach.hostnameUrl, ...reach.ipUrls]
-    .map((u) => `<li><a href="${u}">${u}</a></li>`)
-    .join("");
-
-  const caBlock = caAvailable
-    ? `<p>First, <a href="${CA_DOWNLOAD_PATH}" download="waitron-ca.crt">download this box's certificate</a>, then follow the steps for your device to trust it.</p>`
-    : `<p>This box uses an operator-supplied certificate, so there is nothing to download — your device already trusts it if your administrator installed their own certificate.</p>`;
-
-  const qrBlock = qrSvg
-    ? `<figure class="qr">${qrSvg}<figcaption>Scan with a phone on the same network to open this box.</figcaption></figure>`
-    : `<p class="no-qr">No local network address was detected, so there is no QR code to scan. Use one of the addresses above from a device on the same network.</p>`;
-
-  // Concise, factual per-OS steps — static help text (brief Step 4). Arrows (→) separate menu hops.
-  const osSteps = `<section class="os-steps">
-      <h2>Trust the certificate</h2>
-      <dl>
-        <dt>Android</dt>
-        <dd>Settings → Security → Encryption &amp; credentials → Install a certificate → CA certificate.</dd>
-        <dt>iOS / iPadOS</dt>
-        <dd>Install the downloaded profile, then Settings → General → VPN &amp; Device Management. Then enable full trust under Settings → General → About → Certificate Trust Settings.</dd>
-        <dt>macOS</dt>
-        <dd>Open the file → Keychain Access → set the certificate to Always Trust.</dd>
-        <dt>Windows</dt>
-        <dd>Import the certificate into Trusted Root Certification Authorities.</dd>
-      </dl>
-    </section>`;
-
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Waitron — trust this box</title>
-  </head>
-  <body>
-    <main>
-      <h1>Connect to this Waitron box</h1>
-      <section class="reach">
-        <h2>Open this box</h2>
-        <ul>${urlItems}</ul>
-      </section>
-      <section class="cert">
-        <h2>Get the certificate</h2>
-        ${caBlock}
-      </section>
-      ${osSteps}
-      <section class="scan">
-        <h2>Scan to open</h2>
-        ${qrBlock}
-      </section>
-    </main>
-  </body>
-</html>
-`;
 }

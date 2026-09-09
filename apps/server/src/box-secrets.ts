@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
 import { listBoxIpv4 } from "./box-reach.js";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { mintSelfSignedServerCert, isPermittedLeafIpv4 } from "./self-signed-cert.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
@@ -96,8 +96,12 @@ const exists = (p: string): Promise<boolean> =>
  *     <stateDir>/tls/server.crt      <stateDir>/tls/server.key (0600)
  *     <stateDir>/secrets.env         (0600)   # KEY=VALUE, LF-terminated
  *
- * The leaf's iPAddress SANs are `127.0.0.1` plus every detected non-internal IPv4 (deduped), so it
- * authenticates a dial by loopback or by LAN IP. This does NOT load or consume the secrets — that
+ * The leaf's iPAddress SANs are `127.0.0.1` plus every detected non-internal IPv4 that falls inside
+ * the CA's permitted subtrees (`isPermittedLeafIpv4` — loopback + RFC1918), so a dial by loopback or
+ * by LAN IP authenticates. An out-of-set address (a `100.64/10` CGNAT / Tailscale address, a
+ * `169.254` link-local, a public IP) is dropped rather than added: a SAN the name-constrained CA
+ * cannot vouch for would make `ca.verify(leaf)` fail and the box serve no HTTPS at all. This does
+ * NOT load or consume the secrets — that
  * is the next boot's job (slice 2b / trading); it only guarantees the files are present.
  *
  * Note on the `0o600` mode arg: `writeFileAtomic` passes it to `writeFile`, which applies `mode`
@@ -126,7 +130,14 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   // server.key is the presence sentinel for the whole TLS quartet: mint + write all four only when
   // it is absent, so a reused install keeps its already-trusted cert byte-for-byte.
   if (!(await exists(files.keyFile))) {
-    const ips = Array.from(new Set(["127.0.0.1", ...listIpv4()]));
+    // Filter every candidate IP down to the CA's permitted subtrees before minting: the leaf's SANs
+    // must be a SUBSET of what the box CA can vouch for, or `ca.verify(leaf)` fails on a permitted-
+    // subtree violation and the box cannot serve HTTPS at all. An out-of-set interface address (a
+    // Tailscale CGNAT 100.64/10, a 169.254/16 link-local, a public IP, an IPv6 address) is dropped
+    // from the SAN rather than poisoning the whole cert. 127.0.0.1 is inside 127.0.0.0/8 and kept; a
+    // box whose only reachable IPs are all out-of-set still gets a leaf carrying the hostnames
+    // (waitron.local/localhost), so mDNS reach survives and operator-supplied TLS covers the rest.
+    const ips = Array.from(new Set(["127.0.0.1", ...listIpv4()])).filter(isPermittedLeafIpv4);
     const m = mint({ hostnames: deps.hostnames, ipAddresses: ips, now: deps.now() });
     // Each file is written to a temp path and atomically renamed, so a reader never observes a
     // partial or truncated PEM — only the whole file or its absence. server.key is renamed LAST, on

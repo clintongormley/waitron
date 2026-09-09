@@ -5,6 +5,7 @@ import { TillApi } from "./api/client.js";
 import { withDevDeviceHeader } from "./api/dev-device.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
+import { isTrustBroken } from "./trust-check.js";
 import "./till-app.js";
 
 // The browser entry point for the Counter POS till. It paints the token layer onto the document root
@@ -26,17 +27,45 @@ applyTokens(document.documentElement);
 installErrorCapture(window, diag);
 
 const app = document.querySelector<HTMLElement>("#app")!;
-// The till holds one router (till-reroute §4.1): it probes the venue's servers and points `current` at
-// the one accepting sales, and `withServerTarget` retargets each request onto it. `start()` after the
-// chain is built so the first probe round runs.
-const router = new ServerRouter({ origin: location.origin, fetchImpl: fetch });
-const fetchImpl = createInstrumentedFetch(
-  withDevDeviceHeader(withServerTarget(fetch, router)),
-  diag,
-);
-router.start();
 
-// ONE boot path (device-enrolment §3.1): always mount <till-app>. The device front door — the dev
-// device chooser and the enrolment screen — lives inside the app's boot decision now, not a separate
-// `?dev` mount, so a fresh browser, a dev tab and an enrolled device all enter through the same element.
-render(html`<till-app .api=${new TillApi("", fetchImpl)} .router=${router}></till-app>`, app);
+void bootTill();
+
+// Gate the whole till boot on a click-through trust check (spec §3.3, nice-to-have). The browser's own
+// certificate interstitial fires before this runs on an untrusted origin, so the plain-HTTP landing
+// page is the load-bearing surface; this only catches a user who already clicked past that warning.
+// On a trusted origin (the normal case) trust is not broken and the till mounts unchanged.
+async function bootTill(): Promise<void> {
+  if (await isTrustBroken()) {
+    render(trustInstructions(), app);
+    return;
+  }
+  // The till holds one router (till-reroute §4.1): it probes the venue's servers and points `current`
+  // at the one accepting sales, and `withServerTarget` retargets each request onto it. `start()` after
+  // the chain is built so the first probe round runs.
+  const router = new ServerRouter({ origin: location.origin, fetchImpl: fetch });
+  const fetchImpl = createInstrumentedFetch(
+    withDevDeviceHeader(withServerTarget(fetch, router)),
+    diag,
+  );
+  router.start();
+
+  // ONE boot path (device-enrolment §3.1): always mount <till-app>. The device front door — the dev
+  // device chooser and the enrolment screen — lives inside the app's boot decision now, not a separate
+  // `?dev` mount, so a fresh browser, a dev tab and an enrolled device all enter through the same element.
+  render(html`<till-app .api=${new TillApi("", fetchImpl)} .router=${router}></till-app>`, app);
+}
+
+// The link points at the default-80 plain-HTTP landing page (Task 3). A non-default landing port can't
+// be recovered from the client, so we link to the real-deployment default rather than guess.
+function trustInstructions() {
+  return html`
+    <main style="max-width:32rem;margin:4rem auto;padding:0 1.5rem;font:inherit">
+      <h1>This device hasn't trusted the till yet</h1>
+      <p>
+        The till is served over HTTPS with the venue box's own certificate, which this device does
+        not recognise yet. Install the box's certificate, then reopen the till.
+      </p>
+      <p><a href="http://${location.hostname}/">Open the setup page for instructions</a></p>
+    </main>
+  `;
+}

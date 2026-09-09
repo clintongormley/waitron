@@ -306,12 +306,13 @@ async function seedDeviceProfile(
   name: string,
   capabilities: string[],
   canvasId: string | null,
+  inactivityTimeoutSeconds: number | null = null,
 ): Promise<string> {
   const { rows } = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     return tx.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor, canvas_id, capabilities)
-      values (${cfg.tenantId}, ${name}, 'till', ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
+      insert into device_profiles (tenant_id, name, form_factor, canvas_id, capabilities, inactivity_timeout_seconds)
+      values (${cfg.tenantId}, ${name}, 'till', ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb, ${inactivityTimeoutSeconds})
       returning id`);
   });
   return rows[0]!.id;
@@ -974,6 +975,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // Capabilities relocated onto the device profile (Task 9): a cookieless request has no profile, so
       // the explicit sibling is the empty set (the render axis then hides the capability cards).
       capabilities: [],
+      // The auto-logout timeout also rides the profile (Task 7): no profile → null (the app default).
+      inactivityTimeoutSeconds: null,
       // The node this till is talking to, and the venue's routable server list — empty here because
       // `node_membership` holds no row (the server-list test below writes one and removes it again).
       nodeId: cfg.nodeId,
@@ -1192,6 +1195,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       "Counter",
       ["integrated-card-payment", "open-cash-drawer"],
       canvasId,
+      // The profile carries a non-null auto-logout timeout, so the boot payload must mirror it (Task 7).
+      300,
     );
     try {
       const cookie = await enrolTillDeviceCookie(suite.db, deviceProfileId);
@@ -1204,11 +1209,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
         canvas: unknown;
         capabilities: unknown;
         receipt: ReceiptConfig;
+        inactivityTimeoutSeconds: unknown;
       };
       // The resolved CanvasDef, verbatim (the `getCanvas` definition) — through the profile.
       expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
       // The profile's capabilities, as the explicit sibling (no longer inside `canvas`).
       expect(body.capabilities).toEqual(["integrated-card-payment", "open-cash-drawer"]);
+      // The profile's auto-logout timeout, mirrored onto the boot payload (Task 7) like `capabilities`.
+      expect(body.inactivityTimeoutSeconds).toBe(300);
       // The tenant authored no receipt, so it stays the built-in default. No `layout` field (SP-B4).
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
@@ -1235,9 +1243,15 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       mountTillApi(app, deps(suite.db), collect([]));
       const res = await app.request("/api/till", { headers: { cookie } });
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { canvas: unknown; capabilities: unknown };
+      const body = (await res.json()) as {
+        canvas: unknown;
+        capabilities: unknown;
+        inactivityTimeoutSeconds: unknown;
+      };
       expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
       expect(body.capabilities).toEqual(["open-cash-drawer"]);
+      // This profile was seeded with no timeout, so the boot payload carries null (the app default).
+      expect(body.inactivityTimeoutSeconds).toBeNull();
     } finally {
       await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
       await suite.db.execute(sql`delete from device_profiles where tenant_id = ${cfg.tenantId}`);
@@ -1258,10 +1272,13 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
         canvas: unknown;
         capabilities: unknown;
         receipt: ReceiptConfig;
+        inactivityTimeoutSeconds: unknown;
       };
       // No profile → the built-in default canvas for a till device, and an empty capability set.
       expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
       expect(body.capabilities).toEqual([]);
+      // No profile → no timeout resolved, so the boot payload carries null (the app default).
+      expect(body.inactivityTimeoutSeconds).toBeNull();
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
     } finally {
@@ -1282,6 +1299,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(body).toHaveProperty("canvas");
     expect((body as { canvas: unknown }).canvas).toEqual(DEFAULT_CANVASES.till);
     expect((body as { capabilities: unknown }).capabilities).toEqual([]);
+    // Cookieless → no device, no profile, so the timeout resolves to null (the app default).
+    expect((body as { inactivityTimeoutSeconds: unknown }).inactivityTimeoutSeconds).toBeNull();
     expect(body).not.toHaveProperty("layout");
   });
 });

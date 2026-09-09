@@ -18,8 +18,16 @@ const profiles: DeviceProfile[] = [
     canvasId: "c1",
     capabilities: ["integrated-card-payment", "open-cash-drawer"],
     formFactor: "till",
+    inactivityTimeoutSeconds: null,
   },
-  { id: "p2", name: "Kitchen", canvasId: null, capabilities: [], formFactor: "kds" },
+  {
+    id: "p2",
+    name: "Kitchen",
+    canvasId: null,
+    capabilities: [],
+    formFactor: "kds",
+    inactivityTimeoutSeconds: null,
+  },
 ];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -140,6 +148,7 @@ describe("device-profiles-screen list mode", () => {
       "c1",
       ["integrated-card-payment", "open-cash-drawer"],
       "till",
+      null,
     );
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);
   });
@@ -169,6 +178,7 @@ describe("device-profiles-screen editor form", () => {
       "c2",
       ["act-as-kds"],
       "tablet-landscape",
+      null,
     );
     // Back in list mode after a successful save.
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
@@ -183,7 +193,7 @@ describe("device-profiles-screen editor form", () => {
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
-    expect(api.createDeviceProfile).toHaveBeenCalledWith("Counter", null, [], "till");
+    expect(api.createDeviceProfile).toHaveBeenCalledWith("Counter", null, [], "till", null);
   });
 
   it("the form-factor picker offers the four form factors with their human labels", async () => {
@@ -271,6 +281,7 @@ describe("device-profiles-screen editor form", () => {
       "c1",
       ["integrated-card-payment", "open-cash-drawer"],
       "kds",
+      null,
     );
   });
 
@@ -289,6 +300,7 @@ describe("device-profiles-screen editor form", () => {
       "c1",
       ["open-cash-drawer"],
       "till",
+      null,
     );
   });
 
@@ -307,7 +319,67 @@ describe("device-profiles-screen editor form", () => {
       null,
       ["integrated-card-payment", "open-cash-drawer"],
       "till",
+      null,
     );
+  });
+
+  it("a non-KDS draft renders the inactivity-timeout input; 5 minutes saves 300 seconds (trailing arg)", async () => {
+    const phone: DeviceProfile = { ...profiles[0], formFactor: "phone-portrait" };
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    // The input renders for a non-KDS form factor.
+    expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).toBeTruthy();
+    change(el, "profile-inactivity", "5");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    // Minutes are converted to seconds at the wire edge: 5 → 300, passed as the trailing arg.
+    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+      "p1",
+      "Front counter",
+      "c1",
+      ["integrated-card-payment", "open-cash-drawer"],
+      "phone-portrait",
+      300,
+    );
+  });
+
+  it("a KDS draft hides the inactivity-timeout input and saves a null timeout", async () => {
+    const kdsProfile: DeviceProfile = { ...profiles[0], formFactor: "kds" };
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(kdsProfile) });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    // No timeout input for a kitchen display — it never idle-logs out.
+    expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+      "p1",
+      "Front counter",
+      "c1",
+      ["integrated-card-payment", "open-cash-drawer"],
+      "kds",
+      null,
+    );
+  });
+
+  it("Edit seeds the inactivity-timeout input in minutes from the stored seconds (300 → 5)", async () => {
+    const phone: DeviceProfile = {
+      ...profiles[0],
+      formFactor: "phone-portrait",
+      inactivityTimeoutSeconds: 300,
+    };
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    const input = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=profile-inactivity]",
+    )!;
+    expect(input.value).toBe("5");
   });
 
   it("Edit shows the error banner and stays in list mode when getDeviceProfile fails", async () => {

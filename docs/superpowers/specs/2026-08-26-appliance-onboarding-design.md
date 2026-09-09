@@ -222,7 +222,11 @@ serve them from Hono with a fallback-to-`index.html` SPA handler and correct cac
 unchanged.
 
 **Ports.** **[decided-by-user]** the appliance defaults to **80 (HTTP→HTTPS redirect) and 443
-(HTTPS)**, not 8080. Ports < 1024 need root or `CAP_NET_BIND_SERVICE` on Linux (**[verify]** §18);
+(HTTPS)**, not 8080.
+> **Superseded 2026-09-08** (owner, LAN-HTTPS spike §3, built on the installable-till branch): port 80
+> **never redirects** — it serves a plain-HTTP trust/landing page (CA download + install instructions,
+> no HSTS) so a phone that has not yet trusted the box CA can reach the instructions before the HTTPS
+> interstitial. HTTPS stays on 443. The landing port is `WAITRON_HTTP_LANDING_PORT` (default 80, 0 disables). Ports < 1024 need root or `CAP_NET_BIND_SERVICE` on Linux (**[verify]** §18);
 the appliance runs under systemd so this is free. **Local dev stays on 8080/higher** so a developer
 never needs root — i.e. the port defaults differ appliance vs dev, driven by config, not code.
 

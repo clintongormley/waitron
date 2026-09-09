@@ -10,7 +10,7 @@ import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { CapabilityFlag, FormFactor } from "./canvas.js";
-import { validateCapabilities } from "./device-profile.js";
+import { validateCapabilities, validateInactivityTimeout } from "./device-profile.js";
 
 /**
  * The list/get/create/update/delete service over `device_profiles` (design 2026-09-05 §5.1). MANY rows
@@ -45,6 +45,8 @@ export type DeviceProfileRow = {
   formFactor: FormFactor;
   canvasId: string | null;
   capabilities: CapabilityFlag[];
+  /** The auto-logout idle timeout in seconds; `null` = never (always `null` for a `kds` profile). */
+  inactivityTimeoutSeconds: number | null;
 };
 
 /** The `DeviceProfileRow` column projection shared by every `.select()` and `.returning()` here. */
@@ -54,6 +56,7 @@ const PROFILE_COLUMNS = {
   formFactor: deviceProfiles.formFactor,
   canvasId: deviceProfiles.canvasId,
   capabilities: deviceProfiles.capabilities,
+  inactivityTimeoutSeconds: deviceProfiles.inactivityTimeoutSeconds,
 } as const;
 
 /** Re-attach the `CapabilityFlag[]` shape the plain-jsonb `capabilities` column drops (see header). */
@@ -63,6 +66,7 @@ function toRow(row: {
   formFactor: FormFactor;
   canvasId: string | null;
   capabilities: unknown;
+  inactivityTimeoutSeconds: number | null;
 }): DeviceProfileRow {
   return {
     id: row.id,
@@ -70,6 +74,7 @@ function toRow(row: {
     formFactor: row.formFactor,
     canvasId: row.canvasId,
     capabilities: row.capabilities as CapabilityFlag[],
+    inactivityTimeoutSeconds: row.inactivityTimeoutSeconds,
   };
 }
 
@@ -157,6 +162,9 @@ export async function createDeviceProfile(
     formFactor: FormFactor;
     canvasId: string | null | undefined;
     capabilities: unknown;
+    // Optional so a caller that has not adopted the field yet (the management routes, wired in a later
+    // task) keeps compiling; an omitted value stores NULL (never). `kds` is forced NULL regardless.
+    inactivityTimeoutSeconds?: number | null;
   },
 ): Promise<DeviceProfileRow> {
   await authorizeManager(tx, {
@@ -164,6 +172,10 @@ export async function createDeviceProfile(
     permission: "till.configure",
   });
   const capabilities = validateCapabilities(input.capabilities);
+  const inactivityTimeoutSeconds = validateInactivityTimeout(
+    input.inactivityTimeoutSeconds ?? null,
+    input.formFactor,
+  );
   try {
     const [row] = await tx
       .insert(deviceProfiles)
@@ -173,6 +185,7 @@ export async function createDeviceProfile(
         formFactor: input.formFactor,
         canvasId: input.canvasId ?? null,
         capabilities,
+        inactivityTimeoutSeconds,
       })
       .returning(PROFILE_COLUMNS);
     return toRow(row!);
@@ -199,6 +212,9 @@ export async function updateDeviceProfile(
     formFactor: FormFactor;
     canvasId: string | null | undefined;
     capabilities: unknown;
+    // Optional so the not-yet-updated management routes keep compiling (later task); an omitted value
+    // stores NULL. `kds` is forced NULL regardless.
+    inactivityTimeoutSeconds?: number | null;
   },
 ): Promise<DeviceProfileRow> {
   await authorizeManager(tx, {
@@ -206,6 +222,10 @@ export async function updateDeviceProfile(
     permission: "till.configure",
   });
   const capabilities = validateCapabilities(input.capabilities);
+  const inactivityTimeoutSeconds = validateInactivityTimeout(
+    input.inactivityTimeoutSeconds ?? null,
+    input.formFactor,
+  );
   let updated: DeviceProfileRow[];
   try {
     const rows = await tx
@@ -215,6 +235,7 @@ export async function updateDeviceProfile(
         formFactor: input.formFactor,
         canvasId: input.canvasId ?? null,
         capabilities,
+        inactivityTimeoutSeconds,
         updatedAt: sql`now()`,
       })
       .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))

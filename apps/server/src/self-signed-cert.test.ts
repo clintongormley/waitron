@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import forge from "node-forge";
 import { beforeAll, describe, expect, it } from "vitest";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { mintSelfSignedServerCert, isPermittedLeafIpv4 } from "./self-signed-cert.js";
 
 // One RSA-2048 keypair for the whole suite, injected into every mint so the suite pays keygen once
 // rather than per-case. The two certs a mint returns differ by subject/extensions/issuer regardless
@@ -78,6 +78,22 @@ describe("mintSelfSignedServerCert", () => {
     expect(cert.subjectAltName).toContain("DNS:waitron.local");
   });
 
+  it("the CA carries a critical nameConstraints extension permitting waitron.local + loopback + RFC1918", () => {
+    const m = mintSelfSignedServerCert({
+      hostnames: ["waitron.local", "localhost"],
+      ipAddresses: ["127.0.0.1", "192.168.1.50"],
+      now: new Date("2026-09-09T00:00:00Z"),
+    });
+    const ca = forge.pki.certificateFromPem(m.caCertPem);
+    const nc = ca.getExtension("nameConstraints") as
+      { critical?: boolean; value?: string } | undefined;
+    expect(nc).toBeDefined();
+    expect(nc?.critical).toBe(true);
+    // pathLenConstraint 0 on basicConstraints
+    const bc = ca.getExtension("basicConstraints") as { pathLenConstraint?: number } | undefined;
+    expect(bc?.pathLenConstraint).toBe(0);
+  });
+
   // The property that actually matters: the minted material completes a real TLS handshake
   // when the client trusts the CA, and fails when it does not.
   it("serves a TLS handshake a CA-trusting client accepts and an untrusting one rejects", async () => {
@@ -111,6 +127,34 @@ describe("mintSelfSignedServerCert", () => {
       badSocket.destroy();
     } finally {
       await new Promise<void>((r) => server.close(() => r()));
+    }
+  });
+});
+
+describe("isPermittedLeafIpv4", () => {
+  it("permits loopback and the three RFC1918 ranges the CA is constrained to", () => {
+    for (const ip of ["127.0.0.1", "10.0.0.1", "172.16.5.9", "192.168.1.50"]) {
+      expect(isPermittedLeafIpv4(ip)).toBe(true);
+    }
+  });
+
+  it("rejects addresses outside the permitted subtrees", () => {
+    // CGNAT (Tailscale), link-local, a public IP, and 172.x outside the 172.16/12 window.
+    for (const ip of ["100.64.1.2", "169.254.1.2", "8.8.8.8", "172.32.0.1"]) {
+      expect(isPermittedLeafIpv4(ip)).toBe(false);
+    }
+  });
+
+  it("rejects a non-IPv4 string (IPv6, hostname, malformed quad)", () => {
+    for (const s of [
+      "::1",
+      "fe80::1",
+      "waitron.local",
+      "192.168.1",
+      "192.168.1.256",
+      "1.2.3.4.5",
+    ]) {
+      expect(isPermittedLeafIpv4(s)).toBe(false);
     }
   });
 });

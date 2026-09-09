@@ -85,6 +85,13 @@
       "when": 1788946138728,
       "tag": "0011_drop_print_agent_pairing_codes_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788960459396,
+      "tag": "0012_device_profile_inactivity_timeout_sql",
+      "breakpoints": true
     }
   ]
 }

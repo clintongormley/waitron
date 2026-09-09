@@ -624,6 +624,9 @@ export interface DeviceProfile {
   canvasId: string | null;
   capabilities: string[];
   formFactor: FormFactor;
+  /** The auto-logout idle timeout in SECONDS; `null` = never (and always `null` for a `kds` profile).
+   * The editor works in whole minutes and converts at its own edge. */
+  inactivityTimeoutSeconds: number | null;
 }
 
 /**
@@ -1911,12 +1914,14 @@ export class DashboardApi {
     canvasId: string | null,
     capabilities: string[],
     formFactor: FormFactor,
+    inactivityTimeoutSeconds: number | null,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
       name,
       canvasId,
       capabilities,
       formFactor,
+      inactivityTimeoutSeconds,
     });
   }
 
@@ -1928,12 +1933,14 @@ export class DashboardApi {
     canvasId: string | null,
     capabilities: string[],
     formFactor: FormFactor,
+    inactivityTimeoutSeconds: number | null,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
       name,
       canvasId,
       capabilities,
       formFactor,
+      inactivityTimeoutSeconds,
     });
   }
 

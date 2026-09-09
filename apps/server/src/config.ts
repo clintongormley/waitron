@@ -51,6 +51,15 @@ export interface ServerConfig {
    */
   devMode: boolean;
   httpPort: number;
+  /**
+   * The plain-HTTP trust/landing listener's port (default 80); `0` disables it. A SECOND listener,
+   * distinct from `httpPort` (which serves HTTPS), so the two never conflict. It exists because a
+   * phone hitting the box's HTTPS origin on an untrusted self-signed leaf gets the browser's
+   * interstitial before any of our JS runs — the landing page is served over plain HTTP so the CA
+   * download link resolves without a trust step. `boot.ts` starts it only when this is non-zero AND
+   * the box serves its own minted leaf (`mintedBoxLeaf`); an operator-TLS box needs no such page.
+   */
+  landingPort: number;
   /** Defaults to loopback. `/health` (spec §9) is deliberately unauthenticated, which is fine on a
    * loopback listener and less fine on every interface — the body is operational metadata, not a
    * secret, but there is no reason to serve it beyond the host `apps/server` runs on by default. */
@@ -225,6 +234,9 @@ const DEFAULT_MIN_TICK_MS = 5_000;
  * config that throws must not take the page down with it. One constant, not two, so the page and
  * the server can never disagree about where an operator will look for it. */
 export const DEFAULT_HTTP_PORT = 8080;
+/** The plain-HTTP trust/landing listener's port when `WAITRON_HTTP_LANDING_PORT` is unset — port 80,
+ * where a phone lands by typing the box's bare address. `0` disables the listener entirely. */
+const DEFAULT_HTTP_LANDING_PORT = 80;
 /** The PostgreSQL port a node advertises for a peer's subscription to dial when
  * WAITRON_REPLICATION_PORT is unset — the cluster default. */
 const DEFAULT_REPLICATION_PORT = 5432;
@@ -499,6 +511,23 @@ function optionalPositiveInt(env: Env, variable: string): number | undefined {
 }
 
 /**
+ * A port in the inclusive range `0..MAX_HTTP_PORT`, where `0` is a meaningful value ("disabled"),
+ * unlike every other port in this file. Deliberately NOT `positiveInt`/`parsePositiveInt`, which
+ * reject `0` as non-positive — the landing listener uses `0` to mean "do not bind". An unset or empty
+ * value takes `fallback`; anything that is not an integer in range throws `port_out_of_range`, the
+ * same reason `httpPort`'s own upper-bound guard uses.
+ */
+function boundedPort(env: Env, variable: string, fallback: number): number {
+  const raw = env[variable];
+  if (isUnset(raw)) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_HTTP_PORT) {
+    throw new AppError("server.config_invalid", { variable, reason: "port_out_of_range" });
+  }
+  return value;
+}
+
+/**
  * Which environment this whole deployment belongs to — AEAT's endpoints, and the Stripe key mode
  * a tenant's credential must match. ONE setting, not one per provider: there is no legitimate
  * mixed pair. AEAT pre-production with a live Stripe key means taking real money without filing
@@ -675,6 +704,9 @@ export function loadConfig(
     environment,
     devMode: isDevMode(env),
     httpPort,
+    // The plain-HTTP landing listener's port (default 80, `0` = disabled). Its OWN bounded parser
+    // (not `positiveInt`), because `0` is a valid value here and `positiveInt` rejects it.
+    landingPort: boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT),
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,
     maxTickMs,

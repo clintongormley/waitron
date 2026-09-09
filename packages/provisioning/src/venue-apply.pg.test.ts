@@ -147,8 +147,10 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
         form_factor: string;
         canvas_id: string | null;
         capabilities: string[];
+        inactivity_timeout_seconds: number | null;
       }>(sql`
-        select name, form_factor, canvas_id, capabilities from device_profiles
+        select name, form_factor, canvas_id, capabilities, inactivity_timeout_seconds
+        from device_profiles
         where tenant_id = ${result.tenantId} order by name`);
       return { counts, node, sif, profiles };
     });
@@ -160,14 +162,27 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     // Exactly the three starter profiles, es-ES names (this venue's primary invoice locale), each with
     // no bound canvas, its form-factor persisted, and the form-factor default capabilities.
     expect(profiles.rows).toEqual([
-      { name: "Cocina", form_factor: "kds", canvas_id: null, capabilities: ["act-as-kds"] },
+      {
+        name: "Cocina",
+        form_factor: "kds",
+        canvas_id: null,
+        capabilities: ["act-as-kds"],
+        inactivity_timeout_seconds: null,
+      },
       {
         name: "Mostrador",
         form_factor: "till",
         canvas_id: null,
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
+        inactivity_timeout_seconds: null,
       },
-      { name: "Móvil", form_factor: "phone-portrait", canvas_id: null, capabilities: [] },
+      {
+        name: "Móvil",
+        form_factor: "phone-portrait",
+        canvas_id: null,
+        capabilities: [],
+        inactivity_timeout_seconds: 300,
+      },
     ]);
   });
 

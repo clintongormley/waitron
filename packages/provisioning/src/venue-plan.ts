@@ -81,7 +81,12 @@ export type VenueAction =
       // Names are already resolved to the venue's primary invoice locale here in the pure planner;
       // capabilities are the form-factor defaults from DEFAULT_DEVICE_PROFILES.
       kind: "seed-device-profiles";
-      profiles: { name: string; formFactor: FormFactor; capabilities: CapabilityFlag[] }[];
+      profiles: {
+        name: string;
+        formFactor: FormFactor;
+        capabilities: CapabilityFlag[];
+        inactivityTimeoutSeconds: number | null;
+      }[];
     }
   | { kind: "create-till"; name: string }
   | { kind: "create-node"; name: string; filingModule: string; taxModule: string }
@@ -171,6 +176,9 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
         name: defaultProfileName(profile, locales[0]!),
         formFactor: profile.formFactor,
         capabilities: profile.capabilities,
+        // Thread the seeded timeout through, or the store's createDeviceProfile never receives it and
+        // the phone-portrait default (300 s) is silently dropped. `?? null` normalizes an omitted seed.
+        inactivityTimeoutSeconds: profile.inactivityTimeoutSeconds ?? null,
       })),
     },
     {

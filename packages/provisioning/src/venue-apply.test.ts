@@ -147,17 +147,27 @@ describe("applyVenue", () => {
       name: string;
       canvas_id: string | null;
       capabilities: CapabilityFlag[];
+      inactivity_timeout_seconds: number | null;
     }>(sql`
-      select name, canvas_id, capabilities from device_profiles
+      select name, canvas_id, capabilities, inactivity_timeout_seconds from device_profiles
       where tenant_id = ${result.tenantId} order by name`);
+    // The seeded inactivity timeout reaches the DB only through venue-plan → applyVenue: the handheld
+    // carries 300 s, the counter and kitchen display none. Proven by deletion: drop the
+    // `inactivityTimeoutSeconds` field from planVenue's profile mapping and the handheld reads null.
     expect(profiles.rows).toEqual([
-      { name: "Cocina", canvas_id: null, capabilities: ["act-as-kds"] },
+      {
+        name: "Cocina",
+        canvas_id: null,
+        capabilities: ["act-as-kds"],
+        inactivity_timeout_seconds: null,
+      },
       {
         name: "Mostrador",
         canvas_id: null,
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
+        inactivity_timeout_seconds: null,
       },
-      { name: "Móvil", canvas_id: null, capabilities: [] },
+      { name: "Móvil", canvas_id: null, capabilities: [], inactivity_timeout_seconds: 300 },
     ]);
   });
 
@@ -427,7 +437,14 @@ describe("applyVenue", () => {
           ensure,
           {
             kind: "seed-device-profiles",
-            profiles: [{ name: "Counter", formFactor: "till", capabilities: [] }],
+            profiles: [
+              {
+                name: "Counter",
+                formFactor: "till",
+                capabilities: [],
+                inactivityTimeoutSeconds: null,
+              },
+            ],
           } as VenueAction,
         ],
         message: "applyVenue: seed-device-profiles before seed-admin",
