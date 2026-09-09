@@ -105,12 +105,17 @@ steps take owner sign-off at land):
    box is one disk failure from having no way back.
 
 2. **Device onboarding and the three displays** — till, handheld and KDS working, kiosk optional
-   (owner 2026-09-08; most waiters use their own phones). Includes the LAN-HTTPS spike + the
-   installable-till build
-   ([2026-09-08-lan-https-install-and-name-constraints-spike.md](superpowers/specs/2026-09-08-lan-https-install-and-name-constraints-spike.md):
-   web manifest, a name-constrained CA, the trust flow from the till's own origin, the wake lock —
-   and the measurement that a name-constrained root actually constrains on Android and iOS), plus
-   the register/device follow-ups (Track B item 7).
+   (owner 2026-09-08; most waiters use their own phones). **Installable-till build + LAN-HTTPS
+   LANDED #290**
+   ([2026-09-08-lan-https-install-and-name-constraints-spike.md](superpowers/specs/2026-09-08-lan-https-install-and-name-constraints-spike.md)):
+   the web manifest, the name-constrained CA (leaf SANs filtered to the permitted set), the
+   plain-HTTP trust/landing page on port 80, the screen wake lock + a per-profile inactivity timeout
+   (KDS exempt; §8), and the HTTPS trust detector. The desktop spike rows passed; Android/iOS
+   **on-device install + trust rows remain the owner's** (real phones on the shop WiFi). **Still open
+   under this step:** the three displays actually walked end to end (the `ui-review.md` areas), and
+   the register/device follow-ups (Track B item 7). Owner decisions to confirm from #290: the seeded
+   300 s handheld inactivity default (till/KDS null), whether the counter till also idle-logs-out
+   (today any non-KDS profile with a timeout does), and the provisional Spanish auto-logout label.
 3. **The printer agent process, then USB and IP printers end to end. LANDED #289** — the db-free `@waitron/print-agent` wire client + poll loop and the
    `apps/print-agent` container host, joining a venue over the shared `join_requests` table
    (device-join-and-accept-design.md §7). Standalone, containerised, follows the primary like the
@@ -133,9 +138,13 @@ design-review section apply.
 
 - **Track 1 — devices & UI** (push steps 2 and 5). Owns `apps/till`, `apps/dashboard`, `apps/setup`'s
   screens, the device/session/enrol routes in `apps/server`, `packages/layouts`, `packages/ui`,
-  `packages/identity`. Work: device onboarding and the three displays, kiosk, the installable-till
-  build (manifest, trust flow, wake lock), the register/device follow-ups, the `ui-review.md`
-  walkthrough, counter kitchen fire, pricing adjustments, the two open by-id read-leak classes.
+  `packages/identity`. Work: device onboarding and the three displays, kiosk, the register/device
+  follow-ups, the `ui-review.md` walkthrough, counter kitchen fire, pricing adjustments, the two open
+  by-id read-leak classes. (The installable-till build — manifest, trust flow, wake lock, per-profile
+  inactivity timeout — **LANDED #290**.) *Follow-ups from #290 (small, unowned):* an `int4InRange`
+  helper collapsing the four int4-bounds parsers; an options-object for the growing positional
+  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput` type; a `BRAND_PRIMARY_HEX`
+  constant (the theme colour is literal in three places).
   **Till menu does not load until a manual refresh** (owner, 2026-09-09, from the blank-box-to-selling
   run-it proof): a freshly enrolled handheld showed no menu until the operator reloaded, and a
   dashboard menu change did not appear live. The till should load / live-refresh its catalogue after
@@ -149,8 +158,14 @@ design-review section apply.
   installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick
   carries the images so install needs no internet, unattended updates for a box we did not sell,
   AP-mode WiFi onboarding). Then: the from-scratch primary and first-run modes 1–2, images into
-  Postgres, backup destinations (mirror → S3 → Drive), the name-constrained CA + HTTP landing page,
-  the LAN-HTTPS spike (its desktop half; the phone rows are the owner's). Owed to Track H: the box's
+  Postgres, backup destinations (mirror → S3 → Drive). (The name-constrained CA + plain-HTTP landing
+  page + the LAN-HTTPS spike's desktop half **LANDED #290** — Track 1's slice, but it touched these
+  Track P files; the phone rows are the owner's.) *Follow-ups from #290:* the recovery-mode landing
+  listener (a `// TODO(recovery)` breadcrumb in `boot.ts`); filtering `box-reach`'s advertised
+  reach-URLs/QR through the same permitted-subtree predicate the leaf SANs now use (a Tailscale/link-local-only
+  box could otherwise advertise an `https://<ip>/` its cert can't cover — not a regression); and the
+  parked IPv6-LAN-SAN / public-address self-sign residuals (the C1 leaf-SAN filter now drops out-of-set
+  addresses rather than invalidating the whole cert). Owed to Track H: the box's
   compose runs the print-agent container beside the server with `WAITRON_SERVER_URL` set to the
   server's service address, so the same-box agent joins with nothing typed (print-agent spec §2.2).
 - **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, `packages/print-agent` +
