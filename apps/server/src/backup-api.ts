@@ -26,10 +26,11 @@ export interface BackupApiDeps {
 
 /**
  * Code→HTTP status for the backup admin surface. The management gate's codes (401/403) match
- * box-status/recovery-bundle exactly. `managed_by_environment`/`not_primary` are 409 CONFLICTS (the
- * box's config-ownership or role state forbids the write); the request-shape and config-validation
- * faults are 400. `effective_mismatch` is mapped explicitly at 400 rather than left to the boundary's
- * `?? 400` default — an unmapped code silently 400ing is the footgun errors.ts warns of.
+ * box-status/recovery-bundle exactly. `managed_by_environment`/`not_primary`/`reload_in_progress` are
+ * 409 CONFLICTS (the box's config-ownership, role state, or an in-flight reload forbids the write); the
+ * request-shape and config-validation faults are 400. `effective_mismatch` is mapped explicitly at 400
+ * rather than left to the boundary's `?? 400` default — an unmapped code silently 400ing is the footgun
+ * errors.ts warns of.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -38,6 +39,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "backup.managed_by_environment": 409,
   "backup.not_primary": 409,
+  // A concurrent apply/rotate hit the supervisor's reload latch: Hono serves requests concurrently, so
+  // two writes can race one reload. It is a conflict (retry), not a 400 bad request.
+  "backup.reload_in_progress": 409,
   "backup.recovery_key_unstorable": 400,
   "backup.recovery_key_too_short": 400,
   "backup.destinations_invalid": 400,
@@ -193,7 +197,7 @@ function fromCurrent(
  * partial env override silently orphaning archives).
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
-  const run = createErrorBoundary(STATUS, "backup-api.failed");
+  const run = createErrorBoundary(STATUS, "backup.failed");
 
   const authorize = async (c: Context): Promise<void> => {
     const sessionId = requireManagementSession(c); // throws 401 if absent/forged
@@ -241,11 +245,15 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       loadBackupConfig(backupEnvRecord(input));
       await writeBackupEnv(deps.stateDir, input);
       await deps.supervisor.reload();
-      const s = deps.supervisor.current();
       // The effective key is what the box will actually encrypt under. If a partial env override (or
       // any merge) made it differ from the requested key, fail LOUD rather than orphan archives.
-      if (s.recoveryKey !== input.recoveryKey) throw new AppError("backup.effective_mismatch", {});
-      return c.json(projectStatus(s));
+      if (deps.supervisor.current().recoveryKey !== input.recoveryKey) {
+        throw new AppError("backup.effective_mismatch", {});
+      }
+      // Return the COMPLETE status (the same shape `GET /api/backup/status` returns), so the dashboard,
+      // which assigns this response straight to its status state and reads `backupStatus`/
+      // `archiveUnderCurrentKey`, gets both — the sync `current()` snapshot omits them.
+      return c.json(projectStatus(await deps.supervisor.status()));
     }),
   );
 
@@ -276,9 +284,11 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       loadBackupConfig(backupEnvRecord(input));
       await writeBackupEnv(deps.stateDir, input);
       await deps.supervisor.reload();
-      const s = deps.supervisor.current();
-      if (s.recoveryKey !== recoveryKey) throw new AppError("backup.effective_mismatch", {});
-      return c.json(projectStatus(s));
+      if (deps.supervisor.current().recoveryKey !== recoveryKey) {
+        throw new AppError("backup.effective_mismatch", {});
+      }
+      // Complete status, as `apply` returns and the dashboard expects (see the note there).
+      return c.json(projectStatus(await deps.supervisor.status()));
     }),
   );
 }

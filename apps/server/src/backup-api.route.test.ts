@@ -237,6 +237,12 @@ describe("backup admin routes (real postgres)", () => {
     expect(body.enabled).toBe(true);
     expect(body.keyFingerprint).toBe(keyFingerprint(KEY_1));
     expect(body.recoveryKey).toBeUndefined(); // the status projection NEVER carries the key
+    // The apply RESPONSE is the COMPLETE status the dashboard reads (not the sync snapshot): it
+    // carries `backupStatus` and `archiveUnderCurrentKey`, or the screen has no `backupStatus` after a
+    // successful save. `configured` is true (a destination is now wired); the freshness of the very
+    // first dump is not asserted here (the poll below covers it) — only that the fields are present.
+    expect(body.backupStatus.configured).toBe(true);
+    expect(typeof body.archiveUnderCurrentKey).toBe("boolean");
     // `apply` wrote backup.env verbatim (no restart needed) and the effective config picked it up.
     expect(sup.current().recoveryKey).toBe(KEY_1);
     // The immediate first tick stores an archive under the current key.
@@ -380,6 +386,9 @@ describe("backup admin routes (real postgres)", () => {
     const body = await rot.json();
     expect(body.keyFingerprint).toBe(keyFingerprint(KEY_2));
     expect(typeof body.keyRotatedAt).toBe("string"); // rotation stamped
+    // Rotate, like apply, returns the COMPLETE status (backupStatus + archiveUnderCurrentKey present).
+    expect(body.backupStatus.configured).toBe(true);
+    expect(typeof body.archiveUnderCurrentKey).toBe("boolean");
     expect(sup.current().recoveryKey).toBe(KEY_2);
     // GET recovery-key now returns KEY_2, and a fresh archive lands under it.
     const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
@@ -525,4 +534,67 @@ describe("backup admin routes (real postgres)", () => {
     // The dry-validate ran BEFORE any write — no backup.env was created.
     await expect(readFile(join(stateDir, "backup.env"), "utf8")).rejects.toThrow();
   });
+
+  it("a concurrent apply while a reload is in flight → 409 backup.reload_in_progress", async () => {
+    // Hono serves requests concurrently, so two apply/rotate calls can race the supervisor's single
+    // reload latch. The loser must map to 409 (a conflict to retry), NOT the boundary's default 400.
+    // A gated `buildConfig` parks the FIRST reload inside its critical section (latch held), so the
+    // second apply hits the latch deterministically — no timing guess.
+    const dest = makeDestDir();
+    const stateDir = await makeStateDir();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let entered!: () => void;
+    const enteredOnce = new Promise<void>((r) => {
+      entered = r;
+    });
+    let buildCalls = 0;
+    const base: NodeJS.ProcessEnv = {};
+    const sup = new BackupSupervisor({
+      buildConfig: async () => {
+        buildCalls += 1;
+        if (buildCalls === 1) {
+          entered(); // the first reload is now inside its critical section, holding the latch…
+          await gate; // …and parked here until we release it
+        }
+        return loadBackupConfig(await loadBoxEnv(base, stateDir));
+      },
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      adminDatabaseUrl: suite.pg.uri,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir,
+      mediaDir: mkdtempSync(join(tmpdir(), "backup-api-media-")),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      log: () => {},
+      runDump: fakeDump,
+    });
+    cleanup.push(() => sup.stop());
+    const app = buildApp(tenantId, sup, stateDir);
+    const cookie = await login(app);
+    const body = JSON.stringify({
+      destinationDir: dest,
+      recoveryKey: KEY_1,
+      schedule: DAILY_AT_0330,
+      retention: RETENTION,
+    });
+    const post = () =>
+      app.request("/api/backup/apply", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body,
+      });
+
+    const first = post(); // parks inside reload() → holds the latch
+    await enteredOnce; // deterministic: the latch is held before the second call fires
+    const second = await post(); // hits the latch
+    expect(second.status).toBe(409);
+    expect(await second.json()).toMatchObject({ error: { code: "backup.reload_in_progress" } });
+    release();
+    expect((await first).status).toBe(200); // the winner completes normally once released
+  }, 60_000);
 });
