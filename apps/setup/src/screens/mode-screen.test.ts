@@ -32,6 +32,16 @@ describe("setup-mode-screen", () => {
     ]);
   });
 
+  it("advances to admin with mode:prepare on the Prepare choice", async () => {
+    const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    const events = collect(host);
+    q(el, "[data-test=choose-prepare]")!.click();
+    expect(events).toEqual([
+      { kind: "patch", detail: { patch: { mode: "prepare" } } },
+      { kind: "goto", detail: { screen: "admin" } },
+    ]);
+  });
+
   // The live gate. Prove-by-deletion: rewire the LIVE button to `#advance("live")` and this flips red
   // — a single click would then emit `mode:live`. Today it only reveals the permanence warning.
   it("does NOT provision live on a single click — it shows the permanence warning instead", async () => {

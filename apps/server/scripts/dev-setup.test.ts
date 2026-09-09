@@ -30,6 +30,7 @@ const sampleEnv: DevEnv = {
   WAITRON_MIGRATIONS_DATABASE_URL:
     "postgres://postgres:pg@localhost:5432/postgres?options=-c+role%3Dwaitron_migrator",
   WAITRON_ENV: "dev",
+  WAITRON_ONBOARDING_INTENT: "demo",
   WAITRON_HTTP_PORT: "8080",
   WAITRON_CREDENTIALS_KEY: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -52,6 +53,7 @@ describe("renderEnvFile", () => {
       "DATABASE_URL=postgres://postgres:pg@localhost:5432/postgres",
       "WAITRON_MIGRATIONS_DATABASE_URL=postgres://postgres:pg@localhost:5432/postgres?options=-c+role%3Dwaitron_migrator",
       "WAITRON_ENV=dev",
+      "WAITRON_ONBOARDING_INTENT=demo",
       "WAITRON_HTTP_PORT=8080",
       "WAITRON_CREDENTIALS_KEY=c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       "WAITRON_CREDENTIALS_KEY_VERSION=1",
@@ -135,6 +137,7 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
       seedLocale: "en",
     });
     expect(env.WAITRON_ENV).toBe("dev");
+    expect(env.WAITRON_ONBOARDING_INTENT).toBe("demo");
   });
 
   it("derives the migrator connection and the dev replication credential", () => {

@@ -138,6 +138,7 @@ export interface DevEnv {
   DATABASE_URL: string;
   WAITRON_MIGRATIONS_DATABASE_URL: string;
   WAITRON_ENV: string;
+  WAITRON_ONBOARDING_INTENT: string;
   WAITRON_HTTP_PORT: string;
   WAITRON_CREDENTIALS_KEY: string;
   WAITRON_CREDENTIALS_KEY_VERSION: string;
@@ -156,6 +157,7 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "DATABASE_URL",
   "WAITRON_MIGRATIONS_DATABASE_URL",
   "WAITRON_ENV",
+  "WAITRON_ONBOARDING_INTENT",
   "WAITRON_HTTP_PORT",
   "WAITRON_CREDENTIALS_KEY",
   "WAITRON_CREDENTIALS_KEY_VERSION",
@@ -239,6 +241,7 @@ export function buildDevEnv(input: {
     // reconciles its replication shape AS the table owner, exactly as production does.
     WAITRON_MIGRATIONS_DATABASE_URL: devMigrationsUrl(databaseUrl),
     WAITRON_ENV: "dev",
+    WAITRON_ONBOARDING_INTENT: "demo",
     WAITRON_HTTP_PORT: "8080",
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",

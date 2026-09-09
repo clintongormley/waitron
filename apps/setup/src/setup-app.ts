@@ -18,7 +18,7 @@ import type { AdoptBody, ApiError, ProvisionBody, SetupApi } from "./api/client.
  * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The FIRST screen is `role`
  * (primary | mirror), which forks the rest of the flow (spec §8, C2b):
  *
- * - `role` = **primary** → the existing provisioning flow, unchanged: `mode` (demo/live) → `admin`
+ * - `role` = **primary** → the provisioning flow: `mode` (demo/prepare/live) → `admin`
  *   (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
  *   `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). The venue step
  *   routes to `cert` only for a live ES-common venue, otherwise straight to `review`.
@@ -279,7 +279,7 @@ export class SetupApp extends LitElement {
    * HERE, in the shell, not in the role screen — the same altitude fix (m) that lifted venue→`cert`/
    * `review` out of a screen (backlog #149). A **primary** enters the existing provisioning flow at
    * `mode` (unchanged); a **mirror** goes to the connect-to-primary screen, which skips
-   * `mode`/`admin`/`venue`/`cert`/`review` entirely (a mirror has no demo/live choice, seeds no
+   * `mode`/`admin`/`venue`/`cert`/`review` entirely (a mirror has no onboarding-intent choice, seeds no
    * admin, and files nothing). Same boundary `stopPropagation` as {@link SetupApp.#onPatch}.
    */
   #onRole(event: CustomEvent<{ role: "primary" | "mirror" }>): void {

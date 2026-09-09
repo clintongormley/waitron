@@ -155,6 +155,10 @@ function liveBody(): Record<string, unknown> {
   return { ...demoBody(), mode: "live" };
 }
 
+function prepareBody(): Record<string, unknown> {
+  return { ...demoBody(), mode: "prepare" };
+}
+
 // A well-formed AEAT-cert wire blob (the shape the wizard POSTs as `aeatCert`). A plain object, not
 // a regime type: the host sees the secret only as opaque `unknown`, validated through the seat.
 const CERT = {
@@ -245,7 +249,7 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 /** Narrowing helper for mutating a decoded body's nested objects in the validation tests. */
 const asRec = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
 
-describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate, latch", () => {
+describe("POST /setup-api/provision — orchestration, onboarding intent, cert gate, latch", () => {
   it("provisions a demo venue: 200, orchestrates in order, defers restart, seals no cert", async () => {
     const app = new Hono();
     const {
@@ -283,7 +287,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
     expect(seedMembership).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
 
-    // Demo → no AEAT cert seal (the seal is never reached), and the demo/live fork stamped preproduction.
+    // Demo → no AEAT cert seal (the seal is never reached), and the fiscal environment is preproduction.
     expect(calls).not.toContain("sealAeat");
     const req = provisionRequests[0];
     expect(req.environment).toBe("preproduction");
@@ -304,6 +308,24 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
       databaseUrl: DATABASE_URL,
       migrationsDatabaseUrl: MIGRATIONS_DATABASE_URL,
       environment: "preproduction",
+      onboardingIntent: "demo",
+    });
+  });
+
+  it("provisions Prepare in preproduction and persists the distinct preparation intent", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests, persistTrading, calls } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, prepareBody());
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].environment).toBe("preproduction");
+    expect(calls).not.toContain("sealAeat");
+    expect(persistTrading.mock.calls[0][0]).toMatchObject({
+      environment: "preproduction",
+      onboardingIntent: "prepare",
     });
   });
 
@@ -518,6 +540,21 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
+  it("refuses a Prepare provision carrying an AEAT cert before provisioning or sealing", async () => {
+    const app = new Hono();
+    const { deps, provision, calls } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, { ...prepareBody(), aeatCert: CERT });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "aeatCert" } },
+    });
+    expect(provision).not.toHaveBeenCalled();
+    expect(calls).not.toContain("sealAeat");
+  });
+
   // The presence gate (Copilot, backlog i): a non-expected request carrying a MALFORMED cert must
   // reject with the CLEAN "cert not expected" fault naming `aeatCert`, and must NOT run the regime's
   // `validate` seat at all — no wasted validation on a cert that is refused regardless. The cert below
@@ -621,7 +658,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   });
 
   // Each structural guard names the offending field and refuses BEFORE provisioning. Covers the
-  // demo/live `mode` fork, the object/array/nullable/string-array shape screens, and nested paths.
+  // onboarding `mode` choice, the object/array/nullable/string-array shape screens, and nested paths.
   it.each<[string, string, (body: Record<string, unknown>) => void]>([
     ["an unknown mode", "mode", (b) => void (b.mode = "bogus")],
     ["a string venue", "venue", (b) => void (b.venue = "nope")],

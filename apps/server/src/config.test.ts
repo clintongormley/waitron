@@ -77,6 +77,7 @@ describe("loadConfig", () => {
       // MIN_ENV sets no WAITRON_ENV, so this is not a dev host — the dev device switcher (SP-C) is
       // off. `devMode` is `true` only for the literal WAITRON_ENV=dev.
       devMode: false,
+      onboardingIntent: undefined,
       httpPort: 8080,
       // The plain-HTTP trust/landing listener defaults to port 80 (Task 3); `0` disables it.
       landingPort: 80,
@@ -957,6 +958,77 @@ describe("WAITRON_ENV=dev", () => {
   });
   it("an unknown value still throws server.config_invalid", () => {
     expect(() => deploymentEnvironment({ WAITRON_ENV: "staging" })).toThrow();
+  });
+});
+
+describe("WAITRON_ONBOARDING_INTENT", () => {
+  const productionRp = {
+    WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+    WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
+  };
+
+  it.each([
+    ["demo", "preproduction"],
+    ["prepare", "preproduction"],
+    ["live", "production"],
+  ] as const)("accepts %s with its required fiscal environment", (intent, environment) => {
+    const config = loadConfig(
+      {
+        ...MIN_ENV,
+        ...(environment === "production" ? productionRp : {}),
+        WAITRON_ENV: environment,
+        WAITRON_ONBOARDING_INTENT: intent,
+      },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.onboardingIntent).toBe(intent);
+  });
+
+  it.each([
+    ["demo", "production"],
+    ["prepare", "production"],
+    ["live", "preproduction"],
+  ] as const)("refuses %s with %s", async (intent, environment) => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          {
+            ...MIN_ENV,
+            ...(environment === "production" ? productionRp : {}),
+            WAITRON_ENV: environment,
+            WAITRON_ONBOARDING_INTENT: intent,
+          },
+          ROOT,
+          MEDIA_ROOT,
+          STATE_ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_ONBOARDING_INTENT",
+      reason: "intent_environment_mismatch",
+    });
+  });
+
+  it("refuses an unknown intent", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          { ...MIN_ENV, WAITRON_ONBOARDING_INTENT: "training" },
+          ROOT,
+          MEDIA_ROOT,
+          STATE_ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_ONBOARDING_INTENT",
+      reason: "not_an_onboarding_intent",
+    });
   });
 });
 

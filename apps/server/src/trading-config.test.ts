@@ -23,6 +23,7 @@ const cfg: TradingConfig = {
   databaseUrl: "postgres://app@localhost/waitron",
   migrationsDatabaseUrl: "postgres://mig@localhost/waitron",
   environment: "production",
+  onboardingIntent: "live",
 };
 
 describe("writeTradingEnv", () => {
@@ -32,7 +33,7 @@ describe("writeTradingEnv", () => {
     expect(path).toBe(join(d, "trading.env"));
   });
 
-  it("writes all 8 KEY=value lines with the exact env names, LF-terminated", async () => {
+  it("writes the onboarding intent separately from the fiscal environment", async () => {
     const d = await newDir();
     // Exact-equality on the whole file is the strongest check: it pins the eight names, their values,
     // the order the supervisor sources them in, and the trailing LF, all at once. The five
@@ -48,8 +49,18 @@ describe("writeTradingEnv", () => {
         "WAITRON_TILL_LOCATION_ID=location-5\n" +
         "DATABASE_URL=postgres://app@localhost/waitron\n" +
         "WAITRON_MIGRATIONS_DATABASE_URL=postgres://mig@localhost/waitron\n" +
-        "WAITRON_ENV=production\n",
+        "WAITRON_ENV=production\n" +
+        "WAITRON_ONBOARDING_INTENT=live\n",
     );
+  });
+
+  it("omits the intent for joined or recovered configurations", async () => {
+    const d = await newDir();
+    const env = await readFile(
+      await writeTradingEnv(d, { ...cfg, onboardingIntent: undefined }),
+      "utf8",
+    );
+    expect(env).not.toContain("WAITRON_ONBOARDING_INTENT");
   });
 
   it("writes the file 0600 (owner-only)", async () => {

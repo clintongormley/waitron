@@ -5,6 +5,7 @@ import { parseBoxAddresses } from "./box-reach.js";
 import { tryLoadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { isUnset } from "./env-value.js";
+import type { OnboardingIntent } from "./trading-config.js";
 import "./errors.js";
 
 export type DeploymentEnvironment = "production" | "preproduction";
@@ -50,6 +51,8 @@ export interface ServerConfig {
    * on a production host.
    */
   devMode: boolean;
+  /** Why this fresh primary was created. Undefined during setup, and on mirrors or older state. */
+  onboardingIntent: OnboardingIntent | undefined;
   httpPort: number;
   /**
    * The plain-HTTP trust/landing listener's port (default 80); `0` disables it. A SECOND listener,
@@ -588,6 +591,29 @@ export function isDevMode(env: Env): boolean {
   return env.WAITRON_ENV === "dev";
 }
 
+/** Parse the product intent and prove it agrees with the independently selected fiscal environment. */
+function onboardingIntent(
+  env: Env,
+  environment: DeploymentEnvironment,
+): OnboardingIntent | undefined {
+  const raw = env.WAITRON_ONBOARDING_INTENT;
+  if (isUnset(raw)) return undefined;
+  if (raw !== "demo" && raw !== "prepare" && raw !== "live") {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_ONBOARDING_INTENT",
+      reason: "not_an_onboarding_intent",
+    });
+  }
+  const matches = raw === "live" ? environment === "production" : environment === "preproduction";
+  if (!matches) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_ONBOARDING_INTENT",
+      reason: "intent_environment_mismatch",
+    });
+  }
+  return raw;
+}
+
 export function loadConfig(
   env: Env,
   defaultMigrationsRoot: string,
@@ -723,6 +749,7 @@ export function loadConfig(
       : env.WAITRON_ADMIN_DATABASE_URL,
     environment,
     devMode: isDevMode(env),
+    onboardingIntent: onboardingIntent(env, environment),
     httpPort,
     // The plain-HTTP landing listener's port (default 80, `0` = disabled). Its OWN bounded parser
     // (not `positiveInt`), because `0` is a valid value here and `positiveInt` rejects it.

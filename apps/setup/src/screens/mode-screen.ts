@@ -101,7 +101,7 @@ export class SetupModeScreen extends LitElement {
    * events are composed + bubbling so they cross this screen's shadow boundary; the shell merges the
    * patch into its draft and flips the visible screen.
    */
-  #advance(mode: "demo" | "live"): void {
+  #advance(mode: "demo" | "prepare" | "live"): void {
     dispatchSetupPatch(this, { mode });
     dispatchSetupGoto(this, "admin");
   }
@@ -109,6 +109,11 @@ export class SetupModeScreen extends LitElement {
   /** DEMO is reversible in practice, so it advances immediately with no confirmation. */
   #chooseDemo(): void {
     this.#advance("demo");
+  }
+
+  /** Preparation starts empty and keeps sales simulated, so it advances without a permanence gate. */
+  #choosePrepare(): void {
+    this.#advance("prepare");
   }
 
   /**
@@ -178,12 +183,25 @@ export class SetupModeScreen extends LitElement {
           >
         </wt-card>
         <wt-card raised>
+          <h2>Prepare your restaurant</h2>
+          <p class="choice-copy">
+            Enter your real menus, staff and layouts, then practise with test payments. Nothing is
+            filed to AEAT.
+          </p>
+          <wt-button
+            variant="secondary"
+            data-test="choose-prepare"
+            @click=${() => this.#choosePrepare()}
+            >Prepare your restaurant</wt-button
+          >
+        </wt-card>
+        <wt-card raised>
           <h2>Live</h2>
           <p class="choice-copy">
             The real thing. Every sale is filed to AEAT. This choice is permanent.
           </p>
           <wt-button variant="secondary" data-test="choose-live" @click=${() => this.#chooseLive()}
-            >Set up a live box</wt-button
+            >Go live</wt-button
           >
         </wt-card>
       </div>

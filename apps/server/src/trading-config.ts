@@ -3,6 +3,10 @@ import { rm } from "node:fs/promises";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 
+/** Why this fresh primary was created. Demo and Prepare share the preproduction fiscal environment,
+ * but only Demo receives sample content. */
+export type OnboardingIntent = "demo" | "prepare" | "live";
+
 /**
  * The provisioned identity of a single till, written out as the env the supervisor sources on the
  * next boot so the box enters TRADING mode. The five *Id fields become the `WAITRON_TILL_*_ID`
@@ -19,6 +23,8 @@ export interface TradingConfig {
   databaseUrl: string;
   migrationsDatabaseUrl: string;
   environment: "production" | "preproduction";
+  /** Absent for a mirror or a restored configuration which did not create a fresh primary. */
+  onboardingIntent?: OnboardingIntent;
 }
 
 /**
@@ -38,6 +44,9 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
     DATABASE_URL: cfg.databaseUrl,
     WAITRON_MIGRATIONS_DATABASE_URL: cfg.migrationsDatabaseUrl,
     WAITRON_ENV: cfg.environment,
+    ...(cfg.onboardingIntent === undefined
+      ? {}
+      : { WAITRON_ONBOARDING_INTENT: cfg.onboardingIntent }),
   });
   await writeFileAtomic(path, body, 0o600);
   return path;

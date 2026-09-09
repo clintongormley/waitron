@@ -36,7 +36,7 @@ export function venueModuleConfig(base: ModuleConfig, fiscalTerritory: string): 
 }
 
 export interface ProvisionRequest {
-  /** The demo/live fork: which environment this box is being stamped for. */
+  /** The fiscal environment this box is being stamped for. Demo and Prepare are preproduction. */
   environment: "production" | "preproduction";
   /** country/taxId/legalName/location/tillName/series/admin(hashed) — every field the wizard collects. */
   venue: VenueRequest;

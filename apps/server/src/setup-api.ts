@@ -364,7 +364,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // concurrent case; the tenant-exists check backstops a sequential re-POST.
   let provisioning = false;
 
-  // POST /setup-api/provision — orchestrates the whole flow: demo/live fork → validate + hash →
+  // POST /setup-api/provision — orchestrates the whole flow: onboarding intent → validate + hash →
   // provisioning-secret gate (validate upfront) → provisionVenue → seal the secret → persist trading
   // config → restart. Registered BEFORE the `GET *` catch-all below (Hono first-match wins).
   app.post("/setup-api/provision", (c) => {
@@ -413,11 +413,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const body = parsed as Record<string, unknown>;
 
         const mode = body.mode;
-        if (mode !== "demo" && mode !== "live") invalidRequest("mode");
+        if (mode !== "demo" && mode !== "prepare" && mode !== "live") invalidRequest("mode");
 
         const venue = parseVenue(body.venue);
 
-        // Demo/live fork: live stamps production, demo stamps preproduction (provisionVenue writes it).
+        // Fiscal environment and onboarding intent stay separate: Live stamps production, while
+        // Demo and Prepare both stamp preproduction and differ later in whether sample data is seeded.
         const environment: DeploymentEnvironment = mode === "live" ? "production" : "preproduction";
 
         // Resolve the fiscal regime the REQUEST's territory picks (the box's enabled set is not yet
@@ -480,6 +481,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           databaseUrl,
           migrationsDatabaseUrl,
           environment,
+          onboardingIntent: mode,
         });
 
         const response = c.json(

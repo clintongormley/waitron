@@ -81,12 +81,13 @@ export interface AeatCertDraft {
 
 /**
  * The `POST /setup-api/provision` request body (`apps/server/src/setup-api.ts` — the provision
- * handler; verified against `parseVenue`/`parseCert`). `mode` forks demo (stamps preproduction) vs
- * live (stamps production). `seriesCode` must differ from `rectificativeSeriesCode` (`planVenue`).
+ * handler; verified against `parseVenue`/`parseCert`). `mode` records the onboarding intent: demo
+ * and prepare stamp preproduction, while live stamps production. `seriesCode` must differ from
+ * `rectificativeSeriesCode` (`planVenue`).
  * `aeatCert` is present only for a live ES-common venue and is OMITTED otherwise.
  */
 export interface ProvisionBody {
-  mode: "demo" | "live";
+  mode: "demo" | "prepare" | "live";
   venue: {
     country: string;
     taxId: string;

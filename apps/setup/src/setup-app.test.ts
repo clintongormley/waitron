@@ -342,7 +342,7 @@ describe("setup-app", () => {
   // NOT `config.devMode` (`WAITRON_ENV=dev`), which this browser wizard never observes. `draft.mode`
   // is what the shell already holds by the time provisioning succeeds, so it is threaded straight
   // through as the done screen's `devMode` property.
-  it("threads the demo/live choice through to the done screen as devMode", async () => {
+  it("threads the onboarding intent through to the done screen as devMode", async () => {
     const el = await mountSetupApp(
       stubApi({
         provision: vi
@@ -366,6 +366,21 @@ describe("setup-app", () => {
       }),
     );
     patch(el, { mode: "live" });
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "done");
+    expect((host as unknown as { devMode: boolean }).devMode).toBe(false);
+  });
+
+  it("does not treat a prepared provision as demo mode on the done screen", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi
+          .fn()
+          .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+      }),
+    );
+    patch(el, { mode: "prepare" });
     provisionRequest(el);
     await flush(el);
     const host = await screenHost(el, "done");
@@ -777,6 +792,14 @@ describe("setup-app", () => {
 describe("assembleBody", () => {
   it("omits the aeatCert key entirely for a demo draft (never null/empty)", () => {
     const body = assembleBody({ mode: "demo", venue: { taxId: "B1" } });
+    expect("aeatCert" in body).toBe(false);
+  });
+
+  it("drops a stale certificate from a Prepare draft", () => {
+    const body = assembleBody({
+      mode: "prepare",
+      aeatCert: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+    });
     expect("aeatCert" in body).toBe(false);
   });
 
