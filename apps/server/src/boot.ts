@@ -1792,9 +1792,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         databaseUrl: backupConfig.databaseUrl,
         recoveryKey: backupConfig.recoveryKey,
         // BR-1 Task 2 bridge: the sweep still takes a fixed `intervalMs` at this point in the branch
-        // (Task 3 replaces it with `schedule`). An interval schedule passes its ms straight through;
-        // a wall-clock schedule (new this task, not yet reachable in a shipped config) falls back to
-        // a daily interval until the Task 3 scheduler consumes `schedule` directly.
+        // (Task 3 replaces it with `schedule`). An interval schedule passes its ms straight through.
+        // A wall-clock schedule IS reachable now — an operator can set WAITRON_BACKUP_SCHEDULE_DAYS /
+        // WAITRON_BACKUP_AT today — but until Task 3/4 land this bridge IGNORES it and runs a plain
+        // 24h-from-boot interval regardless of the configured time. Task 4 removes this derivation.
         intervalMs:
           backupConfig.schedule.kind === "interval"
             ? backupConfig.schedule.ms

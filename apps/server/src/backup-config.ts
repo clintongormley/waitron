@@ -102,12 +102,15 @@ function parseSchedule(env: Env): BackupSchedule {
 }
 
 /** `"daily"` (the default when only `WAITRON_BACKUP_AT` is set) or a comma list of weekdays, each
- * `0`–`6` with Sunday = 0 (JS `getDay()` convention); deduped and sorted. A non-integer or
- * out-of-range token throws `backup.schedule_invalid`. */
+ * `0`–`6` with Sunday = 0 (JS `getDay()` convention); deduped and sorted. An empty/whitespace-only,
+ * non-integer or out-of-range token throws `backup.schedule_invalid`. */
 function parseDays(raw: string | undefined): "daily" | number[] {
   if (isUnset(raw) || raw === "daily") return "daily";
   const parts = raw.split(",").map((s) => s.trim());
   const nums = parts.map((p) => {
+    // A blank or whitespace-only token is rejected explicitly: `Number("")` is `0`, so without this
+    // `"1, ,3"` would silently be accepted as Sunday rather than refused.
+    if (p === "") throw new AppError("backup.schedule_invalid", { reason: "bad_day" });
     const n = Number(p);
     if (!Number.isInteger(n) || n < 0 || n > 6) {
       throw new AppError("backup.schedule_invalid", { reason: "bad_day" });

@@ -101,6 +101,16 @@ describe("loadBackupConfig schedule + dual retention", () => {
     ).toThrow(/schedule_invalid/);
   });
 
+  it("rejects a blank/whitespace-only weekday token (Number('') is 0)", () => {
+    expect(() =>
+      loadBackupConfig({
+        WAITRON_BACKUP_DIR: "/mnt/usb",
+        WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+        WAITRON_BACKUP_SCHEDULE_DAYS: "1, ,3",
+      }),
+    ).toThrow(/schedule_invalid/);
+  });
+
   it("rejects a malformed time", () => {
     expect(() =>
       loadBackupConfig({
