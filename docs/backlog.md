@@ -411,15 +411,9 @@ unchanged, so no new H2 receipt
    kind derives from its profile's `form_factor`; a `till`-form-factor enrol auto-creates its own
    register; `tills(tenant_id, location_id, name)` is unique per venue; the shift session is keyed to
    the device's register; a per-(device, person) PIN throttle (`pin.throttled`).
-   - **COMPLETE, finishing the branch for its PR — enrolment by pairing mode + numeric match.** Branch
-     `feat/device-join-and-accept` (worktree `waitron-feat-device-join-and-accept`), all 13 tasks
-     implemented and reviewed as of 2026-09-09; plan
-     [`2026-09-08-device-join-and-accept.md`](superpowers/plans/2026-09-08-device-join-and-accept.md),
-     execution ledger at `.superpowers/sdd/2026-09-08-device-join-and-accept/progress.md` in that
-     worktree (gitignored) and a session handoff beside it in `docs/handoffs/` (also gitignored — it
-     exists only on this machine). devMode now auto-accepts, so the dev till enrols on first knock (the
-     retired `DEMO` pairing code is gone). **One thing a resuming session needs before touching
-     anything:** **do not run `pnpm --filter @waitron/db db:generate`** — it proposes
+   - **LANDED #287 (2026-09-09) — enrolment by pairing mode + numeric match.** devMode auto-accepts,
+     so the dev till enrols on first knock (the retired `DEMO` pairing code is gone). **Live repo-wide
+     hazard this surfaced:** **do not run `pnpm --filter @waitron/db db:generate`** — it proposes
      `DROP TABLE "bookings" CASCADE`, a live table `@waitron/bookings` owns, because that table left
      core's schema barrel in #270 but stayed in core's snapshot chain. Design approved 2026-09-08,
      [`2026-09-08-device-join-and-accept-design.md`](superpowers/specs/2026-09-08-device-join-and-accept-design.md),
@@ -443,6 +437,23 @@ unchanged, so no new H2 receipt
      `stripe_terminal`" rule lives only in the dashboard UI; move it server-side if it is a real
      invariant; (e) the device-management routes build their `devices ⨝ device_profiles` read inline
      in the HTTP layer — a `listDevices` store verb would restore the layer.
+   - *Test-infra follow-ups (from #286, the two-node cluster flake this slice's push surfaced):* the
+     heavy two-node replication suites (`replication-fidelity`, `replication-subscribe`,
+     `replication-over-tunnel`, `replication-arc`) oversubscribed Docker under the full local run and
+     hung 300s. Fixed #286: a boot retry + bounded timeouts (`two-node.ts`), a `groupOrder` isolation
+     project for `fiscal-verifactu`'s two-node file, and a cross-process cluster mutex
+     (`packages/db/src/testing/cluster-mutex.ts`, one live cluster machine-wide). Open edges: (f)
+     `apps/server`'s `replication-arc` isolation was reverted because vitest `projects` are
+     incompatible with `--shard` — it relies on the mutex + retry; if it flakes on CI's `test-server`,
+     it needs a `--shard`-compatible isolation. (g) `test-light-a` runs `sync`'s two two-node suites
+     with a dozen packages on one 4-vCPU runner (the shape that forced `fiscal-verifactu` to its own
+     shard); if it flakes on CI, move `sync` to its own shard. (h) A hung real-PG suite LEAKS its
+     running cluster containers (Ryuk off), starving the next run; `pnpm reap` only removes labelled
+     containers older than 2h, so a fresh leak survives — force-clean `org.testcontainers` leftovers
+     before re-validating. (i) `staff-screen.test.ts` (dashboard, browser mode) flaked once on CI
+     with `vi.mock("@simplewebauthn/browser")` not applying (`mockClear is not a function` across the
+     whole suite); passed on re-run and locally. If recurrent, it is a vitest browser-mode
+     module-mock-hoisting issue to fix, not re-run.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
 `packages/composition`, every NEW module package, `apps/dashboard` module screens,
