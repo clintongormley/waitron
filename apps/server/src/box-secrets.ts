@@ -96,8 +96,12 @@ const exists = (p: string): Promise<boolean> =>
  *     <stateDir>/tls/server.crt      <stateDir>/tls/server.key (0600)
  *     <stateDir>/secrets.env         (0600)   # KEY=VALUE, LF-terminated
  *
- * The leaf's iPAddress SANs are `127.0.0.1` plus every detected non-internal IPv4 (deduped), so it
- * authenticates a dial by loopback or by LAN IP. This does NOT load or consume the secrets — that
+ * The leaf's iPAddress SANs are `127.0.0.1` plus every detected non-internal IPv4 that falls inside
+ * the CA's permitted subtrees (`isPermittedLeafIpv4` — loopback + RFC1918), so a dial by loopback or
+ * by LAN IP authenticates. An out-of-set address (a `100.64/10` CGNAT / Tailscale address, a
+ * `169.254` link-local, a public IP) is dropped rather than added: a SAN the name-constrained CA
+ * cannot vouch for would make `ca.verify(leaf)` fail and the box serve no HTTPS at all. This does
+ * NOT load or consume the secrets — that
  * is the next boot's job (slice 2b / trading); it only guarantees the files are present.
  *
  * Note on the `0o600` mode arg: `writeFileAtomic` passes it to `writeFile`, which applies `mode`
