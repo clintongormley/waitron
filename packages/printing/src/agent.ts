@@ -81,8 +81,8 @@ export async function authenticateAgent(
     .select({ tokenHash: printAgents.tokenHash })
     .from(printAgents)
     // `active = true` is the revocation filter: a revoked agent is simply not found. The explicit
-    // `tenant_id` predicate limits the lookup to `cfg.tenantId`, matching the predicate
-    // on `enrolAgent`'s consume-DELETE. All bind as `$n`, never string-concatenated.
+    // `tenant_id` predicate limits the lookup to `cfg.tenantId`, matching the predicate on
+    // `acceptPrintAgentJoinRequest`'s consuming DELETE. All bind as `$n`, never string-concatenated.
     .where(
       and(
         eq(printAgents.id, agentId),

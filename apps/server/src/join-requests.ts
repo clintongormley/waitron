@@ -300,8 +300,8 @@ export type AcceptResult =
  * Approve a device's ask-to-join.
  *
  * SINGLE-USE IS STRUCTURAL, NOT ACCIDENTAL: the very first thing this does is a locking
- * `DELETE … RETURNING`, the `consumeChallenge` shape (`passkey.ts`, which `enrolAgent` in
- * @waitron/printing follows too) — CONSUME before deciding anything. Postgres serialises two concurrent deletes of
+ * `DELETE … RETURNING`, the `consumeChallenge` shape (`passkey.ts`) — CONSUME before deciding anything.
+ * Postgres serialises two concurrent deletes of
  * the SAME row: the loser's DELETE blocks behind the winner's, and once the winner commits the row is
  * gone, so the loser's DELETE matches zero rows and this throws `join_request.not_found` — which is
  * also the semantically right answer, because by the time the loser got the lock the request really

@@ -107,7 +107,7 @@ const suite = usePgliteDb({
   },
 });
 
-/** Mount the print API. The pairing window is OPEN by default so `enrolAgent`'s knock is admitted;
+/** Mount the print API. The pairing window is OPEN by default so `joinAndAccept`'s knock is admitted;
  *  `pairingOpen: false` proves the shut-window refusal. `readMembership` returns the fixture above so
  *  the pull route can echo `servers`. */
 function mountApp(opts: { pairingOpen?: boolean; enrolRateLimiter?: EnrolRateLimiter } = {}): Hono {
@@ -151,7 +151,7 @@ async function send(
  * accept ROUTE lives in `join-api.ts` and is proven there), returning the enrolled agent's id + Bearer
  * token. The agent's Bearer is exactly the knock's `${joinId}.${secret}`, and `joinId` becomes the
  * agent id (accept carries it onto the `print_agents` row). */
-async function enrolAgent(
+async function joinAndAccept(
   app: Hono,
   label = "Cocina agent",
 ): Promise<{ agentId: string; token: string }> {
@@ -329,7 +329,7 @@ describe("the deleted enrol/codes routes are gone", () => {
 describe("GET /print-api/agent/jobs — the pull carries nodeId + servers", () => {
   it("echoes this node's id and the venue's routable servers (primary first) alongside the jobs", async () => {
     const app = mountApp({ pairingOpen: true });
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     await createPrinterVia(app, agentId);
     const res = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
     expect(res.status).toBe(200);
@@ -346,7 +346,7 @@ describe("GET /print-api/agent/jobs — the pull carries nodeId + servers", () =
 describe("mountPrintApi — agent claim + report", () => {
   it("claims this agent's queued jobs (payload as base64), marking them printing (committed)", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const payload = esc().text("Mesa 4").cut().bytes();
     const jobId = await enqueue(printerId, payload);
@@ -384,8 +384,8 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("claims ONLY the calling agent's own printers' jobs (cross-agent → empty)", async () => {
     const app = mountApp();
-    const mine = await enrolAgent(app, "Mine");
-    const other = await enrolAgent(app, "Other");
+    const mine = await joinAndAccept(app, "Mine");
+    const other = await joinAndAccept(app, "Other");
     const otherPrinter = await createPrinterVia(app, other.agentId, "Other printer");
     const jobId = await enqueue(otherPrinter, new Uint8Array([1]));
 
@@ -398,7 +398,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("reports done → the job is done with delivered_at; failed → failed with attempts++ and last_error", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const doneJob = await enqueue(printerId, new Uint8Array([1]));
     const failJob = await enqueue(printerId, new Uint8Array([2]));
@@ -427,7 +427,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("reports failed with NO error field → 204 (last_error defaults to empty)", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
@@ -449,8 +449,8 @@ describe("mountPrintApi — agent claim + report", () => {
     // predicate makes this cross-agent report mutate the other agent's job (status → done), flipping the
     // `toBe("printing")` assertion red.
     const app = mountApp();
-    const mine = await enrolAgent(app, "Mine");
-    const other = await enrolAgent(app, "Other");
+    const mine = await joinAndAccept(app, "Mine");
+    const other = await joinAndAccept(app, "Other");
     const otherPrinter = await createPrinterVia(app, other.agentId, "Other printer");
     const jobId = await enqueue(otherPrinter, new Uint8Array([1]));
     await send(app, "GET", "/print-api/agent/jobs", { bearer: other.token }); // other claims → printing
@@ -469,7 +469,7 @@ describe("mountPrintApi — agent claim + report", () => {
     // SECOND failed report bump `attempts` to 2, flipping the `toBe(1)` assertion red — a retried report
     // would otherwise burn the 5-attempt cap faster than deliveries warrant.
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     await send(app, "GET", "/print-api/agent/jobs", { bearer: token }); // claim → printing
@@ -493,7 +493,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("report screens the status (a bad/absent status → 400) and the job id shape (non-uuid → 400)", async () => {
     const app = mountApp();
-    const { token } = await enrolAgent(app);
+    const { token } = await joinAndAccept(app);
     const goodId = randomUUID();
     const badStatus = await send(app, "POST", `/print-api/agent/jobs/${goodId}/result`, {
       bearer: token,
@@ -516,7 +516,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("a report for an unknown (well-formed) job id is an idempotent 204", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     await createPrinterVia(app, agentId);
     const res = await send(app, "POST", `/print-api/agent/jobs/${randomUUID()}/result`, {
       bearer: token,
@@ -544,7 +544,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("a REVOKED agent fails the claim AND the report with 401 (instant revocation)", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     // Works before revoke.
@@ -568,7 +568,7 @@ describe("mountPrintApi — agent claim + report", () => {
 describe("mountPrintApi — management: agents", () => {
   it("lists this tenant's agents (newest first) without the token hash", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app, "Listed agent");
+    const { agentId } = await joinAndAccept(app, "Listed agent");
     const res = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });
     expect(res.status).toBe(200);
     const rows = (await res.json()) as Record<string, unknown>[];
@@ -599,7 +599,7 @@ describe("mountPrintApi — management: agents", () => {
 describe("mountPrintApi — management: printers CRUD", () => {
   it("creates, lists, updates and deactivates a printer", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId, "Cocina");
 
     const list = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
@@ -646,7 +646,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("creates each transport's shape (usb with usb_path, cloud_poll with poll_id, tcp with explicit port)", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const usb = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: { name: "USB", transport: "usb", agentId, usbPath: "/dev/usb/lp0" },
@@ -670,7 +670,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("update writes every editable field and clears nullable ones with explicit null", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId, "Full patch");
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
@@ -693,7 +693,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("update rejects a non-boolean active → 400", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
@@ -707,7 +707,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("null / empty bodies on the management write routes degrade to a clean 400 / no-op, never a 500", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     // printers create screens a null body to a 400 (naming the first missing field).
     expect(
@@ -730,7 +730,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("create with a transport short of its required fields → 422 printer.invalid_config", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     // usb requires agentId + usbPath; supplying the agent but omitting usbPath is invalid config.
     const res = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
@@ -819,8 +819,8 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("update clears a connection field with an explicit null and re-binds the agent", async () => {
     const app = mountApp();
-    const first = await enrolAgent(app, "First");
-    const second = await enrolAgent(app, "Second");
+    const first = await joinAndAccept(app, "First");
+    const second = await joinAndAccept(app, "Second");
     const printerId = await createPrinterVia(app, first.agentId, "Movable");
     // Re-bind to the second agent and move host — an explicit set of both fields.
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
@@ -841,7 +841,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 describe("mountPrintApi — management: test-print", () => {
   it("enqueues a known test payload for the printer and returns { jobId } (202)", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const res = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
       cookie: managerCookie,
@@ -879,7 +879,7 @@ describe("mountPrintApi — management: test-print", () => {
 describe("mountPrintApi — management: recent jobs", () => {
   it("lists recent jobs newest-first without the payload", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1, 2, 3]));
     const res = await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie });
