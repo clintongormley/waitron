@@ -181,6 +181,11 @@ export interface VenueServiceContribution {
     cfg: { tenantId: TenantId; locationId: LocationId },
     workingOrderId: string,
   ): Promise<OrderServiceContext>;
+  findOrderContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+  ): Promise<OrderServiceContext | null>;
   recordLineContexts(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },

@@ -738,7 +738,11 @@ export async function createOpenOrder(
   // TAB does NOT flow through here — its link is the `dining_tables.tab_id` back-pointer openTab sets,
   // not an order column, so openTab passes no placement and this never stamps a delivery table on it.
   placement: { deliveryTableId?: string | null; zoneId?: string } = {},
-): Promise<{ orderNumber: number; priced: PricedBasket }> {
+): Promise<{
+  orderNumber: number;
+  priced: PricedBasket;
+  lineRows: WorkingOrderLineInsert[];
+}> {
   // Check the delivery table exists before insertion so an unknown id produces
   // table.not_found rather than a raw foreign-key failure. Scoped to the tenant (not by id alone):
   // one-tenant-per-database is not the query's isolation boundary since RLS was dropped (#255,
@@ -746,14 +750,22 @@ export async function createOpenOrder(
   // otherwise it slips past this pre-check and fails only at the composite FK as a raw 23503, and the
   // pre-check itself leaks that the id exists. This permits an inactive table and takes no row lock.
   const deliveryTableId = placement.deliveryTableId ?? null;
+  let effectiveZoneId = placement.zoneId;
   if (deliveryTableId !== null) {
     const [table] = await tx
-      .select({ id: diningTables.id })
+      .select({ id: diningTables.id, zoneId: diningTables.zoneId })
       .from(diningTables)
-      .where(and(eq(diningTables.id, deliveryTableId), eq(diningTables.tenantId, cfg.tenantId)));
+      .where(
+        and(
+          eq(diningTables.id, deliveryTableId),
+          eq(diningTables.tenantId, cfg.tenantId),
+          eq(diningTables.locationId, cfg.locationId),
+        ),
+      );
     if (table === undefined) {
       throw new AppError("table.not_found", { tableId: deliveryTableId });
     }
+    effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
 
   // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows,
@@ -764,7 +776,7 @@ export async function createOpenOrder(
     cfg,
     id,
     lines,
-    placement.zoneId,
+    effectiveZoneId,
   );
   const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
 
@@ -789,12 +801,12 @@ export async function createOpenOrder(
   if (lineRows.length > 0) {
     await tx.insert(workingOrderLines).values(lineRows);
   }
-  if (placement.zoneId !== undefined) {
-    await VENUE_SERVICE.recordOrderContext(tx, cfg, id, placement.zoneId);
+  if (effectiveZoneId !== undefined) {
+    await VENUE_SERVICE.recordOrderContext(tx, cfg, id, effectiveZoneId);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts);
   }
 
-  return { orderNumber, priced };
+  return { orderNumber, priced, lineRows };
 }
 
 /**
@@ -886,10 +898,13 @@ export async function parkOrder(
 export async function openTab(
   tx: Transaction,
   cfg: TillConfig,
-  req: { tableId: string; lines?: { productId: string; quantity: string }[] },
+  req: {
+    tableId: string;
+    lines?: { productId?: string; menuItemId?: string; quantity: string }[];
+  },
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
-    .select({ active: diningTables.active, tabId: diningTables.tabId })
+    .select({ active: diningTables.active, tabId: diningTables.tabId, zoneId: diningTables.zoneId })
     .from(diningTables)
     // Scope the by-id read to the tenant: since RLS was dropped (#255) `withTenant` no longer isolates
     // SELECTs, so a by-id read is not the isolation boundary (CLAUDE.md §3, till-reroute S3). Without
@@ -901,6 +916,17 @@ export async function openTab(
   }
   if (!table.active) {
     throw new AppError("table.inactive", { tableId: req.tableId });
+  }
+
+  if (table.zoneId !== null) {
+    const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
+    if (context.serviceMode !== "table_tab") {
+      throw new AppError("service_zone.mode_incompatible", {
+        zoneId: table.zoneId,
+        expected: "table_tab",
+        actual: context.serviceMode,
+      });
+    }
   }
 
   // A set tab_id blocks a second tab ONLY while it points at a STILL-OPEN order; the WHERE clause does
@@ -916,7 +942,9 @@ export async function openTab(
   }
 
   const tabId = randomUUID();
-  const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null);
+  const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
+    zoneId: table.zoneId ?? undefined,
+  });
   // TS-1 sets the back-pointer; TS-2 also clears any stale manual status as the new tab opens (§3b(2)).
   await tx
     .update(diningTables)
@@ -1117,49 +1145,69 @@ export async function fireLines(
   const earliestDisplayOrder =
     orderDisplayOrders.length === 0 ? null : Math.min(...orderDisplayOrders);
 
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+
   // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
   // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated
   // `$inferInsert` — that type carries no `SQL` member; `.values()` accepts one per column.
-  const values = lines.map((line) => {
-    const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
-    const stationId = route?.productStationId ?? route?.categoryStationId ?? defaultStationId;
-    if (stationId === null || stationId === undefined) {
-      throw new AppError("station.no_default", { locationId: cfg.locationId });
-    }
-    const courseId = courseByLine.get(line.id) ?? null;
-    // Fired NOW (§3c) if: no course (null fires earliest, §2b) OR its course is already fired for this
-    // order OR its course is the order's earliest (min display_order). Else HELD (`fired_at` NULL) until
-    // `fireCourse` stamps it. For a this-venue course (every A1-screened override, and the usual product
-    // default) `displayOrderByCourse.get` is defined and the three checks decide fire vs held as intended.
-    // A FOREIGN product-default course (the shared-catalogue corner above) is absent from the maps, so all
-    // three checks are false and the line holds — and is then unfireable (Debt → KDS-2); harmless in the
-    // incoherent state that alone produces it.
-    // Coursing editing (A3): `hold === true` short-circuits the whole course decision — the round-send
-    // asked for this line to be INSERTED but NOT fired, so it holds (`fired_at NULL`) even when its course
-    // is the order's earliest (or already fired). It is then released like any other held line, by
-    // `sendLines`/`fireCourse`. Absent `hold` falls through to the unchanged auto-fire-by-course rule.
-    const fired =
-      line.hold === true
-        ? false
-        : courseId === null ||
-          firedCourseIds.has(courseId) ||
-          displayOrderByCourse.get(courseId) === earliestDisplayOrder;
-    return {
-      tenantId: cfg.tenantId,
-      nodeId: cfg.nodeId,
-      workingOrderId: orderId,
-      workingOrderLineId: line.id,
-      stationId,
-      courseId,
-      // Per-line customisation (spec §2/§3), NON-FISCAL: snapshot the parent line's note/doneness onto
-      // the ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
-      // afterwards never moves this fired ticket.
-      note: line.note,
-      doneness: line.doneness,
-      firedAt: fired ? sql`now()` : null,
-      state: "queued" as const,
-    };
-  });
+  const values = (
+    await Promise.all(
+      lines.map(async (line) => {
+        const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
+        const serviceRoute =
+          serviceContext === null || line.productId === null
+            ? null
+            : await VENUE_SERVICE.resolvePreparationRoute(
+                tx,
+                cfg,
+                serviceContext.zoneId,
+                line.productId,
+              );
+        if (serviceRoute?.kind === "no_preparation") return null;
+        const stationId =
+          serviceRoute?.kind === "station"
+            ? serviceRoute.stationId
+            : (route?.productStationId ?? route?.categoryStationId ?? defaultStationId);
+        if (stationId === null || stationId === undefined) {
+          throw new AppError("station.no_default", { locationId: cfg.locationId });
+        }
+        const courseId = courseByLine.get(line.id) ?? null;
+        // Fired NOW (§3c) if: no course (null fires earliest, §2b) OR its course is already fired for this
+        // order OR its course is the order's earliest (min display_order). Else HELD (`fired_at` NULL) until
+        // `fireCourse` stamps it. For a this-venue course (every A1-screened override, and the usual product
+        // default) `displayOrderByCourse.get` is defined and the three checks decide fire vs held as intended.
+        // A FOREIGN product-default course (the shared-catalogue corner above) is absent from the maps, so all
+        // three checks are false and the line holds — and is then unfireable (Debt → KDS-2); harmless in the
+        // incoherent state that alone produces it.
+        // Coursing editing (A3): `hold === true` short-circuits the whole course decision — the round-send
+        // asked for this line to be INSERTED but NOT fired, so it holds (`fired_at NULL`) even when its course
+        // is the order's earliest (or already fired). It is then released like any other held line, by
+        // `sendLines`/`fireCourse`. Absent `hold` falls through to the unchanged auto-fire-by-course rule.
+        const fired =
+          line.hold === true
+            ? false
+            : courseId === null ||
+              firedCourseIds.has(courseId) ||
+              displayOrderByCourse.get(courseId) === earliestDisplayOrder;
+        return {
+          tenantId: cfg.tenantId,
+          nodeId: cfg.nodeId,
+          workingOrderId: orderId,
+          workingOrderLineId: line.id,
+          stationId,
+          courseId,
+          // Per-line customisation (spec §2/§3), NON-FISCAL: snapshot the parent line's note/doneness onto
+          // the ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
+          // afterwards never moves this fired ticket.
+          note: line.note,
+          doneness: line.doneness,
+          firedAt: fired ? sql`now()` : null,
+          state: "queued" as const,
+        };
+      }),
+    )
+  ).filter((value): value is NonNullable<typeof value> => value !== null);
+  if (values.length === 0) return;
   let inserted: { workingOrderLineId: string; stationId: string; firedAt: string | null }[];
   try {
     // `.returning()` captures the newly-written ticket items so print-on-fire (KDS-4) can enqueue their
@@ -1436,7 +1484,8 @@ export async function addTabRound(
   // the priced PARENT row below and read by `fireLines`. All optional, so existing callers (and the till's
   // current `{productId, quantity}` send-round) are unchanged.
   lines: ({
-    productId: string;
+    productId?: string;
+    menuItemId?: string;
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
@@ -1456,7 +1505,9 @@ export async function addTabRound(
   // Price the round (locks each new gross unit at add-time), then APPEND: renumber from maxLineNo+1,
   // never touching existing lines. `priceOrderLines` numbers its rows 1..n in `lines` order, so row i
   // maps to maxLineNo + i + 1.
-  const { lineRows } = await priceOrderLines(tx, cfg, tabId, lines);
+  const usesOffers = lines.some((line) => line.menuItemId !== undefined);
+  const context = usesOffers ? await VENUE_SERVICE.getOrderContext(tx, cfg, tabId) : undefined;
+  const { lineRows, lineContexts } = await priceOrderLines(tx, cfg, tabId, lines, context?.zoneId);
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
   // TS-1 appends the round; KDS-1 fires it (design §3b, the tab round-send fire point) — insert the new
   // lines and send each to the kitchen as a ticket item. `returning` gives the line ids (pre-generated
@@ -1473,6 +1524,7 @@ export async function addTabRound(
     doneness: workingOrderLines.doneness,
     lineNo: workingOrderLines.lineNo,
   });
+  await VENUE_SERVICE.recordLineContexts(tx, cfg, tabId, lineContexts);
   // Coursing editing (A3): correlate each input round line's `hold` onto the PARENT row `priceOrderLines`
   // produced for it. `priceOrderLines` emits one PARENT row (`parentLineId === null`) per input line, in
   // INPUT ORDER, each immediately followed by its option CHILD rows (verified at its source: a single loop
@@ -2847,6 +2899,8 @@ export async function placeOrder(
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+    const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+    const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 
     // Mode dispatch (design §3). Mode I files the DEFERRED invoice HERE, before the transition, from
     // the order's stored locked lines (never a re-price — the composition was locked at add-time); the
@@ -2855,7 +2909,7 @@ export async function placeOrder(
     // guarantees one invoice per order (a second place sees `placed` and is refused before reaching
     // this).
     let placeResult: PlaceOrderResult = { id, status: "placed" };
-    if (cfg.orderFlow === "invoice_first") {
+    if (orderFlow === "invoice_first") {
       const priced = await priceStoredOrder(tx, id);
       // SP-A.2 §16.4 split: the fiscal record's `till_id` is the DEVICE till (`saleTillId`), while the
       // `order_placed` amendment below records the box's CONFIGURED register (`cfg.tillId`). `nodeId`/

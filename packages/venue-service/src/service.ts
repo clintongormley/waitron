@@ -1,5 +1,6 @@
 import type { VenueServiceContribution } from "@waitron/module";
 import {
+  findOrderServiceContext,
   getOrderServiceContext,
   listZoneOffers,
   recordOrderServiceContext,
@@ -12,6 +13,7 @@ import {
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  findOrderContext: findOrderServiceContext,
   resolveZoneContext,
   resolvePreparationRoute,
   listZoneOffers,

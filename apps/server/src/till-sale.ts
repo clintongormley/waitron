@@ -34,11 +34,13 @@ import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
   createOpenOrder,
+  fireLines,
   priceStoredOrder,
   readInvoiceNumber,
   toVatBreakdown,
 } from "./working-order.js";
 import type { LineExtras, TillSaleDeps } from "./working-order.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { enqueueReceiptReprint, enqueueSaleReceipt } from "./receipt-print.js";
 
@@ -80,7 +82,8 @@ export interface TillSaleRequest {
    *  never threaded into any sale/fiscal projection. Declared here because the till already sends them
    *  on this wire. */
   lines: ({
-    productId: string;
+    productId?: string;
+    menuItemId?: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
   } & LineExtras)[];
@@ -96,6 +99,8 @@ export interface TillSaleRequest {
    */
   tender: TillTender;
   workingOrderId?: string;
+  /** The selected service zone for a new counter order. Existing orders use their stored context. */
+  zoneId?: string;
   /**
    * Deliver this counter sale to a dining table (design §3c) — written to
    * `working_orders.delivery_table_id`. Optional: a plain walk-up omits it. A counter delivery is a
@@ -209,7 +214,8 @@ export interface PayWorkingOrderRequest {
    *  also carry per-line `LineExtras` (NON-FISCAL), validated + persisted server-side and never threaded
    *  into a fiscal projection. Declared here because the till already sends them on this wire. */
   lines: ({
-    productId: string;
+    productId?: string;
+    menuItemId?: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
   } & LineExtras)[];
@@ -220,6 +226,8 @@ export interface PayWorkingOrderRequest {
    *  `delivery_table_id`. Ignored for a retrieved order (a delivery is always a fresh walk-up). An id
    *  that names no table is refused `table.not_found`. */
   deliveryTableId?: string;
+  /** The selected service zone for a new counter order. Existing orders use their stored context. */
+  zoneId?: string;
 }
 
 /**
@@ -236,7 +244,9 @@ export interface IntegratedPayRequest {
   /** The walk-up basket to price and file; IGNORED for a retrieved/placed order (files its stored lock).
    *  A line MAY carry per-line `LineExtras` (NON-FISCAL), validated + persisted server-side and never
    *  threaded into a fiscal projection. Declared here because the till already sends them on this wire. */
-  lines: ({ productId: string; quantity: string } & LineExtras)[];
+  lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+  /** The selected service zone for a new counter order. Existing orders use their stored context. */
+  zoneId?: string;
   /** The till-entered gross tip. CLAMPED to "0.00" when the till has tips disabled
    *  (`TillConfig.tipsEnabled === false`), so a client cannot add a tip the venue does not take. */
   tip?: string;
@@ -362,6 +372,7 @@ export async function payWorkingOrder(
       // The result is then filed with recordSale's immediate cash settlement, tagged with this order's
       // id (`sales_working_order_id_key` = the idempotency key).
       let priced: PricedLines;
+      let newlyCreatedLines: Awaited<ReturnType<typeof createOpenOrder>>["lineRows"] = [];
       if (locked === undefined) {
         if (req.lines.length === 0) {
           throw new AppError("sale.empty_basket", {});
@@ -369,15 +380,40 @@ export async function payWorkingOrder(
         // A WALK-UP may be a counter delivery: thread `deliveryTableId` to the create path (a bad id
         // is refused `table.not_found` there). A retrieved order takes the `else` branch and ignores
         // it — you do not "deliver" a parked order.
-        ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
-          deliveryTableId: req.deliveryTableId,
-        }));
+        ({ priced, lineRows: newlyCreatedLines } = await createOpenOrder(
+          tx,
+          cfg,
+          req.id,
+          req.lines,
+          null,
+          {
+            deliveryTableId: req.deliveryTableId,
+            zoneId: req.zoneId,
+          },
+        ));
       } else {
         // Retrieved order: file from the STORED locked lines via the shared `priceStoredOrder` reader,
         // never a re-price of a client basket (`req.lines` is IGNORED). It runs the SAME
         // difference-method arithmetic over the locked gross that `priceBasket` runs over a live
         // catalogue, so a catalogue price change between park and pay never moves the filed total.
         priced = await priceStoredOrder(tx, req.id);
+      }
+
+      const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
+      if (locked === undefined && serviceContext?.serviceMode === "prepay") {
+        await fireLines(
+          tx,
+          cfg,
+          req.id,
+          newlyCreatedLines.map((line) => ({
+            id: line.id!,
+            productId: line.productId ?? null,
+            courseId: line.courseId ?? null,
+            parentLineId: line.parentLineId ?? null,
+            note: line.note ?? null,
+            doneness: line.doneness ?? null,
+          })),
+        );
       }
 
       // File the immediate cash/card sale and settle it (open → settled), tagged with this order's id
@@ -835,7 +871,9 @@ export async function payWorkingOrderIntegrated(
     // STORED locked lines — `req.lines` is IGNORED, exactly as `payWorkingOrder`/`collectOrder` do.
     let priced: PricedLines;
     if (locked === undefined) {
-      ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
+      ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
+        zoneId: req.zoneId,
+      }));
     } else {
       priced = await priceStoredOrder(tx, req.id);
     }
@@ -1499,8 +1537,10 @@ export async function collectOrder(
     if (req.tender.method !== "cash" && req.tender.method !== "card") {
       throw new AppError("sale.unsupported_tender", { method: req.tender.method });
     }
+    const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
+    const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 
-    if (cfg.orderFlow === "invoice_first") {
+    if (orderFlow === "invoice_first") {
       // Mode I: the invoice already issued (deferred) at placing. Settle the EXISTING sale and move
       // placed → settled — file nothing new. `settlementFor` derives the settle amount + change over
       // the already-filed total (a covered cash tender settles at the total and hands back change; a
@@ -1636,6 +1676,7 @@ export async function recordTillSale(
       tender: req.tender,
       // A counter delivery: threaded to the walk-up create path (design §3c). Absent → a plain walk-up.
       deliveryTableId: req.deliveryTableId,
+      zoneId: req.zoneId,
     },
     operatorId,
   );

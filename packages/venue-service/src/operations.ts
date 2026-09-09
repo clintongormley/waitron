@@ -276,6 +276,16 @@ export async function getOrderServiceContext(
   cfg: VenueScope,
   workingOrderId: string,
 ): Promise<{ zoneId: string; departmentId: string; serviceMode: ServiceMode }> {
+  const row = await findOrderServiceContext(tx, cfg, workingOrderId);
+  if (row === null) throw new AppError("order.service_context_missing", { workingOrderId });
+  return row;
+}
+
+export async function findOrderServiceContext(
+  tx: Transaction,
+  cfg: VenueScope,
+  workingOrderId: string,
+): Promise<{ zoneId: string; departmentId: string; serviceMode: ServiceMode } | null> {
   const [row] = await tx
     .select({
       zoneId: orderServiceContexts.zoneId,
@@ -290,8 +300,7 @@ export async function getOrderServiceContext(
         eq(orderServiceContexts.workingOrderId, workingOrderId),
       ),
     );
-  if (row === undefined) throw new AppError("order.service_context_missing", { workingOrderId });
-  return { ...row, serviceMode: row.serviceMode as ServiceMode };
+  return row === undefined ? null : { ...row, serviceMode: row.serviceMode as ServiceMode };
 }
 
 /** Snapshot the commercial attribution of newly priced working-order lines. */

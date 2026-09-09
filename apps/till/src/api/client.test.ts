@@ -370,6 +370,46 @@ describe("TillApi", () => {
     );
   });
 
+  it("listDefaultZoneOffers resolves the configured counter zone", async () => {
+    const payload = {
+      context: { zoneId: "counter", departmentId: "deli", serviceMode: "prepay" as const },
+      defaultMenuId: "takeaway",
+      menus: [{ id: "takeaway", name: "Takeaway", isDefault: true }],
+      offers: [],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(payload));
+
+    await expect(new TillApi("", fetchStub).listDefaultZoneOffers()).resolves.toEqual(payload);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/default-service-zone/offers",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
+  it("uses the resolved default zone for a subsequent order", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          context: { zoneId: "counter", departmentId: "deli", serviceMode: "prepay" },
+          defaultMenuId: "takeaway",
+          menus: [],
+          offers: [],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ id: "wo-1", orderNumber: 4 }));
+    const api = new TillApi("", fetchStub);
+    await api.listDefaultZoneOffers();
+
+    await api.parkOrder({ id: "wo-1", lines: [{ menuItemId: "ham", quantity: "1" }] });
+
+    expect(JSON.parse(fetchStub.mock.calls[1]![1]!.body as string)).toEqual({
+      id: "wo-1",
+      lines: [{ menuItemId: "ham", quantity: "1" }],
+      zoneId: "counter",
+    });
+  });
+
   it("logout DELETEs the session", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
 

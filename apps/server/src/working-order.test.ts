@@ -451,6 +451,164 @@ describe("parkOrder", () => {
   });
 });
 
+describe("openTab service context", () => {
+  it("derives the service zone from the table and prices its menu offer", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(sql`
+        update departments set default_service_mode = 'table_tab'
+        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+      const table = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label, zone_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Offer table', ${zoneId}) returning id`);
+
+      const { tabId } = await openTab(tx, cfg, {
+        tableId: table.rows[0]!.id,
+        lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+      });
+
+      const priced = await tx.execute<{ unit_price_gross: string }>(sql`
+        select unit_price_gross from working_order_lines where working_order_id = ${tabId}`);
+      const context = await tx.execute<{ zone_id: string; service_mode: string }>(sql`
+        select zone_id, service_mode from order_service_contexts where working_order_id = ${tabId}`);
+      expect(priced.rows).toEqual([{ unit_price_gross: "3.25" }]);
+      expect(context.rows).toEqual([{ zone_id: zoneId, service_mode: "table_tab" }]);
+    });
+  });
+
+  it("uses the tab's stored zone for later menu-offer rounds", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      await tx.execute(sql`
+        insert into preparation_routes
+          (tenant_id, location_id, zone_id, product_id, station_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId},
+          (select product_id from menu_items where id = ${premiumCafeOfferId}), ${station.id})`);
+      await tx.execute(sql`
+        update departments set default_service_mode = 'table_tab'
+        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+      const table = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label, zone_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Round table', ${zoneId}) returning id`);
+      const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
+
+      await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
+
+      const line = await tx.execute<{ unit_price_gross: string; menu_item_id: string }>(sql`
+        select l.unit_price_gross, c.menu_item_id
+        from working_order_lines l
+        join working_line_contexts c on c.working_order_line_id = l.id
+        where l.working_order_id = ${tabId}`);
+      expect(line.rows).toEqual([{ unit_price_gross: "3.25", menu_item_id: premiumCafeOfferId }]);
+    });
+  });
+
+  it("routes the same product to the station configured for each table zone", async () => {
+    const { cfg, zoneId, premiumCafeOfferId, cafeId, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const department = await tx.execute<{ id: string }>(sql`
+        update departments set default_service_mode = 'table_tab'
+        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        returning id`);
+      const downstairsZone = await tx.execute<{ id: string }>(sql`
+        insert into floor_zones (tenant_id, location_id, name)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Downstairs') returning id`);
+      await tx.execute(sql`
+        insert into zone_service_policies
+          (tenant_id, location_id, zone_id, department_id, default_menu_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, ${downstairsZone.rows[0]!.id},
+          ${department.rows[0]!.id}, ${catalogueId})`);
+      await tx.execute(sql`
+        insert into zone_menus (tenant_id, zone_id, menu_id)
+        values
+          (${cfg.tenantId}, ${downstairsZone.rows[0]!.id}, ${catalogueId}),
+          (${cfg.tenantId}, ${downstairsZone.rows[0]!.id},
+            (select menu_id from menu_items where id = ${premiumCafeOfferId}))`);
+      const upstairsBar = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const downstairsBar = await createStation(tx, cfg, { name: "Downstairs bar" });
+      const product = await tx.execute<{ category_id: string }>(sql`
+        select category_id from products where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
+      await tx.execute(sql`
+        insert into preparation_routes
+          (tenant_id, location_id, zone_id, category_id, station_id)
+        values
+          (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${upstairsBar.id}),
+          (${cfg.tenantId}, ${cfg.locationId}, ${downstairsZone.rows[0]!.id}, ${product.rows[0]!.category_id}, ${downstairsBar.id})`);
+
+      const upstairsTable = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label, zone_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Upstairs', ${zoneId}) returning id`);
+      const downstairsTable = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label, zone_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Downstairs', ${downstairsZone.rows[0]!.id}) returning id`);
+      const upstairs = await openTab(tx, cfg, { tableId: upstairsTable.rows[0]!.id });
+      const downstairs = await openTab(tx, cfg, { tableId: downstairsTable.rows[0]!.id });
+
+      await addTabRound(tx, cfg, upstairs.tabId, [
+        { menuItemId: premiumCafeOfferId, quantity: "1" },
+      ]);
+      await addTabRound(tx, cfg, downstairs.tabId, [
+        { menuItemId: premiumCafeOfferId, quantity: "1" },
+      ]);
+
+      const routed = await tx.execute<{ working_order_id: string; station_id: string }>(sql`
+        select working_order_id, station_id from ticket_items
+        where working_order_id in (${upstairs.tabId}, ${downstairs.tabId})
+        order by working_order_id`);
+      expect(new Map(routed.rows.map((row) => [row.working_order_id, row.station_id]))).toEqual(
+        new Map([
+          [upstairs.tabId, upstairsBar.id],
+          [downstairs.tabId, downstairsBar.id],
+        ]),
+      );
+    });
+  });
+
+  it("stores an explicitly no-preparation offer without creating a kitchen ticket", async () => {
+    const { cfg, zoneId, premiumCafeOfferId, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(sql`
+        update departments set default_service_mode = 'table_tab'
+        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+      await tx.execute(sql`
+        insert into preparation_routes
+          (tenant_id, location_id, zone_id, product_id, no_preparation)
+        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${cafeId}, true)`);
+      const table = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label, zone_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Deli shelf', ${zoneId}) returning id`);
+      const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
+
+      await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
+
+      const counts = await tx.execute<{ lines: number; tickets: number }>(sql`
+        select
+          (select count(*)::int from working_order_lines where working_order_id = ${tabId}) as lines,
+          (select count(*)::int from ticket_items where working_order_id = ${tabId}) as tickets`);
+      expect(counts.rows).toEqual([{ lines: 1, tickets: 0 }]);
+    });
+  });
+
+  it("refuses to open a table tab in a counter-mode zone", async () => {
+    const { cfg, zoneId } = await setupVenue("prepay");
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const table = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label, zone_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Counter table', ${zoneId}) returning id`);
+      await expect(openTab(tx, cfg, { tableId: table.rows[0]!.id })).rejects.toMatchObject({
+        code: "service_zone.mode_incompatible",
+        params: { zoneId, expected: "table_tab", actual: "prepay" },
+      });
+    });
+  });
+});
+
 /**
  * Read a working order and its lines back RAW (superuser, no tenant scope), for computing what
  * `listHeldOrders`/`getHeldOrder` should independently return. `openedAt` is the actual persisted

@@ -891,6 +891,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.get("/api/default-service-zone/offers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {});
+        return {
+          context,
+          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId)),
+        };
+      });
+      return c.json(result);
+    }),
+  );
+
   // The offers available in one service zone. The zone decides both the visible menus and the
   // payment flow; the menu-item id in each offer is the selling identity and may price the same
   // product differently from another zone's menu.
@@ -929,6 +944,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // (till-sale.ts) → an opaque 500 (the 7b follow-up). `requireUuidParam` refuses it 400 first.
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
+      }
+      if (body.zoneId !== undefined) {
+        requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       // SP-A.2 §16.4 cutover: the sale's `till_id` comes from the AUTHENTICATED enrolled device, not env.
       // Only `tillId` changes — `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`; a `DeviceBinding`
@@ -984,6 +1002,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           (body.simulationOutcome !== "captured" && body.simulationOutcome !== "declined"))
       ) {
         throw new AppError("management.request_invalid", { field: "simulationOutcome" });
+      }
+      if (body.zoneId !== undefined) {
+        requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       // `deps.cardProvider` is `undefined` on a till booted with `WAITRON_TILL_CARD_PROVIDER=none`
       // (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this route on EVERY till regardless of
@@ -1675,7 +1696,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await c.req.json<{ lines?: { productId: string; quantity: string }[] }>();
+      const body = await c.req.json<{
+        lines?: { productId?: string; menuItemId?: string; quantity: string }[];
+      }>();
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
@@ -1704,7 +1727,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // `hold: true` — the tab screen's per-line hold toggle; `addTabRound` inserts it HELD (no fire, no
         // print) regardless of course, released later by `sendLines`.
         lines: ({
-          productId: string;
+          productId?: string;
+          menuItemId?: string;
           quantity: string;
           courseId?: string | null;
           options?: { optionGroupItemId: string; quantity?: number }[];

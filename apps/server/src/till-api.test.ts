@@ -165,8 +165,8 @@ const suite = usePgliteDb({
         values (${tenantId}, ${loc.rows[0]!.id}, 'Counter') returning id`);
         await tx.execute(sql`
         insert into zone_service_policies
-          (tenant_id, location_id, zone_id, department_id, default_menu_id)
-        values (${tenantId}, ${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id})`);
+          (tenant_id, location_id, zone_id, department_id, default_menu_id, is_counter_default)
+        values (${tenantId}, ${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
         await tx.execute(sql`
         insert into zone_menus (tenant_id, zone_id, menu_id)
         values (${tenantId}, ${zone.rows[0]!.id}, ${cat.id})`);
@@ -1379,6 +1379,21 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 });
 
 describe("GET /api/products (session-guarded catalogue)", () => {
+  it("returns the configured default counter zone and its offers", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = await openSession(suite.db);
+
+    const res = await app.request("/api/default-service-zone/offers", {
+      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      context: { zoneId: counterZoneId, serviceMode: "prepay" },
+      offers: [{ id: aguaOfferId, grossPrice: "1.75" }],
+    });
+  });
+
   it("returns the offers allowed in an explicit service zone", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -2396,6 +2411,23 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       insert into floor_zones (tenant_id, location_id, name)
       values (${cfg.tenantId}, ${cfg.locationId}, 'Comedor') returning id`);
     const zoneId = zoneRow.rows[0]!.id;
+    await suite.db.execute(sql`
+      with department as (
+        insert into departments
+          (tenant_id, location_id, name, trading_name, default_service_mode)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Dining room', 'Restaurant', 'table_tab')
+        returning id
+      )
+      insert into zone_service_policies
+        (tenant_id, location_id, zone_id, department_id)
+      select ${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, department.id
+      from department`);
+    await suite.db.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id)
+      values (${cfg.tenantId}, ${zoneId}, ${aguaProduct.catalogueId})`);
+    await suite.db.execute(sql`
+      update zone_service_policies set default_menu_id = ${aguaProduct.catalogueId}
+      where tenant_id = ${cfg.tenantId} and zone_id = ${zoneId}`);
 
     // Create a table IN that zone through the till route, so `createTable`'s zoneId assignment (and its
     // composite zone FK) is exercised — not a raw insert.

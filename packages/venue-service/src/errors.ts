@@ -7,6 +7,11 @@ declare module "@waitron/shared" {
     "service_zone.menu_not_allowed": { zoneId: string; menuId: string };
     "service_zone.default_missing": Record<string, never>;
     "service_zone.offer_not_allowed": { zoneId: string; menuItemId: string };
+    "service_zone.mode_incompatible": {
+      zoneId: string;
+      expected: string;
+      actual: string;
+    };
     "route.missing": { zoneId: string; productId: string };
     "route.station_inactive": { stationId: string };
     "order.service_context_missing": { workingOrderId: string };

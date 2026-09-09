@@ -453,7 +453,8 @@ export type Doneness = (typeof DONENESS)[number];
  * no-doneness sale stays byte-identical to before.
  */
 export interface SaleLine {
-  productId: string;
+  productId?: string;
+  menuItemId?: string;
   quantity: string;
   options?: { optionGroupItemId: string; quantity?: number }[];
   note?: string;
@@ -1193,6 +1194,7 @@ export interface TabTransfer {
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
+  #serviceZoneId?: string;
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
@@ -1264,11 +1266,22 @@ export class TillApi {
     return this.#request<ProductCatalogue>("/api/products", "GET");
   }
 
-  listZoneOffers(zoneId: string): Promise<ZoneOfferCatalogue> {
-    return this.#request<ZoneOfferCatalogue>(
+  async listZoneOffers(zoneId: string): Promise<ZoneOfferCatalogue> {
+    const result = await this.#request<ZoneOfferCatalogue>(
       `/api/service-zones/${encodeURIComponent(zoneId)}/offers`,
       "GET",
     );
+    this.#serviceZoneId = result.context.zoneId;
+    return result;
+  }
+
+  async listDefaultZoneOffers(): Promise<ZoneOfferCatalogue> {
+    const result = await this.#request<ZoneOfferCatalogue>(
+      "/api/default-service-zone/offers",
+      "GET",
+    );
+    this.#serviceZoneId = result.context.zoneId;
+    return result;
   }
 
   /**
@@ -1278,8 +1291,18 @@ export class TillApi {
    * invoice number is never reused). For a walk-up it is a fresh client-minted id; to pay a PARKED
    * order the till sends that order's own id, so the settle lands on the retrieved order.
    */
-  recordSale(lines: SaleLine[], tender: Tender, workingOrderId: string): Promise<TillSaleResult> {
-    return this.#request<TillSaleResult>("/api/sales", "POST", { lines, tender, workingOrderId });
+  recordSale(
+    lines: SaleLine[],
+    tender: Tender,
+    workingOrderId: string,
+    zoneId?: string,
+  ): Promise<TillSaleResult> {
+    return this.#request<TillSaleResult>("/api/sales", "POST", {
+      lines,
+      tender,
+      workingOrderId,
+      zoneId: zoneId ?? this.#serviceZoneId,
+    });
   }
 
   /**
@@ -1295,11 +1318,15 @@ export class TillApi {
   pay(req: {
     id: string;
     lines: SaleLine[];
+    zoneId?: string;
     tip?: string;
     allowOffline?: boolean;
     simulationOutcome?: "captured" | "declined";
   }): Promise<PayOutcome> {
-    return this.#request<PayOutcome>("/api/pay", "POST", req);
+    return this.#request<PayOutcome>("/api/pay", "POST", {
+      ...req,
+      zoneId: req.zoneId ?? this.#serviceZoneId,
+    });
   }
 
   /**
@@ -1355,11 +1382,14 @@ export class TillApi {
    * idempotent against the primary key; `lines` carry no price — the server re-prices. Returns the
    * persisted `{ id, orderNumber }` (the human order number the counter types back in to retrieve).
    */
-  parkOrder(req: { id: string; lines: SaleLine[]; label?: string }): Promise<{
+  parkOrder(req: { id: string; lines: SaleLine[]; zoneId?: string; label?: string }): Promise<{
     id: string;
     orderNumber: number;
   }> {
-    return this.#request<{ id: string; orderNumber: number }>("/api/working-orders", "POST", req);
+    return this.#request<{ id: string; orderNumber: number }>("/api/working-orders", "POST", {
+      ...req,
+      zoneId: req.zoneId ?? this.#serviceZoneId,
+    });
   }
 
   /** The cross-till held list for this node → `GET /api/working-orders`. Every OPEN parked order. */

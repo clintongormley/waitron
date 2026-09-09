@@ -1222,11 +1222,7 @@ export class TillApp extends LitElement {
    * Any OTHER rejection is a real sync failure and propagates to the caller's `sale.error`/`place.error`
    * handler.
    */
-  async #syncIfDirty(
-    id: string,
-    lines: { productId: string; quantity: string }[],
-    label: string | undefined,
-  ): Promise<void> {
+  async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<void> {
     if (!(this.#store.persisted && this.#store.dirty)) return;
     try {
       await this.api.updateWorkingOrder(id, { lines, label });
