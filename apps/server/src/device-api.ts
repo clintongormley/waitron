@@ -211,10 +211,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // The GLOBAL, in-memory, per-process rate-limiter for the knock route (spec §8). Built ONCE
   // here so it is one bucket for the whole mounted API — in production `mountDeviceApi` is called once at
   // boot, so "per-mount" is "per-process". A test may inject its own limiter (over a controllable clock);
-  // production omits it and gets the default `createEnrolRateLimiter({ code })` (`ENROL_RATE_MAX` per
-  // `ENROL_RATE_WINDOW_MS`), throwing this surface's own `device.join_rate_limited` (429).
-  const enrolLimiter =
-    deps.enrolRateLimiter ?? createEnrolRateLimiter({ code: "device.join_rate_limited" });
+  // production omits it and gets the default `createEnrolRateLimiter()` (`ENROL_RATE_MAX` per
+  // `ENROL_RATE_WINDOW_MS`), throwing `device.join_rate_limited` (429).
+  const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate

@@ -50,27 +50,20 @@ export interface EnrolRateLimiterOptions {
    * Injectable clock (defaults to `Date.now`), so a test can drive the fixed window deterministically
    * without a real sleep (CLAUDE.md §4). The window length and cap are NOT injectable: they are the
    * production {@link ENROL_RATE_WINDOW_MS}/{@link ENROL_RATE_MAX} constants, baked in so this limiter
-   * can never be constructed with a different rate POLICY than the one it ships — only the clock and the
-   * thrown {@link EnrolRateLimiterOptions.code} are configurable.
+   * can never be constructed with a different rate POLICY than the one it ships — only the clock is
+   * configurable. The thrown code is fixed at `device.join_rate_limited`: both knock surfaces
+   * (`POST /api/device/join`, `POST /print-api/agent/join`) answer a throttle with it — the agent
+   * client reads the HTTP 429, not the code string, so the print surface reuses the shared device knock
+   * code rather than minting a sibling (CLAUDE.md §3).
    */
   now?: () => number;
-  /**
-   * The `AppError` code thrown when the window is over the cap. A one-member union today: both knock
-   * surfaces (`POST /api/device/join`, `POST /print-api/agent/join`) answer a throttle with
-   * `device.join_rate_limited` — the agent client reads the HTTP 429, not the code string, so the print
-   * surface reuses the shared device knock code rather than minting a sibling (CLAUDE.md §3). The field
-   * stays so a future surface that needs its OWN throttle code widens the union here; defaults to
-   * `device.join_rate_limited`. Takes empty params.
-   */
-  code?: "device.join_rate_limited";
 }
 
 export interface EnrolRateLimiter {
   /**
-   * Record one enrol attempt. Throws the configured {@link EnrolRateLimiterOptions.code} (→ HTTP 429)
-   * when this window has already seen {@link ENROL_RATE_MAX} allowed attempts; otherwise returns, having
-   * counted this one. The first call after {@link ENROL_RATE_WINDOW_MS} elapses opens a fresh window and
-   * resets the count.
+   * Record one enrol attempt. Throws `device.join_rate_limited` (→ HTTP 429) when this window has
+   * already seen {@link ENROL_RATE_MAX} allowed attempts; otherwise returns, having counted this one.
+   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses opens a fresh window and resets the count.
    */
   check(): void;
 }
@@ -78,16 +71,15 @@ export interface EnrolRateLimiter {
 /**
  * The GLOBAL, in-memory, per-process enrol rate-limiter (spec §8). A fixed-window counter with the
  * window ({@link ENROL_RATE_WINDOW_MS}) and cap ({@link ENROL_RATE_MAX}) BAKED IN — a generic
- * `windowMs`/`max` API would misrepresent that fixed policy (CLAUDE.md §1/§3). The one thing it is
- * parameterised on is the thrown {@link EnrolRateLimiterOptions.code} (a one-member union today), so the
- * device knock and the print-agent knock share this counter and the same throttle code. Not per-key (no
- * per-IP/per-tenant bucket) by design — see the module doc: the on-prem topology makes a per-IP key
+ * `windowMs`/`max` API would misrepresent that fixed policy (CLAUDE.md §1/§3). It throws the fixed
+ * `device.join_rate_limited`, shared by the device knock and the print-agent knock (see the module
+ * doc). Not per-key (no per-IP/per-tenant bucket) by design — the on-prem topology makes a per-IP key
  * worthless, and one global bucket is exactly the connection-pool protection wanted. State is two
  * closure variables, so a fresh limiter is fully isolated (each test builds its own; production builds
- * one per knock surface at boot); only the clock and code are injectable.
+ * one per knock surface at boot); only the clock is injectable.
  */
 export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): EnrolRateLimiter {
-  const { now = Date.now, code = "device.join_rate_limited" } = opts;
+  const { now = Date.now } = opts;
   let windowStart = now();
   let count = 0;
   return {
@@ -101,7 +93,7 @@ export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): Enro
       // Refuse BEFORE counting this attempt, so at most `ENROL_RATE_MAX` attempts are ever admitted per
       // window and the counter cannot run away under a sustained flood (it stays pinned at the cap).
       if (count >= ENROL_RATE_MAX) {
-        throw new AppError(code, {});
+        throw new AppError("device.join_rate_limited", {});
       }
       count += 1;
     },
