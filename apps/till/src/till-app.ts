@@ -62,7 +62,8 @@ import type {
   TillSaleResult,
 } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
-import type { CanvasDef, CapabilityFlag, ReceiptConfig, TabDef } from "./layout.js";
+import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
+import { SessionActivity } from "./session-activity.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
@@ -196,6 +197,11 @@ export class TillApp extends LitElement {
    * events. Undefined in tests that do not inject one. */
   @property({ attribute: false }) router?: ServerRouter;
 
+  /** The screen-wake-lock + idle-logout controller (installable-till Task 9). Defaults to the real Wake
+   * Lock API + timers; a test injects a fake. Configured from {@link #boot}, {@link #onLoggedIn} and
+   * {@link #onLogout} with the device kind, login state and profile timeout. */
+  sessionActivity: SessionActivity = new SessionActivity();
+
   /** The router this app is currently subscribed to, or undefined when subscribed to none. The subscribe
    * point is idempotent ({@link #subscribeRouter}): `router` is a `@property` set AFTER `connectedCallback`
    * in some mounts, so both `connectedCallback` and `willUpdate` try to subscribe — a doubled
@@ -244,13 +250,60 @@ export class TillApp extends LitElement {
     this.#subscribedRouter = undefined;
   }
 
+  /**
+   * The device profile's inactivity auto-logout in seconds, or `null` for the app default (no idle
+   * logout). Read from the boot payload in {@link #boot} and fed to {@link sessionActivity} alongside the
+   * device kind and login state.
+   */
+  #inactivityTimeoutSeconds: number | null = null;
+
+  /** Any operator input — feed the session controller so its idle countdown restarts. Composed native
+   * events bubble out of the screens' shadow roots to this host. */
+  readonly #onInteraction = (): void => this.sessionActivity.noteInteraction();
+
+  /** The tab's visibility changed — the browser drops a screen wake lock when the tab hides, so ask the
+   * controller to re-request it when we come back. */
+  readonly #onVisibility = (): void => this.sessionActivity.reacquire();
+
+  /** The idle-logout target: the existing drop-and-lock path. Wired as the controller's `onIdle`. */
+  readonly #onIdle = (): void => void this.#onLogout();
+
+  /** (Re)configure {@link sessionActivity} from the current device kind, login state and profile timeout.
+   * Called after boot resolves the device, and on every login/logout. */
+  #configureSessionActivity(): void {
+    const kind: DeviceKind = this.deviceMode
+      ? "kds_station"
+      : this.handheldMode
+        ? "handheld"
+        : "till";
+    this.sessionActivity.configure({
+      // `operatorName` is the login lifecycle signal: set to the operator's name on login
+      // ({@link #onLoggedIn}) and cleared to "" on logout ({@link #onLogout}). (`operatorPersonId`
+      // is not cleared on logout, so it would keep a stale session looking logged in.)
+      loggedIn: this.operatorName !== "",
+      kind,
+      timeoutSeconds: this.#inactivityTimeoutSeconds,
+      onIdle: this.#onIdle,
+    });
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     this.#subscribeRouter();
+    // Session-activity wiring (installable-till Task 9). pointerdown/keydown are composed, so they reach
+    // this host from inside the screens' shadow roots; visibilitychange is a document event.
+    this.addEventListener("pointerdown", this.#onInteraction);
+    this.addEventListener("keydown", this.#onInteraction);
+    document.addEventListener("visibilitychange", this.#onVisibility);
+    void this.sessionActivity.start();
   }
 
   override disconnectedCallback(): void {
     this.#detach();
+    this.removeEventListener("pointerdown", this.#onInteraction);
+    this.removeEventListener("keydown", this.#onInteraction);
+    document.removeEventListener("visibilitychange", this.#onVisibility);
+    void this.sessionActivity.stop();
     super.disconnectedCallback();
   }
 
@@ -742,6 +795,10 @@ export class TillApp extends LitElement {
       // The device's capability set (device-profile §5.3, Task 9) — relocated off the canvas onto the
       // profile, now an explicit payload sibling. Threaded to the card grid's render axis.
       this.capabilities = till.capabilities;
+      // The device profile's inactivity auto-logout in seconds (Task 9), or null for the app default (no
+      // idle logout). Fed to the session-activity controller after the device kind resolves below. `?? null`
+      // tolerates an older server that omits the field.
+      this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
       // Validate the requested tab against the device's resolved canvas before retaining it.
       this.#setActiveTab(this.#requestedTab(), true, true);
     } catch {
@@ -828,6 +885,10 @@ export class TillApp extends LitElement {
       // a device probe failure was never a boot failure (that is getTill's alone).
       if ((error as { code?: string }).code === "device.unauthorized") this.frontDoor = "enrol";
     }
+    // The device kind is now resolved (`deviceMode`/`handheldMode` set above): configure the
+    // session-activity controller so a KDS holds the wake lock straight away and a session device arms
+    // its idle timer once an operator logs in. Login/logout reconfigure it as the login state flips.
+    this.#configureSessionActivity();
   }
 
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
@@ -858,6 +919,8 @@ export class TillApp extends LitElement {
     // in the session response. Convenience only — the placement route re-checks server-side.
     this.canEdit = canConfigureTill;
     this.errorKey = undefined;
+    // An operator is now logged in — hold the screen awake and arm the idle-logout timer (Task 9).
+    this.#configureSessionActivity();
     // Where the operator lands after login: a handheld waiter goes to the face-set's post-lock face
     // (HANDHELD_FACES[1], the live floor); a normal operator till opens the counter POS.
     const landingFace = this.handheldMode ? HANDHELD_FACES[1] : "counter";
@@ -2144,6 +2207,9 @@ export class TillApp extends LitElement {
     this.#floorLoaded = false;
     this.errorKey = undefined;
     this.#setScreen("lock");
+    // No operator is logged in now — release the wake lock and cancel the idle timer on a session device
+    // (a KDS never reaches logout). Task 9.
+    this.#configureSessionActivity();
   }
 
   /**

@@ -183,6 +183,9 @@ const till = {
   // profile, now an explicit `/api/till` payload sibling. `[]` by default (nothing capability-gated
   // shows); a KDS boot below supplies `["act-as-kds"]` so its kds-board card renders.
   capabilities: [] as CapabilityFlag[],
+  // The device profile's inactivity auto-logout in seconds (installable-till Task 9), or null for the
+  // app default (no idle logout). `null` by default; the session-activity suite drives it to a number.
+  inactivityTimeoutSeconds: null as number | null,
   // This node's id + the venue's routable servers (till-reroute §3.2). `[]` by default (the server sends
   // an empty list while no membership document is held).
   nodeId: "n1",
@@ -441,6 +444,18 @@ const stationQueueWidget = (el: TillApp) =>
 /** Fires a composed, bubbling CustomEvent from `source` — the shape every till screen emits. */
 function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+}
+
+/** A fake {@link SessionActivity} the app can be mounted with, so a till-app test asserts how the app
+ * CONFIGURES the controller without depending on the real Wake Lock API (installable-till Task 9). */
+function fakeSessionActivity() {
+  return {
+    configure: vi.fn(),
+    noteInteraction: vi.fn(),
+    reacquire: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  };
 }
 
 /** Boots the app, settles boot, and logs a person in — leaving the app on the counter. */
@@ -2062,6 +2077,91 @@ describe("till-app", () => {
     // THE load-bearing assertion: a shift change never loses the half-built order.
     expect(store.lines).toHaveLength(2);
     expect(store.lines[0]!.product).toBe(cafe);
+  });
+
+  it("session activity: a handheld + 300s boot configures the controller; logout stops it", async () => {
+    const sa = fakeSessionActivity();
+    const api = stubApi({
+      // A handheld device (phone canvas) whose profile carries a 300s inactivity auto-logout.
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: phoneCanvasDef, inactivityTimeoutSeconds: 300 }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "h1",
+        name: "Phone 1",
+        formFactor: "phone-portrait",
+        stationId: null,
+        tillId: null,
+      }),
+    });
+    currentApi = api;
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api,
+      sessionActivity: sa as never,
+    });
+    await flush(el);
+
+    // The controller is started on connect and configured once boot resolves the device kind + timeout.
+    expect(sa.start).toHaveBeenCalled();
+    expect(sa.configure).toHaveBeenCalled();
+    expect(sa.configure.mock.calls.at(-1)![0]).toMatchObject({
+      loggedIn: false,
+      kind: "handheld",
+      timeoutSeconds: 300,
+    });
+
+    // Login → the same handheld kind + timeout, now logged in (wake lock + idle timer engage).
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    expect(sa.configure.mock.calls.at(-1)![0]).toMatchObject({
+      loggedIn: true,
+      kind: "handheld",
+      timeoutSeconds: 300,
+    });
+
+    // Logout → reconfigured as not-logged-in: the controller releases the lock and cancels the timer.
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(currentApi.logout).toHaveBeenCalledOnce();
+    expect(sa.configure.mock.calls.at(-1)![0]).toMatchObject({
+      loggedIn: false,
+      kind: "handheld",
+      timeoutSeconds: 300,
+    });
+  });
+
+  it("session activity: a KDS boot configures the controller as a kds_station", async () => {
+    const sa = fakeSessionActivity();
+    const api = stubApi({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "kds1",
+        name: "Pass",
+        formFactor: "kds",
+        stationId: "st-1",
+        tillId: null,
+      }),
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-1", queue: [] } }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api, sessionActivity: sa as never });
+    await flush(el);
+    // A KDS never logs in — it is configured as a kds_station (which holds the wake lock while active).
+    expect(sa.configure.mock.calls.at(-1)![0]).toMatchObject({
+      loggedIn: false,
+      kind: "kds_station",
+    });
+  });
+
+  it("session activity: uses the real controller as a clean no-op when wake lock is unavailable", async () => {
+    // No injected sessionActivity → the app builds a real SessionActivity. Its default feature-detect
+    // guards a missing navigator.wakeLock, so boot + login + logout must not throw here.
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    emit(c, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
   });
 
   it("records a nav event on the shared diagnostics trail when the screen changes", async () => {

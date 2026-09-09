@@ -115,6 +115,13 @@ export interface TillInfo {
    * absent. REQUIRED — the server resolves one for every boot.
    */
   capabilities: CapabilityFlag[];
+  /**
+   * The CALLING device's per-profile inactivity auto-logout, in seconds, or `null` for the app default
+   * (no idle logout). Resolved through the device profile like {@link capabilities}, so `null` for a
+   * no-profile or cookieless request. The till arms its idle-logout timer from this (session-activity
+   * controller, installable-till Task 9). A LOCAL mirror of the server's `GET /api/till` field.
+   */
+  inactivityTimeoutSeconds: number | null;
   /** This node's id, so the app can tell which `servers` entry it is on (till-reroute §3.2). ALWAYS
    * present — every boot resolves the node it answered on. */
   nodeId: string;
