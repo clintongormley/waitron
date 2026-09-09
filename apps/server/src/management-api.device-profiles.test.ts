@@ -134,6 +134,7 @@ type ProfileRow = {
   formFactor: string;
   canvasId: string | null;
   capabilities: string[];
+  inactivityTimeoutSeconds: number | null;
 };
 
 /** Seed a canvas through the management canvas route so a profile can bind to a REAL `canvasId`. */
@@ -180,6 +181,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       formFactor: "till",
       canvasId: null,
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
+      // No `inactivityTimeoutSeconds` in the body → the route defaults it to null (the app default).
+      inactivityTimeoutSeconds: null,
     });
     const { id } = row;
 
@@ -194,6 +197,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       formFactor: "till",
       canvasId: null,
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
+      inactivityTimeoutSeconds: null,
     });
 
     // LIST includes it.
@@ -223,6 +227,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       formFactor: "kds",
       canvasId: null,
       capabilities: ["act-as-kds"],
+      // A `kds` profile always coerces the timeout to null in the store, regardless of the body.
+      inactivityTimeoutSeconds: null,
     });
 
     // DELETE → 204, then GET → 404 device_profile.not_found.
@@ -260,6 +266,134 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       headers: { cookie: managerCookie },
     });
     expect(((await got.json()) as ProfileRow).canvasId).toBe(canvasId);
+  });
+
+  it("POST + PUT persist inactivityTimeoutSeconds; PUT wipes it when the key is omitted (full-replace)", async () => {
+    const app = mountApp(tenantId);
+    // CREATE a `phone-portrait` (handheld) profile carrying a 300 s auto-logout timeout — the store
+    // keeps a positive integer for a non-kds form factor. The created row echoes it.
+    const created = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name: uniqueName("Handheld"),
+        formFactor: "phone-portrait",
+        canvasId: null,
+        capabilities: [],
+        inactivityTimeoutSeconds: 300,
+      }),
+    });
+    expect(created.status).toBe(201);
+    const row = (await created.json()) as ProfileRow;
+    expect(row.inactivityTimeoutSeconds).toBe(300);
+    const { id } = row;
+
+    // GET reads it back from the row.
+    const got = await app.request(`/management-api/device-profiles/${id}`, {
+      headers: { cookie: managerCookie },
+    });
+    expect(((await got.json()) as ProfileRow).inactivityTimeoutSeconds).toBe(300);
+
+    // PUT with a NEW value replaces it.
+    const updated = await app.request(`/management-api/device-profiles/${id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name: uniqueName("Handheld2"),
+        formFactor: "phone-portrait",
+        canvasId: null,
+        capabilities: [],
+        inactivityTimeoutSeconds: 120,
+      }),
+    });
+    expect(updated.status).toBe(200);
+    expect(((await updated.json()) as ProfileRow).inactivityTimeoutSeconds).toBe(120);
+
+    // PUT with the key OMITTED wipes the value to null — full-replace, matching `canvasId`'s convention.
+    const wiped = await app.request(`/management-api/device-profiles/${id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name: uniqueName("Handheld3"),
+        formFactor: "phone-portrait",
+        canvasId: null,
+        capabilities: [],
+      }),
+    });
+    expect(wiped.status).toBe(200);
+    expect(((await wiped.json()) as ProfileRow).inactivityTimeoutSeconds).toBeNull();
+  });
+
+  it("POST with a non-positive inactivityTimeoutSeconds → 400 device_profile.invalid (the store's domain rule)", async () => {
+    const app = mountApp(tenantId);
+    // 0 and -5 clear the server SHAPE screen (both integers) and reach the store, whose
+    // `validateInactivityTimeout` rejects a non-null value < 1 → device_profile.invalid.
+    for (const bad of [0, -5]) {
+      const res = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({
+          name: uniqueName("BadTimeout"),
+          formFactor: "phone-portrait",
+          canvasId: null,
+          capabilities: [],
+          inactivityTimeoutSeconds: bad,
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(
+        (await res.json()) as { error: { code: string; params: { reason: string } } },
+      ).toMatchObject({
+        error: { code: "device_profile.invalid", params: { reason: "bad_inactivity_timeout" } },
+      });
+    }
+  });
+
+  it("POST with a non-integer-typed inactivityTimeoutSeconds → 400 management.request_invalid (the server shape screen)", async () => {
+    const app = mountApp(tenantId);
+    // A string and a fractional number are neither null nor an integer number, so the server SHAPE
+    // screen refuses them naming the field — before the store's domain rule is reached.
+    for (const bad of ["300", 12.5]) {
+      const res = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({
+          name: uniqueName("BadTimeoutType"),
+          formFactor: "phone-portrait",
+          canvasId: null,
+          capabilities: [],
+          inactivityTimeoutSeconds: bad,
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(
+        (await res.json()) as { error: { code: string; params: { field: string } } },
+      ).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "inactivityTimeoutSeconds" },
+        },
+      });
+    }
+  });
+
+  it("POST a kds profile coerces inactivityTimeoutSeconds to null even when a value is sent", async () => {
+    const app = mountApp(tenantId);
+    // A kds display has no operator session to log out, so the store forces the timeout to null
+    // regardless of the body value (validateInactivityTimeout returns null for `kds`).
+    const created = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name: uniqueName("Kitchen"),
+        formFactor: "kds",
+        canvasId: null,
+        capabilities: ["act-as-kds"],
+        inactivityTimeoutSeconds: 300,
+      }),
+    });
+    expect(created.status).toBe(201);
+    expect(((await created.json()) as ProfileRow).inactivityTimeoutSeconds).toBeNull();
   });
 
   it("GET by an unknown (well-formed) id → 404 device_profile.not_found", async () => {

@@ -501,6 +501,28 @@ function parseThresholdMinutes(value: unknown, field: string): number | undefine
 }
 
 /**
+ * Screen the device-profile `inactivityTimeoutSeconds` body field for SHAPE only, shared by the profile
+ * POST and PUT routes. An absent or `null` value is `null` (the app default / "never"); a present value
+ * must be an integer NUMBER in int4 range (the column is a Postgres `integer`), else it is refused as
+ * `management.request_invalid` naming the FIELD — the same typeof-first, int4-bounded shape
+ * `parseThresholdMinutes` uses, closing the opaque-500-on-int4-overflow class. The DOMAIN rule (a
+ * non-null value must be `>= 1`, and a `kds` profile coerces to null) is `validateInactivityTimeout`'s
+ * (`@waitron/layouts`), which the store applies — so `0`/`-5` pass this screen and surface as the store's
+ * 400 `device_profile.invalid`, exactly as `capabilities` reaches its own validator unscreened here.
+ */
+function parseInactivityTimeoutSeconds(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < -2_147_483_648 ||
+    value > 2_147_483_647
+  )
+    throw new AppError("management.request_invalid", { field: "inactivityTimeoutSeconds" });
+  return value;
+}
+
+/**
  * Parse and screen a passkey VERIFY route's body, returning the narrowed `{ challengeHandle, response }`
  * pair both `register/verify` and `auth/verify` need — the shared shape those two routes had inline.
  * The body is coerced to `{}` (via `readJsonBody`, see the login route for why a `null`/non-object body must not
@@ -1171,6 +1193,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         formFactor?: unknown;
         canvasId?: unknown;
         capabilities?: unknown;
+        inactivityTimeoutSeconds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1192,6 +1215,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         body.canvasId === undefined || body.canvasId === null
           ? null
           : requireBodyUuid(body.canvasId, "canvasId");
+      // The auto-logout idle timeout — SHAPE-screened here (absent/null → null), DOMAIN-validated by the
+      // store. Threaded like `canvasId`; an omitted key stores NULL (full-replace, matching `canvasId`).
+      const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       // The device's FORM FACTOR (the picker that sends it is Task 15) — screened against the closed
       // `FORM_FACTORS` set (`management.request_invalid` naming the field on a bad/absent value), so the
       // `device_form_factor` enum column never sees a value it cannot hold.
@@ -1205,6 +1231,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           formFactor,
           canvasId,
           capabilities,
+          inactivityTimeoutSeconds,
         });
       });
       return c.json(result, 201);
@@ -1225,6 +1252,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         formFactor?: unknown;
         canvasId?: unknown;
         capabilities?: unknown;
+        inactivityTimeoutSeconds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1242,6 +1270,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         body.canvasId === undefined || body.canvasId === null
           ? null
           : requireBodyUuid(body.canvasId, "canvasId");
+      // The auto-logout idle timeout — SHAPE-screened here, DOMAIN-validated by the store. Full-replace:
+      // an omitted key stores NULL (wiping any prior value), matching `canvasId`'s full-replace semantics.
+      const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       // The device's FORM FACTOR — screened against the closed `FORM_FACTORS` set, the same as POST.
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -1254,6 +1285,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           formFactor,
           canvasId,
           capabilities,
+          inactivityTimeoutSeconds,
         });
       });
       return c.json(result);
