@@ -111,10 +111,11 @@ steps take owner sign-off at land):
    web manifest, a name-constrained CA, the trust flow from the till's own origin, the wake lock —
    and the measurement that a name-constrained root actually constrains on Android and iOS), plus
    the register/device follow-ups (Track B item 7).
-3. **The printer agent process, then USB and IP printers end to end.** The server side (enrolment,
-   auth, outbox) exists, and the transports now live in the db-free `@waitron/print-agent` beside a
-   wire client and a follow-the-primary router; no agent PROCESS does. Standalone, containerised, follows the
-   primary like the till. Printer failover in its on-prem form rides on it.
+3. **The printer agent process, then USB and IP printers end to end. LANDED on
+   `feat/print-agent-process`** — the db-free `@waitron/print-agent` wire client + poll loop and the
+   `apps/print-agent` container host, joining a venue over the shared `join_requests` table
+   (device-join-and-accept-design.md §7). Standalone, containerised, follows the primary like the
+   till. Printer failover in its on-prem form rides on it.
 4. **Payments: card readers.** Stripe Terminal is built. SumUp is built only after its four questions
    are answered — **SENT to SumUp 2026-09-08, awaiting reply**
    ([research/2026-09-08-sumup-questions.md](research/2026-09-08-sumup-questions.md)); question 4 (offline
@@ -158,20 +159,20 @@ design-review section apply.
   order: **1.** the print agent process — spec
   [2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
   plan [2026-09-08-print-agent-process.md](superpowers/plans/2026-09-08-print-agent-process.md).
+  **LANDED on `feat/print-agent-process`:** the db-free `@waitron/print-agent` wire client + poll loop,
+  the `apps/print-agent` container host + LAN setup page, the server knock/status/accept routes, the
+  dashboard "print agents waiting to join" UI, and an e2e. Enrolment is join-and-accept over the
+  **shared** `join_requests` table
+  ([2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)
+  §7) — a second consumer of the device slice #287's mechanism, not the pairing-code enrolment this
+  spec's §2.3 originally described. Retired: `print_agent_pairing_codes`,
+  `generateAgentCode`/`enrolAgent`, `POST /print-api/agent/enrol`,
+  `POST /management-api/print-agents/codes`, and the `agent.pairing_*` error codes.
   **Foundation LANDED #282** (2026-09-08): `@waitron/print-agent`, a db-free package holding the
   ESC/POS transports moved out of `@waitron/printing`, the wire client's `probeNode`, and the
   follow-the-primary router — plus the `import-x/no-restricted-paths` zone that actually enforces the
   db-free invariant (an empty `dependencies` block does not: a relative escape resolves, typechecks
-  and runs, measured at review). Plan Tasks 1 and 3 are done; **Task 2 landed only IN PART** —
-  `probeNode` and the shared result types; `join` waits on the amended contract below, `pullJobs` and
-  `report` on the loop that consumes them. **The rest is BLOCKED** on device enrolment landing
-  ([2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)),
-  which amends this spec §2.3: a two-digit verification number the admin picks out of three, a
-  challenge route that never returns the number, a venue-wide in-memory pairing window, and decoys
-  distinct across both surfaces. Settled there too (owner, 2026-09-08, §7.3): pending agents move out
-  of `print_agents` into the **shared** `join_requests` table serving both surfaces — one table, not
-  one each — which retires the `active`-flag overload and `agent.pending`; and it is the PRINT-AGENT
-  slice that drops `print_agent_pairing_codes`, because the enrol route reading it ships today.
+  and runs, measured at review).
   *Deferred follow-up (2026-09-08 review):* `packages/print-agent`'s `Router` merge and tie-break
   closely duplicate `apps/till/src/api/server-router.ts` — about thirty lines worth a shared home
   when the agent LOOP lands. Not now: `apps/till` belongs to Track 1 and has an active branch, and
@@ -1011,22 +1012,19 @@ Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-
 
 The printing subsystem is built and security-reviewed, with kitchen (KDS-4), counter-receipt +
 cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
-`docs/superpowers/{specs,plans}/2026-08-17-*` and the failover-printing design. **No agent PROCESS
-exists yet** — that is Track H item 1
-([2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
-approved 2026-09-08), which also replaces pairing-code enrolment with join-and-accept. Its db-free
-`@waitron/print-agent` package now EXISTS and the ESC/POS transports have MOVED into it (#282,
-with the wire client's `probeNode` and the follow-the-primary router). **Its §2.3 enrolment was amended 2026-09-08 before
-implementation** by
-[2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)
-§7 — a two-digit number matched out of three, gated on a shared venue-wide pairing window, with
-pending agents in a generic `join_requests` table rather than in `print_agents`. **The join/enrolment half is
-BLOCKED until the device slice lands** (owner, 2026-09-08), because that slice builds the shared
-mechanism: Tasks 5-8 wait on it. Tasks 1 and 3 — the package scaffold and the follow-the-primary
-router — have LANDED; Task 2 only in part (`probeNode` and the shared wire-client types; `join`,
-`pullJobs` and `report` deliberately deferred). Of the independent work only Task 9, the container
-host, is left. The plan's banner carries the detail. Item 2 is the virtual PDF printer + `print_jobs`
-retention (nothing deletes a job today). **Remaining after those:**
+`docs/superpowers/{specs,plans}/2026-08-17-*` and the failover-printing design. **The agent PROCESS
+now EXISTS** — Track H item 1
+([2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md))
+LANDED on `feat/print-agent-process`: the db-free `@waitron/print-agent` wire client + poll loop, the
+`apps/print-agent` container host + LAN setup page, the server knock/status/accept routes, the
+dashboard "print agents waiting to join" UI, and an e2e. Enrolment is join-and-accept over the
+**shared** `join_requests` table
+([2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)
+§7) — a second consumer of the device slice #287's mechanism, not the pairing-code enrolment this
+spec's §2.3 originally described. Retired: `print_agent_pairing_codes`,
+`generateAgentCode`/`enrolAgent`, `POST /print-api/agent/enrol`,
+`POST /management-api/print-agents/codes`, and the `agent.pairing_*` error codes. Item 2 is the
+virtual PDF printer + `print_jobs` retention (nothing deletes a job today). **Remaining after those:**
 
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server Direct
   Print (`printing-epson-server-direct-print*`): a poll→fetch→ack endpoint group off the central outbox,

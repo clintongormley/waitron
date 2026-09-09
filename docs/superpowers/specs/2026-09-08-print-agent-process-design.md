@@ -1,6 +1,7 @@
 # The print agent process — design (Track H, push step 3, slice 1)
 
 **Date:** 2026-09-08. **Status:** design, approved section-by-section with the owner; plan follows.
+
 **Track H** (hardware). Builds on the printing subsystem
 ([2026-08-17-printing-subsystem-design.md](2026-08-17-printing-subsystem-design.md)) and realises the
 "native on-device agent, printing first" of
@@ -15,6 +16,10 @@ from one agent (failover-printing §4a, Track H item 3).
 > longer returns it), `join` is gated on a venue-wide fifteen-minute pairing window, and pending
 > agents are recommended to move to their own `local` table. Read §7 there before implementing §2.3
 > here.
+>
+> **2026-09-09 — implemented on `feat/print-agent-process`.** Enrolment was built per device-join §7
+> above (the shared `join_requests` table), superseding this design's own §2.3 and the plan's
+> Tasks 5–8.
 
 ## 1. What this delivers
 
