@@ -2164,6 +2164,34 @@ describe("till-app", () => {
     expect(lock(el)).not.toBeNull();
   });
 
+  it("idle expiry locks locally even when api.logout() rejects (offline failover — C2)", async () => {
+    // The exact failover case: the device is offline, so `api.logout()` REJECTS. The device must still
+    // end logged-out and locked — the local lock must not depend on the server call.
+    const sa = fakeSessionActivity();
+    const logout = vi.fn().mockRejectedValue(new Error("offline"));
+    const api = stubApi({ logout });
+    currentApi = api;
+    const { el } = await mountWidget<TillApp>("till-app", { api, sessionActivity: sa as never });
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    expect(lock(el)).toBeNull(); // on the counter, logged in
+
+    // Fire the idle callback the app handed the controller — the controller's onIdle IS the app's
+    // drop-and-lock (`#onIdle` → `#onLogout`).
+    const lastConfig = sa.configure.mock.calls.at(-1)![0] as { onIdle: () => void };
+    lastConfig.onIdle();
+    await flush(el);
+
+    // The server logout was ATTEMPTED (best-effort)…
+    expect(logout).toHaveBeenCalledOnce();
+    // …but the rejection never left the till unlocked: back on the lock screen, operator cleared, and
+    // the controller reconfigured to loggedIn:false (wake lock released, idle timer cancelled).
+    expect(lock(el)).not.toBeNull();
+    expect(counter(el)).toBeNull();
+    expect(sa.configure.mock.calls.at(-1)![0]).toMatchObject({ loggedIn: false });
+  });
+
   it("records a nav event on the shared diagnostics trail when the screen changes", async () => {
     const { el } = await mountApp({
       listMyShifts: vi.fn().mockResolvedValue([]),

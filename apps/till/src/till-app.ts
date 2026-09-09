@@ -202,6 +202,12 @@ export class TillApp extends LitElement {
    * {@link #onLogout} with the device kind, login state and profile timeout. */
   sessionActivity: SessionActivity = new SessionActivity();
 
+  /** The device kind the boot probe resolved (S2), the ONE source of the form-factor→kind mapping for
+   * {@link #configureSessionActivity}. Set in {@link #boot} from `kindOfFormFactor` (an unknown form
+   * factor falls back to `"till"`); default `"till"` covers a cookieless / pre-boot till. Kept distinct
+   * from the render-state {@link deviceMode}/{@link handheldMode} booleans so the kind is mapped once. */
+  #deviceKind: DeviceKind = "till";
+
   /** The router this app is currently subscribed to, or undefined when subscribed to none. The subscribe
    * point is idempotent ({@link #subscribeRouter}): `router` is a `@property` set AFTER `connectedCallback`
    * in some mounts, so both `connectedCallback` and `willUpdate` try to subscribe — a doubled
@@ -271,17 +277,12 @@ export class TillApp extends LitElement {
   /** (Re)configure {@link sessionActivity} from the current device kind, login state and profile timeout.
    * Called after boot resolves the device, and on every login/logout. */
   #configureSessionActivity(): void {
-    const kind: DeviceKind = this.deviceMode
-      ? "kds_station"
-      : this.handheldMode
-        ? "handheld"
-        : "till";
     this.sessionActivity.configure({
       // `operatorName` is the login lifecycle signal: set to the operator's name on login
       // ({@link #onLoggedIn}) and cleared to "" on logout ({@link #onLogout}). (`operatorPersonId`
       // is not cleared on logout, so it would keep a stale session looking logged in.)
       loggedIn: this.operatorName !== "",
-      kind,
+      kind: this.#deviceKind,
       timeoutSeconds: this.#inactivityTimeoutSeconds,
       onIdle: this.#onIdle,
     });
@@ -817,6 +818,7 @@ export class TillApp extends LitElement {
     // to `lock` and the front door to `undefined`, then the decision below re-establishes the correct one.
     this.handheldMode = false;
     this.deviceMode = false;
+    this.#deviceKind = "till";
     this.deviceName = undefined;
     this.deviceId = undefined;
     this.frontDoor = undefined;
@@ -864,6 +866,9 @@ export class TillApp extends LitElement {
       // The device kind is DERIVED from its profile's form factor (there is no kind field any more); an
       // unknown form factor maps to `undefined` and stays a normal operator till on the login screen.
       const kind = kindOfFormFactor(identity.formFactor);
+      // Store the resolved kind once (S2) — the session-activity source of truth. An unknown form
+      // factor stays a normal operator till.
+      this.#deviceKind = kind ?? "till";
       if (kind === "handheld") {
         this.handheldMode = true;
       } else if (kind === "kds_station") {
@@ -2180,17 +2185,12 @@ export class TillApp extends LitElement {
 
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
   async #onLogout(): Promise<void> {
-    await this.api.logout();
-    // Guard the post-await module-global `setLocale` below against a teardown during the logout round
-    // trip — the same shape #boot uses. A detached till never legitimately wants a locale switch, and
-    // this one would repaint a live sibling's UI. Returns before the state writes too (harmless to skip
-    // on a detached element); pinned by "does not revert the locale if the app disconnects mid-logout".
-    if (!this.isConnected) return;
+    // LOCK LOCALLY FIRST (C2): a rejecting OR hanging `api.logout()` is the exact offline/failover
+    // case, and it must never leave the till logged in and unlocked. Drop the operator identity, return
+    // to the lock screen, and release the wake lock + idle timer BEFORE the server round trip below;
+    // the server logout is then best-effort. This ordering serves both the idle-expiry path
+    // ({@link #onIdle}) and the manual logout affordance — both reach here.
     this.operatorName = "";
-    // Revert the UI to the venue default (per-user-language-preference): the previous operator's
-    // language must not linger into the lock screen the next operator meets. Their own login re-applies
-    // their preference, exactly as `canEdit` is dropped and re-supplied below.
-    setLocale(this.#venueLocale);
     // Drop the floor-editor privilege — the next operator starts un-privileged until their own login
     // recomputes it (FP-2).
     this.canEdit = false;
@@ -2208,8 +2208,22 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.#setScreen("lock");
     // No operator is logged in now — release the wake lock and cancel the idle timer on a session device
-    // (a KDS never reaches logout). Task 9.
+    // (a KDS never reaches logout). Task 9. `operatorName` is cleared above, so this configures loggedIn:false.
     this.#configureSessionActivity();
+    // Best-effort server logout: the local lock above already stands, so a rejection (an offline till,
+    // the exact failover case) must not be fatal and must never leave the device unlocked. Swallow it —
+    // the session row on an unreachable server is reconciled when the server is next reachable.
+    try {
+      await this.api.logout();
+    } catch {
+      // Offline / server-unreachable: nothing more to do, the device is already locked locally.
+    }
+    // Revert the UI to the venue default (per-user-language-preference) AFTER the round trip, guarded
+    // against a teardown during it — a detached till must not repaint a live sibling's module-global
+    // locale (#boot carries the same guard). The previous operator's language must not linger into the
+    // lock screen the next operator meets; their own login re-applies their preference regardless.
+    if (!this.isConnected) return;
+    setLocale(this.#venueLocale);
   }
 
   /**
