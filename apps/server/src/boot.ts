@@ -99,6 +99,7 @@ import { resolveEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+import { stageRestoreRequest } from "./restore-request.js";
 import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -921,6 +922,7 @@ export async function startServer(
             environment: config.environment,
             devMode: config.devMode,
             operations: createSetupOperationStore(config.stateDir),
+            stageRestore: (request) => stageRestoreRequest(config.stateDir, request),
             // Resolve the fiscal slot from the REQUEST's territory (authoritative, §4): the box's
             // `moduleConfig` base is default-on, which with two fiscal-slot members would be ambiguous;
             // `venueModuleConfig` forces exactly the territory's fiscal module on before provisionVenue's

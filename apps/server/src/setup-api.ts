@@ -24,6 +24,7 @@ import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
 import type { ActiveSetupOperation, SetupOperationStore } from "./setup-operation.js";
+import type { RestoreRequest } from "./restore-request.js";
 import "./errors.js";
 
 /**
@@ -103,6 +104,8 @@ export interface SetupDeps {
   setupAppDir?: string;
   /** Persistent first-boot serialization and progress, shared by provision, adoption and recovery. */
   operations?: SetupOperationStore;
+  /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart. */
+  stageRestore?: (request: RestoreRequest) => Promise<void>;
 }
 
 /**
@@ -134,6 +137,8 @@ const SETUP_PLACEHOLDER_HTML = `<!doctype html>
  * setup routes stop being mounted), so it must be revalidated, never pinned — the same reasoning
  * `spa-api.ts` revalidates a non-hashed `index.html` under. */
 const REVALIDATE_CACHE_CONTROL = "no-cache";
+/** Bounds memory consumed by one unauthenticated setup upload. */
+export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
 
 /**
  * Every AppError code the provision route can THROW inside its error boundary, and its HTTP status.
@@ -165,6 +170,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "person.email_invalid": 400,
   "setup.already_provisioned": 409,
   "setup.operation_conflict": 409,
+  "setup.already_provisioning": 409,
   "deployment.already_stamped": 409,
   // SP-1b fiscal gate: provisioning refused because a `provision-only` module (fiscal) is disabled in
   // `modules.json`. A conflict with the box's config, like the two refusals above — 409, not 400.
@@ -196,11 +202,14 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   // that is a well-formed request whose UPSTREAM primary failed, this is a malformed request.
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
+  "setup.operation_conflict": 409,
+  "setup.already_provisioning": 409,
 };
 
 // `"setup.adopt_failed"` is the LOG TAG for the unexpected-crash branch, not a wire code (as with
 // `runProvision` above): a non-`AppError` reaching the boundary is answered `server.internal`.
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
+const runRestore = createErrorBoundary(PROVISION_STATUS, "setup.restore_failed");
 
 /** Throw the request-shape refusal for `field`, naming it but NEVER echoing its value (a PIN,
  * password or certificate secret is exactly the value a caller can mis-send). */
@@ -665,6 +674,62 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation.complete({ adopted: true, tenantId: result.tenantId, restarting: true });
       }
       return response;
+    });
+  });
+
+  app.post("/setup-api/restore", async (c) => {
+    const stageRestore = deps.stageRestore;
+    const requestRestart = deps.requestRestart;
+    if (stageRestore === undefined || requestRestart === undefined) {
+      return directError(c, log, "setup.not_ready", 503);
+    }
+    if (provisioning) return directError(c, log, "setup.already_provisioning", 409);
+    provisioning = true;
+
+    return runRestore(c, log, async () => {
+      try {
+        if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")) {
+          invalidRequest("artifact");
+        }
+        const declaredLength = Number(c.req.header("content-length"));
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_RESTORE_UPLOAD_BYTES) {
+          invalidRequest("artifact");
+        }
+        const recoveryKey = asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
+        const rawEnvironment = c.req.header("x-waitron-restore-environment");
+        if (rawEnvironment !== "production" && rawEnvironment !== "preproduction") {
+          invalidRequest("environment");
+        }
+        const artifact = new Uint8Array(await c.req.arrayBuffer());
+        if (artifact.byteLength === 0 || artifact.byteLength > MAX_RESTORE_UPLOAD_BYTES) {
+          invalidRequest("artifact");
+        }
+        const requestHash = createHash("sha256")
+          .update(rawEnvironment)
+          .update("\0")
+          .update(recoveryKey)
+          .update("\0")
+          .update(artifact)
+          .digest("hex");
+        const execute = async (): Promise<Response> => {
+          await stageRestore({ artifact, recoveryKey, environment: rawEnvironment });
+          const response = c.json({ restoreStaged: true, restarting: true }, 202);
+          setTimeout(() => requestRestart(), 0);
+          return response;
+        };
+        if (deps.operations === undefined) return execute();
+        return deps.operations.run("restore", requestHash, async (operation) => {
+          if (operation.phase === "complete") {
+            return c.json({ restoreStaged: true, restarting: true }, 202);
+          }
+          const response = await execute();
+          await operation.complete({ restoreStaged: true, restarting: true });
+          return response;
+        });
+      } catch (error) {
+        provisioning = false;
+        throw error;
+      }
     });
   });
 

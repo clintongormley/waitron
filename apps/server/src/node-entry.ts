@@ -8,6 +8,7 @@ import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import {
   DEFAULT_MIGRATIONS_ROOT,
+  DEFAULT_MEDIA_ROOT,
   DEFAULT_STATE_ROOT,
   startLandingListener,
   startServer,
@@ -36,6 +37,7 @@ import { recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
 import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
+import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import "./errors.js";
 
 /** The one database a node owns, matching the URLs `ensureInstance` writes into `instance.env`. */
@@ -205,6 +207,8 @@ export interface EntryDeps {
     log: Logger;
     migrationsRoot: string | null;
   }) => Promise<InstanceUrls>;
+  /** Executes a staged restore before loadBoxEnv/startServer opens application pools. */
+  runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
   readRecoveryState: (stateDir: string) => Promise<RecoveryState>;
   writeRecoveryState: (stateDir: string, state: RecoveryState) => Promise<void>;
@@ -364,6 +368,14 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       migrationsRoot: deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT,
     });
 
+    await (deps.runStagedRestore ?? runStagedRestore)({
+      stateDir: deps.stateDir,
+      databaseUrl: urls.migrationsDatabaseUrl,
+      mediaDir: resolveConfigDir(deps.baseEnv.WAITRON_MEDIA_DIR, DEFAULT_MEDIA_ROOT),
+      migrationsRoot: deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT,
+      log: deps.log,
+    });
+
     // AFTER `ensureInstance`, which has just written `instance.env` — that file is where the merged
     // environment's `DATABASE_URL` comes from.
     const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
@@ -432,6 +444,7 @@ function bootThisProcess(): Promise<void> {
         log,
       }),
     ensureInstance,
+    runStagedRestore,
     loadBoxEnv,
     readRecoveryState,
     writeRecoveryState,

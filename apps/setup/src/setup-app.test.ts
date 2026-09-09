@@ -32,6 +32,7 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       breakGlassSecret: "bg-default",
       restarting: true,
     }),
+    restore: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
     ...overrides,
   } as unknown as SetupApi;
 }
@@ -113,6 +114,15 @@ function adoptRequest(el: SetupApp, body: unknown = adoptBody): void {
   );
 }
 
+function restoreRequest(
+  el: SetupApp,
+  request: { artifact: File; recoveryKey: string; environment: "production" | "preproduction" },
+): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("restore-requested", { detail: { request }, bubbles: true, composed: true }),
+  );
+}
+
 /** Reads a `[data-test]` element's trimmed text out of a mounted screen's own shadow root. */
 async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<string | null> {
   const host = await screenHost(el, screen);
@@ -191,6 +201,39 @@ describe("setup-app", () => {
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector(`[data-test=screen-${screen}]`)).not.toBeNull();
     }
+  });
+
+  it("stages the selected backup and advances to done", async () => {
+    const restore = vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true });
+    const el = await mountSetupApp(stubApi({ restore }));
+    const request = {
+      artifact: new File(["encrypted"], "waitron.backup"),
+      recoveryKey: "recovery-key",
+      environment: "production" as const,
+    };
+    restoreRequest(el, request);
+    await flush(el);
+    expect(restore).toHaveBeenCalledWith(
+      request.artifact,
+      request.recoveryKey,
+      request.environment,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it("routes a failed restore back to the restore form", async () => {
+    const restore = vi.fn().mockRejectedValue({ code: "server.internal", params: {} });
+    const el = await mountSetupApp(stubApi({ restore }));
+    restoreRequest(el, {
+      artifact: new File(["encrypted"], "waitron.backup"),
+      recoveryKey: "recovery-key",
+      environment: "production",
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-restore]")).not.toBeNull();
+    expect(await screenText(el, "restore", "[data-test=server-error]")).toContain(
+      "could not be staged",
+    );
   });
 
   // Fix (m): the venue→cert/review conditional lives in the SHELL now (it owns the merged draft), not

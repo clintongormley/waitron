@@ -35,6 +35,32 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
 }
 
 describe("runEntry", () => {
+  it("runs a staged restore after instance bootstrap and before loading box identity", async () => {
+    const order: string[] = [];
+    await runEntry(
+      deps({
+        ensureInstance: vi.fn(async () => {
+          order.push("instance");
+          return {
+            databaseUrl: "postgres://app",
+            migrationsDatabaseUrl: "postgres://migrator",
+            replicationPassword: "r",
+          };
+        }),
+        runStagedRestore: vi.fn(async (request) => {
+          order.push("restore");
+          expect(request.databaseUrl).toBe("postgres://migrator");
+          return true;
+        }),
+        loadBoxEnv: vi.fn(async (base) => {
+          order.push("identity");
+          return { ...base };
+        }),
+      }),
+    );
+    expect(order).toEqual(["instance", "restore", "identity"]);
+  });
+
   it("never passes the superuser URL to the server", async () => {
     // The mock is held here, not read back off `deps()`: the spread with the `Partial` override
     // widens every field to a union, and a union has no `.mock`.

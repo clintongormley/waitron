@@ -1068,6 +1068,64 @@ async function postAdopt(app: Hono, body: unknown): Promise<Response> {
   });
 }
 
+async function postRestore(
+  app: Hono,
+  body: Uint8Array,
+  environment = "production",
+): Promise<Response> {
+  return app.request("/setup-api/restore", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-recovery-key": "recovery-secret",
+      "x-waitron-restore-environment": environment,
+    },
+    body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+  });
+}
+
+describe("POST /setup-api/restore", () => {
+  it("stages the encrypted artifact under the persistent operation lease and restarts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-operation-"));
+    try {
+      const stageRestore = vi.fn(async () => {});
+      const requestRestart = vi.fn();
+      const app = new Hono();
+      const operations = createSetupOperationStore(dir);
+      mountSetup(
+        app,
+        { environment: "preproduction", operations, stageRestore, requestRestart },
+        noopLog,
+      );
+      const response = await postRestore(app, Uint8Array.from([1, 2, 3]));
+      expect(response.status).toBe(202);
+      expect(stageRestore).toHaveBeenCalledWith({
+        artifact: Uint8Array.from([1, 2, 3]),
+        recoveryKey: "recovery-secret",
+        environment: "production",
+      });
+      expect((await operations.read())?.phase).toBe("complete");
+      await tick();
+      expect(requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses an invalid target environment without staging", async () => {
+    const stageRestore = vi.fn(async () => {});
+    const app = new Hono();
+    mountSetup(
+      app,
+      { environment: "preproduction", stageRestore, requestRestart: vi.fn() },
+      noopLog,
+    );
+    const response = await postRestore(app, Uint8Array.from([1]), "dev");
+    expect(response.status).toBe(400);
+    expect(stageRestore).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, sharing provision's latch", () => {
   it("persists adoption completion without retaining the break-glass secret", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-operation-"));

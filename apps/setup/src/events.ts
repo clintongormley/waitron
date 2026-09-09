@@ -62,3 +62,19 @@ export function dispatchAdoptRequested(el: EventTarget, body: AdoptBody): void {
     new CustomEvent("adopt-requested", { detail: { body }, bubbles: true, composed: true }),
   );
 }
+
+export interface RestoreRequestDetail {
+  artifact: File;
+  recoveryKey: string;
+  environment: "production" | "preproduction";
+}
+
+export function dispatchRestoreRequested(el: EventTarget, request: RestoreRequestDetail): void {
+  el.dispatchEvent(
+    new CustomEvent("restore-requested", {
+      detail: { request },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}

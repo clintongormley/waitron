@@ -130,4 +130,22 @@ describe("SetupApi", () => {
       code: "mirror.bundle_fetch_failed",
     });
   });
+
+  it("restore POSTs the encrypted artifact as binary with recovery metadata", async () => {
+    const result = { restoreStaged: true, restarting: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result, true, 202));
+    const api = new SetupApi("", fetchImpl);
+    const artifact = new Blob([Uint8Array.from([1, 2, 3])]);
+    expect(await api.restore(artifact, "recovery-key", "production")).toEqual(result);
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/restore", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": "recovery-key",
+        "x-waitron-restore-environment": "production",
+      },
+      body: artifact,
+    });
+  });
 });

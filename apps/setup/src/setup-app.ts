@@ -13,6 +13,7 @@ import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
 import "./screens/done-screen.js";
 import type { AdoptBody, ApiError, ProvisionBody, SetupApi } from "./api/client.js";
+import type { RestoreRequestDetail } from "./events.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
@@ -221,6 +222,7 @@ export class SetupApp extends LitElement {
    * normally; cleared before every new adopt POST. The mirror path's analogue of `venueError`.
    */
   @state() private connectError?: string;
+  @state() private restoreError?: string;
 
   /**
    * The break-glass secret the adopt path minted, captured from the 200 to hand to the `done` screen.
@@ -297,6 +299,7 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.reviewError = undefined;
     this.connectError = undefined;
+    this.restoreError = undefined;
     this.screen = event.detail.screen;
   }
 
@@ -460,6 +463,29 @@ export class SetupApp extends LitElement {
     }
   }
 
+  async #onRestoreRequested(event: CustomEvent<{ request: RestoreRequestDetail }>): Promise<void> {
+    event.stopPropagation();
+    this.restoreError = undefined;
+    this.provisionMessage = undefined;
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = undefined;
+    this.screen = "provisioning";
+    try {
+      const request = event.detail.request;
+      await this.api.restore(request.artifact, request.recoveryKey, request.environment);
+      if (!this.isConnected) return;
+      this.screen = "done";
+    } catch (error) {
+      if (!this.isConnected) return;
+      const code = (error as { code?: unknown }).code;
+      this.restoreError =
+        typeof code === "string"
+          ? `The backup could not be staged. Check the file, key and environment. (${code})`
+          : "The backup could not be staged. Check the connection and try again.";
+      this.screen = "restore";
+    }
+  }
+
   /**
    * Map a rejected adopt to the wizard's next state (C2b). Two shapes:
    *
@@ -518,6 +544,8 @@ export class SetupApp extends LitElement {
       @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
       @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
       @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
+      @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
+        void this.#onRestoreRequested(e)}
     >
       ${this.#renderScreen()}
     </div>`;
@@ -543,7 +571,10 @@ export class SetupApp extends LitElement {
       case "role":
         return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
       case "restore":
-        return html`<setup-restore-screen data-test="screen-restore"></setup-restore-screen>`;
+        return html`<setup-restore-screen
+          data-test="screen-restore"
+          .errorMessage=${this.restoreError}
+        ></setup-restore-screen>`;
       case "mode":
         return html`<setup-mode-screen
           data-test="screen-mode"
