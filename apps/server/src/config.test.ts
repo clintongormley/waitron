@@ -331,6 +331,16 @@ describe("loadConfig", () => {
     });
   });
 
+  it("accepts an absolute privacy notice URL for account surfaces", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_PRIVACY_NOTICE_URL: "https://restaurant.example/privacy" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.privacyNoticeUrl).toBe("https://restaurant.example/privacy");
+  });
+
   it("refuses a partial Google login configuration", async () => {
     const error = await captureError(() =>
       Promise.resolve(

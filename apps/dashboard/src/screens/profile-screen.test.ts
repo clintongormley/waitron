@@ -10,7 +10,7 @@ vi.mock("@simplewebauthn/browser", () => ({
 }));
 afterEach(cleanupWidgets);
 afterEach(() => vi.clearAllMocks());
-function apiStub() {
+function apiStub(overrides: Record<string, unknown> = {}) {
   return {
     getProfile: vi.fn().mockResolvedValue({
       displayName: "Alex",
@@ -31,7 +31,10 @@ function apiStub() {
       ],
       venueDefault: "en-GB",
     }),
-    getGoogleConfig: vi.fn().mockResolvedValue({ configured: true }),
+    getGoogleConfig: vi.fn().mockResolvedValue({
+      configured: true,
+      privacyNoticeUrl: "https://restaurant.example/privacy",
+    }),
     beginGoogleLink: vi.fn().mockResolvedValue({
       authorizationUrl: "https://accounts.google.test/link",
     }),
@@ -53,6 +56,9 @@ function apiStub() {
       .fn()
       .mockResolvedValue({ challengeHandle: "handle", options: { challenge: "challenge" } }),
     passkeyRegisterVerify: vi.fn().mockResolvedValue({ credentialId: "new-credential" }),
+    disableTotp: vi.fn().mockResolvedValue(undefined),
+    unlinkGoogle: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
   };
 }
 async function flush(el: ProfileScreen) {
@@ -84,12 +90,17 @@ describe("your profile", () => {
     expect(el.shadowRoot!.textContent).toContain("alex@example.com");
     expect(el.shadowRoot!.querySelector('[data-test="add-passkey"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-test="close-profile"]')).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="privacy-notice"]')!.href,
+    ).toBe("https://restaurant.example/privacy");
     await expectNoA11yViolations(host);
   });
   it("starts Google linking when the installation is configured", async () => {
     const { el, api } = await mount();
     await click(el, "setup-google");
-    expect(api.beginGoogleLink).toHaveBeenCalledOnce();
+    input(el, "currentPassword", "correct horse");
+    await click(el, "save");
+    expect(api.beginGoogleLink).toHaveBeenCalledWith({ currentPassword: "correct horse" });
     expect(el.navigate as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       "https://accounts.google.test/link",
     );
@@ -175,6 +186,9 @@ describe("your profile", () => {
   it("adds a passkey for this session and confirms removal with current credentials", async () => {
     const { el, api } = await mount();
     await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({ currentPassword: "current" });
     expect(startRegistration).toHaveBeenCalledWith({ optionsJSON: { challenge: "challenge" } });
     expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
       challengeHandle: "handle",
@@ -198,5 +212,38 @@ describe("your profile", () => {
     expect(el.shadowRoot!.querySelector("[data-test=recovery-code-list]")?.textContent).toContain(
       "CODE-0",
     );
+  });
+
+  it("disables an authenticator and unlinks Google only after current credentials", async () => {
+    const api = apiStub({
+      getProfile: vi.fn().mockResolvedValue({
+        displayName: "Alex",
+        firstNames: "Alex",
+        lastNames: "Rivera",
+        telephone: null,
+        email: "alex@example.com",
+        locale: "en-GB",
+        hasPassword: true,
+        hasTotp: true,
+        hasGoogle: true,
+        passkeys: [],
+      }),
+    });
+    const { el } = await mountWidget<ProfileScreen>("dashboard-profile-screen", {
+      api: api as unknown as DashboardApi,
+      navigate: vi.fn(),
+    });
+    await flush(el);
+    await click(el, "disable-authenticator");
+    input(el, "currentPassword", "current");
+    input(el, "totp", "123456");
+    await click(el, "save");
+    expect(api.disableTotp).toHaveBeenCalledWith({ currentPassword: "current", totp: "123456" });
+
+    await click(el, "unlink-google");
+    input(el, "currentPassword", "current");
+    input(el, "totp", "123456");
+    await click(el, "save");
+    expect(api.unlinkGoogle).toHaveBeenCalledWith({ currentPassword: "current", totp: "123456" });
   });
 });

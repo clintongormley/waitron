@@ -175,6 +175,8 @@ export interface ServerConfig {
   /** Optional Google login client. The callback is derived from the validated management origin so
    * the configured Google redirect and the server route cannot drift. */
   googleOidc?: { clientId: string; clientSecret: string; redirectUri: string };
+  /** Optional restaurant privacy notice shown during account setup and in Your profile. */
+  privacyNoticeUrl?: string;
   /**
    * The origin tills route on for THIS node (till-reroute design §3.3): what the node publishes as
    * its `contactUrl` in the membership document, and what the CORS allow-list treats as "self". From
@@ -782,6 +784,16 @@ export function loadConfig(
       reason: "google_requires_client_id_and_secret",
     });
   }
+  const privacyNoticeUrl = env.WAITRON_PRIVACY_NOTICE_URL;
+  if (!isUnset(privacyNoticeUrl)) {
+    const parsed = URL.parse(privacyNoticeUrl);
+    if (parsed === null || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
+      throw new AppError("server.config_invalid", {
+        variable: "WAITRON_PRIVACY_NOTICE_URL",
+        reason: "not_an_http_url",
+      });
+    }
+  }
   return {
     databaseUrl,
     migrationsDatabaseUrl: resolvedMigrations,
@@ -850,6 +862,7 @@ export function loadConfig(
           },
         }
       : {}),
+    ...(!isUnset(privacyNoticeUrl) ? { privacyNoticeUrl } : {}),
     // The origin tills route on for this node — defaulting to the origin the dashboard is already
     // served from, so a box that configures nothing still advertises a reachable address. Both
     // variables are validated as bare origins under their own names, so neither can reach a till

@@ -51,6 +51,13 @@ test("renders native table semantics and consumer-provided cells", async () => {
   expect(native.querySelector('button[aria-label="Edit Bea"]')).not.toBeNull();
 });
 
+test("updates its accessible name when the host label changes", async () => {
+  const el = await table();
+  el.setAttribute("aria-label", "Devices");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("table")!.getAttribute("aria-label")).toBe("Devices");
+});
+
 test("sorts without mutating the consumer's rows and toggles the direction", async () => {
   const input = [...rows];
   const el = await table({ rows: input });

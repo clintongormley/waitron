@@ -133,11 +133,15 @@ describe("person-form", () => {
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=email]")!.value,
     ).toBe("ada@example.com");
 
+    let closed = false;
+    el.addEventListener("wt-close", () => {
+      closed = true;
+    });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
     await el.updateComplete;
-    const closed = new Promise<void>((resolve) => el.addEventListener("wt-close", () => resolve()));
-    await (await openedDialog(el)).close();
-    await closed;
+    expect(closed).toBe(true);
+    el.open = false;
+    await el.updateComplete;
     el.open = true;
     await el.updateComplete;
     expect(

@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { startRegistration } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
@@ -8,17 +7,7 @@ import type { PersonForm } from "../widgets/person-form.js";
 import type { PersonEdit } from "../widgets/person-edit.js";
 import { StaffScreen } from "./staff-screen.js";
 
-// The real `startRegistration` drives `navigator.credentials.create`, which needs a physical
-// authenticator and cannot run headless. Mock the whole module: `startRegistration` resolves the
-// attestation the verify step echoes back, so the screen's chain runs end to end under test.
-vi.mock("@simplewebauthn/browser", () => ({
-  startAuthentication: vi.fn().mockResolvedValue({ id: "cred-abc" }),
-  startRegistration: vi.fn().mockResolvedValue({ id: "cred-abc" }),
-}));
-
 afterEach(cleanupWidgets);
-// Shared across tests (the module mock is file-scoped), so clear its call log between them.
-afterEach(() => vi.mocked(startRegistration).mockClear());
 
 const people: PersonSummary[] = [
   {
@@ -53,10 +42,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     createPerson: vi.fn().mockResolvedValue({ id: "p3", invitationSent: true }),
     updatePerson: vi.fn().mockResolvedValue(undefined),
     savePerson: vi.fn().mockResolvedValue(undefined),
+    deactivatePerson: vi.fn().mockResolvedValue(undefined),
     resetPin: vi.fn().mockResolvedValue(undefined),
     resetLogin: vi.fn().mockResolvedValue({ invitationSent: true }),
     reactivatePerson: vi.fn().mockResolvedValue({ invitationSent: true }),
-    setPassword: vi.fn().mockResolvedValue(undefined),
     resendInvitation: vi.fn().mockResolvedValue({ invitationSent: true }),
     passkeyRegisterOptions: vi
       .fn()
@@ -127,7 +116,7 @@ describe("staff-screen", () => {
       new CustomEvent("deactivate-person", { bubbles: true, composed: true }),
     );
     await flush(el);
-    expect(api.savePerson).not.toHaveBeenCalled();
+    expect(api.deactivatePerson).not.toHaveBeenCalled();
     Object.assign(el, { currentPersonId: "p2" });
     await el.updateComplete;
     await openEdit(el, "p1");
@@ -141,10 +130,8 @@ describe("staff-screen", () => {
       new CustomEvent("deactivate-person", { bubbles: true, composed: true }),
     );
     await flush(el);
-    expect(api.savePerson).toHaveBeenCalledWith(
-      "p1",
-      expect.objectContaining({ status: "suspended" }),
-    );
+    expect(api.deactivatePerson).toHaveBeenCalledWith("p1");
+    expect(api.savePerson).not.toHaveBeenCalled();
   });
 
   it("loads the staff on connect and hands them to the list", async () => {
@@ -448,64 +435,6 @@ describe("staff-screen", () => {
 
     expect(api.createPerson).toHaveBeenCalledTimes(1);
   });
-
-  // Add-passkey: options → startRegistration (the browser ceremony, mocked) → verify → success
-  // status. The symmetric parallel of the login screen's passkey flow, for the signed-in manager.
-  it("runs the registration ceremony and shows a success status", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
-    await flush(el);
-
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-passkey]")!.click();
-    await flush(el);
-
-    // v13 wraps the server's options blob under `optionsJSON` — NOT the bare options object.
-    expect(startRegistration).toHaveBeenCalledWith({ optionsJSON: { challenge: "def" } });
-    expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
-      challengeHandle: "h2",
-      response: { id: "cred-abc" },
-    });
-    expect((el as unknown as { passkeyStatus: string | null }).passkeyStatus).toBe(
-      "passkey.registered",
-    );
-    // The status banner renders LOCALISED copy ("Passkey añadida"), never the raw wire code (the
-    // state above stays the raw success code).
-    const status = el.shadowRoot!.querySelector("[role=status]")?.textContent;
-    expect(status).toContain(codeMessage("passkey.registered", "es-ES"));
-    expect(status).not.toContain("passkey.registered");
-  });
-
-  // A rejected registration step becomes the error banner (never an unhandled rejection — pristine
-  // output pins that), leaves no success status, and covers the `.code` arm with a distinct code.
-  it("shows the thrown code as errorKey when a registration step is rejected (and never rejects)", async () => {
-    const api = stubApi({
-      passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
-    });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
-    await flush(el);
-
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-passkey]")!.click();
-    await flush(el);
-
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
-      "passkey.challenge_expired",
-    );
-    expect((el as unknown as { passkeyStatus: string | null }).passkeyStatus).toBeNull();
-  });
-
-  // Covers the `?? "passkey.verification_failed"` fallback arm: a rejection carrying no code.
-  it("falls back to passkey.verification_failed when a rejected registration step carries no code", async () => {
-    const api = stubApi({ passkeyRegisterOptions: vi.fn().mockRejectedValue({}) });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
-    await flush(el);
-
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-passkey]")!.click();
-    await flush(el);
-
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
-      "passkey.verification_failed",
-    );
-  });
 });
 
 describe("staff-screen — row edit", () => {
@@ -555,7 +484,7 @@ describe("staff-screen — row edit", () => {
     expect(api.listStaff).toHaveBeenCalledTimes(2);
   });
 
-  it("deactivates a colleague by saving the full record", async () => {
+  it("deactivates a colleague without rewriting their profile fields", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
     await flush(el);
@@ -566,10 +495,8 @@ describe("staff-screen — row edit", () => {
     );
     await flush(el);
 
-    expect(api.savePerson).toHaveBeenCalledWith(
-      "p1",
-      expect.objectContaining({ status: "suspended" }),
-    );
+    expect(api.deactivatePerson).toHaveBeenCalledWith("p1");
+    expect(api.savePerson).not.toHaveBeenCalled();
     expect(api.listStaff).toHaveBeenCalledTimes(2);
   });
 

@@ -30,6 +30,12 @@ describe("person-edit", () => {
       person,
       open: true,
     });
+    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!.value).toBe(
+      "manager",
+    );
+    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!.value).toBe(
+      "active",
+    );
     change(el, "edit-first-names", "Ada Augusta Byron");
     change(el, "edit-telephone", "+44 21");
     const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!;
@@ -51,7 +57,7 @@ describe("person-edit", () => {
     });
   });
 
-  it("offers reset login, reset PIN and mark inactive as separate actions", async () => {
+  it("confirms reset login, reset PIN and mark inactive before emitting each action", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       person,
       open: true,
@@ -61,11 +67,14 @@ describe("person-edit", () => {
       ["reset-pin", "reset-pin"],
       ["mark-inactive", "deactivate-person"],
     ] as const) {
-      const seen = new Promise<Event>((resolve) =>
-        el.addEventListener(eventName, resolve, { once: true }),
-      );
+      const events: Event[] = [];
+      el.addEventListener(eventName, (event) => events.push(event), { once: true });
       el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!.click();
-      const event = await seen;
+      await el.updateComplete;
+      expect(events).toHaveLength(0);
+      expect(el.shadowRoot!.querySelector("[data-test=confirmation]")!.textContent).not.toBe("");
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-action]")!.click();
+      const event = events[0]!;
       expect(event.bubbles).toBe(true);
       expect(event.composed).toBe(true);
     }
@@ -107,7 +116,14 @@ describe("person-edit", () => {
       open: true,
     });
     change(el, "edit-display-name", "Unsaved");
+    let closed = false;
+    el.addEventListener("wt-close", () => {
+      closed = true;
+    });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    await el.updateComplete;
+    expect(closed).toBe(true);
+    el.open = false;
     await el.updateComplete;
     el.open = true;
     await el.updateComplete;

@@ -13,6 +13,7 @@ import { t } from "../i18n/t.js";
 
 const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
 type EditableField = "displayName" | "firstNames" | "lastNames" | "email";
+type LifecycleAction = "reset-login" | "reset-pin" | "deactivate-person" | "reactivate-person";
 
 /** Edits account details in one form and exposes credential/lifecycle resets as explicit actions. */
 @customElement("dashboard-person-edit")
@@ -63,6 +64,7 @@ export class PersonEdit extends LitElement {
     status: "pending",
   };
   @state() private fieldErrors: Partial<Record<EditableField, string>> = {};
+  @state() private pendingAction: LifecycleAction | null = null;
   #personId: string | null = null;
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -84,6 +86,7 @@ export class PersonEdit extends LitElement {
       status: person?.status ?? "pending",
     };
     this.fieldErrors = {};
+    this.pendingAction = null;
   }
 
   #change(field: EditableField | "telephone", event: CustomEvent<{ value: string }>): void {
@@ -129,10 +132,20 @@ export class PersonEdit extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
+  #confirmationCopy(action: LifecycleAction): string {
+    return t(
+      action === "reset-login"
+        ? "person.confirm_reset_login"
+        : action === "reset-pin"
+          ? "person.confirm_reset_pin"
+          : action === "deactivate-person"
+            ? "person.confirm_mark_inactive"
+            : "person.confirm_reactivate",
+    );
+  }
+
   #statusOptions(person: PersonSummary): PersonSummary["status"][] {
-    if (person.status === "suspended") return ["suspended"];
-    if (person.personId === this.currentPersonId) return [person.status];
-    return person.status === "pending" ? ["pending", "suspended"] : ["active", "suspended"];
+    return [person.status];
   }
 
   #input(testId: string, name: string, label: string, field: EditableField | "telephone") {
@@ -142,7 +155,7 @@ export class PersonEdit extends LitElement {
         class="field"
         data-test=${testId}
         name=${name}
-        autocomplete=${name}
+        autocomplete=${name === "telephone" ? "tel" : name}
         ?required=${field !== "telephone"}
         type=${field === "email" ? "email" : field === "telephone" ? "tel" : "text"}
         label=${label}
@@ -196,20 +209,24 @@ export class PersonEdit extends LitElement {
                     "displayName",
                   )}
                   ${this.#input("edit-email", "email", t("person.email"), "email")}
-                  ${this.#input("edit-telephone", "tel", t("person.telephone"), "telephone")}
+                  ${this.#input("edit-telephone", "telephone", t("person.telephone"), "telephone")}
                   <label class="field">
                     ${t("person.role")}
                     <select
                       data-test="edit-role"
                       name="role"
-                      .value=${this.details.role}
                       @change=${(event: Event) =>
                         (this.details = {
                           ...this.details,
                           role: (event.target as HTMLSelectElement).value as PersonRole,
                         })}
                     >
-                      ${ROLES.map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
+                      ${ROLES.map(
+                        (role) =>
+                          html`<option value=${role} .selected=${this.details.role === role}>
+                            ${roleName(role)}
+                          </option>`,
+                      )}
                     </select>
                   </label>
                   <label class="field">
@@ -217,7 +234,7 @@ export class PersonEdit extends LitElement {
                     <select
                       data-test="edit-status"
                       name="status"
-                      .value=${this.details.status}
+                      disabled
                       @change=${(event: Event) =>
                         (this.details = {
                           ...this.details,
@@ -226,7 +243,10 @@ export class PersonEdit extends LitElement {
                         })}
                     >
                       ${this.#statusOptions(person).map(
-                        (status) => html`<option value=${status}>${statusName(status)}</option>`,
+                        (status) =>
+                          html`<option value=${status} .selected=${this.details.status === status}>
+                            ${statusName(status)}
+                          </option>`,
                       )}
                     </select>
                   </label>
@@ -235,13 +255,13 @@ export class PersonEdit extends LitElement {
                   <wt-button
                     data-test="reset-login"
                     variant="secondary"
-                    @click=${() => this.#emit("reset-login")}
+                    @click=${() => (this.pendingAction = "reset-login")}
                     >${t("person.reset_login")}</wt-button
                   >
                   <wt-button
                     data-test="reset-pin"
                     variant="secondary"
-                    @click=${() => this.#emit("reset-pin")}
+                    @click=${() => (this.pendingAction = "reset-pin")}
                     >${t("person.reset_pin")}</wt-button
                   >
                   ${
@@ -249,7 +269,7 @@ export class PersonEdit extends LitElement {
                       ? html`<wt-button
                           data-test="reactivate"
                           variant="secondary"
-                          @click=${() => this.#emit("reactivate-person")}
+                          @click=${() => (this.pendingAction = "reactivate-person")}
                           >${t("person.reactivate_and_invite")}</wt-button
                         >`
                       : html`<wt-button
@@ -263,7 +283,7 @@ export class PersonEdit extends LitElement {
                           }
                           @click=${() => {
                             if (person.personId !== this.currentPersonId)
-                              this.#emit("deactivate-person");
+                              this.pendingAction = "deactivate-person";
                           }}
                           >${t("person.mark_inactive")}</wt-button
                         >`
@@ -279,6 +299,31 @@ export class PersonEdit extends LitElement {
                       : nothing
                   }
                 </div>
+                ${
+                  this.pendingAction === null
+                    ? nothing
+                    : html`<div data-test="confirmation" role="alert">
+                        <p>${this.#confirmationCopy(this.pendingAction)}</p>
+                        <div class="actions">
+                          <wt-button
+                            data-test="cancel-action"
+                            variant="secondary"
+                            @click=${() => (this.pendingAction = null)}
+                            >${t("action.cancel")}</wt-button
+                          >
+                          <wt-button
+                            data-test="confirm-action"
+                            variant="danger"
+                            @click=${() => {
+                              const action = this.pendingAction;
+                              this.pendingAction = null;
+                              if (action !== null) this.#emit(action);
+                            }}
+                            >${t("action.continue")}</wt-button
+                          >
+                        </div>
+                      </div>`
+                }
               `
             : nothing
         }
@@ -291,6 +336,7 @@ export class PersonEdit extends LitElement {
               event.stopPropagation();
               this.#loadPerson();
               this.open = false;
+              this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
             }}
             >${t("action.cancel")}</wt-button
           >

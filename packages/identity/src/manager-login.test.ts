@@ -9,6 +9,7 @@ import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { codeOf, seedManager, seedPerson, seedPersonWithPassword } from "../test/fixtures.js";
 import { authorizeManager, loginManager, loginManagerById } from "./manager-login.js";
 import { verifyPassword } from "./verify-password.js";
+import { encryptTotpSecret } from "./mfa.js";
 
 // Spy on verifyPassword while delegating to the real KDF, so the timing-equalization mitigation is
 // observable: the person-not-found branch must run one verifyPassword (against the dummy hash) before
@@ -112,12 +113,20 @@ describe("loginManager", () => {
   it("requires a valid TOTP when one is enrolled", async () => {
     const personId = await seedManager(suite.db, tenantId, { email: "owner-totp@x.com" });
     const secret = generateSecret();
+    const totpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 8) } };
     await run((tx) =>
-      tx.execute(sql`update persons set totp_secret = ${secret} where id = ${personId}`),
+      tx.execute(
+        sql`update persons set totp_secret = ${encryptTotpSecret(secret, totpKeyRing.current)} where id = ${personId}`,
+      ),
     );
     const missing = await run((tx) =>
       codeOf(() =>
-        loginManager(tx, { tenantId, email: "owner-totp@x.com", password: "correct horse" }),
+        loginManager(tx, {
+          tenantId,
+          email: "owner-totp@x.com",
+          password: "correct horse",
+          totpKeyRing,
+        }),
       ),
     );
     expect(missing).toBe("totp.invalid");
@@ -127,6 +136,7 @@ describe("loginManager", () => {
         email: "owner-totp@x.com",
         password: "correct horse",
         totp: generateSync({ secret }),
+        totpKeyRing,
       }),
     );
     expect(session.personId).toBe(personId);

@@ -420,6 +420,7 @@ export class DashboardApp extends LitElement {
   @state() private sessionNoticeCode: string | null = null;
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
   private sessionLifetimeSeconds = 30 * 60;
+  private sessionGeneration = 0;
 
   readonly #onSessionInvalid = (event: Event): void => {
     const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
@@ -439,7 +440,21 @@ export class DashboardApp extends LitElement {
   };
 
   readonly #onSessionActive = (): void => {
-    if (this.sessionRole !== undefined) this.#scheduleSessionExpiry(this.sessionLifetimeSeconds);
+    if (this.sessionRole !== undefined) {
+      this.#scheduleSessionExpiry(this.sessionLifetimeSeconds);
+      this.#broadcastSessionDeadline(Date.now() + this.sessionLifetimeSeconds * 1000);
+    }
+  };
+
+  readonly #onSessionStorage = (event: StorageEvent): void => {
+    if (event.key !== "waitron-management-session-deadline" || this.sessionRole === undefined)
+      return;
+    const deadline = Number(event.newValue);
+    if (!Number.isFinite(deadline) || deadline <= Date.now()) {
+      this.#returnToLogin("management_session.expired");
+      return;
+    }
+    this.#scheduleSessionExpiry((deadline - Date.now()) / 1000);
   };
 
   /** The one tenant/business this deployment database represents. It remains visible across login
@@ -474,6 +489,7 @@ export class DashboardApp extends LitElement {
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.addEventListener("waitron-session-active", this.#onSessionActive);
+    window.addEventListener("storage", this.#onSessionStorage);
     document.addEventListener("visibilitychange", this.#onVisibilityChange);
   }
 
@@ -482,6 +498,7 @@ export class DashboardApp extends LitElement {
     this.#breakpoint = undefined;
     window.removeEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.removeEventListener("waitron-session-active", this.#onSessionActive);
+    window.removeEventListener("storage", this.#onSessionStorage);
     document.removeEventListener("visibilitychange", this.#onVisibilityChange);
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
@@ -547,10 +564,14 @@ export class DashboardApp extends LitElement {
    * to login is the safe default for every failure anyway.
    */
   async #probeSession(): Promise<void> {
+    const generation = this.sessionGeneration;
     const wasAuthenticated = this.sessionRole !== undefined;
     try {
-      this.#applyMe(await this.api.getMe());
+      const me = await this.api.getMe();
+      if (!this.isConnected || generation !== this.sessionGeneration) return;
+      this.#applyMe(me);
     } catch (error) {
+      if (!this.isConnected || generation !== this.sessionGeneration) return;
       const code = codeOf(error);
       if (
         wasAuthenticated ||
@@ -579,6 +600,7 @@ export class DashboardApp extends LitElement {
     onboardingIntent?: "demo" | "prepare" | "live";
     sessionExpiresInSeconds?: number;
   }): void {
+    if (!this.isConnected) return;
     this.sessionNoticeCode = null;
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
@@ -591,9 +613,9 @@ export class DashboardApp extends LitElement {
     this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
     this.onboardingIntent = me.onboardingIntent;
-    if (!this.isConnected) return;
     this.sessionLifetimeSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
     this.#scheduleSessionExpiry(this.sessionLifetimeSeconds);
+    this.#broadcastSessionDeadline(Date.now() + this.sessionLifetimeSeconds * 1000);
     this.#writeScreenUrl(this.screen, true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
   }
@@ -606,7 +628,16 @@ export class DashboardApp extends LitElement {
     );
   }
 
+  #broadcastSessionDeadline(deadline: number): void {
+    try {
+      localStorage.setItem("waitron-management-session-deadline", String(deadline));
+    } catch {
+      // Session expiry remains enforced by the local timer and the server when storage is unavailable.
+    }
+  }
+
   #returnToLogin(code: string | null): void {
+    this.sessionGeneration += 1;
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
     this.sessionNoticeCode = code;
@@ -617,6 +648,7 @@ export class DashboardApp extends LitElement {
     this.#activeScreens.clear();
     this.#navGroups.clear();
     this.drawerOpen = false;
+    this.#broadcastSessionDeadline(0);
     this.#url.write(
       { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
       true,

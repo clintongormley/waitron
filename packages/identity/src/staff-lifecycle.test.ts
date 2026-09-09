@@ -7,8 +7,10 @@ import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   clearPersonPin,
+  deactivatePerson,
   invitePerson,
   listPersons,
+  reactivatePersonForInvitation,
   resetPersonLogin,
   updatePersonDetails,
 } from "./staff.js";
@@ -109,7 +111,12 @@ describe("invited person lifecycle", () => {
 
     expect(
       await codeOf(() =>
-        run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: inactiveId })),
+        run((tx) =>
+          reactivatePersonForInvitation(tx, {
+            managementSessionId: sessionId,
+            personId: inactiveId,
+          }),
+        ),
       ),
     ).toBe("person.display_name_taken");
   });
@@ -242,17 +249,7 @@ describe("invited person lifecycle", () => {
     );
 
     await run((tx) =>
-      updatePersonDetails(tx, {
-        managementSessionId: sessionId,
-        personId: target.personId,
-        displayName: "Inactive staff",
-        firstNames: "Inactive",
-        lastNames: "Staff",
-        telephone: null,
-        email: "inactive-staff@example.com",
-        role: "staff",
-        status: "suspended",
-      }),
+      deactivatePerson(tx, { managementSessionId: sessionId, personId: target.personId }),
     );
 
     const rows = await suite.db.execute<{ ended: boolean }>(
@@ -318,5 +315,43 @@ describe("invited person lifecycle", () => {
       password_hash: null,
       totp_secret: null,
     });
+  });
+
+  it("keeps inactive accounts inactive unless the explicit reactivation action is used", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const target = await seedPerson(suite.db, tenantId, "staff", "suspended");
+    expect(
+      await codeOf(() =>
+        run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: target })),
+      ),
+    ).toBe("person.transition_invalid");
+    await run((tx) =>
+      reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId: target }),
+    );
+    const row = await suite.db.execute<{ status: string }>(
+      sql`select status from persons where id = ${target}`,
+    );
+    expect(row.rows[0]).toEqual({ status: "pending" });
+  });
+
+  it("does not let a manager promote themselves to admin", async () => {
+    const actor = await openManagementSession(suite.db, tenantId, "manager");
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          updatePersonDetails(tx, {
+            managementSessionId: actor.sessionId,
+            personId: actor.personId,
+            displayName: "Manager",
+            firstNames: "Manager",
+            lastNames: "Person",
+            telephone: null,
+            email: "manager-promotion@example.com",
+            role: "admin",
+            status: "active",
+          }),
+        ),
+      ),
+    ).toBe("authorization.not_permitted");
   });
 });

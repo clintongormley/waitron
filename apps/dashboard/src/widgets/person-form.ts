@@ -157,7 +157,9 @@ export class PersonForm extends LitElement {
             variant="secondary"
             @click=${(event: Event) => {
               event.stopPropagation();
+              this.#reset();
               this.open = false;
+              this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
             }}
             >${t("action.cancel")}</wt-button
           >

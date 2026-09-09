@@ -32,6 +32,7 @@ export const en = {
   "mode.demo": "Demo",
   "mode.prepare": "Preparation",
   "mode.live": "Live",
+  "account.privacy_notice": "Privacy notice",
   // Shared form feedback
   "form.error_heading": "There is a problem with this form",
   "form.name_required": "Enter a name",
@@ -499,6 +500,14 @@ export const en = {
   "person.reset_login": "Reset login",
   "person.mark_inactive": "Mark inactive",
   "person.reactivate_and_invite": "Reactivate and send invitation",
+  "person.confirm_reset_login":
+    "This removes all current login methods, signs the user out, and sends a new invitation.",
+  "person.confirm_reset_pin":
+    "This removes the current PIN. The user cannot use a till until they set a new one.",
+  "person.confirm_mark_inactive": "This signs the user out and prevents further login.",
+  "person.confirm_reactivate": "This marks the user as Pending and sends a new invitation.",
+  "profile.disable_authenticator": "Disable authenticator",
+  "profile.unlink_google": "Remove Google login",
   "person.password": "Password",
   "person.set_password": "Set password",
   "person.save_email": "Save email",
@@ -849,6 +858,7 @@ export const es: Record<StringKey, string> = {
   "mode.demo": "Demostración",
   "mode.prepare": "Preparación",
   "mode.live": "En vivo",
+  "account.privacy_notice": "Aviso de privacidad",
   "form.error_heading": "Hay un problema con este formulario",
   "form.name_required": "Introduce un nombre",
   "form.first_names_required": "Introduce el nombre o los nombres",
@@ -1283,6 +1293,14 @@ export const es: Record<StringKey, string> = {
   "person.reset_login": "Restablecer acceso",
   "person.mark_inactive": "Marcar como inactivo",
   "person.reactivate_and_invite": "Reactivar y enviar invitación",
+  "person.confirm_reset_login":
+    "Esto elimina todos los métodos de acceso actuales, cierra la sesión y envía una invitación nueva.",
+  "person.confirm_reset_pin":
+    "Esto elimina el PIN actual. El usuario no podrá usar una caja hasta que configure uno nuevo.",
+  "person.confirm_mark_inactive": "Esto cierra la sesión e impide volver a acceder.",
+  "person.confirm_reactivate": "Esto marca al usuario como pendiente y envía una invitación nueva.",
+  "profile.disable_authenticator": "Desactivar autenticador",
+  "profile.unlink_google": "Eliminar acceso con Google",
   "person.password": "Contraseña",
   "person.set_password": "Establecer contraseña",
   "person.save_email": "Guardar correo",

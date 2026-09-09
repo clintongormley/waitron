@@ -13,7 +13,7 @@ import {
 } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { setEmail } from "./staff.js";
+import { updatePersonDetails } from "./staff.js";
 import { codeOf, seedManager } from "../test/fixtures.js";
 
 let tenantId: string;
@@ -109,7 +109,7 @@ describe("management account actions", () => {
       ),
     ).rejects.toMatchObject({ code: "pin.too_short" });
 
-    const session = await run((tx) =>
+    const completion = await run((tx) =>
       completeAccountAction(tx, {
         tenantId,
         token: issued.token,
@@ -118,7 +118,8 @@ describe("management account actions", () => {
         pin: "4321",
       }),
     );
-    expect(session.personId).toBe(personId);
+    expect(completion.personId).toBe(personId);
+    expect(completion.session).not.toBeNull();
     const rows = await suite.db.execute<{ status: string; pin_hash: string | null }>(
       sql`select status, pin_hash from persons where id = ${personId}`,
     );
@@ -147,7 +148,7 @@ describe("management account actions", () => {
     expect(stored.rows[0]!.token_hash).not.toContain(issued.token);
     expect(stored.rows[0]!.used_at).toBeNull();
 
-    const session = await run((tx) =>
+    const completion = await run((tx) =>
       completeAccountAction(tx, {
         tenantId,
         token: issued.token,
@@ -156,7 +157,9 @@ describe("management account actions", () => {
         pin: "4321",
       }),
     );
-    expect(session.personId).toBe(personId);
+    expect(completion.personId).toBe(personId);
+    expect(completion.session).not.toBeNull();
+    const session = completion.session!;
     await expect(
       run((tx) =>
         loginManager(tx, {
@@ -181,11 +184,20 @@ describe("management account actions", () => {
       ]),
     );
 
+    const outstanding = await run((tx) =>
+      issueAccountAction(tx, { tenantId, personId, purpose: "password_reset" }),
+    );
     await run((tx) =>
-      setEmail(tx, {
+      updatePersonDetails(tx, {
         managementSessionId: session.id,
         personId,
+        displayName: "New person",
+        firstNames: "New",
+        lastNames: "Person",
+        telephone: null,
         email: "replacement@x.com",
+        role: "manager",
+        status: "active",
       }),
     );
     const changed = await suite.db.execute<{ email_verified_at: string | null }>(
@@ -197,10 +209,9 @@ describe("management account actions", () => {
         run((tx) =>
           completeAccountAction(tx, {
             tenantId,
-            token: issued.token,
-            purpose: "invitation",
+            token: outstanding.token,
+            purpose: "password_reset",
             password: "another secure password",
-            pin: "4321",
           }),
         ),
       ),
@@ -250,6 +261,26 @@ describe("management account actions", () => {
     await expect(
       run((tx) => requestPasswordResetAction(tx, { tenantId, email: "unknown@x.com" })),
     ).resolves.toBeNull();
+  });
+
+  it("changes the password without opening a session that bypasses an enrolled authenticator", async () => {
+    const personId = await seedManager(suite.db, tenantId, { email: "mfa-reset@x.com" });
+    await suite.db.execute(
+      sql`update persons set totp_secret = 'sealed-placeholder' where id = ${personId}`,
+    );
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { tenantId, personId, purpose: "password_reset" }),
+    );
+    await expect(
+      run((tx) =>
+        completeAccountAction(tx, {
+          tenantId,
+          token: issued.token,
+          purpose: "password_reset",
+          password: "a replacement secure password",
+        }),
+      ),
+    ).resolves.toEqual({ personId, session: null });
   });
 
   it("refuses an expired token", async () => {

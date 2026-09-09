@@ -176,6 +176,7 @@ it("refuses another tenant's session on both passkey registration endpoints", as
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
+        currentPassword: PASSWORD,
         challengeHandle: "11111111-1111-4111-8111-111111111111",
         response: {},
       }),
@@ -220,7 +221,8 @@ async function readCredentials(
 async function registerPasskey(app: Hono, cookie: string, credentialId: string): Promise<void> {
   const options = await app.request("/management-api/passkey/register/options", {
     method: "POST",
-    headers: { cookie },
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ currentPassword: PASSWORD }),
   });
   expect(options.status).toBe(200);
   const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -255,7 +257,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     const cookie = await login(app, MANAGER_EMAIL);
     const res = await app.request("/management-api/passkey/register/options", {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: PASSWORD }),
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { challengeHandle: string; options: { challenge: string } };
@@ -271,7 +274,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     // Begin, then finish with the ceremony mocked to verify.
     const options = await app.request("/management-api/passkey/register/options", {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: PASSWORD }),
     });
     expect(options.status).toBe(200);
     const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -307,7 +311,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     // restores.
     const options = await app.request("/management-api/passkey/register/options", {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: PASSWORD }),
     });
     expect(options.status).toBe(200);
     const { challengeHandle } = (await options.json()) as { challengeHandle: string };

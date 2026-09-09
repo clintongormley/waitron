@@ -1,39 +1,93 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { recoveryCodes } from "./schema/recovery-codes.js";
+import { persons } from "./schema/persons.js";
 
 const PREFIX = "v1";
 const RECOVERY_CODE_COUNT = 10;
 
-export function encryptTotpSecret(secret: string, key: Buffer): string {
-  if (key.length !== 32) throw new Error("TOTP encryption key must contain 32 bytes");
+export interface TotpKeyEntry {
+  key: Buffer;
+  version: number;
+}
+
+export interface TotpKeyRing {
+  current: TotpKeyEntry;
+  previous?: TotpKeyEntry;
+}
+
+export function encryptTotpSecret(secret: string, entry: TotpKeyEntry): string {
+  if (entry.key.length !== 32) throw new Error("TOTP encryption key must contain 32 bytes");
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", entry.key, iv);
   const ciphertext = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
   return [
     PREFIX,
+    String(entry.version),
     iv.toString("base64url"),
     cipher.getAuthTag().toString("base64url"),
     ciphertext.toString("base64url"),
   ].join(".");
 }
 
-export function decryptTotpSecret(stored: string, key?: Buffer): string | null {
-  if (!stored.startsWith(`${PREFIX}.`)) return stored;
-  if (key?.length !== 32) return null;
+export function decryptTotpSecret(
+  stored: string,
+  ring?: TotpKeyRing,
+): { secret: string; keyVersion: number } | null {
+  if (!stored.startsWith(`${PREFIX}.`) || ring === undefined) return null;
   const parts = stored.split(".");
-  if (parts.length !== 4) return null;
+  if (parts.length !== 5) return null;
+  const keyVersion = Number(parts[1]);
+  if (!Number.isInteger(keyVersion)) return null;
+  const entry =
+    ring.current.version === keyVersion
+      ? ring.current
+      : ring.previous?.version === keyVersion
+        ? ring.previous
+        : undefined;
+  if (entry?.key.length !== 32) return null;
   try {
-    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(parts[1]!, "base64url"));
-    decipher.setAuthTag(Buffer.from(parts[2]!, "base64url"));
-    return Buffer.concat([
-      decipher.update(Buffer.from(parts[3]!, "base64url")),
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      entry.key,
+      Buffer.from(parts[2]!, "base64url"),
+    );
+    decipher.setAuthTag(Buffer.from(parts[3]!, "base64url"));
+    const secret = Buffer.concat([
+      decipher.update(Buffer.from(parts[4]!, "base64url")),
       decipher.final(),
     ]).toString("utf8");
+    return { secret, keyVersion };
   } catch {
     return null;
   }
+}
+
+/** Re-seal every TOTP secret that still uses the previous credential key before it is retired. */
+export async function rotateTotpSecrets(
+  tx: Transaction,
+  tenantId: string,
+  ring: TotpKeyRing,
+): Promise<number> {
+  const rows = await tx
+    .select({ id: persons.id, stored: persons.totpSecret })
+    .from(persons)
+    .where(and(eq(persons.tenantId, tenantId), isNotNull(persons.totpSecret)))
+    .for("update");
+  let rotated = 0;
+  for (const row of rows) {
+    const opened = decryptTotpSecret(row.stored!, ring);
+    if (opened === null) throw new AppError("totp.key_unavailable", { personId: row.id });
+    if (opened.keyVersion === ring.current.version) continue;
+    await tx
+      .update(persons)
+      .set({ totpSecret: encryptTotpSecret(opened.secret, ring.current) })
+      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, row.id)));
+    rotated += 1;
+  }
+  return rotated;
 }
 
 function recoveryHash(code: string): string {

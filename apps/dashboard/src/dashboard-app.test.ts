@@ -515,6 +515,33 @@ describe("dashboard-app", () => {
     expect(login(el)).not.toBeNull();
   });
 
+  it("does not restore protected content from a session probe that resolves after logout", async () => {
+    let resolveLate!: (value: unknown) => void;
+    const late = new Promise((resolve) => (resolveLate = resolve));
+    const initial = {
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+      venueName: "Deli Test SL",
+      permissions: [],
+      modules: [],
+    };
+    const getMe = vi.fn().mockResolvedValueOnce(initial).mockReturnValueOnce(late);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi({ getMe }) });
+    await flush(el);
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(
+      new CustomEvent("waitron-session-invalid", {
+        detail: { code: "management_session.expired" },
+      }),
+    );
+    resolveLate(initial);
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("dashboard-app")).toBe(DashboardApp);
   });

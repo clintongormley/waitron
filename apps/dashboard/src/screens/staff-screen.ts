@@ -1,7 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { startRegistration } from "@simplewebauthn/browser";
-import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
 import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
@@ -105,7 +103,7 @@ export class StaffScreen extends LitElement {
       }
       .filter input {
         box-sizing: border-box;
-        min-height: 2.75rem;
+        min-height: var(--wt-tap-min);
         padding: 0 var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
@@ -130,11 +128,6 @@ export class StaffScreen extends LitElement {
   @state() private editingPerson: PersonSummary | null = null;
   @state() private editOpen = false;
   @state() private errorKey: string | null = null;
-  // A minimal success confirmation for #addPasskey: the raw status code is kept here and mapped to
-  // localised copy by `codeMessage` at the render edge (`passkey.registered` → "Passkey añadida").
-  // The WebAuthn ceremony has no visible surface of its own once the browser dialog closes, so
-  // without this the operator gets no feedback.
-  @state() private passkeyStatus: string | null = null;
   @state() private invitationStatus: "sent" | "not_sent" | null = null;
   @state() private search = "";
   @state() private roleFilter: PersonRole | "all" = "all";
@@ -199,7 +192,6 @@ export class StaffScreen extends LitElement {
    */
   #openForm(): void {
     this.errorKey = null;
-    this.passkeyStatus = null;
     this.invitationStatus = null;
     this.#closeEdit(); // the two dialogs are mutually exclusive (both are modal)
     this.formOpen = true;
@@ -228,7 +220,6 @@ export class StaffScreen extends LitElement {
     const person = this.people.find((p) => p.personId === event.detail.personId);
     if (person === undefined) return;
     this.errorKey = null;
-    this.passkeyStatus = null;
     this.invitationStatus = null;
     this.formOpen = false;
     this.editingPerson = person;
@@ -270,17 +261,7 @@ export class StaffScreen extends LitElement {
     event.stopPropagation();
     const person = this.editingPerson;
     if (person === null || person.personId === this.currentPersonId) return;
-    this.#editWith((id) =>
-      this.api.savePerson(id, {
-        displayName: person.displayName,
-        firstNames: person.firstNames ?? person.displayName,
-        lastNames: person.lastNames ?? "—",
-        telephone: person.telephone ?? null,
-        email: person.email ?? "",
-        role: person.role,
-        status: "suspended",
-      }),
-    );
+    this.#editWith((id) => this.api.deactivatePerson(id));
   }
 
   #onResetPin(event: Event): void {
@@ -363,41 +344,6 @@ export class StaffScreen extends LitElement {
   }
 
   /**
-   * Enroll a passkey for the signed-in operator — the symmetric parallel of the login screen's
-   * `#passkeyLogin`, run from where the logged-in manager already is. `passkeyRegisterOptions()` is
-   * GATED (the route resolves the person from the session) and returns the creation options plus a
-   * challenge handle; `startRegistration` runs the browser attestation ceremony; `passkeyRegisterVerify`
-   * echoes the handle with the signed response to finish enrollment. Success sets a brief
-   * `passkeyStatus` banner (the ceremony leaves no visible trace once the browser dialog closes).
-   *
-   * `startRegistration` takes `{ optionsJSON }` in `@simplewebauthn/browser` v13 — the options blob is
-   * nested under that key, not passed bare. The blob is the server's
-   * `PublicKeyCredentialCreationOptionsJSON`; the client types it as an opaque `PasskeyOptions`
-   * (`Record<string, unknown>`), which has no structural overlap with the concrete interface, so the
-   * cast re-narrows it via `unknown` at this one call site — validated there, exactly as the
-   * `PasskeyOptions` note in `api/client.ts` intends.
-   *
-   * Any failure becomes the same `errorKey`-in-a-`role="alert"` banner the other async paths use,
-   * falling back to `passkey.verification_failed` (the code the server itself throws on a failed
-   * verify) when the rejection names none. Caught here because the click handler calls this via
-   * `void`, so an uncaught rejection would strand the operator with no feedback.
-   */
-  async #addPasskey(): Promise<void> {
-    this.errorKey = null;
-    this.passkeyStatus = null;
-    try {
-      const { challengeHandle, options } = await this.api.passkeyRegisterOptions();
-      const response = await startRegistration({
-        optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
-      });
-      await this.api.passkeyRegisterVerify({ challengeHandle, response });
-      this.passkeyStatus = "passkey.registered";
-    } catch (error) {
-      this.errorKey = codeOf(error, "passkey.verification_failed");
-    }
-  }
-
-  /**
    * The form asked to create a person. `stopPropagation` keeps its composed `create-person` inside
    * this screen (the house pattern — the form's own field handlers stop their composed events the
    * same way), so it is not seen a second time by the app shell above. On success reload the list
@@ -450,12 +396,6 @@ export class StaffScreen extends LitElement {
       <div class="header">
         <h1 class="title">${t("staff.title")}</h1>
         <div class="actions">
-          <wt-button
-            variant="secondary"
-            data-test="add-passkey"
-            @click=${() => void this.#addPasskey()}
-            >${t("staff.add_passkey")}</wt-button
-          >
           <wt-button variant="primary" data-test="add" @click=${() => this.#openForm()}
             >${t("staff.add_user")}</wt-button
           >
@@ -512,11 +452,6 @@ export class StaffScreen extends LitElement {
       ${
         this.errorKey && !this.editOpen && !this.formOpen
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
-      ${
-        this.passkeyStatus
-          ? html`<p class="status" role="status">${codeMessage(this.passkeyStatus)}</p>`
           : nothing
       }
       ${

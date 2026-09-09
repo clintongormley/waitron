@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createHmac } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -19,7 +20,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
-import { registerModulePermissions } from "@waitron/identity";
+import { registerModulePermissions, rotateTotpSecrets } from "@waitron/identity";
 import { runDue } from "@waitron/scheduler";
 import {
   StripeOnDeviceProvider,
@@ -1815,6 +1816,12 @@ export async function startServer(
   // database work at boot.
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, till.tenantId, config.devMode || till.practiceMode === true);
+  // Re-seal TOTP secrets while the previous credential key is available. This makes credential-key
+  // rotation complete for both the vault and offline authenticator verification before requests run.
+  await withTenant(db, till.tenantId, async (tx) => {
+    await asAppUser(tx);
+    await rotateTotpSecrets(tx, till.tenantId, ring);
+  });
   mountManagementApi(
     app,
     {
@@ -1832,7 +1839,11 @@ export async function startServer(
       origin: config.managementOrigin,
       googleOidc: config.googleOidc,
       venueLocale,
-      accountActionCodeKey: ring.current.key,
+      privacyNoticeUrl: config.privacyNoticeUrl,
+      accountActionCodeKey: createHmac("sha256", ring.current.key)
+        .update("waitron.account-action-code.v1")
+        .digest(),
+      credentialKeyRing: ring,
       // Resolve on every send so a newly configured or rotated SMTP gateway takes effect immediately.
       // Configured SMTP wins; practice/dev falls back to the loopback-only Mailpit service.
       sendAccountEmail: async (message) => {
@@ -1967,7 +1978,7 @@ export async function startServer(
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       modules: setsToMigrate.map((m) => m.name),
-      credentialKey: ring.current.key,
+      credentialKeyRing: ring,
     },
     log,
   );

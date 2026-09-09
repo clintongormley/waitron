@@ -7,8 +7,10 @@ export interface AccountEmail {
   displayName: string;
   actionUrl: string;
   code?: string;
+  codeExpiresAt?: string;
   expiresAt: string;
   locale: string;
+  privacyNoticeUrl?: string;
 }
 
 export type AccountEmailSender = (message: AccountEmail) => Promise<void>;
@@ -42,8 +44,10 @@ const COPY = {
     invitationLink: "Set up your account",
     resetLink: "Reset your password",
     expires: (expiry: string) => `This single-use link expires at ${expiry}.`,
-    code: (code: string) => `Or enter this code in Waitron: ${code}`,
+    code: (code: string, expiry: string) =>
+      `At the restaurant, enter ${code} on the Waitron login screen. This code expires at ${expiry}.`,
     ignore: "If you did not expect this email, you can ignore it.",
+    privacy: "Privacy notice",
   },
   es: {
     invitationSubject: "Configura tu cuenta de Waitron",
@@ -54,8 +58,10 @@ const COPY = {
     invitationLink: "Configura tu cuenta",
     resetLink: "Restablece tu contraseña",
     expires: (expiry: string) => `Este enlace de un solo uso caduca el ${expiry}.`,
-    code: (code: string) => `O introduce este código en Waitron: ${code}`,
+    code: (code: string, expiry: string) =>
+      `En el restaurante, introduce ${code} en la pantalla de inicio de sesión de Waitron. Este código caduca el ${expiry}.`,
     ignore: "Si no esperabas este correo, puedes ignorarlo.",
+    privacy: "Aviso de privacidad",
   },
 } as const;
 
@@ -81,21 +87,36 @@ export function createAccountEmailSender(
       timeZone: "UTC",
       timeZoneName: "short",
     }).format(new Date(message.expiresAt));
+    const codeExpiry = new Intl.DateTimeFormat(message.locale, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+      timeZoneName: "short",
+    }).format(new Date(message.codeExpiresAt ?? message.expiresAt));
     const text = [
       copy.hello(message.displayName),
       "",
       `${message.locale.startsWith("es") ? "Usa este enlace para" : "Use this link to"} ${action}:`,
       message.actionUrl,
-      ...(message.code === undefined ? [] : ["", copy.code(message.code)]),
+      ...(message.code === undefined ? [] : ["", copy.code(message.code, codeExpiry)]),
       "",
       copy.expires(expiry),
       copy.ignore,
+      ...(message.privacyNoticeUrl === undefined ? [] : [copy.privacy, message.privacyNoticeUrl]),
     ].join("\n");
     const html = `<p>${escapeHtml(copy.hello(message.displayName))}</p>
 <p><a href="${escapeHtml(message.actionUrl)}">${link}</a></p>
-${message.code === undefined ? "" : `<p>${escapeHtml(copy.code(message.code))}</p>`}
+${message.code === undefined ? "" : `<p>${escapeHtml(copy.code(message.code, codeExpiry))}</p>`}
 <p>${escapeHtml(copy.expires(expiry))}</p>
-<p>${copy.ignore}</p>`;
+<p>${escapeHtml(copy.ignore)}</p>
+${
+  message.privacyNoticeUrl === undefined
+    ? ""
+    : `<p><a href="${escapeHtml(message.privacyNoticeUrl)}">${escapeHtml(copy.privacy)}</a></p>`
+}`;
     await transport.sendMail({
       from: config.from,
       to: message.email,

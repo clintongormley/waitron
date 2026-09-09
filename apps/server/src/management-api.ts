@@ -8,6 +8,7 @@
 // `import "@waitron/identity"` is needed on top of them.
 import "./errors.js";
 import type { Context, Hono } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
@@ -31,6 +32,7 @@ import {
   completeAccountAction,
   completeAccountActionByCode,
   completeGoogleLink,
+  deactivatePerson,
   endManagementSession,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
@@ -41,16 +43,15 @@ import {
   loginWithGoogle,
   issueAccountAction,
   invitePerson,
-  reactivatePerson,
+  reactivatePersonForInvitation,
+  resolveManagementSession,
   resetPersonLogin,
   requestPasswordResetAction,
   readOwnProfile,
-  setEmail,
-  setPassword,
-  setRole,
-  suspendPerson,
   updatePersonDetails,
+  verifyOwnCredentials,
   type PersonRoleValue,
+  type TotpKeyRing,
 } from "@waitron/identity";
 import type { IssuedAccountAction } from "@waitron/identity";
 import {
@@ -162,6 +163,7 @@ export interface ManagementApiDeps {
   origin: string;
   /** Venue default used when the recipient has not chosen their own UI language. */
   venueLocale?: string;
+  privacyNoticeUrl?: string;
   /** Outbound delivery for invitation and password-reset links. Omitted in harnesses and when an
    * on-prem installation has not configured SMTP yet. */
   sendAccountEmail?: AccountEmailSender;
@@ -171,6 +173,7 @@ export interface ManagementApiDeps {
     completion: AccountActionRateLimiter;
   };
   accountActionCodeKey?: Buffer;
+  credentialKeyRing?: TotpKeyRing;
   googleOidc?: GoogleOidcConfig;
   googleCodeExchange?: typeof exchangeGoogleCode;
 }
@@ -194,8 +197,10 @@ async function deliverAccountAction(
       displayName: issued.displayName,
       actionUrl: actionUrl.toString(),
       code: issued.code,
+      codeExpiresAt: issued.codeExpiresAt,
       expiresAt: issued.expiresAt,
       locale: issued.locale ?? deps.venueLocale ?? "en-GB",
+      privacyNoticeUrl: deps.privacyNoticeUrl,
     });
     return true;
   } catch {
@@ -257,7 +262,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "passkey.already_registered": 409,
   // Login-enumeration posture, recorded here. This map is SHARED with the authenticated staff routes,
   // where 404/403 are the CORRECT semantics: the write routes
-  // (PATCH/reset-pin/password `/management-api/staff/:id`) screen `:id` with `isUuid` and refuse a
+  // (`PUT` and lifecycle `/management-api/staff/:id` routes) screen `:id` with `isUuid` and refuse a
   // malformed one as `person.not_found` (404), and `resolveManagementSession` re-reads `persons.status`
   // on every gated request and throws `person.suspended` (403) when the logged-in manager was
   // suspended mid-session (`packages/identity/src/management-session.ts`). The LOGIN route
@@ -276,7 +281,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "person.self_deactivation": 403,
   "person.not_found": 404,
-  // The email write boundary (`createPerson`/`setEmail`): a malformed address is a request-shape
+  // The email write boundary: a malformed address is a request-shape
   // fault (400), a per-tenant `persons_tenant_email_uq` collision is a "already exists" conflict
   // (409, the house convention — `passkey.already_registered`/`table.label_taken` map the same way,
   // not the `?? 400` default).
@@ -635,16 +640,52 @@ async function parsePasskeyVerifyBody(
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
+  const credentialKeyRing = deps.credentialKeyRing ?? {
+    current: { version: 1, key: accountActionCodeKey },
+  };
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
+  const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();
+  const acceptInvitation = createPasswordResetCooldown();
   const passwordResetRateLimiter =
     deps.accountActionRateLimiters?.passwordReset ?? createAccountActionRateLimiter();
   const completionRateLimiter =
     deps.accountActionRateLimiters?.completion ?? createAccountActionRateLimiter();
   const googleCodeExchange = deps.googleCodeExchange ?? exchangeGoogleCode;
+  const googleFlowCookie = "waitron_google_flow";
+  const withCredentialChange = <T>(
+    sessionId: string,
+    fn: (tx: Transaction) => Promise<T>,
+  ): Promise<T> =>
+    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { personId } = await resolveManagementSession(tx, sessionId);
+      const finish = credentialChangeThrottle.begin(personId);
+      try {
+        const result = await fn(tx);
+        finish("success");
+        return result;
+      } catch (error) {
+        finish(
+          isAppError(error) && (error.code === "password.invalid" || error.code === "totp.invalid")
+            ? "invalid"
+            : "error",
+        );
+        throw error;
+      }
+    });
+  const bindGoogleFlow = (c: Context, state: string): void => {
+    setCookie(c, googleFlowCookie, state, {
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: deps.secureCookies,
+      path: "/management-api/google/callback",
+      maxAge: 10 * 60,
+    });
+  };
 
   app.get("/management-api/google/config", (c) =>
-    c.json({ configured: deps.googleOidc !== undefined }),
+    c.json({ configured: deps.googleOidc !== undefined, privacyNoticeUrl: deps.privacyNoticeUrl }),
   );
 
   app.post("/management-api/google/login", (c) =>
@@ -658,6 +699,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           redirectUri: deps.googleOidc!.redirectUri,
         });
       });
+      bindGoogleFlow(c, out.state);
       return c.json({ authorizationUrl: out.authorizationUrl });
     }),
   );
@@ -666,15 +708,21 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
       const sessionId = requireManagementSession(c);
-      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const out = await withCredentialChange(sessionId, async (tx) => {
         return beginGoogleLink(tx, {
           tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
+          ...(typeof body.currentPassword === "string"
+            ? { currentPassword: body.currentPassword }
+            : {}),
+          ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
+          keyRing: credentialKeyRing,
           clientId: deps.googleOidc!.clientId,
           redirectUri: deps.googleOidc!.redirectUri,
         });
       });
+      bindGoogleFlow(c, out.state);
       return c.json({ authorizationUrl: out.authorizationUrl });
     }),
   );
@@ -687,10 +735,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (typeof state !== "string" || state === "" || typeof code !== "string" || code === "") {
         throw new AppError("google.invalid", {});
       }
+      const boundState = getCookie(c, googleFlowCookie);
+      deleteCookie(c, googleFlowCookie, { path: "/management-api/google/callback" });
+      if (boundState !== state) throw new AppError("google.invalid", {});
       const claimed = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return claimGoogleState(tx, { tenantId: deps.cfg.tenantId, state });
       });
+      // The provider exchange is a network call, so it sits between the one-time state claim and
+      // the account/session write instead of holding a database transaction open across the network.
       let subject: string;
       try {
         ({ subject } = await googleCodeExchange(deps.googleOidc, {
@@ -713,11 +766,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         });
         return c.redirect(`${deps.origin}/manage/profile?google=linked`);
       }
-      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const completion = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return loginWithGoogle(tx, { tenantId: deps.cfg.tenantId, subject });
       });
-      setManagementCookie(c, session.id, deps.secureCookies);
+      setManagementCookie(c, completion.id, deps.secureCookies);
       return c.redirect(`${deps.origin}/manage/`);
     }),
   );
@@ -758,7 +811,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // or a string that trims to empty), a non-string `password`, or a `totp` present but not a
   // string, is refused as `password.invalid` — the SAME code a wrong password or unknown email
   // gets, so nothing in the response tells an unauthenticated caller which field failed. Email
-  // FORMAT is validated at WRITE-time (`createPerson`/`setEmail`'s `screenEmail`), NOT here:
+  // FORMAT is validated at the account write boundary, not here:
   // login screens only that a non-empty string was supplied and leaves a well-formed-but-unknown
   // address to `loginManager`, which answers `password.invalid` uniformly. (Screening `totp` does
   // NOT avert a 500: `verifyTotp` fails closed — probed against otplib@13.4.1, `verifyTotp`
@@ -801,7 +854,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
             password,
             totp,
             recoveryCode,
-            totpKey: accountActionCodeKey,
+            totpKeyRing: credentialKeyRing,
           });
         });
       } catch (error) {
@@ -875,7 +928,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const purpose: "invitation" | "password_reset" = body.purpose;
       const password = body.password;
-      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const completion = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         const common = {
           tenantId: deps.cfg.tenantId,
@@ -893,9 +946,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           codeKey: accountActionCodeKey,
         });
       });
-      if (session === null) throw new AppError("account_action.invalid", {});
-      setManagementCookie(c, session.id, deps.secureCookies);
-      return c.json({ personId: session.personId });
+      if (completion === null) throw new AppError("account_action.invalid", {});
+      if (completion.session === null) clearManagementCookie(c);
+      else setManagementCookie(c, completion.session.id, deps.secureCookies);
+      return c.json({ personId: completion.personId, authenticated: completion.session !== null });
     }),
   );
 
@@ -1059,6 +1113,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
+      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+        return c.json({ invitationSent: false });
+      }
       const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
@@ -1117,75 +1174,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Update a person's role, status and/or login email. Gated. `:id` is screened with `isUuid` first — a
-  // non-UUID names no row, so it is `person.not_found` (the id is a caller-supplied uuid, safe to
-  // echo) rather than a request-shape error. Both fields are OPTIONAL, but each is type-screened the
-  // way the three sibling write routes screen their required fields: a field PRESENT with a
-  // non-string value is refused as `management.request_invalid` naming the FIELD (never the value),
-  // so `{ role: 123 }`/`{ status: 123 }` are a 400 rather than flowing on to the `person_role`
-  // pgEnum (a non-string `role` → `22P02` → opaque 500) or silently no-op'ing (a non-string
-  // `status` matches neither branch below). An ABSENT field is left `undefined` and is a legitimate
-  // no-op — that is where PATCH differs from create/reset-pin/set-password, whose fields are
-  // required. Given a well-formed value the writes fire: `role` present drives `setRole`, `status`
-  // "suspended"/"active" drives suspend/reactivate (a STRING `status` outside that pair, e.g.
-  // "frozen", matches neither branch and is a deliberate 204 no-op — a value check the pgEnum would
-  // catch on `role` is intentionally NOT applied here, keeping the screen typeof-only like create).
-  // The parsed body is coerced to `{}` (via `readJsonBody`, see the login route): an empty JSON object
-  // `{}`, or a `null`/non-object/empty/unparseable body — all handed back as `{}` by `readJsonBody` —
-  // leaves both `role` and `status` undefined → no writes → a no-op 204. (A `null` body would
-  // otherwise throw on the destructure below, and an empty/unparseable body would otherwise reach `run`
-  // as a SyntaxError → `server.internal` 500; `readJsonBody` averts both.) `role`/`status` are bound to
-  // locals before the closure and narrowed inside
-  // it, so no field narrowing has to cross the closure boundary. `email` is OPTIONAL too and
-  // independent: present-and-a-string drives `setEmail` (shape → `person.email_invalid` 400,
-  // per-tenant collision → `person.email_taken` 409); a non-string is a 400 naming the field; absent
-  // is a no-op. The identity calls enforce `person.manage`.
-  app.patch("/management-api/staff/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requirePersonId(c.req.param("id"));
-      const body = await readJsonBody<{
-        role?: PersonRoleValue;
-        status?: "active" | "suspended";
-        email?: string;
-      }>(c);
-      const { role, status, email } = body;
-      // Typeof screen mirroring the create/reset-pin/set-password routes: refuse a PRESENT field that
-      // is not a string (leaving an absent one as the no-op it should be). This is where a non-string
-      // `role` would otherwise reach the `person_role` pgEnum and 500; a non-string `status` would
-      // silently no-op. An out-of-enum STRING is left to flow through (create screens `role` the same
-      // typeof-only way), so `role: "chef"` still reaches the pgEnum by design.
-      if (role !== undefined && typeof role !== "string") {
-        throw new AppError("management.request_invalid", { field: "role" });
-      }
-      if (status !== undefined && typeof status !== "string") {
-        throw new AppError("management.request_invalid", { field: "status" });
-      }
-      // `email` is OPTIONAL and independent of role/status: a PRESENT-but-non-string value is a
-      // request-shape 400 named by field; a present string drives `setEmail`, which validates the
-      // address (`person.email_invalid` → 400) and per-tenant uniqueness (`person.email_taken` → 409).
-      if (email !== undefined && typeof email !== "string") {
-        throw new AppError("management.request_invalid", { field: "email" });
-      }
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        if (role !== undefined) {
-          await setRole(tx, { managementSessionId: sessionId, personId: id, role });
-        }
-        if (status === "suspended") {
-          await suspendPerson(tx, { managementSessionId: sessionId, personId: id });
-        }
-        if (status === "active") {
-          await reactivatePerson(tx, { managementSessionId: sessionId, personId: id });
-        }
-        if (typeof email === "string") {
-          await setEmail(tx, { managementSessionId: sessionId, personId: id, email });
-        }
-      });
-      return c.body(null, 204);
-    }),
-  );
-
   // Reset a person's PIN. Gated. `:id` screened with `isUuid` (→ `person.not_found`); the body is
   // coerced to `{}` (via `readJsonBody`, see the login route) so a `null`/non-object body hits the same guard,
   // then `pin` must be a string else `management.request_invalid` naming the FIELD, never the PIN
@@ -1203,10 +1191,25 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
+  app.post("/management-api/staff/:id/deactivate", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const personId = requirePersonId(c.req.param("id"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await deactivatePerson(tx, { managementSessionId: sessionId, personId });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
   app.post("/management-api/staff/:id/reset-login", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
+      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+        return c.json({ invitationSent: false });
+      }
       const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
@@ -1225,9 +1228,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
+      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+        return c.json({ invitationSent: false });
+      }
       const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
+        await reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId });
         return issueAccountAction(tx, {
           tenantId: deps.cfg.tenantId,
           personId,
@@ -1236,28 +1242,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         });
       });
       return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
-    }),
-  );
-
-  // Set a person's dashboard password. Gated. `:id` screened with `isUuid` (→ `person.not_found`);
-  // the body is coerced to `{}` (via `readJsonBody`, see the login route) so a `null`/non-object body hits the
-  // same guard, then `password` must be a string else `management.request_invalid` naming the FIELD,
-  // never the password itself. The narrowed `password` is bound to a local before the closure;
-  // `setPassword` enforces `person.manage` and length-checks the value.
-  app.post("/management-api/staff/:id/password", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requirePersonId(c.req.param("id"));
-      const body = await readJsonBody<{ password?: string }>(c);
-      if (typeof body.password !== "string") {
-        throw new AppError("management.request_invalid", { field: "password" });
-      }
-      const { password } = body;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await setPassword(tx, { managementSessionId: sessionId, personId: id, password });
-      });
-      return c.body(null, 204);
     }),
   );
 
@@ -2506,9 +2490,18 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/passkey/register/options", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId: sessionId });
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (typeof body.currentPassword !== "string") {
+        throw new AppError("management.request_invalid", { field: "currentPassword" });
+      }
+      const out = await withCredentialChange(sessionId, async (tx) => {
+        await verifyOwnCredentials(tx, {
+          tenantId: deps.cfg.tenantId,
+          managementSessionId: sessionId,
+          currentPassword: body.currentPassword as string,
+          ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
+          keyRing: credentialKeyRing,
+        });
         return beginPasskeyRegistration(tx, {
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,

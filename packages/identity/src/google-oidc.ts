@@ -1,13 +1,15 @@
 import "./errors.js";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, lt } from "drizzle-orm";
 import { isUniqueViolation } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { resolveManagementSession, startManagementSession } from "./management-session.js";
+import { startManagementSession } from "./management-session.js";
 import type { ManagementSession } from "./management-session.js";
 import { googleOidcStates } from "./schema/google-oidc-states.js";
 import { persons } from "./schema/persons.js";
+import { verifyOwnCredentials } from "./profile.js";
+import type { TotpKeyRing } from "./mfa.js";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -44,6 +46,14 @@ async function begin(
   const nonce = randomBytes(32).toString("base64url");
   const verifier = randomBytes(48).toString("base64url");
   const now = input.now ?? new Date();
+  await tx
+    .delete(googleOidcStates)
+    .where(
+      and(
+        eq(googleOidcStates.tenantId, input.tenantId),
+        lt(googleOidcStates.expiresAt, now.toISOString()),
+      ),
+    );
   await tx.insert(googleOidcStates).values({
     tenantId: input.tenantId,
     personId,
@@ -71,11 +81,15 @@ export function beginGoogleLogin(tx: Transaction, input: GoogleStartInput) {
 
 export async function beginGoogleLink(
   tx: Transaction,
-  input: GoogleStartInput & { managementSessionId: string },
+  input: GoogleStartInput & {
+    managementSessionId: string;
+    currentPassword?: string;
+    totp?: string;
+    keyRing?: TotpKeyRing;
+  },
 ) {
-  const session = await resolveManagementSession(tx, input.managementSessionId);
-  if (session.tenantId !== input.tenantId) throw new AppError("google.invalid", {});
-  return begin(tx, input, "link", session.personId);
+  const person = await verifyOwnCredentials(tx, input);
+  return begin(tx, input, "link", person.id);
 }
 
 export async function claimGoogleState(

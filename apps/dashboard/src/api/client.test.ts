@@ -8,7 +8,7 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
 
 /**
  * An empty 204 — `text()` → "" — the shape the void-returning management routes answer with
- * (`logout`, `updatePerson`, `resetPin`, `setPassword`; `c.body(null, 204)` in
+ * (`logout`, `savePerson`, `resetPin`; `c.body(null, 204)` in
  * `apps/server/src/management-api.ts`). Exercises `#request`'s empty-body branch, which resolves
  * `undefined` instead of `JSON.parse`-ing nothing. `#request` keys off the empty body (`res.ok` +
  * `text() === ""`), not the exact status, so 204 stands in for the real routes.
@@ -85,7 +85,7 @@ describe("DashboardApi", () => {
     await expect(api.beginGoogleLogin()).resolves.toEqual({
       authorizationUrl: "https://accounts.google.test/login",
     });
-    await expect(api.beginGoogleLink()).resolves.toEqual({
+    await expect(api.beginGoogleLink({ currentPassword: "correct horse" })).resolves.toEqual({
       authorizationUrl: "https://accounts.google.test/link",
     });
     expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
@@ -244,21 +244,6 @@ describe("DashboardApi", () => {
       credentials: "include",
     });
   });
-
-  it("updatePerson PATCHes the addressed person (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(
-      api.updatePerson("p1", { role: "supervisor", status: "suspended" }),
-    ).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ role: "supervisor", status: "suspended" }),
-    });
-  });
-
   it("savePerson PUTs the complete administrative edit", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -277,18 +262,6 @@ describe("DashboardApi", () => {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(details),
-    });
-  });
-
-  it("updatePerson carries an email in the PATCH body when supplied", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.updatePerson("p1", { email: "new@x.com" })).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "new@x.com" }),
     });
   });
 
@@ -312,29 +285,19 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("setPassword POSTs the new password to the addressed person's password route (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setPassword("p1", "hunter2 correct horse")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1/password", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password: "hunter2 correct horse" }),
-    });
-  });
-
-  it("passkeyRegisterOptions POSTs the register/options route with credentials and no body", async () => {
+  it("passkeyRegisterOptions POSTs the register/options route with current credentials", async () => {
     const payload = {
       challengeHandle: "ch-1",
       options: { challenge: "abc", rp: { id: "localhost" } },
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.passkeyRegisterOptions()).toEqual(payload);
+    expect(await api.passkeyRegisterOptions({ currentPassword: "correct horse" })).toEqual(payload);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/register/options", {
       method: "POST",
       credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: "correct horse" }),
     });
   });
 

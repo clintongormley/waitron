@@ -145,13 +145,17 @@ export class LoginScreen extends LitElement {
   @state() private confirmPinError = "";
   @state() private invitationCodeError = "";
   @state() private googleConfigured = false;
+  @state() private privacyNoticeUrl = "";
 
   override connectedCallback(): void {
     super.connectedCallback();
     void this.api
       .getGoogleConfig()
-      .then(({ configured }) => {
-        if (this.isConnected) this.googleConfigured = configured;
+      .then(({ configured, privacyNoticeUrl }) => {
+        if (this.isConnected) {
+          this.googleConfigured = configured;
+          this.privacyNoticeUrl = privacyNoticeUrl ?? "";
+        }
       })
       .catch(() => undefined);
   }
@@ -286,6 +290,15 @@ export class LoginScreen extends LitElement {
     this.step = "email";
   }
 
+  #cancelAccountAction(): void {
+    this.token = null;
+    this.actionPurpose = null;
+    if (new URLSearchParams(window.location.search).has("token")) {
+      history.replaceState(null, "", "/manage/");
+    }
+    this.#cancelLogin();
+  }
+
   async #submit(): Promise<void> {
     if (this.busy) return;
     if (this.password === "") {
@@ -405,12 +418,19 @@ export class LoginScreen extends LitElement {
                 this.pin,
               )
             : await this.api.completeAccountAction(this.token, this.actionPurpose, this.password);
-      if (new URLSearchParams(window.location.search).has("token")) {
-        history.replaceState(null, "", "/manage/");
+      const accountSetup = this.actionPurpose === "invitation";
+      this.#cancelAccountAction();
+      if (out.authenticated) {
+        this.dispatchEvent(
+          new CustomEvent("logged-in", {
+            detail: { personId: out.personId, accountSetup },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      } else {
+        this.noticeCode = "password.reset_complete";
       }
-      this.dispatchEvent(
-        new CustomEvent("logged-in", { detail: out, bubbles: true, composed: true }),
-      );
     } catch (error) {
       this.errorKey = codeOf(error);
       if (this.errorKey === "password.too_short") this.passwordError = codeMessage(this.errorKey);
@@ -479,6 +499,16 @@ export class LoginScreen extends LitElement {
     return html`<p class="login-context" data-test="login-context">
       ${t("login.logging_in_as")} <strong>${this.email}</strong>
     </p>`;
+  }
+
+  #privacyLink() {
+    return this.privacyNoticeUrl === ""
+      ? nothing
+      : html`<p>
+          <a href=${this.privacyNoticeUrl} target="_blank" rel="noopener noreferrer"
+            >${t("account.privacy_notice")}</a
+          >
+        </p>`;
   }
 
   #renderPasswordIcon() {
@@ -579,6 +609,14 @@ export class LoginScreen extends LitElement {
           ></wt-input>
           <wt-form-actions>
             <wt-button
+              slot="cancel"
+              variant="secondary"
+              data-test="cancel-account-action"
+              ?disabled=${this.busy}
+              @click=${() => this.#cancelAccountAction()}
+              >${t("action.cancel")}</wt-button
+            >
+            <wt-button
               variant="primary"
               data-test="complete-account"
               ?disabled=${this.busy}
@@ -586,6 +624,7 @@ export class LoginScreen extends LitElement {
               >${t("action.set_password")}</wt-button
             >
           </wt-form-actions>
+          ${this.#privacyLink()}
         </div>
       `;
     }
@@ -810,6 +849,7 @@ export class LoginScreen extends LitElement {
                       </wt-form-actions>
                     `
         }
+        ${this.#privacyLink()}
       </div>
     `;
   }

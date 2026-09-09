@@ -28,6 +28,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Too many incorrect attempts. Wait a moment before trying again.",
     es: "Demasiados intentos incorrectos. Espera un momento antes de volver a intentarlo.",
   },
+  "password.reset_complete": {
+    en: "Your password has been changed. Log in with it to continue.",
+    es: "Tu contraseña se ha cambiado. Inicia sesión con ella para continuar.",
+  },
   "profile.invalid": {
     en: "Check your profile details and try again.",
     es: "Revisa los datos de tu perfil y vuelve a intentarlo.",
@@ -88,7 +92,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The PIN is too short",
     es: "El PIN es demasiado corto",
   },
-  // Login-email management (apps/server/src/management-api staff routes → identity's setEmail). The
+  // Login-email management (apps/server/src/management-api staff routes). The
   // Users form's create/edit rejects with these when the address is malformed or already belongs to
   // another person in the tenant (a case-insensitive unique index on the email).
   "person.email_invalid": {
@@ -98,6 +102,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "person.email_taken": {
     en: "That email is already in use",
     es: "Ese correo ya está en uso",
+  },
+  "person.display_name_taken": {
+    en: "That display name is already in use. Add a surname or nickname.",
+    es: "Ese nombre visible ya está en uso. Añade un apellido o apodo.",
+  },
+  "person.last_admin": {
+    en: "Keep at least one active administrator.",
+    es: "Debe quedar al menos un administrador activo.",
+  },
+  "person.transition_invalid": {
+    en: "Use the account action provided for that status change.",
+    es: "Usa la acción de cuenta indicada para ese cambio de estado.",
   },
   "password.too_short": {
     en: "The password is too short",

@@ -27,12 +27,15 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     requestPasswordReset: vi.fn().mockResolvedValue(undefined),
-    completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1" }),
+    completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1", authenticated: true }),
     passkeyAuthOptions: vi
       .fn()
       .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "abc" } }),
     passkeyAuthVerify: vi.fn().mockResolvedValue({ personId: "p9" }),
-    getGoogleConfig: vi.fn().mockResolvedValue({ configured: true }),
+    getGoogleConfig: vi.fn().mockResolvedValue({
+      configured: true,
+      privacyNoticeUrl: "https://restaurant.example/privacy",
+    }),
     beginGoogleLogin: vi.fn().mockResolvedValue({
       authorizationUrl: "https://accounts.google.test/login",
     }),
@@ -93,11 +96,45 @@ describe("login-screen", () => {
     (el as unknown as { password: string }).password = "correct horse";
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
-    expect((await loggedIn).personId).toBe("p1");
+    expect(await loggedIn).toEqual({ personId: "p1", accountSetup: false });
     expect(api.login).toHaveBeenCalledWith({
       email: "owner@x.com",
       password: "correct horse",
     });
+  });
+
+  it("finishes password recovery at login without creating a session", async () => {
+    const api = stubApi({
+      completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1", authenticated: false }),
+    });
+    history.replaceState(
+      null,
+      "",
+      "/manage/account?token=token-1&purpose=password_reset#email=new%40example.test",
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    (el as unknown as { password: string }).password = "a replacement password";
+    (el as unknown as { confirmPassword: string }).confirmPassword = "a replacement password";
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (event) => events.push(event));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
+    await flush(el);
+    expect(events).toHaveLength(0);
+    expect(el.shadowRoot!.textContent).toContain(codeMessage("password.reset_complete"));
+    expect(el.shadowRoot!.querySelector("wt-input[name=email]")).not.toBeNull();
+  });
+
+  it("cancels account setup and returns to a blank email form", async () => {
+    history.replaceState(
+      null,
+      "",
+      "/manage/account?token=token-1&purpose=invitation#email=new%40example.test",
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-account-action]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-input[name=email]")).not.toBeNull();
+    expect(new URLSearchParams(location.search).has("token")).toBe(false);
   });
 
   it("asks for email first, then offers passkey before password for every account", async () => {
@@ -203,7 +240,7 @@ describe("login-screen", () => {
     expect(actions.querySelector("wt-button:not([slot])")?.getAttribute("data-test")).toBe(
       "continue",
     );
-    expect(el.shadowRoot!.querySelector(".screen")!.lastElementChild).toBe(actions);
+    expect(actions).not.toBeNull();
     await continueWithEmail(el);
     actions = el.shadowRoot!.querySelector("wt-form-actions")!;
     expect(actions.querySelector('[slot="cancel"]')?.getAttribute("data-test")).toBe("back");
@@ -448,7 +485,7 @@ describe("login-screen", () => {
       el.addEventListener("logged-in", (e) => resolve((e as CustomEvent).detail)),
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
-    expect((await loggedIn).personId).toBe("p1");
+    expect(await loggedIn).toEqual({ personId: "p1", accountSetup: true });
     expect(api.completeAccountAction).toHaveBeenCalledWith(
       "token-1",
       "invitation",

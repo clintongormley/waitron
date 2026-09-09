@@ -1380,14 +1380,21 @@ export class DashboardApi {
   getProfile(): Promise<OwnProfile> {
     return this.#request<OwnProfile>("/management-api/session/me/profile", "GET");
   }
-  getGoogleConfig(): Promise<{ configured: boolean }> {
-    return this.#request<{ configured: boolean }>("/management-api/google/config", "GET");
+  getGoogleConfig(): Promise<{ configured: boolean; privacyNoticeUrl?: string }> {
+    return this.#request<{ configured: boolean; privacyNoticeUrl?: string }>(
+      "/management-api/google/config",
+      "GET",
+    );
   }
   beginGoogleLogin(): Promise<{ authorizationUrl: string }> {
     return this.#request<{ authorizationUrl: string }>("/management-api/google/login", "POST");
   }
-  beginGoogleLink(): Promise<{ authorizationUrl: string }> {
-    return this.#request<{ authorizationUrl: string }>("/management-api/session/me/google", "POST");
+  beginGoogleLink(input: ProfileCredentials): Promise<{ authorizationUrl: string }> {
+    return this.#request<{ authorizationUrl: string }>(
+      "/management-api/session/me/google",
+      "POST",
+      input,
+    );
   }
   saveProfile(input: ProfileDetails): Promise<void> {
     return this.#request<void>("/management-api/session/me/profile", "PUT", input);
@@ -1415,6 +1422,12 @@ export class DashboardApi {
   regenerateRecoveryCodes(input: ProfileCredentials): Promise<{ codes: string[] }> {
     return this.#request("/management-api/session/me/recovery-codes", "POST", input);
   }
+  disableTotp(input: ProfileCredentials): Promise<void> {
+    return this.#request<void>("/management-api/session/me/totp", "DELETE", input);
+  }
+  unlinkGoogle(input: ProfileCredentials): Promise<void> {
+    return this.#request<void>("/management-api/session/me/google", "DELETE", input);
+  }
   removePasskey(id: string, input: ProfileCredentials): Promise<void> {
     return this.#request<void>(
       `/management-api/session/me/passkeys/${encodeURIComponent(id)}`,
@@ -1428,13 +1441,17 @@ export class DashboardApi {
     purpose: "invitation" | "password_reset",
     password: string,
     pin?: string,
-  ): Promise<{ personId: string }> {
-    return this.#request<{ personId: string }>("/management-api/account-actions/complete", "POST", {
-      token,
-      purpose,
-      password,
-      ...(pin === undefined ? {} : { pin }),
-    });
+  ): Promise<{ personId: string; authenticated: boolean }> {
+    return this.#request<{ personId: string; authenticated: boolean }>(
+      "/management-api/account-actions/complete",
+      "POST",
+      {
+        token,
+        purpose,
+        password,
+        ...(pin === undefined ? {} : { pin }),
+      },
+    );
   }
 
   completeAccountActionByCode(
@@ -1443,14 +1460,18 @@ export class DashboardApi {
     purpose: "invitation" | "password_reset",
     password: string,
     pin?: string,
-  ): Promise<{ personId: string }> {
-    return this.#request<{ personId: string }>("/management-api/account-actions/complete", "POST", {
-      email,
-      code,
-      purpose,
-      password,
-      ...(pin === undefined ? {} : { pin }),
-    });
+  ): Promise<{ personId: string; authenticated: boolean }> {
+    return this.#request<{ personId: string; authenticated: boolean }>(
+      "/management-api/account-actions/complete",
+      "POST",
+      {
+        email,
+        code,
+        purpose,
+        password,
+        ...(pin === undefined ? {} : { pin }),
+      },
+    );
   }
 
   getEmailInbox(): Promise<EmailInbox> {
@@ -1497,17 +1518,6 @@ export class DashboardApi {
     );
   }
 
-  /**
-   * `PATCH /management-api/staff/:id` — change a person's role, active status and/or login email.
-   * Answers an empty 204.
-   */
-  updatePerson(
-    id: string,
-    patch: { role?: PersonRole; status?: "active" | "suspended"; email?: string },
-  ): Promise<void> {
-    return this.#request<void>(`/management-api/staff/${id}`, "PATCH", patch);
-  }
-
   savePerson(id: string, details: PersonEditDetails): Promise<void> {
     return this.#request<void>(`/management-api/staff/${id}`, "PUT", details);
   }
@@ -1515,6 +1525,10 @@ export class DashboardApi {
   /** `POST /management-api/staff/:id/reset-pin` — set a person's new PIN. Answers an empty 204. */
   resetPin(id: string): Promise<void> {
     return this.#request<void>(`/management-api/staff/${id}/reset-pin`, "POST");
+  }
+
+  deactivatePerson(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/staff/${id}/deactivate`, "POST");
   }
 
   resetLogin(id: string): Promise<{ invitationSent: boolean }> {
@@ -1532,20 +1546,16 @@ export class DashboardApi {
   }
 
   /**
-   * `POST /management-api/staff/:id/password` — set a person's dashboard password. Answers an empty
-   * 204.
-   */
-  setPassword(id: string, password: string): Promise<void> {
-    return this.#request<void>(`/management-api/staff/${id}/password`, "POST", { password });
-  }
-
-  /**
    * `POST /management-api/passkey/register/options` — begin enrolling a passkey for the signed-in
    * operator (gated: the route resolves the person from the session). Takes no body; returns the
    * creation options for `startRegistration` plus the challenge handle its verify half echoes.
    */
-  passkeyRegisterOptions(): Promise<PasskeyChallenge> {
-    return this.#request<PasskeyChallenge>("/management-api/passkey/register/options", "POST");
+  passkeyRegisterOptions(input: ProfileCredentials): Promise<PasskeyChallenge> {
+    return this.#request<PasskeyChallenge>(
+      "/management-api/passkey/register/options",
+      "POST",
+      input,
+    );
   }
 
   /**

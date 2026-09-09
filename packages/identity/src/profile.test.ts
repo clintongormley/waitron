@@ -10,6 +10,7 @@ import { seedManager, seedTill } from "../test/fixtures.js";
 import { startManagementSession } from "./management-session.js";
 import { issueAccountAction, completeAccountAction } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
+import { encryptTotpSecret } from "./mfa.js";
 import {
   readOwnProfile,
   saveOwnProfile,
@@ -18,6 +19,8 @@ import {
   beginOwnTotpEnrollment,
   finishOwnTotpEnrollment,
   regenerateOwnRecoveryCodes,
+  disableOwnTotp,
+  unlinkOwnGoogle,
   removeOwnPasskey,
 } from "./profile.js";
 
@@ -133,6 +136,24 @@ describe("your profile", () => {
     }
   });
 
+  it("rejects a display name already used by an active person", async () => {
+    const f = await fixture();
+    const otherId = await seedManager(suite.db, f.tenantId, { email: "other@example.com" });
+    await suite.db.execute(
+      sql`update persons set display_name = 'Already Here' where id = ${otherId}`,
+    );
+    await expect(
+      withTenant(suite.db, f.tenantId, (tx) =>
+        saveOwnProfile(tx, {
+          ...f,
+          displayName: " already here ",
+          email: f.email,
+          locale: "en-GB",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "person.display_name_taken" });
+  });
+
   it("changes the password and ends other sessions while preserving this one", async () => {
     const f = await fixture();
     const other = await withTenant(suite.db, f.tenantId, (tx) => startManagementSession(tx, f));
@@ -217,24 +238,30 @@ describe("your profile", () => {
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
     const g = await fixture();
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 4) } };
     await suite.db.execute(
-      sql`update persons set totp_secret='JBSWY3DPEHPK3PXP' where id=${g.personId}`,
+      sql`update persons set totp_secret=${encryptTotpSecret("JBSWY3DPEHPK3PXP", keyRing.current)} where id=${g.personId}`,
     );
     await expect(
       withTenant(suite.db, g.tenantId, (tx) =>
-        changeOwnPassword(tx, { ...g, currentPassword: "correct horse", password: "new password" }),
+        changeOwnPassword(tx, {
+          ...g,
+          currentPassword: "correct horse",
+          password: "new password",
+          keyRing,
+        }),
       ),
     ).rejects.toMatchObject({ code: "totp.invalid" });
   });
 
   it("encrypts authenticator secrets and issues single-use recovery codes", async () => {
     const f = await fixture();
-    const totpKey = Buffer.alloc(32, 9);
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 9) } };
     const pending = await withTenant(suite.db, f.tenantId, (tx) =>
       beginOwnTotpEnrollment(tx, {
         ...f,
         currentPassword: "correct horse",
-        encryptionKey: totpKey,
+        keyRing,
       }),
     );
     await expect(
@@ -243,7 +270,7 @@ describe("your profile", () => {
           ...f,
           enrollmentId: pending.enrollmentId,
           code: "000000",
-          encryptionKey: totpKey,
+          keyRing,
         }),
       ),
     ).rejects.toMatchObject({ code: "totp.invalid" });
@@ -252,7 +279,7 @@ describe("your profile", () => {
         ...f,
         enrollmentId: pending.enrollmentId,
         code: generateSync({ secret: pending.secret }),
-        encryptionKey: totpKey,
+        keyRing,
       }),
     );
     expect(recovery.codes).toHaveLength(10);
@@ -268,7 +295,7 @@ describe("your profile", () => {
           ...f,
           password: "correct horse",
           recoveryCode: recovery.codes[0],
-          totpKey,
+          totpKeyRing: keyRing,
         }),
       ),
     ).resolves.toMatchObject({ personId: f.personId });
@@ -278,7 +305,7 @@ describe("your profile", () => {
           ...f,
           password: "correct horse",
           recoveryCode: recovery.codes[0],
-          totpKey,
+          totpKeyRing: keyRing,
         }),
       ),
     ).rejects.toMatchObject({ code: "totp.invalid" });
@@ -288,9 +315,44 @@ describe("your profile", () => {
         ...f,
         currentPassword: "correct horse",
         totp: generateSync({ secret: pending.secret }),
-        encryptionKey: totpKey,
+        keyRing,
       }),
     );
     expect(replacement.codes).toHaveLength(10);
+  });
+
+  it("disables the authenticator and removes its recovery material after reauthentication", async () => {
+    const f = await fixture();
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 7) } };
+    const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+    await suite.db.execute(
+      sql`update persons set totp_secret = ${encryptTotpSecret(secret, keyRing.current)} where id = ${f.personId}`,
+    );
+    await withTenant(suite.db, f.tenantId, (tx) =>
+      disableOwnTotp(tx, {
+        ...f,
+        currentPassword: "correct horse",
+        totp: generateSync({ secret }),
+        keyRing,
+      }),
+    );
+    const rows = await suite.db.execute<{ totp_secret: string | null }>(
+      sql`select totp_secret from persons where id = ${f.personId}`,
+    );
+    expect(rows.rows[0]!.totp_secret).toBeNull();
+  });
+
+  it("unlinks Google after reauthentication", async () => {
+    const f = await fixture();
+    await suite.db.execute(
+      sql`update persons set google_subject = 'google-subject' where id = ${f.personId}`,
+    );
+    await withTenant(suite.db, f.tenantId, (tx) =>
+      unlinkOwnGoogle(tx, { ...f, currentPassword: "correct horse" }),
+    );
+    const rows = await suite.db.execute<{ google_subject: string | null }>(
+      sql`select google_subject from persons where id = ${f.personId}`,
+    );
+    expect(rows.rows[0]!.google_subject).toBeNull();
   });
 });

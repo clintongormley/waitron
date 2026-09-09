@@ -255,15 +255,15 @@ describe("setEmail", () => {
 // with crafted errors — no DB — so the re-throw branch is covered deterministically. asEmailTaken is
 // exported from staff.ts for exactly this, not from the package barrel.
 describe("asEmailTaken", () => {
-  it("translates a Drizzle-wrapped unique violation (23505) to person.email_taken", () => {
+  it("re-throws a wrapped unique violation when the driver omits the constraint name", () => {
+    const original = { cause: { code: "23505" } };
     let thrown: unknown;
     try {
-      asEmailTaken({ cause: { code: "23505" } }, "owner@x.com");
+      asEmailTaken(original, "owner@x.com");
     } catch (e) {
       thrown = e;
     }
-    expect(isAppError(thrown) && thrown.code).toBe("person.email_taken");
-    expect(isAppError(thrown) && thrown.params).toEqual({ email: "owner@x.com" });
+    expect(thrown).toBe(original);
   });
 
   it("translates a 23505 whose constraint is persons_tenant_email_uq", () => {

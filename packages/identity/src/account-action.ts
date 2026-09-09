@@ -134,12 +134,17 @@ interface CompletionInput {
   now?: Date;
 }
 
+export interface AccountActionCompletion {
+  personId: string;
+  session: ManagementSession | null;
+}
+
 async function finishClaimedAction(
   tx: Transaction,
   input: CompletionInput,
   personId: string,
   nowIso: string,
-): Promise<ManagementSession> {
+): Promise<AccountActionCompletion> {
   const [person] = await tx
     .select({ status: persons.status })
     .from(persons)
@@ -174,7 +179,13 @@ async function finishClaimedAction(
         isNull(managementSessions.endedAt),
       ),
     );
-  return startManagementSession(tx, { tenantId: input.tenantId, personId });
+  return {
+    personId,
+    session:
+      input.purpose === "invitation"
+        ? await startManagementSession(tx, { tenantId: input.tenantId, personId })
+        : null,
+  };
 }
 
 /** Find an active account without making an unknown or malformed email observable to the caller. */
@@ -209,7 +220,7 @@ export async function completeAccountAction(
   input: CompletionInput & {
     token: string;
   },
-): Promise<ManagementSession> {
+): Promise<AccountActionCompletion> {
   assertPasswordLength(input.password);
   if (input.purpose === "invitation") assertPinLength(input.pin ?? "");
   const nowIso = (input.now ?? new Date()).toISOString();
@@ -234,7 +245,7 @@ export async function completeAccountAction(
 export async function completeAccountActionByCode(
   tx: Transaction,
   input: CompletionInput & { email: string; code: string; codeKey: Buffer },
-): Promise<ManagementSession | null> {
+): Promise<AccountActionCompletion | null> {
   assertPasswordLength(input.password);
   if (input.purpose === "invitation") assertPinLength(input.pin ?? "");
   const nowIso = (input.now ?? new Date()).toISOString();
@@ -253,6 +264,7 @@ export async function completeAccountActionByCode(
         eq(managementAccountActions.purpose, input.purpose),
         eq(sql`lower(${persons.email})`, email),
         isNull(managementAccountActions.usedAt),
+        gt(managementAccountActions.expiresAt, nowIso),
         gt(managementAccountActions.codeExpiresAt, nowIso),
         lt(managementAccountActions.codeAttempts, ACCOUNT_ACTION_CODE_ATTEMPTS),
       ),

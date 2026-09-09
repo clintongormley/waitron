@@ -15,7 +15,6 @@ import {
 import {
   permissionsForRole,
   resolveManagementSession,
-  IDLE_TIMEOUT_MS,
   setPersonLocale,
   readOwnProfile,
   saveOwnProfile,
@@ -25,6 +24,9 @@ import {
   beginOwnTotpEnrollment,
   finishOwnTotpEnrollment,
   regenerateOwnRecoveryCodes,
+  disableOwnTotp,
+  unlinkOwnGoogle,
+  type TotpKeyRing,
 } from "@waitron/identity";
 import { SUPPORTED_LOCALES, AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle } from "./password-throttle.js";
@@ -73,7 +75,7 @@ export interface MeApiDeps {
    * the module is enabled AND the signed-in person holds its permission — the two runtime gates.
    */
   modules: string[];
-  credentialKey?: Buffer;
+  credentialKeyRing?: TotpKeyRing;
 }
 
 /**
@@ -96,6 +98,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "totp.invalid": 401,
   "passkey.not_registered": 404,
   "person.email_taken": 409,
+  "person.email_invalid": 400,
+  "person.display_name_taken": 409,
+  "profile.invalid": 400,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -129,7 +134,9 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * the operation to the requester.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
-  const credentialKey = deps.credentialKey ?? randomBytes(32);
+  const credentialKeyRing = deps.credentialKeyRing ?? {
+    current: { version: 1, key: randomBytes(32) },
+  };
   const profileThrottle = createPasswordThrottle();
   /** Run `fn` on the app role under this venue's tenant — the one place the withTenant/asAppUser pair
    * is expressed, so no route re-implements it. */
@@ -139,22 +146,26 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return fn(tx);
     });
 
-  const updateProfile = async (
+  const updateProfile = async <T>(
     sessionId: string,
-    fn: (tx: Transaction) => Promise<void>,
-  ): Promise<void> => {
-    const finish = profileThrottle.begin(sessionId);
-    try {
-      await asStaff(fn);
-    } catch (error) {
-      finish(
-        isAppError(error) && (error.code === "password.invalid" || error.code === "totp.invalid")
-          ? "invalid"
-          : "error",
-      );
-      throw error;
-    }
-    finish("success");
+    fn: (tx: Transaction) => Promise<T>,
+  ): Promise<T> => {
+    return asStaff(async (tx) => {
+      const { personId } = await resolveManagementSession(tx, sessionId);
+      const finish = profileThrottle.begin(personId);
+      try {
+        const result = await fn(tx);
+        finish("success");
+        return result;
+      } catch (error) {
+        finish(
+          isAppError(error) && (error.code === "password.invalid" || error.code === "totp.invalid")
+            ? "invalid"
+            : "error",
+        );
+        throw error;
+      }
+    });
   };
   const textField = (body: Record<string, unknown>, field: string): string => {
     if (typeof body[field] !== "string")
@@ -243,11 +254,11 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       return c.json(
-        await asStaff((tx) =>
+        await updateProfile(managementSessionId, (tx) =>
           beginOwnTotpEnrollment(tx, {
             tenantId: deps.cfg.tenantId,
             managementSessionId,
-            encryptionKey: credentialKey,
+            keyRing: credentialKeyRing,
             ...credentials(body),
           }),
         ),
@@ -258,13 +269,13 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const result = await asStaff((tx) =>
+      const result = await updateProfile(managementSessionId, (tx) =>
         finishOwnTotpEnrollment(tx, {
           tenantId: deps.cfg.tenantId,
           managementSessionId,
           enrollmentId: requireBodyUuid(body.enrollmentId, "enrollmentId"),
           code: textField(body, "code"),
-          encryptionKey: credentialKey,
+          keyRing: credentialKeyRing,
         }),
       );
       return c.json(result);
@@ -275,15 +286,44 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       return c.json(
-        await asStaff((tx) =>
+        await updateProfile(managementSessionId, (tx) =>
           regenerateOwnRecoveryCodes(tx, {
             tenantId: deps.cfg.tenantId,
             managementSessionId,
-            encryptionKey: credentialKey,
+            keyRing: credentialKeyRing,
             ...credentials(body),
           }),
         ),
       );
+    }),
+  );
+  app.delete("/management-api/session/me/totp", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      await updateProfile(managementSessionId, (tx) =>
+        disableOwnTotp(tx, {
+          tenantId: deps.cfg.tenantId,
+          managementSessionId,
+          keyRing: credentialKeyRing,
+          ...credentials(body),
+        }),
+      );
+      return c.body(null, 204);
+    }),
+  );
+  app.delete("/management-api/session/me/google", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      await updateProfile(managementSessionId, (tx) =>
+        unlinkOwnGoogle(tx, {
+          tenantId: deps.cfg.tenantId,
+          managementSessionId,
+          ...credentials(body),
+        }),
+      );
+      return c.body(null, 204);
     }),
   );
 
@@ -328,8 +368,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, role, locale, venueName } = await asStaff(async (tx) => ({
-        ...(await resolveManagementSession(tx, sessionId)),
+      const { personId, role, locale, venueName, expiresAt } = await asStaff(async (tx) => ({
+        ...(await resolveManagementSession(tx, sessionId, { touch: false })),
         venueName: await readVenueName(tx),
       }));
       // `permissions` is the signed-in person's EFFECTIVE set (core catalog + registered module
@@ -345,7 +385,10 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         onboardingIntent: deps.onboardingIntent,
         permissions: permissionsForRole(role),
         modules: deps.modules,
-        sessionExpiresInSeconds: IDLE_TIMEOUT_MS / 1000,
+        sessionExpiresInSeconds: Math.max(
+          0,
+          Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000),
+        ),
       });
     }),
   );

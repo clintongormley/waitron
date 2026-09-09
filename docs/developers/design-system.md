@@ -132,8 +132,14 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-form-error-summary` | `heading`, `errors` | — |
 | `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
+| `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label` | native events from consumer-provided cells |
 
 `wt-button` has no `type` property — see "Forms" below.
+
+Use `wt-data-table` for sortable administrative collections such as people, devices, printers and
+canvases. Define columns and cell content in the consuming screen so domain actions stay outside the
+primitive. Always supply `aria-label`; use its loading, empty and error properties instead of
+replacing the table with unrelated markup.
 
 Variant- and state-like properties (`variant`, `size`, `name`, `raised`, `disabled`, `checked`,
 `invalid`, `open`) all reflect to attributes, which is what makes `:host([variant="..."])`-style

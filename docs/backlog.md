@@ -911,7 +911,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations (Debt); cert distribution to a promoted node (Track B item 3) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
-| 5 | Identity | persons/sessions, PIN (+ per-device throttle #269), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets (#294); `persons` + `webauthn_credentials` are `state` (replicate to a standby) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (a hard dep of the TOTP-enrollment slice — the column replicates) |
+| 5 | Identity | persons/sessions, PIN (+ per-device throttle #269), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets (#294), encrypted TOTP enrollment and recovery codes; identity state replicates to a standby | mid-shift-suspension enforce, discount gate, till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home (#167) | fiscal filing remainder parked |
@@ -1425,11 +1425,11 @@ genuinely-decision-bearing.
   defers automatic delivery retries and forbids storing raw bearer tokens in a plain queue. Track 1:
   scope routine passwordless email login and SMS before adding either; the shipped email flow is
   activation/recovery. Verify replacement email addresses before switching the login address; the
-  current profile flow marks a changed address unverified but applies it immediately. Add a
-  tenant-configured privacy-notice link to invitations, account setup and Your profile once the data
-  protection track below defines the restaurant's notice and contact. Add passkey-backed
-  reauthentication, names/removal for passkeys on passwordless accounts, and Google unlinking before
-  treating profile login-method management as complete for passwordless-only users.
+  current profile flow marks a changed address unverified but applies it immediately. The
+  deployment-configured privacy-notice link now appears in invitations, account setup and Your
+  profile; the restaurant still owns the notice content and contact. Add passkey-backed
+  reauthentication and names/removal for passkeys on passwordless accounts before treating profile
+  login-method management as complete for passwordless-only users.
 - **Remote-access bot protection (owner, 2026-09-09).** Add Cloudflare Turnstile as part of the
   optional remote-access offering. Protect internet-facing login and recovery, validate tokens on
   the server, and preserve restaurant-local login during internet outages. Do not infer trusted
@@ -1495,10 +1495,6 @@ genuinely-decision-bearing.
   validation tracing before adopting the helper. The till **PIN-login** (`POST /api/session`) is the twin
   of the management login #145 hardened (a `null`/malformed body → opaque 500 instead of a clean 401).
   `setup-api` uses a different-contract defensive form and is correctly left as-is.
-- **Encrypt `totp_secret` at rest** (SP5). Stored plaintext today and `app_user` holds SELECT on
-  `persons`, so a `persons` leak exposes every enrolled second factor. Latent (nothing writes it yet).
-  The enrollment slice must encrypt via the credentials vault (AES-256-GCM), decrypting on the box before
-  `verifyTotp` (keeps the offline-verifiable property).
 - **Location-scope the by-id verb family together** (SP6). `getHeldOrder`/`updateHeldOrder`/
   `abandonHeldOrder` and `updateTable`/`deactivateTable`/`openTab` address by tenant + id; only
   *list* verbs scope by location. Unreachable today (single-location tenants); when multi-location lands,

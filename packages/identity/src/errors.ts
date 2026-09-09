@@ -33,6 +33,8 @@ declare module "@waitron/shared" {
     "password.invalid": Record<string, never>;
     /** The TOTP token did not verify against the stored secret (or was malformed — fail-closed). */
     "totp.invalid": Record<string, never>;
+    /** A stored authenticator secret cannot be opened by the configured current/previous key ring. */
+    "totp.key_unavailable": { personId: string };
     "google.invalid": Record<string, never>;
     "google.already_linked": Record<string, never>;
     "google.second_factor_required": Record<string, never>;

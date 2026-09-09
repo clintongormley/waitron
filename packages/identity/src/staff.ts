@@ -7,7 +7,7 @@ import { persons } from "./schema/persons.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
 import { sessions } from "./schema/sessions.js";
-import { webauthnCredentials } from "./schema/webauthn.js";
+import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { recoveryCodes } from "./schema/recovery-codes.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
@@ -27,17 +27,13 @@ export { MIN_PIN_LENGTH } from "./verify-pin.js";
  * It matches on the CONSTRAINT NAME, not merely on 23505: a different unique violation on `persons`
  * — the `id` PK, or any unique constraint added later — is re-thrown untouched, never mislabelled
  * `person.email_taken` (which would also break the `{ email }` param contract when `email` is null).
- * When the driver reports no constraint name (PGlite omits it), it falls back to translating: that
- * partial index is the only NON-PK unique constraint these write paths can hit, and a null-email PK
- * clash is a cryptographically-unreachable `defaultRandom()` collision.
- *
  * `email` is normalized before it reaches here, so the error carries the value that actually
  * collided. Exported for the crafted-error unit test in staff.test.ts, NOT from the package barrel.
  */
 export function asEmailTaken(err: unknown, email: string): never {
   if (isUniqueViolation(err)) {
     const constraint = uniqueViolationConstraint(err);
-    if (constraint === undefined || constraint === "persons_tenant_email_uq") {
+    if (constraint === "persons_tenant_email_uq") {
       throw new AppError("person.email_taken", { email });
     }
   }
@@ -60,7 +56,7 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
-async function assertDisplayNameAvailable(
+export async function assertDisplayNameAvailable(
   tx: Transaction,
   tenantId: string,
   displayName: string,
@@ -80,6 +76,62 @@ async function assertDisplayNameAvailable(
   if (existing !== undefined) throw new AppError("person.display_name_taken", { displayName });
 }
 
+export async function assertEmailAvailable(
+  tx: Transaction,
+  tenantId: string,
+  email: string,
+  excludedPersonId?: string,
+): Promise<void> {
+  const [existing] = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(
+      and(
+        eq(persons.tenantId, tenantId),
+        eq(sql`lower(${persons.email})`, email),
+        excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
+      ),
+    );
+  if (existing !== undefined) throw new AppError("person.email_taken", { email });
+}
+
+async function revokePersonAccess(
+  tx: Transaction,
+  tenantId: string,
+  personId: string,
+): Promise<void> {
+  await tx
+    .update(sessions)
+    .set({ endedAt: sql`now()` })
+    .where(
+      and(
+        eq(sessions.tenantId, tenantId),
+        eq(sessions.personId, personId),
+        isNull(sessions.endedAt),
+      ),
+    );
+  await tx
+    .update(managementSessions)
+    .set({ endedAt: sql`now()` })
+    .where(
+      and(
+        eq(managementSessions.tenantId, tenantId),
+        eq(managementSessions.personId, personId),
+        isNull(managementSessions.endedAt),
+      ),
+    );
+  await tx
+    .update(managementAccountActions)
+    .set({ usedAt: sql`now()` })
+    .where(
+      and(
+        eq(managementAccountActions.tenantId, tenantId),
+        eq(managementAccountActions.personId, personId),
+        isNull(managementAccountActions.usedAt),
+      ),
+    );
+}
+
 /** Saves one complete administrative edit after serializing the active-admin invariant. */
 export async function updatePersonDetails(
   tx: Transaction,
@@ -95,7 +147,11 @@ export async function updatePersonDetails(
     status: "pending" | "active" | "suspended";
   },
 ): Promise<void> {
-  const { authorizedBy, tenantId } = await authorizeManager(tx, {
+  const {
+    authorizedBy,
+    tenantId,
+    role: actorRole,
+  } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -116,11 +172,13 @@ export async function updatePersonDetails(
   if (input.status === "suspended" && authorizedBy === input.personId.toLowerCase()) {
     throw new AppError("person.self_deactivation", {});
   }
-  if (person.status === "suspended" && input.status !== "suspended") {
+  if (input.status !== person.status) {
     throw new AppError("person.transition_invalid", {});
   }
-  if (person.status === "pending" && input.status === "active") {
-    throw new AppError("person.transition_invalid", {});
+  if (input.role !== person.role && (input.role === "admin" || person.role === "admin")) {
+    if (!roleHasPermission(actorRole, "person.admin")) {
+      throw new AppError("authorization.not_permitted", { permission: "person.admin" });
+    }
   }
   if (
     person.role === "admin" &&
@@ -137,6 +195,7 @@ export async function updatePersonDetails(
   const telephone = input.telephone?.trim() || null;
   const email = normalizeAndValidateEmail(input.email);
   await assertDisplayNameAvailable(tx, tenantId, displayName, person.id);
+  await assertEmailAvailable(tx, tenantId, email, person.id);
   try {
     await tx
       .update(persons)
@@ -154,44 +213,50 @@ export async function updatePersonDetails(
   } catch (error) {
     if (
       isUniqueViolation(error) &&
-      uniqueViolationConstraint(error) === "persons_tenant_live_display_name_uq"
+      uniqueViolationConstraint(error) !== "persons_tenant_email_uq"
     ) {
       throw new AppError("person.display_name_taken", { displayName });
     }
     asEmailTaken(error, email);
   }
-  if (input.status === "suspended" && person.status !== "suspended") {
-    await tx
-      .update(sessions)
-      .set({ endedAt: sql`now()` })
-      .where(
-        and(
-          eq(sessions.tenantId, tenantId),
-          eq(sessions.personId, person.id),
-          isNull(sessions.endedAt),
-        ),
-      );
-    await tx
-      .update(managementSessions)
-      .set({ endedAt: sql`now()` })
-      .where(
-        and(
-          eq(managementSessions.tenantId, tenantId),
-          eq(managementSessions.personId, person.id),
-          isNull(managementSessions.endedAt),
-        ),
-      );
-    await tx
-      .update(managementAccountActions)
-      .set({ usedAt: sql`now()` })
-      .where(
-        and(
-          eq(managementAccountActions.tenantId, tenantId),
-          eq(managementAccountActions.personId, person.id),
-          isNull(managementAccountActions.usedAt),
-        ),
-      );
+  if (email !== person.email) await revokePersonAccess(tx, tenantId, person.id);
+}
+
+/** Marks a person inactive without rewriting their identity fields. */
+export async function deactivatePerson(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string },
+): Promise<void> {
+  const { authorizedBy, tenantId } = await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  const activeAdmins = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(
+      and(eq(persons.tenantId, tenantId), eq(persons.role, "admin"), eq(persons.status, "active")),
+    )
+    .orderBy(persons.id)
+    .for("update");
+  const [person] = await tx
+    .select({ id: persons.id, role: persons.role, status: persons.status })
+    .from(persons)
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .for("update");
+  if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
+  if (authorizedBy === input.personId.toLowerCase()) {
+    throw new AppError("person.self_deactivation", {});
   }
+  if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
+    throw new AppError("person.last_admin", {});
+  }
+  if (person.status === "suspended") return;
+  await tx
+    .update(persons)
+    .set({ status: "suspended" })
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+  await revokePersonAccess(tx, tenantId, person.id);
 }
 
 /** Invalidates a person's device PIN so only that person can choose its replacement. */
@@ -249,6 +314,7 @@ export async function resetPersonLogin(
     .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
     .for("update");
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
+  if (person.status === "suspended") throw new AppError("person.transition_invalid", {});
   if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
     throw new AppError("person.last_admin", {});
   }
@@ -288,35 +354,58 @@ export async function resetPersonLogin(
       and(eq(totpEnrollments.tenantId, tenantId), eq(totpEnrollments.personId, input.personId)),
     );
   await tx
-    .update(sessions)
-    .set({ endedAt: sql`now()` })
+    .delete(webauthnChallenges)
     .where(
-      and(
-        eq(sessions.tenantId, tenantId),
-        eq(sessions.personId, person.id),
-        isNull(sessions.endedAt),
-      ),
+      and(eq(webauthnChallenges.tenantId, tenantId), eq(webauthnChallenges.personId, person.id)),
+    );
+  await revokePersonAccess(tx, tenantId, person.id);
+}
+
+/** Moves an inactive account to Pending and clears credentials before a fresh invitation is issued. */
+export async function reactivatePersonForInvitation(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string },
+): Promise<void> {
+  const { tenantId } = await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  const [person] = await tx
+    .select({ id: persons.id, displayName: persons.displayName, status: persons.status })
+    .from(persons)
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .for("update");
+  if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
+  if (person.status !== "suspended") throw new AppError("person.transition_invalid", {});
+  await assertDisplayNameAvailable(tx, tenantId, person.displayName, person.id);
+  await tx
+    .update(persons)
+    .set({
+      status: "pending",
+      pinHash: null,
+      passwordHash: null,
+      totpSecret: null,
+      googleSubject: null,
+      emailVerifiedAt: null,
+    })
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+  await tx
+    .delete(webauthnCredentials)
+    .where(
+      and(eq(webauthnCredentials.tenantId, tenantId), eq(webauthnCredentials.personId, person.id)),
     );
   await tx
-    .update(managementSessions)
-    .set({ endedAt: sql`now()` })
-    .where(
-      and(
-        eq(managementSessions.tenantId, tenantId),
-        eq(managementSessions.personId, person.id),
-        isNull(managementSessions.endedAt),
-      ),
-    );
+    .delete(recoveryCodes)
+    .where(and(eq(recoveryCodes.tenantId, tenantId), eq(recoveryCodes.personId, person.id)));
   await tx
-    .update(managementAccountActions)
-    .set({ usedAt: sql`now()` })
+    .delete(totpEnrollments)
+    .where(and(eq(totpEnrollments.tenantId, tenantId), eq(totpEnrollments.personId, person.id)));
+  await tx
+    .delete(webauthnChallenges)
     .where(
-      and(
-        eq(managementAccountActions.tenantId, tenantId),
-        eq(managementAccountActions.personId, person.id),
-        isNull(managementAccountActions.usedAt),
-      ),
+      and(eq(webauthnChallenges.tenantId, tenantId), eq(webauthnChallenges.personId, person.id)),
     );
+  await revokePersonAccess(tx, tenantId, person.id);
 }
 
 /** Creates the pending account an administrator has invited. Credentials are chosen by its owner. */
@@ -343,6 +432,7 @@ export async function invitePerson(
   const telephone = input.telephone?.trim() || null;
   const email = normalizeAndValidateEmail(input.email);
   await assertDisplayNameAvailable(tx, tenantId, displayName);
+  await assertEmailAvailable(tx, tenantId, email);
   try {
     const [row] = await tx
       .insert(persons)
@@ -363,7 +453,7 @@ export async function invitePerson(
   } catch (error) {
     if (
       isUniqueViolation(error) &&
-      uniqueViolationConstraint(error) === "persons_tenant_live_display_name_uq"
+      uniqueViolationConstraint(error) !== "persons_tenant_email_uq"
     ) {
       throw new AppError("person.display_name_taken", { displayName });
     }
@@ -393,12 +483,15 @@ export async function createPerson(
   });
   assertPinLength(input.pin);
   const email = normalizeAndValidateEmail(input.email);
+  const displayName = requiredText(input.displayName, "displayName");
+  await assertDisplayNameAvailable(tx, tenantId, displayName);
+  await assertEmailAvailable(tx, tenantId, email);
   try {
     const [row] = await tx
       .insert(persons)
       .values({
         tenantId,
-        displayName: input.displayName,
+        displayName,
         pinHash: hashPin(input.pin),
         role: input.role,
         email,
@@ -406,12 +499,9 @@ export async function createPerson(
       .returning({ id: persons.id });
     return { id: row!.id };
   } catch (err) {
-    // The insert can raise only two unique violations on `persons`: `persons_tenant_email_uq`, the
-    // partial index that fires solely when `email` IS NOT NULL, and the `id` primary key. `asEmailTaken`
-    // translates ONLY the email-index constraint (re-throwing a PK/other violation), and that index
-    // can only fire with a non-null email — so whenever it translates, `email!` is genuinely non-null.
-    // (A null-email PK clash is a cryptographically-unreachable `defaultRandom()` collision, re-thrown
-    // untouched on a driver that reports the constraint name.)
+    if (isUniqueViolation(err) && uniqueViolationConstraint(err) !== "persons_tenant_email_uq") {
+      throw new AppError("person.display_name_taken", { displayName });
+    }
     asEmailTaken(err, email);
   }
 }

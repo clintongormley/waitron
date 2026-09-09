@@ -13,6 +13,7 @@ import {
   loginWithGoogle,
 } from "./google-oidc.js";
 import { codeOf, openManagementSession, seedPerson } from "../test/fixtures.js";
+import { encryptTotpSecret } from "./mfa.js";
 
 let tenantId: string;
 const suite = usePgliteDb({
@@ -47,7 +48,12 @@ describe("Google OpenID Connect state", () => {
   it("binds a link ceremony to the signed-in person and consumes state once", async () => {
     const owner = await openManagementSession(suite.db, tenantId, "staff");
     const begun = await run((tx) =>
-      beginGoogleLink(tx, { tenantId, managementSessionId: owner.sessionId, ...config }),
+      beginGoogleLink(tx, {
+        tenantId,
+        managementSessionId: owner.sessionId,
+        currentPassword: "correct horse",
+        ...config,
+      }),
     );
     const claimed = await run((tx) => claimGoogleState(tx, { tenantId, state: begun.state }));
     expect(claimed.personId).toBe(owner.personId);
@@ -55,6 +61,22 @@ describe("Google OpenID Connect state", () => {
     expect(
       await codeOf(() => run((tx) => claimGoogleState(tx, { tenantId, state: begun.state }))),
     ).toBe("google.invalid");
+  });
+
+  it("requires current credentials before starting a link ceremony", async () => {
+    const owner = await openManagementSession(suite.db, tenantId, "staff");
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          beginGoogleLink(tx, {
+            tenantId,
+            managementSessionId: owner.sessionId,
+            currentPassword: "wrong",
+            ...config,
+          }),
+        ),
+      ),
+    ).toBe("password.invalid");
   });
 
   it("links by stable subject, prevents duplicates, and signs an active linked person in", async () => {
@@ -72,8 +94,12 @@ describe("Google OpenID Connect state", () => {
 
   it("does not let Google bypass an enrolled Waitron authenticator", async () => {
     const personId = await seedPerson(suite.db, tenantId, "staff");
+    const encrypted = encryptTotpSecret("JBSWY3DPEHPK3PXP", {
+      version: 1,
+      key: Buffer.alloc(32, 5),
+    });
     await suite.db.execute(
-      sql`update persons set google_subject = 'google-mfa', totp_secret = 'encrypted' where id = ${personId}`,
+      sql`update persons set google_subject = 'google-mfa', totp_secret = ${encrypted} where id = ${personId}`,
     );
     expect(
       await codeOf(() => run((tx) => loginWithGoogle(tx, { tenantId, subject: "google-mfa" }))),

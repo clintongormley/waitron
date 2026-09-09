@@ -44,7 +44,14 @@ export async function startManagementSession(
 export async function resolveManagementSession(
   tx: Transaction,
   sessionId: string,
-): Promise<{ tenantId: string; personId: string; role: PersonRoleValue; locale: string | null }> {
+  options: { touch?: boolean } = {},
+): Promise<{
+  tenantId: string;
+  personId: string;
+  role: PersonRoleValue;
+  locale: string | null;
+  expiresAt: string;
+}> {
   const [row] = await tx
     .select({
       tenantId: managementSessions.tenantId,
@@ -65,15 +72,20 @@ export async function resolveManagementSession(
     throw new AppError("person.suspended", { personId: row.personId });
   }
   if (row.status !== "active") throw new AppError("management_session.required", {});
-  await tx
-    .update(managementSessions)
-    .set({ lastSeenAt: sql`now()` })
-    .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
+  if (options.touch !== false) {
+    await tx
+      .update(managementSessions)
+      .set({ lastSeenAt: sql`now()` })
+      .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
+  }
   return {
     tenantId: row.tenantId,
     personId: row.personId,
     role: row.role as PersonRoleValue,
     locale: row.locale,
+    expiresAt: new Date(
+      (options.touch === false ? Date.parse(row.lastSeenAt) : Date.now()) + IDLE_TIMEOUT_MS,
+    ).toISOString(),
   };
 }
 

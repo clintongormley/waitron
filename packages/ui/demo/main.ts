@@ -2,6 +2,7 @@ import { applyTokens, registerIcons } from "../src/index.js";
 import "../src/components/wt-button.js";
 import "../src/components/wt-card.js";
 import "../src/components/wt-dialog.js";
+import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
 import "../src/components/wt-switch.js";
@@ -33,6 +34,7 @@ const panel = (theme: "light" | "dark") => `
         <wt-switch label="Activado" checked></wt-switch>
       </div>
     </wt-card>
+    <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
     <div class="row" style="margin-top:16px">
       <wt-button class="open-dialog">Abrir diálogo</wt-button>
     </div>
@@ -48,6 +50,18 @@ app.innerHTML = `<div class="panels">${panel("light")}${panel("dark")}</div>`;
 
 for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   applyTokens(el);
+  const table = el.querySelector(".demo-table") as HTMLElement & {
+    rows: readonly { name: string; role: string }[];
+    columns: readonly unknown[];
+  };
+  table.rows = [
+    { name: "Ada", role: "Manager" },
+    { name: "Bea", role: "Staff" },
+  ];
+  table.columns = [
+    { key: "name", label: "Name", cell: (row: { name: string }) => row.name },
+    { key: "role", label: "Role", cell: (row: { role: string }) => row.role },
+  ];
 }
 
 for (const trigger of app.querySelectorAll<HTMLElement>(".open-dialog")) {

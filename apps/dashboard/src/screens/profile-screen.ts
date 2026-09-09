@@ -14,7 +14,19 @@ import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
-type Mode = "view" | "details" | "password" | "pin" | "remove" | "totp" | "recovery" | "codes";
+type Mode =
+  | "view"
+  | "details"
+  | "password"
+  | "pin"
+  | "remove"
+  | "totp"
+  | "recovery"
+  | "google"
+  | "disable-totp"
+  | "unlink-google"
+  | "passkey"
+  | "codes";
 type Field =
   | "displayName"
   | "firstNames"
@@ -94,8 +106,8 @@ export class ProfileScreen extends LitElement {
         gap: var(--wt-space-2);
       }
       svg {
-        width: 1rem;
-        height: 1rem;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
         fill: none;
         stroke: currentColor;
       }
@@ -118,6 +130,7 @@ export class ProfileScreen extends LitElement {
   @state() private totpSetup: { enrollmentId: string; secret: string; uri: string } | null = null;
   @state() private recoveryCodes: string[] = [];
   @state() private googleConfigured = false;
+  @state() private privacyNoticeUrl = "";
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -135,6 +148,7 @@ export class ProfileScreen extends LitElement {
       this.locales = locales.locales;
       this.venueLocale = locales.venueDefault;
       this.googleConfigured = google.configured;
+      this.privacyNoticeUrl = google.privacyNoticeUrl ?? "";
     } catch (error) {
       this.error = codeMessage(codeOf(error));
     }
@@ -164,6 +178,10 @@ export class ProfileScreen extends LitElement {
       this.mode === "pin" ||
       (this.mode === "totp" && this.totpSetup === null) ||
       this.mode === "recovery" ||
+      this.mode === "google" ||
+      this.mode === "disable-totp" ||
+      this.mode === "unlink-google" ||
+      this.mode === "passkey" ||
       this.mode === "remove" ||
       this.fields.email.trim().toLowerCase() !== this.profile?.email
     );
@@ -287,6 +305,16 @@ export class ProfileScreen extends LitElement {
         this.recoveryCodes = result.codes;
         this.mode = "codes";
         return;
+      } else if (this.mode === "google") {
+        const { authorizationUrl } = await this.api.beginGoogleLink(credentials);
+        this.navigate(authorizationUrl);
+        return;
+      } else if (this.mode === "disable-totp") {
+        await this.api.disableTotp(credentials);
+      } else if (this.mode === "unlink-google") {
+        await this.api.unlinkGoogle(credentials);
+      } else if (this.mode === "passkey") {
+        await this.#addPasskey(credentials);
       }
       if (!this.isConnected) return;
       this.#edit("view");
@@ -322,37 +350,12 @@ export class ProfileScreen extends LitElement {
     link.click();
     URL.revokeObjectURL(url);
   }
-  async #addPasskey(): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.error = "";
-    this.saved = false;
-    try {
-      const { challengeHandle, options } = await this.api.passkeyRegisterOptions();
-      const response = await startRegistration({
-        optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
-      });
-      await this.api.passkeyRegisterVerify({ challengeHandle, response });
-      await this.#load();
-      this.saved = true;
-    } catch (error) {
-      this.error = codeMessage(codeOf(error, "passkey.verification_failed"));
-    } finally {
-      this.busy = false;
-    }
-  }
-  async #linkGoogle(): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.error = "";
-    try {
-      const { authorizationUrl } = await this.api.beginGoogleLink();
-      this.navigate(authorizationUrl);
-    } catch (error) {
-      this.error = codeMessage(codeOf(error));
-    } finally {
-      this.busy = false;
-    }
+  async #addPasskey(credentials: { currentPassword?: string; totp?: string }): Promise<void> {
+    const { challengeHandle, options } = await this.api.passkeyRegisterOptions(credentials);
+    const response = await startRegistration({
+      optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
+    });
+    await this.api.passkeyRegisterVerify({ challengeHandle, response });
   }
   override render() {
     const p = this.profile;
@@ -427,7 +430,7 @@ export class ProfileScreen extends LitElement {
                   <wt-button
                     data-test="add-passkey"
                     ?disabled=${this.busy}
-                    @click=${() => void this.#addPasskey()}
+                    @click=${() => this.#edit("passkey")}
                     >${t("staff.add_passkey")}</wt-button
                   >
                 </section>
@@ -439,10 +442,15 @@ export class ProfileScreen extends LitElement {
                   ${
                     p.hasTotp
                       ? html`<wt-button
-                          data-test="recovery-codes"
-                          @click=${() => this.#edit("recovery")}
-                          >${t("profile.replace_recovery_codes")}</wt-button
-                        >`
+                            data-test="recovery-codes"
+                            @click=${() => this.#edit("recovery")}
+                            >${t("profile.replace_recovery_codes")}</wt-button
+                          ><wt-button
+                            data-test="disable-authenticator"
+                            variant="danger"
+                            @click=${() => this.#edit("disable-totp")}
+                            >${t("profile.disable_authenticator")}</wt-button
+                          >`
                       : html`<wt-button
                           data-test="setup-authenticator"
                           @click=${() => this.#edit("totp")}
@@ -462,16 +470,36 @@ export class ProfileScreen extends LitElement {
                     }
                   </p>
                   ${
-                    !p.hasGoogle && this.googleConfigured
+                    p.hasGoogle
                       ? html`<wt-button
-                          data-test="setup-google"
-                          ?disabled=${this.busy}
-                          @click=${() => void this.#linkGoogle()}
-                          >${t("profile.setup_google")}</wt-button
+                          data-test="unlink-google"
+                          variant="danger"
+                          @click=${() => this.#edit("unlink-google")}
+                          >${t("profile.unlink_google")}</wt-button
                         >`
-                      : nothing
+                      : this.googleConfigured
+                        ? html`<wt-button
+                            data-test="setup-google"
+                            ?disabled=${this.busy}
+                            @click=${() => this.#edit("google")}
+                            >${t("profile.setup_google")}</wt-button
+                          >`
+                        : nothing
                   }
                 </section>
+                ${
+                  this.privacyNoticeUrl === ""
+                    ? nothing
+                    : html`<section>
+                        <a
+                          data-test="privacy-notice"
+                          href=${this.privacyNoticeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          >${t("account.privacy_notice")}</a
+                        >
+                      </section>`
+                }
               `
             : this.mode === "codes"
               ? html`<section>
@@ -492,7 +520,7 @@ export class ProfileScreen extends LitElement {
                 </section>`
               : html`<section class="fields">
                   <h2>
-                    ${t(this.mode === "details" ? "profile.details" : this.mode === "password" ? "profile.change_password" : this.mode === "pin" ? "profile.change_pin" : this.mode === "totp" ? "profile.setup_authenticator" : this.mode === "recovery" ? "profile.replace_recovery_codes" : "profile.remove_passkey")}
+                    ${t(this.mode === "details" ? "profile.details" : this.mode === "password" ? "profile.change_password" : this.mode === "pin" ? "profile.change_pin" : this.mode === "totp" ? "profile.setup_authenticator" : this.mode === "recovery" ? "profile.replace_recovery_codes" : this.mode === "google" ? "profile.google_login" : this.mode === "disable-totp" ? "profile.disable_authenticator" : this.mode === "unlink-google" ? "profile.unlink_google" : this.mode === "passkey" ? "staff.add_passkey" : "profile.remove_passkey")}
                   </h2>
                   ${
                     this.mode === "details"

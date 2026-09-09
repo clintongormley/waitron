@@ -110,6 +110,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() loadingMessage = "Loading";
   @property() emptyMessage = "No results";
   @property() errorMessage = "";
+  @property({ attribute: "aria-label" }) override ariaLabel = "";
 
   @state() private sortKey: string | null = null;
   @state() private sortDirection: SortDirection = "ascending";
@@ -155,7 +156,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (this.rows.length === 0)
       return html`<p class="message" role="status">${this.emptyMessage}</p>`;
 
-    const label = this.getAttribute("aria-label") ?? undefined;
+    const label = this.ariaLabel || undefined;
     return html`
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table aria-label=${label ?? nothing}>

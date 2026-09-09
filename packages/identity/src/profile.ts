@@ -8,13 +8,24 @@ import { managementAccountActions } from "./schema/management-account-actions.js
 import { webauthnCredentials } from "./schema/webauthn.js";
 import { sessions } from "./schema/sessions.js";
 import { resolveManagementSession } from "./management-session.js";
-import { asEmailTaken, normalizeAndValidateEmail } from "./staff.js";
+import {
+  asEmailTaken,
+  assertDisplayNameAvailable,
+  assertEmailAvailable,
+  normalizeAndValidateEmail,
+} from "./staff.js";
 import { assertPasswordLength, hashPassword, verifyPassword } from "./verify-password.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { verifyTotp } from "./totp.js";
 import { generateTotpSecret, totpAuthUri } from "./totp.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
-import { decryptTotpSecret, encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
+import { recoveryCodes } from "./schema/recovery-codes.js";
+import {
+  decryptTotpSecret,
+  encryptTotpSecret,
+  replaceRecoveryCodes,
+  type TotpKeyRing,
+} from "./mfa.js";
 
 interface Owner {
   tenantId: string;
@@ -23,7 +34,7 @@ interface Owner {
 interface Credentials {
   currentPassword?: string;
   totp?: string;
-  encryptionKey?: Buffer;
+  keyRing?: TotpKeyRing;
 }
 
 async function ownPerson(tx: Transaction, input: Owner) {
@@ -60,16 +71,26 @@ function verifyCurrent(person: typeof persons.$inferSelect, credentials: Credent
     (credentials.totp === undefined ||
       !verifyTotp(
         credentials.totp,
-        decryptTotpSecret(person.totpSecret, credentials.encryptionKey) ?? "",
+        decryptTotpSecret(person.totpSecret, credentials.keyRing)?.secret ?? "",
       ))
   ) {
     throw new AppError("totp.invalid", {});
   }
 }
 
+/** Resolve the signed-in person and require their current login factors before a sensitive change. */
+export async function verifyOwnCredentials(
+  tx: Transaction,
+  input: Owner & Credentials,
+): Promise<typeof persons.$inferSelect> {
+  const person = await ownPerson(tx, input);
+  verifyCurrent(person, input);
+  return person;
+}
+
 export async function beginOwnTotpEnrollment(
   tx: Transaction,
-  input: Owner & Credentials & { encryptionKey: Buffer },
+  input: Owner & Credentials & { keyRing: TotpKeyRing },
 ): Promise<{ enrollmentId: string; secret: string; uri: string; expiresAt: string }> {
   const person = await ownPerson(tx, input);
   verifyCurrent(person, input);
@@ -85,7 +106,7 @@ export async function beginOwnTotpEnrollment(
     .values({
       tenantId: input.tenantId,
       personId: person.id,
-      encryptedSecret: encryptTotpSecret(secret, input.encryptionKey),
+      encryptedSecret: encryptTotpSecret(secret, input.keyRing.current),
       expiresAt,
     })
     .returning({ id: totpEnrollments.id });
@@ -99,7 +120,7 @@ export async function beginOwnTotpEnrollment(
 
 export async function finishOwnTotpEnrollment(
   tx: Transaction,
-  input: Owner & { enrollmentId: string; code: string; encryptionKey: Buffer },
+  input: Owner & { enrollmentId: string; code: string; keyRing: TotpKeyRing },
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   const [enrollment] = await tx
@@ -115,10 +136,9 @@ export async function finishOwnTotpEnrollment(
     )
     .for("update");
   const secret =
-    enrollment === undefined
-      ? null
-      : decryptTotpSecret(enrollment.encryptedSecret, input.encryptionKey);
-  if (secret === null || !verifyTotp(input.code, secret)) throw new AppError("totp.invalid", {});
+    enrollment === undefined ? null : decryptTotpSecret(enrollment.encryptedSecret, input.keyRing);
+  if (secret === null || !verifyTotp(input.code, secret.secret))
+    throw new AppError("totp.invalid", {});
   await tx
     .update(persons)
     .set({ totpSecret: enrollment!.encryptedSecret })
@@ -133,11 +153,40 @@ export async function finishOwnTotpEnrollment(
 
 export async function regenerateOwnRecoveryCodes(
   tx: Transaction,
-  input: Owner & Credentials & { encryptionKey: Buffer },
+  input: Owner & Credentials & { keyRing: TotpKeyRing },
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   verifyCurrent(person, input);
   return { codes: await replaceRecoveryCodes(tx, input.tenantId, person.id) };
+}
+
+export async function disableOwnTotp(
+  tx: Transaction,
+  input: Owner & Credentials & { keyRing: TotpKeyRing },
+): Promise<void> {
+  const person = await ownPerson(tx, input);
+  verifyCurrent(person, input);
+  await tx
+    .update(persons)
+    .set({ totpSecret: null })
+    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
+  await tx
+    .delete(recoveryCodes)
+    .where(and(eq(recoveryCodes.tenantId, input.tenantId), eq(recoveryCodes.personId, person.id)));
+  await tx
+    .delete(totpEnrollments)
+    .where(
+      and(eq(totpEnrollments.tenantId, input.tenantId), eq(totpEnrollments.personId, person.id)),
+    );
+}
+
+export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credentials): Promise<void> {
+  const person = await ownPerson(tx, input);
+  verifyCurrent(person, input);
+  await tx
+    .update(persons)
+    .set({ googleSubject: null })
+    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
 }
 
 async function invalidateLinks(tx: Transaction, tenantId: string, personId: string): Promise<void> {
@@ -206,6 +255,8 @@ export async function saveOwnProfile(
   const locale = assertSupportedLocale(input.locale);
   const changedEmail = email !== person.email;
   if (changedEmail) verifyCurrent(person, input);
+  await assertDisplayNameAvailable(tx, input.tenantId, displayName, person.id);
+  await assertEmailAvailable(tx, input.tenantId, email, person.id);
   try {
     await tx
       .update(persons)

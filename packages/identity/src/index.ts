@@ -11,6 +11,8 @@ export {
   endManagementSession,
 } from "./management-session.js";
 export type { ManagementSession } from "./management-session.js";
+export { rotateTotpSecrets } from "./mfa.js";
+export type { TotpKeyEntry, TotpKeyRing } from "./mfa.js";
 export { loginManager, loginManagerById, authorizeManager } from "./manager-login.js";
 export {
   CHALLENGE_TTL_MS,
@@ -35,6 +37,9 @@ export {
   beginOwnTotpEnrollment,
   finishOwnTotpEnrollment,
   regenerateOwnRecoveryCodes,
+  disableOwnTotp,
+  unlinkOwnGoogle,
+  verifyOwnCredentials,
   removeOwnPasskey,
 } from "./profile.js";
 export { sessions } from "./schema/sessions.js";
@@ -45,12 +50,13 @@ export { MIN_PIN_LENGTH, assertPinLength } from "./verify-pin.js";
 export {
   clearPersonPin,
   createPerson,
+  deactivatePerson,
   invitePerson,
   listActivePersonsWithPermission,
   listActiveStaff,
   listPersons,
   normalizeAndValidateEmail,
-  reactivatePerson,
+  reactivatePersonForInvitation,
   resetPersonLogin,
   resetPin,
   setEmail,
@@ -70,7 +76,11 @@ export {
   issueAccountAction,
   requestPasswordResetAction,
 } from "./account-action.js";
-export type { AccountActionPurpose, IssuedAccountAction } from "./account-action.js";
+export type {
+  AccountActionCompletion,
+  AccountActionPurpose,
+  IssuedAccountAction,
+} from "./account-action.js";
 export { hashSecret, verifySecret } from "./secret-hash.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
