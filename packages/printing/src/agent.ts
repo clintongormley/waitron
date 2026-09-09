@@ -2,60 +2,25 @@
 // throws them — the reachability convention every code-throwing file in the tree follows, guarded
 // tree-wide by scripts/errors-reachable.test.ts. See errors.ts.
 import "./errors.js";
-import { createHash, randomBytes } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printAgentPairingCodes, printAgents } from "@waitron/db";
+import { printAgents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { hashSecret, verifySecret } from "@waitron/identity";
+import { verifySecret } from "@waitron/identity";
 
-// Printing subsystem §3a — the CRYPTO CORE of print-agent enrolment + auth, modelled EXACTLY on
-// device-identity (apps/server/src/device.ts + device-session.ts), because a print agent is the same
-// "enrol a trusted local box centrally, revoke it centrally" problem, just bound to printers not a
-// station. Three pure verbs on the caller's transaction — the Task-6 route layer wraps each in
-// `withTenant`/`asAppUser` and owns the HTTP status mapping (and, for auth, the Bearer-header parse):
+// Printing subsystem §3a — the agent-auth CORE. `authenticateAgent` resolves a presented bearer token
+// to its `print_agents` row id, or throws `agent.unauthorized`; a revoked (`active = false`) agent
+// fails instantly. Agent enrolment is join-and-accept (the shared join_requests mechanism, in
+// apps/server/src/join-requests.ts) — there is no pairing-code verb here. The Task-6 route layer wraps
+// this call in `withTenant`/`asAppUser`, owns the HTTP status mapping and parses the Bearer header.
 //
-//   - generateAgentCode: an admin mints a single-use pairing code (the `printer.manage` verb).
-//   - enrolAgent:        the local agent redeems the code and becomes a trusted `print_agents` row,
-//                        receiving a bearer token it authenticates with thereafter.
-//   - authenticateAgent: the auth CORE — resolves a presented bearer token to its agent id, or throws
-//                        `agent.unauthorized`. A revoked (`active = false`) agent fails instantly.
-//
-// Two-tier secret handling, and EVERY hash/compare is REUSED, never home-rolled (the "reuse crypto,
-// write none" rule, design §7):
-//  - the pairing code is EPHEMERAL (single-use, TTL-bounded) and is looked up by the redeeming agent
-//    from the code ALONE, so its at-rest form is a deterministic SHA-256 (createHash, node:crypto) —
-//    the indexed lookup key. High entropy + single-use + a short TTL is what keeps that digest safe;
-//  - the agent token is LONG-LIVED and salted per row, so it is scrypt (hashSecret, @waitron/identity)
-//    — the same KDF PINs, passwords and device tokens use — and never stored plaintext.
-// The plaintext code and token each leave this module EXACTLY ONCE (the return values, for the operator
-// to read / the agent to store); neither is ever logged or persisted in the clear.
+// The agent token's secret half is LONG-LIVED and salted per row, so it is hashed with scrypt
+// (verifySecret, @waitron/identity) — the same KDF PINs, passwords and device tokens use — and the
+// plaintext is never compared with `===` nor persisted in the clear.
 
 /**
- * How long a minted pairing code stays redeemable — the device-identity `PAIRING_TTL_MS` analogue
- * (device.ts), the WebAuthn-challenge TTL pattern (passkey.ts `CHALLENGE_TTL_MS`). The TTL is computed
- * in code from `created_at` (there is deliberately no `expires_at` column, §2a); a code older than this
- * redeems `agent.pairing_expired`, and — because the redeeming DELETE is rolled back with the enclosing
- * transaction on that throw — the row survives to lapse by its TTL rather than being burned by the
- * too-late attempt.
- */
-export const PAIRING_TTL_MS = 15 * 60 * 1000; // 15 minutes
-
-/** Bytes of entropy per pairing code. 32 bytes = 256 bits, emitted as base64url. An agent code is
- * copied into the agent process's config rather than read off one screen and typed into another, so it
- * needs no ambiguity-proof alphabet — a high-entropy URL-safe string is enough. At 256 bits the SHA-256
- * digest collision the `(tenant_id, code_sha256)` unique index guards against is unreachable in
- * practice, so there is no digest-collision translation or retry here; that index is a pure
- * defense-in-depth backstop. */
-const PAIRING_CODE_BYTES = 32;
-
-/** Bytes of entropy in the bearer token's secret half. 32 bytes = 256 bits, base64url — the
- * device-token width (device.ts). */
-const TOKEN_BYTES = 32;
-
-/**
- * The tenant + venue scope a code/agent is minted under. The route resolves it (single-tenant deli
- * deployment, `deps.tenantId` + the location) and passes it down, so these verbs never derive scope
+ * The tenant + venue scope an agent is minted under. The route resolves it (single-tenant deli
+ * deployment, `deps.tenantId` + the location) and passes it down, so this verb never derives scope
  * from client input. `authenticateAgent` reads only `tenantId` (typed narrower at its call site).
  */
 export interface PrintAgentConfig {
@@ -73,91 +38,6 @@ export interface PrintAgentConfig {
  * private, unexported const (the same reason `till-session.ts` re-declares it).
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Mint a single-use pairing code for a new print agent (§3a). Stores only the code's SHA-256
- * (never the plaintext) plus the label to stamp on the enrolled agent, scoped to `cfg`'s tenant +
- * venue, and returns the plaintext code ONCE for the operator to read into the agent's config.
- * The caller runs this as `app_user` inside `withTenant` (the `printer.manage` route). The app
- * role grants permit INSERT; the inserted `tenantId` value comes from `cfg.tenantId`.
- */
-export async function generateAgentCode(
-  tx: Transaction,
-  cfg: PrintAgentConfig,
-  input: { label: string },
-): Promise<{ code: string }> {
-  const code = randomBytes(PAIRING_CODE_BYTES).toString("base64url");
-  await tx.insert(printAgentPairingCodes).values({
-    tenantId: cfg.tenantId,
-    locationId: cfg.locationId,
-    codeSha256: createHash("sha256").update(code).digest("hex"),
-    label: input.label,
-  });
-  return { code };
-}
-
-/**
- * Redeem a pairing code and enrol the agent (§3a). Mirrors the WebAuthn `consumeChallenge` semantic
- * (`passkey.ts`) EXACTLY:
- *
- *  1. A locking `DELETE FROM print_agent_pairing_codes WHERE tenant_id AND code_sha256 = sha256(code)
- *     RETURNING` — Drizzle-parameterised, never string-concatenated. The DELETE row-locks the code, so
- *     two agents racing on the SAME code serialise: the second blocks, then — once the first commits —
- *     matches ZERO rows. No row (unknown, or already-consumed, both folded) → `agent.pairing_invalid`.
- *  2. `now - created_at > PAIRING_TTL_MS` → `agent.pairing_expired`. The throw rolls the caller's
- *     transaction back, UNDOING the consume-DELETE, so an expired code lapses by its TTL rather than
- *     being burned by the too-late attempt (the WebAuthn semantic). No catch/commit around this — the
- *     route's `withTenant` transaction rolls it back.
- *  3. Mint a long-lived secret (`randomBytes(32).base64url`) and INSERT the `print_agents` row with its
- *     scrypt hash (`hashSecret`, @waitron/identity) — the plaintext lives ONLY in the returned token,
- *     never at rest.
- *
- * Returns the enrolled agent's id + the bearer token the agent presents thereafter. The token is
- * `${agentId}.${secret}`: a SELECTOR (the row id, needed to fetch the per-row scrypt salt) + a
- * VALIDATOR (the secret `authenticateAgent` checks). Composing it HERE (not in the route) keeps the
- * token format in one module with the split in `authenticateAgent`.
- */
-export async function enrolAgent(
-  tx: Transaction,
-  cfg: PrintAgentConfig,
-  input: { code: string },
-): Promise<{ agentId: string; token: string }> {
-  const codeSha256 = createHash("sha256").update(input.code).digest("hex");
-  // Consume BEFORE anything else: the locking DELETE … RETURNING is the single-use guarantee under
-  // concurrency (see the doc above). Parameterised by Drizzle — `code_sha256` binds as `$n`.
-  const [row] = await tx
-    .delete(printAgentPairingCodes)
-    .where(
-      and(
-        eq(printAgentPairingCodes.tenantId, cfg.tenantId),
-        eq(printAgentPairingCodes.codeSha256, codeSha256),
-      ),
-    )
-    .returning({
-      createdAt: printAgentPairingCodes.createdAt,
-      label: printAgentPairingCodes.label,
-      locationId: printAgentPairingCodes.locationId,
-    });
-  if (row === undefined) throw new AppError("agent.pairing_invalid", {});
-  if (Date.now() - Date.parse(row.createdAt) > PAIRING_TTL_MS) {
-    throw new AppError("agent.pairing_expired", {});
-  }
-
-  const secret = randomBytes(TOKEN_BYTES).toString("base64url");
-  const [agent] = await tx
-    .insert(printAgents)
-    .values({
-      tenantId: cfg.tenantId,
-      // The venue the code was minted under — stamped onto the enrolled agent, so scope is fixed at
-      // mint time rather than re-derived at redemption.
-      locationId: row.locationId,
-      name: row.label,
-      tokenHash: hashSecret(secret),
-      active: true,
-    })
-    .returning({ id: printAgents.id });
-  return { agentId: agent!.id, token: `${agent!.id}.${secret}` };
-}
 
 /**
  * The agent-auth CORE (§3a, Ruling 5). Resolves a presented bearer token STRING to its agent id, or
