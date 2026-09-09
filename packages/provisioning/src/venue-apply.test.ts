@@ -64,6 +64,8 @@ describe("applyVenue", () => {
       series: number;
       sif: number;
       default_stations: number;
+      default_departments: number;
+      counter_zones: number;
     }>(sql`
       select
         (select count(*) from tenants where id = ${result.tenantId})::int as tenants,
@@ -71,7 +73,11 @@ describe("applyVenue", () => {
         (select count(*) from invoice_series where node_id = ${result.nodeId})::int as series,
         (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null)::int as sif,
         (select count(*) from kitchen_stations
-           where location_id = ${result.locationId} and is_default and active)::int as default_stations`);
+           where location_id = ${result.locationId} and is_default and active)::int as default_stations,
+        (select count(*) from departments
+           where location_id = ${result.locationId} and is_default and active)::int as default_departments,
+        (select count(*) from zone_service_policies
+           where location_id = ${result.locationId} and is_counter_default)::int as counter_zones`);
     // KDS-1: applyVenue seeds exactly one active default kitchen station for the location, so a fresh
     // venue can fire the moment it exists (fireLines' fallback). Proven by deletion — dropping the
     // create-location station insert makes default_stations 0.
@@ -81,6 +87,8 @@ describe("applyVenue", () => {
       series: 2,
       sif: 1,
       default_stations: 1,
+      default_departments: 1,
+      counter_zones: 1,
     });
 
     const series = await suite.db.execute<{ purpose: string }>(sql`
@@ -99,6 +107,10 @@ describe("applyVenue", () => {
     expect(sif.rows[0]?.nif).toBe("B12345678");
     expect(sif.rows[0]?.numero_instalacion).toBeGreaterThanOrEqual(1);
     expect(result.seeded).toEqual([
+      {
+        module: "venue-service",
+        report: "default department and counter zone ready",
+      },
       {
         module: "fiscal-verifactu",
         report: expect.stringMatching(/^SIF .* \(installation \d+\)$/),
@@ -519,8 +531,12 @@ describe("applyVenue", () => {
         modules,
       });
       expect(seeded).toContain(result.nodeId);
-      expect(result.seeded.map((s) => s.module)).toEqual(["fiscal-verifactu", "probe"]);
-      expect(result.seeded[1]).toEqual({ module: "probe", report: `recorded ${result.nodeId}` });
+      expect(result.seeded.map((s) => s.module)).toEqual([
+        "venue-service",
+        "fiscal-verifactu",
+        "probe",
+      ]);
+      expect(result.seeded[2]).toEqual({ module: "probe", report: `recorded ${result.nodeId}` });
     });
 
     it("a throwing seed rolls the whole venue back — no tenant row survives", async () => {

@@ -36,6 +36,7 @@ export const departments = pgTable(
     name: text("name").notNull(),
     tradingName: text("trading_name").notNull(),
     defaultServiceMode: text("default_service_mode").notNull(),
+    isDefault: boolean("is_default").notNull().default(false),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
@@ -70,6 +71,7 @@ export const zoneServicePolicies = pgTable(
     departmentId: uuid("department_id").notNull(),
     serviceMode: text("service_mode"),
     defaultMenuId: uuid("default_menu_id"),
+    isCounterDefault: boolean("is_counter_default").notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.tenantId, t.zoneId], name: "zone_service_policies_pk" }),

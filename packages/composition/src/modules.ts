@@ -20,7 +20,11 @@ import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_CLASSIFICATION, PAYMENTS_CONFIGURATION_TRANSFER } from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
 import { WORKFORCE_CLASSIFICATION, WORKFORCE_CONFIGURATION_TRANSFER } from "@waitron/workforce";
-import { VENUE_SERVICE, VENUE_SERVICE_CLASSIFICATION } from "@waitron/venue-service";
+import {
+  VENUE_SERVICE,
+  VENUE_SERVICE_CLASSIFICATION,
+  VENUE_SERVICE_PROVISIONING,
+} from "@waitron/venue-service";
 import {
   WORKFORCE_ES_CLASSIFICATION,
   WORKFORCE_ES_CONFIGURATION_TRANSFER,
@@ -86,6 +90,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     classification: VENUE_SERVICE_CLASSIFICATION,
     venueService: VENUE_SERVICE,
     configurationTransfer: { kind: "none" },
+    provisioning: VENUE_SERVICE_PROVISIONING,
   },
   {
     name: "identity",
