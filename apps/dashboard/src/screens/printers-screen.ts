@@ -6,6 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { drawerPolicyName, jobStatusName, printModeName, transportName } from "../i18n/domain.js";
@@ -13,7 +14,9 @@ import { formatIsoMinute } from "../date-utils.js";
 import type {
   DashboardApi,
   DrawerOpenPolicy,
+  JoinRequestRow,
   LocationSummary,
+  PairingModeState,
   PrintAgentRow,
   PrintJobRow,
   PrintTicketScope,
@@ -69,11 +72,17 @@ const TRANSPORTS: readonly PrintTransport[] = ["network_tcp", "usb"];
  * list + "new" form idiom, `@waitron/ui` primitives, `--wt-*` tokens). It manages three things:
  *
  *  - PRINT AGENTS — the always-on local processes that pull queued jobs and push bytes to the hardware.
- *    Lists the enrolled agents (name, active/revoked, last-seen); GENERATES a pairing code (type a label
- *    → `api.createAgentCode(label)`), shown ONCE in a copyable panel that lives only in component state
- *    (never re-fetchable, like a device pairing code); REVOKES an agent behind a TWO-STEP confirm (a
- *    revoke stops a working agent, so an accidental single click must not fire it). Only ACTIVE agents
- *    show the revoke control.
+ *    Lists the enrolled agents (name, active/revoked, last-seen); REVOKES an agent behind a TWO-STEP
+ *    confirm (a revoke stops a working agent, so an accidental single click must not fire it — only
+ *    ACTIVE agents show the control). A new agent JOINS through the SHARED join-and-accept mechanism
+ *    (device-join-and-accept, the twin of the Devices screen): the venue-wide pairing window, a queue of
+ *    agents asking to join (`api.joinRequests("print_agent")`, NO number in the row), and a per-request
+ *    accept dialog that fetches `api.joinChallenge(id)` — three shuffled two-digit numbers of which the
+ *    server does not say which is real — and accepts on the tapped one (`api.acceptPrintAgentJoinRequest`).
+ *    An agent binds nothing, so the dialog is JUST the three numbers (no profile / station pickers). A
+ *    WRONG tap is terminal for the row (the server denied it) — `device.join_mismatch`, the same
+ *    surface-neutral terminal code the device accept uses. Deny sits behind the same two-step confirm as
+ *    Revoke.
  *  - PRINTERS — the managed printer configs. CREATES one from the "new printer" form (name + transport +
  *    the transport's connection fields); EDITS a row's name / connection fields / ticket scope / active
  *    and Guardar-s it (`api.updatePrinter`); DEACTIVATES one (`api.deactivatePrinter`, never a hard
@@ -154,34 +163,24 @@ export class PrintersScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      .code-panel {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        align-items: flex-start;
-        margin-top: var(--wt-space-4);
-        padding: var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-      }
-      .code-hint {
-        margin: 0;
+      .hint {
+        margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-text-muted);
       }
-      .code-value {
+      .origin {
         font-family: var(--wt-font-family-mono, monospace);
-        font-size: var(--wt-font-size-lg);
-        letter-spacing: 0.15em;
         color: var(--wt-color-text);
       }
-      .code-actions {
+      .actions {
         display: flex;
         gap: var(--wt-space-2);
         align-items: center;
+        flex-wrap: wrap;
       }
-      .copied {
-        color: var(--wt-color-text-muted);
+      .choices {
+        display: flex;
+        gap: var(--wt-space-3);
+        flex-wrap: wrap;
       }
       .error {
         color: var(--wt-color-danger);
@@ -244,12 +243,20 @@ export class PrintersScreen extends LitElement {
   // not reset the segmented control.
   @state() private drawerPolicies: Record<string, DrawerOpenPolicy> = {};
 
-  // The generate-agent-code form's label, and the one-time code held ONLY here (never re-fetchable).
-  @state() private newAgentLabel = "";
-  @state() private generatedCode: string | null = null;
-  @state() private copied = false;
   // The id of the agent whose Revoke control is ARMED (awaiting a confirming second click), or null.
   @state() private armedRevokeId: string | null = null;
+
+  // The shared join-and-accept half (device-join-and-accept, reused for print agents; the Devices
+  // screen documents each field). The pairing window as last read (undefined until the first read
+  // settles); the print agents waiting to join, in server order, each carrying NO number; the request
+  // whose accept dialog is open (single-valued: one dialog at a time); the three numbers the server
+  // offered per request, CACHED because the set is fixed at join; and the id of the request whose Deny
+  // is ARMED (its own state, so arming a Deny does not disarm a Revoke above).
+  @state() private pairing: PairingModeState | undefined;
+  @state() private pendingJoins: JoinRequestRow[] = [];
+  @state() private openRequestId: string | null = null;
+  @state() private challenges: Record<string, string[]> = {};
+  @state() private armedDenyId: string | null = null;
 
   // The new-printer form's fields. `newTransport` seeds to the first option; the connection fields are
   // all optional strings, sent only when non-empty (the server owns the per-transport required check).
@@ -303,28 +310,34 @@ export class PrintersScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     this.armedRevokeId = null;
+    this.armedDenyId = null;
     try {
-      const [agents, printers, jobs, stations, tills, locations] = await Promise.all([
-        this.api.listAgents(),
-        this.api.listPrinters(),
-        this.api.listRecentJobs(),
-        // The station↔printer mapping section needs the full station list for its toggles.
-        // `listStations()` (GET /management-api/stations) is `till.configure`-gated, whereas the mapping
-        // WRITES are `printer.manage`-gated — but that mismatch is unreachable: both permissions map to
-        // exactly {manager, admin} (packages/identity/src/permissions.ts), so every user who can reach
-        // this screen holds both. If the role→permission map ever grants `printer.manage` WITHOUT
-        // `till.configure`, move this read to a `printer.manage`-gated stations endpoint (raised by
-        // Copilot on the KDS-4 PR).
-        this.api.listStations(),
-        // Counter receipt/drawer (§5): the tills (receipt-printer picker) + locations (print-mode toggle).
-        // `listTills()` is `printer.manage`-gated (this screen's own permission); `getLocations()` is
-        // `schedule.manage`-gated, the same unreachable-mismatch shape as `listStations()` above — both
-        // `printer.manage` and `schedule.manage` sit in the MANAGER set (packages/identity/src/permissions.ts;
-        // admin holds ALL), so the two map to the identical {manager, admin} and every user who reaches
-        // this screen holds both.
-        this.api.listTills(),
-        this.api.getLocations(),
-      ]);
+      const [agents, printers, jobs, stations, tills, locations, pairing, pendingJoins] =
+        await Promise.all([
+          this.api.listAgents(),
+          this.api.listPrinters(),
+          this.api.listRecentJobs(),
+          // The station↔printer mapping section needs the full station list for its toggles.
+          // `listStations()` (GET /management-api/stations) is `till.configure`-gated, whereas the mapping
+          // WRITES are `printer.manage`-gated — but that mismatch is unreachable: both permissions map to
+          // exactly {manager, admin} (packages/identity/src/permissions.ts), so every user who can reach
+          // this screen holds both. If the role→permission map ever grants `printer.manage` WITHOUT
+          // `till.configure`, move this read to a `printer.manage`-gated stations endpoint (raised by
+          // Copilot on the KDS-4 PR).
+          this.api.listStations(),
+          // Counter receipt/drawer (§5): the tills (receipt-printer picker) + locations (print-mode toggle).
+          // `listTills()` is `printer.manage`-gated (this screen's own permission); `getLocations()` is
+          // `schedule.manage`-gated, the same unreachable-mismatch shape as `listStations()` above — both
+          // `printer.manage` and `schedule.manage` sit in the MANAGER set (packages/identity/src/permissions.ts;
+          // admin holds ALL), so the two map to the identical {manager, admin} and every user who reaches
+          // this screen holds both.
+          this.api.listTills(),
+          this.api.getLocations(),
+          // The shared pairing window + this surface's join queue (kind "print_agent"). Both take their
+          // permission from the row's KIND, so they serve the printers screen exactly as the devices one.
+          this.api.pairingMode(),
+          this.api.joinRequests("print_agent"),
+        ]);
       // Pair each printer id with its OWN station set at fetch time, so the correlation cannot drift on
       // a later reorder/filter the way a positional array-zip would. (Still one call per printer — the
       // N+1 is a tracked follow-up, out of scope here; only the zip fragility is being removed.)
@@ -365,6 +378,8 @@ export class PrintersScreen extends LitElement {
       this.drawerPolicies = Object.fromEntries(
         locations.map((l) => [l.id, this.drawerPolicies[l.id] ?? "gated"]),
       );
+      this.pairing = pairing;
+      this.pendingJoins = pendingJoins;
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -395,45 +410,123 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  // ── Agents ─────────────────────────────────────────────────────────────────────────────────────
+  // ── Agents: join-and-accept (the shared mechanism, twin of the Devices screen) ───────────────────
 
-  /** The generate-code label field's composed `wt-change`. `stopPropagation` keeps it inside this shadow. */
-  #onAgentLabel(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.newAgentLabel = event.detail.value;
+  /** Re-read the pairing window and this surface's pending queue after a join-side mutation, WITHOUT the
+   * option/list feeds (which none of those mutations change). Throws like the verbs it calls; every
+   * caller wraps it in its own `try/catch`. Disarms any armed deny (the armed row may no longer exist). */
+  async #reloadJoins(): Promise<void> {
+    this.armedDenyId = null;
+    const [pairing, pendingJoins] = await Promise.all([
+      this.api.pairingMode(),
+      this.api.joinRequests("print_agent"),
+    ]);
+    this.pairing = pairing;
+    this.pendingJoins = pendingJoins;
   }
 
-  /** Mint an agent pairing code for the typed label, then show it ONCE and reload. A blank label is a
-   * no-op (the server requires one). On success the code goes into state (never re-fetched) and the
-   * label resets; on rejection the `errorKey` banner shows and the form is left intact for a retry. */
-  async #generateCode(): Promise<void> {
-    this.errorKey = null; // also dismisses a prior banner on the blank-label early return below
-    const label = this.newAgentLabel.trim();
-    if (label === "") return;
-    await this.#submit(async () => {
-      const { code } = await this.api.createAgentCode(label);
-      this.generatedCode = code;
-      this.copied = false;
-      this.newAgentLabel = "";
-    });
+  /** Reload the AGENTS only (not the option feeds) after an accept — the accepted request becomes an
+   * enrolled agent. Throws like `listAgents` itself; the one caller wraps it. Disarms any armed revoke. */
+  async #reloadAgents(): Promise<void> {
+    this.armedRevokeId = null;
+    this.agents = await this.api.listAgents();
   }
 
-  /** Copy the shown code to the clipboard, confirming with a transient "Copied" status. Never throws: if
-   * the clipboard is unavailable or denied the code stays on screen to copy by hand (the catch arm). */
-  async #copyCode(code: string): Promise<void> {
+  /** Open the pairing window, or extend an already-open one — the SAME call (the route moves an open
+   * window's lapse to a fresh window from now rather than adding one). */
+  async #openPairing(): Promise<void> {
+    this.errorKey = null;
     try {
-      await navigator.clipboard.writeText(code);
-      this.copied = true;
-    } catch {
-      this.copied = false;
+      await this.api.openPairingMode();
+      await this.#reloadJoins();
+    } catch (error) {
+      this.errorKey = codeOf(error);
     }
   }
 
-  /** Dismiss the shown-once code — it lived only in state, so this is final (it cannot be re-fetched). */
-  #dismissCode(): void {
-    this.generatedCode = null;
-    this.copied = false;
+  /** Shut the window. Requests already pending stay pending and are still acceptable — the window admits
+   * an ask, it does not hold one open. */
+  async #closePairing(): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.closePairingMode();
+      await this.#reloadJoins();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
   }
+
+  /** Open a pending request's accept dialog, fetching its three numbers the FIRST time only: the server
+   * fixes the set at join, so a second fetch would show the same three and teach nobody anything. */
+  async #openRequest(id: string): Promise<void> {
+    this.errorKey = null;
+    this.openRequestId = id;
+    if (this.challenges[id] !== undefined) return;
+    try {
+      const { choices } = await this.api.joinChallenge(id);
+      this.challenges = { ...this.challenges, [id]: choices };
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** The two-step deny: the first click ARMS `id`, a second on the armed row confirms. Denying is not
+   * undoable, so the confirm gate is deliberate (Revoke's idiom). */
+  #onDeny(id: string): void {
+    if (this.armedDenyId === id) {
+      this.armedDenyId = null;
+      void this.#deny(id);
+      return;
+    }
+    this.armedDenyId = id;
+  }
+
+  /** Refuse a pending request, then re-read the queue. `#onDeny` already cleared the armed state. */
+  async #deny(id: string): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.denyJoinRequest(id);
+      if (this.openRequestId === id) this.openRequestId = null;
+      await this.#reloadJoins();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /**
+   * Accept the open request with the number the admin tapped. An agent binds nothing, so the body is
+   * just `{ choice }`.
+   *
+   * A WRONG number is not a rejected submission: the server DELETED the request before answering
+   * `device.join_mismatch` (the surface-neutral terminal code), so that code closes the dialog and
+   * re-reads the queue without the row. Every other fault leaves the dialog open on the same request for
+   * a retry (there is nothing to correct here, but a transient server fault is worth a second tap).
+   */
+  async #accept(request: JoinRequestRow, choice: string): Promise<void> {
+    if (this.submitting) return;
+    this.errorKey = null;
+    this.submitting = true;
+    try {
+      await this.api.acceptPrintAgentJoinRequest(request.id, { choice });
+      this.openRequestId = null;
+      await Promise.all([this.#reloadJoins(), this.#reloadAgents()]);
+    } catch (error) {
+      const code = codeOf(error);
+      this.errorKey = code;
+      if (code === "device.join_mismatch") {
+        this.openRequestId = null;
+        try {
+          await this.#reloadJoins();
+        } catch (reloadError) {
+          this.errorKey = codeOf(reloadError);
+        }
+      }
+    } finally {
+      this.submitting = false;
+    }
+  }
+
+  // ── Agents: revoke ───────────────────────────────────────────────────────────────────────────────
 
   /** The two-step revoke: the first click ARMS `id`, a second click on the armed row confirms and
    * revokes. Arming another row disarms the first (single-valued state). */
@@ -671,34 +764,144 @@ export class PrintersScreen extends LitElement {
     </li>`;
   }
 
-  #renderCodePanel(code: string): TemplateResult {
-    return html`<section
-      class="code-panel"
-      data-test="code-panel"
-      aria-label=${t("printers.code_title")}
+  /** The venue-wide pairing window (device-join-and-accept §1.1, shared with the Devices screen). While
+   * OPEN: when it lapses, plus Extend and Close. While SHUT: Open, and — only when there were any — how
+   * many knocks were turned away in the last ten minutes. Counts are composed with `.replace` (this
+   * catalogue has no interpolation). */
+  #renderPairing(): TemplateResult {
+    const mode = this.pairing;
+    if (mode === undefined) return html`<p class="hint">${t("printers.pairing_loading")}</p>`;
+    return html`<wt-card data-test="pairing-mode">
+      <h3 class="panel-title" style="margin-top:0">${t("printers.pairing_title")}</h3>
+      <p class="hint">${t("printers.pairing_hint")}</p>
+      ${
+        mode.open
+          ? html`<p data-test="pairing-until">
+                ${t("printers.pairing_open_until").replace(
+                  "{time}",
+                  mode.openUntil === null ? "" : formatIsoMinute(mode.openUntil),
+                )}
+              </p>
+              <div class="actions">
+                <wt-button
+                  variant="primary"
+                  data-test="pairing-extend"
+                  @click=${() => void this.#openPairing()}
+                  >${t("printers.pairing_extend")}</wt-button
+                >
+                <wt-button
+                  variant="secondary"
+                  data-test="pairing-close"
+                  @click=${() => void this.#closePairing()}
+                  >${t("printers.pairing_close")}</wt-button
+                >
+              </div>`
+          : html`<div class="actions">
+                <wt-button
+                  variant="primary"
+                  data-test="pairing-open"
+                  @click=${() => void this.#openPairing()}
+                  >${t("printers.pairing_open")}</wt-button
+                >
+              </div>
+              ${
+                mode.refusedRecently > 0
+                  ? html`<p class="hint" data-test="pairing-refused">
+                      ${t("printers.pairing_refused").replace(
+                        "{count}",
+                        String(mode.refusedRecently),
+                      )}
+                    </p>`
+                  : nothing
+              }`
+      }
+    </wt-card>`;
+  }
+
+  /** One waiting agent: the name it asked for and when, plus Let in and the two-step Deny. NO number is
+   * rendered here and none is fetched to render it — the row shape has none (design §1.2 rule 1). */
+  #renderJoinRequest(request: JoinRequestRow): TemplateResult {
+    const armed = this.armedDenyId === request.id;
+    return html`<li data-test="join-row-${request.id}">
+      <wt-card>
+        <div class="row">
+          <div class="details">
+            <span class="label" data-test="join-label-${request.id}">${request.label}</span>
+            <span class="meta">
+              <span data-test="join-asked-${request.id}"
+                >${formatIsoMinute(request.createdAt)}</span
+              >
+            </span>
+          </div>
+          <wt-button
+            variant="primary"
+            size="sm"
+            data-test="join-review-${request.id}"
+            aria-label=${`${t("printers.join_review")} ${request.label}`}
+            @click=${() => void this.#openRequest(request.id)}
+            >${t("printers.join_review")}</wt-button
+          >
+          <wt-button
+            variant="danger"
+            size="sm"
+            data-test="join-deny-${request.id}"
+            data-armed=${armed ? "true" : nothing}
+            aria-label=${`${armed ? t("printers.join_deny_confirm") : t("printers.join_deny")} ${request.label}`}
+            @click=${() => this.#onDeny(request.id)}
+            >${armed ? t("printers.join_deny_confirm") : t("printers.join_deny")}</wt-button
+          >
+        </div>
+      </wt-card>
+    </li>`;
+  }
+
+  /**
+   * The accept dialog: the three numbers as three real buttons, each accessibly named ("Number 47", not
+   * a bare "47") so the comparison against what the agent is showing is a deliberate act. An agent binds
+   * nothing, so — unlike the Devices dialog — there are no profile/station pickers and the numbers are
+   * tappable at once. The server does not say which is real, and a wrong tap denies the request, so the
+   * number IS the accept: there is no separate Accept control.
+   */
+  #renderAcceptDialog(): TemplateResult | typeof nothing {
+    const request = this.pendingJoins.find((r) => r.id === this.openRequestId);
+    if (request === undefined) return nothing;
+    const choices = this.challenges[request.id];
+    return html`<wt-dialog
+      data-test="join-dialog"
+      heading=${t("printers.join_dialog_title")}
+      .open=${true}
+      @wt-close=${() => (this.openRequestId = null)}
     >
-      <h3 class="panel-title" style="margin-top:0">${t("printers.code_title")}</h3>
-      <p class="code-hint">${t("printers.code_hint")}</p>
-      <code class="code-value" data-test="code-value">${code}</code>
-      <div class="code-actions">
-        <wt-button
-          variant="secondary"
-          data-test="copy-code"
-          @click=${() => void this.#copyCode(code)}
-          >${t("printers.copy")}</wt-button
-        >
-        <wt-button variant="ghost" data-test="dismiss-code" @click=${() => this.#dismissCode()}
-          >${t("printers.done")}</wt-button
-        >
-        ${
-          this.copied
-            ? html`<span class="copied" role="status" data-test="copied"
-                >${t("printers.copied")}</span
-              >`
-            : nothing
-        }
-      </div>
-    </section>`;
+      <p class="label" data-test="join-dialog-label">${request.label}</p>
+      ${
+        choices === undefined
+          ? html`<p class="hint">${t("printers.join_loading")}</p>`
+          : html`<p id="join-match-prompt">${t("printers.join_match_prompt")}</p>
+              <div class="choices" role="group" aria-labelledby="join-match-prompt">
+                ${choices.map(
+                  // `size="lg"`: the number has to be legible across the room, against the agent's setup
+                  // page — that is the whole job of a two-digit code.
+                  (number) =>
+                    html`<wt-button
+                      variant="secondary"
+                      size="lg"
+                      data-choice=${number}
+                      ?disabled=${this.submitting}
+                      aria-label=${t("printers.join_choice_label").replace("{number}", number)}
+                      @click=${() => void this.#accept(request, number)}
+                      >${number}</wt-button
+                    >`,
+                )}
+              </div>`
+      }
+      <wt-button
+        slot="footer"
+        variant="ghost"
+        data-test="join-cancel"
+        @click=${() => (this.openRequestId = null)}
+        >${t("action.cancel")}</wt-button
+      >
+    </wt-dialog>`;
   }
 
   #renderPrinter(p: EditablePrinter): TemplateResult {
@@ -851,31 +1054,34 @@ export class PrintersScreen extends LitElement {
     return html`
       <section>
         <h2 class="panel-title" style="margin-top:0">${t("printers.agents_title")}</h2>
-        ${
-          this.agents.length === 0
-            ? html`<p class="empty" data-test="no-agents">${t("printers.no_agents")}</p>`
-            : html`<ol>
-                ${this.agents.map((agent) => this.#renderAgent(agent))}
-              </ol>`
-        }
-        <h3 class="panel-title">${t("printers.generate_title")}</h3>
-        <div class="new">
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=generate-code]"))}
-            label=${t("printers.agent_label")}
-            data-test="agent-label"
-            .value=${this.newAgentLabel}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onAgentLabel(e)}
-          ></wt-input>
-          <wt-button
-            variant="primary"
-            data-test="generate-code"
-            ?disabled=${this.submitting}
-            @click=${() => void this.#generateCode()}
-            >${t("printers.generate")}</wt-button
-          >
-        </div>
-        ${this.generatedCode !== null ? this.#renderCodePanel(this.generatedCode) : nothing}
+
+        <section data-test="pairing-panel">${this.#renderPairing()}</section>
+
+        <section data-test="join-panel">
+          <h3 class="panel-title">${t("printers.join_waiting_title")}</h3>
+          <p class="hint">
+            ${t("printers.join_hint")}
+            <code class="origin" data-test="join-origin">${window.location.origin}</code>
+          </p>
+          ${
+            this.pendingJoins.length === 0
+              ? html`<p class="empty" data-test="no-join-requests">${t("printers.join_none")}</p>`
+              : html`<ol>
+                  ${this.pendingJoins.map((request) => this.#renderJoinRequest(request))}
+                </ol>`
+          }
+        </section>
+
+        <section data-test="enrolled-agents-panel">
+          <h3 class="panel-title">${t("printers.join_enrolled_title")}</h3>
+          ${
+            this.agents.length === 0
+              ? html`<p class="empty" data-test="no-agents">${t("printers.no_agents")}</p>`
+              : html`<ol>
+                  ${this.agents.map((agent) => this.#renderAgent(agent))}
+                </ol>`
+          }
+        </section>
       </section>
     `;
   }
@@ -1129,7 +1335,7 @@ export class PrintersScreen extends LitElement {
     return html`
       <h1 class="title">${t("printers.title")}</h1>
       ${this.#renderAgentsSection()} ${this.#renderPrintersSection()}
-      ${this.#renderReceiptSection()} ${this.#renderJobsSection()}
+      ${this.#renderReceiptSection()} ${this.#renderJobsSection()} ${this.#renderAcceptDialog()}
       ${
         this.errorKey
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`

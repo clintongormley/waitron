@@ -149,3 +149,141 @@ describe("createClient — probeNode", () => {
     }
   });
 });
+
+describe("createClient — join", () => {
+  it("POSTs { name } to /print-api/agent/join and returns { token, verificationNumber }", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(reply(201, { token: "a1.secret", verificationNumber: "07" }));
+    const client = createClient({ fetch: fetchImpl });
+    expect(await client.join(URL_A, "kitchen-pi")).toEqual({
+      ok: true,
+      value: { token: "a1.secret", verificationNumber: "07" },
+    });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`${URL_A}/print-api/agent/join`);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ name: "kitchen-pi" });
+    expect(init.headers["content-type"]).toBe("application/json");
+  });
+
+  it("maps 403 → pairing_closed and 429 → rate_limited", async () => {
+    const closed = createClient({
+      fetch: vi.fn().mockResolvedValue(reply(403, { code: "device.pairing_closed" })),
+    });
+    expect(await closed.join(URL_A, "x")).toEqual({
+      ok: false,
+      failure: { kind: "pairing_closed" },
+    });
+    const limited = createClient({
+      fetch: vi.fn().mockResolvedValue(reply(429, { code: "device.join_rate_limited" })),
+    });
+    expect(await limited.join(URL_A, "x")).toEqual({
+      ok: false,
+      failure: { kind: "rate_limited" },
+    });
+  });
+
+  it("a body missing verificationNumber is bad_reply", async () => {
+    const client = createClient({
+      fetch: vi.fn().mockResolvedValue(reply(201, { token: "a1.secret" })),
+    });
+    expect(await client.join(URL_A, "x")).toMatchObject({
+      ok: false,
+      failure: { kind: "bad_reply" },
+    });
+  });
+});
+
+describe("createClient — joinStatus", () => {
+  it("sends the Bearer and decodes the status string", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(reply(200, { status: "approved" }));
+    const client = createClient({ fetch: fetchImpl });
+    expect(await client.joinStatus(URL_A, "a1.secret")).toEqual({ ok: true, value: "approved" });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`${URL_A}/print-api/agent/join/status`);
+    expect(init.headers.authorization).toBe("Bearer a1.secret");
+  });
+
+  it("an unknown status string is bad_reply", async () => {
+    const client = createClient({
+      fetch: vi.fn().mockResolvedValue(reply(200, { status: "weird" })),
+    });
+    expect(await client.joinStatus(URL_A, "t")).toMatchObject({
+      ok: false,
+      failure: { kind: "bad_reply" },
+    });
+  });
+});
+
+describe("createClient — pullJobs", () => {
+  it("sends the Bearer, decodes base64 payloads, returns servers + nodeId", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      reply(200, {
+        nodeId: "n1",
+        servers: [{ nodeId: "n1", url: "http://a.test", standing: "serving-primary" }],
+        jobs: [
+          {
+            id: "j1",
+            printerId: "p1",
+            transport: "network_tcp",
+            host: "10.0.0.9",
+            port: 9100,
+            usbPath: null,
+            payload: Buffer.from([1, 2, 3]).toString("base64"),
+          },
+        ],
+      }),
+    );
+    const client = createClient({ fetch: fetchImpl });
+    const result = await client.pullJobs(URL_A, "a1.secret");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.nodeId).toBe("n1");
+    expect(result.value.servers).toEqual([{ url: "http://a.test", nodeId: "n1" }]);
+    expect(result.value.jobs[0]!.payload).toEqual(new Uint8Array([1, 2, 3]));
+    expect(fetchImpl.mock.calls[0]![0]).toBe(`${URL_A}/print-api/agent/jobs`);
+    expect(fetchImpl.mock.calls[0]![1].headers.authorization).toBe("Bearer a1.secret");
+  });
+
+  it("401 → unauthorized; a reply whose jobs is not an array is bad_reply", async () => {
+    const unauth = createClient({
+      fetch: vi.fn().mockResolvedValue(reply(401, { code: "agent.unauthorized" })),
+    });
+    expect(await unauth.pullJobs(URL_A, "t")).toEqual({
+      ok: false,
+      failure: { kind: "unauthorized" },
+    });
+    const bad = createClient({
+      fetch: vi.fn().mockResolvedValue(reply(200, { nodeId: "n1", servers: [], jobs: "no" })),
+    });
+    expect(await bad.pullJobs(URL_A, "t")).toMatchObject({
+      ok: false,
+      failure: { kind: "bad_reply" },
+    });
+  });
+});
+
+describe("createClient — report", () => {
+  it("POSTs the outcome to the job's result route and resolves on 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(reply(204));
+    const client = createClient({ fetch: fetchImpl });
+    expect(await client.report(URL_A, "t", "j1", { status: "failed", error: "boom" })).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`${URL_A}/print-api/agent/jobs/j1/result`);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ status: "failed", error: "boom" });
+    expect(init.headers.authorization).toBe("Bearer t");
+  });
+
+  it("a thrown fetch on report is unreachable (so the loop drops it, the lease reclaims)", async () => {
+    const client = createClient({ fetch: vi.fn().mockRejectedValue(new Error("ECONNRESET")) });
+    expect(await client.report(URL_A, "t", "j1", { status: "done" })).toMatchObject({
+      ok: false,
+      failure: { kind: "unreachable" },
+    });
+  });
+});

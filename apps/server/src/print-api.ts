@@ -1,15 +1,15 @@
-// Side-effect only: loads this host's errors.ts augmentation for the apps/server code THESE routes
-// throw directly — `management.request_invalid` (the body/query screens, via `request-screens.js` and
-// the local field screens). The enrol flood guard (`enrol-rate-limit.js`, which carries its own
-// errors.js) is built HERE with this surface's own `agent.pairing_rate_limited` code, so a rate-limited
-// enrol answers in the `agent.*` namespace directly (no catch-and-translate) and `device.*` never
-// appears on this surface. The printing codes this surface answers —
-// `printer.*`/`agent.*`, `agent.pairing_rate_limited` included — are declared in
-// @waitron/printing's own errors.ts and reach here through the VALUE imports of its verbs below
-// (enrolAgent/generateAgentCode/createPrinter/updatePrinter/deactivatePrinter/claimPrintJobs/
-// reportPrintJob and, transitively, requireAgent's authenticateAgent); `shared.invalid_id` (thrown by
-// `requireUuidParam`) loads via the AppError value import. The device-api sibling relies on the same
-// transitive reachability. See the note atop errors.ts.
+// Side-effect only: loads this host's errors.ts augmentation for the apps/server codes THESE routes
+// throw directly — the shared knock codes `device.pairing_closed`/`device.join_full` (the window +
+// cap refusals, answered on the agent knock BY DESIGN — the agent joins through the same
+// join_requests mechanism a device does) and `management.request_invalid` (the body/query screens).
+// `device.join_rate_limited` reaches here through the value import of `createEnrolRateLimiter`
+// (`enrol-rate-limit.js`, which throws it). The printing/agent codes this surface answers —
+// `printer.*`/`agent.*` — are declared in @waitron/printing's own errors.ts and reach here through the
+// VALUE imports of its verbs below (createPrinter/updatePrinter/deactivatePrinter/claimPrintJobs/
+// reportPrintJob and, transitively, requireAgent's authenticateAgent); the join codes
+// (`device.join_full`, and `join_request.not_found` via the accept route in join-api.ts) load through
+// the value imports of `createJoinRequest`/`readAgentJoinStatus` (`join-requests.js`); `shared.invalid_id`
+// (thrown by `requireUuidParam`) loads via the AppError value import. See the note atop errors.ts.
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -35,9 +35,7 @@ import {
   createPrinter,
   deactivatePrinter,
   enqueuePrintJob,
-  enrolAgent,
   esc,
-  generateAgentCode,
   listPrinters,
   reportPrintJob,
   updatePrinter,
@@ -45,6 +43,7 @@ import {
   type UpdatePrinterInput,
 } from "@waitron/printing";
 import { authorizeManager, type Permission } from "@waitron/identity";
+import { routableServers, type SignedMembershipDocument } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
 import {
   attachPrinterToStation,
@@ -54,37 +53,45 @@ import {
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { requireAgent } from "./print-agent-session.js";
+import { createJoinRequest, readAgentJoinStatus } from "./join-requests.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
+import type { PairingMode } from "./pairing-mode.js";
+import { isUuid } from "./till-session.js";
+import type { TillConfig } from "./till-config.js";
 import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**
- * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` carries
- * this venue's tenant + location — the scope every `withTenant` below runs under and the two
- * fields the `@waitron/printing` verbs stamp onto minted codes / created printers
- * (`PrintAgentConfig` / `PrintConfig`). No `nodeId`: these routes need no write-path node id. No
+ * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` is the FULL
+ * `TillConfig` (branded ids), not a `{ tenantId, locationId }` subset: the shared join verbs
+ * (`createJoinRequest`, `readAgentJoinStatus`, and the accept verb in join-api.ts) are typed `cfg:
+ * TillConfig` and read `cfg.tenantId`/`cfg.locationId`, and the pull route echoes `cfg.nodeId` so the
+ * agent can tell which node it is talking to. `readMembership` reads the venue's held chart so the pull
+ * can list its routable servers (the agent follows the primary across a failover, mirroring the till's
+ * `GET /api/till`). `pairingMode` is the venue-wide window the knock is admitted under — the SAME holder
+ * `boot.ts` hands the device and shared-join mounts, so "venue-wide" is a property of the wiring. No
  * cookie config: the AGENT surface authenticates with a Bearer token (never a cookie), and the
  * MANAGEMENT surface reuses the browser management session the sibling gated APIs already carry.
  */
 export interface PrintApiDeps {
   db: Database;
-  cfg: { tenantId: string; locationId: string };
+  cfg: TillConfig;
+  readMembership: () => Promise<SignedMembershipDocument | null>;
+  pairingMode: PairingMode;
   /**
-   * The redemption rate-limiter for `POST /print-api/agent/enrol` — the SAME per-process, in-memory,
-   * GLOBAL fixed-window guard the device enrol route uses (`enrol-rate-limit.ts`), built here with THIS
-   * surface's own throw code. Optional and injected ONLY by tests (which pass a limiter over a
-   * controllable clock, and MUST give it `code: "agent.pairing_rate_limited"` to match production);
-   * production omits it and `mountPrintApi` builds the default (`ENROL_RATE_MAX` per
-   * `ENROL_RATE_WINDOW_MS`, code `agent.pairing_rate_limited`). The limiter throws
-   * `agent.pairing_rate_limited` directly, so the print enrolment flow answers every pairing outcome in
-   * ONE namespace (`agent.*`) with no catch-and-translate, never leaking `device.*`.
+   * The knock rate-limiter for `POST /print-api/agent/join` — the SAME per-process, in-memory, GLOBAL
+   * fixed-window guard the device knock uses (`enrol-rate-limit.ts`). Optional and injected ONLY by
+   * tests (which pass a limiter over a controllable clock); production omits it and `mountPrintApi`
+   * builds the default (`ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`, code `device.join_rate_limited`).
+   * Both knock surfaces throw the shared `device.join_rate_limited` (429): the agent client reads the
+   * HTTP status, not the code string, so there is no per-surface throttle code to mint.
    */
   enrolRateLimiter?: EnrolRateLimiter;
 }
 
 /**
- * The ONE permission that gates every print-MANAGEMENT route (the agent codes, the printers CRUD, and
- * the job list) — one named constant referenced at each gated route rather than an inline literal, the
+ * The ONE permission that gates every print-MANAGEMENT route (the agents list/revoke, the printers CRUD,
+ * and the job list) — one named constant referenced at each gated route rather than an inline literal, the
  * `purchasing-api.ts` / `device-api.ts` seam. `printer.manage` maps to `manager` + `admin`
  * (permissions.ts) — central printer administration is an admin act, never a till operator's. The
  * AGENT API itself is device-authed (`requireAgent`), deliberately NOT gated on this (design §7).
@@ -107,11 +114,13 @@ const TEST_PRINT_PAYLOAD = esc().init().line("Waitron").line("Test print").feed(
  * registered code absent from this table defaults to 400 via `run`. Each surface owns its own STATUS
  * map (error-boundary.ts) — this one is the `printer.*`/`agent.*` surface's.
  *
- *  - Agent auth/enrol: `agent.unauthorized` (the `requireAgent` fold of missing/unknown/revoked, 401),
- *    `agent.pairing_invalid` (an unknown/consumed/foreign code, 404 — a not-found, oracle-free) and
- *    `agent.pairing_expired` (a code that WAS ours but lapsed, 410 Gone — distinct by design),
- *    `agent.pairing_rate_limited` (the enrol flood guard, 429, thrown BEFORE any DB work — the limiter
- *    is built with this surface's own code, so it throws `agent.*` directly with no translation).
+ *  - Agent auth: `agent.unauthorized` (the `requireAgent` fold of missing/unknown/revoked, 401).
+ *  - The knock (join-and-accept, the shared join_requests mechanism): `device.pairing_closed` (a knock
+ *    while the venue's window is shut, 403 — the ORDINARY state, not an anomaly), `device.join_full`
+ *    (the tenant already holds the per-(tenant,kind) cap of pending requests, 429) and
+ *    `device.join_rate_limited` (the knock flood guard, 429, thrown BEFORE any DB work). These are the
+ *    SHARED device knock codes: the agent joins through the same mechanism a device does, and its client
+ *    reads the HTTP status, not the code string, so there is no `agent.*` sibling to mint.
  *  - Printer/agent management: `printer.not_found` (an absent printer id, 404),
  *    `printer.invalid_config` (a transport short of its required fields, 422 Unprocessable — the config
  *    is well-formed JSON but semantically invalid), `agent.not_found` (an absent agent id on revoke, or
@@ -125,9 +134,11 @@ const TEST_PRINT_PAYLOAD = esc().init().line("Waitron").line("Test print").feed(
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "agent.unauthorized": 401,
-  "agent.pairing_invalid": 404,
-  "agent.pairing_expired": 410,
-  "agent.pairing_rate_limited": 429,
+  // The shared knock refusals. `pairing_closed` is a 403 (the door is shut, not the caller unknown);
+  // `join_full` and `join_rate_limited` are 429, thrown before any DB work.
+  "device.pairing_closed": 403,
+  "device.join_full": 429,
+  "device.join_rate_limited": 429,
   "printer.not_found": 404,
   "printer.invalid_config": 422,
   "agent.not_found": 404,
@@ -196,29 +207,33 @@ function optionalUuid(v: unknown, field: string): string | undefined {
 
 /**
  * Mounts the three print route groups on an existing Hono app — the `mountDeviceApi` convention (the
- * unauthenticated enrol seam, the token-gated agent group, the `printer.manage`-gated management
+ * unauthenticated knock + status seam, the token-gated agent group, the `printer.manage`-gated management
  * group), attached to the SAME app. Every handler is wrapped in `run` so the whole surface maps errors
  * identically:
  *
- *  1. UNAUTHENTICATED agent enrol (`POST /print-api/agent/enrol`) — redeems a pairing code
- *     (`enrolAgent`) and returns `{ agentId, token }` in the BODY (the agent stores the token; it never
- *     rides a cookie). Rate-limited FIRST, before any DB work, reusing the device enrol guard.
+ *  1. UNAUTHENTICATED join, a KNOCK and a POLL (the shared join_requests mechanism, mirroring the
+ *     device knock). `POST /print-api/agent/join` asks to join: refused unless an admin has the venue's
+ *     pairing window open, else it mints a pending request and returns `{ token, verificationNumber }`
+ *     in the BODY (the agent stores the token and presents it as a Bearer; it never rides a cookie).
+ *     `GET /print-api/agent/join/status` is the joiner asking whether it is in yet, on that Bearer.
+ *     Approval is an ADMIN act on another surface (`join-api.ts`'s accept route), never anything the
+ *     agent does for itself. The knock is rate-limited FIRST, then window-gated, both before any DB work.
  *  2. AGENT-GATED routes (`GET /print-api/agent/jobs`, `POST /print-api/agent/jobs/:id/result`) — each
  *     calls `requireAgent` (Bearer, 401 otherwise; a REVOKED agent fails instantly) and then acts only
  *     within the authenticated agent's OWN printers' scope. The claim CLAIMS-and-COMMITS within the
  *     request (Controller Ruling 6): the server holds NO lock or transaction across the remote agent's
- *     push — the agent pushes the bytes itself and REPORTs the outcome in a separate request.
- *  3. `printer.manage`-GATED management routes (the agent codes, the printers CRUD, the job list) —
+ *     push — the agent pushes the bytes itself and REPORTs the outcome in a separate request. The pull
+ *     also carries the venue's `nodeId` + routable `servers` so the agent follows the primary.
+ *  3. `printer.manage`-GATED management routes (the agents list/revoke, the printers CRUD, the job list) —
  *     each calls `requireManagementSession` (401) then funnels its DB work through the local `gated`
  *     helper, which `authorizeManager`s `printer.manage` (403) before the op runs, in exactly one place.
  */
 export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void {
-  // The GLOBAL, in-memory, per-process enrol rate-limiter (design §7 / the device enrol precedent).
+  // The GLOBAL, in-memory, per-process knock rate-limiter (design §7 / the device knock precedent).
   // Built ONCE here so it is one bucket for the whole mounted API; a test may inject its own limiter
-  // over a controllable clock, production omits it and gets `createEnrolRateLimiter({ code })` throwing
-  // THIS surface's own `agent.pairing_rate_limited` (429), so the enrol route needs no catch-and-translate.
-  const enrolLimiter =
-    deps.enrolRateLimiter ?? createEnrolRateLimiter({ code: "agent.pairing_rate_limited" });
+  // over a controllable clock, production omits it and gets the default `createEnrolRateLimiter()`
+  // throwing the shared `device.join_rate_limited` (429).
+  const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // `printer.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
@@ -235,25 +250,53 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       return fn(tx);
     });
 
-  // ── Agent enrol (UNAUTHENTICATED) ────────────────────────────────────────────────────────────────
-  app.post("/print-api/agent/enrol", (c) =>
+  // ── Knock (UNAUTHENTICATED) ──────────────────────────────────────────────────────────────────────
+  app.post("/print-api/agent/join", (c) =>
     run(c, log, async () => {
-      // Rate-limit FIRST — before the body is parsed and before `enrolAgent`'s locking DELETE — so an
-      // enrol flood is refused (429 `agent.pairing_rate_limited`) with ZERO DB work, keeping a flood on
-      // this unauthenticated route from starving the sale path (CLAUDE.md §5). The device enrol route's
-      // exact posture; this limiter is built with THIS surface's own code (see `enrolLimiter` above), so
-      // the throttle answers in the `agent.*` namespace directly — no catch-and-translate needed.
+      // Rate limit, then the window, BOTH before the body is parsed and before any DB work — so a flood
+      // on this unauthenticated route draws no connection from the pool and creates no row (CLAUDE.md §5,
+      // nothing external may block a sale). The device knock's exact ordering (`device-api.ts`); this
+      // surface has no devMode auto-accept, so the window is always consulted.
       enrolLimiter.check();
-      const body = await readJsonBody<{ code?: unknown }>(c);
-      const code = requireString(body.code, "code");
-      const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      if (!deps.pairingMode.isOpen()) {
+        deps.pairingMode.noteRefused();
+        throw new AppError("device.pairing_closed", {});
+      }
+      const body = await readJsonBody<{ name?: unknown }>(c);
+      const name = requireString(body.name, "name");
+      const made = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return enrolAgent(tx, deps.cfg, { code });
+        return createJoinRequest(tx, deps.cfg, { kind: "print_agent", label: name });
       });
-      // The token is the agent's ONLY secret and leaves the process ONLY here, in the response body —
-      // the agent stores it and presents it as a Bearer thereafter. `agentId` is the non-secret
-      // selector half (also embedded in the token), returned so the agent can log/identify itself.
-      return c.json({ agentId: enrolled.agentId, token: enrolled.token }, 200);
+      // The token is `${joinId}.${secret}`: the joinId becomes the agent id (accept carries it onto the
+      // `print_agents` row), so the Bearer the agent holds from now works unchanged after approval. The
+      // secret is the agent's ONLY secret and leaves the process ONLY here, in the response body.
+      return c.json(
+        { token: `${made.joinId}.${made.token}`, verificationNumber: made.verificationNumber },
+        201,
+      );
+    }),
+  );
+
+  // ── Am I in yet? (the joiner's own Bearer) ───────────────────────────────────────────────────────
+  // Bearer, but NOT `requireAgent`: a pending token names a `join_requests` row, not yet a
+  // `print_agents` one, so it must resolve through `readAgentJoinStatus`, not `authenticateAgent`.
+  // Pending, approved and not_approved are the only three answers, and the last folds denied, lapsed and
+  // never-existed together — the joiner's recovery (restart → re-join) is identical in every case.
+  app.get("/print-api/agent/join/status", (c) =>
+    run(c, log, async () => {
+      const bearer = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+      const dot = bearer.indexOf(".");
+      const joinId = dot > 0 ? bearer.slice(0, dot) : "";
+      const secret = dot > 0 ? bearer.slice(dot + 1) : "";
+      // A non-uuid selector names nothing — answered `not_approved` HERE, before it reaches a bare-uuid
+      // comparison (which would `22P02` → an opaque 500), the device sibling's guard.
+      if (!isUuid(joinId)) return c.json({ status: "not_approved" as const });
+      const status = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return readAgentJoinStatus(tx, deps.cfg, joinId, secret);
+      });
+      return c.json({ status });
     }),
   );
 
@@ -272,7 +315,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       });
       // The OPAQUE payload bytes ride as base64 over JSON (the agent decodes and pushes them verbatim);
       // the printer connection facts travel alongside so the agent's transport knows where to send.
+      // `nodeId` + `servers` mirror the till's `GET /api/till` pull (till-api.ts): the agent polls each
+      // routable server to follow the primary across a failover, and `nodeId` tells which it is now on.
+      const held = await deps.readMembership();
       return c.json({
+        nodeId: deps.cfg.nodeId,
+        servers: routableServers(held),
         jobs: claimed.map((job) => ({
           id: job.id,
           printerId: job.printer_id,
@@ -311,19 +359,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         return reportPrintJob(tx, deps.cfg, { agentId, jobId, outcome });
       });
       return c.body(null, 204);
-    }),
-  );
-
-  // ── Mint an agent pairing code (printer.manage) ──────────────────────────────────────────────────
-  app.post("/management-api/print-agents/codes", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ label?: unknown }>(c);
-      const label = requireString(body.label, "label");
-      // The plaintext code leaves ONLY here, once, for the operator to read into the agent's config
-      // (generateAgentCode stores only its SHA-256). Shown once — the dashboard surfaces it and forgets.
-      const result = await gated(sessionId, (tx) => generateAgentCode(tx, deps.cfg, { label }));
-      return c.json(result, 201);
     }),
   );
 

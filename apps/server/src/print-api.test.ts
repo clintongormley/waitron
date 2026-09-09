@@ -1,14 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, joinRequests, printAgents, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, esc } from "@waitron/printing";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
+import { acceptPrintAgentJoinRequest } from "./join-requests.js";
+import { createPairingMode } from "./pairing-mode.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import type { TillConfig } from "./till-config.js";
 import {
   ENROL_RATE_MAX,
   ENROL_RATE_WINDOW_MS,
@@ -29,8 +40,23 @@ import "./errors.js";
 // order-independent across the shared PGlite.
 const noopLog: Logger = () => {};
 
+// The venue's routable servers the pull route echoes (via `readMembership` → `routableServers`).
+// A held chart with a primary + a secondary, so the pull test asserts the mapped, primary-first list.
+const MEMBERSHIP = signedMembershipDoc(3, {
+  signerNodeId: "box",
+  nodes: [
+    { nodeId: "box", contactUrl: "https://box.deli.test", standing: "serving-primary" },
+    { nodeId: "cloud", contactUrl: "https://cloud.deli.test", standing: "serving-secondary" },
+  ],
+});
+const EXPECTED_SERVERS = [
+  { nodeId: "box", url: "https://box.deli.test", standing: "serving-primary" },
+  { nodeId: "cloud", url: "https://cloud.deli.test", standing: "serving-secondary" },
+];
+
 let tenantId: string;
 let locationId: string;
+let cfg: TillConfig;
 let managerCookie: string;
 let staffCookie: string;
 
@@ -43,6 +69,21 @@ const suite = usePgliteDb({
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
+    // The FULL TillConfig the print verbs are typed on (branded ids). Only tenantId/locationId are read
+    // by the join verbs and the routes; nodeId is echoed on the pull; the other fiscal ids are unused
+    // here, so a branded random uuid stands in.
+    cfg = {
+      tenantId: brandTenantId(tenantId),
+      tillId: brandTillId(randomUUID()),
+      nodeId: brandNodeId(randomUUID()),
+      seriesId: brandSeriesId(randomUUID()),
+      locationId: brandLocationId(locationId),
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      cardProvider: "none",
+      tipsEnabled: false,
+      orderFlow: "ticket_then_pay",
+    };
     const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
@@ -66,9 +107,24 @@ const suite = usePgliteDb({
   },
 });
 
-function mountApp(enrolRateLimiter?: EnrolRateLimiter): Hono {
+/** Mount the print API. The pairing window is OPEN by default so `joinAndAccept`'s knock is admitted;
+ *  `pairingOpen: false` proves the shut-window refusal. `readMembership` returns the fixture above so
+ *  the pull route can echo `servers`. */
+function mountApp(opts: { pairingOpen?: boolean; enrolRateLimiter?: EnrolRateLimiter } = {}): Hono {
   const app = new Hono();
-  mountPrintApi(app, { db: suite.db, cfg: { tenantId, locationId }, enrolRateLimiter }, noopLog);
+  const pairingMode = createPairingMode();
+  if (opts.pairingOpen ?? true) pairingMode.open();
+  mountPrintApi(
+    app,
+    {
+      db: suite.db,
+      cfg,
+      pairingMode,
+      readMembership: async () => MEMBERSHIP,
+      enrolRateLimiter: opts.enrolRateLimiter,
+    },
+    noopLog,
+  );
   return app;
 }
 
@@ -91,21 +147,38 @@ async function send(
   });
 }
 
-/** Mint an agent pairing code (management route) and redeem it (unauth enrol), returning the agent's
- * id + Bearer token. */
-async function enrolAgent(
+/** Knock (unauth, window-gated) then accept the join in-process (via the verb, as `enqueue` does — the
+ * accept ROUTE lives in `join-api.ts` and is proven there), returning the enrolled agent's id + Bearer
+ * token. The agent's Bearer is exactly the knock's `${joinId}.${secret}`, and `joinId` becomes the
+ * agent id (accept carries it onto the `print_agents` row). */
+async function joinAndAccept(
   app: Hono,
   label = "Cocina agent",
 ): Promise<{ agentId: string; token: string }> {
-  const codeRes = await send(app, "POST", "/management-api/print-agents/codes", {
-    cookie: managerCookie,
-    body: { label },
+  const { token, verificationNumber, joinId } = await knock(app, label);
+  await withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const result = await acceptPrintAgentJoinRequest(tx, cfg, joinId, {
+      choice: verificationNumber,
+    });
+    expect(result.ok).toBe(true);
   });
-  expect(codeRes.status).toBe(201);
-  const { code } = (await codeRes.json()) as { code: string };
-  const enrol = await send(app, "POST", "/print-api/agent/enrol", { body: { code } });
-  expect(enrol.status).toBe(200);
-  return (await enrol.json()) as { agentId: string; token: string };
+  return { agentId: joinId, token };
+}
+
+/** Knock the unauthenticated join route (window must be open) and return its reply plus the parsed
+ * joinId (the selector half of the token). */
+async function knock(
+  app: Hono,
+  name = "Cocina agent",
+): Promise<{ token: string; verificationNumber: string; joinId: string }> {
+  const res = await send(app, "POST", "/print-api/agent/join", { body: { name } });
+  expect(res.status).toBe(201);
+  const { token, verificationNumber } = (await res.json()) as {
+    token: string;
+    verificationNumber: string;
+  };
+  return { token, verificationNumber, joinId: token.slice(0, token.indexOf(".")) };
 }
 
 /** Create a network_tcp printer bound to `agentId` via the management route, returning its id. */
@@ -143,77 +216,137 @@ async function jobRow(jobId: string): Promise<{
   return rows[0]!;
 }
 
-describe("mountPrintApi — agent enrol", () => {
-  it("mints a code (manager) and enrols an agent (unauth) → { agentId, token }", async () => {
-    const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
-    expect(agentId).toMatch(/^[0-9a-f-]{36}$/);
-    // The token is `${agentId}.${secret}` — the selector half is the agent id, the secret half rides
-    // after the first dot and is never otherwise disclosed.
-    expect(token.startsWith(`${agentId}.`)).toBe(true);
+describe("POST /print-api/agent/join (the knock)", () => {
+  it("window shut → 403 device.pairing_closed with no join_requests row created", async () => {
+    const app = mountApp({ pairingOpen: false });
+    const name = `kitchen-${randomUUID()}`;
+    const res = await send(app, "POST", "/print-api/agent/join", { body: { name } });
+    expect(res.status).toBe(403);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "device.pairing_closed" },
+    });
+    // Nothing was written — the window guard runs before any DB work.
+    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(joinRequests).where(eq(joinRequests.label, name));
+    });
+    expect(rows).toHaveLength(0);
   });
 
-  it("enrol with an unknown code → 404 agent.pairing_invalid; a missing code → 400", async () => {
-    const app = mountApp();
-    const unknown = await send(app, "POST", "/print-api/agent/enrol", { body: { code: "nope" } });
-    expect(unknown.status).toBe(404);
-    expect((await unknown.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "agent.pairing_invalid" },
+  it("window open → 201 { token, verificationNumber }, a pending join_requests row, no print_agents row", async () => {
+    const app = mountApp({ pairingOpen: true });
+    const name = `kitchen-${randomUUID()}`;
+    const res = await send(app, "POST", "/print-api/agent/join", { body: { name } });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { token: string; verificationNumber: string };
+    expect(body.verificationNumber).toMatch(/^\d{2}$/);
+    // `${joinId}.${secret}` — a uuid selector, a dot, then the base64url secret.
+    expect(body.token).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]+$/);
+    const joinId = body.token.slice(0, body.token.indexOf("."));
+    const [pending] = await withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx
+        .select({ kind: joinRequests.kind })
+        .from(joinRequests)
+        .where(eq(joinRequests.id, joinId));
     });
-    const missing = await send(app, "POST", "/print-api/agent/enrol", { body: {} });
-    expect(missing.status).toBe(400);
+    expect(pending).toMatchObject({ kind: "print_agent" });
+    // The knock alone never creates the real row — that is the admin's accept.
+    const agents = await withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(printAgents).where(eq(printAgents.name, name));
+    });
+    expect(agents).toHaveLength(0);
+  });
+
+  it("the knock screens the body (a missing name → 400)", async () => {
+    const app = mountApp({ pairingOpen: true });
+    const res = await send(app, "POST", "/print-api/agent/join", { body: {} });
+    expect(res.status).toBe(400);
     expect(
-      (await missing.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "code" } } });
+      (await res.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "name" } } });
   });
 
-  it("enrol with an EMPTY or MALFORMED or null body → 400, never a 500", async () => {
-    const app = mountApp();
-    const empty = await app.request("/print-api/agent/enrol", { method: "POST" });
-    expect(empty.status).toBe(400);
-    const malformed = await app.request("/print-api/agent/enrol", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{",
-    });
-    expect(malformed.status).toBe(400);
-    const nullBody = await send(app, "POST", "/print-api/agent/enrol", { body: null });
-    expect(nullBody.status).toBe(400);
-  });
-
-  it("rate-limits enrol: the (cap+1)th attempt is 429 BEFORE the DB, then the window resets", async () => {
+  it("rate-limits the knock: the (cap+1)th attempt is 429 device.join_rate_limited BEFORE the DB, then the window resets", async () => {
     // THE GUARD (proven by deletion): a per-process GLOBAL fixed-window counter checked at the TOP of the
-    // enrol handler, before the body parse and the pairing-code DELETE. Deleting `enrolLimiter.check()`
-    // from print-api.ts's enrol route makes the (cap+1)th attempt redeem/400 instead of 429.
+    // knock handler, before the body parse and the window check. Deleting `enrolLimiter.check()` from
+    // print-api.ts's knock route makes the (cap+1)th attempt reach the handler (201) instead of 429.
     let fakeNow = 1_000;
-    // The injected limiter is built with THIS surface's own code (as `mountPrintApi` builds its default),
-    // so it throws `agent.pairing_rate_limited` directly — the route no longer catch-and-translates.
-    const limiter = createEnrolRateLimiter({
-      now: () => fakeNow,
-      code: "agent.pairing_rate_limited",
-    });
-    const app = mountApp(limiter);
-    // Pre-fill to one below the cap in-process, so the next HTTP attempt is the (cap+1)th → 429.
+    const limiter = createEnrolRateLimiter({ now: () => fakeNow });
+    const app = mountApp({ pairingOpen: true, enrolRateLimiter: limiter });
     for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
-    const limited = await send(app, "POST", "/print-api/agent/enrol", { body: { code: "x" } });
+    const limited = await send(app, "POST", "/print-api/agent/join", { body: { name: "x" } });
     expect(limited.status).toBe(429);
-    // This surface answers in its OWN namespace: the limiter throws `agent.pairing_rate_limited`
-    // directly (never `device.*`).
     expect((await limited.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "agent.pairing_rate_limited" },
+      error: { code: "device.join_rate_limited" },
     });
-    // Advance past the window — the counter resets and a well-formed enrol reaches the handler again
-    // (a 404 for the junk code, i.e. it got PAST the limiter to the DB).
+    // Past the window — the counter resets and a well-formed knock reaches the handler (201).
     fakeNow += ENROL_RATE_WINDOW_MS + 1;
-    const after = await send(app, "POST", "/print-api/agent/enrol", { body: { code: "x" } });
-    expect(after.status).toBe(404);
+    const after = await send(app, "POST", "/print-api/agent/join", { body: { name: "x" } });
+    expect(after.status).toBe(201);
+  });
+});
+
+describe("GET /print-api/agent/join/status", () => {
+  it("pending before accept; approved after; not_approved with a garbage token", async () => {
+    const app = mountApp({ pairingOpen: true });
+    const { token, verificationNumber, joinId } = await knock(app);
+
+    const pending = await send(app, "GET", "/print-api/agent/join/status", { bearer: token });
+    expect(pending.status).toBe(200);
+    expect((await pending.json()) as { status: string }).toEqual({ status: "pending" });
+
+    // Accept in-process (the route is proven in join-api.pg.test.ts).
+    await withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const r = await acceptPrintAgentJoinRequest(tx, cfg, joinId, { choice: verificationNumber });
+      expect(r.ok).toBe(true);
+    });
+    const approved = await send(app, "GET", "/print-api/agent/join/status", { bearer: token });
+    expect((await approved.json()) as { status: string }).toEqual({ status: "approved" });
+
+    // A non-uuid selector is guarded to `not_approved`, never a 22P02 → 500.
+    const bad = await send(app, "GET", "/print-api/agent/join/status", { bearer: "nope.nope" });
+    expect(bad.status).toBe(200);
+    expect((await bad.json()) as { status: string }).toEqual({ status: "not_approved" });
+  });
+});
+
+describe("the deleted enrol/codes routes are gone", () => {
+  it("POST /print-api/agent/enrol → 404; POST /management-api/print-agents/codes → 404", async () => {
+    const app = mountApp({ pairingOpen: true });
+    const enrol = await send(app, "POST", "/print-api/agent/enrol", { body: { code: "x" } });
+    expect(enrol.status).toBe(404);
+    const codes = await send(app, "POST", "/management-api/print-agents/codes", {
+      cookie: managerCookie,
+      body: { label: "x" },
+    });
+    expect(codes.status).toBe(404);
+  });
+});
+
+describe("GET /print-api/agent/jobs — the pull carries nodeId + servers", () => {
+  it("echoes this node's id and the venue's routable servers (primary first) alongside the jobs", async () => {
+    const app = mountApp({ pairingOpen: true });
+    const { agentId, token } = await joinAndAccept(app);
+    await createPrinterVia(app, agentId);
+    const res = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      nodeId: string;
+      servers: { nodeId: string; url: string; standing: string }[];
+      jobs: unknown[];
+    };
+    expect(body.nodeId).toBe(cfg.nodeId);
+    expect(body.servers).toEqual(EXPECTED_SERVERS);
   });
 });
 
 describe("mountPrintApi — agent claim + report", () => {
   it("claims this agent's queued jobs (payload as base64), marking them printing (committed)", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const payload = esc().text("Mesa 4").cut().bytes();
     const jobId = await enqueue(printerId, payload);
@@ -251,8 +384,8 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("claims ONLY the calling agent's own printers' jobs (cross-agent → empty)", async () => {
     const app = mountApp();
-    const mine = await enrolAgent(app, "Mine");
-    const other = await enrolAgent(app, "Other");
+    const mine = await joinAndAccept(app, "Mine");
+    const other = await joinAndAccept(app, "Other");
     const otherPrinter = await createPrinterVia(app, other.agentId, "Other printer");
     const jobId = await enqueue(otherPrinter, new Uint8Array([1]));
 
@@ -265,7 +398,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("reports done → the job is done with delivered_at; failed → failed with attempts++ and last_error", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const doneJob = await enqueue(printerId, new Uint8Array([1]));
     const failJob = await enqueue(printerId, new Uint8Array([2]));
@@ -294,7 +427,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("reports failed with NO error field → 204 (last_error defaults to empty)", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
@@ -316,8 +449,8 @@ describe("mountPrintApi — agent claim + report", () => {
     // predicate makes this cross-agent report mutate the other agent's job (status → done), flipping the
     // `toBe("printing")` assertion red.
     const app = mountApp();
-    const mine = await enrolAgent(app, "Mine");
-    const other = await enrolAgent(app, "Other");
+    const mine = await joinAndAccept(app, "Mine");
+    const other = await joinAndAccept(app, "Other");
     const otherPrinter = await createPrinterVia(app, other.agentId, "Other printer");
     const jobId = await enqueue(otherPrinter, new Uint8Array([1]));
     await send(app, "GET", "/print-api/agent/jobs", { bearer: other.token }); // other claims → printing
@@ -336,7 +469,7 @@ describe("mountPrintApi — agent claim + report", () => {
     // SECOND failed report bump `attempts` to 2, flipping the `toBe(1)` assertion red — a retried report
     // would otherwise burn the 5-attempt cap faster than deliveries warrant.
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     await send(app, "GET", "/print-api/agent/jobs", { bearer: token }); // claim → printing
@@ -360,7 +493,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("report screens the status (a bad/absent status → 400) and the job id shape (non-uuid → 400)", async () => {
     const app = mountApp();
-    const { token } = await enrolAgent(app);
+    const { token } = await joinAndAccept(app);
     const goodId = randomUUID();
     const badStatus = await send(app, "POST", `/print-api/agent/jobs/${goodId}/result`, {
       bearer: token,
@@ -383,7 +516,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("a report for an unknown (well-formed) job id is an idempotent 204", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     await createPrinterVia(app, agentId);
     const res = await send(app, "POST", `/print-api/agent/jobs/${randomUUID()}/result`, {
       bearer: token,
@@ -411,7 +544,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("a REVOKED agent fails the claim AND the report with 401 (instant revocation)", async () => {
     const app = mountApp();
-    const { agentId, token } = await enrolAgent(app);
+    const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     // Works before revoke.
@@ -435,7 +568,7 @@ describe("mountPrintApi — agent claim + report", () => {
 describe("mountPrintApi — management: agents", () => {
   it("lists this tenant's agents (newest first) without the token hash", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app, "Listed agent");
+    const { agentId } = await joinAndAccept(app, "Listed agent");
     const res = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });
     expect(res.status).toBe(200);
     const rows = (await res.json()) as Record<string, unknown>[];
@@ -461,24 +594,12 @@ describe("mountPrintApi — management: agents", () => {
     });
     expect(malformed.status).toBe(400);
   });
-
-  it("agent-codes screens the body (a missing label → 400)", async () => {
-    const app = mountApp();
-    const res = await send(app, "POST", "/management-api/print-agents/codes", {
-      cookie: managerCookie,
-      body: {},
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "label" } } });
-  });
 });
 
 describe("mountPrintApi — management: printers CRUD", () => {
   it("creates, lists, updates and deactivates a printer", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId, "Cocina");
 
     const list = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
@@ -525,7 +646,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("creates each transport's shape (usb with usb_path, cloud_poll with poll_id, tcp with explicit port)", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const usb = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: { name: "USB", transport: "usb", agentId, usbPath: "/dev/usb/lp0" },
@@ -549,7 +670,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("update writes every editable field and clears nullable ones with explicit null", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId, "Full patch");
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
@@ -572,7 +693,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("update rejects a non-boolean active → 400", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
@@ -586,17 +707,9 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("null / empty bodies on the management write routes degrade to a clean 400 / no-op, never a 500", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
-    // agent-codes + printers create screen a null body to a 400 (naming the first missing field).
-    expect(
-      (
-        await send(app, "POST", "/management-api/print-agents/codes", {
-          cookie: managerCookie,
-          body: null,
-        })
-      ).status,
-    ).toBe(400);
+    // printers create screens a null body to a 400 (naming the first missing field).
     expect(
       (await send(app, "POST", "/management-api/printers", { cookie: managerCookie, body: null }))
         .status,
@@ -617,7 +730,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("create with a transport short of its required fields → 422 printer.invalid_config", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     // usb requires agentId + usbPath; supplying the agent but omitting usbPath is invalid config.
     const res = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
@@ -706,8 +819,8 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("update clears a connection field with an explicit null and re-binds the agent", async () => {
     const app = mountApp();
-    const first = await enrolAgent(app, "First");
-    const second = await enrolAgent(app, "Second");
+    const first = await joinAndAccept(app, "First");
+    const second = await joinAndAccept(app, "Second");
     const printerId = await createPrinterVia(app, first.agentId, "Movable");
     // Re-bind to the second agent and move host — an explicit set of both fields.
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
@@ -728,7 +841,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
 describe("mountPrintApi — management: test-print", () => {
   it("enqueues a known test payload for the printer and returns { jobId } (202)", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const res = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
       cookie: managerCookie,
@@ -766,7 +879,7 @@ describe("mountPrintApi — management: test-print", () => {
 describe("mountPrintApi — management: recent jobs", () => {
   it("lists recent jobs newest-first without the payload", async () => {
     const app = mountApp();
-    const { agentId } = await enrolAgent(app);
+    const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1, 2, 3]));
     const res = await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie });
@@ -783,7 +896,6 @@ describe("mountPrintApi — the printer.manage gate", () => {
 
   // Every gated route, as [method, path, body].
   const routes: ["GET" | "POST" | "PATCH", string, unknown?][] = [
-    ["POST", "/management-api/print-agents/codes", { label: "X" }],
     ["GET", "/management-api/print-agents"],
     ["POST", `/management-api/print-agents/${DUMMY}/revoke`],
     ["POST", "/management-api/printers", { name: "X", transport: "network_tcp", host: "10.0.0.1" }],

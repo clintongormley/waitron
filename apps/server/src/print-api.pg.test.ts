@@ -6,7 +6,17 @@ import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
+import { acceptPrintAgentJoinRequest } from "./join-requests.js";
+import { createPairingMode } from "./pairing-mode.js";
+import type { TillConfig } from "./till-config.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -74,10 +84,35 @@ beforeAll(async () => {
   staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
 });
 
-/** The print API mounted over the REAL app-role pool (suite.admin), scoped to `tenant`. */
+/** The FULL TillConfig for a seeded tenant. Only tenantId/locationId are read by the join verbs and
+ * routes here; nodeId is echoed on the pull and the rest are unused, so branded random uuids stand in. */
+function cfgOf(tenant: Tenant): TillConfig {
+  return {
+    tenantId: brandTenantId(tenant.tenantId),
+    tillId: brandTillId(randomUUID()),
+    nodeId: brandNodeId(randomUUID()),
+    seriesId: brandSeriesId(randomUUID()),
+    locationId: brandLocationId(tenant.locationId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    cardProvider: "none",
+    tipsEnabled: false,
+    orderFlow: "ticket_then_pay",
+  };
+}
+
+/** The print API mounted over the REAL app-role pool (suite.admin), scoped to `tenant`. The pairing
+ * window is OPEN so `joinAndAccept`'s knock is admitted; `readMembership` returns no chart (the pull's
+ * `servers` are proven in the PGlite suite). */
 function mountApp(tenant: Tenant): Hono {
   const app = new Hono();
-  mountPrintApi(app, { db: suite.admin, cfg: tenant }, noopLog);
+  const pairingMode = createPairingMode();
+  pairingMode.open();
+  mountPrintApi(
+    app,
+    { db: suite.admin, cfg: cfgOf(tenant), pairingMode, readMembership: async () => null },
+    noopLog,
+  );
   return app;
 }
 
@@ -98,16 +133,29 @@ async function send(
   });
 }
 
-async function enrolAgent(app: Hono, label: string): Promise<{ agentId: string; token: string }> {
-  const codeRes = await send(app, "POST", "/management-api/print-agents/codes", {
-    cookie: managerCookie,
-    body: { label },
+/** Knock (unauth, window open) then accept the join in-process via the verb (the accept ROUTE lives in
+ * join-api.ts, proven in join-api.pg.test.ts). The agent's Bearer is the knock's `${joinId}.${secret}`
+ * and joinId becomes the agent id. */
+async function joinAndAccept(
+  app: Hono,
+  label: string,
+  tenant: Tenant = tenantA,
+): Promise<{ agentId: string; token: string }> {
+  const knock = await send(app, "POST", "/print-api/agent/join", { body: { name: label } });
+  expect(knock.status).toBe(201);
+  const { token, verificationNumber } = (await knock.json()) as {
+    token: string;
+    verificationNumber: string;
+  };
+  const joinId = token.slice(0, token.indexOf("."));
+  await withTenant(suite.admin, tenant.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const result = await acceptPrintAgentJoinRequest(tx, cfgOf(tenant), joinId, {
+      choice: verificationNumber,
+    });
+    expect(result.ok).toBe(true);
   });
-  expect(codeRes.status).toBe(201);
-  const { code } = (await codeRes.json()) as { code: string };
-  const enrol = await send(app, "POST", "/print-api/agent/enrol", { body: { code } });
-  expect(enrol.status).toBe(200);
-  return (await enrol.json()) as { agentId: string; token: string };
+  return { agentId: joinId, token };
 }
 
 async function createPrinter(app: Hono, agentId: string, name: string): Promise<string> {
@@ -140,7 +188,7 @@ async function seedStation(tenant: Tenant, name: string): Promise<string> {
 describe("Print API over real Postgres (as the app role)", () => {
   it("enrol → claim (committed within the request) → report done, all as the app role", async () => {
     const app = mountApp(tenantA);
-    const { agentId, token } = await enrolAgent(app, "Cocina");
+    const { agentId, token } = await joinAndAccept(app, "Cocina");
     const printerId = await createPrinter(app, agentId, "Cocina real");
     const jobId = await enqueue(tenantA, printerId, new Uint8Array([0x41, 0x42]));
 
@@ -172,8 +220,8 @@ describe("Print API over real Postgres (as the app role)", () => {
 
   it("agent scope: claims ONLY the calling agent's own printers' jobs (cross-agent → empty)", async () => {
     const app = mountApp(tenantA);
-    const mine = await enrolAgent(app, "Mine");
-    const other = await enrolAgent(app, "Other");
+    const mine = await joinAndAccept(app, "Mine");
+    const other = await joinAndAccept(app, "Other");
     const otherPrinter = await createPrinter(app, other.agentId, "Other printer");
     const jobId = await enqueue(tenantA, otherPrinter, new Uint8Array([1]));
 
@@ -188,7 +236,7 @@ describe("Print API over real Postgres (as the app role)", () => {
 
   it("a REVOKED agent fails the claim instantly (401)", async () => {
     const app = mountApp(tenantA);
-    const { agentId, token } = await enrolAgent(app, "Revocable");
+    const { agentId, token } = await joinAndAccept(app, "Revocable");
     await createPrinter(app, agentId, "Revocable printer");
     expect((await send(app, "GET", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
 
@@ -215,28 +263,24 @@ describe("Print API over real Postgres (as the app role)", () => {
     });
 
     // Staff session → 403 (the gate refuses it).
-    const staff = await send(app, "POST", "/management-api/print-agents/codes", {
-      cookie: staffCookie,
-      body: { label: "nope" },
-    });
+    const staff = await send(app, "GET", "/management-api/print-agents", { cookie: staffCookie });
     expect(staff.status).toBe(403);
     expect((await staff.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
 
-    // Manager session → 201 (the gate admits it).
-    const manager = await send(app, "POST", "/management-api/print-agents/codes", {
+    // Manager session → 200 (the gate admits it).
+    const manager = await send(app, "GET", "/management-api/print-agents", {
       cookie: managerCookie,
-      body: { label: "Gate OK" },
     });
-    expect(manager.status).toBe(201);
+    expect(manager.status).toBe(200);
   });
 });
 
 describe("Station ↔ printer mapping routes over real Postgres (printer.manage)", () => {
   it("attaches, lists both directions, is idempotent, and detaches a pair as a manager", async () => {
     const app = mountApp(tenantA);
-    const agent = await enrolAgent(app, "Mapping agent");
+    const agent = await joinAndAccept(app, "Mapping agent");
     const printerId = await createPrinter(app, agent.agentId, "Mapping printer");
     const stationId = await seedStation(tenantA, `Cocina ${randomUUID()}`);
     const at = `/management-api/stations/${stationId}/printers/${printerId}`;
@@ -277,7 +321,7 @@ describe("Station ↔ printer mapping routes over real Postgres (printer.manage)
 
   it("404s an unknown station/printer and 400s a malformed id (never a 22P02 → 500)", async () => {
     const app = mountApp(tenantA);
-    const agent = await enrolAgent(app, "Miss agent");
+    const agent = await joinAndAccept(app, "Miss agent");
     const printerId = await createPrinter(app, agent.agentId, "Miss printer");
     const stationId = await seedStation(tenantA, `Barra ${randomUUID()}`);
 
@@ -317,7 +361,7 @@ describe("Station ↔ printer mapping routes over real Postgres (printer.manage)
     // the by-deletion proof recorded on that block covers these too: deleting the `authorizeManager(...)`
     // call from print-api.ts's `gated` flips this staff case from 403 to 204; restoring it turns it green.
     const app = mountApp(tenantA);
-    const agent = await enrolAgent(app, "Gate agent");
+    const agent = await joinAndAccept(app, "Gate agent");
     const printerId = await createPrinter(app, agent.agentId, "Gate printer");
     const stationId = await seedStation(tenantA, `Plancha ${randomUUID()}`);
     const at = `/management-api/stations/${stationId}/printers/${printerId}`;
@@ -377,7 +421,7 @@ async function locationDrawerPolicy(locationId: string): Promise<string> {
 describe("Receipt-printer + print-mode config routes over real Postgres (printer.manage)", () => {
   it("sets, then clears, a till's receipt printer as a manager (persists both ways)", async () => {
     const app = mountApp(tenantA);
-    const agent = await enrolAgent(app, "Recibos agent");
+    const agent = await joinAndAccept(app, "Recibos agent");
     const printerId = await createPrinter(app, agent.agentId, "Recibos");
     const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
 
@@ -515,7 +559,7 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
 
   it("GET /management-api/tills lists the venue's tills as { id, label, locationId, receiptPrinterId } (printer set + unset)", async () => {
     const app = mountApp(tenantA);
-    const agent = await enrolAgent(app, "Recibos agent 2");
+    const agent = await joinAndAccept(app, "Recibos agent 2");
     const printerId = await createPrinter(app, agent.agentId, "Recibos 2");
     const withPrinterName = `Caja ${randomUUID()}`;
     const withoutPrinterName = `Caja ${randomUUID()}`;

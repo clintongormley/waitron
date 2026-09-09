@@ -6,6 +6,7 @@ import { t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
+  JoinRequestRow,
   LocationSummary,
   PrintAgentRow,
   PrintJobRow,
@@ -115,13 +116,34 @@ const tills: Till[] = [
 ];
 const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
 
+// One print agent knocking to join (the shared join-and-accept queue, kind "print_agent"). The row
+// carries NO verification number — that lives only in the challenge dialog's three buttons.
+const pending: JoinRequestRow[] = [
+  { id: "j1", kind: "print_agent", label: "kitchen-pi", createdAt: "2026-09-08T10:02:00.000Z" },
+];
+
+/** The three numbers the server offers for `j1`, shuffled, one of them real — and which one that is.
+ * The dashboard is never told which, so the test knowing it is the only way to check the pending LIST
+ * never carries it. */
+const CHOICES = ["12", "47", "83"];
+const REAL_NUMBER = "47";
+
+const SHUT = { open: false, openUntil: null, refusedRecently: 0 };
+const OPEN = { open: true, openUntil: "2026-09-08T10:20:00.000Z", refusedRecently: 0 };
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listAgents: vi.fn().mockResolvedValue(agents),
     listPrinters: vi.fn().mockResolvedValue(printers),
     listRecentJobs: vi.fn().mockResolvedValue(jobs),
-    createAgentCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeAgent: vi.fn().mockResolvedValue(undefined),
+    pairingMode: vi.fn().mockResolvedValue(SHUT),
+    openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
+    closePairingMode: vi.fn().mockResolvedValue(undefined),
+    joinRequests: vi.fn().mockResolvedValue(pending),
+    joinChallenge: vi.fn().mockResolvedValue({ choices: CHOICES }),
+    denyJoinRequest: vi.fn().mockResolvedValue(undefined),
+    acceptPrintAgentJoinRequest: vi.fn().mockResolvedValue(undefined),
     createPrinter: vi.fn().mockResolvedValue({ id: "p9" }),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
@@ -255,107 +277,246 @@ describe("printers-screen", () => {
     expect(banner).not.toContain("server.internal");
   });
 
-  // ── Agents: mint a pairing code (shown once) ─────────────────────────────────────────────────────
+  // ── Agents: the shared pairing window (device-join-and-accept §1.1, reused by print agents) ───────
 
-  it("generates an agent pairing code, shows it once, and reloads the agents", async () => {
+  it("loads the pairing window and the print-agent join queue on connect", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
-    typeField(el, "[data-test=agent-label]", "Cocina agent");
-    await el.updateComplete;
-    q(el, "[data-test=generate-code]")!.click();
-    await flush(el);
-
-    expect(api.createAgentCode).toHaveBeenCalledWith("Cocina agent");
-    expect(q(el, "[data-test=code-panel]")).toBeTruthy();
-    expect(text(el, "[data-test=code-value]")).toBe("ABCD2345");
-    // Generating reloads so a newly-enrolled agent would appear.
-    expect(api.listAgents).toHaveBeenCalledTimes(2);
+    expect(api.pairingMode).toHaveBeenCalledTimes(1);
+    // The queue is the print-agent surface, never the device one.
+    expect(api.joinRequests).toHaveBeenCalledWith("print_agent");
   });
 
-  it("does not generate a code when the label is blank", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-
-    typeField(el, "[data-test=agent-label]", "   ");
-    await el.updateComplete;
-    q(el, "[data-test=generate-code]")!.click();
-    await flush(el);
-
-    expect(api.createAgentCode).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=code-panel]")).toBeNull();
-  });
-
-  it("clears the shown-once code on dismiss and never re-fetches it", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-
-    typeField(el, "[data-test=agent-label]", "Agente");
-    await el.updateComplete;
-    q(el, "[data-test=generate-code]")!.click();
-    await flush(el);
-    expect(q(el, "[data-test=code-panel]")).toBeTruthy();
-
-    q(el, "[data-test=dismiss-code]")!.click();
-    await el.updateComplete;
-    expect(q(el, "[data-test=code-panel]")).toBeNull();
-    expect(api.createAgentCode).toHaveBeenCalledTimes(1);
-  });
-
-  it("copies the shown code to the clipboard and confirms with a Copied status", async () => {
-    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-
-    typeField(el, "[data-test=agent-label]", "Agente");
-    await el.updateComplete;
-    q(el, "[data-test=generate-code]")!.click();
-    await flush(el);
-    q(el, "[data-test=copy-code]")!.click();
-    await flush(el);
-
-    expect(writeText).toHaveBeenCalledWith("ABCD2345");
-    expect(text(el, "[data-test=copied]")).toBe(t("printers.copied", "es-ES"));
-  });
-
-  it("does not throw or confirm when the clipboard write is rejected", async () => {
-    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-
-    typeField(el, "[data-test=agent-label]", "Agente");
-    await el.updateComplete;
-    q(el, "[data-test=generate-code]")!.click();
-    await flush(el);
-    q(el, "[data-test=copy-code]")!.click();
-    await flush(el);
-
-    expect(q(el, "[data-test=copied]")).toBeNull();
-    expect(q(el, "[data-test=code-panel]")).toBeTruthy();
-  });
-
-  it("shows an error and no code panel when generate is rejected", async () => {
+  it("shows the shut window's Open control, with the refused-knock hint", async () => {
     const api = stubApi({
-      createAgentCode: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
+      pairingMode: vi.fn().mockResolvedValue({ ...SHUT, refusedRecently: 2 }),
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
-    typeField(el, "[data-test=agent-label]", "Agente");
-    await el.updateComplete;
-    q(el, "[data-test=generate-code]")!.click();
+    expect(q(el, "[data-test=pairing-open]")).toBeTruthy();
+    expect(q(el, "[data-test=pairing-until]")).toBeNull();
+    expect(text(el, "[data-test=pairing-refused]")).toBe(
+      t("printers.pairing_refused", "es-ES").replace("{count}", "2"),
+    );
+  });
+
+  it("opens the window and shows when it lapses", async () => {
+    const pairingMode = vi.fn().mockResolvedValueOnce(SHUT).mockResolvedValue(OPEN);
+    const api = stubApi({ pairingMode });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=pairing-open]")!.click();
+    await flush(el);
+
+    expect(api.openPairingMode).toHaveBeenCalledWith();
+    expect(text(el, "[data-test=pairing-until]")).toBe(
+      t("printers.pairing_open_until", "es-ES").replace("{time}", "2026-09-08 10:20"),
+    );
+    expect(q(el, "[data-test=pairing-open]")).toBeNull();
+  });
+
+  // Extend is the SAME call as Open — the route moves an open window's lapse rather than adding one.
+  it("extends and closes an open window", async () => {
+    const api = stubApi({ pairingMode: vi.fn().mockResolvedValue(OPEN) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=pairing-extend]")!.click();
+    await flush(el);
+    expect(api.openPairingMode).toHaveBeenCalledWith();
+
+    q(el, "[data-test=pairing-close]")!.click();
+    await flush(el);
+    expect(api.closePairingMode).toHaveBeenCalledWith();
+  });
+
+  it("shows an error banner when opening the window is rejected", async () => {
+    const api = stubApi({
+      openPairingMode: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=pairing-open]")!.click();
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
-      "management.request_invalid",
+      "authorization.not_permitted",
     );
+  });
+
+  // ── Agents: the print-agent join queue (design §1.2, kind "print_agent") ──────────────────────────
+
+  it("lists a waiting agent by the name it asked for, and shows the setup-page hint with this origin", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(text(el, "[data-test=join-label-j1]")).toBe("kitchen-pi");
+    expect(text(el, "[data-test=join-asked-j1]")).toBe("2026-09-08 10:02");
+    // The operator hint carries the dashboard's own origin verbatim (the address to type into the agent).
+    expect(text(el, "[data-test=join-origin]")).toBe(window.location.origin);
+  });
+
+  // Design §1.2 rule 1: the LIST must never show the answer beside the question. Asserted against the
+  // SPECIFIC number this fake server holds, over the panel's rendered TEXT, plus the fact that nothing
+  // fetched a challenge to render the list.
+  it("never renders the request's verification number in the pending list", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    const panel = q(el, "[data-test=join-panel]")!;
+    expect(panel.textContent).toContain("kitchen-pi");
+    expect(panel.textContent).not.toContain(REAL_NUMBER);
+    expect(panel.querySelectorAll("[data-choice]")).toHaveLength(0);
+    expect(api.joinChallenge).not.toHaveBeenCalled();
+  });
+
+  it("shows the empty placeholder when nothing is waiting to join", async () => {
+    const api = stubApi({ joinRequests: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(text(el, "[data-test=no-join-requests]")).toBe(t("printers.join_none", "es-ES"));
+  });
+
+  it("denies only on the confirming second click, then reloads the queue", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=join-deny-j1]")!.click();
+    await el.updateComplete;
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+    expect(text(el, "[data-test=join-deny-j1]")).toBe(t("printers.join_deny_confirm", "es-ES"));
+
+    q(el, "[data-test=join-deny-j1]")!.click();
+    await flush(el);
+    expect(api.denyJoinRequest).toHaveBeenCalledWith("j1");
+    expect(api.joinRequests).toHaveBeenCalledTimes(2);
+  });
+
+  // ── Agents: the accept dialog's numeric match (no binding pickers — just the three numbers) ────────
+
+  it("opens a row and renders the three numbers as buttons, immediately tappable", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    expect(api.joinChallenge).toHaveBeenCalledWith("j1");
+    const buttons = Array.from(el.shadowRoot!.querySelectorAll("[data-choice]"));
+    expect(buttons.map((b) => b.getAttribute("data-choice"))).toEqual(CHOICES);
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(CHOICES);
+    // No binding to choose first: an agent accept is only the number, so it is tappable at once.
+    expect(
+      (q(el, `[data-choice="${REAL_NUMBER}"]`) as import("@waitron/ui").WtButton).disabled,
+    ).toBe(false);
+  });
+
+  it("accepts with the tapped number, then closes the dialog and reloads the queue and agents", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+
+    expect(api.acceptPrintAgentJoinRequest).toHaveBeenCalledWith("j1", { choice: REAL_NUMBER });
+    expect(q(el, "[data-test=join-dialog]")).toBeNull();
+    expect(api.listAgents).toHaveBeenCalledTimes(2);
+    expect(api.joinRequests).toHaveBeenCalledTimes(2);
+  });
+
+  // Design §1.2: a wrong tap has ALREADY denied the request server-side (device.join_mismatch is the
+  // surface-neutral terminal code). The dialog closes, the row is gone, and the copy sends the operator
+  // back to the agent. Proven by deletion: drop the mismatch branch in #accept and this fails.
+  it("treats a mismatch as terminal: the row goes, and the banner tells them to ask again", async () => {
+    const api = stubApi({
+      acceptPrintAgentJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
+      joinRequests: vi.fn().mockResolvedValueOnce(pending).mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    q(el, '[data-choice="12"]')!.click();
+    await flush(el);
+
+    expect(q(el, "[data-test=join-row-j1]")).toBeNull();
+    expect(q(el, "[data-test=join-dialog]")).toBeNull();
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("device.join_mismatch", "es-ES"));
+    expect(banner).not.toContain("device.join_mismatch");
+  });
+
+  // The counterpart that gives the mismatch branch its meaning: a fault the operator CAN retry leaves
+  // the dialog open on the same request.
+  it("keeps the dialog open on a recoverable accept fault", async () => {
+    const api = stubApi({
+      acceptPrintAgentJoinRequest: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+
+    expect(q(el, "[data-test=join-dialog]")).toBeTruthy();
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
+  });
+
+  it("reopens a row without re-fetching its numbers — the set is fixed server-side", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+    q(el, "[data-test=join-cancel]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    expect(api.joinChallenge).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelectorAll("[data-choice]")).toHaveLength(3);
+  });
+
+  it("shows an error banner when the challenge fetch is rejected", async () => {
+    const api = stubApi({
+      joinChallenge: vi.fn().mockRejectedValue({ code: "join_request.not_found" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("join_request.not_found");
+  });
+
+  // The generate-code panel and its verb are gone: an agent is enrolled by ACCEPTING its ask now.
+  it("shows none of the retired generate-code controls", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(q(el, "[data-test=agent-label]")).toBeNull();
+    expect(q(el, "[data-test=generate-code]")).toBeNull();
     expect(q(el, "[data-test=code-panel]")).toBeNull();
-    expect(api.listAgents).toHaveBeenCalledTimes(1); // NOT reloaded
+    expect(q(el, "[data-test=copy-code]")).toBeNull();
   });
 
   // ── Agents: revoke ───────────────────────────────────────────────────────────────────────────────
@@ -1023,12 +1184,6 @@ describe("printers-screen", () => {
 
 it.each([
   {
-    method: "createAgentCode",
-    field: "[data-test=agent-label]",
-    button: "[data-test=generate-code]",
-    result: { code: "PAIR" },
-  },
-  {
     method: "createPrinter",
     field: "[data-test=new-printer-name]",
     button: "[data-test=add-printer]",
@@ -1078,37 +1233,38 @@ it.each([
   },
 );
 
-it("keeps Test Print working while Generate is pending without unlocking Generate", async () => {
-  let resolve!: (value: { code: string }) => void;
-  const createAgentCode = vi.fn(
+it("keeps Test Print working while Add printer is pending without unlocking Add printer", async () => {
+  let resolve!: (value: { id: string }) => void;
+  const createPrinter = vi.fn(
     () =>
-      new Promise<{ code: string }>((done) => {
+      new Promise<{ id: string }>((done) => {
         resolve = done;
       }),
   );
-  const api = stubApi({ createAgentCode });
+  const api = stubApi({ createPrinter });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
-  const field =
-    el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("[data-test=agent-label]")!;
+  const field = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
+    "[data-test=new-printer-name]",
+  )!;
   await field.updateComplete;
   const input = field.shadowRoot!.querySelector("input")!;
-  input.value = "Kitchen agent";
+  input.value = "Kitchen printer";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
   input.focus();
   await userEvent.keyboard("{Enter}");
-  expect(createAgentCode).toHaveBeenCalledExactlyOnceWith("Kitchen agent");
+  expect(createPrinter).toHaveBeenCalledTimes(1);
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=test-print-p1]")!.click();
   await flush(el);
   expect(api.testPrint).toHaveBeenCalledExactlyOnceWith("p1");
   input.focus();
   await userEvent.keyboard("{Enter}");
-  expect(createAgentCode).toHaveBeenCalledTimes(1);
+  expect(createPrinter).toHaveBeenCalledTimes(1);
   expect(
-    (el.shadowRoot!.querySelector("[data-test=generate-code]") as import("@waitron/ui").WtButton)
+    (el.shadowRoot!.querySelector("[data-test=add-printer]") as import("@waitron/ui").WtButton)
       .disabled,
   ).toBe(true);
-  resolve({ code: "PAIR" });
+  resolve({ id: "p9" });
   await flush(el);
 });

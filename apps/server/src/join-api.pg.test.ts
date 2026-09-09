@@ -676,6 +676,161 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   });
 });
 
+describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
+  async function agentCount(cfg: TillConfig): Promise<number> {
+    const { rows } = await suite.admin.execute<{ n: number }>(
+      sql`select count(*)::int as n from print_agents where tenant_id = ${cfg.tenantId}`,
+    );
+    return rows[0]!.n;
+  }
+
+  it("enrols the agent when the number matches, and the request is consumed", async () => {
+    const venue = await setupVenue(suite.admin);
+    const app = mountApp(venue.cfg);
+    const made = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const res = await send(
+      app,
+      "POST",
+      `/management-api/print-agent-join-requests/${made.joinId}/accept`,
+      { cookie: venue.managerCookie, body: { choice: made.verificationNumber } },
+    );
+    expect(res.status).toBe(204);
+    expect(await pendingCount(venue.cfg)).toBe(0);
+    // The real row carries the request's own id (so the agent's Bearer keeps working) and its label.
+    const { rows } = await suite.admin.execute<{ name: string; active: boolean }>(
+      sql`select name, active from print_agents where id = ${made.joinId}`,
+    );
+    expect(rows[0]).toMatchObject({ name: "Cocina agent", active: true });
+  });
+
+  it("a wrong number is 400 device.join_mismatch, no print_agents row, and the request is gone on a FRESH retry", async () => {
+    const venue = await setupVenue(suite.admin);
+    const app = mountApp(venue.cfg);
+    const made = await knock(venue, {
+      kind: "print_agent",
+      label: "Cocina agent",
+      numbers: () => 42,
+    });
+    const path = `/management-api/print-agent-join-requests/${made.joinId}/accept`;
+    const wrong = await send(app, "POST", path, {
+      cookie: venue.managerCookie,
+      body: { choice: "07" }, // 42 is the real number, so 07 is wrong by construction
+    });
+    expect(wrong.status).toBe(400);
+    expect((await errorOf(wrong)).code).toBe("device.join_mismatch");
+    expect(await agentCount(venue.cfg)).toBe(0);
+
+    // The consuming delete stuck (the mismatch is thrown AFTER the transaction commits) — a FRESH
+    // request, even with the RIGHT number, finds nothing. Rolling the delete back would turn a wrong
+    // tap into an unlimited retry.
+    const retry = await send(app, "POST", path, {
+      cookie: venue.managerCookie,
+      body: { choice: made.verificationNumber },
+    });
+    expect(retry.status).toBe(404);
+    expect((await errorOf(retry)).code).toBe("join_request.not_found");
+    expect(await pendingCount(venue.cfg)).toBe(0);
+  });
+
+  it("this route 404s a DEVICE request, and the device accept route 404s a print_agent request (kind filtering)", async () => {
+    const venue = await setupVenue(suite.admin);
+    const app = mountApp(venue.cfg);
+    const device = await knock(venue, { kind: "device", label: "Bar till" });
+    // The print accept route cannot consume a device request.
+    const asPrint = await send(
+      app,
+      "POST",
+      `/management-api/print-agent-join-requests/${device.joinId}/accept`,
+      { cookie: venue.managerCookie, body: { choice: device.verificationNumber } },
+    );
+    expect(asPrint.status).toBe(404);
+    expect((await errorOf(asPrint)).code).toBe("join_request.not_found");
+
+    // The device accept route cannot consume a print_agent request (the mirror predicate).
+    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const profileId = await seedProfile(venue.cfg, "till");
+    const asDevice = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${agent.joinId}/accept`,
+      { cookie: venue.managerCookie, body: { choice: agent.verificationNumber, profileId } },
+    );
+    expect(asDevice.status).toBe(404);
+    expect((await errorOf(asDevice)).code).toBe("join_request.not_found");
+
+    // Both asks survive, untouched.
+    expect(await pendingCount(venue.cfg)).toBe(2);
+    expect(await agentCount(venue.cfg)).toBe(0);
+  });
+
+  it("needs printer.manage — a staff session is 403 and the request survives", async () => {
+    const venue = await setupVenue(suite.admin);
+    const app = mountApp(venue.cfg);
+    const made = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const res = await send(
+      app,
+      "POST",
+      `/management-api/print-agent-join-requests/${made.joinId}/accept`,
+      { cookie: venue.staffCookie, body: { choice: made.verificationNumber } },
+    );
+    expect(res.status).toBe(403);
+    expect((await errorOf(res)).params).toEqual({ permission: "printer.manage" });
+    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await agentCount(venue.cfg)).toBe(0);
+  });
+
+  it("is 404 for an unknown or malformed id, and screens a missing choice", async () => {
+    const venue = await setupVenue(suite.admin);
+    const app = mountApp(venue.cfg);
+    for (const id of [randomUUID(), "not-a-uuid"]) {
+      const res = await send(
+        app,
+        "POST",
+        `/management-api/print-agent-join-requests/${id}/accept`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: "42" },
+        },
+      );
+      expect(res.status).toBe(404);
+      expect((await errorOf(res)).code).toBe("join_request.not_found");
+    }
+    const made = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const noChoice = await send(
+      app,
+      "POST",
+      `/management-api/print-agent-join-requests/${made.joinId}/accept`,
+      { cookie: venue.managerCookie, body: {} },
+    );
+    expect(noChoice.status).toBe(400);
+    expect(await errorOf(noChoice)).toEqual({
+      code: "management.request_invalid",
+      params: { field: "choice" },
+    });
+  });
+
+  it("cannot accept another tenant's request (real app_user, two tenants)", async () => {
+    const mine = await setupVenue(suite.admin);
+    const theirs = await setupVenue(suite.admin);
+    const made = await knock(theirs, { kind: "print_agent", label: "Their agent" });
+    // My printer.manage session, scoped to MY tenant, cannot reach their request — the accept's own
+    // tenant predicate rides its consuming delete, so a globally-unique join id is not the boundary.
+    const app = mountApp(mine.cfg);
+    const res = await send(
+      app,
+      "POST",
+      `/management-api/print-agent-join-requests/${made.joinId}/accept`,
+      { cookie: mine.managerCookie, body: { choice: made.verificationNumber } },
+    );
+    expect(res.status).toBe(404);
+    expect((await errorOf(res)).code).toBe("join_request.not_found");
+    // Their ask survives; no agent row appears in either tenant.
+    expect(await pendingCount(theirs.cfg)).toBe(1);
+    expect(await agentCount(mine.cfg)).toBe(0);
+    expect(await agentCount(theirs.cfg)).toBe(0);
+  });
+});
+
 describe("the pending cap is the list's bound", () => {
   it("lists at most the cap, because the knock verb refuses past it", async () => {
     const venue = await setupVenue(suite.admin);

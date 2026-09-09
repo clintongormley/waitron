@@ -368,10 +368,7 @@ describe("POST /api/device/join", () => {
     // The window is SHUT, so a 403 would also be a plausible answer — the 429 is what proves the
     // limiter runs FIRST, and the absent `noteRefused` proves the window was never consulted.
     const venue = await setupVenue(suite.admin);
-    const limiter = createEnrolRateLimiter({
-      now: () => 1_000,
-      code: "device.join_rate_limited",
-    });
+    const limiter = createEnrolRateLimiter({ now: () => 1_000 });
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, limiter, mode);
     for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
@@ -1116,10 +1113,7 @@ describe("join rate limiter (spec §8)", () => {
   it("rate-limits the knock: the (cap+1)th is 429 BEFORE the DB, then the window resets", async () => {
     const venue = await setupVenue(suite.admin);
     let fakeNow = 1_000;
-    const limiter = createEnrolRateLimiter({
-      now: () => fakeNow,
-      code: "device.join_rate_limited",
-    });
+    const limiter = createEnrolRateLimiter({ now: () => fakeNow });
     const mode = createPairingMode();
     mode.open();
     const app = mountApp(venue.cfg, limiter, mode);

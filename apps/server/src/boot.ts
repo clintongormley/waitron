@@ -1468,22 +1468,27 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     );
     // The ADMIN side of joining, on the SAME app: the venue's pairing-window control, and the pending
     // requests both surfaces raise (list, challenge, deny — each gated on the permission the ROW's kind
-    // demands — plus the DEVICE accept). It takes the SAME `pairingMode` holder the device mount above
+    // demands — plus BOTH per-surface accepts, device and print agent). It takes the SAME `pairingMode` holder the device mount above
     // received, which is what makes the window venue-wide, and the same full `till` config, because the
     // accept verb is typed `cfg: TillConfig`. Routes only — no database work at boot; the management
     // gate runs per request.
     mountJoinApi(app, { db, cfg: till, pairingMode }, log);
     // The printing subsystem's HTTP surface on the SAME app, the identical three-group convention: the
-    // UNAUTHENTICATED agent enrol (`POST /print-api/agent/enrol`, redeem a pairing code for a Bearer
-    // token), the `requireAgent`-gated agent group (claim this agent's queued jobs, report each result —
-    // the claim commits within the request, holding no lock across the agent's push, design §3c/Ruling 6)
-    // and the `printer.manage`-gated management group (mint agent codes, list/revoke agents, printers
-    // CRUD, recent jobs). It reuses the EXACT `db` and this venue's tenant + location (`till.tenantId`/
-    // `till.locationId`) so scope cannot drift from the sibling mounts. No `secureCookies` (the agent uses
-    // a Bearer token, the management group the shared management session), no fiscal backend/clock/card
-    // provider/media store — these routes touch only the four print_* tables. Routes only — no database
-    // work at boot; the agent guard and the `printer.manage` gate run per request.
-    mountPrintApi(app, { db, cfg: { tenantId: till.tenantId, locationId: till.locationId } }, log);
+    // UNAUTHENTICATED knock + status (`POST /print-api/agent/join`, `GET /print-api/agent/join/status`
+    // — join through the shared join_requests mechanism a device uses), the `requireAgent`-gated agent
+    // group (claim this agent's queued jobs, report each result — the claim commits within the request,
+    // holding no lock across the agent's push, design §3c/Ruling 6; the pull also carries the venue's
+    // node id + routable servers) and the `printer.manage`-gated management group (list/revoke agents,
+    // printers CRUD, recent jobs). It passes `till` verbatim (the same FULL `TillConfig` `mountTillApi`
+    // and `mountJoinApi` receive), the SAME `pairingMode` holder the device + join mounts share (so the
+    // venue's one window admits the agent knock too), and `readNodeMembership` for the pull's server
+    // list. No `secureCookies` (the agent uses a Bearer token, the management group the shared management
+    // session). Routes only — no database work at boot.
+    mountPrintApi(
+      app,
+      { db, cfg: till, readMembership: () => readNodeMembership(db), pairingMode },
+      log,
+    );
   }
   // The deployment holds one tenant per database. The dashboard's management HTTP surface
   // (manager login, staff/person management, passkey ceremonies) on the SAME app, the identical

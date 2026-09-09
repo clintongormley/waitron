@@ -51,7 +51,6 @@ export const PRIVILEGES: Record<string, string> = {
   payment_refunds: "SIU",
   payments: "SIU",
   persons: "SIU",
-  print_agent_pairing_codes: "SID",
   print_agents: "SIU",
   print_jobs: "SIU",
   printers: "SIU",

@@ -1,0 +1,16 @@
+-- The pairing code is gone: a print agent now enrols via join-and-accept (`join_requests` + an admin
+-- accept), so nothing reads or writes this table any more — the mint/verify/redeem verbs that used it
+-- are removed in the same slice. Dropped rather than left dormant because an unused table still carries
+-- grants and a classification row. NOT a publication membership: it was classified `local`, and a
+-- `local` table is in neither publication (`packages/sync/src/publications.ts`).
+--
+-- Safe to DROP outright: no other table ever pointed AT it, and its own scope FKs (tenant_id,
+-- location_id) go with their columns. Receipt — `grep -rn 'print_agent_pairing' packages apps scripts`
+-- (excluding `coverage/`) matches only this migration directory's own history and `agent.ts`/its test,
+-- which the same slice removes; no surviving schema module, source file, or other table.
+--
+-- Waitron is pre-production, so there is no data to preserve and no backfill (CLAUDE.md §3).
+--
+-- CASCADE is deliberately NOT used (matching 0010's drop of `device_pairing_codes`): a dependency this
+-- drop does not expect should FAIL here rather than be silently removed with the table.
+DROP TABLE "print_agent_pairing_codes";

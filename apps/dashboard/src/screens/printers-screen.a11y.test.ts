@@ -1,9 +1,12 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { expect, afterEach, describe, it, vi } from "vitest";
+import { userEvent } from "@vitest/browser/context";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { t } from "../i18n/t.js";
 import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
   DashboardApi,
+  JoinRequestRow,
   LocationSummary,
   PrintAgentRow,
   PrintJobRow,
@@ -14,12 +17,16 @@ import type {
 } from "../api/client.js";
 
 /**
- * The Impresoras screen scanned by axe in both themes, in two states: the default agents + printers +
- * jobs lists with their forms, and after a pairing code has been generated (the shown-once code panel).
- * Mounted by ASSIGNING the `api` STUB as a property (never bare markup), exactly as the sibling screen
- * a11y suites do: `connectedCallback` fires `void this.#load()` → `listAgents()` + `listPrinters()` +
- * `listRecentJobs()`, so the stub must resolve all three or a stray rejection pollutes the run (a
- * rejection is a finding).
+ * The Impresoras screen scanned by axe in both themes, in three states: the default agents + printers +
+ * jobs lists with their forms and a print agent waiting to join (the pairing window shut), the pairing
+ * window OPEN, and the accept dialog with its three number buttons. Mounted by ASSIGNING the `api` STUB
+ * as a property (never bare markup), exactly as the sibling screen a11y suites do: `connectedCallback`
+ * fires `void this.#load()` → the list verbs plus `pairingMode()` + `joinRequests("print_agent")`, so
+ * the stub must resolve them all or a stray rejection pollutes the run (a rejection is a finding).
+ *
+ * The last block is not about theme: it pins that each number button carries a real accessible NAME
+ * ("Number 47", never a bare "47" — design §1.2 wants the comparison to be a deliberate act), and that
+ * the dialog can be both reached and operated from the keyboard alone.
  */
 const agents: PrintAgentRow[] = [
   {
@@ -111,13 +118,29 @@ const tills: Till[] = [
 ];
 const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
 
-function stubApi(): DashboardApi {
+// A print agent knocking to join, so the pending queue + accept dialog are in the a11y tree.
+const pending: JoinRequestRow[] = [
+  { id: "j1", kind: "print_agent", label: "kitchen-pi", createdAt: "2026-09-08T10:02:00.000Z" },
+];
+const CHOICES = ["12", "47", "83"];
+
+function stubApi(pairingOpen = false): DashboardApi {
   return {
     listAgents: vi.fn().mockResolvedValue(agents),
     listPrinters: vi.fn().mockResolvedValue(printers),
     listRecentJobs: vi.fn().mockResolvedValue(jobs),
-    createAgentCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeAgent: vi.fn().mockResolvedValue(undefined),
+    pairingMode: vi.fn().mockResolvedValue({
+      open: pairingOpen,
+      openUntil: pairingOpen ? "2026-09-08T10:20:00.000Z" : null,
+      refusedRecently: pairingOpen ? 0 : 2,
+    }),
+    openPairingMode: vi.fn().mockResolvedValue({ openUntil: "2026-09-08T10:20:00.000Z" }),
+    closePairingMode: vi.fn().mockResolvedValue(undefined),
+    joinRequests: vi.fn().mockResolvedValue(pending),
+    joinChallenge: vi.fn().mockResolvedValue({ choices: CHOICES }),
+    denyJoinRequest: vi.fn().mockResolvedValue(undefined),
+    acceptPrintAgentJoinRequest: vi.fn().mockResolvedValue(undefined),
     createPrinter: vi.fn().mockResolvedValue({ id: "p9" }),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
@@ -145,7 +168,7 @@ async function flush(el: PrintersScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (theme) => {
-  it("renders the agents, printers and jobs lists with their forms accessibly", async () => {
+  it("renders the agents, printers and jobs lists plus the pending queue accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
       { api: stubApi() },
@@ -155,24 +178,66 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders the shown-once pairing-code panel accessibly", async () => {
+  it("renders the open pairing window accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
-      { api: stubApi() },
+      { api: stubApi(true) },
       theme,
     );
     await flush(el);
-    // Type a label and generate a code so the shown-once panel is in the a11y tree.
-    el.shadowRoot!.querySelector("[data-test=agent-label]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "Nuevo agente" },
-        bubbles: true,
-        composed: true,
-      }),
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the accept dialog and its three numbers accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi(true) },
+      theme,
     );
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=generate-code]")!.click();
+    await flush(el);
+    // Open the waiting row so the modal dialog and its three number buttons are in the a11y tree.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
+  });
+});
+
+describe("printers-screen a11y — the numeric match", () => {
+  // A bare "47" is not a name a screen reader can act on — the number has to be announced as one.
+  // Read off the INNER <button>, which is the element that carries the name (wt-button forwards
+  // `aria-label` into its shadow root).
+  it("names every number button, not just labels it with the digits", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(true),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    const names = Array.from(el.shadowRoot!.querySelectorAll("[data-choice]")).map((b) =>
+      b.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
+    );
+    expect(names).toEqual(
+      CHOICES.map((n) => t("printers.join_choice_label", "es-ES").replace("{number}", n)),
+    );
+  });
+
+  // Reachable AND operable from the keyboard alone: Enter on the focused row control opens the dialog,
+  // and Enter on a focused number accepts with it. Real key events, not synthetic clicks.
+  it("opens the dialog and accepts a number from the keyboard alone", async () => {
+    const api = stubApi(true);
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.focus();
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=join-dialog]")).toBeTruthy();
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.focus();
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+
+    expect(api.acceptPrintAgentJoinRequest).toHaveBeenCalledWith("j1", { choice: "47" });
   });
 });

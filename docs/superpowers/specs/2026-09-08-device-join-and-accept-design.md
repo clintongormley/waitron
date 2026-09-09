@@ -10,6 +10,11 @@ keyed to the register — stands unchanged.
 **Amends:** [`2026-09-08-print-agent-process-design.md`](2026-09-08-print-agent-process-design.md)
 §2.3 (approved 2026-09-08, not yet implemented) — see §7. One mechanism serves both surfaces.
 
+> **2026-09-09 — §7's print-agent half implemented on `feat/print-agent-process`.** The print agent
+> now enrols over the shared `join_requests` table described here, superseding
+> [`2026-09-08-print-agent-process-design.md`](2026-09-08-print-agent-process-design.md)'s own §2.3
+> and its plan's Tasks 5–8.
+
 ---
 
 ## 0. What this replaces, and why

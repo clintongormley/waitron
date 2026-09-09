@@ -32,22 +32,4 @@ describe("the printer / agent error codes carry their declared params", () => {
     expect(error.code).toBe("agent.unauthorized");
     expect(error.params).toEqual({});
   });
-
-  it("constructs agent.pairing_invalid with NO params (mistyped vs unknown is not disclosed)", () => {
-    const error = new AppError("agent.pairing_invalid", {});
-    expect(error.code).toBe("agent.pairing_invalid");
-    expect(error.params).toEqual({});
-  });
-
-  it("constructs agent.pairing_expired with NO params (the code lapsed past its TTL)", () => {
-    const error = new AppError("agent.pairing_expired", {});
-    expect(error.code).toBe("agent.pairing_expired");
-    expect(error.params).toEqual({});
-  });
-
-  it("constructs agent.pairing_rate_limited with NO params (the enrol flood guard, own namespace)", () => {
-    const error = new AppError("agent.pairing_rate_limited", {});
-    expect(error.code).toBe("agent.pairing_rate_limited");
-    expect(error.params).toEqual({});
-  });
 });

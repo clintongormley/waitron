@@ -2031,15 +2031,25 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
-  it("createAgentCode POSTs { label } and returns the one-time code (201)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ code: "ABCD2345" }, true, 201));
+  it("acceptPrintAgentJoinRequest POSTs the tapped number and resolves on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createAgentCode("Cocina")).toEqual({ code: "ABCD2345" });
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-agents/codes", {
+    await expect(api.acceptPrintAgentJoinRequest("j1", { choice: "47" })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-agent-join-requests/j1/accept", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ label: "Cocina" }),
+      body: JSON.stringify({ choice: "47" }),
+    });
+  });
+
+  it("acceptPrintAgentJoinRequest rejects with device.join_mismatch when the number was wrong", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "device.join_mismatch" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.acceptPrintAgentJoinRequest("j1", { choice: "12" })).rejects.toMatchObject({
+      code: "device.join_mismatch",
     });
   });
 

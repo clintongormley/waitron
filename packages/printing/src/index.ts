@@ -10,7 +10,7 @@
 // through this re-export too.
 import "./errors.js";
 
-export { PAIRING_TTL_MS, authenticateAgent, enrolAgent, generateAgentCode } from "./agent.js";
+export { authenticateAgent } from "./agent.js";
 export type { PrintAgentConfig } from "./agent.js";
 export { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from "./printers.js";
 export type {
