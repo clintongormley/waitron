@@ -63,15 +63,30 @@ const devices: DeviceRow[] = [
 ];
 
 const deviceProfiles: DeviceProfile[] = [
-  { id: "dp1", name: "Counter till", canvasId: "p1", capabilities: [], formFactor: "till" },
+  {
+    id: "dp1",
+    name: "Counter till",
+    canvasId: "p1",
+    capabilities: [],
+    formFactor: "till",
+    inactivityTimeoutSeconds: null,
+  },
   {
     id: "dp2",
     name: "Waiter handheld",
     canvasId: "p2",
     capabilities: [],
     formFactor: "phone-portrait",
+    inactivityTimeoutSeconds: null,
   },
-  { id: "dp3", name: "Pass screen", canvasId: null, capabilities: [], formFactor: "kds" },
+  {
+    id: "dp3",
+    name: "Pass screen",
+    canvasId: null,
+    capabilities: [],
+    formFactor: "kds",
+    inactivityTimeoutSeconds: null,
+  },
 ];
 
 const tills: Till[] = [{ id: "t1", label: "Caja 1", locationId: "l1", receiptPrinterId: null }];

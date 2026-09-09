@@ -1745,19 +1745,20 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
   });
 
-  it("createDeviceProfile POSTs the profile body including its form factor (201)", async () => {
+  it("createDeviceProfile POSTs the profile body including its form factor + inactivity timeout (201)", async () => {
     const stored = {
       id: "p9",
       name: "Counter",
       canvasId: "c1",
       capabilities: ["open-cash-drawer"],
       formFactor: "till",
+      inactivityTimeoutSeconds: 300,
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createDeviceProfile("Counter", "c1", ["open-cash-drawer"], "till")).toEqual(
-      stored,
-    );
+    expect(
+      await api.createDeviceProfile("Counter", "c1", ["open-cash-drawer"], "till", 300),
+    ).toEqual(stored);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-profiles", {
       method: "POST",
       credentials: "include",
@@ -1767,23 +1768,25 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         canvasId: "c1",
         capabilities: ["open-cash-drawer"],
         formFactor: "till",
+        inactivityTimeoutSeconds: 300,
       }),
     });
   });
 
-  it("updateDeviceProfile PUTs the profile body including its form factor (200)", async () => {
+  it("updateDeviceProfile PUTs the profile body including its form factor + inactivity timeout (200)", async () => {
     const stored = {
       id: "p1",
       name: "Kitchen",
       canvasId: null,
       capabilities: ["act-as-kds"],
       formFactor: "kds",
+      inactivityTimeoutSeconds: null,
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.updateDeviceProfile("p1", "Kitchen", null, ["act-as-kds"], "kds")).toEqual(
-      stored,
-    );
+    expect(
+      await api.updateDeviceProfile("p1", "Kitchen", null, ["act-as-kds"], "kds", null),
+    ).toEqual(stored);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-profiles/p1", {
       method: "PUT",
       credentials: "include",
@@ -1793,6 +1796,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         canvasId: null,
         capabilities: ["act-as-kds"],
         formFactor: "kds",
+        inactivityTimeoutSeconds: null,
       }),
     });
   });

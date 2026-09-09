@@ -619,6 +619,7 @@ export const en = {
   "device_profiles.form_factor.phone-portrait": "Handheld phone",
   "device_profiles.form_factor.tablet-landscape": "Handheld tablet",
   "device_profiles.form_factor.kds": "Kitchen display",
+  "device_profiles.inactivity_timeout_label": "Auto-logout after (minutes)",
   // NOTE: the empty-name banner pseudo-code (device_profiles.err_no_name) and the server's
   // device_profile.* rejections live in i18n/codes.ts's CODE_MESSAGES, resolved via codeMessage().
 } as const;
@@ -1166,6 +1167,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.form_factor.phone-portrait": "Teléfono de mano",
   "device_profiles.form_factor.tablet-landscape": "Tableta de mano",
   "device_profiles.form_factor.kds": "Pantalla de cocina",
+  "device_profiles.inactivity_timeout_label": "Cierre de sesión automático (minutos)",
   // (device_profiles.err_no_name y device_profile.* viven en i18n/codes.ts — ver la nota en `en`.)
 };
 
