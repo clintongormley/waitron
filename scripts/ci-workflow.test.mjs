@@ -574,6 +574,34 @@ describe("the scope gates", () => {
   });
 });
 
+describe("the image smoke's scoping", () => {
+  // The `image` job's build + smoke is the only proof a non-root process binds 443 under host
+  // networking — worth running when the box image's inputs change, wasteful on the many PRs that
+  // cannot touch them. It reads a `deploy` output (fed by `isImageInputPath` in
+  // scripts/changed-packages.mjs) so a pull request runs it only when `deploy/` changed. These pin
+  // the wiring, and — the half that matters — that a push to `main` still smokes on `code` alone,
+  // because `publish` ships the image off this smoke passing.
+  it("declares a `deploy` output on the `changes` job", () => {
+    expect(outputsOf(job("changes").body)).toContain("deploy");
+  });
+
+  it("gates the image job on `code` and reads `deploy` to scope its pull-request runs", () => {
+    const gates = gatesRead(job("image").body);
+    expect(gates).toContain("code");
+    expect(gates).toContain("deploy");
+  });
+
+  // The fail-safe half, pinned positively. The `deploy` narrowing must apply to pull requests ONLY:
+  // a push to `main` (or a `v*` tag) still runs the smoke on `code`, gating `publish` behind it. A
+  // mutation dropping this event guard — scoping main pushes to `deploy` too — would publish images
+  // no smoke ever booted; this fails on it. (Written as one `if:` line so the line-based `gatesRead`
+  // above reads it, exactly as the `publish` gate is.)
+  it("scopes the `deploy` narrowing to pull requests, so every main push is still smoked", () => {
+    const ifLine = job("image").body.find((line) => /^ {4}if:/.test(line)) ?? "";
+    expect(ifLine).toMatch(/github\.event_name != 'pull_request'/);
+  });
+});
+
 describe("the sharded jobs", () => {
   it("were found, and each has a matching merge job", () => {
     // Extraction guard: an empty `shardedJobs` would make every case below vacuous. There are two
