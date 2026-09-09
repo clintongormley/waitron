@@ -190,6 +190,10 @@ writeFileSync(
   JSON.stringify({ modules: { "fiscal-none": false } }),
 );
 const KEY_ENV = {
+  // Task 3: keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
+  // privileged, and a root CI container would otherwise stand up a live service on it. Its own
+  // behaviour is proven directly in landing-listener.test.ts.
+  WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_MEDIA_DIR: MEDIA_ROOT,
@@ -716,6 +720,7 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
     });
     // Trust the CA the box just minted, so the self-signed leaf verifies. `undici`'s `Agent` is real
     // (this file mocks only `undici`'s `fetch`, not `Agent` — see the header comment), and Node's
@@ -816,6 +821,7 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
     });
     // Trust the CA the box minted, so its self-signed leaf verifies on a loopback dial (the leaf
     // carries 127.0.0.1 as an iPAddress SAN unconditionally — `ensureBoxSecrets`).
@@ -855,6 +861,7 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
       WAITRON_BOX_ADDRESSES: override,
     });
     try {
@@ -929,6 +936,7 @@ describe("startServer, against a real container as the deployment role", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_STATE_DIR: stateDir,
         WAITRON_ENV: "preproduction",
+        WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
       });
 
       probe = await pg.connect();
@@ -995,6 +1003,7 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
         });
       } catch {
         // Expected: this pristine clone seeds no venue, so the trading branch's `readOrderFlow` (and a
@@ -1114,6 +1123,7 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
         }),
       ).rejects.toMatchObject({
         code: "module.dependency_missing",
@@ -1153,6 +1163,7 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
         }),
       ).rejects.toMatchObject({ code: "module.fiscal_slot_empty" });
     } finally {
@@ -1181,6 +1192,7 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
       WAITRON_SETUP_APP_DIR: wizardApp,
     });
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
@@ -1264,6 +1276,7 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
     });
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
     const { via, close } = httpsVia(ca);
@@ -1329,6 +1342,7 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_TLS_CERT_FILE: certFile,
       WAITRON_TLS_KEY_FILE: keyFile,
       WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
     });
     // Trust the OPERATOR CA (not the box-minted one): a completed handshake here proves the OPERATOR
     // leaf is what the box served. Dialling with the BOX CA would be the wrong-direction control.
@@ -1384,6 +1398,7 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_TLS_CERT_FILE: join(stateDir, "does-not-exist.crt"),
           WAITRON_TLS_KEY_FILE: join(stateDir, "does-not-exist.key"),
           WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
         }),
       ).rejects.toThrow();
       // ensureBoxSecrets ran (and succeeded) BEFORE the failing startListening call — it is
@@ -1425,6 +1440,7 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
           // Deliberately DISTINCT from the `managementOrigin` this boot falls back to
           // (`http://localhost:5191`, the dev default — WAITRON_MANAGEMENT_ORIGIN is unset here), so
           // the contactUrl assertion below tells the two apart: a seed wired to `managementOrigin`
@@ -1540,6 +1556,7 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
         });
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
         const { via, close } = httpsVia(ca);
@@ -1629,6 +1646,7 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
         });
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
         const { via, close } = httpsVia(ca);
@@ -2547,6 +2565,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
       WAITRON_MIN_TICK_MS: "50",
       WAITRON_MAX_TICK_MS: "200",
       WAITRON_SKIP_RETRY_MS: "100",

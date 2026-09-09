@@ -24,6 +24,10 @@ import type { CardProvider, TillConfig } from "./till-config.js";
 // branches (`stripe_terminal`, `stripe_on_device`) are the ones `boot.test.ts` — which boots against
 // a real container with `cardProvider=none` — cannot reach; the `none` branch is covered there.
 const KEY_ENV = {
+  // Task 3: keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
+  // privileged, and a root CI container would otherwise stand up a live service on it. Its own
+  // behaviour is proven directly in landing-listener.test.ts.
+  WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
