@@ -26,6 +26,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import {
   collectOrder,
@@ -890,6 +891,22 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  // The offers available in one service zone. The zone decides both the visible menus and the
+  // payment flow; the menu-item id in each offer is the selling identity and may price the same
+  // product differently from another zone's menu.
+  app.get("/api/service-zones/:zoneId/offers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
+        return { context, ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId)) };
+      });
+      return c.json(result);
+    }),
+  );
+
   // Ring one walk-up sale — the HTTP face of the fiscal sale path. SESSION-GUARDED, and the guard
   // supplies the attribution: the sale is filed as `operatorId = session.personId`, so who rang it is
   // the logged-in operator, never a browser-sent value. `recordTillSale` opens its OWN
@@ -1013,7 +1030,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         id: string;
         // A parked line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `parkOrder` →
         // `priceOrderLines`, which validates + persists them on the parent dish line.
-        lines: ({ productId: string; quantity: string } & LineExtras)[];
+        lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+        zoneId?: string;
         label?: string;
       }>();
       // The client MINTS `body.id` — it becomes the `working_orders.id` PK `createOpenOrder` INSERTs
@@ -1022,9 +1040,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // is a VALID id colliding with an existing open row, which REPLAYS; this is a malformed one refused
       // before any INSERT.)
       requireUuidParam(body.id, "WorkingOrderId");
+      if (body.zoneId !== undefined) {
+        requireUuidParam(body.zoneId, "ServiceZoneId");
+      }
       const result = await parkOrder({ db: deps.db }, deps.cfg, {
         id: body.id,
         lines: body.lines,
+        zoneId: body.zoneId,
         label: body.label,
         operatorId: personId,
       });

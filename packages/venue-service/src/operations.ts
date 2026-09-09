@@ -8,6 +8,7 @@ import {
   departments,
   orderServiceContexts,
   preparationRoutes,
+  workingLineContexts,
   zoneMenus,
   zoneServicePolicies,
 } from "./schema/service.js";
@@ -179,21 +180,77 @@ export async function listZoneOffers(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,
-): Promise<{ defaultMenuId: string | null; offers: MenuOffer[] }> {
+): Promise<{
+  defaultMenuId: string | null;
+  menus: { id: string; name: string; isDefault: boolean }[];
+  offers: MenuOffer[];
+}> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
   const menus = await tx
-    .select({ id: zoneMenus.menuId })
+    .select({ id: zoneMenus.menuId, name: catalogues.name })
     .from(zoneMenus)
+    .innerJoin(
+      catalogues,
+      and(eq(catalogues.tenantId, zoneMenus.tenantId), eq(catalogues.id, zoneMenus.menuId)),
+    )
     .where(and(eq(zoneMenus.tenantId, cfg.tenantId), eq(zoneMenus.zoneId, zoneId)))
     .orderBy(zoneMenus.displayOrder, zoneMenus.menuId);
   return {
     defaultMenuId: context.defaultMenuId,
+    menus: menus.map((menu) => ({
+      ...menu,
+      isDefault: menu.id === context.defaultMenuId,
+    })),
     offers: await listMenuOffers(
       tx,
       cfg.tenantId,
       menus.map((menu) => menu.id),
     ),
   };
+}
+
+/** Resolve an explicit service zone, or the venue's configured counter default for a new order. */
+export async function resolveNewOrderZone(
+  tx: Transaction,
+  cfg: VenueScope,
+  input: { zoneId?: string | null },
+): Promise<{
+  zoneId: string;
+  departmentId: string;
+  departmentName: string;
+  serviceMode: ServiceMode;
+  defaultMenuId: string | null;
+}> {
+  if (input.zoneId !== undefined && input.zoneId !== null) {
+    return resolveZoneContext(tx, cfg, input.zoneId);
+  }
+  const [policy] = await tx
+    .select({ zoneId: zoneServicePolicies.zoneId })
+    .from(zoneServicePolicies)
+    .where(
+      and(
+        eq(zoneServicePolicies.tenantId, cfg.tenantId),
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        eq(zoneServicePolicies.isCounterDefault, true),
+      ),
+    );
+  if (policy === undefined) throw new AppError("service_zone.default_missing", {});
+  return resolveZoneContext(tx, cfg, policy.zoneId);
+}
+
+/** Resolve a selling identity only when its menu is assigned to the service zone. */
+export async function resolveZoneOffer(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  menuItemId: string,
+): Promise<MenuOffer> {
+  const { offers } = await listZoneOffers(tx, cfg, zoneId);
+  const offer = offers.find((candidate) => candidate.id === menuItemId);
+  if (offer === undefined) {
+    throw new AppError("service_zone.offer_not_allowed", { zoneId, menuItemId });
+  }
+  return offer;
 }
 
 /** Snapshot the zone's current department and payment flow when a new order opens. */
@@ -235,6 +292,48 @@ export async function getOrderServiceContext(
     );
   if (row === undefined) throw new AppError("order.service_context_missing", { workingOrderId });
   return { ...row, serviceMode: row.serviceMode as ServiceMode };
+}
+
+/** Snapshot the commercial attribution of newly priced working-order lines. */
+export async function recordWorkingLineContexts(
+  tx: Transaction,
+  cfg: VenueScope,
+  workingOrderId: string,
+  lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+): Promise<void> {
+  if (lines.length === 0) return;
+  const context = await getOrderServiceContext(tx, cfg, workingOrderId);
+  const [department] = await tx
+    .select({ name: departments.name })
+    .from(departments)
+    .where(and(eq(departments.tenantId, cfg.tenantId), eq(departments.id, context.departmentId)));
+  if (department === undefined) {
+    throw new AppError("department.not_found", { departmentId: context.departmentId });
+  }
+  const byMenuItem = new Map<string, MenuOffer>();
+  for (const line of lines) {
+    if (!byMenuItem.has(line.menuItemId)) {
+      byMenuItem.set(
+        line.menuItemId,
+        await resolveZoneOffer(tx, cfg, context.zoneId, line.menuItemId),
+      );
+    }
+  }
+  await tx.insert(workingLineContexts).values(
+    lines.map((line) => {
+      const offer = byMenuItem.get(line.menuItemId)!;
+      return {
+        tenantId: cfg.tenantId,
+        workingOrderLineId: line.workingOrderLineId,
+        menuItemId: offer.id,
+        menuId: offer.menuId,
+        menuName: offer.menuName,
+        departmentId: context.departmentId,
+        departmentName: department.name,
+        categoryName: offer.category,
+      };
+    }),
+  );
 }
 
 export async function createPreparationRoute(

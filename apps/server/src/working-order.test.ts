@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  CORE_MIGRATIONS,
   asAppUser,
   captureError,
   optionGroupItems,
@@ -15,6 +14,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergenMap, Database, Doneness, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -23,6 +23,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
   listAvailableProducts,
   priceBasket,
@@ -81,7 +83,10 @@ import "./errors.js";
 // Writes run as app_user. Real PostgreSQL covers concurrent order-number allocation.
 const LOCALE = "es-ES";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 let db: Database;
 
@@ -97,6 +102,9 @@ interface SeededVenue {
   cafeId: string;
   /** A second `each` product with NO category, so its priced line carries `category: null`. */
   aguaId: string;
+  zoneId: string;
+  cafeOfferId: string;
+  premiumCafeOfferId: string;
 }
 
 /**
@@ -117,31 +125,79 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
 
-  const { cafeId, aguaId, catalogueId } = await withTenant(db, tenantId, async (tx) => {
-    await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
-    const cafe = await createProduct(tx, tenantId, {
-      catalogueId: cat.id,
-      categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Café" },
-      pricingUnit: "each",
-      unitPrice: "1.50",
-      vatClass: "general",
-    });
-    // Deliberately category-less: `listAvailableProducts` resolves its `category` to NULL (LEFT JOIN),
-    // so its priced line snapshots `category: null` — the other side of `parkOrder`'s `?? null`.
-    const agua = await createProduct(tx, tenantId, {
-      catalogueId: cat.id,
-      categoryId: null,
-      descriptions: { [LOCALE]: "Agua" },
-      pricingUnit: "each",
-      unitPrice: "2.00",
-      vatClass: "general",
-    });
-    await assignCatalogueToLocation(tx, locationId, cat.id);
-    return { cafeId: cafe.id, aguaId: agua.id, catalogueId: cat.id };
-  });
+  const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } = await withTenant(
+    db,
+    tenantId,
+    async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+      const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+      const cafe = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: bebidas.id,
+        descriptions: { [LOCALE]: "Café" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      // Deliberately category-less: `listAvailableProducts` resolves its `category` to NULL (LEFT JOIN),
+      // so its priced line snapshots `category: null` — the other side of `parkOrder`'s `?? null`.
+      const agua = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { [LOCALE]: "Agua" },
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      await assignCatalogueToLocation(tx, locationId, cat.id);
+      const premium = await createCatalogue(tx, tenantId, { name: "Carta premium" });
+      const section = await createMenuSection(tx, tenantId, {
+        menuId: cat.id,
+        name: { [LOCALE]: "Bebidas" },
+      });
+      const premiumSection = await createMenuSection(tx, tenantId, {
+        menuId: premium.id,
+        name: { [LOCALE]: "Bebidas" },
+      });
+      const cafeOffer = await createMenuItem(tx, tenantId, {
+        menuId: cat.id,
+        productId: cafe.id,
+        sectionId: section.id,
+        grossPrice: "2.50",
+      });
+      const premiumCafeOffer = await createMenuItem(tx, tenantId, {
+        menuId: premium.id,
+        productId: cafe.id,
+        sectionId: premiumSection.id,
+        grossPrice: "3.25",
+      });
+      const department = await tx.execute<{ id: string }>(sql`
+      insert into departments
+        (tenant_id, location_id, name, trading_name, default_service_mode)
+      values (${tenantId}, ${locationId}, 'Restaurant', 'Restaurant', ${orderFlow}) returning id`);
+      const zone = await tx.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Counter') returning id`);
+      await tx.execute(sql`
+      insert into zone_service_policies
+        (tenant_id, location_id, zone_id, department_id, default_menu_id, is_counter_default)
+      values (${tenantId}, ${locationId}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
+      await tx.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+      values
+        (${tenantId}, ${zone.rows[0]!.id}, ${cat.id}, 0),
+        (${tenantId}, ${zone.rows[0]!.id}, ${premium.id}, 1)`);
+      return {
+        cafeId: cafe.id,
+        aguaId: agua.id,
+        catalogueId: cat.id,
+        zoneId: zone.rows[0]!.id,
+        cafeOfferId: cafeOffer.id,
+        premiumCafeOfferId: premiumCafeOffer.id,
+      };
+    },
+  );
 
   const cfg: TillConfig = {
     tenantId,
@@ -159,10 +215,44 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.
     orderFlow,
   };
-  return { cfg, cafeId, aguaId, catalogueId };
+  return { cfg, cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId };
 }
 
 describe("parkOrder", () => {
+  it("prices the selected menu offer and freezes its service context", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    const id = randomUUID();
+
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+
+    const line = await db.execute<{ unit_price_gross: string }>(sql`
+      select unit_price_gross from working_order_lines where working_order_id = ${id}`);
+    const context = await db.execute<{ zone_id: string; service_mode: string }>(sql`
+      select zone_id, service_mode from order_service_contexts where working_order_id = ${id}`);
+    const attribution = await db.execute<{
+      menu_item_id: string;
+      menu_name: string;
+      department_name: string;
+    }>(sql`
+      select menu_item_id, menu_name, department_name
+      from working_line_contexts
+      where working_order_line_id = (
+        select id from working_order_lines where working_order_id = ${id})`);
+    expect(line.rows).toEqual([{ unit_price_gross: "3.25" }]);
+    expect(context.rows).toEqual([{ zone_id: zoneId, service_mode: "prepay" }]);
+    expect(attribution.rows).toEqual([
+      {
+        menu_item_id: premiumCafeOfferId,
+        menu_name: "Carta premium",
+        department_name: "Restaurant",
+      },
+    ]);
+  });
+
   it("parks an open working order with number 1 and its priced lines", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();

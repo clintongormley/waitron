@@ -82,6 +82,11 @@ export interface MenuOffer extends MenuItem {
   pricingUnit: PricingUnit;
   vatClass: VatClass;
   category: string;
+  allergens: ProductAllergens | null;
+  diet: DietProfile | null;
+  dietDerivation: DietDerivation | null;
+  dietOverride: DietOverride | null;
+  courseId: string | null;
   optionGroups: MenuOfferOptionGroup[];
 }
 
@@ -100,6 +105,10 @@ export interface MenuOfferOption {
   priceDelta: string;
   maxQuantity: number;
   vatClass: VatClass | null;
+  addAllergens: ProductAllergens | null;
+  removeAllergens: string[] | null;
+  addOrigins: string[] | null;
+  removeOrigins: string[] | null;
 }
 
 export interface Product {
@@ -442,6 +451,11 @@ export async function listMenuOffers(
       pricingUnit: products.pricingUnit,
       vatClass: products.vatClass,
       category: categories.name,
+      allergens: products.allergens,
+      diet: products.diet,
+      dietDerivation: products.dietDerivation,
+      dietOverride: products.dietOverride,
+      courseId: products.courseId,
     })
     .from(menuItems)
     .innerJoin(
@@ -485,6 +499,10 @@ export async function listMenuOffers(
       priceDelta: menuItemOptions.priceDelta,
       maxQuantity: optionGroupItems.maxQuantity,
       vatClass: optionGroupItems.vatClass,
+      addAllergens: optionGroupItems.addAllergens,
+      removeAllergens: optionGroupItems.removeAllergens,
+      addOrigins: optionGroupItems.addOrigins,
+      removeOrigins: optionGroupItems.removeOrigins,
     })
     .from(menuItemOptionGroups)
     .innerJoin(
@@ -552,12 +570,19 @@ export async function listMenuOffers(
       priceDelta: option.priceDelta,
       maxQuantity: option.maxQuantity,
       vatClass: option.vatClass as VatClass | null,
+      addAllergens: option.addAllergens as ProductAllergens | null,
+      removeAllergens: option.removeAllergens as string[] | null,
+      addOrigins: option.addOrigins as string[] | null,
+      removeOrigins: option.removeOrigins as string[] | null,
     });
   }
   return rows.map((row) => ({
     ...row,
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
+    diet: row.diet as DietProfile | null,
+    dietDerivation: row.dietDerivation as DietDerivation | null,
+    dietOverride: row.dietOverride as DietOverride | null,
     optionGroups: groupsByItem.get(row.id) ?? [],
   }));
 }

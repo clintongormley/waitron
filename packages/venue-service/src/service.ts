@@ -3,7 +3,10 @@ import {
   getOrderServiceContext,
   listZoneOffers,
   recordOrderServiceContext,
+  recordWorkingLineContexts,
   resolvePreparationRoute,
+  resolveNewOrderZone,
+  resolveZoneOffer,
   resolveZoneContext,
 } from "./operations.js";
 
@@ -12,6 +15,9 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveZoneContext,
   resolvePreparationRoute,
   listZoneOffers,
+  resolveNewOrderZone,
+  resolveZoneOffer,
   recordOrderContext: recordOrderServiceContext,
+  recordLineContexts: recordWorkingLineContexts,
   getOrderContext: getOrderServiceContext,
 };

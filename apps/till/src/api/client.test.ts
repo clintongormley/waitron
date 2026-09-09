@@ -335,6 +335,41 @@ describe("TillApi", () => {
     expect(r.products[1]!.allergens).toBeNull();
   });
 
+  it("listZoneOffers GETs menu-item identities for the selected service zone", async () => {
+    const payload = {
+      context: { zoneId: "zone-upstairs", departmentId: "restaurant", serviceMode: "table_tab" },
+      defaultMenuId: "drinks",
+      menus: [{ id: "drinks", name: "Drinks", isDefault: true }],
+      offers: [
+        {
+          id: "upstairs-negroni",
+          menuId: "drinks",
+          productId: "negroni",
+          sectionId: "cocktails",
+          grossPrice: "11.00",
+          displayOrder: 0,
+          active: true,
+          menuName: "Drinks",
+          sectionName: { en: "Cocktails" },
+          descriptions: { en: "Negroni" },
+          pricingUnit: "each" as const,
+          vatClass: "general" as const,
+          category: "Cocktails",
+          optionGroups: [],
+        },
+      ],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(payload));
+
+    await expect(new TillApi("", fetchStub).listZoneOffers("zone-upstairs")).resolves.toEqual(
+      payload,
+    );
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/service-zones/zone-upstairs/offers",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
   it("logout DELETEs the session", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
 

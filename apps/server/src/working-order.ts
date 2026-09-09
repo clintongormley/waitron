@@ -54,6 +54,7 @@ import {
 } from "@waitron/catalogue";
 import type {
   BasketItemWithOptions,
+  AvailableProduct,
   DietaryOrigin,
   DietDerivation,
   DietOverride,
@@ -67,6 +68,7 @@ import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FloorAnnotator } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { enqueueCorrectionSlips, enqueueKitchenTickets } from "./kitchen-print.js";
 import { requireNullableString } from "@waitron/server-kit";
@@ -135,21 +137,85 @@ async function priceOrderLines(
   // the doneness is validated against the enum (`working_order.invalid_doneness`). Both attach to the PARENT dish
   // line only — a child modifier row carries neither. Absent = NULL (not chosen); a whitespace-only
   // note folds to NULL.
-  lines: ({
-    productId: string;
+  requestedLines: ({
+    productId?: string;
+    menuItemId?: string;
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
   } & LineExtras)[],
-): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
-  if (lines.length === 0) {
+  zoneId?: string,
+): Promise<{
+  lineRows: WorkingOrderLineInsert[];
+  priced: PricedBasket;
+  lineContexts: { workingOrderLineId: string; menuItemId: string }[];
+}> {
+  if (requestedLines.length === 0) {
     // An empty basket needs no catalogue read: nothing to resolve, no course override to screen, nothing
     // to price. priceBasket([]) yields the correct empty PricedBasket shape (a pure call, no DB), so every
     // splitOffCheck / lineless openTab / unjoin skips the full listAvailableProducts scan they used to pay
     // for. Callers passing [] ignore `priced` (they persist no lines); it is returned only for type-consistency.
-    return { lineRows: [], priced: priceBasket([]) };
+    return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
   }
-  const { products: available, invoiceLocales } = await listAvailableProducts(tx, cfg.locationId);
+  const catalogue = await listAvailableProducts(tx, cfg.locationId);
+  const usesOffers = requestedLines.some((line) => line.menuItemId !== undefined);
+  const offerBySelectionId = new Map<
+    string,
+    Awaited<ReturnType<typeof VENUE_SERVICE.resolveZoneOffer>>
+  >();
+  if (usesOffers && zoneId === undefined) {
+    throw new AppError("service_zone.default_missing", {});
+  }
+  if (usesOffers) {
+    for (const line of requestedLines) {
+      if (line.menuItemId === undefined || line.productId !== undefined) {
+        throw new AppError("management.request_invalid", { field: "lines" });
+      }
+      const offer = await VENUE_SERVICE.resolveZoneOffer(tx, cfg, zoneId!, line.menuItemId);
+      offerBySelectionId.set(line.menuItemId, offer);
+    }
+  }
+  const available = usesOffers
+    ? [...offerBySelectionId.values()].map((offer) => ({
+        id: offer.id,
+        descriptions: offer.descriptions,
+        pricingUnit: offer.pricingUnit,
+        unitPrice: offer.grossPrice,
+        vatClass: offer.vatClass as AvailableProduct["vatClass"],
+        category: offer.category,
+        allergens: offer.allergens,
+        diet: offer.diet as AvailableProduct["diet"],
+        dietDerivation: offer.dietDerivation as AvailableProduct["dietDerivation"],
+        dietOverride: offer.dietOverride as AvailableProduct["dietOverride"],
+        courseId: offer.courseId,
+        catalogueId: offer.menuId,
+        catalogueName: offer.menuName,
+        optionGroups: offer.optionGroups.map((group) => ({
+          id: group.id,
+          name: group.name,
+          minSelect: group.minSelect,
+          maxSelect: group.maxSelect,
+          required: group.required,
+          items: group.options.map((option) => ({
+            id: option.id,
+            name: option.name,
+            priceDelta: option.priceDelta,
+            vatClass:
+              option.vatClass as AvailableProduct["optionGroups"][number]["items"][number]["vatClass"],
+            maxQuantity: option.maxQuantity,
+            addAllergens: option.addAllergens,
+            removeAllergens: option.removeAllergens as string[] | null,
+            addOrigins: option.addOrigins as string[] | null,
+            removeOrigins: option.removeOrigins as string[] | null,
+          })),
+        })),
+      }))
+    : catalogue.products;
+  const invoiceLocales = catalogue.invoiceLocales;
+  const lines = requestedLines.map((line) => ({
+    ...line,
+    productId: line.menuItemId ?? line.productId ?? "",
+  }));
   const byId = new Map(available.map((p) => [p.id, p]));
 
   // Build the priceable basket AND, in lockstep, the per-PRICED-LINE metadata `priceBasketWithOptions`
@@ -161,11 +227,12 @@ async function priceOrderLines(
     | {
         kind: "parent";
         productId: string;
+        menuItemId: string | null;
         courseId: string | null;
         note: string | null;
         doneness: Doneness | null;
       }
-    | { kind: "child"; optionGroupItemId: string };
+    | { kind: "child"; optionGroupItemId: string; menuItemId: string | null };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   // Per-PRODUCT cache of `optionGroupItemId → { item, groupId }`, built once per distinct product rather
@@ -346,13 +413,18 @@ async function priceOrderLines(
     // CHILD row inherits none (no ticket_item, KDS coursing is per dish).
     lineMeta.push({
       kind: "parent",
-      productId: line.productId,
+      productId: offerBySelectionId.get(line.productId)?.productId ?? line.productId,
+      menuItemId: line.menuItemId ?? null,
       courseId: line.courseId ?? product.courseId ?? null,
       note,
       doneness,
     });
     for (const option of selectedOptions) {
-      lineMeta.push({ kind: "child", optionGroupItemId: option.id });
+      lineMeta.push({
+        kind: "child",
+        optionGroupItemId: option.id,
+        menuItemId: line.menuItemId ?? null,
+      });
     }
   }
 
@@ -473,7 +545,12 @@ async function priceOrderLines(
       doneness: meta.kind === "parent" ? meta.doneness : null,
     };
   });
-  return { lineRows, priced };
+  const lineContexts = lineMeta.flatMap((meta, index) =>
+    meta.menuItemId === null
+      ? []
+      : [{ workingOrderLineId: ids[index]!, menuItemId: meta.menuItemId }],
+  );
+  return { lineRows, priced, lineContexts };
 }
 
 /**
@@ -613,7 +690,8 @@ export interface ParkOrderRequest {
   id: string;
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines` via
   // `createOpenOrder`.
-  lines: ({ productId: string; quantity: string } & LineExtras)[];
+  lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+  zoneId?: string;
   label?: string;
   operatorId?: string;
 }
@@ -649,7 +727,8 @@ export async function createOpenOrder(
   // A line MAY also carry per-line `LineExtras` (NON-FISCAL) — likewise forwarded to `priceOrderLines`,
   // which validates + persists them on the parent dish line.
   lines: ({
-    productId: string;
+    productId?: string;
+    menuItemId?: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
   } & LineExtras)[],
@@ -658,7 +737,7 @@ export async function createOpenOrder(
   // and payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up, column NULL). A
   // TAB does NOT flow through here — its link is the `dining_tables.tab_id` back-pointer openTab sets,
   // not an order column, so openTab passes no placement and this never stamps a delivery table on it.
-  placement: { deliveryTableId?: string | null } = {},
+  placement: { deliveryTableId?: string | null; zoneId?: string } = {},
 ): Promise<{ orderNumber: number; priced: PricedBasket }> {
   // Check the delivery table exists before insertion so an unknown id produces
   // table.not_found rather than a raw foreign-key failure. Scoped to the tenant (not by id alone):
@@ -680,7 +759,13 @@ export async function createOpenOrder(
   // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows,
   // keeping the raw price so the caller need not re-derive it — `priceOrderLines`'s own doc-comment
   // explains the zip and why `priced` is threaded back out.
-  const { lineRows, priced } = await priceOrderLines(tx, cfg, id, lines);
+  const { lineRows, priced, lineContexts } = await priceOrderLines(
+    tx,
+    cfg,
+    id,
+    lines,
+    placement.zoneId,
+  );
   const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
 
   await tx.insert(workingOrders).values({
@@ -703,6 +788,10 @@ export async function createOpenOrder(
   // always pass ≥1 line (they guard empty baskets before calling), so this never changes their path.
   if (lineRows.length > 0) {
     await tx.insert(workingOrderLines).values(lineRows);
+  }
+  if (placement.zoneId !== undefined) {
+    await VENUE_SERVICE.recordOrderContext(tx, cfg, id, placement.zoneId);
+    await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts);
   }
 
   return { orderNumber, priced };
@@ -736,7 +825,9 @@ export async function parkOrder(
     return await withTenant(deps.db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
-      const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null);
+      const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null, {
+        zoneId: req.zoneId,
+      });
       return { id: req.id, orderNumber };
     });
   } catch (error) {

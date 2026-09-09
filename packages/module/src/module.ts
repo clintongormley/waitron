@@ -105,6 +105,13 @@ export interface ZoneMenuOffer {
   readonly pricingUnit: "each" | "weight";
   readonly vatClass: string;
   readonly category: string;
+  readonly allergens: Readonly<
+    Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
+  > | null;
+  readonly diet: unknown;
+  readonly dietDerivation: unknown;
+  readonly dietOverride: unknown;
+  readonly courseId: string | null;
   readonly optionGroups: readonly {
     readonly id: string;
     readonly name: Readonly<Record<string, string>>;
@@ -117,6 +124,12 @@ export interface ZoneMenuOffer {
       readonly priceDelta: string;
       readonly maxQuantity: number;
       readonly vatClass: string | null;
+      readonly addAllergens: Readonly<
+        Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
+      > | null;
+      readonly removeAllergens: readonly string[] | null;
+      readonly addOrigins: readonly string[] | null;
+      readonly removeOrigins: readonly string[] | null;
     }[];
   }[];
 }
@@ -141,7 +154,22 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },
     zoneId: string,
-  ): Promise<{ defaultMenuId: string | null; offers: readonly ZoneMenuOffer[] }>;
+  ): Promise<{
+    defaultMenuId: string | null;
+    menus: readonly { id: string; name: string; isDefault: boolean }[];
+    offers: readonly ZoneMenuOffer[];
+  }>;
+  resolveNewOrderZone(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    input: { zoneId?: string | null },
+  ): Promise<OrderServiceContext>;
+  resolveZoneOffer(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    zoneId: string,
+    menuItemId: string,
+  ): Promise<ZoneMenuOffer>;
   recordOrderContext(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },
@@ -153,6 +181,12 @@ export interface VenueServiceContribution {
     cfg: { tenantId: TenantId; locationId: LocationId },
     workingOrderId: string,
   ): Promise<OrderServiceContext>;
+  recordLineContexts(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+    lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+  ): Promise<void>;
 }
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */

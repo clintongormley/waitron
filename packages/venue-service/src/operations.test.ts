@@ -8,7 +8,7 @@ import {
   createMenuSection,
   createProduct,
 } from "@waitron/catalogue";
-import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, withTenant, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -26,7 +26,10 @@ import {
   getOrderServiceContext,
   listZoneOffers,
   recordOrderServiceContext,
+  recordWorkingLineContexts,
   resolvePreparationRoute,
+  resolveNewOrderZone,
+  resolveZoneOffer,
   resolveZoneContext,
 } from "./operations.js";
 
@@ -189,9 +192,23 @@ describe("venue service routing", () => {
         sectionId: section.id,
         grossPrice: "24.90",
       });
+      const hiddenMenu = await createCatalogue(tx, tenantId, { name: "Staff" });
+      const hiddenSection = await createMenuSection(tx, tenantId, {
+        menuId: hiddenMenu.id,
+        name: { en: "Staff" },
+      });
+      const hiddenOffer = await createMenuItem(tx, tenantId, {
+        menuId: hiddenMenu.id,
+        productId: ham.id,
+        sectionId: hiddenSection.id,
+        grossPrice: "1.00",
+      });
       await allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id, {
         makeDefault: true,
       });
+      await tx.execute(sql`
+        update zone_service_policies set is_counter_default = true
+        where tenant_id = ${tenantId} and zone_id = ${zone.rows[0]!.id}`);
 
       await tx.execute(sql`
         insert into working_orders (id, tenant_id, till_id, node_id, order_number)
@@ -201,6 +218,27 @@ describe("venue service routing", () => {
         { tenantId, locationId },
         "00000000-0000-4000-8000-000000000001",
         zone.rows[0]!.id,
+      );
+      const workingLineId = "00000000-0000-4000-8000-000000000002";
+      await tx.insert(workingOrderLines).values({
+        id: workingLineId,
+        tenantId,
+        workingOrderId: "00000000-0000-4000-8000-000000000001",
+        lineNo: 1,
+        productId: ham.id,
+        descriptions: { "en-GB": "Sliced ham" },
+        quantity: "0.250",
+        unitPrice: "22.64",
+        unitPriceGross: "24.90",
+        vatRate: "10.00",
+        lineTotal: "6.23",
+        category: "Cold cuts",
+      });
+      await recordWorkingLineContexts(
+        tx,
+        { tenantId, locationId },
+        "00000000-0000-4000-8000-000000000001",
+        [{ workingOrderLineId: workingLineId, menuItemId: offer.id }],
       );
       await configureZone(
         tx,
@@ -230,12 +268,45 @@ describe("venue service routing", () => {
       });
       const visible = await listZoneOffers(tx, { tenantId, locationId }, zone.rows[0]!.id);
       expect(visible.defaultMenuId).toBe(menu.id);
+      expect(visible.menus).toEqual([{ id: menu.id, name: "Deli takeaway", isDefault: true }]);
+      await expect(resolveNewOrderZone(tx, { tenantId, locationId }, {})).resolves.toMatchObject({
+        zoneId: zone.rows[0]!.id,
+        departmentId: department.id,
+        serviceMode: "invoice_first",
+      });
       expect(visible.offers).toHaveLength(1);
       expect(visible.offers[0]).toMatchObject({
         id: offer.id,
         productId: ham.id,
         grossPrice: "24.90",
       });
+      await expect(
+        resolveZoneOffer(tx, { tenantId, locationId }, zone.rows[0]!.id, offer.id),
+      ).resolves.toMatchObject({ id: offer.id, productId: ham.id, grossPrice: "24.90" });
+      await expect(
+        resolveZoneOffer(tx, { tenantId, locationId }, zone.rows[0]!.id, hiddenOffer.id),
+      ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
+      await tx.execute(sql`
+        update catalogues set name = 'Renamed menu'
+        where tenant_id = ${tenantId} and id = ${menu.id}`);
+      await tx.execute(sql`
+        update departments set name = 'Renamed department'
+        where tenant_id = ${tenantId} and id = ${department.id}`);
+      const attribution = await tx.execute<{
+        menu_name: string;
+        department_name: string;
+        category_name: string;
+      }>(sql`
+        select menu_name, department_name, category_name
+        from working_line_contexts
+        where tenant_id = ${tenantId} and working_order_line_id = ${workingLineId}`);
+      expect(attribution.rows).toEqual([
+        {
+          menu_name: "Deli takeaway",
+          department_name: "Deli",
+          category_name: "Cold cuts",
+        },
+      ]);
     });
   });
 
@@ -306,6 +377,7 @@ describe("venue service routing", () => {
       await expect(listZoneOffers(tx, { tenantId, locationId }, zone.rows[0]!.id)).resolves.toEqual(
         {
           defaultMenuId: null,
+          menus: [{ id: menu.id, name: "Terrace", isDefault: false }],
           offers: [],
         },
       );

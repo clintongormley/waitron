@@ -15,6 +15,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
 } from "@waitron/catalogue";
 import {
@@ -62,6 +64,9 @@ let aguaProduct: { id: string; catalogueId: string };
 // `GET /api/products` response can be proven to carry BOTH the `menus` list (default flagged) and
 // products drawn from every accessible catalogue, not just the default one.
 let cervezaProduct: { id: string; catalogueId: string };
+let counterZoneId: string;
+let aguaOfferId: string;
+let hiddenAguaOfferId: string;
 // SP-A.2 cutover: the sale routes (`/api/sales`, `/api/pay`, place, collect) now resolve `till_id` from
 // the authenticated enrolled device. This suite's single seeded tenant gets ONE enrolled `till` device
 // (bound to `cfg.tillId`) in setup; the happy-path place/sale calls carry its cookie so they reach the
@@ -119,38 +124,89 @@ const suite = usePgliteDb({
     // on the APP role via the catalogue helpers — the same `withTenant` + `asAppUser` path the route
     // reads them back through — so the active/assignment filters are real, not bypassed by a
     // superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
-    const { agua, cerveza } = await withTenant(db, tenantId, async (tx) => {
-      await asAppUser(tx);
-      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
-      const p = await createProduct(tx, tenantId, {
-        catalogueId: cat.id,
-        categoryId: bebidas.id,
-        descriptions: { es: "Agua mineral" },
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-        // An EU-14 allergen declaration on the seeded product, so `GET /api/products` has a non-null
-        // `allergens` map to carry back — the field this route carries through unchanged.
-        allergens: { sulphites: { presence: "may_contain" } },
-      });
-      await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
+    const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTenant(
+      db,
+      tenantId,
+      async (tx) => {
+        await asAppUser(tx);
+        const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+        const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+        const p = await createProduct(tx, tenantId, {
+          catalogueId: cat.id,
+          categoryId: bebidas.id,
+          descriptions: { es: "Agua mineral" },
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "general",
+          // An EU-14 allergen declaration on the seeded product, so `GET /api/products` has a non-null
+          // `allergens` map to carry back — the field this route carries through unchanged.
+          allergens: { sulphites: { presence: "may_contain" } },
+        });
+        await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
 
-      const cat2 = await createCatalogue(tx, tenantId, { name: "Happy Hour" });
-      const p2 = await createProduct(tx, tenantId, {
-        catalogueId: cat2.id,
-        categoryId: bebidas.id,
-        descriptions: { es: "Cerveza" },
-        pricingUnit: "each",
-        unitPrice: "2.50",
-        vatClass: "general",
-      });
-      await addCatalogueToLocation(tx, tenantId, loc.rows[0]!.id, cat2.id);
+        const cat2 = await createCatalogue(tx, tenantId, { name: "Happy Hour" });
+        const p2 = await createProduct(tx, tenantId, {
+          catalogueId: cat2.id,
+          categoryId: bebidas.id,
+          descriptions: { es: "Cerveza" },
+          pricingUnit: "each",
+          unitPrice: "2.50",
+          vatClass: "general",
+        });
+        await addCatalogueToLocation(tx, tenantId, loc.rows[0]!.id, cat2.id);
 
-      return { agua: { ...p, catalogueId: cat.id }, cerveza: { ...p2, catalogueId: cat2.id } };
-    });
+        const department = await tx.execute<{ id: string }>(sql`
+        insert into departments
+          (tenant_id, location_id, name, trading_name, default_service_mode)
+        values (${tenantId}, ${loc.rows[0]!.id}, 'Restaurant', 'Restaurant', 'prepay')
+        returning id`);
+        const zone = await tx.execute<{ id: string }>(sql`
+        insert into floor_zones (tenant_id, location_id, name)
+        values (${tenantId}, ${loc.rows[0]!.id}, 'Counter') returning id`);
+        await tx.execute(sql`
+        insert into zone_service_policies
+          (tenant_id, location_id, zone_id, department_id, default_menu_id)
+        values (${tenantId}, ${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id})`);
+        await tx.execute(sql`
+        insert into zone_menus (tenant_id, zone_id, menu_id)
+        values (${tenantId}, ${zone.rows[0]!.id}, ${cat.id})`);
+        const section = await createMenuSection(tx, tenantId, {
+          menuId: cat.id,
+          name: { es: "Bebidas" },
+        });
+        const offer = await createMenuItem(tx, tenantId, {
+          menuId: cat.id,
+          productId: p.id,
+          sectionId: section.id,
+          grossPrice: "1.75",
+        });
+
+        const hiddenMenu = await createCatalogue(tx, tenantId, { name: "Staff" });
+        const hiddenSection = await createMenuSection(tx, tenantId, {
+          menuId: hiddenMenu.id,
+          name: { es: "Staff" },
+        });
+        const hiddenOffer = await createMenuItem(tx, tenantId, {
+          menuId: hiddenMenu.id,
+          productId: p.id,
+          sectionId: hiddenSection.id,
+          grossPrice: "0.50",
+        });
+
+        return {
+          agua: { ...p, catalogueId: cat.id },
+          cerveza: { ...p2, catalogueId: cat2.id },
+          zoneId: zone.rows[0]!.id,
+          offerId: offer.id,
+          hiddenOfferId: hiddenOffer.id,
+        };
+      },
+    );
     aguaProduct = { id: agua.id, catalogueId: agua.catalogueId };
     cervezaProduct = { id: cerveza.id, catalogueId: cerveza.catalogueId };
+    counterZoneId = zoneId;
+    aguaOfferId = offerId;
+    hiddenAguaOfferId = hiddenOfferId;
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
@@ -1323,6 +1379,23 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 });
 
 describe("GET /api/products (session-guarded catalogue)", () => {
+  it("returns the offers allowed in an explicit service zone", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = await openSession(suite.db);
+
+    const res = await app.request(`/api/service-zones/${counterZoneId}/offers`, {
+      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      context: { zoneId: counterZoneId, serviceMode: "prepay" },
+      defaultMenuId: aguaProduct.catalogueId,
+      menus: [{ id: aguaProduct.catalogueId, name: "Carta", isDefault: true }],
+      offers: [{ id: aguaOfferId, productId: aguaProduct.id, grossPrice: "1.75" }],
+    });
+  });
+
   it("REJECTS (401 session.required) when no cookie is present — proves the requireSession guard", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1633,6 +1706,44 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       sql`select status, till_id from working_orders where id = ${id}`,
     );
     expect(rows.rows[0]).toMatchObject({ status: "open", till_id: cfg.tillId });
+  });
+
+  it("POST prices an allowed menu offer and rejects an offer outside the selected zone", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const allowedId = randomUUID();
+    const allowed = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: allowedId,
+        zoneId: counterZoneId,
+        lines: [{ menuItemId: aguaOfferId, quantity: "2" }],
+      }),
+    });
+    expect(allowed.status).toBe(200);
+    const priced = await suite.db.execute<{ unit_price_gross: string }>(sql`
+      select unit_price_gross from working_order_lines where working_order_id = ${allowedId}`);
+    expect(priced.rows).toEqual([{ unit_price_gross: "1.75" }]);
+
+    const rejected = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: randomUUID(),
+        zoneId: counterZoneId,
+        lines: [{ menuItemId: hiddenAguaOfferId, quantity: "1" }],
+      }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toMatchObject({
+      error: {
+        code: "service_zone.offer_not_allowed",
+        params: { zoneId: counterZoneId, menuItemId: hiddenAguaOfferId },
+      },
+    });
   });
 
   it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b park sibling)", async () => {

@@ -6,9 +6,12 @@ describe("VENUE_SERVICE", () => {
     expect(Object.keys(VENUE_SERVICE).sort()).toEqual([
       "getOrderContext",
       "listZoneOffers",
+      "recordLineContexts",
       "recordOrderContext",
+      "resolveNewOrderZone",
       "resolvePreparationRoute",
       "resolveZoneContext",
+      "resolveZoneOffer",
     ]);
   });
 });

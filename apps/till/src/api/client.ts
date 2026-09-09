@@ -376,6 +376,48 @@ export interface ProductCatalogue {
   products: TillProduct[];
 }
 
+/** A product's distinct selling identity on one menu. Its id selects this price and option set. */
+export interface TillMenuOffer {
+  id: string;
+  menuId: string;
+  productId: string;
+  sectionId: string;
+  grossPrice: string;
+  displayOrder: number;
+  active: boolean;
+  menuName: string;
+  sectionName: Record<string, string>;
+  descriptions: Record<string, string>;
+  pricingUnit: "each" | "weight";
+  vatClass: "general" | "reduced" | "super_reduced" | "zero";
+  category: string;
+  optionGroups: {
+    id: string;
+    name: Record<string, string>;
+    minSelect: number;
+    maxSelect: number;
+    required: boolean;
+    options: {
+      id: string;
+      name: Record<string, string>;
+      priceDelta: string;
+      maxQuantity: number;
+      vatClass: "general" | "reduced" | "super_reduced" | "zero" | null;
+    }[];
+  }[];
+}
+
+export interface ZoneOfferCatalogue {
+  context: {
+    zoneId: string;
+    departmentId: string;
+    serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+  };
+  defaultMenuId: string | null;
+  menus: TillMenu[];
+  offers: TillMenuOffer[];
+}
+
 /**
  * The meat-doneness enum (order-line customisation) — a LOCAL redefinition of the server's
  * `packages/db` `Doneness`, the same bundle-decoupling rationale as every other type in this file (see
@@ -1220,6 +1262,13 @@ export class TillApi {
    */
   listProducts(): Promise<ProductCatalogue> {
     return this.#request<ProductCatalogue>("/api/products", "GET");
+  }
+
+  listZoneOffers(zoneId: string): Promise<ZoneOfferCatalogue> {
+    return this.#request<ZoneOfferCatalogue>(
+      `/api/service-zones/${encodeURIComponent(zoneId)}/offers`,
+      "GET",
+    );
   }
 
   /**
