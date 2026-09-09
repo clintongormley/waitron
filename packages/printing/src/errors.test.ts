@@ -21,6 +21,12 @@ describe("the printer / agent error codes carry their declared params", () => {
     expect(error.params).toEqual({ reason: "missing_transport_fields" });
   });
 
+  it("constructs printer.already_registered with the clashing local_key", () => {
+    const error = new AppError("printer.already_registered", { localKey: "SN-X" });
+    expect(error.code).toBe("printer.already_registered");
+    expect(error.params).toEqual({ localKey: "SN-X" });
+  });
+
   it("constructs agent.not_found with the agent id", () => {
     const error = new AppError("agent.not_found", { id: "agt_123" });
     expect(error.code).toBe("agent.not_found");
