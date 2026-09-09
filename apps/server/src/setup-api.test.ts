@@ -1069,6 +1069,31 @@ async function postAdopt(app: Hono, body: unknown): Promise<Response> {
 }
 
 describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, sharing provision's latch", () => {
+  it("persists adoption completion without retaining the break-glass secret", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-operation-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const first = new Hono();
+      mountSetup(first, makeAdoptDeps({ operations }).deps, noopLog);
+      const response = await postAdopt(first, adoptBody());
+      expect(await response.json()).toMatchObject({ breakGlassSecret: BREAK_GLASS_SECRET });
+      expect((await operations.read())?.data).toEqual({
+        adopted: true,
+        tenantId: TENANT_ID,
+        restarting: true,
+      });
+
+      const restarted = new Hono();
+      const next = makeAdoptDeps({ operations: createSetupOperationStore(dir) });
+      mountSetup(restarted, next.deps, noopLog);
+      const replay = await postAdopt(restarted, adoptBody());
+      expect(await replay.json()).toEqual({ adopted: true, tenantId: TENANT_ID, restarting: true });
+      expect(next.adopt).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("adopts a venue: 200, passes the body through to adopt, defers the restart", async () => {
     const app = new Hono();
     const { deps, adopt, adoptRequests, requestRestart } = makeAdoptDeps();

@@ -587,7 +587,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // (adopt), never both, so a start of either action must latch out a concurrent start of the other —
   // the same "one unrecoverable first-boot action" guard, expressed once. Registered BEFORE the
   // `GET *` catch-all below (Hono first-match wins).
-  app.post("/setup-api/adopt", (c) => {
+  app.post("/setup-api/adopt", async (c) => {
     // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Only `adopt` and
     // `requestRestart` are load-bearing for this route (the fetch/persist deps are captured inside the
     // `adopt` closure in boot). Captured as consts so TypeScript narrows them non-undefined below.
@@ -605,50 +605,66 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    return runAdopt(c, log, async () => {
-      try {
-        // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so a degenerate body falls
-        // through to the field screen below (a 400) rather than an opaque 500. Validate the credential
-        // PER FIELD here — the primary's login object (`personId`/`password` required, `totp` optional) —
-        // so a wrong-shape body is refused at the mirror's OWN boundary as a clean `setup.request_invalid`
-        // 400, never forwarded to fail the primary and surface as an opaque `mirror.bundle_fetch_failed`
-        // 502. The password/TOTP is NEVER logged — `asString` echoes the field NAME only, never its value.
-        const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
-        const primaryUrl = asString(body.primaryUrl, "primaryUrl");
-        // SSRF guard — `/setup-api/adopt` is UNAUTHENTICATED, so an attacker who can reach a mirror in
-        // setup could otherwise point `primaryUrl` at the cloud metadata endpoint or an internal host and
-        // drive the box to POST its admin credential there. Refuse a scheme/host the policy disallows HERE,
-        // before `adopt` runs `fetchBundle` — no fetch is attempted for a rejected URL. Throws
-        // `mirror.primary_url_invalid` (400 via `ADOPT_STATUS`); the value is never echoed.
-        assertSafePrimaryUrl(primaryUrl);
-        const cred = asObject(body.credential, "credential");
-        const credential: AdoptCredential = {
-          personId: asString(cred.personId, "credential.personId"),
-          password: asString(cred.password, "credential.password"),
-          totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
-        };
+    const requestHash = createHash("sha256")
+      .update(await c.req.raw.clone().text())
+      .digest("hex");
+    const execute = () =>
+      runAdopt(c, log, async () => {
+        try {
+          // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so a degenerate body falls
+          // through to the field screen below (a 400) rather than an opaque 500. Validate the credential
+          // PER FIELD here — the primary's login object (`personId`/`password` required, `totp` optional) —
+          // so a wrong-shape body is refused at the mirror's OWN boundary as a clean `setup.request_invalid`
+          // 400, never forwarded to fail the primary and surface as an opaque `mirror.bundle_fetch_failed`
+          // 502. The password/TOTP is NEVER logged — `asString` echoes the field NAME only, never its value.
+          const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
+          const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+          // SSRF guard — `/setup-api/adopt` is UNAUTHENTICATED, so an attacker who can reach a mirror in
+          // setup could otherwise point `primaryUrl` at the cloud metadata endpoint or an internal host and
+          // drive the box to POST its admin credential there. Refuse a scheme/host the policy disallows HERE,
+          // before `adopt` runs `fetchBundle` — no fetch is attempted for a rejected URL. Throws
+          // `mirror.primary_url_invalid` (400 via `ADOPT_STATUS`); the value is never echoed.
+          assertSafePrimaryUrl(primaryUrl);
+          const cred = asObject(body.credential, "credential");
+          const credential: AdoptCredential = {
+            personId: asString(cred.personId, "credential.personId"),
+            password: asString(cred.password, "credential.password"),
+            totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
+          };
 
-        const { tenantId, breakGlassSecret } = await adopt({ primaryUrl, credential });
+          const { tenantId, breakGlassSecret } = await adopt({ primaryUrl, credential });
 
-        // Surface the break-glass secret ONCE, here, in the connect response — the operator's only
-        // chance to record the offline promote fallback. It is NEVER logged (mirroring the sync-token
-        // discipline): no `log(...)` call on this success path carries it, and it is not put in the
-        // `setup.adopt_failed` error branch either.
-        const response = c.json(
-          { adopted: true, tenantId, breakGlassSecret, restarting: true },
-          200,
-        );
-        // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
-        // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it) —
-        // the same persist-then-restart transition provision uses.
-        setTimeout(() => requestRestart(), 0);
-        return response;
-      } catch (error) {
-        // Reset on ANY failure so a corrected retry is accepted. On SUCCESS the function has already
-        // returned above, so the latch stays true and no second setup action can start before restart.
-        provisioning = false;
-        throw error;
+          // Surface the break-glass secret ONCE, here, in the connect response — the operator's only
+          // chance to record the offline promote fallback. It is NEVER logged (mirroring the sync-token
+          // discipline): no `log(...)` call on this success path carries it, and it is not put in the
+          // `setup.adopt_failed` error branch either.
+          const response = c.json(
+            { adopted: true, tenantId, breakGlassSecret, restarting: true },
+            200,
+          );
+          // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
+          // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it) —
+          // the same persist-then-restart transition provision uses.
+          setTimeout(() => requestRestart(), 0);
+          return response;
+        } catch (error) {
+          // Reset on ANY failure so a corrected retry is accepted. On SUCCESS the function has already
+          // returned above, so the latch stays true and no second setup action can start before restart.
+          provisioning = false;
+          throw error;
+        }
+      });
+    if (deps.operations === undefined) return execute();
+    return deps.operations.run("adopt", requestHash, async (operation) => {
+      if (operation.phase === "complete") {
+        return c.json(operation.data as { adopted: true; tenantId: string; restarting: true });
       }
+      const response = await execute();
+      if (response.ok) {
+        const result = (await response.clone().json()) as { tenantId: string };
+        await operation.complete({ adopted: true, tenantId: result.tenantId, restarting: true });
+      }
+      return response;
     });
   });
 
