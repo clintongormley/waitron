@@ -22,6 +22,39 @@ it("uses http when not secure", () => {
   expect(r.hostnameUrl).toBe("http://waitron.local");
 });
 
+// The advertised IP URLs must be cert-coverable: the box leaf's iPAddress SANs are filtered to the
+// CA's permitted subtrees (`isPermittedLeafIpv4`), so an out-of-set interface address (Tailscale
+// 100.64/10 CGNAT, 169.254/16 link-local) would present an `https://<ip>/` the leaf's cert cannot
+// vouch for → a TLS name mismatch on dial. Drop those from the advertised set; keep the permitted
+// LAN address and always keep the `waitron.local` hostname URL (the cert covers the NAME).
+it("drops out-of-set IPs from the advertised URLs but keeps permitted LAN + the hostname URL", () => {
+  const r = buildReachInfo({
+    hostname: "waitron.local",
+    port: 8080,
+    secure: true,
+    listIpv4: () => ["100.64.1.2", "192.168.1.50", "169.254.1.2"],
+  });
+  expect(r.hostnameUrl).toBe("https://waitron.local:8080");
+  expect(r.addresses).toEqual(["192.168.1.50"]);
+  expect(r.ipUrls).toEqual(["https://192.168.1.50:8080"]);
+  expect(r.qrTarget).toBe("https://192.168.1.50:8080");
+});
+
+// No cert-coverable IP: the box still advertises the hostname URL (name-based reach via mDNS, whose
+// `waitron.local` name the cert covers), and the IP-QR target is null rather than an error.
+it("advertises only the hostname URL when no IP is cert-coverable", () => {
+  const r = buildReachInfo({
+    hostname: "waitron.local",
+    port: 8080,
+    secure: true,
+    listIpv4: () => ["100.64.1.2", "169.254.1.2"],
+  });
+  expect(r.hostnameUrl).toBe("https://waitron.local:8080");
+  expect(r.addresses).toEqual([]);
+  expect(r.ipUrls).toEqual([]);
+  expect(r.qrTarget).toBeNull();
+});
+
 it("qrTarget is null when there is no non-internal IPv4", () => {
   const r = buildReachInfo({
     hostname: "waitron.local",

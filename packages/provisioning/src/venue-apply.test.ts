@@ -151,9 +151,10 @@ describe("applyVenue", () => {
     }>(sql`
       select name, canvas_id, capabilities, inactivity_timeout_seconds from device_profiles
       where tenant_id = ${result.tenantId} order by name`);
-    // The seeded inactivity timeout reaches the DB only through venue-plan → applyVenue: the handheld
-    // carries 300 s, the counter and kitchen display none. Proven by deletion: drop the
-    // `inactivityTimeoutSeconds` field from planVenue's profile mapping and the handheld reads null.
+    // The seeded inactivity timeout reaches the DB only through venue-plan → applyVenue: the counter
+    // till and handheld each carry 300 s, the kitchen display none. Proven by deletion: drop the
+    // `inactivityTimeoutSeconds` field from planVenue's profile mapping and the counter/handheld read
+    // null.
     expect(profiles.rows).toEqual([
       {
         name: "Cocina",
@@ -165,7 +166,7 @@ describe("applyVenue", () => {
         name: "Mostrador",
         canvas_id: null,
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
-        inactivity_timeout_seconds: null,
+        inactivity_timeout_seconds: 300,
       },
       { name: "Móvil", canvas_id: null, capabilities: [], inactivity_timeout_seconds: 300 },
     ]);

@@ -64,9 +64,10 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
 export interface DefaultDeviceProfile {
   formFactor: FormFactor;
   capabilities: CapabilityFlag[];
-  /** The auto-logout idle timeout (seconds) the profile is seeded with; NULL/omitted = never. Only
-   * `phone-portrait` (Handheld) carries one — a shared handheld auto-logs-out so the next server does
-   * not inherit the last one's session. The 300 s (five-minute) default is owner-confirmed at review. */
+  /** The auto-logout idle timeout (seconds) the profile is seeded with; NULL/omitted = never. Both
+   * operator-facing form factors — `till` (Counter) and `phone-portrait` (Handheld) — carry one so the
+   * next operator does not inherit the last one's session; `kds` (a kitchen display, no logged-in
+   * operator) is exempt. The 300 s (five-minute) default is owner-confirmed at review. */
   inactivityTimeoutSeconds?: number | null;
   /**
    * The seeded name per BARE language subtag (`"es"`, `"en"`). These names are LOCALE CONTENT — the
@@ -89,6 +90,9 @@ export const DEFAULT_DEVICE_PROFILES: readonly DefaultDeviceProfile[] = [
     formFactor: "till",
     capabilities: DEFAULT_PROFILE_CAPABILITIES.till,
     nameByLocale: { es: "Mostrador", en: "Counter" },
+    // A shared counter till auto-logs-out after five minutes idle so the next operator does not
+    // inherit the last one's session; still editable per profile.
+    inactivityTimeoutSeconds: 300,
   },
   {
     formFactor: "kds",
@@ -99,7 +103,7 @@ export const DEFAULT_DEVICE_PROFILES: readonly DefaultDeviceProfile[] = [
     formFactor: "phone-portrait",
     capabilities: DEFAULT_PROFILE_CAPABILITIES["phone-portrait"],
     nameByLocale: { es: "Móvil", en: "Handheld" },
-    // A shared handheld auto-logs-out after five minutes idle; till/kds are left NULL (never).
+    // A shared handheld auto-logs-out after five minutes idle (as the counter till does); kds is exempt.
     inactivityTimeoutSeconds: 300,
   },
 ];

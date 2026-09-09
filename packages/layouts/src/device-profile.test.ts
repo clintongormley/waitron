@@ -136,12 +136,13 @@ describe("DEFAULT_DEVICE_PROFILES", () => {
     expect(byFormFactor["phone-portrait"]!.nameByLocale).toEqual({ es: "Móvil", en: "Handheld" });
   });
 
-  it("seeds only the handheld with a 300 s inactivity timeout; till and kds carry none", () => {
-    // The owner-confirmed default: a shared handheld auto-logs-out after five minutes; a till and a
-    // kitchen display do not. `?? null` normalizes the till's omitted value.
+  it("seeds the till and handheld with a 300 s inactivity timeout; kds carries none", () => {
+    // The owner-confirmed default: an operator-facing device (counter till and shared handheld alike)
+    // auto-logs-out after five minutes so the next operator does not inherit the last one's session; a
+    // kitchen display is not a logged-in operator and is exempt. `?? null` normalizes an omitted value.
     const byFormFactor = Object.fromEntries(DEFAULT_DEVICE_PROFILES.map((p) => [p.formFactor, p]));
     expect(byFormFactor["phone-portrait"]!.inactivityTimeoutSeconds).toBe(300);
-    expect(byFormFactor.till!.inactivityTimeoutSeconds ?? null).toBeNull();
+    expect(byFormFactor.till!.inactivityTimeoutSeconds).toBe(300);
     expect(byFormFactor.kds!.inactivityTimeoutSeconds ?? null).toBeNull();
   });
 });
