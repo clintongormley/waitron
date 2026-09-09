@@ -77,9 +77,13 @@ it("a non-empty base value still wins over the file", async () => {
 Run: `pnpm --filter @waitron/server exec vitest run src/box-env.test.ts -t "empty base value"`
 Expected: FAIL — merged value is `""`, not `/mnt/usb`.
 
-- [ ] **Step 3: Implement the non-empty-base merge**
+- [ ] **Step 3: Add `backup.env` to the file list, and implement the non-empty-base merge**
 
-In `apps/server/src/box-env.ts`, replace the final `return { ...fromFiles, ...base };` with a merge that skips empty base values (import `isUnset` from `./env-value.js`):
+First (Blocker: without this the wizard's file is never read and even Step 1's test fails), add `"backup.env"` to `FILES` at `box-env.ts:7`, LAST so it is read after the existing files:
+```ts
+const FILES = ["instance.env", "secrets.env", "trading.env", "backup.env"] as const;
+```
+Then, in `apps/server/src/box-env.ts`, replace the final `return { ...fromFiles, ...base };` with a merge that skips empty base values (import `isUnset` from `./env-value.js`):
 
 ```ts
 import { isUnset } from "./env-value.js";
@@ -115,25 +119,23 @@ Create `scripts/backup-compose-env.test.ts` (root Vitest project). It parses `de
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
-import { loadBoxEnv } from "../apps/server/src/box-env.js"; // if reachable; else re-express the merge rule inline
 
 describe("compose backup vars cannot silently disable a file-configured backup", () => {
-  it("empty ${VAR:-} rendering is treated as absent by the merge", async () => {
-    // documents Blocker 1: the ${VAR:-} defaults render empty; the merge must ignore them
+  it("every WAITRON_BACKUP_* compose var uses the empty-default shape the merge is proven to ignore", () => {
+    // Documents Blocker 1: compose passes these as `${VAR:-}` → "" ; box-env.test.ts proves
+    // an empty base value no longer masks backup.env. This guard makes a future compose edit
+    // that reintroduces a NON-empty hard-coded default (which WOULD win) visible.
     const composeText = readFileSync(join(__dirname, "../deploy/compose.yml"), "utf8");
-    const doc = parse(composeText);
-    const env = doc.services.server.environment as Record<string, string>;
-    for (const key of Object.keys(env)) {
-      if (key.startsWith("WAITRON_BACKUP_")) {
-        expect(env[key]).toMatch(/\$\{.*:-\}$/); // documents the empty-default shape
-      }
+    const backupLines = composeText.split("\n").filter((l) => /WAITRON_BACKUP_\w+:/.test(l));
+    expect(backupLines.length).toBeGreaterThan(0);
+    for (const line of backupLines) {
+      expect(line).toMatch(/\$\{WAITRON_BACKUP_\w+:-\}\s*$/); // empty default only
     }
   });
 });
 ```
 
-(If `yaml` is not already a dep of the root project, read the file and assert with a regex instead — do not add a dependency for this.) The behavioural half is covered by Step 1's box-env test; this guard documents the compose shape so a future edit that reintroduces the trap is visible.
+Regex over the text — no YAML dependency, no cross-project import (the behavioural half is Step 1's box-env test). This guard documents the compose shape so a future edit that reintroduces the trap is visible.
 
 - [ ] **Step 7: Sweep the prose receipts**
 
@@ -307,7 +309,11 @@ Add `const DEFAULT_BACKUP_RETAIN_DAYS = 30;`. Delete the old `WAITRON_BACKUP_DAT
 Run: `pnpm --filter @waitron/server exec vitest run src/backup-config.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Verify + commit**
+- [ ] **Step 6: Sweep the "DB-url required" receipts (CLAUDE.md §1 base-to-tip)**
+
+Making `WAITRON_BACKUP_DATABASE_URL` optional retires the claim that it is required-when-a-destination-is-set. Grep and update each: `docs/superpowers/specs/2026-09-08-node-containers-design.md` (~:143-145), `docs/backlog.md` (~:95), `deploy/Dockerfile` (~:98), `deploy/.env.example` (~:33), and `.github/instructions/waitron.instructions.md` if it paraphrases it. Reword to "optional; the box derives the backup read connection from its own owner connection when unset" with a one-line pointer to this change.
+
+- [ ] **Step 7: Verify + commit**
 
 Run: `pnpm --filter @waitron/server test:coverage && pnpm typecheck`
 ```bash
@@ -335,8 +341,8 @@ export function nextFireMs(
 export const AUTO_MARGIN_MINUTES = 30;
 export const MAX_SLEEP_MS = 60 * 60 * 1000;        // 1h cap, recompute
 ```
-- `BackupSweepDeps` changes: remove `intervalMs`; add `schedule: BackupSchedule`, `retainDays: number`, `jitterSeed: string`, `readClock: () => Promise<ScheduleClock>` (used only for wall-clock).
-- `pruneBackend(backend, retain, retainDays, nowMs)`.
+- `BackupSweepDeps` changes: remove `intervalMs`; add `schedule: BackupSchedule`, `retainDays: number`, `jitterSeed: string`, `readClock: () => Promise<ScheduleClock>` (wall-clock only), and `onDump?: () => void` (called after a successful fan-out — the supervisor uses it to flip `archiveUnderCurrentKey`, Task 4/I7).
+- `pruneBackend(backend, retain, retainDays, nowMs)` — age is measured off the artifact's OWN timestamp parsed from its key (clock-jump-safe, spec §3.3), NOT the filesystem `mtimeMs`. Add `backupArchiveTimestamp(key: string): Date` to `pg-dump.ts` as the inverse of `backupArchiveKey`'s stamp (the `basicIsoStamp` format at `pg-dump.ts:69-87`), with its own unit test round-tripping `backupArchiveTimestamp(backupArchiveKey(d))`.
 
 - [ ] **Step 1: Failing tests — next-fire math (pure, no DB)**
 
@@ -488,10 +494,11 @@ Expected: FAIL.
 
 - [ ] **Step 7: Implement the loop + prune changes**
 
-`BackupSweepDeps`: remove `intervalMs`; add `schedule: BackupSchedule`, `retainDays: number`, `jitterSeed: string`, `readClock: () => Promise<ScheduleClock>`. Rework the loop:
+`BackupSweepDeps`: remove `intervalMs`; add `schedule: BackupSchedule`, `retainDays: number`, `jitterSeed: string`, `readClock: () => Promise<ScheduleClock>`, `onDump?: () => void`. Thin the stale file-header comment (`backup-sweep.ts:1-9`, "sleeps `intervalMs`…") to describe the wall-clock loop (CLAUDE.md §1: a behaviour change retires the receipt). In `runOnce`, after the fan-out completes successfully, call `deps.onDump?.()`. Rework the loop:
 ```ts
 export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
   const now = deps.now ?? (() => new Date());
+  if (deps.signal.aborted) return;   // don't fire a dump into a shutdown (M15)
   // Immediate first dump on start (enable/rotate/boot) — preserves today's "runOnce first".
   await tick(deps);
   while (!deps.signal.aborted) {
@@ -521,11 +528,13 @@ async function tick(deps: BackupSweepDeps): Promise<void> {
 async function pruneBackend(backend: StorageBackend, retain: number, retainDays: number, nowMs: number): Promise<void> {
   const objects = await backend.list(BACKUP_KEY_PREFIX); // newest-first
   const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
-  const toDelete = objects.filter((obj, i) => i >= retain || (nowMs - obj.mtimeMs) > maxAgeMs);
+  const toDelete = objects.filter(
+    (obj, i) => i >= retain || (nowMs - backupArchiveTimestamp(obj.key).getTime()) > maxAgeMs,
+  );
   await Promise.all(toDelete.map((obj) => backend.delete(obj.key)));
 }
 ```
-Update its call site (`backup-sweep.ts:170`) to pass `deps.retainDays` and `(deps.now ?? (() => new Date()))().getTime()`. `runOnce`'s `Omit` type now omits `"schedule" | "sleep" | "jitterSeed" | "readClock"` too.
+Age is read from the key's own embedded stamp (`backupArchiveTimestamp`, new in `pg-dump.ts`), NOT `obj.mtimeMs` — the stamp is the immutable dump time, so a later clock change cannot resurrect a pruned window (spec §3.3). Update the call site (`backup-sweep.ts:170`) to pass `deps.retainDays` and `(deps.now ?? (() => new Date()))().getTime()`. `runOnce`'s `Omit` type now omits `"schedule" | "sleep" | "jitterSeed" | "readClock"` too. Add a `pruneBackend` unit test with a fake backend whose object keys carry stamps 0 / 2 / 10 days old and assert both caps (a within-count but too-old object IS pruned).
 
 - [ ] **Step 8: Run — passes**
 
@@ -551,8 +560,9 @@ git add -A && git commit -s -m "feat(backup): wall-clock scheduler + dual (count
 **Interfaces:**
 - Produces:
 ```ts
-export interface BackupRuntimeStatus {
+export interface BackupRuntimeStatus {           // SYNC, config-derived only (no I/O)
   enabled: boolean;
+  isPrimary: boolean;                     // readSingletonRole() === "primary" (I5)
   managedByEnvironment: boolean;
   destinations: { id: string; dir: string }[];
   schedule: BackupSchedule | undefined;
@@ -561,13 +571,14 @@ export interface BackupRuntimeStatus {
   keyRotatedAt: string | undefined;
   recoveryKey: string | undefined;        // effective running key (for GET recovery-key; never logged)
   archiveUnderCurrentKey: boolean;         // false until the first dump after enable/rotate lands
-  backupStatus: BackupStatus;              // the box-status freshness object (readBackupStatus)
 }
 export interface BackupSupervisorDeps {
-  buildConfig: () => BackupConfig | undefined;      // loadBackupConfig(mergedEnv) — re-read each reload
-  managedByEnvironment: boolean;                    // any WAITRON_BACKUP_* non-empty in the RAW process env
-  readSingletonRole: () => SingletonRole;           // holders.singletonRole.current
-  adminDatabaseUrl: string;                         // fallback backup read connection
+  // Re-reads the box-env files from DISK each reload (B2) — closing over a boot-time value would
+  // make hot-reload a no-op. ASYNC because it merges files off disk.
+  buildConfig: () => Promise<BackupConfig | undefined>;   // async () => loadBackupConfig(await loadBoxEnv(base, stateDir))
+  isManagedByEnvironment: () => boolean;            // any WAITRON_BACKUP_* non-empty in the RAW base env
+  readSingletonRole: () => SingletonRole;           // holders.singletonRole.current (read live each reload/status)
+  adminDatabaseUrl: string;                         // fallback backup read connection (the OWNER connection)
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
   stateDir: string; mediaDir: string; jitterSeed: string;
@@ -578,8 +589,9 @@ export interface BackupSupervisorDeps {
 }
 export class BackupSupervisor {
   constructor(deps: BackupSupervisorDeps);
-  reload(): Promise<void>;          // latched; stop→close→build→derive→probe→immediate dump→loop
-  current(): BackupRuntimeStatus;   // for the routes + box-status
+  reload(): Promise<void>;          // latched; stop→close→awaited buildConfig→derive→probe→immediate dump→loop
+  current(): BackupRuntimeStatus;   // SYNC config-derived snapshot (routes + status shell)
+  status(): Promise<BackupRuntimeStatus & { backupStatus: BackupStatus }>;  // current() + live readBackupStatus freshness (B3)
   stop(): Promise<void>;
 }
 export function keyFingerprint(key: string): string; // e.g. sha256(key).hex().slice(0,8)
@@ -587,12 +599,13 @@ export function keyFingerprint(key: string): string; // e.g. sha256(key).hex().s
 
 - [ ] **Step 1: Failing test — reload lifecycle on real Postgres**
 
-Create `apps/server/src/backup-supervisor.pg.test.ts`:
+Create `apps/server/src/backup-supervisor.pg.test.ts`. **Point `adminDatabaseUrl` at the migrator/owner role, NOT the container superuser** (CLAUDE.md §4: a superuser hides grant gaps, and the design's whole point is the derived OWNER connection can read the fiscal sources). Use the template suite's migrator connection string; assert the probe passes as that role.
 ```ts
 import { describe, expect, it, vi } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
-// build a supervisor whose buildConfig returns a local-fs dest in a tmpdir + a strong key.
+// build a supervisor whose buildConfig (async) returns a local-fs dest in a tmpdir + a strong key,
+// and whose adminDatabaseUrl is the MIGRATOR (owner) role connection, not a superuser.
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -643,12 +656,12 @@ export class BackupSupervisor {
     this.#reloading = true;
     try {
       await this.#teardown();
-      const cfg = this.#deps.buildConfig();
+      const cfg = await this.#deps.buildConfig();   // re-read from DISK each reload (B2)
       this.#config = cfg;
       this.#firstDumpDone = false;
       if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
         this.#deps.log("info", "backup.disabled", {});
-        return;
+        return;   // #config kept for current(): enabled=(cfg!==undefined && isPrimary), so a non-primary reads disabled
       }
       const url = cfg.databaseUrl ?? this.#deps.adminDatabaseUrl;
       const openDb = this.#deps.openDb ?? createPostgresDb;
@@ -682,7 +695,30 @@ export class BackupSupervisor {
     }
   }
 
-  current(): BackupRuntimeStatus { /* assemble from #config + #deps.managedByEnvironment + readBackupStatus over the backends */ }
+  current(): BackupRuntimeStatus {
+    const cfg = this.#config;
+    const isPrimary = this.#deps.readSingletonRole() === "primary";
+    return {
+      enabled: cfg !== undefined && isPrimary && this.#db !== undefined,
+      isPrimary,
+      managedByEnvironment: this.#deps.isManagedByEnvironment(),
+      destinations: cfg?.destinations.map((d) => ({ id: d.id, dir: d.dir })) ?? [],
+      schedule: cfg?.schedule,
+      retention: cfg === undefined ? undefined : { count: cfg.retain, days: cfg.retainDays },
+      keyFingerprint: cfg === undefined ? undefined : keyFingerprint(cfg.recoveryKey),
+      keyRotatedAt: cfg?.keyRotatedAt,
+      recoveryKey: cfg?.recoveryKey,
+      archiveUnderCurrentKey: this.#firstDumpDone,
+    };
+  }
+  async status(): Promise<BackupRuntimeStatus & { backupStatus: BackupStatus }> {
+    const base = this.current();
+    const cfg = this.#config;
+    const now = (this.#deps.now ?? (() => new Date()))();
+    const backends = cfg?.destinations.map(buildBackend) ?? [];
+    const backupStatus = await readBackupStatus(backends, cfg?.staleAfterMs ?? 0, now);
+    return { ...base, backupStatus };
+  }
   async stop(): Promise<void> { await this.#teardown(); }
   async #teardown(): Promise<void> {
     this.#controller?.abort();
@@ -692,7 +728,7 @@ export class BackupSupervisor {
   }
 }
 ```
-Register new error codes in `errors.ts`: `"backup.reload_in_progress": Record<string, never>`. For `archiveUnderCurrentKey`, either add an `onDump?: () => void` hook to `runBackupSweep`'s successful `runOnce` (simplest; set `#firstDumpDone = true`) or derive it in `current()` by checking the newest object's mtime is after the reload time — prefer the hook. `current()` builds `keyFingerprint(cfg.recoveryKey)`, `recoveryKey: cfg.recoveryKey`, and calls `readBackupStatus(backends, cfg.staleAfterMs, (this.#deps.now ?? (()=>new Date()))())`.
+Pass `onDump: () => { this.#firstDumpDone = true; }` into `runBackupSweep` (the hook Task 3 added), which flips `archiveUnderCurrentKey`. Register `"backup.reload_in_progress": Record<string, never>` in `errors.ts`. Note `status()` rebuilds the backends to read freshness; that is cheap (`buildBackend` is a constructor over a path) and keeps `current()` synchronous and I/O-free.
 
 - [ ] **Step 4: Run — passes**
 
@@ -701,21 +737,23 @@ Expected: PASS.
 
 - [ ] **Step 5: Rewire boot to use the supervisor**
 
-In `boot.ts`, replace the inline block (~1625-1692) with:
+**First, thread the raw base env into boot (I4).** Today `startServer(env)` gets only the merged env (`node-entry.ts:288-297`), which cannot tell a file-sourced value from an env-sourced one — but key-presence provenance (spec §3.2 Blocker 2) needs the RAW base. Add an optional second parameter `startServer(env, base?: NodeJS.ProcessEnv)` and pass `deps.baseEnv` from node-entry. Boot uses `base` for BOTH provenance and the on-disk re-read below. **Reconcile the existing boot tests** that inject `WAITRON_BACKUP_*` via the merged `env` arg (`boot.test.ts:1938`, `boot.singleton.test.ts:224`): pass those vars via the new `base` param instead (so the disk re-read sees them), or write a `backup.env` fixture into the test state dir. The `:1938` test awaiting `backup.disabled_probe_failed` survives because Task 2 keeps an explicitly-set `WAITRON_BACKUP_DATABASE_URL` honoured.
+
+Then replace the inline block (~1625-1692) with:
 ```ts
 const backupSupervisor = new BackupSupervisor({
-  buildConfig: () => loadBackupConfig(env),
-  managedByEnvironment: BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),  // `base` = raw process env passed to loadBoxEnv
+  buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),  // re-read from DISK each reload (B2)
+  isManagedByEnvironment: () => BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),         // RAW base, not merged (I4)
   readSingletonRole: () => holders.singletonRole.current,
   adminDatabaseUrl: config.adminDatabaseUrl,
   modules: ALL_MODULES, environment: config.environment,
   stateDir: config.stateDir, mediaDir: config.mediaDir, jitterSeed: till.nodeId,
-  readClock: () => withTenant(db, till.tenantId, async (tx) => { await asAppUser(tx); return readScheduleClock(tx, till.locationId); }),
+  readClock: () => withTenant(db, till.tenantId, async (tx) => { await asAppUser(tx); return resolveVenueClock(tx, till.tenantId, till.nodeId); }),
   log,
 });
 await backupSupervisor.reload();
 ```
-Define `BACKUP_ENV_KEYS = ["WAITRON_BACKUP_DIR","WAITRON_BACKUP_DESTINATIONS","WAITRON_BACKUP_DATABASE_URL","WAITRON_BACKUP_RECOVERY_KEY","WAITRON_BACKUP_SCHEDULE_DAYS","WAITRON_BACKUP_AT","WAITRON_BACKUP_INTERVAL_MS","WAITRON_BACKUP_RETAIN","WAITRON_BACKUP_RETAIN_DAYS"]`. Thread the raw `base` env into `startServer`/boot so it is in scope (today only merged env reaches boot — pass it alongside, mirroring the Task 6 provenance need). Add a small `readScheduleClock(tx, locationId)` reading `select time_zone, day_cutover from location where id = $locationId and tenant_id = $tenantId` (tenant-scoped — reuse `report-api`'s query shape at `report-api.ts:117-118`). Wire box-status: `readBackup: () => Promise.resolve(backupSupervisor.current().backupStatus)`. Register `await backupSupervisor.stop()` in the existing shutdown path beside the other teardowns.
+Define `BACKUP_ENV_KEYS = ["WAITRON_BACKUP_DIR","WAITRON_BACKUP_DESTINATIONS","WAITRON_BACKUP_DATABASE_URL","WAITRON_BACKUP_RECOVERY_KEY","WAITRON_BACKUP_SCHEDULE_DAYS","WAITRON_BACKUP_AT","WAITRON_BACKUP_INTERVAL_MS","WAITRON_BACKUP_RETAIN","WAITRON_BACKUP_RETAIN_DAYS"]`. For the clock, **export and reuse `resolveVenueClock(tx, tenantId, nodeId)`** (`report-api.ts:112-133` — currently NOT exported; export it; it is tenant-scoped and keyed by `nodes.id` joined to `locations`, returning `{ timeZone, dayCutover }`, exactly `ScheduleClock`). Wire box-status to the async freshness reader: `readBackup: () => backupSupervisor.status().then((s) => s.backupStatus)` (B3 — `readBackup` is already `() => Promise<BackupStatus>` at `box-status.ts:216`). Register `await backupSupervisor.stop()` in the existing shutdown path beside the other teardowns.
 
 - [ ] **Step 6: Run the server boot/e2e suites unfiltered (a value more than one suite asserts)**
 
@@ -820,7 +858,7 @@ export function assertStorableKey(key: string): void; // throws backup.recovery_
   - `GET /api/backup/recovery-key` → `{ key }` from `current().recoveryKey`; body never logged.
   - `POST /api/backup/rotate` → body `{ recoveryKey }`.
 
-- [ ] **Step 1: Register error codes** in `errors.ts`: `"backup.managed_by_environment": Record<string, never>`, `"backup.not_primary": Record<string, never>`, `"backup.recovery_key_unstorable": { reason: string }`, `"backup.effective_mismatch": Record<string, never>`, and `"backup.destination_failed": { id: string }` if absent.
+- [ ] **Step 1: Register error codes** in `errors.ts`: `"backup.managed_by_environment": Record<string, never>`, `"backup.not_primary": Record<string, never>`, `"backup.recovery_key_unstorable": { reason: string }`, `"backup.effective_mismatch": Record<string, never>`, and `"backup.request_invalid": { field: string }`. Do NOT register `backup.destination_failed` as a thrown code — it is a per-destination **status** signal derived from `readBackupStatus` (`DestinationStatus.stale`/`lastBackupAt`), surfaced in the status projection, not an `AppError` (M14; spec §5 wording "surfaced in status").
 
 - [ ] **Step 2: Failing test — the passphrase round-trip guard (pure)**
 
@@ -887,12 +925,12 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     });
   };
   const guardWritable = () => {
-    const s = deps.supervisor.current();
+    const s = deps.supervisor.current();   // sync snapshot; reads live singleton role
     if (s.managedByEnvironment) throw new AppError("backup.managed_by_environment", {});
-    // primary check happens in reload too, but refuse early with a clear code:
+    if (!s.isPrimary) throw new AppError("backup.not_primary", {});   // I5: refuse BEFORE writeBackupEnv
   };
 
-  app.get("/api/backup/status", (c) => run(c, log, async () => { await authorize(c); const s = deps.supervisor.current(); return c.json(projectStatus(s)); }));
+  app.get("/api/backup/status", (c) => run(c, log, async () => { await authorize(c); return c.json(projectStatus(await deps.supervisor.status())); }));
 
   app.post("/api/backup/mint-key", (c) => run(c, log, async () => { await authorize(c); return c.json({ key: randomBytes(32).toString("base64url") }); }));
 
@@ -1048,5 +1086,6 @@ git add -A && git commit -s -m "feat(setup): first-run backup nudge on the done 
 ## Self-review notes (author)
 
 - Spec coverage: §3.1 → T4; §3.2 (backup.env, provenance, capture, DB-url-derive) → T1/T2/T5/T6; §3.3 (schedule+retention) → T2/T3; §3.4 (routes) → T6; §3.5 (key mint/override/round-trip) → T6/T7; §3.6 (UI) → T7/T8; §5 codes → T2/T6; §7 tests → each task; §8 rotate → T6; Blocker 1 → T1; Blocker 2 → T4/T6; Blocker 3 → T6.
-- Type consistency: `BackupSchedule`/`BackupConfig` defined in T2 and consumed unchanged in T3/T4; `BackupRuntimeStatus` defined in T4, projected in T6, mirrored in T7.
-- Open confirmations for the implementer (named, not placeholders): the dashboard route path/hash for the nudge link (T8); whether `readClock` should run on the app pool vs the backup pool (plan: app pool via `withTenant`); the exact `backupArchiveKey` stamp format if age-by-key-stamp is preferred over `mtimeMs` (plan uses `mtimeMs`).
+- Type consistency: `BackupSchedule`/`BackupConfig` defined in T2 and consumed unchanged in T3/T4; `BackupRuntimeStatus` defined in T4 (sync `current()`) with the async `status()` superset adding `backupStatus`, projected in T6, mirrored in T7.
+- Open confirmation for the implementer (named, not a placeholder): the dashboard route path/hash for the nudge link (T8).
+- **Fresh-context plan-vs-spec review (Opus, 2026-09-09) applied:** B1 (`backup.env` added to `loadBoxEnv`'s `FILES`, T1); B2 (`buildConfig` is async and re-reads from disk each reload, T4); B3 (sync `current()` + async `status()` for freshness, T4/T6); I4 (raw base env threaded via `startServer(env, base)`, existing boot tests reconciled, T4); I5 (`backup.not_primary` refused in `guardWritable` before any write, T6); I6 (export + reuse `resolveVenueClock`, not a non-existent helper/table, T4); I7 (`onDump` hook added in T3, consumed in T4); I8 (age from the archive-key stamp `backupArchiveTimestamp`, not fs `mtime`, T3); I9 (DB-url-required receipt sweep, T2); I10 (pg test pins the migrator/owner role, T4); M11 (`backup.request_invalid` registered, T6); M12 (sweep header comment thinned, T3); M13 (root guard regex-only, no cross-project import, T1); M14 (`destination_failed` is a status field, not a thrown code, T6); M15 (no dump fired into a pre-aborted signal, T3). Domain logic (config parsing, capture/restore, auth gate) was verified sound.
