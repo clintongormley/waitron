@@ -86,7 +86,10 @@ steps take owner sign-off at land):
    when boot fails), the box serving its own leaf over HTTPS in ALL modes (setup, recovery AND
    trading — a trading-mode plain-HTTP bug the run-it proof caught, design §11), and the CI `image`
    job that builds, smokes the real host-network compose and publishes to GHCR gated on the full
-   suite. Proven end to end on 2026-09-09: a blank box → phone setup → provision → trading over HTTPS
+   suite. The build + smoke were later scoped (#288): on a PR they run only when `deploy/` changed,
+   on a push to `main`/tag still on `code` (so `publish` is unaffected), with the steps in a reusable
+   `image-smoke.yml` also driven by a nightly + on-request `image-nightly.yml`.
+   Proven end to end on 2026-09-09: a blank box → phone setup → provision → trading over HTTPS
    → enrolled till → a recorded preproduction sale (design §11). **Still open under this step:** the
    first-run chooser's modes 1–2 (*Onboarding*, the four-mode wizard) and backup off the primary
    (mirror → S3 → Drive; only `LocalFsBackend` exists).
