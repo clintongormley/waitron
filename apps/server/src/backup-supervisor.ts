@@ -7,11 +7,14 @@
 // first tick takes a dump under the new config.
 //
 // `current()` is a SYNC, config-derived snapshot (no I/O) for the routes and the status shell.
-// `status()` adds the async freshness read (`readBackupStatus`) and a DERIVED `archiveUnderCurrentKey`
-// — true iff a destination actually STORED an artifact at/after the last reload (when the current key
-// took effect). It is derived from real stored state, never flagged off a "a tick ran" hook, so it
-// cannot lie on a tick where every destination failed (the Task 3 carry: `Promise.allSettled` swallows
-// per-backend faults, so a post-fan-out flag would claim an archive exists when nothing was stored).
+// `status()` adds the async freshness read (`readBackupStatus`) and `archiveUnderCurrentKey`, which
+// reports whether THIS supervisor's own running sweep — which runs under the current key — has stored
+// an archive to at least one destination since the last reload. It is an IN-PROCESS signal, set by the
+// sweep's `onStored` callback (which fires ONLY when ≥1 destination stored on a tick), never inferred
+// from a stored object's mtime: a restored/copied OLD-key archive can carry a fresh mtime, so mtime
+// does not prove the key. `onStored` firing only on a real store also keeps the all-destinations-failed
+// tick false (the Task 3 carry: `Promise.allSettled` swallows per-backend faults). The flag resets on
+// each reload and on restart, self-healing on the immediate first dump after boot — sound, unlike mtime.
 
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -92,9 +95,10 @@ export class BackupSupervisor {
    * down BEFORE `reload()` assigned a fresh worker/pool, leaving a sweep running after `stop()`
    * returned (Task 4 review carry, step 8b). */
   #stopped = false;
-  /** When the running duty last (re)started. `archiveUnderCurrentKey` reads TRUE only for an artifact
-   * stored at/after this instant — i.e. under the config/key this reload put in force. */
-  #reloadedAt: Date | undefined;
+  /** True once the running sweep has stored an archive to ≥1 destination since the last reload — the
+   * in-process proof that an artifact exists under the CURRENT key. Set by the sweep's `onStored`
+   * callback, reset to false at the start of every `reload()`. `archiveUnderCurrentKey` is this flag. */
+  #storedUnderCurrentKey = false;
 
   constructor(deps: BackupSupervisorDeps) {
     this.#deps = deps;
@@ -110,6 +114,9 @@ export class BackupSupervisor {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
+      // A fresh config/key takes effect this reload; the old sweep's stores no longer count, so the
+      // in-process "stored under the current key" proof restarts at false and the new sweep re-earns it.
+      this.#storedUnderCurrentKey = false;
       await this.#teardown();
       // A `stop()` may have run (fully, or concurrently) while we awaited the teardown. Bail before
       // reading config or starting anything — `#teardown` above already left no worker/pool.
@@ -117,7 +124,6 @@ export class BackupSupervisor {
       const cfg = await this.#deps.buildConfig();
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
       this.#config = cfg;
-      this.#reloadedAt = this.#now();
       if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
         // because `#db` is undefined (no probe passed) — a non-primary reads disabled.
@@ -167,6 +173,12 @@ export class BackupSupervisor {
         jitterSeed: this.#deps.jitterSeed,
         readClock: this.#deps.readClock,
         signal: controller.signal,
+        // Fired when a tick stored to ≥1 destination — the in-process proof an artifact exists under
+        // the current key. A stale callback from a torn-down sweep cannot lie: reload() reset the flag
+        // and this closure is bound to the sweep this reload started.
+        onStored: () => {
+          this.#storedUnderCurrentKey = true;
+        },
         sleep: this.#deps.sleep ?? realSleep,
         runDump: this.#deps.runDump ?? realPgDump,
         now: this.#deps.now,
@@ -208,16 +220,10 @@ export class BackupSupervisor {
     const now = this.#now();
     const backends = cfg?.destinations.map(buildBackend) ?? [];
     const backupStatus = await readBackupStatus(backends, cfg?.staleAfterMs ?? 0, now);
-    // Truthful: an archive exists under the CURRENT key iff a destination stored one at/after the last
-    // reload (when the current key/config took effect). Derived from real stored state, so it is never
-    // true on an all-destinations-failed tick.
-    const since = this.#reloadedAt?.getTime() ?? Infinity;
-    const archiveUnderCurrentKey =
-      backupStatus.configured &&
-      backupStatus.destinations.some(
-        (d) => d.lastBackupAt !== null && Date.parse(d.lastBackupAt) >= since,
-      );
-    return { ...base, backupStatus, archiveUnderCurrentKey };
+    // Truthful: an archive exists under the CURRENT key iff THIS supervisor's running sweep stored one
+    // since the last reload. Read from the in-process flag, never a stored object's mtime — a copied
+    // old-key archive can carry a fresh mtime, and the flag only rises on a real ≥1-destination store.
+    return { ...base, backupStatus, archiveUnderCurrentKey: this.#storedUnderCurrentKey };
   }
 
   async stop(): Promise<void> {

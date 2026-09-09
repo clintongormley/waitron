@@ -106,6 +106,11 @@ export interface BackupSweepDeps {
   readClock: () => Promise<ScheduleClock>;
   signal: AbortSignal;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
+  /** Fired once per tick when AT LEAST ONE destination stored the archive on that tick — the
+   * in-process signal the supervisor uses to know an artifact was written under the CURRENT key. It
+   * fires ONLY on a real store, so an all-destinations-failed tick (every `put` threw, swallowed as
+   * `backup.destination_failed`) never fires it. */
+  onStored?: () => void;
   log: Logger;
   /** Injectable for tests; defaults to the real `pg_dump` shell-out. */
   runDump?: PgDumpRunner;
@@ -195,10 +200,14 @@ export async function runOnce(
     // others their backup (fail-safe, per this file's header). `allSettled` therefore never rejects
     // here. (A HANGING backend is a different matter — see the header: `allSettled` waits for it, so
     // in v1 it stalls the tick rather than being abandoned.)
+    let anyStored = false;
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
         try {
           await backend.put(key, ciphertext);
+          // The archive is now stored on this backend regardless of what prune does next; record the
+          // success before prune so a later prune fault cannot mask a genuine store.
+          anyStored = true;
           await pruneBackend(backend, deps.retain, deps.retainDays, nowMs);
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
@@ -214,6 +223,9 @@ export async function runOnce(
         }
       }),
     );
+    // Signal an in-process store ONLY when a destination actually stored the archive this tick — not
+    // "a tick ran". An all-destinations-failed tick leaves `anyStored` false and never fires it.
+    if (anyStored) deps.onStored?.();
   } finally {
     // Only the dump creates the staged file; a fail-fast tick that threw before it never staged
     // anything, so guard the cleanup on `dumped` rather than issuing a spurious `rm`.
@@ -251,18 +263,33 @@ export async function pruneBackend(
  * UTC placeholder that `nextFireMs` ignores. A throw anywhere in a tick — including one that escaped
  * `runOnce`'s per-destination handling, e.g. the dump itself failing — is logged as `backup.failed`
  * (structured `errorCode`, never a raw message that could carry the connection string) and swallowed
- * so the next tick still runs; but an abort MID-tick is a cancellation, not a failure (M15).
+ * so the next tick still runs; but an abort MID-tick is a cancellation, not a failure (M15). A
+ * transient failure to RESOLVE the next fire (a `readClock` rejection) is contained the same way — it
+ * is logged as `backup.schedule_failed`, the loop sleeps a bounded delay and retries, and never exits.
  */
 export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
   const now = deps.now ?? (() => new Date());
   if (deps.signal.aborted) return; // don't fire a dump into a shutting-down box (M15)
   await tick(deps);
   while (!deps.signal.aborted) {
-    const clock =
-      deps.schedule.kind === "wall-clock"
-        ? await deps.readClock()
-        : { timeZone: "UTC", dayCutover: "00:00" };
-    const fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
+    // Resolve the next fire INSIDE a try: a wall-clock schedule reads the venue clock (`readClock`),
+    // which can reject transiently (a tenant-config read fault). That rejection sat outside the loop's
+    // error handling and propagated out of `runBackupSweep`, killing the box's only backup duty until
+    // the next reload/boot. Contain it: log, sleep a bounded delay, and RETRY — never exit on a
+    // transient schedule-resolution failure. An `interval` schedule never calls `readClock`.
+    let fireAt: number;
+    try {
+      const clock =
+        deps.schedule.kind === "wall-clock"
+          ? await deps.readClock()
+          : { timeZone: "UTC", dayCutover: "00:00" };
+      fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
+    } catch (err) {
+      if (deps.signal.aborted) break;
+      deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
+      await deps.sleep(MAX_SLEEP_MS, deps.signal);
+      continue;
+    }
     // Sleep toward `fireAt` in <=1h chunks: each chunk re-checks `now()`, so a clock/NTP jump is
     // caught within ~1h. `fireAt` is fixed for this cycle (a tz/cutover change lands at the next fire).
     while (!deps.signal.aborted && now().getTime() < fireAt) {

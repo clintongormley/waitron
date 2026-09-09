@@ -288,6 +288,55 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
     }
   }, 60_000);
 
+  it("a copied old-key archive with a post-reload mtime does NOT make archiveUnderCurrentKey true", async () => {
+    // The mtime regression: `archiveUnderCurrentKey` used to be derived from a stored object's mtime
+    // (lastBackupAt >= reloadedAt). A restored/rsynced OLD-key archive that lands with a FRESH mtime
+    // would then read as "an archive under the current key" while it decrypts under a different key —
+    // mtime does not prove the key. Here the running sweep stores NOTHING (its dump throws), yet a
+    // fresh-mtime archive sits in the dest; the flag must stay false because THIS sweep never stored.
+    const dest = await makeDestDir();
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      admin: ownerUrl,
+      logs: [],
+      managed: false,
+    };
+    const sup = new BackupSupervisor({
+      buildConfig: async () => refs.config,
+      isManagedByEnvironment: () => refs.managed,
+      readSingletonRole: () => refs.role,
+      adminDatabaseUrl: refs.admin,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      mediaDir: await makeMediaDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      log: (level, event) => refs.logs.push({ level, event }),
+      // The sweep's own dump fails, so it stores nothing under the current key.
+      runDump: async () => {
+        throw new Error("dump fails so the sweep stores nothing");
+      },
+    });
+    try {
+      await sup.reload();
+      await waitForEvent(refs, "backup.failed"); // the tick ran and stored nothing
+      // A copied old-key archive lands NOW (post-reload) with a fresh mtime — not written by our sweep.
+      await writeFile(join(dest, "waitron-20200101T000000Z.backup.enc"), "old-key-ciphertext");
+      const s = await sup.status();
+      // The fresh file IS visible to the freshness read (so the OLD mtime path would have said true)…
+      expect(s.backupStatus.configured).toBe(true);
+      if (s.backupStatus.configured) {
+        expect(s.backupStatus.destinations[0].lastBackupAt).not.toBeNull();
+      }
+      // …but the in-process flag knows THIS sweep stored nothing under the current key.
+      expect(s.archiveUnderCurrentKey).toBe(false);
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+
   it("a non-primary node runs no duty", async () => {
     const dest = await makeDestDir();
     const refs: Refs = {

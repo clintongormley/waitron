@@ -544,6 +544,49 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     expect(backend.objects.size).toBe(1);
   });
 
+  it("a transient readClock rejection does not kill the sweep; it retries and a later tick runs", async () => {
+    // Schedule resolution (readClock + nextFireMs) sat OUTSIDE tick()'s try/catch, so a single
+    // readClock rejection propagated out of runBackupSweep and the sweep was dead until the next
+    // reload/boot. A transient failure must be contained: log it, sleep a bounded delay, and RETRY —
+    // never exit. Here readClock rejects on its FIRST call (after the immediate first tick) then
+    // succeeds, and a later tick still runs.
+    const controller = new AbortController();
+    const backend = new FakeBackend("only");
+    const logged: Array<[string, string]> = [];
+    let clockCalls = 0;
+    let dumpCalls = 0;
+    let nowMs = Date.parse("2026-09-05T00:00:00Z");
+
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
+        log: (level, event) => logged.push([level, event]),
+        now: () => new Date(nowMs),
+        readClock: async () => {
+          clockCalls += 1;
+          if (clockCalls === 1) throw new Error("clock read failed");
+          return { timeZone: "Europe/Madrid", dayCutover: "05:00" };
+        },
+        runDump: async ({ outFile }) => {
+          dumpCalls += 1;
+          await writeFile(outFile, "DUMP-BYTES");
+        },
+        // Advance the clock by each slept chunk so the schedule wait completes and the retried tick
+        // fires; abort once a SECOND tick has run so the loop ends.
+        sleep: async (chunk: number) => {
+          nowMs += chunk;
+          if (dumpCalls >= 2) controller.abort();
+        },
+      }),
+    );
+
+    // The rejection was contained (logged), the sweep did NOT die, and a second tick ran on retry.
+    expect(logged).toContainEqual(["warn", "backup.schedule_failed"]);
+    expect(dumpCalls).toBeGreaterThanOrEqual(2);
+    expect(clockCalls).toBeGreaterThanOrEqual(2);
+  });
+
   it("waits to a wall-clock schedule's nextFireMs, reading the clock each cycle", async () => {
     const controller = new AbortController();
     const backend = new FakeBackend("only");
