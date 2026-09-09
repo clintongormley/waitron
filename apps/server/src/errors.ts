@@ -17,6 +17,8 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
+    /** The local capture inbox was requested while email uses SMTP or is not configured. */
+    "email.test_inbox_unavailable": Record<string, never>;
     /** A required environment variable is absent or empty. `variable` is our own declared name. */
     "server.config_missing": { variable: string };
     /**

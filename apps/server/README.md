@@ -338,7 +338,7 @@ it:
   still decrypt while `rotate` re-seals them under the current one. Setting one without the other is
   a boot-time `credentials.key_ring_incomplete` failure, not a runtime surprise later.
 
-Provisioning and rotating credentials themselves (`fiscal.aeat`, `payments.stripe`) is
+Provisioning and rotating credentials themselves (`fiscal.aeat`, `payments.stripe`, `email.smtp`) is
 `packages/credentials`'s own CLI, not this process — e.g.
 `waitron-credentials set --tenant <uuid> --purpose fiscal.aeat` with the JSON payload on stdin. Run
 `waitron-credentials` with no arguments for its own usage text (`set` / `list` / `delete` /
@@ -347,9 +347,14 @@ never prints a decrypted credential.
 
 ### Account email
 
-Development captures invitation and password-reset email in Mailpit. `pnpm dev:setup`,
-`pnpm dev:reset`, `pnpm dev:onboard`, and the `wa-wt` worktree launcher start it with the shared database; open
-`http://127.0.0.1:8025` to read the messages. SMTP and the Mailpit UI bind to loopback only.
+Demo and Prepare capture invitation and password-reset email in Mailpit when you have not configured
+SMTP. Sign in as a manager and open **Configuration → Test inbox** to read a message and follow its
+account link. The inbox is served through Waitron's authenticated API; Mailpit's own ports bind to
+the box loopback only.
+
+`pnpm dev:setup`, `pnpm dev:reset`, `pnpm dev:onboard`, and the `wa-wt` worktree launcher also start
+Mailpit with the shared development database. During local development you can inspect its own UI at
+`http://127.0.0.1:8025`.
 
 For a production or on-prem venue, put its SMTP relay in the encrypted credential vault. Write the
 payload to a permission-restricted file rather than putting its password in a shell argument:
@@ -365,8 +370,9 @@ payload to a permission-restricted file rather than putting its password in a sh
 waitron-credentials set --tenant <uuid> --purpose email.smtp --file /secure/path/smtp.json
 ```
 
-The server reads this credential when it sends, so rotating it does not require a restart. If it is
-missing or the relay is unavailable, creating a person still succeeds and reports that the
+The server reads this credential when it sends, so rotating it does not require a restart. Configured
+SMTP takes precedence over local capture. A live installation never falls back to Mailpit: if SMTP
+is missing or the relay is unavailable, creating a person still succeeds and reports that the
 invitation was not sent; password-reset requests continue to return their generic accepted response.
 Once SMTP is restored, request another reset or resend the invitation from Users.
 

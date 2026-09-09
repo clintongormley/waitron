@@ -440,6 +440,32 @@ export interface ReceiptConfig {
   footerMessage?: string;
 }
 
+export interface TestEmailAddress {
+  name: string;
+  address: string;
+}
+
+export interface TestEmailSummary {
+  id: string;
+  from: TestEmailAddress;
+  to: TestEmailAddress[];
+  subject: string;
+  snippet: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface TestEmail extends Omit<TestEmailSummary, "snippet" | "createdAt" | "read"> {
+  date: string;
+  text: string;
+}
+
+export interface EmailInbox {
+  mode: "local_capture" | "smtp" | "unconfigured";
+  count: number;
+  messages: TestEmailSummary[];
+}
+
 // ── Table service-status configuration types ──────────────────────────────────────────────────────
 // A LOCAL copy of apps/server's `ServiceStatus` JSON shape (the `/management-api/service-statuses`
 // routes wrapping `apps/server/src/tables.ts`'s config CRUD), deliberately NOT imported from any
@@ -1309,6 +1335,17 @@ export class DashboardApi {
       purpose,
       password,
     });
+  }
+
+  getEmailInbox(): Promise<EmailInbox> {
+    return this.#request<EmailInbox>("/management-api/email", "GET");
+  }
+
+  getTestEmail(id: string): Promise<TestEmail> {
+    return this.#request<TestEmail>(
+      `/management-api/email/message/${encodeURIComponent(id)}`,
+      "GET",
+    );
   }
 
   /** `DELETE /management-api/session` — end the session. Answers an empty 204. */

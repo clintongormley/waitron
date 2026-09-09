@@ -70,6 +70,19 @@ export const en = {
   "nav.device_profiles": "Device profiles",
   "nav.diagnostics": "Diagnostics",
   "nav.backup": "Backups",
+  "nav.email": "Test inbox",
+  // Account email
+  "email.title": "Account email",
+  "email.local_capture":
+    "Messages are captured on this box. No email is sent to the public internet.",
+  "email.smtp": "Messages are delivered through your configured SMTP gateway.",
+  "email.unconfigured":
+    "Email is not configured. Invitations and password-reset links cannot be delivered.",
+  "email.empty": "No captured messages yet.",
+  "email.refresh": "Refresh inbox",
+  "email.from": "From",
+  "email.to": "To",
+  "email.open_link": "Open account link",
   // Login screen
   "login.email": "Email",
   "login.password": "Password",
@@ -779,6 +792,18 @@ export const es: Record<StringKey, string> = {
   "nav.device_profiles": "Perfiles de dispositivo",
   "nav.diagnostics": "Diagnóstico",
   "nav.backup": "Copias de seguridad",
+  "nav.email": "Bandeja de pruebas",
+  "email.title": "Correo de cuentas",
+  "email.local_capture":
+    "Los mensajes se guardan en este equipo. No se envía ningún correo a Internet.",
+  "email.smtp": "Los mensajes se envían mediante la pasarela SMTP configurada.",
+  "email.unconfigured":
+    "El correo no está configurado. No se pueden enviar invitaciones ni enlaces para restablecer contraseñas.",
+  "email.empty": "Aún no hay mensajes guardados.",
+  "email.refresh": "Actualizar bandeja",
+  "email.from": "De",
+  "email.to": "Para",
+  "email.open_link": "Abrir enlace de cuenta",
   "login.email": "Correo electrónico",
   "login.password": "Contraseña",
   "login.logging_in_as": "Iniciando sesión como:",

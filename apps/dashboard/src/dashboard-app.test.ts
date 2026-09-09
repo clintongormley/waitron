@@ -291,6 +291,7 @@ const NAV_SCREENS = [
   "canvas-editor",
   "diagnostics",
   "backup",
+  "email",
 ] as const;
 
 /** The five group-header i18n keys the sidebar renders (the pinned overview+sales group has none). */
@@ -327,6 +328,7 @@ const SCREEN_TAGS = [
   "dashboard-printers-screen",
   "dashboard-canvas-editor-screen",
   "dashboard-diagnostics-screen",
+  "dashboard-email-screen",
 ] as const;
 
 /** The screen tags currently mounted in the shell (should always be exactly one when logged in). */
@@ -869,7 +871,7 @@ describe("dashboard-app", () => {
   });
 
   // The grouped static sidebar (Task 11): every group header renders, every one of the twenty manager
-  // faces (a manager session sees the gated `diagnostics` + `backup` too) keeps its `data-test="nav-<screen>"`
+  // faces (a manager session sees the gated configuration tools too) keeps its `data-test="nav-<screen>"`
   // id, and the active face is marked `aria-current="page"`.
   it("renders each nav group header and all nav items", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -881,9 +883,9 @@ describe("dashboard-app", () => {
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
-    // …and every one of the twenty manager faces is present by its stable data-test id.
+    // …and every manager face is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(NAV_SCREENS).toHaveLength(20);
+    expect(NAV_SCREENS).toHaveLength(21);
   });
 
   // The module-UI seam (SP2 Task 3): a BUNDLED module's screen and nav are mounted GENERICALLY from the

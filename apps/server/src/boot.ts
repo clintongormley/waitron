@@ -95,7 +95,9 @@ import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { createAccountEmailSender } from "./account-email.js";
-import { readCredential } from "./credentials.js";
+import { resolveEmailDelivery } from "./email-delivery.js";
+import { mountEmailInboxApi } from "./email-inbox-api.js";
+import { createMailpitClient } from "./mailpit-client.js";
 import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -1642,6 +1644,8 @@ export async function startServer(
   // `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a passkey is bound
   // to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes only — no
   // database work at boot.
+  const resolveAccountEmail = () =>
+    resolveEmailDelivery(db, ring, till.tenantId, config.devMode || till.practiceMode === true);
   mountManagementApi(
     app,
     {
@@ -1658,15 +1662,23 @@ export async function startServer(
       rpId: config.managementRpId,
       origin: config.managementOrigin,
       venueLocale,
-      // Development email is captured by the Mailpit service in docker-compose.yml. Production
-      // reads the venue's SMTP URL + sender from the encrypted credential vault on every send, so
-      // configuration and rotation take effect without restarting the box.
+      // Resolve on every send so a newly configured or rotated SMTP gateway takes effect immediately.
+      // Configured SMTP wins; practice/dev falls back to the loopback-only Mailpit service.
       sendAccountEmail: async (message) => {
-        const smtp = config.devMode
-          ? { url: "smtp://127.0.0.1:1025", from: "Waitron <no-reply@waitron.test>" }
-          : await readCredential(db, ring, till.tenantId, "email.smtp");
-        await createAccountEmailSender({ url: smtp.url!, from: smtp.from! })(message);
+        const delivery = await resolveAccountEmail();
+        if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+        await createAccountEmailSender(delivery.smtp)(message);
       },
+    },
+    log,
+  );
+  mountEmailInboxApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId },
+      resolveMode: async () => (await resolveAccountEmail()).mode,
+      mailpit: createMailpitClient("http://127.0.0.1:8025"),
     },
     log,
   );

@@ -48,6 +48,7 @@ import "./screens/canvas-editor-screen.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
+import "./screens/email-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
 
 /**
@@ -83,7 +84,8 @@ type CoreScreen =
   | "canvas-editor"
   | "device-profiles"
   | "diagnostics"
-  | "backup";
+  | "backup"
+  | "email";
 
 /** A destination the shell can show: a core face, or an active module's own screen id. The `& {}` keeps
  * the `CoreScreen` literal autocomplete while still admitting any module id string — the one spelling
@@ -167,6 +169,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
       { screen: "backup", labelKey: "nav.backup", requiresManager: true },
+      { screen: "email", labelKey: "nav.email", requiresManager: true },
     ],
   },
 ];
@@ -926,6 +929,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-diagnostics-screen .api=${this.api}></dashboard-diagnostics-screen>`;
       case "backup":
         return html`<dashboard-backup-screen .api=${this.api}></dashboard-backup-screen>`;
+      case "email":
+        return html`<dashboard-email-screen .api=${this.api}></dashboard-email-screen>`;
       default:
         return html`<dashboard-overview-screen .api=${this.api}></dashboard-overview-screen>`;
     }

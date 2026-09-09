@@ -1,5 +1,5 @@
-# A Waitron node: the app and its Postgres. Everything the node keeps lives in the five named
-# volumes below, so `docker volume` is the whole of a box's life.
+# A Waitron node: the app, its Postgres and its practice email inbox. Everything the node keeps lives
+# in the six named volumes below, so `docker volume` is the whole of a box's life.
 #
 # Operating this file — including which CLI invocation bypasses the entrypoint and which does not —
 # is deploy/README.md. `deploy/prepare.sh` installs this once per box; the restaurant never runs it.
@@ -18,6 +18,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       # The one secret a box needs before anything runs. The entrypoint uses it to create the
       # database and the roles, then deletes it from the environment it hands the server: the server
@@ -114,6 +116,29 @@ services:
         max-size: 10m
         max-file: "5"
 
+  # Demo and Prepare capture account email locally when no SMTP credential exists. Both ports stay
+  # on the box loopback; browsers read the inbox through Waitron's authenticated management API.
+  # Production starts the small service too because Compose is installed before onboarding selects a
+  # mode, but the application never falls back to it for a live installation.
+  mailpit:
+    image: axllent/mailpit:v1.31.1
+    restart: unless-stopped
+    networks:
+      - internal
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGE_SIZE: 1
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    volumes:
+      - mailpit:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 networks:
   internal:
 
@@ -123,3 +148,4 @@ volumes:
   logs:
   media:
   backups:
+  mailpit:

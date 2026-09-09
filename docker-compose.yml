@@ -46,7 +46,9 @@ services:
   # Development-only SMTP capture. Waitron submits mail on 1025; open http://localhost:8025 to read
   # invitations and password resets without sending anything to the public internet.
   mailpit:
-    image: axllent/mailpit:v1.27.4
+    image: axllent/mailpit:v1.31.1
+    environment:
+      MP_MAX_MESSAGE_SIZE: 1
     ports:
       - "127.0.0.1:1025:1025"
       - "127.0.0.1:8025:8025"

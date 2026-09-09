@@ -144,6 +144,27 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("loads the email delivery status and reads a captured message", async () => {
+    const inbox = { mode: "local_capture", count: 1, messages: [{ id: "mail-1" }] };
+    const message = { id: "mail-1", subject: "Set up your account", text: "Open the link" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(inbox))
+      .mockResolvedValueOnce(jsonResponse(message));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getEmailInbox()).resolves.toEqual(inbox);
+    await expect(api.getTestEmail("mail/1")).resolves.toEqual(message);
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/management-api/email", {
+      method: "GET",
+      credentials: "include",
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/management-api/email/message/mail%2F1", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
   it("updatePerson PATCHes the addressed person (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
