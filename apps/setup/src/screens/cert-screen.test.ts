@@ -92,6 +92,23 @@ describe("setup-cert-screen", () => {
     });
   });
 
+  it("gives every certificate field a stable name", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    expect((q(el, "[data-test=pfx]") as HTMLInputElement).name).toBe("certificate-file");
+    expect((q(el, "[data-test=certKind]") as HTMLSelectElement).name).toBe("certificate-kind");
+  });
+
+  it("lets the operator reveal and hide the certificate passphrase", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("type")).toBe("password");
+    q(el, "[data-test=toggle-passphrase]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("type")).toBe("text");
+    expect(q(el, "[data-test=toggle-passphrase]")!.getAttribute("aria-label")).toBe(
+      "Hide certificate passphrase",
+    );
+  });
+
   it("reads the file to canonical base64 with NO data: prefix, and emits the cert patch", async () => {
     const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const events = collect(host);
@@ -112,7 +129,7 @@ describe("setup-cert-screen", () => {
           },
         },
       },
-      { kind: "goto", detail: { screen: "review" } },
+      { kind: "goto", detail: { screen: "fiscal-test" } },
     ]);
     // The emitted base64 is the canonical payload only — the data-URL prefix and its comma are gone.
     const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
@@ -163,6 +180,10 @@ describe("setup-cert-screen", () => {
     expect(q(el, "[data-test=error]")).not.toBeNull();
     expect(q(el, "[data-test=error]")!.getAttribute("role")).toBe("alert");
     expect(q(el, ".field.file")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=pfx-field-error]")).not.toBeNull();
+    expect((q(el, "[data-test=pfx]") as HTMLInputElement).getAttribute("aria-invalid")).toBe(
+      "true",
+    );
   });
 
   it("blocks Next when the passphrase is blank, marking it invalid", async () => {
@@ -175,6 +196,7 @@ describe("setup-cert-screen", () => {
     expect(events).toEqual([]);
     expect(q(el, "[data-test=error]")).not.toBeNull();
     expect(q(el, "[data-test=passphrase]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=passphrase-field-error]")).not.toBeNull();
   });
 
   it("clears the banner once a file and passphrase are supplied and Next succeeds", async () => {

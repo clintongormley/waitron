@@ -18,6 +18,20 @@ function emptyResponse(): Response {
 }
 
 describe("DashboardApi", () => {
+  it("downloads an encrypted configuration export as binary", async () => {
+    const artifact = new Blob(["encrypted"], { type: "application/octet-stream" });
+    const response = new Response(artifact, { status: 200 });
+    const fetchImpl = vi.fn().mockResolvedValue(response);
+    const api = new DashboardApi("https://box.test", fetchImpl);
+    expect(await (await api.exportConfiguration("a strong passphrase")).text()).toBe("encrypted");
+    expect(fetchImpl).toHaveBeenCalledWith("https://box.test/management-api/configuration-export", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ passphrase: "a strong passphrase" }),
+    });
+  });
+
   it("posts login credentials with cookies included", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1" }));
     const api = new DashboardApi("", fetchImpl);

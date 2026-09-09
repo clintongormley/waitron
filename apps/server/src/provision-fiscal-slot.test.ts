@@ -8,6 +8,7 @@ import { isAppError } from "@waitron/shared";
 // throws before any DB write, so this suite needs no Postgres.
 const contribution = (id: string): FiscalContribution => ({
   id,
+  activationReadiness: "not-applicable",
   makeBackend: () => ({ id }) as unknown as FiscalBackend,
   drain: () => Promise.reject(new Error("slot-selection tests never run the drain seat")),
 });

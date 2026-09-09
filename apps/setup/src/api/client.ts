@@ -29,6 +29,7 @@ export type FetchLike = typeof fetch;
 export interface SetupStatus {
   provisioned: boolean;
   environment: "production" | "preproduction";
+  developmentMode?: boolean;
   needs: string[];
 }
 
@@ -88,6 +89,7 @@ export interface AeatCertDraft {
  */
 export interface ProvisionBody {
   mode: "demo" | "prepare" | "live";
+  configurationImport?: boolean;
   venue: {
     country: string;
     taxId: string;
@@ -149,6 +151,18 @@ export interface RestoreOutcome {
   restoreStaged: true;
   restarting: true;
 }
+
+export interface ConfigurationPreview {
+  venue: Omit<ProvisionBody["venue"], "admin"> & {
+    location: ProvisionBody["venue"]["location"] & { id: string };
+  };
+  counts: Record<string, number>;
+  reconnect: string[];
+}
+
+export type FiscalReadinessResult =
+  | { status: "accepted" | "rejected" | "uncertain"; testedAt?: string }
+  | { status: "not-applicable" };
 
 /**
  * A rejected `#request`. `code` is the server's stable domain code from the `{ error: { code } }`
@@ -227,6 +241,32 @@ export class SetupApi {
       } satisfies ApiError;
     }
     return JSON.parse(await res.text()) as RestoreOutcome;
+  }
+
+  async stageConfiguration(artifact: Blob, passphrase: string): Promise<ConfigurationPreview> {
+    const res = await this.#fetchImpl(this.#baseUrl + "/setup-api/configuration", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-export-passphrase": passphrase,
+      },
+      body: artifact,
+    });
+    if (!res.ok) {
+      const envelope = (await res.json()) as {
+        error?: { code?: string; params?: Record<string, unknown> };
+      };
+      throw {
+        code: envelope.error?.code ?? "server.internal",
+        params: envelope.error?.params,
+      } satisfies ApiError;
+    }
+    return JSON.parse(await res.text()) as ConfigurationPreview;
+  }
+
+  runFiscalTest(body: ProvisionBody): Promise<FiscalReadinessResult> {
+    return this.#request<FiscalReadinessResult>("/setup-api/fiscal-test", "POST", body);
   }
 
   /**

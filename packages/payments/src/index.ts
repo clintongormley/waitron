@@ -74,3 +74,4 @@ export type {
   SettlementReportSource,
 } from "./reconcile.js";
 export { PAYMENTS_CLASSIFICATION } from "./classification.js";
+export { PAYMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";

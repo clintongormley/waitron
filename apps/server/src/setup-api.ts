@@ -25,6 +25,9 @@ import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
 import type { ActiveSetupOperation, SetupOperationStore } from "./setup-operation.js";
 import type { RestoreRequest } from "./restore-request.js";
+import type { ConfigurationPreview } from "./configuration-import.js";
+import type { FiscalContribution } from "@waitron/fiscal";
+import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import "./errors.js";
 
 /**
@@ -106,6 +109,22 @@ export interface SetupDeps {
   operations?: SetupOperationStore;
   /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart. */
   stageRestore?: (request: RestoreRequest) => Promise<void>;
+  /** Validates and stages a prepared configuration archive before live provisioning. */
+  stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
+  /** Removes the staged archive only after the live venue and its configuration are durable. */
+  clearConfiguration?: () => Promise<void>;
+  /** Runs one explicit preproduction submission for the intended live fiscal inputs. */
+  runFiscalTest?: (input: {
+    request: ProvisionRequest;
+    contribution: FiscalContribution;
+    secret: unknown;
+  }) => Promise<FiscalReadinessResult>;
+  /** Refuses first production activation unless matching accepted server evidence exists. */
+  assertFiscalReady?: (input: {
+    request: ProvisionRequest;
+    contribution: FiscalContribution;
+    secret: unknown;
+  }) => Promise<void>;
 }
 
 /**
@@ -139,6 +158,7 @@ const SETUP_PLACEHOLDER_HTML = `<!doctype html>
 const REVALIDATE_CACHE_CONTROL = "no-cache";
 /** Bounds memory consumed by one unauthenticated setup upload. */
 export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
+export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 
 /**
  * Every AppError code the provision route can THROW inside its error boundary, and its HTTP status.
@@ -164,6 +184,7 @@ export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
   "setup.provisioning_secret_required": 400,
+  "setup.fiscal_test_required": 409,
   // A present-but-malformed `admin.email` fails identity's `isValidEmail` screen (see `parseVenue`).
   // The domain-named code identity raises for the same write-boundary check; defaults to 400 anyway,
   // enumerated so this map stays the surface's whole 4xx contract.
@@ -330,6 +351,56 @@ function parseVenue(venueRaw: unknown): VenueRequest {
   };
 }
 
+function parseProvisionPayload(
+  parsed: unknown,
+  devMode: boolean,
+): {
+  mode: "demo" | "prepare" | "live";
+  request: ProvisionRequest;
+  contribution: FiscalContribution;
+  secret: FiscalContribution["provisioningSecret"];
+  secretExpected: boolean;
+  rawSecret: unknown;
+} {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    invalidRequest("body");
+  }
+  const body = parsed as Record<string, unknown>;
+  const mode = body.mode;
+  if (mode !== "demo" && mode !== "prepare" && mode !== "live") invalidRequest("mode");
+  if (body.configurationImport !== undefined && typeof body.configurationImport !== "boolean") {
+    invalidRequest("configurationImport");
+  }
+  if (body.configurationImport === true && mode !== "live") invalidRequest("configurationImport");
+
+  const venue = parseVenue(body.venue);
+  const environment: DeploymentEnvironment =
+    mode === "live" && !devMode ? "production" : "preproduction";
+  const selection = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+  if (selection.contribution === undefined) invalidRequest("location.fiscalTerritory");
+  const contribution = selection.contribution;
+  const secret = contribution.provisioningSecret;
+  const secretExpected = secret?.required(environment) ?? false;
+  const present = body.aeatCert !== undefined;
+  if (secretExpected && !present) {
+    throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
+  }
+  if (!secretExpected && present) invalidRequest("aeatCert");
+  if (secretExpected) secret!.validate(body.aeatCert);
+  return {
+    mode,
+    request: {
+      environment,
+      venue,
+      configurationImport: mode === "live" && body.configurationImport === true,
+    },
+    contribution,
+    secret,
+    secretExpected,
+    rawSecret: body.aeatCert,
+  };
+}
+
 /** A direct structured error response mirroring the error boundary's `{ error: { code, params } }`
  * shape, for the two refusals that are returned OUTSIDE the boundary (the latch and the deps gate). */
 function directError(
@@ -377,6 +448,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       {
         provisioned: false,
         environment: deps.environment,
+        ...(deps.devMode === true ? { developmentMode: true } : {}),
         needs: ["venue"],
         ...(operation === undefined || operation === null
           ? {}
@@ -393,6 +465,35 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     );
   });
 
+  let provisioning = false;
+  let fiscalTesting = false;
+
+  app.post("/setup-api/fiscal-test", async (c) => {
+    if (provisioning || fiscalTesting) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    fiscalTesting = true;
+    return runProvision(c, log, async () => {
+      try {
+        if (deps.runFiscalTest === undefined) return directError(c, log, "setup.not_ready", 503);
+        const parsed = await c.req.json().catch(() => null);
+        const payload = parseProvisionPayload(parsed, deps.devMode === true);
+        if (payload.mode !== "live" || payload.request.environment !== "production") {
+          invalidRequest("mode");
+        }
+        return c.json(
+          await deps.runFiscalTest({
+            request: payload.request,
+            contribution: payload.contribution,
+            secret: payload.rawSecret,
+          }),
+        );
+      } finally {
+        fiscalTesting = false;
+      }
+    });
+  });
+
   // The one-shot provisioning latch. CLOSURE-scoped (per `mountSetup`, i.e. per booted process — one
   // mount per boot), so it survives across requests to THIS box yet gives every test its own fresh
   // latch. It is SHARED with the adopt route below (a box is set up EITHER as a primary via provision
@@ -402,8 +503,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // is not atomic with `applyVenue`, so two concurrent provisions could each pass that check and start
   // a second, unrecoverable chain (CLAUDE.md §5). The single setup process + this latch prevent the
   // concurrent case; the tenant-exists check backstops a sequential re-POST.
-  let provisioning = false;
-
   // POST /setup-api/provision — orchestrates the whole flow: onboarding intent → validate + hash →
   // provisioning-secret gate (validate upfront) → provisionVenue → seal the secret → persist trading
   // config → restart. Registered BEFORE the `GET *` catch-all below (Hono first-match wins).
@@ -441,7 +540,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // check+set completes before a second near-simultaneous POST's handler begins; the loser is
     // refused 409 here rather than being allowed to mint a second chain. Reset to false on ANY
     // failure (below) so a corrected retry works; LEFT true on success — the box is about to restart.
-    if (provisioning) {
+    if (provisioning || fiscalTesting) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
@@ -454,56 +553,22 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // Parse defensively: `c.req.json()` throws on a malformed body and returns `null` for a
         // literal JSON `null` — both are a bad request, not a 500.
         const parsed: unknown = await c.req.json().catch(() => null);
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          invalidRequest("body");
+        const payload = parseProvisionPayload(parsed, deps.devMode === true);
+        const {
+          mode,
+          request,
+          contribution,
+          secret,
+          secretExpected: expected,
+          rawSecret,
+        } = payload;
+        const { environment, venue } = request;
+        if (environment === "production") {
+          if (deps.assertFiscalReady === undefined) {
+            throw new AppError("setup.fiscal_test_required", { module: contribution.id });
+          }
+          await deps.assertFiscalReady({ request, contribution, secret: rawSecret });
         }
-        const body = parsed as Record<string, unknown>;
-
-        const mode = body.mode;
-        if (mode !== "demo" && mode !== "prepare" && mode !== "live") invalidRequest("mode");
-
-        const venue = parseVenue(body.venue);
-
-        // Fiscal environment and onboarding intent stay separate: Live stamps production, while
-        // Demo and Prepare both stamp preproduction and differ later in whether sample data is seeded.
-        const environment: DeploymentEnvironment =
-          mode === "live" && deps.devMode !== true ? "production" : "preproduction";
-
-        // Resolve the fiscal regime the REQUEST's territory picks (the box's enabled set is not yet
-        // written at setup) through the shared `venueFiscalSelection` seam, and reach its provision-time
-        // secret only through the `provisioningSecret` seat — the host holds the opaque blob and the
-        // vault ring but not the regime's shape, so it imports no regime package. The seam throws
-        // `fiscal.regime_not_implemented` for an unimplemented territory, the SAME code `planVenue`
-        // would raise inside `provision`, only earlier (both before any mint). A regime with no
-        // `provisioningSecret` seat (e.g. a files-nothing regime) leaves `expected` false.
-        const { contribution } = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
-        const secret = contribution?.provisioningSecret;
-        const expected = secret?.required(environment) ?? false;
-        const present = body.aeatCert !== undefined;
-        // SYMMETRIC gate on PRESENCE (not the parsed value), both arms checked BEFORE `provision` so
-        // nothing is stamped/minted/sealed on a bad request:
-        //   - secret expected but MISSING → `setup.provisioning_secret_required` naming the module;
-        //   - secret NOT expected but PRESENT → `setup.request_invalid` naming `aeatCert`. The 2c
-        //     client already gates the cert on live mode and never sends it otherwise, so this is
-        //     defense-in-depth (CLAUDE.md §5): it stops a real AEAT signing cert being sealed into a
-        //     preproduction tenant's vault by a hand-crafted demo body. Gating on presence means a
-        //     MALFORMED secret on a non-expected request rejects cleanly with `{ field: "aeatCert" }`
-        //     and no wasted validation — never leaking which sub-field of a secret we were never
-        //     going to accept.
-        if (expected && !present) {
-          throw new AppError("setup.provisioning_secret_required", { module: contribution!.id });
-        }
-        if (!expected && present) {
-          invalidRequest("aeatCert");
-        }
-        // Validate the secret's SHAPE upfront — BEFORE `provision` mints the unrepairable SIF/hash
-        // chain (CLAUDE.md §5) — so a malformed blob 400s with `setup.request_invalid` naming the
-        // offending sub-field and NOTHING stamped or minted. `expected` implies `present` (we threw
-        // otherwise) and implies `secret` is defined (`required` returned true). The seal below
-        // re-validates as defense-in-depth for a direct caller.
-        if (expected) secret!.validate(body.aeatCert);
-
-        const request = { environment, venue };
         let result: VenueResult;
         if (operation !== undefined && operation.phase !== "started") {
           result = operation.data.result as VenueResult;
@@ -541,7 +606,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // Seal the regime's provisioning secret AFTER provision mints the tenant (the vault row is
         // FK-restricted to it) and BEFORE the trading config is persisted. Reaches the regime only
         // through the `seal` seat, so this host imports no regime package.
-        if (expected) await secret!.seal({ db, ring }, result.tenantId, body.aeatCert);
+        if (expected) await secret!.seal({ db, ring }, result.tenantId, rawSecret);
 
         await persistTrading({
           tenantId: result.tenantId,
@@ -555,6 +620,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           ...(deps.devMode === true ? { developmentMode: true } : {}),
           onboardingIntent: mode,
         });
+        if (mode === "live") await deps.clearConfiguration?.();
 
         const response = c.json(
           { provisioned: true, tenantId: result.tenantId, restarting: true },
@@ -598,7 +664,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // `GET *` catch-all below (Hono first-match wins).
   app.post("/setup-api/adopt", async (c) => {
     // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Only `adopt` and
-    // `requestRestart` are load-bearing for this route (the fetch/persist deps are captured inside the
+    // `requestRestart` are required for this route (the fetch/persist deps are captured inside the
     // `adopt` closure in boot). Captured as consts so TypeScript narrows them non-undefined below.
     const adopt = deps.adopt;
     const requestRestart = deps.requestRestart;
@@ -730,6 +796,29 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         provisioning = false;
         throw error;
       }
+    });
+  });
+
+  app.post("/setup-api/configuration", async (c) => {
+    const stage = deps.stageConfiguration;
+    if (stage === undefined) return directError(c, log, "setup.not_ready", 503);
+    if (provisioning || fiscalTesting) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    return runRestore(c, log, async () => {
+      if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")) {
+        invalidRequest("artifact");
+      }
+      const passphrase = asString(c.req.header("x-waitron-export-passphrase"), "passphrase");
+      const declaredLength = Number(c.req.header("content-length"));
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
+        invalidRequest("artifact");
+      }
+      const artifact = new Uint8Array(await c.req.arrayBuffer());
+      if (artifact.byteLength === 0 || artifact.byteLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
+        invalidRequest("artifact");
+      }
+      return c.json(await stage(artifact, passphrase), 200);
     });
   });
 

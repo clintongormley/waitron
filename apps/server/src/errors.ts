@@ -1213,6 +1213,8 @@ declare module "@waitron/shared" {
      * fault → HTTP 400 by `setup-api.ts`'s provision route, matching `setup.request_invalid`.
      */
     "setup.provisioning_secret_required": { module: string };
+    /** First production activation lacks an accepted test submission bound to its fiscal inputs. */
+    "setup.fiscal_test_required": { module: string };
     /** Another handler currently holds the persistent first-boot operation lease. */
     "setup.already_provisioning": Record<string, never>;
     /** A different request owns the box's persisted incomplete first-boot operation. */

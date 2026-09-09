@@ -9,6 +9,7 @@ import { venueFiscalSelection } from "./venue-fiscal.js";
 function contribution(id: string): FiscalContribution {
   return {
     id,
+    activationReadiness: "not-applicable",
     makeBackend: () => ({ id }) as unknown as FiscalBackend,
     drain: async () => ({
       nextDueAt: null,

@@ -6,6 +6,7 @@ import { fakeModule } from "./testing/fake-module.js";
 
 const contribution = (id: string): FiscalContribution => ({
   id,
+  activationReadiness: "not-applicable",
   makeBackend: () => ({ id }) as unknown as FiscalBackend,
   // These tests exercise slot SELECTION only; the runtime submission seat is never invoked here.
   drain: () => Promise.reject(new Error("fiscal-slot selection tests never run the drain seat")),

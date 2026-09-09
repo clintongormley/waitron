@@ -93,7 +93,7 @@ describe("setup-mode-screen", () => {
     q(el, "[data-test=confirm-live]")!.click();
     expect(events).toEqual([
       { kind: "patch", detail: { patch: { mode: "live" } } },
-      { kind: "goto", detail: { screen: "admin" } },
+      { kind: "goto", detail: { screen: "live-source" } },
     ]);
   });
 

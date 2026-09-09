@@ -1,6 +1,8 @@
 # The Waitron node's app image. Built from the repository root:
 #   docker build -f deploy/Dockerfile -t waitron:dev .   (`pnpm build:image`)
 
+ARG WAITRON_BUILD_ID=development
+
 # ---------------------------------------------------------------------------
 # Build stage — install the workspace and run the builds that already exist.
 # ---------------------------------------------------------------------------
@@ -30,6 +32,8 @@ RUN pnpm --filter @waitron/server build \
 # Runtime stage — the build outputs, a Postgres client and a non-root user.
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
+
+ARG WAITRON_BUILD_ID
 
 # The Postgres CLIENT major, which MUST track the SERVER major in deploy/compose.yml
 # (postgres:18-alpine). Bumping one without the other reintroduces the failure this repo comes from:
@@ -121,6 +125,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/med
 # QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one of the four
 # fail rather than ship a box whose certificate, QR and relying party disagree.
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
+  WAITRON_BUILD_ID=${WAITRON_BUILD_ID} \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
   WAITRON_MEDIA_DIR=/var/lib/waitron/media \
   WAITRON_DEMO_MEDIA_SOURCE=/app/demo-media \

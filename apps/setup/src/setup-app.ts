@@ -5,6 +5,9 @@ import { baseStyles } from "@waitron/ui";
 import "./screens/role-screen.js";
 import "./screens/connect-screen.js";
 import "./screens/restore-screen.js";
+import "./screens/live-source-screen.js";
+import "./screens/configuration-preview-screen.js";
+import "./screens/fiscal-test-screen.js";
 import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
@@ -12,24 +15,34 @@ import "./screens/cert-screen.js";
 import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
 import "./screens/done-screen.js";
-import type { AdoptBody, ApiError, ProvisionBody, SetupApi } from "./api/client.js";
-import type { RestoreRequestDetail } from "./events.js";
+import type {
+  AdoptBody,
+  ApiError,
+  ConfigurationPreview,
+  ProvisionBody,
+  SetupApi,
+} from "./api/client.js";
+import type { ConfigurationRequestDetail, RestoreRequestDetail } from "./events.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
  * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The first screen is `mode`,
  * which offers the four product journeys:
  *
- * - Demo, Prepare or Go live → `admin`
- *   (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
- *   `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). The venue step
- *   routes to `cert` only for a live ES-common venue, otherwise straight to `review`.
+ * - Demo or Prepare → `admin` (first operator) → `venue` (tenant + location + series) → `review`
+ *   (confirm + POST) → `provisioning` (in flight) → `done` (restarting).
+ * - Go live → `live-source`; importing a prepared configuration adds `configuration-preview`, then
+ *   both sources follow `admin` → `venue` → `cert` (AEAT, live ES-common only) → `fiscal-test` →
+ *   `review` → `provisioning` → `done`. Development onboarding skips the real external-service steps.
  * - Join or recover → `role`, whose mirror branch opens `connect` and backup branch opens `restore`.
  */
 export type Screen =
   | "role"
   | "connect"
   | "restore"
+  | "live-source"
+  | "configuration-preview"
+  | "fiscal-test"
   | "mode"
   | "admin"
   | "venue"
@@ -79,11 +92,10 @@ function deepMerge(base: unknown, patch: unknown): unknown {
  *
  * The one thing it does actively is the `aeatCert` gate, which is a FISCAL guard, not a tidiness one.
  * The cert is included ONLY for a LIVE provision that actually carries a PFX; otherwise the key is
- * DROPPED entirely (never sent as `null` or empty). Gating on `mode` — not just on "a PFX was read" —
- * is load-bearing: an operator can go live → cert (fill the PFX) → Back → mode → switch to Demo →
- * Provision, and the demo path skips the cert screen but the draft still holds the cert. Without the
- * mode gate, `assembleBody` would POST that stale certificate onto a DEMO/preproduction tenant and the
- * server would seal a real AEAT signing certificate into it — unrepairable (CLAUDE.md §5). The server
+ * DROPPED entirely (never sent as `null` or empty). The mode gate matters because an operator can go
+ * live → cert (fill the PFX) → Back → mode → switch to Demo → Provision. Without it, `assembleBody`
+ * would POST that stale certificate onto a DEMO/preproduction tenant and the server would seal a real
+ * AEAT signing certificate into it — unrepairable (CLAUDE.md §5). The server
  * distinguishes "no certificate" from "malformed" by the key's ABSENCE (the symmetric presence gate in
  * `apps/server/src/setup-api.ts`, which reaches the regime's secret validator through the fiscal
  * contribution's `provisioningSecret` seat) and answers a live production venue with no cert
@@ -184,6 +196,7 @@ export class SetupApp extends LitElement {
    * before provisioning a real `production` venue.
    */
   @state() private environment?: "production" | "preproduction";
+  @state() private developmentMode = false;
 
   /**
    * The accumulated provision request, built up a screen at a time. Seeded with the defaults every
@@ -223,6 +236,11 @@ export class SetupApp extends LitElement {
    */
   @state() private connectError?: string;
   @state() private restoreError?: string;
+  @state() private configurationError?: string;
+  @state() private configurationPreview?: ConfigurationPreview;
+  @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
+  @state() private fiscalTestRunning = false;
+  @state() private fiscalTestError?: string;
 
   /**
    * The break-glass secret the adopt path minted, captured from the 200 to hand to the `done` screen.
@@ -269,6 +287,7 @@ export class SetupApp extends LitElement {
       const status = await this.api.getStatus();
       if (!this.isConnected) return;
       this.environment = status.environment;
+      this.developmentMode = status.developmentMode === true;
     } catch {
       // Leave `environment` undefined — a failed status read is never a reason to block setup.
     }
@@ -300,6 +319,7 @@ export class SetupApp extends LitElement {
     this.reviewError = undefined;
     this.connectError = undefined;
     this.restoreError = undefined;
+    this.configurationError = undefined;
     this.screen = event.detail.screen;
   }
 
@@ -308,7 +328,7 @@ export class SetupApp extends LitElement {
    * {@link SetupApp.draft}. The venue→`cert`/`review` decision lives HERE, not in the venue screen: the
    * shell owns the draft, so it — mirroring `apps/dashboard/src/dashboard-app.ts`'s conditional routing
    * — is where the conditional belongs. A live ES-common venue still needs the AEAT certificate
-   * (`cert`); every other case (demo, or a non-ES-common territory) goes straight to `review`.
+   * (`cert`) unless this is the managed development walkthrough; every other case goes to `review`.
    *
    * Same boundary `stopPropagation` and stale-banner clear as {@link SetupApp.#onGoto}: advancing off
    * the venue form is a user-initiated navigation, so a routed-back `venueError` must not linger.
@@ -320,7 +340,9 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.reviewError = undefined;
     this.screen =
-      this.draft.mode === "live" && this.draft.venue?.location?.fiscalTerritory === "ES-common"
+      this.draft.mode === "live" &&
+      this.draft.venue?.location?.fiscalTerritory === "ES-common" &&
+      !this.developmentMode
         ? "cert"
         : "review";
   }
@@ -406,6 +428,11 @@ export class SetupApp extends LitElement {
       case "setup.provisioning_secret_required":
         this.screen = "cert";
         return;
+      case "setup.fiscal_test_required":
+        this.fiscalTestStatus = undefined;
+        this.fiscalTestError = "Run an accepted fiscal test before activating production.";
+        this.screen = "fiscal-test";
+        return;
       case "setup.already_provisioning":
         this.provisionMessage = "Setup is already in progress on this box.";
         this.provisionCanRetry = false;
@@ -486,6 +513,50 @@ export class SetupApp extends LitElement {
     }
   }
 
+  async #onConfigurationRequested(
+    event: CustomEvent<{ request: ConfigurationRequestDetail }>,
+  ): Promise<void> {
+    event.stopPropagation();
+    this.configurationError = undefined;
+    try {
+      const preview = await this.api.stageConfiguration(
+        event.detail.request.artifact,
+        event.detail.request.passphrase,
+      );
+      if (!this.isConnected) return;
+      const location = Object.fromEntries(
+        Object.entries(preview.venue.location).filter(([key]) => key !== "id"),
+      ) as ProvisionBody["venue"]["location"];
+      this.draft = deepMerge(this.draft, {
+        configurationImport: true,
+        venue: { ...preview.venue, location },
+      }) as DeepPartial<ProvisionBody>;
+      this.configurationPreview = preview;
+      this.screen = "configuration-preview";
+    } catch {
+      if (!this.isConnected) return;
+      this.configurationError =
+        "The configuration export could not be opened. Check the file and passphrase.";
+      this.screen = "live-source";
+    }
+  }
+
+  async #onFiscalTestRequested(event: CustomEvent): Promise<void> {
+    event.stopPropagation();
+    this.fiscalTestRunning = true;
+    this.fiscalTestError = undefined;
+    try {
+      const result = await this.api.runFiscalTest(assembleBody(this.draft));
+      if (!this.isConnected) return;
+      this.fiscalTestStatus = result.status === "not-applicable" ? "accepted" : result.status;
+    } catch {
+      if (!this.isConnected) return;
+      this.fiscalTestError = "The fiscal test could not run. Check the connection and try again.";
+    } finally {
+      if (this.isConnected) this.fiscalTestRunning = false;
+    }
+  }
+
   /**
    * Map a rejected adopt to the wizard's next state (C2b). Two shapes:
    *
@@ -546,6 +617,9 @@ export class SetupApp extends LitElement {
       @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
       @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
         void this.#onRestoreRequested(e)}
+      @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
+        void this.#onConfigurationRequested(e)}
+      @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
     >
       ${this.#renderScreen()}
     </div>`;
@@ -575,6 +649,23 @@ export class SetupApp extends LitElement {
           data-test="screen-restore"
           .errorMessage=${this.restoreError}
         ></setup-restore-screen>`;
+      case "live-source":
+        return html`<setup-live-source-screen
+          data-test="screen-live-source"
+          .errorMessage=${this.configurationError}
+        ></setup-live-source-screen>`;
+      case "configuration-preview":
+        return html`<setup-configuration-preview-screen
+          data-test="screen-configuration-preview"
+          .preview=${this.configurationPreview}
+        ></setup-configuration-preview-screen>`;
+      case "fiscal-test":
+        return html`<setup-fiscal-test-screen
+          data-test="screen-fiscal-test"
+          .status=${this.fiscalTestStatus}
+          .running=${this.fiscalTestRunning}
+          .errorMessage=${this.fiscalTestError}
+        ></setup-fiscal-test-screen>`;
       case "mode":
         return html`<setup-mode-screen
           data-test="screen-mode"

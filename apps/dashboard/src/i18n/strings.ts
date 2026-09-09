@@ -329,6 +329,16 @@ export const en = {
   "diagnostics.empty": "No log lines yet",
   // Backup admin screen (destination + recovery key + policy + status; recovery-key wizard)
   "backup.title": "Backups",
+  "backup.configuration.title": "Move your preparation to production",
+  "backup.configuration.explanation":
+    "Download an encrypted copy of menus, layouts, staff profiles and settings. Sales, fiscal records and credentials stay behind.",
+  "backup.configuration.passphrase": "Export passphrase (required)",
+  "backup.configuration.confirm": "Confirm export passphrase (required)",
+  "backup.configuration.download": "Download configuration export",
+  "backup.configuration.form_error": "There is a problem with this form.",
+  "backup.configuration.passphrase_error": "Use at least 12 characters.",
+  "backup.configuration.match_error": "The passphrases must match.",
+  "backup.configuration.request_error": "The configuration export could not be created.",
   "backup.status.state": "Backups",
   "backup.status.on": "On",
   "backup.status.off": "Off",
@@ -1025,6 +1035,16 @@ export const es: Record<StringKey, string> = {
   "diagnostics.empty": "Aún no hay líneas de registro",
   // Backup admin screen (destination + recovery key + policy + status; recovery-key wizard)
   "backup.title": "Copias de seguridad",
+  "backup.configuration.title": "Lleva tu preparación a producción",
+  "backup.configuration.explanation":
+    "Descarga una copia cifrada de menús, planos, perfiles del personal y ajustes. Las ventas, los registros fiscales y las credenciales no se copian.",
+  "backup.configuration.passphrase": "Contraseña de exportación (obligatoria)",
+  "backup.configuration.confirm": "Confirma la contraseña de exportación (obligatoria)",
+  "backup.configuration.download": "Descargar configuración",
+  "backup.configuration.form_error": "Hay un problema con este formulario.",
+  "backup.configuration.passphrase_error": "Usa al menos 12 caracteres.",
+  "backup.configuration.match_error": "Las contraseñas deben coincidir.",
+  "backup.configuration.request_error": "No se pudo crear la exportación de configuración.",
   "backup.status.state": "Copias de seguridad",
   "backup.status.on": "Activadas",
   "backup.status.off": "Desactivadas",

@@ -139,7 +139,8 @@ export class SetupModeScreen extends LitElement {
   /** The explicit confirm. Emits `mode:"live"` only once the operator has switched "I understand" on. */
   #confirmLive(): void {
     if (!this.understood) return;
-    this.#advance("live");
+    dispatchSetupPatch(this, { mode: "live" });
+    dispatchSetupGoto(this, "live-source");
   }
 
   #cancelLive(): void {

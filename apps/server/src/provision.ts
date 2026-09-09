@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { stampDeployment, withTenant, type Database } from "@waitron/db";
+import { stampDeployment, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   applyVenue,
   assertNoForeignTenant,
@@ -40,6 +40,8 @@ export interface ProvisionRequest {
   environment: "production" | "preproduction";
   /** country/taxId/legalName/location/tillName/series/admin(hashed) — every field the wizard collects. */
   venue: VenueRequest;
+  /** Server-derived from the selected Live journey; browser input cannot name a staged file directly. */
+  configurationImport?: boolean;
 }
 
 export interface ProvisionDeps {
@@ -61,6 +63,7 @@ export interface ProvisionDeps {
    * `<stateDir>/modules.json` after `applyVenue` commits, so the next (trading) boot's fiscal slot
    * resolves rather than failing `module.fiscal_slot_ambiguous` under the default-on both-enabled set. */
   readonly stateDir: string;
+  readonly beforeCommit?: (tx: Transaction, result: VenueResult) => Promise<void>;
 }
 
 /**
@@ -183,7 +186,11 @@ export async function provisionVenue(
   await stampDeployment(deps.ownerDb, req.environment);
 
   // 4. Mint the venue and every enabled module's seed under one transaction.
-  const result = await applyVenue(plan, { db: deps.ownerDb, modules });
+  const result = await applyVenue(plan, {
+    db: deps.ownerDb,
+    modules,
+    beforeCommit: deps.beforeCommit,
+  });
 
   // 5. Persist the resolved module set so the trading boot reads a fiscal slot that resolves to exactly
   // one member (§4). Written AFTER applyVenue commits — a failed mint leaves no modules.json behind — and

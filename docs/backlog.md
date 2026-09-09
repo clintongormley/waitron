@@ -163,7 +163,7 @@ design-review section apply.
   module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
   installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick
   carries the images so install needs no internet, unattended updates for a box we did not sell,
-  AP-mode WiFi onboarding). **Node onboarding is now planned in `waitron-node-onboarding`**:
+  AP-mode WiFi onboarding). **Guided node onboarding is implemented in `waitron-node-onboarding`**:
   [design](superpowers/specs/2026-09-09-node-onboarding-design.md) and
   [implementation plan](superpowers/plans/2026-09-09-node-onboarding.md), covering Demo, Prepare,
   Go live, and Join or recover. Coordinate its setup UI and module-contract changes with Tracks 1
@@ -1196,7 +1196,7 @@ Onboarding free-tier slices 1–4 are complete (#137–#166); spec
 venue-only (R1) — the full `instance` role-split is deferred to the appliance image (*Debt →
 Provisioning/build*).
 
-**Guided node onboarding (owner decisions, 2026-09-09): planning complete, implementation next.**
+**Guided node onboarding (owner decisions, 2026-09-09): implemented, awaiting branch review.**
 [Design](superpowers/specs/2026-09-09-node-onboarding-design.md) and
 [plan](superpowers/plans/2026-09-09-node-onboarding.md) supersede the 2026-09-04 mode sketch.
 
@@ -1206,15 +1206,17 @@ Provisioning/build*).
    test payments and no fiscal submissions by default. This is not for actual trading.
 3. **Go live:** recommend configuration transfer from Prepare into a fresh production database;
    also offer an empty start. Keep sales/history, fiscal chains/counters, credentials and device
-   enrolments out of the transfer. Reconnect hardware and activate staff accounts. A bounded fiscal
-   test before initial activation is the proposed product policy, not an established legal duty.
+   enrolments out of the transfer. Reconnect hardware and activate staff accounts. Production
+   activation requires an accepted submission to the fiscal test service with the same venue,
+   certificate and software versions; rejected or uncertain results cannot activate it.
 4. **Join or recover an existing restaurant:** add a mirror or restore a backup, inheriting the
    source environment and retaining existing membership, fencing and fiscal restore safeguards.
 
 Development gets two managed targets: seeded **dev demo** and blank **dev onboarding**, sharing
-persistent development trust while resetting application identity separately. The implementation
-uses Sol high, per owner instruction. The plan covers the module transfer contract, installed seed
-and Mailpit, resumable setup and fiscal checks, both recovery UI paths and installed-image checks.
+persistent development trust while resetting application identity separately. `wa-wt demo <name>`
+and `wa-wt onboarding <name>` select them; changing target resets application data while preserving
+the development CA and TLS identity. The implementation includes the module transfer contract,
+installed seed and Mailpit, resumable setup and fiscal checks, and both recovery UI paths.
 
 The no-filing regime must be wizard-reachable through the fiscal contribution. Third-party
 Square/CSV import remains its separate backlog item. Live-system training with automatic invoice

@@ -33,6 +33,8 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       restarting: true,
     }),
     restore: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
+    stageConfiguration: vi.fn(),
+    runFiscalTest: vi.fn().mockResolvedValue({ status: "accepted" }),
     ...overrides,
   } as unknown as SetupApi;
 }
@@ -123,6 +125,16 @@ function restoreRequest(
   );
 }
 
+function configurationRequest(el: SetupApp, artifact: File, passphrase: string): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("configuration-requested", {
+      detail: { request: { artifact, passphrase } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
 /** Reads a `[data-test]` element's trimmed text out of a mounted screen's own shadow root. */
 async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<string | null> {
   const host = await screenHost(el, screen);
@@ -187,6 +199,9 @@ describe("setup-app", () => {
     const screens: Screen[] = [
       "connect",
       "restore",
+      "live-source",
+      "configuration-preview",
+      "fiscal-test",
       "admin",
       "venue",
       "cert",
@@ -201,6 +216,52 @@ describe("setup-app", () => {
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector(`[data-test=screen-${screen}]`)).not.toBeNull();
     }
+  });
+
+  it("stages a preparation export and prefills the live venue draft", async () => {
+    const preview = {
+      venue: {
+        country: "ES",
+        taxId: "B12345678",
+        legalName: "Prepared SL",
+        location: {
+          id: "source-location",
+          name: "Prepared",
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Restaurant",
+          fiscalTerritory: "ES-common",
+          addressLine1: "Calle 1",
+          addressLine2: null,
+          postalCode: "28001",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00",
+        },
+        tillName: "Till",
+        seriesCode: "F",
+        rectificativeSeriesCode: "R",
+      },
+      counts: { products: 4 },
+      reconnect: ["printers"],
+    };
+    const stageConfiguration = vi.fn().mockResolvedValue(preview);
+    const el = await mountSetupApp(stubApi({ stageConfiguration }));
+    const artifact = new File(["encrypted"], "prepared.waitron-config");
+    configurationRequest(el, artifact, "a strong passphrase");
+    await flush(el);
+    expect(stageConfiguration).toHaveBeenCalledWith(artifact, "a strong passphrase");
+    expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).not.toBeNull();
+    expect(readDraft(el)).toMatchObject({
+      configurationImport: true,
+      venue: { taxId: "B12345678", location: { name: "Prepared" } },
+    });
+    expect((readDraft(el).venue?.location as Record<string, unknown>).id).toBeUndefined();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-configuration-preview]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!
+      .click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-admin]")).not.toBeNull();
   });
 
   it("stages the selected backup and advances to done", async () => {
@@ -261,6 +322,45 @@ describe("setup-app", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).toBeNull();
+  });
+
+  it("skips certificate and fiscal services in the development onboarding target", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockResolvedValue({
+          provisioned: false,
+          environment: "preproduction",
+          developmentMode: true,
+          needs: ["venue"],
+        }),
+      }),
+    );
+    await flush(el);
+    goto(el, "venue");
+    patch(el, { mode: "live" });
+    advance(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+  });
+
+  it("runs the fiscal test and exposes Continue only after the server reports acceptance", async () => {
+    const runFiscalTest = vi.fn().mockResolvedValue({
+      status: "accepted",
+      testedAt: "2026-09-09T00:00:00.000Z",
+    });
+    const el = await mountSetupApp(stubApi({ runFiscalTest }));
+    goto(el, "fiscal-test");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-fiscal-test]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=run]")!
+      .click();
+    await flush(el);
+    expect(runFiscalTest).toHaveBeenCalledOnce();
+    expect(
+      el
+        .shadowRoot!.querySelector<HTMLElement>("[data-test=screen-fiscal-test]")!
+        .shadowRoot!.querySelector("[data-test=continue]"),
+    ).not.toBeNull();
   });
 
   // Prove-by-deletion of the `fiscalTerritory === "ES-common"` operand: drop it (leaving only

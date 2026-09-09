@@ -26,6 +26,8 @@ const read = (path: string): string => readFileSync(`${ROOT}${path}`, "utf8");
 const DOCKERFILE = read("deploy/Dockerfile");
 const COMPOSE = read("deploy/compose.yml");
 const PREPARE = read("deploy/prepare.sh");
+const CI = read(".github/workflows/ci.yml");
+const IMAGE_SMOKE = read(".github/workflows/image-smoke.yml");
 const CONFIG_SOURCE = read("apps/server/src/config.ts");
 const SERVER_MANIFEST = JSON.parse(read("apps/server/package.json")) as {
   bin: Record<string, string>;
@@ -82,6 +84,12 @@ describe("the container image's environment", () => {
   it("parses as a non-empty ENV block", () => {
     // A parser that silently returned {} would make every assertion below vacuous.
     expect(IMAGE_ENV.WAITRON_STATE_DIR).toBe("/var/lib/waitron/state");
+  });
+
+  it("stamps the exact source revision into every CI-built image", () => {
+    expect(IMAGE_ENV.WAITRON_BUILD_ID).toBe("${WAITRON_BUILD_ID}");
+    expect(CI).toContain("build-args: WAITRON_BUILD_ID=${{ github.sha }}");
+    expect(IMAGE_SMOKE).toContain("build-args: WAITRON_BUILD_ID=${{ github.sha }}");
   });
 
   it("binds every interface, not the container's own loopback", () => {

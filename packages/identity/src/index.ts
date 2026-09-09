@@ -73,6 +73,7 @@ export {
 export { generateTotpSecret, totpAuthUri, verifyTotp } from "./totp.js";
 
 export { IDENTITY_CLASSIFICATION } from "./classification.js";
+export { IDENTITY_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
 // from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.

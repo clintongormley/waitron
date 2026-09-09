@@ -10,6 +10,7 @@ describe("the public surface", () => {
         "TITULARES_ACCESO",
         "exportTimeRecord",
         "WORKFORCE_ES_CLASSIFICATION",
+        "WORKFORCE_ES_CONFIGURATION_TRANSFER",
         "WORKFORCE_ES_MIGRATIONS",
         "WORKFORCE_ES_VOCABULARY",
         "convenioConfig",

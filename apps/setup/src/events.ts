@@ -78,3 +78,25 @@ export function dispatchRestoreRequested(el: EventTarget, request: RestoreReques
     }),
   );
 }
+
+export interface ConfigurationRequestDetail {
+  artifact: File;
+  passphrase: string;
+}
+
+export function dispatchConfigurationRequested(
+  el: EventTarget,
+  request: ConfigurationRequestDetail,
+): void {
+  el.dispatchEvent(
+    new CustomEvent("configuration-requested", {
+      detail: { request },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
+export function dispatchFiscalTestRequested(el: EventTarget): void {
+  el.dispatchEvent(new CustomEvent("fiscal-test-requested", { bubbles: true, composed: true }));
+}

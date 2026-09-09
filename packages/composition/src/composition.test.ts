@@ -36,6 +36,50 @@ describe("ALL_MODULES backup contribution", () => {
   });
 });
 
+describe("ALL_MODULES configuration transfer contribution", () => {
+  it("makes every module explicitly opt in or declare no transferable configuration", () => {
+    expect(ALL_MODULES.map((module) => [module.name, module.configurationTransfer?.kind])).toEqual(
+      ALL_MODULES.map((module) => [module.name, expect.stringMatching(/^(none|tables)$/)]),
+    );
+  });
+
+  it("has no route from preparation sales, fiscal history, credentials or account tokens", () => {
+    const names = ALL_MODULES.flatMap((module) =>
+      module.configurationTransfer?.kind === "tables"
+        ? module.configurationTransfer.tables.map((table) => table.name)
+        : [],
+    );
+    expect(names).not.toEqual(
+      expect.arrayContaining([
+        "sales",
+        "tenders",
+        "payments",
+        "payment_refunds",
+        "tenant_credentials",
+        "management_account_actions",
+        "management_sessions",
+        "sessions",
+        "bookings",
+        "time_entries",
+      ]),
+    );
+    expect(
+      ALL_MODULES.find((module) => module.name === "fiscal-verifactu")?.configurationTransfer,
+    ).toEqual({ kind: "none" });
+  });
+
+  it("removes active order links and hardware authenticators from copied configuration", () => {
+    const tables = ALL_MODULES.flatMap((module) =>
+      module.configurationTransfer?.kind === "tables" ? module.configurationTransfer.tables : [],
+    );
+    expect(tables.find((table) => table.name === "dining_tables")?.omit).toContain("tab_id");
+    expect(tables.find((table) => table.name === "print_agents")?.omit).toEqual(
+      expect.arrayContaining(["token_hash", "last_seen_at"]),
+    );
+    expect(tables.find((table) => table.name === "printers")?.omit).toContain("poll_token_hash");
+  });
+});
+
 describe("ALL_MODULES vocabulary seat", () => {
   it("fiscal declares the fiscal module's own vocabulary, by reference", () => {
     const fiscal = ALL_MODULES.find((m) => m.name === "fiscal-verifactu");

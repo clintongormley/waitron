@@ -205,6 +205,8 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   const requestRestart = vi.fn(() => {
     calls.push("requestRestart");
   });
+  const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
+  const assertFiscalReady = vi.fn().mockResolvedValue(undefined);
   // The regime's provisioning-secret seal runs `withTenant(db, …)` — i.e. `db.transaction(cb)`. A fake
   // db that RECORDS the seal (in order, into `calls`) and resolves stands in for the real vault write.
   // The seal's DB correctness — the sealed row, the right tenant, the round-trip — is covered by the
@@ -230,6 +232,8 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     requestRestart,
     databaseUrl: DATABASE_URL,
     migrationsDatabaseUrl: MIGRATIONS_DATABASE_URL,
+    runFiscalTest,
+    assertFiscalReady,
     ...overrides,
   };
   return {
@@ -260,6 +264,34 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 const asRec = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
 
 describe("POST /setup-api/provision — orchestration, onboarding intent, cert gate, latch", () => {
+  it("runs an explicit fiscal test and refuses activation when its bound evidence is absent", async () => {
+    const fiscalTest = new Hono();
+    const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
+    mountSetup(fiscalTest, makeDeps({ runFiscalTest }).deps, noopLog);
+    const body = { ...liveBody(), aeatCert: CERT };
+    const tested = await fiscalTest.request("/setup-api/fiscal-test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(tested.status).toBe(200);
+    expect(await tested.json()).toEqual({ status: "accepted" });
+    expect(runFiscalTest).toHaveBeenCalledOnce();
+
+    const provision = new Hono();
+    const assertFiscalReady = vi.fn(async () => {
+      throw new AppError("setup.fiscal_test_required", { module: "verifactu" });
+    });
+    const deps = makeDeps({ assertFiscalReady });
+    mountSetup(provision, deps.deps, noopLog);
+    const refused = await postProvision(provision, body);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "setup.fiscal_test_required", params: { module: "verifactu" } },
+    });
+    expect(deps.provision).not.toHaveBeenCalled();
+  });
+
   it("reports completed persistent progress and replays it after a process restart", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-operation-"));
     try {
@@ -1083,6 +1115,37 @@ async function postRestore(
     body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
   });
 }
+
+async function postConfiguration(app: Hono, body: Uint8Array): Promise<Response> {
+  return app.request("/setup-api/configuration", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-export-passphrase": "a strong passphrase",
+    },
+    body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+  });
+}
+
+describe("POST /setup-api/configuration", () => {
+  it("stages and previews a bounded preparation export", async () => {
+    const preview = {
+      venue: { taxId: "B12345678" },
+      counts: { products: 2 },
+      reconnect: ["printers"],
+    } as never;
+    const stageConfiguration = vi.fn(async () => preview);
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
+    const response = await postConfiguration(app, Uint8Array.from([1, 2, 3]));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(preview);
+    expect(stageConfiguration).toHaveBeenCalledWith(
+      Uint8Array.from([1, 2, 3]),
+      "a strong passphrase",
+    );
+  });
+});
 
 describe("POST /setup-api/restore", () => {
   it("stages the encrypted artifact under the persistent operation lease and restarts", async () => {

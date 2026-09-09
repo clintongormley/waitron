@@ -47,7 +47,10 @@ export function expectedSchemaVersion(set: MigrationSet, root: string | null): n
  * Any OTHER driver error is rethrown, never swallowed as 0 — a connection failure reported as "zero
  * migrations applied" would let a caller conclude a fully-migrated database needs re-migrating.
  */
-export async function appliedSchemaVersion(db: Database, set: MigrationSet): Promise<number> {
+export async function appliedSchemaVersion(
+  db: Pick<Database, "execute">,
+  set: MigrationSet,
+): Promise<number> {
   if (!DRIZZLE_MIGRATIONS_TABLE.test(set.table)) {
     throw new AppError("migrations.invalid_table", { table: set.table });
   }

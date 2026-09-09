@@ -94,12 +94,25 @@ import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
 import { resolveEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { stageRestoreRequest } from "./restore-request.js";
+import {
+  clearStagedConfigurationImport,
+  readStagedConfigurationImport,
+  stageConfigurationImport,
+} from "./configuration-import.js";
+import {
+  importConfigurationTables,
+  publishConfigurationMedia,
+  validateConfigurationBundle,
+} from "./configuration-transfer.js";
+import { createFiscalReadinessStore } from "./fiscal-readiness.js";
+import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -761,6 +774,7 @@ export async function startServer(
   // auto-commit satisfies that just as the pool would.
   // SP-1b drift visibility only (the outbox schema-version park gate that once read this is gone with
   // the sync block). Computed in the trading-mode block, used solely to log `module.reconcile` drift.
+  let appliedModuleVersions: Record<string, number> = {};
   if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
@@ -768,6 +782,7 @@ export async function startServer(
       // which the backup manifest shares — the driftProbe is an auto-commit pool, so its `Promise.all`
       // reads are each isolated); the migrated Set is derived from it (version > 0).
       const myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
+      appliedModuleVersions = myModuleVersions;
       const migrated = new Set(
         Object.entries(myModuleVersions)
           .filter(([, v]) => v > 0)
@@ -923,21 +938,142 @@ export async function startServer(
             devMode: config.devMode,
             operations: createSetupOperationStore(config.stateDir),
             stageRestore: (request) => stageRestoreRequest(config.stateDir, request),
+            stageConfiguration: (artifact, passphrase) =>
+              stageConfigurationImport(config.stateDir, artifact, passphrase, async (bundle) => {
+                const resolvedConfig = venueModuleConfig(
+                  moduleConfig,
+                  bundle.venue.location.fiscalTerritory,
+                );
+                const modules = enabledModules(ALL_MODULES, resolvedConfig);
+                validateConfigurationBundle(
+                  bundle,
+                  modules,
+                  await schemaVersionsByModule(ownerDb, modules),
+                );
+              }),
+            clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
+            runFiscalTest: async ({ request, contribution, secret }) => {
+              const resolvedConfig = venueModuleConfig(
+                moduleConfig,
+                request.venue.location.fiscalTerritory,
+              );
+              const modules = enabledModules(ALL_MODULES, resolvedConfig);
+              const moduleVersions = await schemaVersionsByModule(ownerDb, modules);
+              const input = fiscalReadinessInput({
+                venue: request.venue,
+                contribution,
+                secret,
+                moduleVersions,
+                applicationVersion:
+                  process.env.WAITRON_BUILD_ID ?? process.env.npm_package_version ?? "development",
+              });
+              return createFiscalReadinessStore(config.stateDir, () =>
+                submitFiscalReadiness({
+                  stateDir: config.stateDir,
+                  migrationsRoot: config.migrationsRoot,
+                  modules,
+                  venue: request.venue,
+                  contribution,
+                  secret,
+                  ring,
+                  readinessInput: input,
+                }),
+              ).run(input);
+            },
+            assertFiscalReady: async ({ request, contribution, secret }) => {
+              const resolvedConfig = venueModuleConfig(
+                moduleConfig,
+                request.venue.location.fiscalTerritory,
+              );
+              const modules = enabledModules(ALL_MODULES, resolvedConfig);
+              const moduleVersions = await schemaVersionsByModule(ownerDb, modules);
+              await createFiscalReadinessStore(
+                config.stateDir,
+                async () => "uncertain",
+              ).assertReady(
+                fiscalReadinessInput({
+                  venue: request.venue,
+                  contribution,
+                  secret,
+                  moduleVersions,
+                  applicationVersion:
+                    process.env.WAITRON_BUILD_ID ??
+                    process.env.npm_package_version ??
+                    "development",
+                }),
+              );
+            },
             // Resolve the fiscal slot from the REQUEST's territory (authoritative, §4): the box's
             // `moduleConfig` base is default-on, which with two fiscal-slot members would be ambiguous;
             // `venueModuleConfig` forces exactly the territory's fiscal module on before provisionVenue's
             // gate/slot check runs and before it persists the set to `<stateDir>/modules.json`.
-            provision: (req) =>
-              provisionVenue(
+            provision: async (req) => {
+              const resolvedConfig = venueModuleConfig(
+                moduleConfig,
+                req.venue.location.fiscalTerritory,
+              );
+              const modules = enabledModules(ALL_MODULES, resolvedConfig);
+              const staged = req.configurationImport
+                ? await readStagedConfigurationImport(config.stateDir)
+                : null;
+              if (req.configurationImport && staged === null) {
+                throw new AppError("setup.request_invalid", { field: "configurationImport" });
+              }
+              if (
+                staged !== null &&
+                (staged.bundle.venue.country !== req.venue.country ||
+                  staged.bundle.venue.taxId !== req.venue.taxId)
+              ) {
+                throw new AppError("setup.request_invalid", { field: "configurationImport" });
+              }
+              const versions =
+                staged === null ? undefined : await schemaVersionsByModule(ownerDb, modules);
+              const result = await provisionVenue(
                 {
                   ownerDb,
-                  moduleConfig: venueModuleConfig(moduleConfig, req.venue.location.fiscalTerritory),
+                  moduleConfig: resolvedConfig,
                   database: ownerDatabaseName,
                   stateDir: config.stateDir,
+                  ...(staged === null
+                    ? {}
+                    : {
+                        beforeCommit: async (tx, result) => {
+                          await importConfigurationTables(
+                            tx,
+                            staged.bundle,
+                            { tenantId: result.tenantId, locationId: result.locationId },
+                            modules,
+                            versions!,
+                          );
+                        },
+                      }),
                 },
                 req,
-              ),
-            recoverProvision: (req) => recoverProvisionedVenue(ownerDb, req),
+              );
+              if (staged !== null) {
+                await publishConfigurationMedia(
+                  staged.artifact,
+                  staged.passphrase,
+                  config.mediaDir,
+                );
+              }
+              return result;
+            },
+            recoverProvision: async (req) => {
+              const result = await recoverProvisionedVenue(ownerDb, req);
+              if (req.configurationImport) {
+                const staged = await readStagedConfigurationImport(config.stateDir);
+                if (staged === null) {
+                  throw new AppError("setup.request_invalid", { field: "configurationImport" });
+                }
+                await publishConfigurationMedia(
+                  staged.artifact,
+                  staged.passphrase,
+                  config.mediaDir,
+                );
+              }
+              return result;
+            },
             seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
             adopt: async (req) => {
               // Adopt establishes a NATIVE subscription (swap step 4), so it needs the MIGRATOR
@@ -1675,6 +1811,22 @@ export async function startServer(
         if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
         await createAccountEmailSender(delivery.smtp)(message);
       },
+    },
+    log,
+  );
+  mountConfigurationExportApi(
+    app,
+    {
+      db,
+      cfg: {
+        tenantId: till.tenantId,
+        locationId: till.locationId,
+        tillId: till.tillId,
+        nodeId: till.nodeId,
+      },
+      modules: setsToMigrate,
+      moduleVersions: appliedModuleVersions,
+      mediaDir: config.mediaDir,
     },
     log,
   );

@@ -204,6 +204,12 @@ export class BackupScreen extends LitElement {
   @state() private retainDays = 30;
 
   @state() private submitting = false;
+  @state() private configurationPassphrase = "";
+  @state() private configurationConfirm = "";
+  @state() private configurationPassphraseVisible = false;
+  @state() private configurationConfirmVisible = false;
+  @state() private configurationError: "required" | "mismatch" | "request" | null = null;
+  @state() private exportingConfiguration = false;
 
   // Rotate: the re-shown OLD key (null until the operator asks to see it).
   @state() private oldKey: string | null = null;
@@ -490,6 +496,34 @@ export class BackupScreen extends LitElement {
     this.pastedKey = event.detail.value;
   }
 
+  async #exportConfiguration(): Promise<void> {
+    this.configurationError = null;
+    if (this.configurationPassphrase.length < MIN_KEY_LENGTH) {
+      this.configurationError = "required";
+      return;
+    }
+    if (this.configurationPassphrase !== this.configurationConfirm) {
+      this.configurationError = "mismatch";
+      return;
+    }
+    this.exportingConfiguration = true;
+    try {
+      const artifact = await this.api.exportConfiguration(this.configurationPassphrase);
+      const url = URL.createObjectURL(artifact);
+      const download = document.createElement("a");
+      download.href = url;
+      download.download = `waitron-configuration-${this.#fileStamp}.enc`;
+      download.click();
+      URL.revokeObjectURL(url);
+      this.configurationPassphrase = "";
+      this.configurationConfirm = "";
+    } catch {
+      this.configurationError = "request";
+    } finally {
+      this.exportingConfiguration = false;
+    }
+  }
+
   #toggleWeekday(n: number): void {
     this.weekdays = this.weekdays.includes(n)
       ? this.weekdays.filter((d) => d !== n)
@@ -500,12 +534,102 @@ export class BackupScreen extends LitElement {
     const s = this.status;
     return html`
       <h1 class="title">${t("backup.title")}</h1>
-      ${s === undefined ? nothing : this.#renderBody(s)}
+      ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
       ${
         this.errorKey
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
+    `;
+  }
+
+  #renderConfigurationExport(): TemplateResult {
+    const fieldMessage =
+      this.configurationError === "required"
+        ? t("backup.configuration.passphrase_error")
+        : this.configurationError === "mismatch"
+          ? t("backup.configuration.match_error")
+          : null;
+    return html`
+      <section class="card" aria-labelledby="configuration-export-title">
+        <h2 id="configuration-export-title">${t("backup.configuration.title")}</h2>
+        <p class="hint">${t("backup.configuration.explanation")}</p>
+        ${
+          this.configurationError
+            ? html`<p class="error" role="alert" data-test="configuration-error">
+                ${
+                  this.configurationError === "request"
+                    ? t("backup.configuration.request_error")
+                    : t("backup.configuration.form_error")
+                }
+              </p>`
+            : nothing
+        }
+        <wt-input
+          data-test="configuration-passphrase"
+          name="configuration-passphrase"
+          type=${this.configurationPassphraseVisible ? "text" : "password"}
+          autocomplete="new-password"
+          required
+          ?invalid=${fieldMessage !== null}
+          label=${t("backup.configuration.passphrase")}
+          .value=${this.configurationPassphrase}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.configurationPassphrase = event.detail.value;
+          }}
+        >
+          <wt-button
+            slot="end"
+            variant="ghost"
+            data-test="toggle-configuration-passphrase"
+            aria-label=${this.configurationPassphraseVisible ? t("login.hide_password") : t("login.show_password")}
+            @click=${() =>
+              (this.configurationPassphraseVisible = !this.configurationPassphraseVisible)}
+            >${this.configurationPassphraseVisible ? t("login.hide_password") : t("login.show_password")}</wt-button
+          >
+        </wt-input>
+        ${
+          fieldMessage
+            ? html`<p class="error" data-test="configuration-field-error">${fieldMessage}</p>`
+            : nothing
+        }
+        <wt-input
+          data-test="configuration-confirm"
+          name="configuration-passphrase-confirmation"
+          type=${this.configurationConfirmVisible ? "text" : "password"}
+          autocomplete="new-password"
+          required
+          ?invalid=${fieldMessage !== null}
+          label=${t("backup.configuration.confirm")}
+          .value=${this.configurationConfirm}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.configurationConfirm = event.detail.value;
+          }}
+        >
+          <wt-button
+            slot="end"
+            variant="ghost"
+            data-test="toggle-configuration-confirm"
+            aria-label=${this.configurationConfirmVisible ? t("login.hide_password") : t("login.show_password")}
+            @click=${() => (this.configurationConfirmVisible = !this.configurationConfirmVisible)}
+            >${this.configurationConfirmVisible ? t("login.hide_password") : t("login.show_password")}</wt-button
+          >
+        </wt-input>
+        ${
+          fieldMessage
+            ? html`<p class="error" data-test="configuration-field-error">${fieldMessage}</p>`
+            : nothing
+        }
+        <wt-button
+          variant="primary"
+          data-test="configuration-export"
+          ?disabled=${this.exportingConfiguration}
+          @click=${() => void this.#exportConfiguration()}
+          >${t("backup.configuration.download")}</wt-button
+        >
+      </section>
     `;
   }
 

@@ -4,6 +4,7 @@ import { FISCAL_NONE_SLOT } from "./slot.js";
 describe("FISCAL_NONE_SLOT", () => {
   it("id is none and makeBackend builds a NoneBackend", () => {
     expect(FISCAL_NONE_SLOT.id).toBe("none");
+    expect(FISCAL_NONE_SLOT.activationReadiness).toBe("not-applicable");
     const backend = FISCAL_NONE_SLOT.makeBackend({
       db: {} as never,
       clock: {} as never,
