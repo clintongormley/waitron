@@ -757,6 +757,46 @@ describe("listHeldOrders", () => {
 });
 
 describe("getHeldOrder", () => {
+  it("returns the parked offer's identity and snapshots after its live product changes", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+    await db.execute(sql`
+      update products
+      set descriptions = ${JSON.stringify({ [LOCALE]: "Renamed café" })}::jsonb,
+          pricing_unit = 'weight', vat_class = 'reduced',
+          allergens = ${JSON.stringify({ milk: { presence: "contains" } })}::jsonb
+      where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
+    await db.execute(sql`
+      update menu_items set active = false
+      where tenant_id = ${cfg.tenantId} and id = ${premiumCafeOfferId}`);
+
+    const order = await getHeldOrder({ db }, cfg, id);
+    expect(order.lines).toEqual([
+      expect.objectContaining({
+        menuItemId: premiumCafeOfferId,
+        productId: cafeId,
+        quantity: "1.000",
+        product: expect.objectContaining({
+          id: cafeId,
+          productId: cafeId,
+          menuItemId: premiumCafeOfferId,
+          descriptions: { [LOCALE]: "Café" },
+          pricingUnit: "each",
+          unitPrice: "3.25",
+          vatClass: "general",
+          category: "Bebidas",
+          allergens: null,
+          catalogueName: "Carta premium",
+        }),
+      }),
+    ]);
+  });
+
   it("returns the open order's product/quantity lines, ordered by lineNo", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const id = randomUUID();
@@ -817,6 +857,33 @@ describe("getHeldOrder", () => {
 });
 
 describe("updateHeldOrder", () => {
+  it("replaces an offer line using the order's stored zone and refreshes its attribution", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "2" }],
+    });
+
+    const line = await db.execute<{
+      quantity: string;
+      unit_price_gross: string;
+      menu_item_id: string;
+    }>(sql`
+      select l.quantity, l.unit_price_gross, c.menu_item_id
+      from working_order_lines l
+      join working_line_contexts c on c.working_order_line_id = l.id
+      where l.tenant_id = ${cfg.tenantId} and l.working_order_id = ${id}`);
+    expect(line.rows).toEqual([
+      { quantity: "2.000", unit_price_gross: "3.25", menu_item_id: premiumCafeOfferId },
+    ]);
+  });
+
   it("replaces the lines, re-prices the total and updates the label, leaving the order row otherwise unchanged", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const id = randomUUID();

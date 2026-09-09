@@ -1122,7 +1122,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await c.req.json<{
         // A line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `updateHeldOrder` →
         // `priceOrderLines`, which validates + persists them on the parent dish line.
-        lines: ({ productId: string; quantity: string } & LineExtras)[];
+        lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
         label?: string;
       }>();
       await updateHeldOrder({ db: deps.db }, deps.cfg, id, {

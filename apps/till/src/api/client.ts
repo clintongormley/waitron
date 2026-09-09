@@ -295,6 +295,10 @@ export interface TillOptionGroup {
 /** One sellable product from `GET /api/products` (mirrors catalogue's `AvailableProduct`). */
 export interface TillProduct {
   id: string;
+  /** The shared product identity used by recipes, stock and preparation routing. */
+  productId?: string;
+  /** The selling identity whose menu, price and offered modifiers were selected. */
+  menuItemId?: string;
   descriptions: Record<string, string>;
   pricingUnit: "each" | "weight";
   unitPrice: string;
@@ -391,6 +395,11 @@ export interface TillMenuOffer {
   pricingUnit: "each" | "weight";
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
   category: string;
+  allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+  diet: DietProfile | null;
+  dietDerivation: DietDerivation | null;
+  dietOverride: DietOverride | null;
+  courseId: string | null;
   optionGroups: {
     id: string;
     name: Record<string, string>;
@@ -403,6 +412,13 @@ export interface TillMenuOffer {
       priceDelta: string;
       maxQuantity: number;
       vatClass: "general" | "reduced" | "super_reduced" | "zero" | null;
+      addAllergens: Record<
+        string,
+        { presence: "contains" | "may_contain"; source?: string }
+      > | null;
+      removeAllergens: string[] | null;
+      addOrigins: string[] | null;
+      removeOrigins: string[] | null;
     }[];
   }[];
 }
@@ -416,6 +432,35 @@ export interface ZoneOfferCatalogue {
   defaultMenuId: string | null;
   menus: TillMenu[];
   offers: TillMenuOffer[];
+}
+
+/** Adapt a menu offer to the till's display model while keeping product and selling ids distinct. */
+export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
+  return {
+    id: offer.productId,
+    productId: offer.productId,
+    menuItemId: offer.id,
+    descriptions: offer.descriptions,
+    pricingUnit: offer.pricingUnit,
+    unitPrice: offer.grossPrice,
+    vatClass: offer.vatClass,
+    category: offer.category,
+    allergens: offer.allergens,
+    courseId: offer.courseId,
+    catalogueId: offer.menuId,
+    catalogueName: offer.menuName,
+    optionGroups: offer.optionGroups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      minSelect: group.minSelect,
+      maxSelect: group.maxSelect,
+      required: group.required,
+      items: group.options,
+    })),
+    diet: offer.diet,
+    dietDerivation: offer.dietDerivation,
+    dietOverride: offer.dietOverride,
+  };
 }
 
 /**
@@ -547,15 +592,15 @@ export interface HeldOrderSummary {
 
 /**
  * `GET /api/working-orders/:id` — a retrieved parked order: enough to name it in the UI plus the
- * pricing INPUTS to rebuild its basket. Mirrors the server's `HeldOrder`. `lines` are `product_id` +
- * `quantity` only (never a stored price — the till re-prices on retrieve); the server sends
- * `quantity` at numeric(_,3) scale ("2.000"), passed through here as sent.
+ * stored inputs and commercial snapshots needed to rebuild its basket. Mirrors the server's
+ * `HeldOrder`; contextual lines can be restored even when their live offer is no longer available.
+ * The server sends `quantity` at numeric(_,3) scale ("2.000"), passed through here as sent.
  */
 export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
-  lines: SaleLine[];
+  lines: (SaleLine & { product?: TillProduct })[];
 }
 
 /**

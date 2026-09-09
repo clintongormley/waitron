@@ -1281,6 +1281,7 @@ jobs:
           set -- "$@" --filter "!@waitron/shared"
           set -- "$@" --filter "!@waitron/server-kit"
           set -- "$@" --filter "!@waitron/dashboard-modules"
+          set -- "$@" --filter "!@waitron/venue-service"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage

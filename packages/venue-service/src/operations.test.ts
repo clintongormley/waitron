@@ -24,6 +24,7 @@ import {
   createPreparationRoute,
   allowMenuInZone,
   getOrderServiceContext,
+  listWorkingLineContexts,
   listZoneOffers,
   recordOrderServiceContext,
   recordWorkingLineContexts,
@@ -292,6 +293,22 @@ describe("venue service routing", () => {
       await tx.execute(sql`
         update departments set name = 'Renamed department'
         where tenant_id = ${tenantId} and id = ${department.id}`);
+      await expect(
+        listWorkingLineContexts(
+          tx,
+          { tenantId, locationId },
+          "00000000-0000-4000-8000-000000000001",
+        ),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          workingOrderLineId: workingLineId,
+          menuItemId: offer.id,
+          menuName: "Deli takeaway",
+          categoryName: "Cold cuts",
+          pricingUnit: "weight",
+          vatClass: "reduced",
+        }),
+      ]);
       const attribution = await tx.execute<{
         menu_name: string;
         department_name: string;

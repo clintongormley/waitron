@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
-import { catalogues, floorZones, kitchenStations, products } from "@waitron/db";
+import { catalogues, floorZones, kitchenStations, products, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { listMenuOffers, type MenuOffer } from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode } from "@waitron/module";
@@ -303,6 +303,56 @@ export async function findOrderServiceContext(
   return row === undefined ? null : { ...row, serviceMode: row.serviceMode as ServiceMode };
 }
 
+export async function listWorkingLineContexts(
+  tx: Transaction,
+  cfg: VenueScope,
+  workingOrderId: string,
+): Promise<
+  {
+    workingOrderLineId: string;
+    menuItemId: string;
+    menuId: string;
+    menuName: string;
+    categoryName: string;
+    pricingUnit: "each" | "weight";
+    vatClass: string;
+    allergens: MenuOffer["allergens"];
+    diet: unknown;
+    dietDerivation: unknown;
+    dietOverride: unknown;
+  }[]
+> {
+  const rows = await tx
+    .select({
+      workingOrderLineId: workingLineContexts.workingOrderLineId,
+      menuItemId: workingLineContexts.menuItemId,
+      menuId: workingLineContexts.menuId,
+      menuName: workingLineContexts.menuName,
+      categoryName: workingLineContexts.categoryName,
+      pricingUnit: workingLineContexts.pricingUnit,
+      vatClass: workingLineContexts.vatClass,
+      allergens: workingLineContexts.allergens,
+      diet: workingLineContexts.diet,
+      dietDerivation: workingLineContexts.dietDerivation,
+      dietOverride: workingLineContexts.dietOverride,
+    })
+    .from(workingLineContexts)
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(workingOrderLines.tenantId, workingLineContexts.tenantId),
+        eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
+      ),
+    )
+    .where(
+      and(
+        eq(workingLineContexts.tenantId, cfg.tenantId),
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+      ),
+    );
+  return rows.map((row) => ({ ...row, pricingUnit: row.pricingUnit as "each" | "weight" }));
+}
+
 /** Snapshot the commercial attribution of newly priced working-order lines. */
 export async function recordWorkingLineContexts(
   tx: Transaction,
@@ -340,6 +390,12 @@ export async function recordWorkingLineContexts(
         departmentId: context.departmentId,
         departmentName: department.name,
         categoryName: offer.category,
+        pricingUnit: offer.pricingUnit,
+        vatClass: offer.vatClass,
+        allergens: offer.allergens,
+        diet: offer.diet,
+        dietDerivation: offer.dietDerivation,
+        dietOverride: offer.dietOverride,
       };
     }),
   );

@@ -6,6 +6,7 @@ describe("VENUE_SERVICE", () => {
     expect(Object.keys(VENUE_SERVICE).sort()).toEqual([
       "findOrderContext",
       "getOrderContext",
+      "listLineContexts",
       "listZoneOffers",
       "recordLineContexts",
       "recordOrderContext",

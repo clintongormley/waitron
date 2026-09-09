@@ -186,6 +186,25 @@ export interface VenueServiceContribution {
     cfg: { tenantId: TenantId; locationId: LocationId },
     workingOrderId: string,
   ): Promise<OrderServiceContext | null>;
+  listLineContexts(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+  ): Promise<
+    readonly {
+      workingOrderLineId: string;
+      menuItemId: string;
+      menuId: string;
+      menuName: string;
+      categoryName: string;
+      pricingUnit: "each" | "weight";
+      vatClass: string;
+      allergens: ZoneMenuOffer["allergens"];
+      diet: unknown;
+      dietDerivation: unknown;
+      dietOverride: unknown;
+    }[]
+  >;
   recordLineContexts(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },

@@ -11,7 +11,7 @@ import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
-import { toWireLineExtras, toWireOption } from "./state/order-line.js";
+import { toWireLineExtras, toWireOption, toWireProductIdentity } from "./state/order-line.js";
 // Side-effect imports register the three screen elements this app swaps between; it names them only
 // as tags below, so the wiring — not the screens — is what lives here.
 import "./screens/till-lock-screen.js";
@@ -61,6 +61,7 @@ import type {
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
+import { menuOfferToTillProduct } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
 import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
@@ -444,15 +445,14 @@ export class TillApp extends LitElement {
   @state() private initialDeviceStation?: DeviceStation;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
-  /** ALL sellable products across the location's accessible menus, loaded at login. The counter/table
-   * screens are handed this WHOLE set plus {@link selectedCatalogueId}, and each narrows its OWN grid to
-   * the selected menu via `filterProductsByMenu` (`menu-filter.ts`). The full set is threaded down
-   * deliberately — a screen resolves a tab line's name and an allergen lookup against every menu's
-   * products, not just the shown one — so a menu switch only re-filters the grid, never re-fetches. */
+  /** Offers available in the counter's current service zone. Each carries a distinct menu-item ID,
+   * even when two menus offer the same product. Table ordering keeps its own zone-specific set. */
   @state() private products: TillProduct[] = [];
-  /** The location's accessible menus (default first), loaded at login beside {@link products}. Drives the
-   * `<till-menu-switcher>`; with one menu the switcher renders nothing and the till looks as before. */
+  /** Menus available in the counter's current service zone, default first. */
   @state() private menus: TillMenu[] = [];
+  @state() private tableProducts: TillProduct[] = [];
+  @state() private tableMenus: TillMenu[] = [];
+  @state() private tableSelectedCatalogueId = "";
   /** The grid's selected menu, reset to the default at login and changed by the switcher.
    * An empty selection matches no product. */
   @state() private selectedCatalogueId = "";
@@ -927,8 +927,8 @@ export class TillApp extends LitElement {
     // A fresh session reloads the floor in full — reset the "already loaded once" flag beside the other
     // per-session resets (SP-B2.1 review). The full load below (or a later floor tab-select) re-sets it.
     this.#floorLoaded = false;
-    const { menus, products } = await this.api.listProducts();
-    this.products = products;
+    const { menus, offers } = await this.api.listDefaultZoneOffers();
+    this.products = offers.map(menuOfferToTillProduct);
     this.menus = menus;
     // A fresh login starts on the location default, regardless of the previous menu preference.
     this.#selectMenu(this.#defaultCatalogueId());
@@ -1016,13 +1016,26 @@ export class TillApp extends LitElement {
   }
 
   /** Use the location default at login, or the first accessible menu when none is marked default. */
-  #defaultCatalogueId(): string {
-    return this.menus.find((menu) => menu.isDefault)?.id ?? this.menus[0]?.id ?? "";
+  #defaultCatalogueId(menus: TillMenu[] = this.menus): string {
+    return menus.find((menu) => menu.isDefault)?.id ?? menus[0]?.id ?? "";
   }
 
   /** Menu selection filters the product grid without changing the working order or browser history. */
   #onMenuSelected(event: CustomEvent<{ id: string }>): void {
-    this.#selectMenu(event.detail.id);
+    if (this.#tableCatalogueActive()) this.#selectTableMenu(event.detail.id);
+    else this.#selectMenu(event.detail.id);
+  }
+
+  #tableCatalogueActive(): boolean {
+    return (
+      this.drill?.kind === "table-order" || this.#activeTab()?.key === this.#tableOrderTabKey()
+    );
+  }
+
+  #selectTableMenu(id: string): void {
+    if (!this.isConnected) return;
+    if (id !== "" && !this.tableMenus.some((menu) => menu.id === id)) return;
+    this.tableSelectedCatalogueId = id;
   }
 
   #selectDiet(predicate: DietPredicate | null): void {
@@ -1180,7 +1193,7 @@ export class TillApp extends LitElement {
   #currentSaleLines(): SaleLine[] {
     return this.#store.lines.map((line) => {
       const saleLine: SaleLine = {
-        productId: line.product.id,
+        ...toWireProductIdentity(line.product),
         quantity: line.quantity,
         ...toWireLineExtras(line),
       };
@@ -1195,7 +1208,7 @@ export class TillApp extends LitElement {
    * Re-sync a PERSISTED (retrieved) working order to the server before a terminal fiscal step — pay
    * (`#onConfirmPayment`/`#onCollectCard`) or place (`#onPlaceOrder`) — but ONLY when the basket was
    * actually EDITED since it was retrieved. The one place every call site expresses that rule, so none
-   * re-implements it. Two guards, both load-bearing:
+   * re-implements it. Two guards enforce the rule:
    *  - `persisted`: a fresh walk-up (not persisted) has no server row to update — pay creates its order
    *    from the sent `lines`, place PARKS it first — so this is a no-op for it (each call site owns the
    *    fresh-basket branch; this helper only ever runs the update).
@@ -1479,10 +1492,8 @@ export class TillApp extends LitElement {
    * the server persisted it under), and refresh the list. Stays on the counter with the retrieved
    * basket ready to ring or pay.
    *
-   * DEACTIVATED-PRODUCT EDGE (spec §4): a line whose product no longer resolves — deactivated in the
-   * catalogue since the order was parked — is DROPPED from the rebuilt basket and a non-fatal
-   * `held.product_gone` is surfaced, rather than failing the whole retrieve. The operator gets the rest
-   * of the order back and is told something was removed.
+   * A contextual line uses the server's stored offer snapshot, so deactivation does not remove it.
+   * A legacy product-only line that can no longer resolve is dropped and surfaces `held.product_gone`.
    *
    * Each `quantity` arrives at numeric(_,3) scale ("2.000"); {@link displayQuantity} cleans an EACH
    * count's trailing zeros for display without touching re-pricing (a weight keeps its decimals).
@@ -1509,9 +1520,15 @@ export class TillApp extends LitElement {
       const lines: OrderLine[] = [];
       let droppedAProduct = false;
       for (const line of order.lines) {
-        const product = this.products.find((candidate) => candidate.id === line.productId);
+        const product =
+          line.product ??
+          this.products.find((candidate) =>
+            line.menuItemId === undefined
+              ? candidate.id === line.productId
+              : candidate.menuItemId === line.menuItemId,
+          );
         if (product === undefined) {
-          // The product was deactivated since the order was parked: drop the line, flag it, keep going.
+          // A legacy product-only line no longer resolves; contextual lines carry their own snapshot.
           droppedAProduct = true;
           continue;
         }
@@ -1791,12 +1808,31 @@ export class TillApp extends LitElement {
     const { tableId, hasOpenTab } = (event as CustomEvent<{ tableId: string; hasOpenTab: boolean }>)
       .detail;
     this.errorKey = undefined;
+    const table = this.tables.find((candidate) => candidate.id === tableId);
+    if (table?.zoneId !== null && table?.zoneId !== undefined) {
+      try {
+        const { menus, offers, defaultMenuId } = await this.api.listZoneOffers(table.zoneId);
+        this.tableProducts = offers.map(menuOfferToTillProduct);
+        this.tableMenus = menus;
+        this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
+      } catch {
+        this.tableProducts = [];
+        this.tableMenus = [];
+        this.tableSelectedCatalogueId = "";
+        this.errorKey = "table.error";
+        return;
+      }
+    } else {
+      this.tableProducts = [];
+      this.tableMenus = [];
+      this.tableSelectedCatalogueId = "";
+    }
     // `set-status` is keyed by TABLE id (Ruling FP-F), so remember it from the SAME event that resolves
     // the tab's working-order id — `#onSetStatus` reads {@link activeTableId}, the pay/round/serve paths
     // read {@link activeTabId}.
     this.activeTableId = tableId;
     if (hasOpenTab) {
-      this.activeTabId = this.tables.find((table) => table.id === tableId)?.tabId;
+      this.activeTabId = table?.tabId;
     } else {
       const { tabId } = await this.api.openTab(tableId);
       this.activeTabId = tabId;
@@ -2362,7 +2398,7 @@ export class TillApp extends LitElement {
       .store=${this.#store}
       .capabilities=${this.capabilities}
       .canConfigureTill=${this.canEdit}
-      .products=${this.products}
+      .products=${tab.key === this.#tableOrderTabKey() ? this.tableProducts : this.products}
       .heldOrders=${this.heldOrders}
       .stationQueue=${this.stationQueue}
       .defaultStationId=${this.#defaultStationId()}
@@ -2379,8 +2415,12 @@ export class TillApp extends LitElement {
       .bumpMode=${this.bumpMode}
       .deviceMode=${this.deviceMode}
       .initialDeviceStation=${this.initialDeviceStation}
-      .menus=${this.menus}
-      .selectedMenuId=${this.selectedCatalogueId}
+      .menus=${tab.key === this.#tableOrderTabKey() ? this.tableMenus : this.menus}
+      .selectedMenuId=${
+        tab.key === this.#tableOrderTabKey()
+          ? this.tableSelectedCatalogueId
+          : this.selectedCatalogueId
+      }
       .selectedDiet=${this.selectedDiet}
       .statuses=${this.statuses}
       .courses=${this.courses}
@@ -2412,9 +2452,9 @@ export class TillApp extends LitElement {
         return html`<till-table-order-screen
           slot="drill"
           .lines=${this.tabLines}
-          .products=${this.products}
-          .menus=${this.menus}
-          .selectedMenuId=${this.selectedCatalogueId}
+          .products=${this.tableProducts}
+          .menus=${this.tableMenus}
+          .selectedMenuId=${this.tableSelectedCatalogueId}
           .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}
           .courses=${this.courses}

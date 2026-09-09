@@ -2646,18 +2646,41 @@ export interface HeldOrderSummary {
   openedAt: string;
 }
 
-/** A retrieved order: enough to name it in the UI plus the inputs to rebuild its basket. */
+/** A retrieved order with the stored commercial snapshot needed to rebuild its basket. */
 export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
   /**
-   * `product_id` + `quantity` per line, in `line_no` order — the till re-adds each to the basket.
-   * `productId` is nullable since ordering modifiers (Task 2) made `working_order_lines.product_id`
-   * nullable for child modifier lines; the till re-pricing that reads it (child-line handling) lands
-   * in Tasks 4/6, so today every parked line still carries a product.
+   * Parent and child rows in `line_no` order. Contextual parent rows carry their stored offer and
+   * display snapshot so retrieval does not depend on the offer still being active. Product-only rows
+   * remain readable while older order paths are migrated to menu-item identity.
    */
-  lines: { productId: string | null; quantity: string }[];
+  lines: {
+    menuItemId?: string;
+    productId: string | null;
+    quantity: string;
+    product?: {
+      id: string;
+      productId: string;
+      menuItemId: string;
+      descriptions: Record<string, string>;
+      pricingUnit: "each" | "weight";
+      unitPrice: string;
+      vatClass: "general" | "reduced" | "super_reduced" | "zero";
+      category: string;
+      allergens: Readonly<
+        Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
+      > | null;
+      courseId: string | null;
+      catalogueId: string;
+      catalogueName: string;
+      optionGroups: readonly [];
+      diet: unknown;
+      dietDerivation: unknown;
+      dietOverride: unknown;
+    };
+  }[];
 }
 
 /**
@@ -2709,7 +2732,8 @@ export async function listHeldOrders(
 
 /**
  * Read an open parked order anywhere in the venue (venue-wide, till-reroute §3.6 — not node-scoped).
- * Return product ids and quantities in line-number order so the till can rebuild and re-price the basket.
+ * Return line snapshots in line-number order so the till can rebuild the agreed basket even when an
+ * offer has since been deactivated.
  * Scoped to the tenant, not the id alone: `withTenant` no longer isolates SELECTs since RLS was dropped
  * (#255), so the tenant predicate is this by-id read's own boundary — a foreign-tenant id reads as absent.
  */
@@ -2740,14 +2764,56 @@ export async function getHeldOrder(
       throw new AppError("working_order.not_found", { workingOrderId: id });
     }
 
-    const lines = await tx
+    const lineRows = await tx
       .select({
+        id: workingOrderLines.id,
         productId: workingOrderLines.productId,
         quantity: workingOrderLines.quantity,
+        descriptions: workingOrderLines.descriptions,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        courseId: workingOrderLines.courseId,
       })
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
+      .where(
+        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
+      )
       .orderBy(workingOrderLines.lineNo);
+
+    const contextByLine = new Map(
+      (await VENUE_SERVICE.listLineContexts(tx, cfg, id)).map((line) => [
+        line.workingOrderLineId,
+        line,
+      ]),
+    );
+    const lines = lineRows.map((line) => {
+      const context = contextByLine.get(line.id);
+      if (context === undefined || line.productId === null) {
+        return { productId: line.productId, quantity: line.quantity };
+      }
+      return {
+        menuItemId: context.menuItemId,
+        productId: line.productId,
+        quantity: line.quantity,
+        product: {
+          id: line.productId,
+          productId: line.productId,
+          menuItemId: context.menuItemId,
+          descriptions: line.descriptions,
+          pricingUnit: context.pricingUnit,
+          unitPrice: line.unitPriceGross,
+          vatClass: context.vatClass as "general" | "reduced" | "super_reduced" | "zero",
+          category: context.categoryName,
+          allergens: context.allergens,
+          courseId: line.courseId,
+          catalogueId: context.menuId,
+          catalogueName: context.menuName,
+          optionGroups: [] as const,
+          diet: context.diet,
+          dietDerivation: context.dietDerivation,
+          dietOverride: context.dietOverride,
+        },
+      };
+    });
 
     return { id: order.id, orderNumber: order.orderNumber, label: order.label, lines };
   });
@@ -2762,7 +2828,7 @@ export async function getHeldOrder(
  */
 export interface UpdateHeldOrderRequest {
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines`.
-  lines: ({ productId: string; quantity: string } & LineExtras)[];
+  lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
   label?: string;
 }
 
@@ -2808,9 +2874,17 @@ export async function updateHeldOrder(
     // open (checked above, held under the lock), so the line delete and the re-insert both satisfy
     // `require_open_parent`, and the re-numbered `line_no`s start from 1.
     // An edit only rewrites the persisted lines; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
-    const { lineRows } = await priceOrderLines(tx, cfg, id, req.lines);
+    const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+    const { lineRows, lineContexts } = await priceOrderLines(
+      tx,
+      cfg,
+      id,
+      req.lines,
+      context?.zoneId,
+    );
     await tx.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
     await tx.insert(workingOrderLines).values(lineRows);
+    await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts);
 
     // Runs over the `enforce_transition` trigger (OLD.status = 'open', so it passes). `req.label`
     // absent clears any prior label to NULL — the whole request is the new state, labels included.

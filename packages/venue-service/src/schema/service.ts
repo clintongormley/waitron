@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -274,6 +275,15 @@ export const workingLineContexts = pgTable(
     departmentId: uuid("department_id").notNull(),
     departmentName: text("department_name").notNull(),
     categoryName: text("category_name").notNull(),
+    pricingUnit: text("pricing_unit").notNull(),
+    vatClass: text("vat_class").notNull(),
+    allergens:
+      jsonb("allergens").$type<
+        Record<string, { presence: "contains" | "may_contain"; source?: string }>
+      >(),
+    diet: jsonb("diet").$type<unknown>(),
+    dietDerivation: jsonb("diet_derivation").$type<unknown>(),
+    dietOverride: jsonb("diet_override").$type<unknown>(),
   },
   (t) => [
     primaryKey({ columns: [t.tenantId, t.workingOrderLineId], name: "working_line_contexts_pk" }),
@@ -287,5 +297,10 @@ export const workingLineContexts = pgTable(
       foreignColumns: [menuItems.tenantId, menuItems.id],
       name: "working_line_contexts_menu_item_fk",
     }),
+    check("working_line_contexts_pricing_unit_ck", sql`${t.pricingUnit} in ('each','weight')`),
+    check(
+      "working_line_contexts_vat_class_ck",
+      sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
+    ),
   ],
 );

@@ -3,6 +3,7 @@ import {
   findOrderServiceContext,
   getOrderServiceContext,
   listZoneOffers,
+  listWorkingLineContexts,
   recordOrderServiceContext,
   recordWorkingLineContexts,
   resolvePreparationRoute,
@@ -14,6 +15,7 @@ import {
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
   findOrderContext: findOrderServiceContext,
+  listLineContexts: listWorkingLineContexts,
   resolveZoneContext,
   resolvePreparationRoute,
   listZoneOffers,
