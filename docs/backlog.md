@@ -111,8 +111,7 @@ steps take owner sign-off at land):
    web manifest, a name-constrained CA, the trust flow from the till's own origin, the wake lock —
    and the measurement that a name-constrained root actually constrains on Android and iOS), plus
    the register/device follow-ups (Track B item 7).
-3. **The printer agent process, then USB and IP printers end to end. LANDED on
-   `feat/print-agent-process`** — the db-free `@waitron/print-agent` wire client + poll loop and the
+3. **The printer agent process, then USB and IP printers end to end. LANDED #289** — the db-free `@waitron/print-agent` wire client + poll loop and the
    `apps/print-agent` container host, joining a venue over the shared `join_requests` table
    (device-join-and-accept-design.md §7). Standalone, containerised, follows the primary like the
    till. Printer failover in its on-prem form rides on it.
@@ -159,7 +158,7 @@ design-review section apply.
   order: **1.** the print agent process — spec
   [2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
   plan [2026-09-08-print-agent-process.md](superpowers/plans/2026-09-08-print-agent-process.md).
-  **LANDED on `feat/print-agent-process`:** the db-free `@waitron/print-agent` wire client + poll loop,
+  **LANDED #289:** the db-free `@waitron/print-agent` wire client + poll loop,
   the `apps/print-agent` container host + LAN setup page, the server knock/status/accept routes, the
   dashboard "print agents waiting to join" UI, and an e2e. Enrolment is join-and-accept over the
   **shared** `join_requests` table
@@ -168,6 +167,15 @@ design-review section apply.
   spec's §2.3 originally described. Retired: `print_agent_pairing_codes`,
   `generateAgentCode`/`enrolAgent`, `POST /print-api/agent/enrol`,
   `POST /management-api/print-agents/codes`, and the `agent.pairing_*` error codes.
+  *#289 whole-branch review — the Codex run-it seat caught two behavioural bugs reading missed and
+  both were fixed in the branch: the loop pulled from a wrong-ENVIRONMENT server (§5) — now gated on an
+  eligible in-env primary; and "restart to get a fresh code" was false — the verification number is now
+  persisted so a restart-while-pending still shows it (revised the in-memory-only choice).*
+  *#289 review deferred (non-blocking):* a shared `parseBearer`/selector-split helper (three ad-hoc
+  Bearer splits in `apps/server`); a `parseHttpOrigin` dedup between `apps/print-agent`'s `config.ts`
+  and `setup-page.ts`; the dashboard join-and-accept logic → a shared Lit `ReactiveController` IF a
+  third join surface appears; and two stale device-#287 comments to sweep (`enrol-rate-limit.test.ts:13`
+  "pairing-code DELETE", `apps/dashboard/src/api/client.ts:577` "redeemed its pairing code").
   **Foundation LANDED #282** (2026-09-08): `@waitron/print-agent`, a db-free package holding the
   ESC/POS transports moved out of `@waitron/printing`, the wire client's `probeNode`, and the
   follow-the-primary router — plus the `import-x/no-restricted-paths` zone that actually enforces the
@@ -192,8 +200,21 @@ design-review section apply.
   `export type … from` for one symbol, where a single `export type { PrintTransport }` would keep the
   doc comment attached in editor hover.
   **2.** the virtual PDF printer + a
-  `print_jobs` retention sweep (spec §7); **3.** un-pin IP printers from one agent (failover-printing
-  §4a); **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
+  `print_jobs` retention sweep (spec §7); **3.** **central printer provisioning redesign** (owner
+  decisions 2026-09-09; design next, spec to be written) — subsumes the bare "un-pin IP printers"
+  (failover-printing §4a). Decided: **(a) IP printers** are LOCATION-scoped with NO agent choice — any
+  agent at the location serves them (claim-lock hands each job to whichever grabs it first),
+  automatic assignment + failover; the reclaim race the lease comment flags is accepted at-least-once
+  for MVP, a per-claim token hardens it later. **(b) USB printers** are DISCOVERY-driven — the agent
+  reports the USB printers attached to its box, the operator registers a chosen SUBSET centrally
+  (discovery ≠ exposure) with a name/location, keyed on the printer's USB **serial** (survives
+  reboot/replug; the agent maps serial→`/dev/usb/lpN` at print time) rather than a raw device path.
+  **(c) Bluetooth printers** slot in LATER as a third local transport (MAC-keyed, plus a box-local
+  pairing step) — the discovery/registration framework is built transport-agnostic so BT drops in;
+  PARKED on whether a concrete BT printer is needed at launch (open question to the owner). This
+  changes the printers-screen create flow and adds an agent USB-discovery capability + a
+  discovered-devices store; the current manual create form (agent dropdown) is what it replaces.
+  **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
 - **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
   `packages/sync`, `packages/membership`, `packages/db`'s harness, `apps/server`'s promote / rejoin /
@@ -1015,7 +1036,7 @@ cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
 `docs/superpowers/{specs,plans}/2026-08-17-*` and the failover-printing design. **The agent PROCESS
 now EXISTS** — Track H item 1
 ([2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md))
-LANDED on `feat/print-agent-process`: the db-free `@waitron/print-agent` wire client + poll loop, the
+LANDED #289: the db-free `@waitron/print-agent` wire client + poll loop, the
 `apps/print-agent` container host + LAN setup page, the server knock/status/accept routes, the
 dashboard "print agents waiting to join" UI, and an e2e. Enrolment is join-and-accept over the
 **shared** `join_requests` table
