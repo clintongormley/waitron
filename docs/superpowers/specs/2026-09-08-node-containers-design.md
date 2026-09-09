@@ -140,13 +140,14 @@ report carries both readings of each):
   `BOX_HOSTNAME` by `scripts/deploy-image-env.test.ts`, which also loads the image's own declared
   environment under `WAITRON_ENV=production`.
 - **`WAITRON_BACKUP_DIR` is NOT set** (it was listed here, and must not be). `loadBackupConfig` is
-  fail-closed: a destination without `WAITRON_BACKUP_DATABASE_URL` and
-  `WAITRON_BACKUP_RECOVERY_KEY` throws — `server.config_invalid {
-  variable: "WAITRON_BACKUP_DATABASE_URL", reason: "required_with_backup_destination" }` fires
-  first — so baking the path alone would take a box down at its first boot into trading, right
-  after the wizard. The volume and its mount point stay; `compose.yml` passes the three together
-  from the box's `.env`. Consequence, recorded in `docs/backlog.md`: a prepared box takes no
-  backups until a human writes those three lines.
+  fail-closed: a destination without `WAITRON_BACKUP_RECOVERY_KEY` throws
+  `backup.recovery_key_missing`, so baking the path alone would take a box down at its first boot
+  into trading, right after the wizard. `WAITRON_BACKUP_DATABASE_URL` is now OPTIONAL — when it is
+  unset the box derives the backup read connection from its own owner connection (BR-1 Task 2,
+  2026-09-09), so it is no longer part of the throw. The volume and its mount point stay;
+  `compose.yml` passes the dir and recovery key (and the optional db url) from the box's `.env`.
+  Consequence, recorded in `docs/backlog.md`: a prepared box takes no backups until a human writes
+  those lines.
 
 Image size is not a goal of this spec; correctness of the boot is. A slimmer image is a later
 concern.

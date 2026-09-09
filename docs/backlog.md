@@ -95,9 +95,11 @@ steps take owner sign-off at land):
    (mirror → S3 → Drive; only `LocalFsBackend` exists).
    **A prepared box takes NO backups until a human edits `/opt/waitron/.env`.** The image
    deliberately does not set `WAITRON_BACKUP_DIR` (node-containers design §3.1): `loadBackupConfig`
-   is fail-closed, so a destination without `WAITRON_BACKUP_DATABASE_URL` and
-   `WAITRON_BACKUP_RECOVERY_KEY` throws at boot — baking the path alone would kill a box on its
-   first restart into trading, right after the wizard. So the trio is `.env`-only, and NOTHING in
+   is fail-closed, so a destination without `WAITRON_BACKUP_RECOVERY_KEY` throws at boot — baking
+   the path alone would kill a box on its first restart into trading, right after the wizard.
+   (`WAITRON_BACKUP_DATABASE_URL` is now OPTIONAL — the box derives the backup read connection from
+   its own owner connection when it is unset, BR-1 Task 2 2026-09-09.) So the dir and recovery key
+   are `.env`-only, and NOTHING in
    the plug-in-and-open-your-phone flow asks for it. That matters because the recorded posture is
    COLD RECOVERY — restore from backup plus a fresh chain is what gets a venue trading again — and a
    box with backups off has nothing to restore. The natural fix is the wizard: mint the recovery key

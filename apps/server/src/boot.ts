@@ -1764,7 +1764,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // is off/fenced; closed in `closePools` below, AFTER `stopWork` has aborted + awaited
   // `backupWorker`, so no tick can touch it mid-close.
   let backupDb: Database | undefined;
-  if (isSingletonPrimary && backupConfig !== undefined) {
+  if (isSingletonPrimary && backupConfig !== undefined && backupConfig.databaseUrl !== undefined) {
     let probeDb: Database | undefined;
     try {
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
@@ -1791,7 +1791,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         stagingDir: backupStagingDir,
         databaseUrl: backupConfig.databaseUrl,
         recoveryKey: backupConfig.recoveryKey,
-        intervalMs: backupConfig.intervalMs,
+        // BR-1 Task 2 bridge: the sweep still takes a fixed `intervalMs` at this point in the branch
+        // (Task 3 replaces it with `schedule`). An interval schedule passes its ms straight through;
+        // a wall-clock schedule (new this task, not yet reachable in a shipped config) falls back to
+        // a daily interval until the Task 3 scheduler consumes `schedule` directly.
+        intervalMs:
+          backupConfig.schedule.kind === "interval"
+            ? backupConfig.schedule.ms
+            : 24 * 60 * 60 * 1000,
         retain: backupConfig.retain,
         signal: backupController.signal,
         sleep: realSleep,
@@ -1809,6 +1816,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // `backupDb`. The probe's own errors are already handled by the `catch` above.
       if (probeDb !== undefined) await probeDb.close().catch(() => {});
     }
+  } else if (isSingletonPrimary && backupConfig !== undefined) {
+    // BR-1 Task 2 bridge: a destination + recovery key are configured but no
+    // `WAITRON_BACKUP_DATABASE_URL`. The supervisor that derives the read connection from the box's
+    // own owner connection lands in a later task; until then backup stays off rather than dumping
+    // over a guessed connection. This branch is removed when the supervisor is wired in.
+    log("warn", "backup.disabled_no_database_url", {});
   } else if (isSingletonPrimary) {
     log("info", "backup.disabled", {});
   }

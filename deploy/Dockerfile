@@ -95,9 +95,11 @@ COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
 
 # Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,
 # which is a read-only layer — every writable path is a volume. WAITRON_BACKUP_DIR is deliberately
-# NOT here: a destination without WAITRON_BACKUP_RECOVERY_KEY and WAITRON_BACKUP_DATABASE_URL is
-# fail-closed (backup-config.ts's loadBackupConfig throws), so setting the path alone would take a
-# provisioned box down at boot. compose.yml passes all three together from the box's .env.
+# NOT here: a destination without WAITRON_BACKUP_RECOVERY_KEY is fail-closed (backup-config.ts's
+# loadBackupConfig throws), so setting the path alone would take a provisioned box down at boot.
+# WAITRON_BACKUP_DATABASE_URL is OPTIONAL — the box derives the backup read connection from its own
+# owner connection when unset (BR-1 Task 2, 2026-09-09). compose.yml passes the dir and recovery key
+# (and the optional db url) from the box's .env.
 #
 # WAITRON_HTTP_HOST must be 0.0.0.0: config.ts defaults it to 127.0.0.1, which is right for a dev
 # machine and wrong for every container — the phone is the screen, so a server bound to the

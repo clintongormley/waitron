@@ -1621,6 +1621,10 @@ declare module "@waitron/shared" {
     "backup.recovery_key_too_short": { min: number };
     /** WAITRON_BACKUP_DESTINATIONS is not a valid JSON array of destination descriptors. */
     "backup.destinations_invalid": { reason: string };
+    /** The backup schedule env vars are inconsistent or malformed: an interval AND a wall-clock
+     * schedule both set, or a bad weekday token or `WAITRON_BACKUP_AT` time. `reason` is a short
+     * machine tag. */
+    "backup.schedule_invalid": { reason: string };
     /**
      * A module declared `backup.nonDbState` naming a `source` the composition root's resolver map
      * carries no entry for (BR-2 Task 4). Every source ref a module declares must be resolvable to an
