@@ -113,9 +113,9 @@ steps take owner sign-off at land):
    (KDS exempt; §8), and the HTTPS trust detector. The desktop spike rows passed; Android/iOS
    **on-device install + trust rows remain the owner's** (real phones on the shop WiFi). **Still open
    under this step:** the three displays actually walked end to end (the `ui-review.md` areas), and
-   the register/device follow-ups (Track B item 7). Owner decisions to confirm from #290: the seeded
-   300 s handheld inactivity default (till/KDS null), and whether the counter till also idle-logs-out
-   (today any non-KDS profile with a timeout does). The auto-logout label ships English-default
+   the register/device follow-ups (Track B item 7). Owner decisions from #290 now SETTLED (#293): the
+   seeded inactivity default is 300 s for BOTH handheld and counter till (KDS exempt), all editable;
+   the counter till idle-logs-out by default. The auto-logout label ships English-default
    ("Auto-logout after (minutes)") and i18n'ed; only the `es` translation wording is provisional.
 3. **The printer agent process, then USB and IP printers end to end. LANDED #289** — the db-free `@waitron/print-agent` wire client + poll loop and the
    `apps/print-agent` container host, joining a venue over the shared `join_requests` table
@@ -161,12 +161,13 @@ design-review section apply.
   AP-mode WiFi onboarding). Then: the from-scratch primary and first-run modes 1–2, images into
   Postgres, backup destinations (mirror → S3 → Drive). (The name-constrained CA + plain-HTTP landing
   page + the LAN-HTTPS spike's desktop half **LANDED #290** — Track 1's slice, but it touched these
-  Track P files; the phone rows are the owner's.) *Follow-ups from #290:* the recovery-mode landing
-  listener (a `// TODO(recovery)` breadcrumb in `boot.ts`); filtering `box-reach`'s advertised
-  reach-URLs/QR through the same permitted-subtree predicate the leaf SANs now use (a Tailscale/link-local-only
-  box could otherwise advertise an `https://<ip>/` its cert can't cover — not a regression); and the
-  parked IPv6-LAN-SAN / public-address self-sign residuals (the C1 leaf-SAN filter now drops out-of-set
-  addresses rather than invalidating the whole cert). Owed to Track H: the box's
+  Track P files; the phone rows are the owner's.) *Follow-ups from #290 now LANDED #293:* the
+  recovery-mode landing listener (the `// TODO(recovery)` breadcrumb is gone), and filtering
+  `box-reach`'s advertised reach-URLs/QR through the same permitted-subtree predicate the leaf SANs
+  use (a Tailscale/link-local-only box no longer advertises an `https://<ip>/` its cert can't cover).
+  *Still parked:* the IPv6-LAN-SAN / public-address self-sign residuals (the #290 leaf-SAN filter
+  drops out-of-set addresses rather than invalidating the whole cert, so nothing is broken today).
+  Owed to Track H: the box's
   compose runs the print-agent container beside the server with `WAITRON_SERVER_URL` set to the
   server's service address, so the same-box agent joins with nothing typed (print-agent spec §2.2).
 - **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, `packages/print-agent` +
