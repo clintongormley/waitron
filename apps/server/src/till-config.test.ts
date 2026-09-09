@@ -70,7 +70,7 @@ describe("loadTillConfig", () => {
   it("leaves localeOverride undefined when WAITRON_TILL_LOCALE is unset (while locale defaults to es-ES)", () => {
     // The venue-default UI locale (`readVenueLocale`, boot.ts) reads the RAW env as its override, NOT
     // the defaulted `locale` — so an unset `WAITRON_TILL_LOCALE` must leave `localeOverride` undefined,
-    // letting `resolveVenueLocale` fall through to geography, even as the FISCAL `locale` still
+    // letting the country-pack resolver fall through to geography, even as the FISCAL `locale` still
     // defaults to `es-ES` beside it.
     const config = loadTillConfig(base);
     expect(config.localeOverride).toBeUndefined();

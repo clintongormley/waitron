@@ -123,7 +123,7 @@ function demoBody(): Record<string, unknown> {
     mode: "demo",
     venue: {
       country: "ES",
-      taxId: "50000000K",
+      taxId: "50000000R",
       legalName: "Waitron Dev SL",
       location: {
         name: "Sala principal",
@@ -325,6 +325,97 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     await tick();
     // Normalized to lowercase/trimmed, and not hashed — the email is not a credential.
     expect(provisionRequests[0].venue.admin.email).toBe("owner@x.com");
+  });
+
+  it("normalizes country fields and derives fiscal territory and time zone before provisioning", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    const venue = asRec(body.venue);
+    const location = asRec(venue.location);
+    venue.taxId = " b 1234567 4 ";
+    location.fiscalTerritory = "GB-vat";
+    location.timeZone = "Atlantic/Canary";
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].venue).toMatchObject({
+      country: "ES",
+      taxId: "B12345674",
+      location: {
+        postalCode: "28013",
+        province: "Madrid",
+        fiscalTerritory: "ES-common",
+        timeZone: "Europe/Madrid",
+      },
+    });
+  });
+
+  it("provisions the installed country-wide UK pack without applying Spanish validators", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    const venue = asRec(body.venue);
+    const location = asRec(venue.location);
+    venue.country = "gb";
+    venue.taxId = "GB 123";
+    location.postalCode = "SW1A 1AA";
+    location.province = "England";
+    location.invoiceLocales = ["en-GB"];
+
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0]!.venue).toMatchObject({
+      country: "GB",
+      taxId: "GB 123",
+      location: {
+        fiscalTerritory: "GB-vat",
+        postalCode: "SW1A 1AA",
+        province: "England",
+        timeZone: "Europe/London",
+      },
+    });
+  });
+
+  it.each<[string, string, (body: Record<string, unknown>) => void]>([
+    ["a bad NIF checksum", "taxId", (body) => void (asRec(body.venue).taxId = "B12345678")],
+    [
+      "an invalid postcode",
+      "location.postalCode",
+      (body) => void (asRec(asRec(body.venue).location).postalCode = "53000"),
+    ],
+    [
+      "a postcode/province mismatch",
+      "location.province",
+      (body) => void (asRec(asRec(body.venue).location).province = "Barcelona"),
+    ],
+    [
+      "an unsupported fiscal jurisdiction",
+      "location.fiscalTerritory",
+      (body) => {
+        const location = asRec(asRec(body.venue).location);
+        location.postalCode = "35001";
+        location.province = "Las Palmas";
+      },
+    ],
+  ])("refuses %s at the setup boundary", async (_label, field, mutate) => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    mutate(body);
+
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toEqual({ code: "setup.request_invalid", params: { field } });
+    expect(provision).not.toHaveBeenCalled();
   });
 
   // A present-but-malformed email fails identity's `normalizeAndValidateEmail` at the write boundary,

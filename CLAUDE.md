@@ -345,6 +345,13 @@ unfiltered `main` run, not a wrong hook.
   not be added until SP-3 pulled it back behind the slot — after which the no-op regime was a package
   with an empty runtime duty and `apps/server` imported no regime at all (`fiscal-none`, this branch;
   design `docs/superpowers/specs/2026-09-06-module-fiscal-none-design.md`, SP-3).
+- **A country pack is a browser-safe preset over modules, not a module.** Generic contracts live in
+  `@waitron/country`; each country owns its validation and geography in a separate package; and
+  `@waitron/country-packs` is the only package that names every installed country implementation.
+  Packs name module and fiscal contribution ids as strings and never carry an external-provider
+  credential. Setup derives geography-dependent values in the browser and repeats the derivation at
+  the server boundary. Guarded by `scripts/module-seams.test.ts`; design:
+  `docs/superpowers/specs/2026-09-09-country-packs-and-address-entry-design.md`.
 - **No new table enters the core migration set without a stated reason in the commit.** A
   `tenant_id`-bearing domain table belongs to its module's own migration set (`migrations.from`), where
   its grants travel with it; a core-set addition is a deliberate exception and says why it is

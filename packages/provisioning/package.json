@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@waitron/composition": "workspace:*",
+    "@waitron/country-packs": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/identity": "workspace:*",

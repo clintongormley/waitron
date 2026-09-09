@@ -592,19 +592,30 @@ unchanged, so no new H2 receipt
    - **CI isolation LANDED #291:** Bookings has a dedicated job, ordered Node/browser projects,
      serialized browser files and an outer deadline. Remaining investigation is under
      *Debt → CI / test infra*.
-4. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** With one tenant per database and a
+4. **Country packs and address validation — IN FLIGHT (`address-autocomplete`).** The browser-safe
+   `@waitron/country` contract, Spain/UK implementations and `@waitron/country-packs` registry replace
+   the country facts previously split between shared locale code, provisioning and setup. Spain owns
+   checksum-valid NIFs, phone/postcode normalization, all province codes, regional locale/time-zone
+   defaults and explicit fiscal jurisdictions. Setup derives province, fiscal territory and time zone
+   in the browser; the server repeats the checks before provisioning. Design/plan:
+   `superpowers/{specs,plans}/2026-09-09-country-packs-and-address-entry*`.
+   - **Follow-ons:** build the authenticated Waitron-hosted address relay and its first provider
+     adapter (manual entry remains the offline path); apply phone normalization to bookings; add a
+     supplier country/identifier scheme before validating purchasing tax IDs; implement the currently
+     refused foral, Canary, Ceuta and Melilla fiscal jurisdictions.
+5. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron runs is a small control
    plane: accounts (a customer of ours — one customer may own several taxpayers), subscriptions,
    instances (which box/VM serves which tenant, its version; region Spain), a WireGuard keypair +
    endpoint per box and the box's public names, version rollout per tenant. Still open from the relay
    decision (§3): one name or two for LAN-vs-remote reach. Docs-only until designed.
-5. **Reconsider the backup container against off-the-shelf** (brainstorm, not a mandate): `WBA1` +
+6. **Reconsider the backup container against off-the-shelf** (brainstorm, not a mandate): `WBA1` +
    `artifact-cipher.ts` (whole-dump in memory, restorable only by Waitron code — `pg_dump | age`,
    tar).
-6. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
+7. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
    (`recordSale` / `recordCorrection` / `recordSubstitution`; also under *Debt → Fiscal*): needs the
    huella-invariance re-run across all three.
-7. **Tax-model system — BACK BURNER (no non-Spanish venue in scope; owner 2026-09-07).** Today the `tax` slot in provisioning's territory→module
+8. **Tax-model system — BACK BURNER (no non-Spanish venue in scope; owner 2026-09-07).** Today the `tax` slot in provisioning's territory→module
    registry (`ES-common → {filing:"verifactu", tax:"vat"}`) is an INERT label stamped into
    `nodes.tax_module` and copied at adoption — nothing branches on it. Intended shape: the tax MODEL
    (VAT / GST — calculation, receipt layout, inclusive-vs-exclusive pricing) is GENERIC and lives in

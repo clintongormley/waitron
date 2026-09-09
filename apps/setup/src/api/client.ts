@@ -48,14 +48,14 @@ export interface AdminDraft {
 /**
  * The venue's location + fiscal-point details. Field names match the server's `parseVenue` /
  * `VenueRequest` exactly (`apps/server/src/setup-api.ts`,
- * `packages/provisioning/src/venue-plan.ts`). `fiscalTerritory` is `"ES-common"` — the only regime
- * implemented today. `invoiceLocales` is a non-empty `string[]` (`planVenue` rejects 0 or more than
- * 2). `addressLine2` is the one NULLABLE field (`asNullableString`); the rest are required strings.
- * `dayCutover` is `"HH:MM"` or `"HH:MM:SS"`.
+ * `packages/provisioning/src/venue-plan.ts`). `fiscalTerritory` is the country pack's derived,
+ * persisted jurisdiction ID. `invoiceLocales` is a non-empty `string[]` (`planVenue` rejects 0 or
+ * more than 2). `addressLine2` is the one NULLABLE field (`asNullableString`); the rest are required
+ * strings. `dayCutover` is `"HH:MM"` or `"HH:MM:SS"`.
  */
 export interface LocationDraft {
   name: string;
-  fiscalTerritory: "ES-common";
+  fiscalTerritory: string;
   invoiceLocales: string[];
   operationDescription: string;
   addressLine1: string;

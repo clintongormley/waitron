@@ -40,6 +40,8 @@
     "@waitron/catalogue": "workspace:*",
     "@waitron/composition": "workspace:*",
     "@waitron/core": "workspace:*",
+    "@waitron/country": "workspace:*",
+    "@waitron/country-packs": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",

@@ -7,7 +7,6 @@ import {
   BAND_RANK,
   classifyBand,
   compareDecimal,
-  COUNTRY_DEFAULT_LOCALE,
   decimal,
   divideDecimal,
   FALLBACK_LOCALE,
@@ -22,9 +21,7 @@ import {
   MONEY_SCALE,
   multiplyDecimal,
   negateDecimal,
-  PROVINCE_DEFAULT_LOCALE,
   resolveActiveLocale,
-  resolveVenueLocale,
   saleId,
   saleLineId,
   seriesId,
@@ -96,13 +93,10 @@ describe("package public surface (./index.js)", () => {
   it("re-exports every locale binding", () => {
     expect(isSupportedLocale("es-ES")).toBe(true);
     expect(assertSupportedLocale("en-GB")).toBe("en-GB");
-    expect(resolveVenueLocale({ country: "ES" })).toBe("es-ES");
     expect(resolveActiveLocale("en-GB", "es-ES")).toBe("en-GB");
     expect(SUPPORTED_LOCALES).toBeDefined();
     expect([...SUPPORTED_LOCALE_CODES]).toEqual(["es-ES", "en-GB"]);
     expect(FALLBACK_LOCALE).toBe("en-GB");
-    expect(COUNTRY_DEFAULT_LOCALE).toEqual({ ES: "es-ES" });
-    expect(PROVINCE_DEFAULT_LOCALE).toEqual({});
   });
 
   it("re-exports the timing band classifier", () => {

@@ -3,6 +3,12 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "@waitron/composition";
+import {
+  findAdministrativeArea,
+  findAdministrativeAreaByPostalCode,
+  resolveFiscalJurisdiction,
+} from "@waitron/country";
+import { getCountryPack } from "@waitron/country-packs";
 import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
@@ -212,34 +218,71 @@ function asStringArray(value: unknown, field: string): string[] {
 }
 
 /**
- * Validate the request's venue fields (presence/shape) and HASH the admin PIN + password at this
+ * Validate the request's venue fields and HASH the admin PIN + password at this
  * boundary into a `VenueRequest` — the plaintext secrets are read, hashed and discarded here, so they
- * never enter the plan or any action (venue-plan.ts's admin note). A missing/mistyped field throws
- * `setup.request_invalid` naming the field, before any hashing or provisioning. Domain rules the plan
- * owns (locale cardinality, series-code equality, territory) are left to `planVenue` inside
- * `provisionVenue`. This screen is structural (presence/shape) for every field EXCEPT one: the admin
- * email is additionally FORMAT-validated — identity's `normalizeAndValidateEmail` normalizes it and
- * validates it, throwing `person.email_invalid` on a present-but-malformed address (see the `email:` field below).
+ * never enter the plan or any action. The country pack repeats the browser's tax-id, postcode,
+ * province and jurisdiction checks here and derives the persisted fiscal territory and time zone.
+ * A missing, mistyped or country-invalid field throws `setup.request_invalid` naming the field,
+ * before any provisioning. The plan retains its country/territory and other domain guards as a
+ * second boundary for non-setup callers.
  */
 function parseVenue(venueRaw: unknown): VenueRequest {
   const v = asObject(venueRaw, "venue");
   const loc = asObject(v.location, "location");
   const admin = asObject(v.admin, "admin");
+  const countryInput = asString(v.country, "country");
+  const taxIdInput = asString(v.taxId, "taxId");
+  asString(loc.fiscalTerritory, "location.fiscalTerritory");
+  const invoiceLocales = asStringArray(loc.invoiceLocales, "location.invoiceLocales");
+  const postalCodeInput = asString(loc.postalCode, "location.postalCode");
+  const provinceInput = asString(loc.province, "location.province");
+  asString(loc.timeZone, "location.timeZone");
+
+  const country = getCountryPack(countryInput);
+  if (country === undefined) invalidRequest("country");
+
+  const taxId = country.taxIdentifier?.validate(taxIdInput);
+  if (taxId?.valid === false) invalidRequest("taxId");
+  const postalCode = country.postalCode?.validate(postalCodeInput);
+  if (postalCode?.valid === false) invalidRequest("location.postalCode");
+
+  const area = findAdministrativeArea(country, provinceInput);
+  if (country.administrativeAreas.length > 0 && area === undefined) {
+    invalidRequest("location.province");
+  }
+  if (country.administrativeAreas.length > 0) {
+    const postalArea =
+      postalCode?.valid === true
+        ? findAdministrativeAreaByPostalCode(country, postalCode.normalized)
+        : undefined;
+    if (postalArea === undefined || postalArea.code !== area?.code) {
+      invalidRequest("location.province");
+    }
+  }
+
+  const jurisdiction = resolveFiscalJurisdiction(country, area?.code);
+  if (jurisdiction === undefined || !jurisdiction.supported || jurisdiction.modules === undefined) {
+    invalidRequest("location.fiscalTerritory");
+  }
+  if (invoiceLocales.some((locale) => !country.invoiceLocales.includes(locale))) {
+    invalidRequest("location.invoiceLocales");
+  }
+
   return {
-    country: asString(v.country, "country"),
-    taxId: asString(v.taxId, "taxId"),
+    country: country.countryCode,
+    taxId: taxId?.valid === true ? taxId.normalized : taxIdInput,
     legalName: asString(v.legalName, "legalName"),
     location: {
       name: asString(loc.name, "location.name"),
-      fiscalTerritory: asString(loc.fiscalTerritory, "location.fiscalTerritory"),
-      invoiceLocales: asStringArray(loc.invoiceLocales, "location.invoiceLocales"),
+      fiscalTerritory: jurisdiction.id,
+      invoiceLocales,
       operationDescription: asString(loc.operationDescription, "location.operationDescription"),
       addressLine1: asString(loc.addressLine1, "location.addressLine1"),
       addressLine2: asNullableString(loc.addressLine2, "location.addressLine2"),
-      postalCode: asString(loc.postalCode, "location.postalCode"),
+      postalCode: postalCode?.valid === true ? postalCode.normalized : postalCodeInput,
       city: asString(loc.city, "location.city"),
-      province: asString(loc.province, "location.province"),
-      timeZone: asString(loc.timeZone, "location.timeZone"),
+      province: area?.name ?? provinceInput,
+      timeZone: area?.timeZone ?? country.defaultTimeZone,
       dayCutover: asString(loc.dayCutover, "location.dayCutover"),
     },
     tillName: asString(v.tillName, "tillName"),

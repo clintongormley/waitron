@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
+import { COUNTRY_PACKS } from "../packages/country-packs/src/index.js";
 import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioning/src/index.js";
 
 /**
@@ -40,6 +41,7 @@ const DEFERRED_RUNTIME_PASS = new Map<string, string>([]);
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const REGIME_PACKAGES = ["@waitron/fiscal-verifactu", "@waitron/verifactu"];
+const COUNTRY_IMPLEMENTATIONS = ["@waitron/country-es", "@waitron/country-gb"];
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -161,5 +163,36 @@ describe("the territory registry and the fiscal slot agree", () => {
     const ids = new Set(ALL_MODULES.flatMap((m) => (m.fiscal === undefined ? [] : [m.fiscal.id])));
     for (const t of FISCAL_TERRITORIES)
       expect(ids.has(resolveFiscalModules(t).filing), t).toBe(true);
+  });
+
+  it("every country pack's default module id names an enabled module", () => {
+    const names = new Set(ALL_MODULES.map(({ name }) => name));
+    for (const pack of COUNTRY_PACKS) {
+      for (const moduleId of pack.moduleIds)
+        expect(names.has(moduleId), pack.countryCode).toBe(true);
+    }
+  });
+});
+
+describe("country implementations are named only by the browser-safe country registry", () => {
+  const files = [join(REPO_ROOT, "apps"), join(REPO_ROOT, "packages")].flatMap(sourceFiles);
+  const registry = "packages/country-packs/src/registry.ts";
+
+  it("scans production sources and finds the registry's implementation imports", () => {
+    expect(files.length).toBeGreaterThan(0);
+    expect(imports(join(REPO_ROOT, registry), COUNTRY_IMPLEMENTATIONS)).toEqual(
+      COUNTRY_IMPLEMENTATIONS,
+    );
+  });
+
+  it.each(files.map((file) => [relative(REPO_ROOT, file), file]))("%s", (rel, file) => {
+    if (
+      rel === registry ||
+      rel.startsWith("packages/country-es/") ||
+      rel.startsWith("packages/country-gb/")
+    ) {
+      return;
+    }
+    expect(imports(file, COUNTRY_IMPLEMENTATIONS)).toEqual([]);
   });
 });

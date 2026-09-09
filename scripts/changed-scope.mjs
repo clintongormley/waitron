@@ -276,6 +276,8 @@ export const OWN_SHARD_PACKAGES = [
  * test package is selected exactly once. Add each new package to one bin or its own shard.
  */
 export const LIGHT_A_PACKAGES = [
+  "@waitron/country",
+  "@waitron/country-es",
   "@waitron/core",
   "@waitron/payments",
   "@waitron/provisioning",
@@ -293,6 +295,8 @@ export const LIGHT_A_PACKAGES = [
 ];
 
 export const LIGHT_B_PACKAGES = [
+  "@waitron/country-gb",
+  "@waitron/country-packs",
   "@waitron/dashboard-kit",
   "@waitron/payments-stripe",
   "@waitron/identity",

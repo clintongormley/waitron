@@ -103,16 +103,18 @@ describe("configuration", () => {
       "ui",
       "dashboard-kit",
       "dashboard-modules",
+      "country",
+      "country-packs",
     ]);
   });
 
-  it("does not scan the Spain-specific non-owner packages", () => {
+  it("does not scan country-specific and other Spanish non-owner packages", () => {
     // verifactu (the AEAT wire library) and reporting (the modelo-303 form) are Spanish by nature
     // and unscanned by OMISSION — neither a generic package nor a vocabulary owner. Pinned so a
     // future edit cannot silently re-add one to the generic set, and so "unscanned" is never a
     // silent gap: a generic English package (fiscal-none) belongs in GENERIC_PACKAGES, not here.
-    for (const spanish of ["verifactu", "reporting"]) {
-      expect(GENERIC_PACKAGES).not.toContain(spanish);
+    for (const countrySpecific of ["country-es", "country-gb", "verifactu", "reporting"]) {
+      expect(GENERIC_PACKAGES).not.toContain(countrySpecific);
     }
   });
 
