@@ -1,7 +1,7 @@
 import "./errors.js";
 import { randomBytes, randomInt } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
-import { type Transaction, devices, joinRequests } from "@waitron/db";
+import { type Transaction, devices, joinRequests, printAgents } from "@waitron/db";
 import { hashSecret, verifySecret } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { FormFactor } from "@waitron/layouts";
@@ -383,6 +383,95 @@ export async function acceptDeviceJoinRequest(
   });
 
   return { ok: true, deviceId: row.id, name: row.label, formFactor: binding.formFactor };
+}
+
+/** What {@link acceptPrintAgentJoinRequest} hands back. A wrong choice is a RESULT, never a throw —
+ * the same reason {@link acceptDeviceJoinRequest} returns: an AppError would roll the consuming delete
+ * back into existence and turn a wrong tap into an unlimited retry (design §1.2). */
+export type AgentAcceptResult =
+  { ok: true; agentId: string; name: string } | { ok: false; reason: "mismatch" };
+
+/**
+ * Approve a print agent's ask-to-join. The mirror of {@link acceptDeviceJoinRequest}, minus the device
+ * binding: consume the request with a locking `DELETE … RETURNING` whose `kind = "print_agent"`
+ * predicate rides along (a device row, another tenant's, or an already-decided one all fold into
+ * `join_request.not_found`), then — only on a matching choice — insert the real `print_agents` row with
+ * the request's own id and token hash, so the bearer the agent has held since join keeps working.
+ * ONE transaction: the caller's `withTenant` covers the delete and the insert together.
+ */
+export async function acceptPrintAgentJoinRequest(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  input: { choice: string },
+): Promise<AgentAcceptResult> {
+  await sweepLapsed(tx, cfg);
+  const [row] = await tx
+    .delete(joinRequests)
+    .where(
+      and(
+        eq(joinRequests.tenantId, cfg.tenantId),
+        eq(joinRequests.id, id),
+        eq(joinRequests.kind, "print_agent"),
+      ),
+    )
+    .returning({
+      id: joinRequests.id,
+      label: joinRequests.label,
+      verificationNumber: joinRequests.verificationNumber,
+      tokenHash: joinRequests.tokenHash,
+      locationId: joinRequests.locationId,
+    });
+  if (row === undefined) throw new AppError("join_request.not_found", {});
+  if (input.choice !== row.verificationNumber) {
+    // Already consumed by the delete above — a wrong tap is single-use, same as a device accept.
+    return { ok: false, reason: "mismatch" };
+  }
+
+  await tx.insert(printAgents).values({
+    id: row.id,
+    tenantId: cfg.tenantId,
+    locationId: row.locationId,
+    name: row.label,
+    tokenHash: row.tokenHash,
+    active: true,
+  });
+  return { ok: true, agentId: row.id, name: row.label };
+}
+
+/**
+ * What a print agent polling with `${joinId}.${secret}` should be told. The mirror of
+ * {@link readJoinStatus}, resolving the approved fallback against `print_agents` rather than `devices`
+ * — the id is carried through accept, so one selector answers both questions. Denied, lapsed and
+ * never-existed all fold into `not_approved`; the agent's recovery (restart → re-join) is identical in
+ * every case. Both by-id reads carry their own tenant predicate (CLAUDE.md §3).
+ */
+export async function readAgentJoinStatus(
+  tx: Transaction,
+  cfg: TillConfig,
+  joinId: string,
+  token: string,
+): Promise<"pending" | "approved" | "not_approved"> {
+  await sweepLapsed(tx, cfg);
+  const [pending] = await tx
+    .select({ tokenHash: joinRequests.tokenHash })
+    .from(joinRequests)
+    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, joinId)));
+  if (pending !== undefined) {
+    return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
+  }
+  const [accepted] = await tx
+    .select({ tokenHash: printAgents.tokenHash })
+    .from(printAgents)
+    .where(
+      and(
+        eq(printAgents.tenantId, cfg.tenantId),
+        eq(printAgents.id, joinId),
+        eq(printAgents.active, true),
+      ),
+    );
+  if (accepted !== undefined && verifySecret(token, accepted.tokenHash)) return "approved";
+  return "not_approved";
 }
 
 /** Refuse a request. Deleting the row is the whole of it — there is no denied state to carry, because

@@ -1,19 +1,30 @@
-import { sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   JOIN_TTL_MS,
   PENDING_CAP,
   acceptDeviceJoinRequest,
+  acceptPrintAgentJoinRequest,
   challengeFor,
   createJoinRequest,
   denyJoinRequest,
   listPendingJoinRequests,
+  readAgentJoinStatus,
   readJoinStatus,
   type AcceptResult,
 } from "./join-requests.js";
 // `useTemplateDb` is NOT on the `@waitron/db` barrel — the exports map is enumerated (CLAUDE.md §3),
 // and the sibling suite imports it from the subpath (`device-api.pg.test.ts:5-6`).
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import {
+  asAppUser,
+  joinRequests,
+  printAgents,
+  withTenant,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import { verifySecret } from "@waitron/identity";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { TillConfig } from "./till-config.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -37,6 +48,26 @@ async function seedProfile(
     values (${cfg.tenantId}, ${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
     returning id`);
   return rows[0]!.id;
+}
+
+// One tenant-scoped transaction run as the real `app_user` role — the shape every verb here is
+// exercised through, so the `join_requests`/`print_agents` grants (not superuser) are what answers.
+function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return fn(tx);
+  });
+}
+
+// The `code` of the AppError `fn` throws, or undefined if it does not throw — lets a test assert the
+// domain code without a try/catch inside every case.
+async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
+  try {
+    await fn();
+    return undefined;
+  } catch (e) {
+    return (e as { code?: string }).code;
+  }
 }
 
 describe("createJoinRequest", () => {
@@ -816,5 +847,143 @@ describe("denyJoinRequest", () => {
       expect(await denyJoinRequest(tx, venue.cfg, madeDevice.joinId)).toBe("device");
       expect(await denyJoinRequest(tx, venue.cfg, madeAgent.joinId)).toBe("print_agent");
     });
+  });
+});
+
+describe("acceptPrintAgentJoinRequest", () => {
+  it("a right choice inserts a print_agents row (id = joinId, name = label, token carried) and deletes the request", async () => {
+    const cfg = (await setupVenue(suite.admin)).cfg;
+    const made = await asApp(cfg, (tx) =>
+      createJoinRequest(tx, cfg, { kind: "print_agent", label: "kitchen-pi" }),
+    );
+    const result = await asApp(cfg, (tx) =>
+      acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
+    );
+    expect(result).toEqual({ ok: true, agentId: made.joinId, name: "kitchen-pi" });
+
+    const [agent] = await asApp(cfg, (tx) =>
+      tx
+        .select()
+        .from(printAgents)
+        .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.id, made.joinId))),
+    );
+    expect(agent).toMatchObject({ id: made.joinId, name: "kitchen-pi", active: true });
+    // At the VERB layer `token` IS the bare secret (createJoinRequest returns it un-composed);
+    // print_agents.token_hash was copied from the request, so verifySecret(secret, hash) holds. The
+    // route composes `${joinId}.${secret}` — that composition is Task 6's concern, not this one.
+    expect(verifySecret(made.token, agent!.tokenHash)).toBe(true);
+
+    const gone = await asApp(cfg, (tx) =>
+      tx
+        .select()
+        .from(joinRequests)
+        .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, made.joinId))),
+    );
+    expect(gone).toHaveLength(0);
+  });
+
+  it("a wrong choice returns mismatch, consumes the request (single-use), inserts no agent", async () => {
+    const cfg = (await setupVenue(suite.admin)).cfg;
+    const made = await asApp(cfg, (tx) =>
+      createJoinRequest(tx, cfg, { kind: "print_agent", label: "x" }),
+    );
+    const wrong = String((Number(made.verificationNumber) + 1) % 100).padStart(2, "0");
+    // A SEPARATE transaction from the retry below: a wrong choice must COMMIT the consuming delete
+    // (an AppError would roll it back into an unlimited retry — accept's header), so the single-use
+    // property is only observable across transaction boundaries.
+    expect(
+      await asApp(cfg, (tx) =>
+        acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: wrong }),
+      ),
+    ).toEqual({ ok: false, reason: "mismatch" });
+    const agents = await asApp(cfg, (tx) =>
+      tx
+        .select()
+        .from(printAgents)
+        .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.id, made.joinId))),
+    );
+    expect(agents).toHaveLength(0);
+    // consumed: a retry with the RIGHT choice is now not_found.
+    expect(
+      await codeOf(() =>
+        asApp(cfg, (tx) =>
+          acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
+        ),
+      ),
+    ).toBe("join_request.not_found");
+  });
+
+  it("refuses a device request 404 (kind predicate rides the delete)", async () => {
+    const cfg = (await setupVenue(suite.admin)).cfg;
+    const made = await asApp(cfg, (tx) =>
+      createJoinRequest(tx, cfg, { kind: "device", label: "d" }),
+    );
+    expect(
+      await codeOf(() =>
+        asApp(cfg, (tx) => acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: "00" })),
+      ),
+    ).toBe("join_request.not_found");
+  });
+
+  it("tenant-scoped: tenant B cannot accept tenant A's agent request", async () => {
+    const cfgA = (await setupVenue(suite.admin)).cfg;
+    const cfgB = (await setupVenue(suite.admin)).cfg;
+    const madeA = await asApp(cfgA, (tx) =>
+      createJoinRequest(tx, cfgA, { kind: "print_agent", label: "a" }),
+    );
+    expect(
+      await codeOf(() =>
+        asApp(cfgB, (tx) =>
+          acceptPrintAgentJoinRequest(tx, cfgB, madeA.joinId, {
+            choice: madeA.verificationNumber,
+          }),
+        ),
+      ),
+    ).toBe("join_request.not_found");
+  });
+});
+
+describe("readAgentJoinStatus", () => {
+  it("pending before accept, approved after, and not_approved for a wrong token or unknown id", async () => {
+    const cfg = (await setupVenue(suite.admin)).cfg;
+    // `token` is the bare secret at the verb layer (see acceptPrintAgentJoinRequest's test); the route
+    // splits the Bearer and hands readAgentJoinStatus the secret, so pass `token` directly here.
+    const made = await asApp(cfg, (tx) =>
+      createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),
+    );
+    expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, made.joinId, made.token))).toBe(
+      "pending",
+    );
+    expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, made.joinId, "wrong"))).toBe(
+      "not_approved",
+    );
+    await asApp(cfg, (tx) =>
+      acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
+    );
+    expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, made.joinId, made.token))).toBe(
+      "approved",
+    );
+    expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, randomUUID(), made.token))).toBe(
+      "not_approved",
+    );
+  });
+
+  it("tenant-scoped: tenant B cannot read tenant A's pending or approved agent status", async () => {
+    // A globally-unique join id is not the isolation boundary (CLAUDE.md §3): B's session, holding A's
+    // id and A's token, must read not_approved for BOTH the pending and the approved lookups.
+    const cfgA = (await setupVenue(suite.admin)).cfg;
+    const cfgB = (await setupVenue(suite.admin)).cfg;
+    const madeA = await asApp(cfgA, (tx) =>
+      createJoinRequest(tx, cfgA, { kind: "print_agent", label: "a" }),
+    );
+    expect(
+      await asApp(cfgB, (tx) => readAgentJoinStatus(tx, cfgB, madeA.joinId, madeA.token)),
+    ).toBe("not_approved");
+    await asApp(cfgA, (tx) =>
+      acceptPrintAgentJoinRequest(tx, cfgA, madeA.joinId, { choice: madeA.verificationNumber }),
+    );
+    expect(
+      await asApp(cfgB, (tx) => readAgentJoinStatus(tx, cfgB, madeA.joinId, madeA.token)),
+    ).toBe("not_approved");
   });
 });
