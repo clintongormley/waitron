@@ -84,6 +84,43 @@ function ipv4Mask(prefix: number): number[] {
   return [(bits >>> 24) & 0xff, (bits >>> 16) & 0xff, (bits >>> 8) & 0xff, bits & 0xff];
 }
 
+/** A dotted-quad string → its unsigned 32-bit value, or `undefined` when it is not a well-formed IPv4
+ * address (an IPv6 literal, a hostname, an out-of-range or malformed octet). */
+function ipv4ToInt(ip: string): number | undefined {
+  const octets = ip.split(".");
+  if (octets.length !== 4) return undefined;
+  let value = 0;
+  for (const octet of octets) {
+    if (!/^\d{1,3}$/.test(octet)) return undefined;
+    const n = Number(octet);
+    if (n > 255) return undefined;
+    value = value * 256 + n;
+  }
+  return value >>> 0;
+}
+
+/**
+ * Whether `ip` sits inside one of the CA's permitted IPv4 subtrees ({@link PERMITTED_IPV4_CIDRS}).
+ * The invariant: a leaf's iPAddress SANs must be a SUBSET of the CA's permitted set, or the CA cannot
+ * vouch for the leaf and `ca.verify(leaf)` fails on a permitted-subtree violation — the box then
+ * cannot serve HTTPS at all. `box-secrets.ts` filters its candidate IP SANs through this so an
+ * out-of-set interface address (a Tailscale 100.64/10 CGNAT address, a 169.254/16 link-local, a
+ * public IP, or an IPv6 address) is dropped from the SAN rather than poisoning the whole cert. A
+ * non-IPv4 string is never permitted. Loopback (127.0.0.1) is inside 127.0.0.0/8 and so retained.
+ */
+export function isPermittedLeafIpv4(ip: string): boolean {
+  const ipInt = ipv4ToInt(ip);
+  if (ipInt === undefined) return false;
+  return PERMITTED_IPV4_CIDRS.some(([addr, prefix]) => {
+    const netInt = ipv4ToInt(addr);
+    if (netInt === undefined) return false;
+    const maskBytes = ipv4Mask(prefix);
+    const mask =
+      ((maskBytes[0]! << 24) | (maskBytes[1]! << 16) | (maskBytes[2]! << 8) | maskBytes[3]!) >>> 0;
+    return (ipInt & mask) === (netInt & mask);
+  });
+}
+
 /**
  * A pre-built `nameConstraints` extension (node-forge has no builder for it). The `value` is the DER
  * of `NameConstraints ::= SEQUENCE { permittedSubtrees [0] IMPLICIT SEQUENCE OF GeneralSubtree }`,
