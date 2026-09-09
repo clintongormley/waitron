@@ -255,9 +255,9 @@ sit with whichever track touches the file. Fiscal-adjacent work in any track sti
 sign-off at land.
 
 **Back burner — cloud (docs only, no build):** Waitron Cloud itself, the control plane (Track C
-item 4), cloud-only redundancy (Track B item 4), the cloud trial on-ramp, WireGuard on the box
+item 5), cloud-only redundancy (Track B item 4), the cloud trial on-ramp, WireGuard on the box
 image and `@waitron/tunnel`'s retirement (Track A step 5's cloud half), the cloud-standby e2e
-(Track B item 2), the tax-model system (Track C item 7 — no non-Spanish venue is in scope).
+(Track B item 2), the tax-model system (Track C item 8 — no non-Spanish venue is in scope).
 
 **Prioritisation is by soundness, not the calendar** (2026-08-02): Waitron will be finished before the
 deli must trade, so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and
@@ -295,7 +295,7 @@ seat probe is `superpowers/specs/2026-09-05-model-seats-experiment.md`, the per-
   The cloud is a dedicated instance per tenant (warm mirror today, or a primary, hosted in Spain);
   the shared multi-tenant cloud store (cloud-storage §2/§9) and the parked multi-tenant transport are
   DROPPED. Density comes from many isolated instances per host. The only multi-tenant pieces are a
-  small control plane (Track C item 4) and the preproduction trial demo. The stateless tunnel relay
+  small control plane (Track C item 5) and the preproduction trial demo. The stateless tunnel relay
   is gone (`2026-09-05-relay-decision.md`). This removed the last consumer of FORCE RLS.
 - **Warm standby + human promotion; active-active is SHELVED for the foreseeable future.** The
   owner's reason: active-active would have to cover orders, kitchen progress and every other
@@ -561,7 +561,7 @@ unchanged, so no new H2 receipt
      Spain-specific modules (verifactu, workforce-es, reporting = modelo 303); core/generic code is
      English — identifiers, strings AND comments. The guard scans comments (quotations intact);
      `provisioning`/`tunnel`/`payments-stripe`/`ui`/`migrations`/`fiscal-none` are scanned, `reporting`
-     is not. The inert tax-model slot value went `iva`→`vat` (item 7). Design:
+     is not. The inert tax-model slot value went `iva`→`vat` (item 8). Design:
      `superpowers/specs/2026-09-07-english-only-generic-english-design.md`. *Remaining follow-on:* make
      provisioning's tests regime-agnostic against `fiscal-none` and drop the production-only test
      exemption (spec §6 step 5).
@@ -592,7 +592,7 @@ unchanged, so no new H2 receipt
    - **CI isolation LANDED #291:** Bookings has a dedicated job, ordered Node/browser projects,
      serialized browser files and an outer deadline. Remaining investigation is under
      *Debt → CI / test infra*.
-4. **Country packs and address validation — IN FLIGHT (`address-autocomplete`).** The browser-safe
+4. **Country packs and address validation — LANDED #292.** The browser-safe
    `@waitron/country` contract, Spain/UK implementations and `@waitron/country-packs` registry replace
    the country facts previously split between shared locale code, provisioning and setup. Spain owns
    checksum-valid NIFs, phone/postcode normalization, all province codes, regional locale/time-zone
@@ -1265,7 +1265,7 @@ mostly a UX wrapper over built paths; modes 3–4 carry the real new work.
   commission applies to a POS app taking payment for physical goods. Survey + decisions:
   [2026-09-08-handheld-app-store-and-kiosk-findings.md](superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md).
 - **Cloud trial on-ramp** — same-origin PWA pointed at a cloud instance; preproduction, shared demo
-  tenant. Gated on Waitron Cloud (a per-tenant instance fleet plus the control plane, Track C item 4).
+  tenant. Gated on Waitron Cloud (a per-tenant instance fleet plus the control plane, Track C item 5).
 - **Identity on a standby:** `persons` + `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is still **PIN-re-prompt v1** (a
   portable signed token is a later slice). **`totp_secret` at-rest encryption is a hard dependency of
@@ -1503,7 +1503,7 @@ genuinely-decision-bearing.
   in `packages/fiscal-verifactu/src/backend.ts` repeat the same alta head + tail. Unrepairable-record
   builders (CLAUDE.md §5), so a de-dup needs its own review + a huella-invariance re-run across all three.
   Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">` + a `buildDesglose`; also
-  folds in the `fechaFromStoredDay` algebra and `recordSubstitution`'s N+1 loop. (Track C item 6.)
+  folds in the `fechaFromStoredDay` algebra and `recordSubstitution`'s N+1 loop. (Track C item 7.)
 - **Concurrent-corrective race in `settleSale` is untranslated.** If a rectificativa commits between the
   opening read and the `sale_settlements` INSERT, the coverage trigger raises a raw `P0001` that
   `settleSale` does not map to a `sale.*` code. Fail-closed and unreachable in the headless slice (needs
