@@ -114,8 +114,9 @@ steps take owner sign-off at land):
    **on-device install + trust rows remain the owner's** (real phones on the shop WiFi). **Still open
    under this step:** the three displays actually walked end to end (the `ui-review.md` areas), and
    the register/device follow-ups (Track B item 7). Owner decisions to confirm from #290: the seeded
-   300 s handheld inactivity default (till/KDS null), whether the counter till also idle-logs-out
-   (today any non-KDS profile with a timeout does), and the provisional Spanish auto-logout label.
+   300 s handheld inactivity default (till/KDS null), and whether the counter till also idle-logs-out
+   (today any non-KDS profile with a timeout does). The auto-logout label ships English-default
+   ("Auto-logout after (minutes)") and i18n'ed; only the `es` translation wording is provisional.
 3. **The printer agent process, then USB and IP printers end to end. LANDED #289** — the db-free `@waitron/print-agent` wire client + poll loop and the
    `apps/print-agent` container host, joining a venue over the shared `join_requests` table
    (device-join-and-accept-design.md §7). Standalone, containerised, follows the primary like the
