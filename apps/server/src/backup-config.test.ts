@@ -7,15 +7,15 @@ describe("loadBackupConfig", () => {
     expect(loadBackupConfig({})).toBeUndefined();
     expect(loadBackupConfig({ WAITRON_BACKUP_DIR: "" })).toBeUndefined();
   });
-  it("requires a backup database url when the dir is set", () => {
-    expect(() => loadBackupConfig({ WAITRON_BACKUP_DIR: "/b" })).toThrow(
-      new AppError("server.config_invalid", {
-        variable: "WAITRON_BACKUP_DATABASE_URL",
-        reason: "required_with_backup_destination",
-      }),
-    );
+  it("loads with an undefined databaseUrl when the dir is set but no url (supervisor derives it)", () => {
+    const c = loadBackupConfig({
+      WAITRON_BACKUP_DIR: "/b",
+      WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+    });
+    expect(c).toBeDefined();
+    expect(c!.databaseUrl).toBeUndefined();
   });
-  it("builds a config with defaults", () => {
+  it("builds a config with defaults, passing an explicit databaseUrl through", () => {
     const c = loadBackupConfig({
       WAITRON_BACKUP_DIR: "/b",
       WAITRON_BACKUP_DATABASE_URL: "postgres://x",
@@ -25,9 +25,10 @@ describe("loadBackupConfig", () => {
       databaseUrl: "postgres://x",
       recoveryKey: "twelve-chars!",
       retain: expect.any(Number),
-      intervalMs: expect.any(Number),
+      retainDays: expect.any(Number),
       staleAfterMs: expect.any(Number),
     });
+    expect(c!.schedule).toEqual({ kind: "interval", ms: expect.any(Number) });
     expect(c!.destinations[0].dir).toMatch(/^\//); // resolved absolute
   });
   it("rejects a non-positive retain count", () => {
@@ -44,6 +45,95 @@ describe("loadBackupConfig", () => {
         reason: "not_a_positive_integer",
       }),
     );
+  });
+});
+
+describe("loadBackupConfig schedule + dual retention", () => {
+  it("parses a wall-clock schedule (daily at HH:MM)", () => {
+    const c = loadBackupConfig({
+      WAITRON_BACKUP_DIR: "/mnt/usb",
+      WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+      WAITRON_BACKUP_SCHEDULE_DAYS: "daily",
+      WAITRON_BACKUP_AT: "04:30",
+    })!;
+    expect(c.schedule).toEqual({ kind: "wall-clock", days: "daily", at: { hour: 4, minute: 30 } });
+    expect(c.databaseUrl).toBeUndefined(); // derived by the supervisor, not required here
+  });
+
+  it("parses a weekday subset and 'auto' time", () => {
+    const c = loadBackupConfig({
+      WAITRON_BACKUP_DIR: "/mnt/usb",
+      WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+      WAITRON_BACKUP_SCHEDULE_DAYS: "1,3,5",
+      WAITRON_BACKUP_AT: "auto",
+    })!;
+    expect(c.schedule).toEqual({ kind: "wall-clock", days: [1, 3, 5], at: "auto" });
+  });
+
+  it("applies dual-retention defaults (7 count, 30 days)", () => {
+    const c = loadBackupConfig({
+      WAITRON_BACKUP_DIR: "/mnt/usb",
+      WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+      WAITRON_BACKUP_SCHEDULE_DAYS: "daily",
+      WAITRON_BACKUP_AT: "auto",
+    })!;
+    expect(c.retain).toBe(7);
+    expect(c.retainDays).toBe(30);
+  });
+
+  it("uses the legacy interval mode when no wall-clock schedule is set", () => {
+    const c = loadBackupConfig({
+      WAITRON_BACKUP_DIR: "/mnt/usb",
+      WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+      WAITRON_BACKUP_INTERVAL_MS: "3600000",
+    })!;
+    expect(c.schedule).toEqual({ kind: "interval", ms: 3600000 });
+  });
+
+  it("rejects both an interval and a wall-clock schedule", () => {
+    expect(() =>
+      loadBackupConfig({
+        WAITRON_BACKUP_DIR: "/mnt/usb",
+        WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+        WAITRON_BACKUP_INTERVAL_MS: "3600000",
+        WAITRON_BACKUP_AT: "04:00",
+      }),
+    ).toThrow(/schedule_invalid/);
+  });
+
+  it("rejects a blank/whitespace-only weekday token (Number('') is 0)", () => {
+    expect(() =>
+      loadBackupConfig({
+        WAITRON_BACKUP_DIR: "/mnt/usb",
+        WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+        WAITRON_BACKUP_SCHEDULE_DAYS: "1, ,3",
+      }),
+    ).toThrow(/schedule_invalid/);
+  });
+
+  it("rejects a malformed time", () => {
+    expect(() =>
+      loadBackupConfig({
+        WAITRON_BACKUP_DIR: "/mnt/usb",
+        WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+        WAITRON_BACKUP_SCHEDULE_DAYS: "daily",
+        WAITRON_BACKUP_AT: "25:99",
+      }),
+    ).toThrow(/schedule_invalid/);
+  });
+
+  it("carries an explicit keyRotatedAt through, undefined when unset", () => {
+    const withRotation = loadBackupConfig({
+      WAITRON_BACKUP_DIR: "/mnt/usb",
+      WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+      WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-09T00:00:00.000Z",
+    })!;
+    expect(withRotation.keyRotatedAt).toBe("2026-09-09T00:00:00.000Z");
+    const withoutRotation = loadBackupConfig({
+      WAITRON_BACKUP_DIR: "/mnt/usb",
+      WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+    })!;
+    expect(withoutRotation.keyRotatedAt).toBeUndefined();
   });
 });
 

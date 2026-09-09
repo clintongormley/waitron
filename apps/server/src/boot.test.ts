@@ -1959,19 +1959,27 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const backupDir = mkdtempSync(join(tmpdir(), "waitron-boot-backup-"));
     const [server, disabled] = await withCapturedStdout(async (lines) => {
-      const started = await startServer({
-        ...KEY_ENV,
-        DATABASE_URL: databaseUrl,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "production",
-        WAITRON_BACKUP_DIR: backupDir,
-        // Port 1 → ECONNREFUSED, fast and deterministic (a refused port, never a hanging one).
-        WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
-        // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig
-        // throws backup.recovery_key_missing before the probe this test exercises ever runs.
-        WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
-      });
+      const started = await startServer(
+        {
+          ...KEY_ENV,
+          DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "production",
+        },
+        // The backup vars go through the RAW `base` arg, not the merged `env`: the supervisor re-reads
+        // its config off `loadBoxEnv(base, stateDir)` on every reload, so a value only in `env` would
+        // never reach it. `WAITRON_STATE_DIR` (TRADING_STATE_DIR) holds no `backup.env`, so `base` is
+        // the sole source here.
+        {
+          WAITRON_BACKUP_DIR: backupDir,
+          // Port 1 → ECONNREFUSED, fast and deterministic (a refused port, never a hanging one).
+          WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
+          // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig
+          // throws backup.recovery_key_missing before the probe this test exercises ever runs.
+          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+        },
+      );
       // The probe's createPostgresDb/assert failure was caught and backup left OFF — proven by the log line,
       // whose arrival also means startServer got past the probe rather than throwing out of it.
       const event = await waitForEvent(lines, "backup.disabled_probe_failed");
@@ -1985,10 +1993,11 @@ describe("startServer, against a real container as the deployment role", () => {
       // startServer RESOLVED (we hold a StartedServer) and the till TRADES: /health answers 200.
       expect(disabled.event).toBe("backup.disabled_probe_failed");
       await fetchHealthOk(`http://127.0.0.1:${port}/health`);
-      // The captured backup.disabled_probe_failed line means backupWorker stayed undefined, so mountBoxStatusApi
-      // received readBackup: undefined — and box-status's `backup: { configured: false }` for that exact
-      // undefined-reader case is asserted directly (over the management gate) in box-status.route.test.ts, so
-      // it is not re-proven behind a manager login here (boot.test.ts seeds no manager identity — that would
+      // The captured backup.disabled_probe_failed line means the supervisor left backup off (no
+      // destinations backing its config), so box-status's `readBackup` — now the supervisor's async
+      // `status().backupStatus` — reports `backup: { configured: false }`. That configured:false
+      // report is asserted directly (over the management gate) in box-status.route.test.ts, so it is
+      // not re-proven behind a manager login here (boot.test.ts seeds no manager identity — that would
       // be the heavy scaffolding the slice brief says to avoid).
     } finally {
       await server.close();

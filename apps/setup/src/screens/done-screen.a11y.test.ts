@@ -35,4 +35,18 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations with the backup nudge suppressed in demo mode", async () => {
+    const { host } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(() => new Promise(() => {})),
+        startDelayMs: 100000,
+        pollIntervalMs: 100000,
+        devMode: true,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

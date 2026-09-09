@@ -95,3 +95,17 @@ export function dumpFileName(now: Date): string {
 export function backupArchiveKey(now: Date): string {
   return `${BACKUP_KEY_PREFIX}${basicIsoStamp(now)}.backup.enc`;
 }
+
+/** The inverse of {@link backupArchiveKey}'s stamp: the immutable dump INSTANT parsed back out of a
+ * `waitron-<basic-ISO>.*` key, at the second precision `basicIsoStamp` carries (sub-seconds are
+ * dropped by the stamp, so they cannot be recovered). The sweep's dual-retention prune reads an
+ * artifact's age off THIS — the time baked into its own name — rather than the filesystem `mtimeMs`,
+ * so a later clock change (a box's wall clock jumping back, a restore) can never resurrect a window
+ * that was already past the age cap (spec §3.3). Throws on a key whose stamp is missing/malformed —
+ * every real backup key carries one, so a bad key is a defect, not a value to guess an age for. */
+export function backupArchiveTimestamp(key: string): Date {
+  const m = /waitron-(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(key);
+  if (m === null) throw new Error(`backup key carries no parseable timestamp: ${key}`);
+  const [, y, mo, d, h, mi, s] = m.map(Number);
+  return new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+}

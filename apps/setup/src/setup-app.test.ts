@@ -338,6 +338,40 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
+  // The done screen's first-run backup nudge (Task 8) is gated on the wizard's own DEMO/LIVE choice —
+  // NOT `config.devMode` (`WAITRON_ENV=dev`), which this browser wizard never observes. `draft.mode`
+  // is what the shell already holds by the time provisioning succeeds, so it is threaded straight
+  // through as the done screen's `devMode` property.
+  it("threads the demo/live choice through to the done screen as devMode", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi
+          .fn()
+          .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+      }),
+    );
+    patch(el, { mode: "demo" });
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "done");
+    expect((host as unknown as { devMode: boolean }).devMode).toBe(true);
+  });
+
+  it("does not treat a live provision as demo mode on the done screen", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi
+          .fn()
+          .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+      }),
+    );
+    patch(el, { mode: "live" });
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "done");
+    expect((host as unknown as { devMode: boolean }).devMode).toBe(false);
+  });
+
   it("shows the in-flight state with a DISABLED provision control while the POST is pending", async () => {
     let resolveProvision!: (value: unknown) => void;
     const provision = vi.fn().mockImplementation(

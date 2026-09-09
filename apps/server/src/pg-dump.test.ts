@@ -2,7 +2,13 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { backupArchiveKey, dumpAtomic, dumpFileName, type PgDumpRunner } from "./pg-dump.js";
+import {
+  backupArchiveKey,
+  backupArchiveTimestamp,
+  dumpAtomic,
+  dumpFileName,
+  type PgDumpRunner,
+} from "./pg-dump.js";
 
 describe("dumpFileName", () => {
   it("produces a sortable, colon-free, .dump-suffixed name", () => {
@@ -29,6 +35,35 @@ describe("backupArchiveKey", () => {
     expect(key).toBe(dumpFileName(at).replace(/\.dump$/, ".backup.enc"));
     // Shares the BACKUP_KEY_PREFIX the prune/status scans use, so it is pruned + read fresh.
     expect(key.startsWith("waitron-")).toBe(true);
+  });
+});
+
+describe("backupArchiveTimestamp", () => {
+  it("round-trips backupArchiveKey to second precision", () => {
+    // The stamp is second-precision (basicIsoStamp drops sub-seconds), so the inverse recovers the
+    // instant truncated to the second — assert on THAT precision, not the sub-second the Date carried.
+    const d = new Date("2026-08-29T17:55:01.123Z");
+    const truncated = new Date("2026-08-29T17:55:01.000Z");
+    expect(backupArchiveTimestamp(backupArchiveKey(d))).toEqual(truncated);
+  });
+
+  it("parses the stamp out of a full waitron-*.backup.enc key", () => {
+    expect(backupArchiveTimestamp("waitron-20260829T175501Z.backup.enc")).toEqual(
+      new Date("2026-08-29T17:55:01.000Z"),
+    );
+  });
+
+  it("recovers the ordering of two keys as an instant comparison", () => {
+    const older = backupArchiveTimestamp(backupArchiveKey(new Date("2026-08-29T17:55:01Z")));
+    const newer = backupArchiveTimestamp(backupArchiveKey(new Date("2026-08-30T09:00:00Z")));
+    expect(newer.getTime()).toBeGreaterThan(older.getTime());
+  });
+
+  it("throws on a key carrying no parseable stamp", () => {
+    // A real backup key always carries the stamp, so a missing one is a defect, not an age to guess.
+    expect(() => backupArchiveTimestamp("waitron-notastamp.backup.enc")).toThrow(
+      /no parseable timestamp/,
+    );
   });
 });
 

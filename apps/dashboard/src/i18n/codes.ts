@@ -444,6 +444,47 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the amounts: rates 0–100, no negatives",
     es: "Revisa los importes: tipos 0–100, sin negativos",
   },
+  // Backup admin (backup-recovery-key-wizard). The apply/rotate routes reject with these when the
+  // environment owns the config, this node is not the primary, the recovery key cannot be stored
+  // verbatim / is too short / is missing, the destination or schedule is malformed, the request shape
+  // is wrong, or the effective key ended up different from the one supplied. The screen RENDERS these
+  // (it also reuses `backup.recovery_key_too_short` as its own client-side floor message for a pasted key).
+  "backup.managed_by_environment": {
+    en: "Backups on this box are managed by its environment — there is nothing to change here",
+    es: "Las copias de seguridad de esta caja las gestiona su entorno; aquí no hay nada que cambiar",
+  },
+  "backup.not_primary": {
+    en: "This node isn't the venue's primary — change backups from the primary node",
+    es: "Este nodo no es el principal del local; cambia las copias de seguridad desde el nodo principal",
+  },
+  "backup.recovery_key_unstorable": {
+    en: "That recovery key can't be stored safely — remove any spaces or line breaks",
+    es: "Esa clave de recuperación no se puede guardar de forma segura; quita los espacios o saltos de línea",
+  },
+  "backup.recovery_key_too_short": {
+    en: "The recovery key is too short",
+    es: "La clave de recuperación es demasiado corta",
+  },
+  "backup.recovery_key_missing": {
+    en: "Enter a recovery key",
+    es: "Introduce una clave de recuperación",
+  },
+  "backup.destinations_invalid": {
+    en: "Check the backup destination",
+    es: "Revisa el destino de la copia de seguridad",
+  },
+  "backup.schedule_invalid": {
+    en: "Check the backup schedule",
+    es: "Revisa la programación de la copia de seguridad",
+  },
+  "backup.request_invalid": {
+    en: "Check the backup settings and try again",
+    es: "Revisa los ajustes de la copia de seguridad e inténtalo de nuevo",
+  },
+  "backup.effective_mismatch": {
+    en: "The saved key didn't take effect — try again",
+    es: "La clave guardada no se aplicó; inténtalo de nuevo",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

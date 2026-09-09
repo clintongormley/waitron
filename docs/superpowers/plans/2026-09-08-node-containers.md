@@ -1039,6 +1039,10 @@ one, and anything already in `base` (the real environment) beats all three. That
 cloud rule 4's cheap half: a cloud profile injects `WAITRON_CREDENTIALS_KEY` from the environment
 and the file is ignored.
 
+> Refined 2026-09-09: only a NON-EMPTY base value beats a file, and `backup.env` joined the file
+> list last. An empty base value (compose's `${VAR:-}` → `""`) no longer masks a file value — see
+> `backup-recovery-key-wizard-design.md` §3.2, Blocker 1.
+
 - [ ] **Step 1: Write the failing test**
 
 ```ts

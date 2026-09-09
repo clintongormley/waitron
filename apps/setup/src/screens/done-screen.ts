@@ -1,10 +1,16 @@
-import { LitElement, type TemplateResult, css, html } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { actionsStyles, statusStyles } from "../form-styles.js";
 import type { SetupApi } from "../api/client.js";
+
+/** The dashboard's backup screen (`apps/dashboard/src/dashboard-app.ts`'s `backup` face), reached at
+ * its path-based route (`UrlStateController` + `dashboardPath`, `apps/dashboard/src/navigation.ts`:
+ * `basePath: "/manage"`, `primary: "dashboard"`). Same origin as the box's trading server, which is
+ * what this screen is waiting to come back up as. */
+export const BACKUP_SETUP_URL = "/manage/backup";
 
 /**
  * The wizard's final screen. A successful provision returns `{ restarting: true }` and the box then
@@ -58,6 +64,18 @@ export class SetupDoneScreen extends LitElement {
         background: var(--wt-color-surface-sunken, #f1f5f9);
         border-radius: 0.375rem;
       }
+      .backup-nudge {
+        margin: 1rem 0;
+        padding: 1rem;
+        border: 1px solid var(--wt-color-border, #cbd5e1);
+        border-radius: 0.5rem;
+      }
+      .nudge-link {
+        display: inline-block;
+        margin-top: 0.5rem;
+        color: var(--wt-color-primary, #1f6feb);
+        text-decoration: underline;
+      }
     `,
   ];
 
@@ -71,6 +89,14 @@ export class SetupDoneScreen extends LitElement {
    * `undefined` on the primary provision path, which mints no secret and shows no panel.
    */
   @property({ attribute: false }) breakGlassSecret?: string;
+
+  /**
+   * Whether this box provisioned as a disposable demo (the wizard's own DEMO/LIVE choice,
+   * `draft.mode === "demo"` — `apps/setup/src/setup-app.ts`), which suppresses the first-run backup
+   * nudge below: a demo box is reversible in practice (mode-screen.ts), so a missing backup is not
+   * worth interrupting the operator over.
+   */
+  @property({ type: Boolean }) devMode = false;
 
   /** How to reload into the till once trading mode is up. Injectable so a test can assert it without
    * navigating the runner; the default is the real page reload (a bound native, not authored code). */
@@ -140,6 +166,17 @@ export class SetupDoneScreen extends LitElement {
                 >
               </div>`
             : null
+        }
+        ${
+          this.devMode
+            ? nothing
+            : html`<div class="backup-nudge" data-test="backup-nudge">
+                <p>
+                  Your box is trading — but it has no backups yet, so there is no way back from a
+                  disk failure.
+                </p>
+                <a class="nudge-link" href=${BACKUP_SETUP_URL}>Set up backups now</a>
+              </div>`
         }
         ${
           this.ready

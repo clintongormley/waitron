@@ -109,7 +109,7 @@ function requireDeclarationType(raw: string | undefined): string {
  * on the join. Convert day_cutover to HH:MM. A missing location is a configuration
  * error surfaced as an opaque server error.
  */
-async function resolveVenueClock(
+export async function resolveVenueClock(
   tx: Transaction,
   tenantId: TenantId,
   nodeId: string,

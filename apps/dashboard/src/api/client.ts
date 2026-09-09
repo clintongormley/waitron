@@ -1174,6 +1174,65 @@ export type DiagnosticsLine = {
  * is the standing default, with no pending revert). */
 export type Verbosity = { level: "debug" | "info"; revertsAt: string | null };
 
+// ── Backup admin (recovery-key wizard) types ─────────────────────────────────────────────────────
+// LOCAL copies of the server's backup-status/apply JSON shapes (the `/api/backup/*` routes wrapping
+// `apps/server`'s `BackupSupervisor`), deliberately NOT imported from `apps/server`/`@waitron/db` — a
+// runtime import would drag its barrel + Node builtins into the browser bundle (the #70 rule every
+// shape above follows). These are the CONTRACT the backup admin screen builds on; the server shapes
+// stay the source of truth, and a mismatch surfaces as a runtime shape error a view test catches.
+
+/** How often a backup runs. A `wall-clock` schedule fires on the chosen days at a fixed time or the
+ * box-chosen `auto` slot (after close + the day's reports); `interval` is the every-N-ms form the box
+ * image may set — the screen authors only `wall-clock`, but reads either back in status. Mirrors the
+ * server's `BackupSchedule`. */
+export type BackupSchedule =
+  | { kind: "interval"; ms: number }
+  | {
+      kind: "wall-clock";
+      days: "daily" | number[];
+      at: { hour: number; minute: number } | "auto";
+    };
+
+/** One configured destination's freshness (mirrors the server's `DestinationStatus`). `lastBackupAt`
+ * is null and `stale` true when nothing has landed there yet. */
+export type BackupDestinationStatus = {
+  id: string;
+  lastBackupAt: string | null;
+  ageSeconds: number | null;
+  stale: boolean;
+};
+
+/** The per-destination freshness read (mirrors the server's `BackupStatus`): `configured: false` when
+ * backups are off, else one entry per destination. */
+export type BackupFreshness =
+  { configured: false } | { configured: true; destinations: BackupDestinationStatus[] };
+
+/** `GET /api/backup/status` — the running backup duty projected for the admin surface, the server's
+ * `BackupRuntimeStatus` MINUS the secret `recoveryKey`, plus the async freshness read (`backupStatus`)
+ * and the derived `archiveUnderCurrentKey`. `schedule`/`retention`/`keyFingerprint`/`keyRotatedAt` are
+ * absent (optional here) when no backup is configured. Mirrors the server's `projectStatus`. */
+export interface BackupStatusView {
+  enabled: boolean;
+  isPrimary: boolean;
+  managedByEnvironment: boolean;
+  destinations: { id: string; dir: string }[];
+  schedule?: BackupSchedule;
+  retention?: { count: number; days: number };
+  keyFingerprint?: string;
+  keyRotatedAt?: string;
+  backupStatus: BackupFreshness;
+  archiveUnderCurrentKey: boolean;
+}
+
+/** The `POST /api/backup/apply` body — the destination, the chosen recovery key, and the policy
+ * (schedule + retention). Mirrors the server's `readApplyBody`. */
+export interface BackupApplyBody {
+  destinationDir: string;
+  recoveryKey: string;
+  schedule: BackupSchedule;
+  retention: { count: number; days: number };
+}
+
 export class DashboardApi {
   /** The one request primitive every method funnels through (see @waitron/dashboard-kit's
    * createRequest for the credentials/JSON/FormData/empty-body/`{ code }` rules). */
@@ -2459,5 +2518,38 @@ export class DashboardApi {
       level,
       ttlMinutes,
     });
+  }
+
+  // ── Backup admin (recovery-key wizard) ────────────────────────────────────────────────────────
+
+  /** `GET /api/backup/status` — the running backup duty, projected without the recovery key (see
+   * {@link BackupStatusView}). Backs the always-available status view. */
+  getBackupStatus(): Promise<BackupStatusView> {
+    return this.#request<BackupStatusView>("/api/backup/status", "GET");
+  }
+
+  /** `POST /api/backup/mint-key` — mint a strong recovery key for the operator to record. Stateless:
+   * mints and returns, stores nothing (`apply` is what persists a chosen key). */
+  mintBackupKey(): Promise<{ key: string }> {
+    return this.#request<{ key: string }>("/api/backup/mint-key", "POST");
+  }
+
+  /** `POST /api/backup/apply` — configure + enable backups from the wizard; returns the fresh status.
+   * Rejects with a `backup.*` `{ code }` (env-managed, non-primary, an unstorable/too-short key, a bad
+   * schedule/destination) the screen surfaces via `codeMessage`. */
+  applyBackup(body: BackupApplyBody): Promise<BackupStatusView> {
+    return this.#request<BackupStatusView>("/api/backup/apply", "POST", body);
+  }
+
+  /** `GET /api/backup/recovery-key` — the EFFECTIVE running recovery key so an admin can re-record it
+   * (the rotate screen re-shows the OLD key before changing it). `null` when no backup is configured. */
+  getBackupRecoveryKey(): Promise<{ key: string | null }> {
+    return this.#request<{ key: string | null }>("/api/backup/recovery-key", "GET");
+  }
+
+  /** `POST /api/backup/rotate` — change the recovery key, reusing the running destination/schedule/
+   * retention; returns the fresh status. Archives taken before the rotate still need the OLD key. */
+  rotateBackupKey(body: { recoveryKey: string }): Promise<BackupStatusView> {
+    return this.#request<BackupStatusView>("/api/backup/rotate", "POST", body);
   }
 }

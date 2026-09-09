@@ -8,9 +8,11 @@ import { sql } from "drizzle-orm";
 import { withTenant } from "@waitron/db";
 import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
 import { FISCAL_RESTORE, currentSif, registerSif } from "@waitron/fiscal-verifactu";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
+import { enabledModules, fiscalSlot } from "@waitron/module";
 import type { RestoreHook, WaitronModule } from "@waitron/module";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
+import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -861,5 +863,76 @@ describe("restore hooks (identity phase)", () => {
       ),
     ).rejects.toMatchObject({ code: "restore.identity_unknown" });
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+// Task 5: the sweep captures `backup.env` + `modules.json` as `secrets/<name>` entries; the restore
+// needs NO change (it writes back every `secrets/*` entry via `restoreSecrets`/`unpackBundleToDir`).
+// These pin that round-trip and the two exceptions that matter: `skipSecrets` (rejoin) restores
+// neither, and a restore that MISSES `modules.json` makes the box REFUSE TO BOOT rather than silently
+// flip regime. PGlite is the right target here (CLAUDE.md §4): the two files are disk-only config —
+// this suite makes no privilege, trigger or concurrency claim; the DB restore is the mocked `runRestore`.
+describe("optional state (backup.env + modules.json) round-trip", () => {
+  useTempDirs("waitron-optstate-");
+  beforeEach(resetSeries); // the round-trips run the identity phase; re-arm the node's one live series
+
+  const BACKUP_ENV = "WAITRON_BACKUP_DIR=/mnt/usb\nWAITRON_BACKUP_RETAIN=7\n";
+  // A modules.json that disables the second fiscal-slot member, so exactly one regime is enabled.
+  const MODULES_JSON = `${JSON.stringify({ modules: { "fiscal-none": false } }, null, 2)}\n`;
+  const OPTIONAL_ENTRIES: ArchiveEntry[] = [
+    { name: "secrets/backup.env", bytes: Buffer.from(BACKUP_ENV) },
+    { name: "secrets/modules.json", bytes: Buffer.from(MODULES_JSON) },
+  ];
+
+  it("restores both onto a FRESH state dir, leaving the box's OWN instance.env untouched", async () => {
+    // instance.env is per-hardware and deliberately NEVER captured — the restored box keeps its own.
+    // Write a distinct one into the fresh target and prove the restore does not overwrite it.
+    await writeFile(join(stateDir, "instance.env"), "WAITRON_NODE_HARDWARE=box-002\n");
+    await restoreFromArtifact(
+      makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]) }),
+    );
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(BACKUP_ENV);
+    expect(await readFile(join(stateDir, "modules.json"), "utf8")).toBe(MODULES_JSON);
+    // Per-hardware safety: instance.env is not in the archive, so it is left exactly as it was.
+    expect(await readFile(join(stateDir, "instance.env"), "utf8")).toBe(
+      "WAITRON_NODE_HARDWARE=box-002\n",
+    );
+  });
+
+  it("skipSecrets (rejoin) restores NEITHER file — a rejoining mirror keeps its own config", async () => {
+    await restoreFromArtifact(
+      makeRestoreDeps({
+        skipSecrets: true,
+        artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]),
+      }),
+    );
+    await expect(stat(join(stateDir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(stateDir, "modules.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("a restore that MISSES modules.json makes the box REFUSE TO BOOT (fiscal slot ambiguous), not a silent regime flip", async () => {
+    // The enabled set is on-disk config, not a DB row. A restore WITHOUT modules.json leaves the box at
+    // the all-enabled default, where BOTH fiscal-slot members (fiscal-verifactu + fiscal-none) are on —
+    // and boot's fiscalSlot refuses that LOUD rather than silently picking a regime. That is exactly
+    // what makes modules.json worth capturing. Asserted through the real boot path:
+    // readModuleConfig → enabledModules → fiscalSlot.
+    await restoreFromArtifact(makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES]) }));
+    await expect(stat(join(stateDir, "modules.json"))).rejects.toMatchObject({ code: "ENOENT" });
+    const missing = await readModuleConfig(stateDir);
+    let ambiguous: unknown;
+    try {
+      fiscalSlot(enabledModules(ALL_MODULES, missing), null);
+    } catch (err) {
+      ambiguous = err;
+    }
+    expect(isAppError(ambiguous) && ambiguous.code).toBe("module.fiscal_slot_ambiguous");
+
+    // Contrast: the SAME restore WITH modules.json (disabling fiscal-none) resolves the slot to the one
+    // enabled regime, so boot proceeds.
+    await restoreFromArtifact(
+      makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]) }),
+    );
+    const present = await readModuleConfig(stateDir);
+    expect(fiscalSlot(enabledModules(ALL_MODULES, present), null).id).toBe("verifactu");
   });
 });

@@ -201,11 +201,13 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
   return found;
 }
 
-/** True if any captured line's `event` starts with `prefix` — used to assert a backup event's ABSENCE. */
-function hasEventPrefixed(lines: readonly string[], prefix: string): boolean {
+/** True if any captured line's `event` is EXACTLY `event`. Exact, not prefix: `backup.disabled` and
+ * `backup.disabled_probe_failed` must be told apart — a non-primary logs the former (the duty is
+ * skipped before the probe), a primary that runs and fails the probe logs the latter. */
+function hasEvent(lines: readonly string[], event: string): boolean {
   return lines.some((line) => {
     try {
-      return (JSON.parse(line) as LogLine).event.startsWith(prefix);
+      return (JSON.parse(line) as LogLine).event === event;
     } catch {
       return false;
     }
@@ -213,9 +215,9 @@ function hasEventPrefixed(lines: readonly string[], prefix: string): boolean {
 }
 
 // The singleton duties' config, present in FULL on both boots so the ONLY thing that decides whether
-// they run is `singleton_role`. The relay + backup DB are unreachable (port 1) on purpose: the real
-// call-through worker backs off / the backup read-privilege probe fails fast — this suite asserts the
-// WIRING (started or not), never a live connection. Each boot fills in its own DATABASE url.
+// they run is `singleton_role`. The relay is unreachable (port 1) on purpose: the real call-through
+// worker backs off — this suite asserts the WIRING (started or not), never a live connection. Each
+// boot fills in its own DATABASE url.
 function dutyEnv(port: number) {
   return {
     ...KEY_ENV,
@@ -224,6 +226,15 @@ function dutyEnv(port: number) {
     WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
     WAITRON_TUNNEL_BOX_ID: "box-secondary",
     WAITRON_TUNNEL_TOKEN: "tunnel-secret",
+  };
+}
+
+// The backup config goes through the RAW `base` arg (2nd `startServer` param), not the merged `env`:
+// the supervisor re-reads its config off `loadBoxEnv(base, stateDir)` each reload, so a value only in
+// `env` would never reach it. The backup DB is unreachable (port 1) on purpose so the read-privilege
+// probe fails fast on the primary — the WIRING assertion, never a live connection.
+function backupBase() {
+  return {
     WAITRON_BACKUP_DIR: backupDir,
     WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
     // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig throws
@@ -236,11 +247,14 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
   it("a sell-only local secondary (primary, secondary) runs NEITHER singleton duty, though it is not a mirror", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
-      const started = await startServer({
-        ...dutyEnv(port),
-        DATABASE_URL: secondaryDatabaseUrl,
-        WAITRON_MIGRATIONS_DATABASE_URL: secondary.pg.uri,
-      });
+      const started = await startServer(
+        {
+          ...dutyEnv(port),
+          DATABASE_URL: secondaryDatabaseUrl,
+          WAITRON_MIGRATIONS_DATABASE_URL: secondary.pg.uri,
+        },
+        backupBase(),
+      );
       // The loop's first sleep is logged strictly AFTER the (synchronous) boot has decided every gate
       // above — the backup/tunnel blocks run before `runLoop` — so once this line has arrived the backup
       // gate has been evaluated and the absence assertions below are not merely "not yet".
@@ -248,11 +262,13 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
       return [started, captured] as const;
     });
     try {
-      // 1. Backup — the gate is skipped ENTIRELY, so NEITHER the read-privilege probe failure
-      // (backup.disabled_probe_failed) NOR the disabled-info line (backup.disabled) is logged. The
-      // primary control below emits a backup.* line for the identical env, so this absence is the gate
-      // rather than a missing config.
-      expect(hasEventPrefixed(lines, "backup.")).toBe(false);
+      // 1. Backup — the supervisor is built and `reload()` runs on every boot, but a NON-PRIMARY takes
+      // the disabled branch BEFORE the read-privilege probe: `backup.disabled` is logged and the
+      // probe-failure line (only a primary that RUNS the probe emits it) is ABSENT. The primary control
+      // below emits `backup.disabled_probe_failed` for the identical config, so this split is the gate
+      // (duty skipped on the secondary, entered on the primary), not a missing config.
+      expect(hasEvent(lines, "backup.disabled")).toBe(true);
+      expect(hasEvent(lines, "backup.disabled_probe_failed")).toBe(false);
 
       // 2. Tunnel client — not dialed (the primary control dials it once).
       expect(runTunnelClient).not.toHaveBeenCalled();
@@ -269,21 +285,24 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
   it("the singleton primary (primary, primary) of the same identity DOES run both (control: the secondary's absence is real)", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
-      const started = await startServer({
-        ...dutyEnv(port),
-        DATABASE_URL: primaryDatabaseUrl,
-        WAITRON_MIGRATIONS_DATABASE_URL: primary.pg.uri,
-      });
+      const started = await startServer(
+        {
+          ...dutyEnv(port),
+          DATABASE_URL: primaryDatabaseUrl,
+          WAITRON_MIGRATIONS_DATABASE_URL: primary.pg.uri,
+        },
+        backupBase(),
+      );
       // The backup gate runs during the (synchronous) boot, so its `backup.*` line is emitted before the
       // first `loop.sleeping` — wait for that to be sure the gate has been decided before asserting.
       await waitForEvent(captured, "loop.sleeping");
       return [started, captured] as const;
     });
     try {
-      // 1. Backup — the gate RAN: with the port-1 backup DB the read-privilege probe fails, so a
-      // `backup.*` line (backup.disabled_probe_failed) is emitted. The positive twin of the secondary's
-      // absence assertion — entered on the singleton primary, skipped on the secondary.
-      expect(hasEventPrefixed(lines, "backup.")).toBe(true);
+      // 1. Backup — the gate RAN: with the port-1 backup DB the read-privilege probe fails, so
+      // `backup.disabled_probe_failed` is emitted. The positive twin of the secondary's absence
+      // assertion — the probe is entered on the singleton primary, skipped on the secondary.
+      expect(hasEvent(lines, "backup.disabled_probe_failed")).toBe(true);
 
       // 2. Tunnel client — dialed once.
       expect(runTunnelClient).toHaveBeenCalledTimes(1);

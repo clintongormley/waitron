@@ -47,6 +47,7 @@ import "./screens/printers-screen.js";
 import "./screens/canvas-editor-screen.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
+import "./screens/backup-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
 
 /**
@@ -81,7 +82,8 @@ type CoreScreen =
   | "printers"
   | "canvas-editor"
   | "device-profiles"
-  | "diagnostics";
+  | "diagnostics"
+  | "backup";
 
 /** A destination the shell can show: a core face, or an active module's own screen id. The `& {}` keeps
  * the `CoreScreen` literal autocomplete while still admitting any module id string — the one spelling
@@ -164,6 +166,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "canvas-editor", labelKey: "nav.canvases" },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
+      { screen: "backup", labelKey: "nav.backup", requiresManager: true },
     ],
   },
 ];
@@ -370,8 +373,8 @@ export class DashboardApp extends LitElement {
 
   /** Whether the viewport is at/below the drawer breakpoint (Task 12). Tracked from `matchMedia` so the
    * shell knows when the sidebar is off-canvas: a CLOSED off-canvas sidebar must be made `inert` (see
-   * render) or its nineteen nav buttons stay in the tab order and a11y tree while translated off-screen,
-   * so a keyboard user would tab through nineteen invisible controls before reaching a visible one. At
+   * render) or its nav buttons stay in the tab order and a11y tree while translated off-screen,
+   * so a keyboard user would tab through invisible controls before reaching a visible one. At
    * desktop width the sidebar is in-flow and always interactive, so this is `false` there. */
   @state() private narrow = false;
 
@@ -660,7 +663,7 @@ export class DashboardApp extends LitElement {
         <div class=${classMap({ layout: true, "drawer-open": hasNav && this.drawerOpen })}>
           <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
                breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
-               off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nineteen nav buttons
+               off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nav buttons
                leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
                control; it is interactive at desktop width and whenever the drawer is open. -->
           ${
@@ -899,6 +902,8 @@ export class DashboardApp extends LitElement {
         ></dashboard-device-profiles-screen>`;
       case "diagnostics":
         return html`<dashboard-diagnostics-screen .api=${this.api}></dashboard-diagnostics-screen>`;
+      case "backup":
+        return html`<dashboard-backup-screen .api=${this.api}></dashboard-backup-screen>`;
       default:
         return html`<dashboard-overview-screen .api=${this.api}></dashboard-overview-screen>`;
     }
