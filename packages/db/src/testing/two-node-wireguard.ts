@@ -4,6 +4,7 @@ import pg from "pg";
 import { dockerAvailable } from "./harness.js";
 import { POSTGRES_IMAGE } from "./postgres.js";
 import { LOGICAL_REPLICATION_COMMAND, type ReplNode, type StartedNetwork } from "./two-node.js";
+import { clusterMutex, type ClusterMutex } from "./cluster-mutex.js";
 
 export type { StartedNetwork } from "./two-node.js";
 
@@ -77,6 +78,13 @@ export interface TwoNodeWireguardOptions {
   startNetwork?(): Promise<StartedNetwork>;
   /** Seam — starts one node on the network at a tunnel address. Defaults to a real container. */
   startNode?(network: StartedNetwork, node: NodePlan): Promise<StartedWireguardNode>;
+  /**
+   * Seam — the cross-process mutex holding "only one two-node cluster alive machine-wide at a time",
+   * shared with the sibling {@link import("./two-node.js")} fixture: whichever kind boots, no other
+   * two-node cluster runs concurrently, so Docker is never oversubscribed. Acquired before any
+   * container boots, released on teardown. Defaults to the shared file-backed {@link clusterMutex}.
+   */
+  mutex?: ClusterMutex;
 }
 
 /** Where a node sits on the network and the tunnel: its Docker alias and its `wg0` address. */
@@ -228,6 +236,7 @@ export async function startTwoNodeWireguardCluster(
   const startNetwork = options.startNetwork ?? (() => new Network().start());
   const startNode = options.startNode ?? startRealWireguardNode;
   const migrate = options.migrate ?? (async () => {});
+  const mutex = options.mutex ?? clusterMutex;
 
   /* v8 ignore start -- Docker-absent branch: unreachable in any Docker-present run (every CI runner
      and dev machine this package requires), gated to the REAL primitives so a seam-injecting test
@@ -251,6 +260,10 @@ export async function startTwoNodeWireguardCluster(
     }
   };
 
+  // Hold the machine-wide mutex for the whole cluster lifetime (boot → stop), acquired before the
+  // first `startNetwork()/startNode()` and released on BOTH the success `stop()` path and the
+  // setup-failure cleanup path — each in a `finally`, so a teardown error can't strand the lock.
+  const release = await mutex.acquire();
   try {
     const network = await startNetwork();
     started.push(network);
@@ -274,10 +287,25 @@ export async function startTwoNodeWireguardCluster(
 
     await migrate(a.node.uri);
     await migrate(b.node.uri);
-    return { nodeA: a.node, nodeB: b.node, stop: teardown };
+    return {
+      nodeA: a.node,
+      nodeB: b.node,
+      stop: async () => {
+        try {
+          await teardown();
+        } finally {
+          await release();
+        }
+      },
+    };
   } catch (error) {
-    // Setup failed after some resources came up — stop exactly those, then surface the real cause.
-    await teardown();
+    // Setup failed after some resources came up — stop exactly those and release the lock, then
+    // surface the real cause.
+    try {
+      await teardown();
+    } finally {
+      await release();
+    }
     throw error;
   }
 }

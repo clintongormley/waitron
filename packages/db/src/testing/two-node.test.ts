@@ -9,6 +9,29 @@ import {
 import { dockerAvailable } from "./harness.js";
 import { runMigrationSets } from "./postgres.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
+import type { ClusterMutex, Release } from "./cluster-mutex.js";
+
+// A mutex that never actually locks — the seam tests below drive the fixture's ordering and cleanup
+// without touching the real machine-wide file lock (which the real-Docker smoke suites exercise).
+const noopMutex: ClusterMutex = { acquire: async () => async () => {} };
+
+// A spy mutex recording acquire/release into a shared event log, to assert the fixture acquires
+// BEFORE the first boot and releases on stop() (and on total-failure cleanup).
+const makeSpyMutex = (events: string[]): { mutex: ClusterMutex; held: () => number } => {
+  let held = 0;
+  const mutex: ClusterMutex = {
+    acquire: async () => {
+      held += 1;
+      events.push("acquire");
+      const release: Release = async () => {
+        held -= 1;
+        events.push("release");
+      };
+      return release;
+    },
+  };
+  return { mutex, held: () => held };
+};
 
 // Acquire retry + setup-path cleanup, driven through the `startNetwork`/`startNode` seams so no
 // daemon is needed. Two invariants are pinned here. (1) A transiently-starved boot must recover: the
@@ -47,7 +70,12 @@ describe("startTwoNodeCluster acquire retry and cleanup", () => {
       return { node: fakeNode(alias), stop: async () => {} };
     };
 
-    const cluster = await startTwoNodeCluster({ migrate: async () => {}, startNetwork, startNode });
+    const cluster = await startTwoNodeCluster({
+      migrate: async () => {},
+      startNetwork,
+      startNode,
+      mutex: noopMutex,
+    });
 
     // Without the retry loop, attempt 1's rejection would propagate and no cluster would return.
     expect(cluster.nodeA.networkHost).toBe("node-a");
@@ -77,7 +105,12 @@ describe("startTwoNodeCluster acquire retry and cleanup", () => {
       return { node: fakeNode(alias), stop: async () => {} };
     };
 
-    const cluster = await startTwoNodeCluster({ migrate: async () => {}, startNetwork, startNode });
+    const cluster = await startTwoNodeCluster({
+      migrate: async () => {},
+      startNetwork,
+      startNode,
+      mutex: noopMutex,
+    });
 
     expect(cluster.nodeA.networkHost).toBe("node-a");
     // The survivor node-a was NOT leaked; attempt-1 teardown is nodes-before-network.
@@ -97,7 +130,7 @@ describe("startTwoNodeCluster acquire retry and cleanup", () => {
     };
 
     await expect(
-      startTwoNodeCluster({ migrate: async () => {}, startNetwork, startNode }),
+      startTwoNodeCluster({ migrate: async () => {}, startNetwork, startNode, mutex: noopMutex }),
     ).rejects.toThrow("attempt 3");
 
     // Three attempts ran; each attempt's network came up and was torn down (nodes never did).
@@ -125,6 +158,7 @@ describe("startTwoNodeCluster acquire retry and cleanup", () => {
       migrate: async () => {},
       startNetwork: async () => makeNetwork([], "network-1"),
       startNode,
+      mutex: noopMutex,
     });
 
     expect(entered).toContain("node-a");
@@ -157,6 +191,7 @@ describe("startTwoNodeCluster acquire retry and cleanup", () => {
       },
       startNetwork,
       startNode,
+      mutex: noopMutex,
     });
 
     expect(cluster.nodeA.networkHost).toBe("node-a");
@@ -188,6 +223,7 @@ describe("startTwoNodeCluster acquire retry and cleanup", () => {
       },
       startNetwork,
       startNode,
+      mutex: noopMutex,
     });
 
     expect(cluster.nodeA.networkHost).toBe("node-a");
@@ -195,6 +231,85 @@ describe("startTwoNodeCluster acquire retry and cleanup", () => {
     // regression that dropped the second fulfilled node from teardown (e.g. a `break` after the first
     // fulfilled result) would leak node-b's container and this assertion would miss `node-b@1`.
     expect(stopped).toEqual(["node-b@1", "node-a@1", "network-1"]);
+  });
+});
+
+// The cross-process mutex wiring, driven through the seams so no daemon is needed. The invariant: the
+// fixture acquires the machine-wide lock BEFORE the first network/node boot and releases it on stop()
+// — and on total-failure cleanup — so no two two-node clusters (of either kind) are ever alive at
+// once. Only these ordering/lifecycle facts are pinned here; the mutex's own atomicity, stale
+// recovery and fail-loud timeout live in cluster-mutex.test.ts.
+describe("startTwoNodeCluster cluster mutex", () => {
+  const fakeNode = (alias: string): ReplNode => ({
+    uri: `postgres://${alias}/db`,
+    networkHost: alias,
+    run: async () => {},
+    query: async () => [],
+  });
+
+  it("acquires the mutex before the first boot and releases it on stop()", async () => {
+    const events: string[] = [];
+    const { mutex, held } = makeSpyMutex(events);
+    const cluster = await startTwoNodeCluster({
+      migrate: async () => {
+        events.push("migrate");
+      },
+      startNetwork: async () => {
+        events.push("network");
+        return { stop: async () => {} } as unknown as StartedNetwork;
+      },
+      startNode: async (_network, alias) => {
+        events.push(`node:${alias}`);
+        return { node: fakeNode(alias), stop: async () => {} };
+      },
+      mutex,
+    });
+
+    // acquire is strictly first — before the network and both nodes boot.
+    expect(events[0]).toBe("acquire");
+    expect(events.indexOf("acquire")).toBeLessThan(events.indexOf("network"));
+    expect(held()).toBe(1); // still held across the cluster's whole lifetime
+    expect(events).not.toContain("release");
+
+    await cluster.stop();
+    expect(events.at(-1)).toBe("release");
+    expect(held()).toBe(0);
+  });
+
+  it("releases the mutex when every acquire attempt fails", async () => {
+    const events: string[] = [];
+    const { mutex, held } = makeSpyMutex(events);
+    await expect(
+      startTwoNodeCluster({
+        migrate: async () => {},
+        startNetwork: async () => ({ stop: async () => {} }) as unknown as StartedNetwork,
+        startNode: async (_network, alias) => {
+          throw new Error(`boot ${alias} starved`);
+        },
+        mutex,
+      }),
+    ).rejects.toThrow("starved");
+    // The lock must not be stranded when the cluster never comes up.
+    expect(held()).toBe(0);
+    expect(events).toContain("release");
+  });
+
+  it("defaults to the real machine-wide mutex, which the escape hatch can disable", async () => {
+    // No `mutex` option: it falls back to the shared `clusterMutex`. With the escape hatch set the
+    // real acquire is a no-op, so this covers the default branch without touching the real file lock.
+    const prev = process.env.WAITRON_TWO_NODE_MUTEX;
+    process.env.WAITRON_TWO_NODE_MUTEX = "0";
+    try {
+      const cluster = await startTwoNodeCluster({
+        migrate: async () => {},
+        startNetwork: async () => ({ stop: async () => {} }) as unknown as StartedNetwork,
+        startNode: async (_network, alias) => ({ node: fakeNode(alias), stop: async () => {} }),
+      });
+      await cluster.stop();
+    } finally {
+      if (prev === undefined) delete process.env.WAITRON_TWO_NODE_MUTEX;
+      else process.env.WAITRON_TWO_NODE_MUTEX = prev;
+    }
   });
 });
 

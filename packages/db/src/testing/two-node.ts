@@ -3,6 +3,7 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import pg from "pg";
 import { dockerAvailable } from "./harness.js";
 import { POSTGRES_IMAGE } from "./postgres.js";
+import { clusterMutex, type ClusterMutex } from "./cluster-mutex.js";
 
 /**
  * A two-node PostgreSQL cluster on a shared Docker network for exercising native logical
@@ -88,6 +89,14 @@ export interface TwoNodeClusterOptions {
    * node needs.
    */
   command?: string[];
+  /**
+   * Seam — the cross-process mutex holding "only one two-node cluster alive machine-wide at a time".
+   * Acquired before any container boots and released on teardown, so no combination of packages,
+   * vitest forks or `pnpm` package processes can oversubscribe Docker with concurrent cluster boots
+   * plus their heavy replication setup. Defaults to the shared file-backed {@link clusterMutex}; a
+   * test injects a fake to assert the ordering without touching the real machine-wide lock.
+   */
+  mutex?: ClusterMutex;
 }
 
 export const LOGICAL_REPLICATION_COMMAND = [
@@ -181,6 +190,27 @@ export async function startTwoNodeCluster(options: TwoNodeClusterOptions): Promi
   }
   /* v8 ignore stop */
 
+  // Hold the machine-wide mutex for the WHOLE cluster lifetime — boot AND the caller's heavy
+  // post-boot replication setup, which is where the starvation lives — not just across the boot. It
+  // is acquired before the first `startNetwork()/startNode()` and released on the success `stop()`
+  // path and on total-failure cleanup alike (both in a `finally`, so a teardown error can't strand
+  // the lock).
+  const mutex = options.mutex ?? clusterMutex;
+  const release = await mutex.acquire();
+  try {
+    return await acquireWithRetries(options, startNetwork, startNode, release);
+  } catch (error) {
+    await release();
+    throw error;
+  }
+}
+
+async function acquireWithRetries(
+  options: TwoNodeClusterOptions,
+  startNetwork: () => Promise<StartedNetwork>,
+  startNode: (network: StartedNetwork, alias: string) => Promise<StartedReplNode>,
+  release: () => Promise<void>,
+): Promise<TwoNodeCluster> {
   // The acquire retries: a transiently-starved boot fails its attempt, tears that attempt down, and
   // the next tries in a calmer window. Only the LAST attempt's error surfaces.
   let lastError: unknown;
@@ -218,7 +248,17 @@ export async function startTwoNodeCluster(options: TwoNodeClusterOptions): Promi
       ];
       await options.migrate(a.value.node.uri);
       await options.migrate(b.value.node.uri);
-      return { nodeA: a.value.node, nodeB: b.value.node, stop: teardown };
+      return {
+        nodeA: a.value.node,
+        nodeB: b.value.node,
+        stop: async () => {
+          try {
+            await teardown();
+          } finally {
+            await release();
+          }
+        },
+      };
     } catch (error) {
       // This attempt failed after some resources came up — stop exactly those, remember the cause,
       // and retry unless this was the last attempt.
