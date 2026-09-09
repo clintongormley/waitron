@@ -1,3 +1,6 @@
+export { POLL_INTERVAL_MS, createAgent } from "./agent.js";
+export type { Agent, AgentOptions } from "./agent.js";
+export type { AgentConfig, AgentPhase, AgentStatus, Host, HostLog } from "./host.js";
 export { DEFAULT_TIMEOUT_MS, createClient } from "./client.js";
 export type {
   AgentClient,
