@@ -1648,6 +1648,43 @@ declare module "@waitron/shared" {
      */
     "backup.source_kind_unsupported": { kind: string };
     /**
+     * A backup admin route (`apply`/`rotate`) was refused because this box's backup config is owned by
+     * the ENVIRONMENT, not the wizard: at least one `WAITRON_BACKUP_*` var is set in the raw base env
+     * (`isManagedByEnvironment`, spec §3.2). Writing `backup.env` would be silently overridden on the
+     * next reload, so the route refuses BEFORE any write rather than let the operator believe a change
+     * took that the env will mask. No params — the refusal names no value (an env var could hold the
+     * recovery key). Mapped to 409 (the box's config-ownership state forbids the write). Never renamed. */
+    "backup.managed_by_environment": Record<string, never>;
+    /**
+     * A backup admin route (`apply`/`rotate`) was refused because this node is not the singleton
+     * PRIMARY (`current().isPrimary` is false). Only the primary runs the backup duty (spec §3.4), so a
+     * secondary/mirror configuring backups would write a `backup.env` that never takes effect here. No
+     * params. Mapped to 409 (the node's role forbids the write). Never renamed once shipped. */
+    "backup.not_primary": Record<string, never>;
+    /**
+     * A recovery key the operator supplied cannot be stored VERBATIM in the `KEY=value` `backup.env`
+     * file: it carries a `\r`/`\n`/control char or leading/trailing whitespace, OR it does not survive
+     * the env-file round-trip byte-for-byte (`parseEnvFile(formatEnvFile({K:key})).K !== key`). Refused
+     * before writing, because a key that round-trips to a DIFFERENT string would have the box encrypt
+     * archives under a string the operator never recorded — unrecoverable (CLAUDE.md §5). `reason` is a
+     * short machine tag (`"whitespace_or_control"`/`"round_trip"`), never the key. Mapped to 400. Never
+     * renamed once shipped. */
+    "backup.recovery_key_unstorable": { reason: string };
+    /**
+     * After `apply`/`rotate` wrote `backup.env` and the supervisor reloaded, the EFFECTIVE recovery key
+     * (`current().recoveryKey`, what the box will actually encrypt under) does not equal the key the
+     * operator requested. The guard against a partial env override silently orphaning archives: if
+     * anything (an env var, a merge) made the effective key differ from the requested one, the route
+     * fails LOUD rather than leave the operator recording a key the box will not use. No params — the
+     * keys are secrets. Mapped to 400. Never renamed once shipped. */
+    "backup.effective_mismatch": Record<string, never>;
+    /**
+     * A backup admin route body failed shape validation before any write — a missing/blank
+     * `destinationDir` or `recoveryKey`, or a malformed `schedule`/`retention`. `field` names the
+     * offending field (our own declared name, never the value, which could be the recovery key). Mapped
+     * to 400. Never renamed once shipped. */
+    "backup.request_invalid": { field: string };
+    /**
      * The operator-supplied `primaryUrl` a mirror was pointed at is not a URL the mirror may fetch from
      * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a
      * host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over ANY scheme, or a

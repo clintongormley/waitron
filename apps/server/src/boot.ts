@@ -125,6 +125,7 @@ import { buildLandingApp } from "./landing-app.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
+import { mountBackupApi } from "./backup-api.js";
 import { loadBackupConfig } from "./backup-config.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -1885,6 +1886,21 @@ export async function startServer(
   mountRecoveryBundleApi(
     app,
     { db, cfg: { tenantId: till.tenantId }, stateDir: config.stateDir, now },
+    log,
+  );
+
+  // The authenticated backup admin routes (BR-1 Task 6): the same management gate as box-status,
+  // reading and hot-reloading the SAME `backupSupervisor` above so the wizard can enable/rotate
+  // backups without a restart. Writes `backup.env` to `config.stateDir`; refuses a write the env owns
+  // or that a non-primary would make.
+  mountBackupApi(
+    app,
+    {
+      supervisor: backupSupervisor,
+      db,
+      cfg: { tenantId: till.tenantId },
+      stateDir: config.stateDir,
+    },
     log,
   );
 

@@ -341,6 +341,58 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
     await sup.stop();
   });
 
+  it("a stop() racing a reload() leaves no running worker and no open pool", async () => {
+    // Step 8b: `apply`/`rotate` now call `reload()` on a live box, so a shutdown `stop()` can interleave
+    // with an in-flight `reload()` at an await point. Without the `#stopped` guard, `stop()` tears down
+    // BEFORE `reload()` opens its pool and starts its worker, so the reload would leave a sweep + pool
+    // running after `stop()` returned. The invariant that catches that: every pool the supervisor opens
+    // is also closed (opened === closed), and after settle no duty is enabled.
+    const dest = await makeDestDir();
+    let opened = 0;
+    let closed = 0;
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      admin: ownerUrl,
+      logs: [],
+      managed: false,
+    };
+    const sup = new BackupSupervisor({
+      buildConfig: async () => refs.config,
+      isManagedByEnvironment: () => refs.managed,
+      readSingletonRole: () => refs.role,
+      adminDatabaseUrl: refs.admin,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      mediaDir: await makeMediaDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      log: (level, event) => refs.logs.push({ level, event }),
+      runDump: fakeDump,
+      // Count every pool the supervisor opens and closes — the leak-detector for the race.
+      openDb: async (url) => {
+        const db = await createPostgresDb(url);
+        opened += 1;
+        const orig = db.close.bind(db);
+        db.close = async () => {
+          closed += 1;
+          await orig();
+        };
+        return db;
+      },
+    });
+    // Fire the reload and, WITHOUT awaiting it, race a stop() against it — the two interleave at the
+    // reload's await points (teardown → buildConfig → openDb → probe).
+    const reloading = sup.reload();
+    await sup.stop();
+    await reloading.catch(() => {});
+    // Let any leaked worker (there must be none) have a window to open/start.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(sup.current().enabled).toBe(false); // no running duty (#db torn down / never assigned)
+    expect(opened).toBe(closed); // every opened pool was closed — no leaked connection
+  }, 60_000);
+
   it("the probe gates a bad connection: it is refused, backup stays off (control by inversion)", async () => {
     // The positive twin is `enable from off` above (a GOOD owner url → enabled + an artifact). Here the
     // SAME config with a reader that cannot read the journals is REFUSED by the probe: backup left off,

@@ -86,6 +86,12 @@ export class BackupSupervisor {
   #db: Database | undefined;
   #config: BackupConfig | undefined;
   #reloading = false;
+  /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
+   * tearing down anything it opened — rather than start (or leave) a worker after a stop. Without it a
+   * shutdown `stop()` that interleaves with a route-triggered `reload()` at an await point could tear
+   * down BEFORE `reload()` assigned a fresh worker/pool, leaving a sweep running after `stop()`
+   * returned (Task 4 review carry, step 8b). */
+  #stopped = false;
   /** When the running duty last (re)started. `archiveUnderCurrentKey` reads TRUE only for an artifact
    * stored at/after this instant — i.e. under the config/key this reload put in force. */
   #reloadedAt: Date | undefined;
@@ -105,7 +111,11 @@ export class BackupSupervisor {
     this.#reloading = true;
     try {
       await this.#teardown();
+      // A `stop()` may have run (fully, or concurrently) while we awaited the teardown. Bail before
+      // reading config or starting anything — `#teardown` above already left no worker/pool.
+      if (this.#stopped) return;
       const cfg = await this.#deps.buildConfig();
+      if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
       this.#config = cfg;
       this.#reloadedAt = this.#now();
       if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
@@ -129,6 +139,13 @@ export class BackupSupervisor {
         if (db !== undefined) await db.close().catch(() => {});
         this.#deps.log("error", "backup.disabled_probe_failed", { errorCode: codeOf(err) });
         this.#config = undefined;
+        return;
+      }
+      // A `stop()` landed while we opened the pool / ran the probe. Close the pool we just opened and
+      // bail WITHOUT assigning `#db` or starting a worker — otherwise the sweep we are about to start
+      // would outlive the `stop()` that already returned.
+      if (this.#stopped) {
+        await db?.close().catch(() => {});
         return;
       }
       this.#db = db;
@@ -204,6 +221,9 @@ export class BackupSupervisor {
   }
 
   async stop(): Promise<void> {
+    // Terminal: set the flag FIRST, so a route-triggered `reload()` still in flight sees it at its
+    // next await-checkpoint and bails instead of starting (or leaving) a worker after this teardown.
+    this.#stopped = true;
     await this.#teardown();
   }
 
