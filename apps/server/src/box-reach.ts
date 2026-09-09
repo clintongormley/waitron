@@ -1,5 +1,6 @@
 import { networkInterfaces } from "node:os";
 import { AppError } from "@waitron/shared";
+import { isPermittedLeafIpv4 } from "./self-signed-cert.js";
 import "./errors.js";
 
 /**
@@ -13,7 +14,7 @@ export interface ReachInfo {
   hostname: string; // "waitron.local"
   scheme: "https" | "http";
   port: number;
-  addresses: string[]; // non-internal IPv4s
+  addresses: string[]; // non-internal, cert-coverable IPv4s (filtered to the CA's permitted subtrees)
   hostnameUrl: string; // e.g. "https://waitron.local:8080" (":443"/":80" omitted)
   ipUrls: string[]; // one per address, same port rule
   /** The URL the IP-QR encodes — the FIRST ip URL, since `.local` is unreliable on iOS (spec §7);
@@ -52,10 +53,16 @@ function urlFor(scheme: "https" | "http", host: string, port: number): string {
   return isDefault ? `${scheme}://${host}` : `${scheme}://${host}:${port}`;
 }
 
-/** Compose the reachable URLs for `hostname` + every detected IPv4, and the IP-QR target. */
+/** Compose the reachable URLs for `hostname` + every cert-coverable IPv4, and the IP-QR target. Only
+ * cert-coverable IPs are advertised: the box leaf's iPAddress SANs are filtered to the CA's permitted
+ * subtrees (`isPermittedLeafIpv4`), so an out-of-set address (Tailscale 100.64/10, 169.254/16
+ * link-local, a public IP) would yield an `https://<ip>/` the leaf's cert cannot vouch for — a TLS
+ * name mismatch on dial. The `waitron.local` hostname URL is unaffected: the cert covers the NAME, and
+ * mDNS (a separate path in boot) still resolves it to the box's real address even when that IP is
+ * out-of-set. When no IP is permitted the box still advertises the hostname URL and a null IP-QR. */
 export function buildReachInfo(opts: BuildReachOptions): ReachInfo {
   const scheme: "https" | "http" = opts.secure ? "https" : "http";
-  const addresses = (opts.listIpv4 ?? listBoxIpv4)();
+  const addresses = (opts.listIpv4 ?? listBoxIpv4)().filter(isPermittedLeafIpv4);
   const ipUrls = addresses.map((addr) => urlFor(scheme, addr, opts.port));
   return {
     hostname: opts.hostname,
