@@ -215,7 +215,9 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       ]);
       expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
       expect(results.filter((result) => result.status === "rejected")).toEqual([
-        expect.objectContaining({ reason: { code: "provisioning.second_venue" } }),
+        expect.objectContaining({
+          reason: expect.objectContaining({ code: "provisioning.second_venue" }),
+        }),
       ]);
       const counts = await owner.execute<{ locations: number; nodes: number }>(sql`
         select
