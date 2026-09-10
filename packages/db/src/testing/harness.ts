@@ -54,17 +54,67 @@ export interface Target {
 // Cache the fallback probe within each isolated test file.
 let cachedDockerAvailable: boolean | undefined;
 
+export interface DockerProbeOptions {
+  /** How many times to probe before concluding the daemon is absent. */
+  attempts: number;
+  /** Milliseconds to wait between a failed probe and the next one. */
+  delayMs: number;
+  /** Blocking sleep between attempts; injectable so tests don't wait in real time. */
+  sleep: (ms: number) => void;
+}
+
+// A CI runner has Docker installed but its daemon can still be a second or two from accepting
+// connections when this gate's CLI probe first runs. A one-shot `docker info` then caches "absent"
+// for the rest of that test file, and every consumer of the gate misreads Docker as gone — with
+// three different symptoms: a caller that hard-requires two real containers throws "cannot degrade
+// to a hermetic run" (the sync two-node replication fixture — the failure that motivated this); the
+// `resolveTargets` dual-target suites throw at collection under REQUIRE_DOCKER; and the
+// `describe.runIf(dockerAvailable())` suites silently skip. Retrying a not-ready daemon across a few
+// probes avoids all three. Genuine absence — a missing `docker` binary (ENOENT) — never resolves on
+// retry, so it fails fast; a daemon that never comes up still fails after the bounded wait, so
+// REQUIRE_DOCKER stays loud.
+const DOCKER_PROBE_ATTEMPTS = 6;
+// Sleeps run only BETWEEN failed probes: up to 5 × 1s = ~5s. Each probe also carries `docker info`'s
+// own 10s timeout, so a HANGING daemon (rare) can exceed that; a not-ready daemon errors fast, so the
+// ~5s figure holds for the case this retry exists for.
+const DOCKER_PROBE_DELAY_MS = 1_000;
+
+/** Blocking sleep — `dockerAvailable` is synchronous and runs once at suite setup, so a short thread
+ * block is acceptable and simpler than making the whole probe async. The retry LOGIC is covered by
+ * `probeDockerCli`'s injected sleep; this one-line stdlib primitive is not worth a wall-clock test. */
+function sleepSync(ms: number): void {
+  /* v8 ignore next -- trivial Atomics.wait sleep, no logic to cover (matches the file's other thin-line ignore) */
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Probe for a working Docker daemon, retrying a not-yet-ready daemon up to `attempts` times with a
+ * `delayMs` wait between tries. `run` performs one probe and throws on failure; a thrown ENOENT
+ * (the `docker` binary is missing) is treated as genuine absence and returns immediately without
+ * retrying. Returns true on the first successful probe, false once the attempts are exhausted.
+ */
+export function probeDockerCli(run: () => void, options: DockerProbeOptions): boolean {
+  for (let attempt = 0; attempt < options.attempts; attempt++) {
+    try {
+      run();
+      return true;
+    } catch (error) {
+      if ((error as { code?: string }).code === "ENOENT") return false;
+      if (attempt < options.attempts - 1) options.sleep(options.delayMs);
+    }
+  }
+  return false;
+}
+
 export function dockerAvailable(): boolean {
   // Global setup has already started and migrated this container. A redundant CLI
   // probe can fail independently; actual database/boot failures still fail the suites.
   if (inject("sharedPg") !== undefined) return true;
   if (cachedDockerAvailable !== undefined) return cachedDockerAvailable;
-  try {
-    execFileSync("docker", ["info"], { stdio: "ignore", timeout: 10_000 });
-    cachedDockerAvailable = true;
-  } catch {
-    cachedDockerAvailable = false;
-  }
+  cachedDockerAvailable = probeDockerCli(
+    () => execFileSync("docker", ["info"], { stdio: "ignore", timeout: 10_000 }),
+    { attempts: DOCKER_PROBE_ATTEMPTS, delayMs: DOCKER_PROBE_DELAY_MS, sleep: sleepSync },
+  );
   return cachedDockerAvailable;
 }
 

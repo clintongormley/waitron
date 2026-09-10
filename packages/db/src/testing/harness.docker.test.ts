@@ -38,8 +38,9 @@ describe("Docker availability", () => {
   });
 
   it("keeps the required-Docker failure when neither a container nor the CLI is available", async () => {
+    // A missing `docker` binary throws ENOENT (a `code`, not just a message) — fail fast, no retry.
     execFileSync.mockImplementation(() => {
-      throw new Error("spawnSync docker ENOENT");
+      throw Object.assign(new Error("spawnSync docker ENOENT"), { code: "ENOENT" });
     });
     const { dockerAvailable, resolveTargets } = await import("./harness.js");
     expect(dockerAvailable()).toBe(false);
@@ -48,5 +49,51 @@ describe("Docker availability", () => {
     expect(() =>
       resolveTargets({ dockerAvailable: dockerAvailable(), requireDocker: true }),
     ).toThrow(/REQUIRE_DOCKER/);
+  });
+});
+
+describe("probeDockerCli — readiness retry", () => {
+  const daemonNotReady = () => new Error("Cannot connect to the Docker daemon");
+
+  it("returns true when the daemon becomes ready after a transient failure", async () => {
+    const { probeDockerCli } = await import("./harness.js");
+    let calls = 0;
+    const run = () => {
+      calls += 1;
+      if (calls < 3) throw daemonNotReady();
+    };
+    const sleeps: number[] = [];
+    const ok = probeDockerCli(run, { attempts: 5, delayMs: 40, sleep: (ms) => sleeps.push(ms) });
+    expect(ok).toBe(true);
+    expect(calls).toBe(3); // failed twice, succeeded on the third probe
+    expect(sleeps).toEqual([40, 40]); // slept only BETWEEN the failed attempts
+  });
+
+  it("fails fast without retrying when the docker binary is missing (ENOENT)", async () => {
+    const { probeDockerCli } = await import("./harness.js");
+    let calls = 0;
+    const run = () => {
+      calls += 1;
+      throw Object.assign(new Error("spawn docker ENOENT"), { code: "ENOENT" });
+    };
+    const sleeps: number[] = [];
+    const ok = probeDockerCli(run, { attempts: 5, delayMs: 40, sleep: (ms) => sleeps.push(ms) });
+    expect(ok).toBe(false);
+    expect(calls).toBe(1); // a missing binary never appears on retry
+    expect(sleeps).toEqual([]);
+  });
+
+  it("gives up loudly after the bounded attempts when the daemon never comes up", async () => {
+    const { probeDockerCli } = await import("./harness.js");
+    let calls = 0;
+    const run = () => {
+      calls += 1;
+      throw daemonNotReady();
+    };
+    const sleeps: number[] = [];
+    const ok = probeDockerCli(run, { attempts: 3, delayMs: 40, sleep: (ms) => sleeps.push(ms) });
+    expect(ok).toBe(false);
+    expect(calls).toBe(3);
+    expect(sleeps).toEqual([40, 40]); // no sleep after the final attempt
   });
 });
