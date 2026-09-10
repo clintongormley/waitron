@@ -65,9 +65,15 @@ and then to HEAD:
 | 7–13 | throws | complete 15/15 |
 | 14 | complete 15/15 | complete 15/15 |
 
-Point 14 is the one existing box that already upgrades: it has applied `0013`, so the
-`ALTER TYPE … ADD VALUE` is committed before the batch that names the label begins. Only points 1–13
-throw. (A first draft of this table said 7–14 throw; re-running the suite falsified that.)
+Point 14 is a row in the test matrix, not a box: no released image can leave a database there.
+`git log --diff-filter=A -- packages/db/drizzle/0013_central_printer_provisioning.sql
+packages/db/drizzle/0014_central_printer_provisioning_sql.sql` names a single commit, `af17abab`
+(#304), for both files, so no image ships `0013` without `0014` and nothing in the field has applied
+one and not the other. What the row does show is the mechanism: with `0013` already committed, the
+batch that names the label no longer contains the `ALTER TYPE … ADD VALUE`, and it passes. Only
+points 1–13 throw, and that is where every real box sits. (A first draft of this table said 7–14
+throw; re-running the suite falsified that. A first draft of THIS paragraph called point 14 "the one
+existing box that already upgrades"; `git log` falsified that.)
 
 **Defect B cannot be fixed by editing the journal, and this was measured rather than assumed.**
 Raising entries 2–6 above entry 1 makes points 1–2 clean but breaks points 3–7, which then RE-APPLY

@@ -17,7 +17,10 @@ string) and logs only `codeOf(error)`, which is `"unknown"` for anything that is
 of guesswork, one wrong hypothesis that would have wiped the box for the wrong reason, and finally a
 wipe — which also destroyed the evidence, so the exact schema artefact that broke the boot was
 never confirmed. Both halves are defects: a box that cannot say why it will not start, and a mixed
-image/database that nothing detects.
+image/database that nothing detects. **Pointer, 2026-09-10 (later the same day):** the artefact was
+afterwards confirmed and reproduced on `fix/core-migration-upgrade` — core `0013` adds the
+`bluetooth` label to `print_transport` and `0014` names it in a `CHECK` inside the same pending
+batch; regression test `packages/db/src/migrate-upgrade.pg.test.ts`.
 
 ## 2. Decisions (owner, 2026-09-10)
 
@@ -208,7 +211,10 @@ outcomes look alike measures nothing (CLAUDE.md §1); the control is what makes 
   the branch's table migration had NOT landed; the artefact that actually broke the boot (most
   plausibly the non-transactional `bluetooth` enum value, or a journal entry) was **not confirmed**,
   because the box was reset to unblock the owner before the enum was queried. §6's experiment exists
-  precisely because that question is still open.
+  precisely because that question is still open. **Pointer, 2026-09-10 (later the same day):** it was
+  the `bluetooth` enum value — confirmed and reproduced on `fix/core-migration-upgrade`, where `0014`
+  names the label inside the batch that `0013` adds it in
+  (`packages/db/src/migrate-upgrade.pg.test.ts`).
 - Owner, 2026-09-10: "be aware that most users will never have access to the terminal on this box,
   there only window is via the web server"; "CI flakes are just bad tests that waste time and must be
   fixed"; approval of the classify-on-the-page + scrubbed-`docker logs` shape, and of *restore or
