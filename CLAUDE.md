@@ -246,6 +246,14 @@ unfiltered `main` run, not a wrong hook.
   clean). The guard is the `import-x/no-restricted-paths` zone in `eslint.config.js`, alongside
   `packages/verifactu`'s and `packages/shared`'s. Design:
   `docs/superpowers/specs/2026-09-08-print-agent-process-design.md` §2.1.
+- **A container that must reach a hot-plugged USB printer mounts `/dev:/dev:ro`, not `/dev/usb`.** A
+  `/dev/usb` subdirectory bind goes stale when the printer is re-plugged (the node vanishes and does
+  not return); a hard `devices: /dev/usb/lp0` line refuses to start when no printer is attached. The
+  shape that survives both — measured on the real box 2026-09-10 — is the whole `/dev` mounted
+  read-only plus `device_cgroup_rules: ["c 180:* rwm"]` (the usblp major) and `group_add: ["7"]` (the
+  `lp` group's write bit); `:ro` still permits device-node writes but refuses `mknod`, and the cgroup
+  rule denies every other device class. Pinned by `scripts/deploy-image-env.test.ts`; spec
+  `docs/superpowers/specs/2026-09-10-print-agent-box-wiring-design.md` §5.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would
   publish the whole harness and give `asAppUser` a second import path. Consequence: `apps/server`

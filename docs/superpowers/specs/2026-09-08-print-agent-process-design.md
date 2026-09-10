@@ -120,6 +120,10 @@ nothing secret.
   /dev/usb/lp0`). Track P's compose wires it in beside the server later; on that box the compose sets
   `WAITRON_SERVER_URL` to the server's service address, so the same-box agent needs nothing typed.
 
+_(2026-09-10: the box compose wiring, the published image, and the CA-trust path the same-box
+`https://127.0.0.1` needs are designed in
+[2026-09-10-print-agent-box-wiring-design.md](2026-09-10-print-agent-box-wiring-design.md).)_
+
 ### 2.3 Server side (`apps/server`, `packages/printing`, `packages/db`)
 
 **Data.** `print_agents` gains `approved_at timestamptz null` (NULL = pending) and `join_code text
