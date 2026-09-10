@@ -256,6 +256,13 @@ async function registroCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
+async function preparationTicketCount(workingOrderId: string): Promise<number> {
+  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+    select count(*)::text as count from ticket_items where working_order_id = ${workingOrderId}
+  `);
+  return Number(rows[0]!.count);
+}
+
 /** Create a receipt printer (cloud_poll) and point the till at it. `receipt_print_mode` defaults to
  *  `auto`, so a filed sale auto-enqueues its receipt via the print-on-sale hook. */
 async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
@@ -498,8 +505,9 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
-      // A WALK-UP was never fired to a station, so its handover marker stays NULL — the `markCollected`
-      // default guard: only a counter COLLECT (a placed order) stamps `collected_at`, never a walk-up.
+      expect(await preparationTicketCount(id)).toBe(1);
+      // The prepay walk-up has entered preparation, but its handover marker stays NULL until somebody
+      // collects it. Only a counter COLLECT of an already-placed order stamps `collected_at` here.
       expect(await collectedAtSet(id)).toBe(false);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
       const payments = await paymentsFor(id);
@@ -563,6 +571,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       expect(client.lastCreateIntent).toBe(firstIntent); // no second createPaymentIntent
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
+      expect(await preparationTicketCount(id)).toBe(1);
       expect(await paymentCount(id)).toBe(1);
     } finally {
       await app.close();
@@ -936,11 +945,12 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       expect(await paymentCount(id)).toBe(1);
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
+      expect(await preparationTicketCount(id)).toBe(1);
       expect(await filedSaleTotal(id)).toBe("1.50");
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-      // The recovered order was an OPEN walk-up (seeded via createOpenOrder, never fired), so its handover
-      // marker stays NULL — a recovered walk-up is still a walk-up (the `wasPlaced` guard).
+      // The recovered OPEN walk-up has entered preparation, but its handover marker stays NULL until
+      // collection — a recovered walk-up is still a walk-up (the `wasPlaced` guard).
       expect(await collectedAtSet(id)).toBe(false);
       const payments = await paymentsFor(id);
       expect(payments).toHaveLength(1);
@@ -989,6 +999,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await paymentCount(id)).toBe(1);
+      expect(await preparationTicketCount(id)).toBe(1); // placement fired it; recovery did not re-fire
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       // A recovered PLACED collect leaves its station queue: collected_at stamped in the settle UPDATE.
       expect(await collectedAtSet(id)).toBe(true);

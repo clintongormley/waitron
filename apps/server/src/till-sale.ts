@@ -19,6 +19,7 @@ import {
   isUniqueViolation,
   sales,
   withTenant,
+  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -1028,6 +1029,14 @@ async function finalizeCapture(
         tenantId: cfg.tenantId,
       });
 
+      // A newly-paid prepay order enters preparation as part of the same commit as its sale. Do this
+      // after `recordSale`: its chain-head lock serialises concurrent captures, so only the winner can
+      // reach the fire and the per-line ticket unique is never asked to distinguish two card winners.
+      // A placed order was already fired when it was placed and must not be fired a second time.
+      if (!markCollected) {
+        await firePrepayOrder(tx, cfg, req.id);
+      }
+
       // → settled. `working_orders_enforce_transition` permits open → settled (walk-up) and
       // placed → settled (issue-at-pay); the `settled_at` biconditional requires the timestamp be set.
       // A counter collect (`markCollected`, the order was `placed`) ALSO stamps the order-level
@@ -1193,12 +1202,20 @@ async function finalizeRecovery(
       tenantId: cfg.tenantId,
     });
 
+    // Lost-T2 recovery follows the same prepay fire point as a normal capture. A placed order already
+    // has ticket items from placing; an open order has not entered preparation yet. The order row lock
+    // above makes a concurrent recovery replay before it can reach this point.
+    if (locked?.status === "open") {
+      await firePrepayOrder(tx, cfg, req.id);
+    }
+
     // → settled, at the ORIGINAL capture instant (the same reading the tender carries).
     // `working_orders_enforce_transition` permits open → settled and placed → settled; the `settled_at`
     // biconditional requires the timestamp be set. A recovered order that was `placed` (a genuine
     // counter collect whose P3 was lost) ALSO stamps `collected_at` here so it leaves its station queue
     // (§3e) — read off the FOR-UPDATE status above, the recover-time analogue of `finalizeCapture`'s
-    // P1 `markCollected`. A recovered WALK-UP (`open`, never fired) leaves it NULL. NON-FISCAL.
+    // P1 `markCollected`. A recovered WALK-UP (`open`) has just entered preparation and leaves it NULL
+    // until handover. NON-FISCAL.
     await tx
       .update(workingOrders)
       .set({
@@ -1224,6 +1241,38 @@ async function finalizeRecovery(
     await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
     return { outcome: "captured", ticket };
   });
+}
+
+/** Fire an open order at payment when its frozen service context uses the prepay flow. */
+async function firePrepayOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  workingOrderId: string,
+): Promise<void> {
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
+  if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
+    return;
+  }
+
+  const lines = await tx
+    .select({
+      id: workingOrderLines.id,
+      productId: workingOrderLines.productId,
+      courseId: workingOrderLines.courseId,
+      parentLineId: workingOrderLines.parentLineId,
+      note: workingOrderLines.note,
+      doneness: workingOrderLines.doneness,
+    })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.tenantId, cfg.tenantId),
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo);
+
+  await fireLines(tx, cfg, workingOrderId, lines);
 }
 
 /**
