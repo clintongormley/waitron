@@ -1,6 +1,11 @@
 import { decimal, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 
+/** This adapter's `payments.provider` discriminator. It lives HERE, not in `provider.ts`, so that
+ * `reverse.ts` can import it without a cycle: `provider.ts` imports `reverseViaSumUp`, and
+ * `reverse.ts` needs the constant, while `client.ts` imports neither. */
+export const SUMUP_PROVIDER = "sumup";
+
 /** The `status` values SumUp documents on a transaction (`GET /v2.1/merchants/{mc}/transactions`).
  * `SumUpTransaction.status` is deliberately wider: a value SumUp adds later must reach the adapter as
  * a string it does not recognise, not be silently narrowed away by a type. */

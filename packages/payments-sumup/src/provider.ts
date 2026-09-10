@@ -20,9 +20,10 @@ import {
   tillsForWorkingOrders,
 } from "@waitron/payments";
 import type { SumUpClient, SumUpTransaction } from "./client.js";
+import { SUMUP_PROVIDER } from "./client.js";
+import { reverseViaSumUp } from "./reverse.js";
 import "./errors.js";
 
-export const SUMUP_PROVIDER = "sumup";
 const CURRENCY = "EUR";
 /** SumUp gives the reader 60 s to START the checkout, then the customer taps; two minutes covers
  * a slow tap. Longer than Stripe's 60 s window for that reason. */
@@ -298,21 +299,22 @@ export class SumUpCloudProvider implements PaymentProvider {
     };
   }
 
-  // Throwing stubs until their task lands — the whole span is v8-ignored so an uncallable stub is
-  // not scored as an uncovered function; each ignore is REMOVED in the task that implements it
-  // (`void`/`refund`/`partialRefund` Task 5).
-  /* v8 ignore start */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Task 5 implements the reversal
-  void(_ref: string): Promise<PaymentResult> {
-    throw new Error("Task 5");
+  /** void / refund / partialRefund all share one reversal path (`reverseViaSumUp`); a `void` is a
+   * full refund at SumUp (spec §5 — there is no separate void endpoint), a `partialRefund` carries
+   * the amount. Every phase is tenant-scoped inside `reverseViaSumUp`. */
+  private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
+    return reverseViaSumUp(this.opts.db, this.opts.client, ref, kind, amount, {
+      tenantId: this.opts.tenantId,
+      nodeId: this.opts.nodeId,
+    });
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Task 5 implements the reversal
-  refund(_ref: string): Promise<PaymentResult> {
-    throw new Error("Task 5");
+  void(ref: string): Promise<PaymentResult> {
+    return this.reverse("void", ref);
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Task 5 implements the reversal
-  partialRefund(_ref: string, _amount: Decimal): Promise<PaymentResult> {
-    throw new Error("Task 5");
+  refund(ref: string): Promise<PaymentResult> {
+    return this.reverse("refund", ref);
   }
-  /* v8 ignore stop */
+  partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
+    return this.reverse("refund", ref, amount);
+  }
 }
