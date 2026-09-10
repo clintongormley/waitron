@@ -697,7 +697,7 @@ lands, this file compiles because it returns bare strings, not `AppError`s.
 ```bash
 pnpm --filter @waitron/server exec vitest run src/boot-failure.test.ts
 ```
-Expected: 8 passed.
+Expected: 10 passed.
 
 - [ ] **Step 5: Commit**
 
