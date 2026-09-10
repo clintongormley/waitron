@@ -535,6 +535,22 @@ describe("runEntry", () => {
     expect(reported).toContain("params: (not serialisable)");
   });
 
+  // A boot can throw a non-Error — a bare string from a dependency, a rejected promise with no
+  // reason. There is no chain to walk and no stack to print; the installer still gets the value.
+  it("reports a non-Error throw rather than printing nothing", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() => Promise.reject("boot gave up")),
+        }),
+      ),
+    ).rejects.toBeTruthy();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("non-error thrown: boot gave up");
+  });
+
   // The bound `sqlStateOf` uses, for the same reason — a self-referential `cause` must not spin.
   it("stops walking a self-referential cause rather than spinning", async () => {
     const reportFailure = vi.fn();
