@@ -19,9 +19,10 @@ export interface RecoveryDeps {
 }
 
 /** Escapes into HTML text/attribute content. This page is served before any authentication exists
- * and both the error code and the log tail are attacker-influenceable — the tail demonstrably so,
- * see `OPERATOR_TEXT` — so every interpolated value goes through this, never a raw template literal. Exported so the suite asserts
- * the page's exact rendered bytes against this rule rather than against a second copy of it. */
+ * and every string on it that came from outside the image is attacker-influenceable — the log tail
+ * demonstrably so, see `OPERATOR_TEXT`, which enumerates all three — so every interpolated value
+ * goes through this, never a raw template literal. Exported so the suite asserts the page's exact
+ * rendered bytes against this rule rather than against a second copy of it. */
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -91,19 +92,30 @@ type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE;
 /**
  * What the page says, keyed by error code.
  *
- * EVERY string here is fixed and chosen by code, and the caught error's own message and stack never
- * reach the page — a failure of the boot sequence itself sends them to the container's stdout,
- * scrubbed, which is the installer's channel (the limit is on `GENERIC_TEXT`).
- * Exactly two values on this page come from outside the image, and spec §5 names both: the error
- * CODE and the log TAIL, each HTML-escaped and each treated as attacker-influenceable.
+ * EVERY string in this table is fixed and chosen by code. THREE strings on the page are not: the
+ * error CODE, the log TAIL and `lastFailureAt` — the last read from `recovery.json` behind nothing
+ * but a `typeof === "string"` check (`recovery-state.ts`), so it is a string from outside the image
+ * exactly as the other two are. All three are HTML-escaped and all three are treated as
+ * attacker-influenceable. (`failures` also comes from that file; it is the one value interpolated
+ * without escaping, and what makes that safe is that the same read coerces it to a number.)
  *
- * The TAIL is worth stating plainly, because it is a wider channel than the code. It is the server's
- * own `waitron.log`, and the shared error boundary writes an `AppError`'s params into that file
- * (`packages/server-kit/src/error-boundary.ts`), so a param CAN be read off this page by anyone on
- * the venue's LAN, with no login. What keeps that safe is not this page: it is the repo's convention
- * that an `AppError`'s params never carry a secret — the rule `apps/server/src/errors.ts` states for
- * `server.config_invalid` and its siblings. This page is why that convention matters beyond a log
- * file. Pinned by `recovery-surface.test.ts` → "the log tail as a second channel out of the image".
+ * The TAIL is the widest of the three, and the caught error's own words DO reach it — the earlier
+ * claim that they never leave stdout was wrong twice. The box has ONE logger, tee'd to the
+ * container's stdout and to the `waitron.log` this page tails (`boot.ts`), so every module that logs
+ * a caught error's message writes it onto an unauthenticated LAN page: `mdns.ts` and `me-api.ts`
+ * already do, and email is configured as a URL, so a mailer failure is a plausible carrier of
+ * `smtp://user:pass@host`. Two things bound that, neither of them this page:
+ *
+ *  - the file sink masks URL credentials on every line it writes (`log-file.ts` → `redactSecrets`),
+ *    which covers the connection-string shape and NOTHING else — an error message carrying a secret
+ *    in any other shape still reaches this page;
+ *  - the repo's convention that an `AppError`'s params never carry a secret (the rule
+ *    `apps/server/src/errors.ts` states for `server.config_invalid` and its siblings), because the
+ *    shared error boundary writes those params into the same file
+ *    (`packages/server-kit/src/error-boundary.ts`).
+ *
+ * This page is why both matter beyond a log file. Pinned by `recovery-surface.test.ts` → "the log
+ * tail as a second channel out of the image" and "the caught error's own words on the page".
  *
  * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,

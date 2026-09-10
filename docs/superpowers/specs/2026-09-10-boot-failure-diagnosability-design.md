@@ -172,6 +172,16 @@ rendered page contains the curated text and NOT `hunter2`, while the same test's
 installer's stdout DOES carry the message with `hunter2` replaced by `***`. A measurement where both
 outcomes look alike measures nothing (CLAUDE.md §1); the control is what makes this one a probe.
 
+**Wrong as stated, and fixed in code, 2026-09-11.** The caught error's text DID reach the page. The
+box has one logger tee'd to stdout and to the `waitron.log` the page tails (`boot.ts`), so any module
+logging a caught error's message — `mdns.ts`, `me-api.ts` — put it on the unauthenticated page;
+`redactSecrets` was applied to the entrypoint's stdout report only. The invariant now enforced is
+narrower and true: the file sink masks URL credentials on every line it writes
+(`log-file.ts` → `redactSecrets`), and stdout is deliberately left whole as the installer's channel.
+Three strings on the page come from outside the image, not two — the error code, the log tail and
+`lastFailureAt`. See `apps/server/src/recovery-surface.ts` (`OPERATOR_TEXT`), which is the authority,
+and `recovery-surface.test.ts` → "the caught error's own words on the page".
+
 ## 6. Testing
 
 - **Unit, `classifyBootFailure`:** an `AppError` keeps its code; an error carrying each listed

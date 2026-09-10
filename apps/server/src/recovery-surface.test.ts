@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary } from "@waitron/server-kit";
 import "./errors.js";
-import { createRotatingFileSink } from "./log-file.js";
+import { createRotatingFileSink, tee } from "./log-file.js";
 import { createLogger } from "./logger.js";
 import { FRESH, afterFailure, type RecoveryState } from "./recovery-state.js";
 import { GENERIC_TEXT, OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
@@ -147,6 +147,45 @@ describe("the log tail as a second channel out of the image", () => {
       await recoveryApp({ state, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
     ).text();
     expect(withoutLog).not.toContain("WAITRON_PROBE");
+  });
+});
+
+/**
+ * ONE logger feeds both the container's stdout and the rotating `waitron.log` this page tails
+ * (`boot.ts` → `createLogger(tee(stdoutSink, fileSink), …)`), so any module that logs a caught
+ * error's own words puts them on an unauthenticated LAN page — `mdns.ts` logs `err.message`,
+ * `me-api.ts` logs `error.message`, and email is configured as a URL, so a mailer failure is a
+ * plausible carrier of `smtp://user:pass@host`. The file sink is what redacts, so the guarantee is
+ * structural: a module written next year is covered without knowing this page exists.
+ */
+describe("the caught error's own words on the page", () => {
+  it("masks a URL password logged by any module, and keeps the installer's stdout copy", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-log-"));
+    const stdout: string[] = [];
+    // Wired exactly as `boot.ts` wires the process logger: one logger, tee'd to stdout and to the
+    // real rotating file sink in a real directory.
+    const log = createLogger(
+      tee(
+        (line) => stdout.push(line),
+        createRotatingFileSink({ dir: logDir, maxBytes: 1_000_000, maxFiles: 2 }),
+      ),
+      () => new Date(),
+    );
+    log("warn", "mail.send_failed", {
+      message: "connect ECONNREFUSED smtp://mailer:hunter2@smtp.example:587",
+    });
+
+    const body = await (await recoveryApp({ state, logDir, onRetry: vi.fn() }).request("/")).text();
+    expect(body).not.toContain("hunter2");
+    // The control, in the other direction: the line IS on the page, masked. Without it the
+    // assertion above would pass against a page that renders no tail at all.
+    expect(body).toContain("mail.send_failed");
+    expect(body).toContain("smtp://mailer:***@smtp.example:587");
+    // And the second control, for the CHOICE: stdout is the installer's channel (spec §4.4) and
+    // keeps the line whole. Redacting there too would erase the difference between a wrong password
+    // and no password at all — both mask to `***` — which is exactly what an installer chasing
+    // `provisioning.database_unreachable` (28P01) has to tell apart.
+    expect(stdout.join("")).toContain("hunter2");
   });
 });
 
