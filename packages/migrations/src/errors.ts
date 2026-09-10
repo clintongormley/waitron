@@ -20,10 +20,10 @@ import "@waitron/shared";
  * `server.` on the grounds that "`apps/server` is still the only thing that can actually hit it in
  * production" — true when written, and unsafe to keep relying on: this package was extracted
  * precisely so a second binary could run the migration sets, and `@waitron/provisioning` is the
- * consumer it was extracted for. That consumer does not import it yet — as of this commit
- * `packages/provisioning`'s only dependency is `@waitron/shared` — so the second thrower is
- * intended, not present. Renaming after it ships would cost a permanent deprecate-and-add instead
- * of a find-replace, which is why now was the free moment rather than then.
+ * consumer it was extracted for — and it IS a thrower today: it has depended on this package since
+ * #11 (`86229c87`) and `instance-apply.ts` calls `migrationOptionsFor`. Renaming after that shipped
+ * would have cost a permanent deprecate-and-add instead of a find-replace, which is why the
+ * extraction was the free moment.
  *
  * `tenant.not_found` (`apps/server/src/errors.ts`) is the closest SIBLING, not a precedent for
  * renaming: it was introduced under that name in `4fb3f2c` and never renamed —
@@ -46,13 +46,12 @@ declare module "@waitron/shared" {
     /**
      * A migration set reported success with fewer migrations applied than the image ships.
      *
-     * Drizzle decides what to apply from `max(created_at)` alone — never a journal index or a hash
-     * (`drizzle-orm@0.45.2/pg-core/dialect.js:56-62`) — so a migration whose `when` sits below a
-     * value the database already recorded is never applied, and nothing is raised. Measured
-     * 2026-09-10: a database at the core set's entry 1 upgraded to HEAD with 10 of 15 migrations
-     * applied and no error. The wrong schema then surfaces as an unclassified driver failure in
-     * whatever query first touches it, which is the diagnosability defect this branch exists to
-     * remove.
+     * Drizzle skips an entry whose `when` sits at or below the watermark the database already
+     * recorded, and raises nothing — the rule, its citation and why no journal edit repairs it are
+     * in CLAUDE.md §3. Measured 2026-09-10: a database at the core set's entry 1 upgraded to HEAD
+     * with 10 of 15 migrations applied and no error. The wrong schema then surfaces as an
+     * unclassified driver failure in whatever query first touches it, which is the diagnosability
+     * defect this branch exists to remove.
      *
      * Both counts are journal lengths — public facts about a build artefact, never data.
      */
