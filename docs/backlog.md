@@ -194,8 +194,7 @@ design-review section apply.
 - **Track P — platform & packaging** (push step 1). Owns the Dockerfiles/compose, `packages/provisioning`,
   `apps/server`'s config/boot wiring/backup-*/media/tls + certificate code, `packages/credentials`.
   Work: the two containers + volumes **LANDED #285** (see Priorities item 1);
-  the named next Track P specs are **boot-failure diagnosability — spec + plan WRITTEN 2026-09-10,
-  implemented on `feat/boot-failure-diagnosability`, not yet merged**
+  the named next Track P specs are **boot-failure diagnosability — LANDED #310**
   ([design](superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md),
   [plan](superpowers/plans/2026-09-10-boot-failure-diagnosability.md):
   the recovery page renders curated operator text keyed by error code instead of `unknown` — the
@@ -219,7 +218,16 @@ design-review section apply.
   created since #304) will be refused by that branch's `provisioning.database_ahead` check once it
   merges — the remedy is `wa-wt reset demo`); the scrubbed real
   error to `docker logs` for the installer; and a
-  one-way-migration warning in `try-branch.sh`). All of that is written on the branch — the
+  one-way-migration warning in `try-branch.sh`). **Left open by #310, deliberately:** the leak fix masks URL credentials on
+  every line the rotating log sink writes, which is the connection-string shape and nothing else — an
+  error message carrying a secret in any OTHER shape still reaches the unauthenticated recovery page
+  through the log tail, and what bounds that is the convention that an `AppError`'s params carry no
+  secret, which nothing guards. Four paths still migrate a live database with no ahead-of-image check
+  (`instance-apply.ts`, `restore.ts`, `rejoin-command.ts`, `dev-setup.ts`); only the boot path has
+  one. Core release points 1 to 6 still cannot upgrade at all — `migrations.incomplete` makes that
+  loud rather than silent, and repairing it means a squashed baseline, an owner decision nobody has
+  taken. And every dev or demo database created before #307 now fails the ahead check, because #307
+  changed `0014`'s drizzle hash: the remedy is `wa-wt reset demo`. All of that is written on the branch — the
   classifier, the ahead check with its real-Postgres proof, `migrations.incomplete`, the curated
   page, the scrubbed stdout and the `try-branch` warning — and design §9 records what the §6
   experiment settled, including that §6's own sketch of the proof-by-deletion was wrong: an
