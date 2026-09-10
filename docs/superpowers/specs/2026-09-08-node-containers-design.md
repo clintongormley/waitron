@@ -473,6 +473,12 @@ failed (the consecutive count, the last error code, the last 200 log lines) and 
 **retry a normal boot** — a counter reset plus an exit, letting Docker's restart policy do the
 restart.
 
+> **2026-09-10 — superseded in part.** The page now renders curated operator text keyed by the
+> error code (never the caught error's own words — the boundary in §5 of the design below), and the
+> entrypoint writes the scrubbed real error to `docker logs` for the installer; a database migrated
+> by a different image is detected explicitly as `provisioning.database_ahead`. Design:
+> [boot-failure-diagnosability](2026-09-10-boot-failure-diagnosability-design.md).
+
 Deliberately NOT here — the recovery spec designs each, and each needs its own thinking: a
 degraded-but-trading mode (§9.1's module-contract change); restore from a backup over the web
 (`waitron-restore` exists but is shell-only); rolling back to the previous image (the running

@@ -192,7 +192,14 @@ design-review section apply.
 - **Track P — platform & packaging** (push step 1). Owns the Dockerfiles/compose, `packages/provisioning`,
   `apps/server`'s config/boot wiring/backup-*/media/tls + certificate code, `packages/credentials`.
   Work: the two containers + volumes **LANDED #285** (see Priorities item 1);
-  the named next Track P specs are **the recovery spec** (a degraded-but-trading mode + the
+  the named next Track P specs are **boot-failure diagnosability — spec WRITTEN 2026-09-10, plan +
+  implementation next** ([design](superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md):
+  the recovery page renders curated operator text keyed by error code instead of `unknown` — the
+  operator's only window is that page; an explicit `provisioning.database_ahead` check for a
+  database migrated by a different image (the 2026-09-10 `try-branch` → `install.sh` bricking, whose
+  exact schema artefact was never confirmed because the box was reset — the spec's real-PG
+  experiment settles it); the scrubbed real error to `docker logs` for the installer; and a
+  one-way-migration warning in `try-branch.sh`), **the recovery spec** (a degraded-but-trading mode + the
   module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
   installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick
   carries the images so install needs no internet, unattended updates for a box we did not sell,
