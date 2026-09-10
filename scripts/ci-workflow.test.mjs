@@ -471,6 +471,14 @@ describe("ci.yml's job graph", () => {
     expect(ifLine).toMatch(/needs\.ci\.result\s*==\s*'success'/);
   });
 
+  // The print-agent image ships from the SAME publish job, so it inherits the ci-green gate above
+  // rather than opening a second, ungated publish path.
+  it("publishes the print-agent image from the gated publish job", () => {
+    const body = job("publish").body.join("\n");
+    expect(body).toContain("target: print-agent");
+    expect(body).toContain("tags: ${{ steps.tags.outputs.agent_tags }}");
+  });
+
   // The other direction. A `needs` entry naming a job that does not exist is not a silent failure —
   // GitHub rejects the workflow — but it is a five-minute round trip through a push, and the same
   // extraction answers it for free.

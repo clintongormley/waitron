@@ -6,14 +6,15 @@
 #   curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/try-branch.sh | sudo bash -s -- <branch-or-ref>
 #
 # CI does not publish an image for a pull request (only pushes to main and version tags publish to
-# GHCR), so there is no PR image to pull — this builds it. Docker fetches the branch itself as the
-# build context, so the box needs no checkout and no pnpm; only a git ref that exists on the public
-# repo (a PR branch, or a commit SHA).
+# GHCR), so there is no PR image to pull — this builds both the app image and the print-agent image
+# from the same Dockerfile. Docker fetches the branch itself as the build context, so the box needs
+# no checkout and no pnpm; only a git ref that exists on the public repo (a PR branch, or a commit
+# SHA).
 #
-# It leaves the box's .env alone: WAITRON_IMAGE is set inline on the compose command, overriding
-# compose.yml's default for this run only. A plain `docker compose up -d` afterwards drops back to
-# whatever .env selects (the published image by default). WAITRON_DIR points at the box's compose
-# file, matching prepare.sh; add `sudo` if your user is not in the docker group.
+# It leaves the box's .env alone: WAITRON_IMAGE and WAITRON_PRINT_AGENT_IMAGE are set inline on the
+# compose command, overriding compose.yml's defaults for this run only. A plain `docker compose up -d`
+# afterwards drops back to whatever .env selects (the published images by default). WAITRON_DIR points
+# at the box's compose file, matching prepare.sh; add `sudo` if your user is not in the docker group.
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
@@ -30,6 +31,11 @@ WAITRON_DIR="${WAITRON_DIR:-/opt/waitron}"
 safe="${REF//[^A-Za-z0-9._-]/-}"
 TAG="waitron:${safe:0:100}"
 
+AGENT_TAG="waitron-print-agent:${safe:0:100}"
 docker build -t "$TAG" -f deploy/Dockerfile "$@" "https://github.com/clintongormley/waitron.git#${REF}"
+docker build -t "$AGENT_TAG" -f deploy/Dockerfile --target print-agent "$@" "https://github.com/clintongormley/waitron.git#${REF}"
 
-WAITRON_IMAGE="$TAG" docker compose -f "$WAITRON_DIR/compose.yml" up -d
+# Both image vars set on ONE line with the compose up — NOT split with a `\` continuation. The guard
+# scripts/deploy-image-env.test.ts asserts `WAITRON_IMAGE=…docker compose…up` with a single-line regex
+# (`[^\n]*`), which a line break would fail (preflight ruling, 2026-09-10).
+WAITRON_IMAGE="$TAG" WAITRON_PRINT_AGENT_IMAGE="$AGENT_TAG" docker compose -f "$WAITRON_DIR/compose.yml" up -d

@@ -50,7 +50,7 @@ Owner decisions taken in this brainstorm (2026-09-08):
 
 ```text
 packages/print-agent   @waitron/print-agent — db-free; the loop, the router, the client, the transports
-apps/print-agent       the container host: env/state-dir config, the setup page, esbuild bundle, Dockerfile
+apps/print-agent       the container host: env/state-dir config, the setup page, esbuild bundle (image built by deploy/Dockerfile --target print-agent)
 packages/printing      loses the transports (moved), keeps runtime.ts; authenticateAgent learns "pending"
 apps/server            print-api.ts: join/accept/deny replace enrol/codes; the pull reply carries servers
 packages/db            print_agents: + approved_at, + join_code; print_agent_pairing_codes dropped
@@ -115,10 +115,16 @@ nothing secret.
   optional, *name*; Save. Joining/pending: "Waiting for approval in the dashboard — verification code
   **ABCD**". Running: the server it follows, last job time, last error. Unauthorized: "This agent was
   revoked — restart it to ask to join again."
-- Bundled with esbuild to `dist/print-agent.js` like `apps/server`'s bins; `Dockerfile` in this
-  directory (node 24 alpine, the state dir a named volume, a USB printer via `--device
-  /dev/usb/lp0`). Track P's compose wires it in beside the server later; on that box the compose sets
-  `WAITRON_SERVER_URL` to the server's service address, so the same-box agent needs nothing typed.
+- Bundled with esbuild to `dist/print-agent.js` like `apps/server`'s bins; the image is built by
+  `deploy/Dockerfile --target print-agent` (node:26-slim), with a USB printer reached via
+  `/dev:/dev:ro` + `device_cgroup_rules c 180:* rwm` + `group_add 7` (see the box-wiring design below).
+  The box compose wires it in beside the server; on that box it follows `WAITRON_SERVER_URL`
+  = `https://127.0.0.1` (the box's own loopback leaf) and trusts the box's self-signed CA fetched
+  from the landing listener, so the same-box agent needs nothing typed.
+
+_(2026-09-10: the box compose wiring, the published image, and the CA-trust path the same-box
+`https://127.0.0.1` needs are designed in
+[2026-09-10-print-agent-box-wiring-design.md](2026-09-10-print-agent-box-wiring-design.md).)_
 
 ### 2.3 Server side (`apps/server`, `packages/printing`, `packages/db`)
 

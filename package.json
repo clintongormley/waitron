@@ -19,6 +19,7 @@
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
     "build:image": "docker build -f deploy/Dockerfile -t waitron:dev .",
+    "build:image:print-agent": "docker build -f deploy/Dockerfile --target print-agent -t waitron-print-agent:dev .",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

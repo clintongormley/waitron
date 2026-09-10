@@ -1,5 +1,5 @@
-# A Waitron node: the app, its Postgres and its practice email inbox. Everything the node keeps lives
-# in the six named volumes below, so `docker volume` is the whole of a box's life.
+# A Waitron node: the app, its Postgres, its practice email inbox, and the print agent. Everything the
+# node keeps lives in the named volumes below, so `docker volume` is the whole of a box's life.
 #
 # Operating this file — including which CLI invocation bypasses the entrypoint and which does not —
 # is deploy/README.md. `deploy/prepare.sh` installs this once per box; the restaurant never runs it.
@@ -143,39 +143,64 @@ services:
         max-size: 10m
         max-file: "3"
 
-# --- Print agent (Track P owed item, spec §2.2) -----------------------------------------------------
-# The @waitron/print-agent-app container (apps/print-agent) is the box-local bridge between the server
-# and USB/network/Bluetooth printers. Its device access was verified on the real box 2026-09-10
-# (apps/print-agent/src/host.ts and task-6-hardware-facts.md). It is left COMMENTED here because its
-# home is not yet settled: the agent may run beside the server on the box OR on a separate Pi next to
-# the printer, and whether it runs here is Track P's wiring decision. Uncomment to run it on the box:
-#
-#   print-agent:
-#     image: ${WAITRON_PRINT_AGENT_IMAGE:-ghcr.io/clintongormley/waitron-print-agent:main}
-#     restart: unless-stopped
-#     # Host networking so the mDNS _pdl-datastream._tcp discovery answers on the venue LAN, and the
-#     # setup page binds 9110 on the box directly — same profile as the app service above.
-#     network_mode: host
-#     environment:
-#       # The address the agent follows. On the box this is the loopback leaf; elsewhere the box's LAN name.
-#       WAITRON_SERVER_URL: ${WAITRON_PRINT_AGENT_SERVER_URL:-https://127.0.0.1}
-#     devices:
-#       # The usblp write node captured on the box (root:lp, crw-rw----). Swap for /dev/bus/usb to allow
-#       # hotplug of a printer plugged in after the container started.
-#       - "/dev/usb/lp0:/dev/usb/lp0"
-#     group_add:
-#       # gid 7 is group `lp`, which owns the write bit on /dev/usb/lp0; without it the node opens denied.
-#       - "7"
-#     volumes:
-#       - print_agent:/var/lib/waitron-print-agent
-#       # BlueZ's system DBus socket, so the agent can drive `bluetoothctl` scan/pair for Bluetooth
-#       # printers. (The box's BT adapter was unconfirmed at the 2026-09-10 capture — see spec §7.)
-#       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
-#     logging:
-#       driver: json-file
-#       options: { max-size: 10m, max-file: "5" }
-#
-# A `print_agent:` named volume is added to the volumes block below when this service is enabled.
+  # The box-local bridge between the server and USB/network/Bluetooth printers (print-agent spec
+  # 2026-09-10). On by default: the single-box venue is the common case, and the same-box agent joins
+  # with nothing typed because WAITRON_SERVER_URL is the box's own loopback leaf, whose CA the agent
+  # fetches from the landing listener's /ca.crt.
+  print-agent:
+    image: ${WAITRON_PRINT_AGENT_IMAGE:-ghcr.io/clintongormley/waitron-print-agent:main}
+    restart: unless-stopped
+    # Host networking so mDNS printer discovery answers on the venue LAN and the setup page binds 9110
+    # on the box directly — same profile as the app service.
+    network_mode: host
+    # service_started, NOT service_healthy: the app is 503 on /health until provisioned, and the agent
+    # follows the primary on its own once the server is up, so it need not wait for health.
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      # The box's own origin; the agent trusts its self-signed leaf via the fetched CA. Overridable
+      # for an agent that runs on a separate Pi and must name the box's LAN address instead.
+      WAITRON_SERVER_URL: ${WAITRON_PRINT_AGENT_SERVER_URL:-https://127.0.0.1}
+    # USB printer access, hot-plug safe. Measured on the real box 2026-09-10 (spec §5): a hard
+    # `devices:` line refuses to start with no printer; a /dev/usb subdirectory mount goes stale on
+    # re-plug. Mounting the whole /dev read-only plus the usblp char-device major (180) lets the node
+    # user reach /dev/usb/lpN after a hot-plug. The cgroup rule ADDS major 180 to Docker's default
+    # device whitelist (null, zero, full, random, tty, …); :ro still permits writing an existing
+    # device node but refuses mknod, and a class that is neither a Docker default nor 180 (e.g.
+    # hidraw) is denied.
+    device_cgroup_rules:
+      - "c 180:* rwm"
+    group_add:
+      # gid 7 is `lp`, which owns the write bit on /dev/usb/lpN.
+      - "7"
+    volumes:
+      - print_agent:/var/lib/waitron-print-agent
+      - /dev:/dev:ro
+      # BlueZ's system DBus socket for `bluetoothctl` scan/pair. Long syntax with create_host_path:
+      # false so a host without DBus fails the mount loudly rather than having Docker create a
+      # directory where the socket should be.
+      - type: bind
+        source: /run/dbus/system_bus_socket
+        target: /run/dbus/system_bus_socket
+        bind:
+          create_host_path: false
+    # No curl in a slim image, so an inline node http GET — the setup page's /status.json on 9110.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - "-e"
+        - "require('node:http').get({host:'127.0.0.1',port:9110,path:'/status.json'},(s)=>process.exit(s.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
 
 networks:
   internal:
@@ -187,3 +212,4 @@ volumes:
   media:
   backups:
   mailpit:
+  print_agent:

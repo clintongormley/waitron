@@ -234,9 +234,10 @@ design-review section apply.
   use (a Tailscale/link-local-only box no longer advertises an `https://<ip>/` its cert can't cover).
   *Still parked:* the IPv6-LAN-SAN / public-address self-sign residuals (the #290 leaf-SAN filter
   drops out-of-set addresses rather than invalidating the whole cert, so nothing is broken today).
-  Owed to Track H: the box's
-  compose runs the print-agent container beside the server with `WAITRON_SERVER_URL` set to the
-  server's service address, so the same-box agent joins with nothing typed (print-agent spec §2.2).
+  Owed to Track H: **DONE 2026-09-10** — the box's compose runs the print-agent container beside the
+  server by default (`WAITRON_SERVER_URL=https://127.0.0.1`, the agent fetches and pins the box CA from
+  the landing listener), with a hot-plug-safe `/dev:/dev:ro` + major-180 device mount. Spec
+  [2026-09-10-print-agent-box-wiring-design.md](superpowers/specs/2026-09-10-print-agent-box-wiring-design.md).
 - **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, `packages/print-agent` +
   `apps/print-agent` (new), `packages/payments*`, the printer/payment routes in `apps/server`. Work, in
   order: **1.** the print agent process — spec

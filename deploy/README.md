@@ -1,16 +1,18 @@
 # Running a Waitron node
 
-A node is two containers: the Waitron app and its Postgres. Everything the node keeps lives in five
-named Docker volumes, so `docker volume` is the whole of a box's life — back those up and you have
-backed up the box.
+A node is a few containers: the Waitron app, its Postgres, a local mail capture, and the print agent.
+Everything the node keeps lives in the named Docker volumes below, so `docker volume` is the whole of
+a box's life — back those up and you have backed up the box.
 
-| volume    | mounted at                 | holds                                                                                                  |
-| --------- | -------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `db`      | `/var/lib/postgresql`      | the cluster                                                                                            |
-| `state`   | `/var/lib/waitron/state`   | the box's identity: `secrets.env`, `instance.env`, `trading.env`, `modules.json`, the CA and leaf PEMs |
-| `logs`    | `/var/lib/waitron/logs`    | the rotating log file                                                                                  |
-| `backups` | `/var/lib/waitron/backups` | local encrypted backup archives, when they are switched on                                             |
-| `media`   | `/var/lib/waitron/media`   | product images                                                                                         |
+| volume        | mounted at                     | holds                                                                                                  |
+| ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `db`          | `/var/lib/postgresql`          | the cluster                                                                                            |
+| `state`       | `/var/lib/waitron/state`       | the box's identity: `secrets.env`, `instance.env`, `trading.env`, `modules.json`, the CA and leaf PEMs |
+| `logs`        | `/var/lib/waitron/logs`        | the rotating log file                                                                                  |
+| `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                             |
+| `media`       | `/var/lib/waitron/media`       | product images                                                                                         |
+| `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)               |
+| `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                    |
 
 ## Preparing a box
 
@@ -56,11 +58,11 @@ collision cannot arise.
 ```bash
 cd /opt/waitron
 docker compose pull && docker compose up -d   # update to the current :main image
-docker compose ps                             # both services, with health
+docker compose ps                             # all the services, with health
 docker compose logs -f app                    # the server's JSON lines
 ```
 
-Both services are `restart: unless-stopped`, so the box comes back on its own after a power cut and
+The services are all `restart: unless-stopped`, so the box comes back on its own after a power cut and
 after the app's own requested restart at the end of the setup wizard.
 
 ### Trying a branch before it merges
@@ -160,10 +162,14 @@ the wizard, not a file on the box.
 ## Building and running the image locally
 
 ```bash
-pnpm build:image      # docker build -f deploy/Dockerfile -t waitron:dev .
+pnpm build:image              # docker build -f deploy/Dockerfile -t waitron:dev .
+pnpm build:image:print-agent  # docker build -f deploy/Dockerfile --target print-agent -t waitron-print-agent:dev .
 ```
 
-Then point the compose at it with `WAITRON_IMAGE=waitron:dev` in `.env`.
+Then point the compose at both in `.env`: `WAITRON_IMAGE=waitron:dev` and
+`WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:dev`. The print agent is an on-by-default service, so
+without the second one a local `docker compose up` still pulls the published
+`ghcr.io/clintongormley/waitron-print-agent:main`.
 
 On a Mac, Docker Desktop cannot put a container on the LAN, so the shipped host-networking profile
 does not give you a reachable box. Run the bridge shape instead with an override file — which is

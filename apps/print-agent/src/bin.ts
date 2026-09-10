@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import { createAgent, type AgentStatus } from "@waitron/print-agent";
 import { readEnv } from "./config.js";
 import { createContainerHost } from "./host.js";
+import { createServerTrustingFetch } from "./server-ca.js";
 import { createSetupApp } from "./setup-page.js";
 import { FileState } from "./state.js";
 
@@ -14,9 +15,17 @@ const state = new FileState(env.stateDir);
 
 // The latest status the loop publishes, read live by the setup page.
 let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
+// Trust the box's self-signed CA (fetched from its landing listener's /ca.crt) on top of Node's
+// public roots, so https://127.0.0.1 verifies and a promoted cloud primary's public cert still does.
+const trustingFetch = await createServerTrustingFetch({
+  serverUrl: env.serverUrl,
+  stateDir: env.stateDir,
+  log: (msg, fields) => console.info(JSON.stringify({ level: "info", msg, ...fields })),
+});
 const host = createContainerHost({
   env,
   state,
+  fetch: trustingFetch,
   onStatus: (next) => {
     status = next;
   },
