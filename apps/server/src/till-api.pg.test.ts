@@ -9,6 +9,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
   listAvailableProducts,
 } from "@waitron/catalogue";
@@ -132,7 +134,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  */
 async function setupVenue(): Promise<{
   cfg: TillConfig;
-  available: AvailableProduct[];
+  available: (AvailableProduct & { menuItemId: string })[];
   operatorId: string;
 }> {
   const venue = await applyVenue(
@@ -175,7 +177,7 @@ async function setupVenue(): Promise<{
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
-    await createProduct(tx, cfg.tenantId, {
+    const jamon = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
       descriptions: { es: "Jamón cortado" },
@@ -183,7 +185,7 @@ async function setupVenue(): Promise<{
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    await createProduct(tx, cfg.tenantId, {
+    const agua = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { es: "Agua mineral" },
@@ -192,13 +194,55 @@ async function setupVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    const section = await createMenuSection(tx, cfg.tenantId, {
+      menuId: cat.id,
+      name: { es: "Carta" },
+    });
+    const jamonItem = await createMenuItem(tx, cfg.tenantId, {
+      menuId: cat.id,
+      productId: jamon.id,
+      sectionId: section.id,
+      grossPrice: "24.90",
+    });
+    const aguaItem = await createMenuItem(tx, cfg.tenantId, {
+      menuId: cat.id,
+      productId: agua.id,
+      sectionId: section.id,
+      grossPrice: "1.50",
+    });
+    await tx.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+      select ${cfg.tenantId}, zone_id, ${cat.id}, 0
+      from zone_service_policies
+      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        and is_counter_default`);
+    await tx.execute(sql`
+      update zone_service_policies set default_menu_id = ${cat.id}
+      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        and is_counter_default`);
+    await tx.execute(sql`
+      insert into preparation_routes (tenant_id, location_id, category_id, station_id)
+      values
+        (${cfg.tenantId}, ${cfg.locationId}, ${comida.id},
+          (select id from kitchen_stations
+           where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default)),
+        (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id},
+          (select id from kitchen_stations
+           where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default))`);
     // A staff person with a KNOWN PIN ("5555"), inserted on the app role (which holds INSERT on
     // `persons`), so the login route can verify their credential and the sale is attributed to them.
     const person = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
+    const menuItems = new Map([
+      [jamon.id, jamonItem.id],
+      [agua.id, aguaItem.id],
+    ]);
     return {
-      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      available: (await listAvailableProducts(tx, cfg.locationId)).products.map((product) => ({
+        ...product,
+        menuItemId: menuItems.get(product.id)!,
+      })),
       operatorId: person.rows[0]!.id,
     };
   });
@@ -361,7 +405,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });
@@ -425,18 +469,20 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // `cfg.tillId`), so both sales below file the same chain the pre-cutover env-till would.
     const deviceCookie = await enrolTillCookie(cfg);
 
-    // 2. The operator sees the menu: GET /api/products returns `{ menus, products }` for the seeded
-    // catalogue. The sale lines are built FROM `products`, exactly as the real till does (it never
-    // invents product ids).
-    const productsRes = await app.request("/api/products", { headers: { cookie } });
+    // 2. The operator sees the default zone's menu offers. The sale lines are built from those offers,
+    // exactly as the real till does (it never invents menu-item ids).
+    const productsRes = await app.request("/api/default-service-zone/offers", {
+      headers: { cookie },
+    });
     expect(productsRes.status).toBe(200);
-    const { products } = (await productsRes.json()) as {
-      products: {
+    const { offers } = (await productsRes.json()) as {
+      offers: {
         id: string;
         pricingUnit: "each" | "weight";
         descriptions: Record<string, string>;
       }[];
     };
+    const products = offers.map((offer) => ({ ...offer, menuItemId: offer.id }));
     // The two seeded, sellable products come back — the reduced-rate weighed one and the
     // general-rate each one — so the basket below genuinely mixes VAT rates.
     expect(products.map((p) => p.descriptions.es).sort()).toEqual([
@@ -454,8 +500,8 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         lines: [
-          { productId: jamon.id, quantity: "0.200" },
-          { productId: agua.id, quantity: "2" },
+          { menuItemId: jamon.menuItemId, quantity: "0.200" },
+          { menuItemId: agua.menuItemId, quantity: "2" },
         ],
         tender: { method: "cash", amount: "10.00" },
       }),
@@ -488,8 +534,8 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         lines: [
-          { productId: jamon.id, quantity: "0.200" },
-          { productId: agua.id, quantity: "2" },
+          { menuItemId: jamon.menuItemId, quantity: "0.200" },
+          { menuItemId: agua.menuItemId, quantity: "2" },
         ],
         tender: { method: "cash", amount: "10.00" },
       }),
@@ -553,7 +599,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });
@@ -599,7 +645,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });
@@ -638,7 +684,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
         id: workingOrderId,
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         label: "Mesa 3",
       }),
     });
@@ -659,7 +705,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         workingOrderId,
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });
@@ -701,7 +747,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         workingOrderId,
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });
@@ -761,7 +807,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
           id: workingOrderId,
-          lines: [{ productId: each.id, quantity: "1" }],
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         }),
       });
 
@@ -813,7 +859,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
           id: workingOrderId,
-          lines: [{ productId: each.id, quantity: "1" }],
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         }),
       });
 
@@ -898,7 +944,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
         id: workingOrderId,
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         label: "Mesa 9",
       }),
     });
@@ -1059,13 +1105,10 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
   });
 });
 
-// Fix round 1 (review): `sendToPrep` (a `{}` body to `POST /:id/prep`) is Mode P's own pickup — it
-// needs a genuinely SETTLED order, which under this suite's `prepay` cfg means a real fiscal write
-// (`POST /api/sales`, Mode P's walk-up path) that `till-api.test.ts`'s stub `FiscalBackend` cannot
-// make. Real Postgres, so this is the one place the SUCCESS path — and (KDS-1) the double-send
-// collision → `ticket.already_fired` — is proven end to end.
+// Mode P fires preparation in the sale transaction. The retained `sendToPrep` endpoint therefore
+// rejects a second fire, while still refusing an unpaid order before any write.
 describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", () => {
-  it("fires a genuinely SETTLED walk-up order to the kitchen; a re-send is refused ticket.already_fired; a still-OPEN parked order is refused working_order.not_settled", async () => {
+  it("finds a prepay sale already fired and refuses a still-open parked order", async () => {
     const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
     const each = available.find((p) => p.pricingUnit === "each")!;
 
@@ -1085,20 +1128,22 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         workingOrderId,
-        lines: [{ productId: each.id, quantity: "1" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });
     expect(sale.status).toBe(200);
 
-    // NOW send it to prep — the SETTLED-order pickup the guard exists to allow. It fires the line to the
-    // kitchen (KDS-1 `fireLines`), routed to the venue's provisioned default station.
+    // Preparation was committed with the sale, so an explicit send is a duplicate.
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({}),
     });
-    expect(sent.status).toBe(200);
+    expect(sent.status).toBe(409);
+    expect(await sent.json()).toMatchObject({
+      error: { code: "ticket.already_fired", params: { workingOrderId } },
+    });
 
     // It appears on that station's kitchen queue, queued.
     const stations = (await (
@@ -1115,25 +1160,13 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
       }),
     ]);
 
-    // A DOUBLE send-to-prep re-fires the already-sent line and collides on `ticket_items`' per-line
-    // unique — mapped to the domain code (409), never leaking the raw 23505 as an opaque 500 (KDS-1).
-    const reSend = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
-    });
-    expect(reSend.status).toBe(409);
-    expect(await reSend.json()).toMatchObject({
-      error: { code: "ticket.already_fired", params: { workingOrderId } },
-    });
-
     // A SEPARATE, still-OPEN (parked, unpaid) order is refused — the other half of the guard, over the
     // real route rather than the library function directly.
     const openId = randomUUID();
     const park = await app.request("/api/working-orders", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ id: openId, lines: [{ productId: each.id, quantity: "1" }] }),
+      body: JSON.stringify({ id: openId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] }),
     });
     expect(park.status).toBe(200);
     const refused = await app.request(`/api/working-orders/${openId}/prep`, {
@@ -1170,21 +1203,16 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     // SP-A.2 cutover: the walk-up sale resolves its till from an enrolled till device (venue's own till).
     const deviceCookie = await enrolTillCookie(cfg);
 
-    // Walk-up settle (open → settled in one tx) → send to prep → the line is on the default station's queue.
+    // Walk-up settle and preparation fire happen in one transaction.
     const workingOrderId = randomUUID();
     await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         workingOrderId,
-        lines: [{ productId: each.id, quantity: "1" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       }),
-    });
-    await app.request(`/api/working-orders/${workingOrderId}/prep`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
     });
     const stations = (await (
       await app.request("/api/stations", { headers: { cookie } })
@@ -1241,7 +1269,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     await app.request("/api/working-orders", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ id: openId, lines: [{ productId: each.id, quantity: "1" }] }),
+      body: JSON.stringify({ id: openId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] }),
     });
     const refused = await app.request(`/api/orders/${openId}/collect`, {
       method: "POST",
@@ -1310,7 +1338,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
       body: JSON.stringify({
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });
@@ -1364,7 +1392,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
       body: JSON.stringify({
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "card", amount: "3.00" },
       }),
     });
@@ -1425,7 +1453,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
       body: JSON.stringify({
-        lines: [{ productId: each.id, quantity: "2" }],
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });
@@ -1512,6 +1540,9 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     await suite.admin.execute(
       sql`update locations set order_flow = 'invoice_first' where id = ${cfg.locationId}`,
     );
+    await suite.admin.execute(sql`
+      update departments set default_service_mode = 'invoice_first'
+      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
     const modeCfg: TillConfig = { ...cfg, orderFlow: "invoice_first" };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -1526,7 +1557,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     const park = await app.request("/api/working-orders", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: sessionPair },
-      body: JSON.stringify({ id: workingOrderId, lines: [{ productId: each.id, quantity: "2" }] }),
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+      }),
     });
     expect(park.status).toBe(200);
 
@@ -1591,7 +1625,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     const park = await app.request("/api/working-orders", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: sessionPair },
-      body: JSON.stringify({ id: workingOrderId, lines: [{ productId: each.id, quantity: "2" }] }),
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+      }),
     });
     expect(park.status).toBe(200);
     const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
@@ -1666,7 +1703,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     const park = await app.request("/api/working-orders", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: sessionPair },
-      body: JSON.stringify({ id: workingOrderId, lines: [{ productId: each.id, quantity: "2" }] }),
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+      }),
     });
     expect(park.status).toBe(200);
     const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {

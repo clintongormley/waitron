@@ -713,6 +713,18 @@ describe("till-app", () => {
     );
   });
 
+  it("still opens the counter when its default zone offers cannot be loaded", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockRejectedValue(new Error("configuration incomplete")),
+    });
+
+    const c = await toCounter(el);
+    expect(c.products).toEqual([]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      t("service_zone.load_error"),
+    );
+  });
+
   it("changes and manually refreshes the counter's service zone", async () => {
     const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
     defaultCatalogue.zones = [
@@ -758,6 +770,45 @@ describe("till-app", () => {
     emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
     await flush(el);
     expect(listZoneOffers).toHaveBeenCalledTimes(2);
+  });
+
+  it("visibly refuses a service-zone change while the basket has lines", async () => {
+    const catalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    catalogue.zones = [
+      {
+        id: "zone-counter",
+        name: "Counter",
+        departmentId: "department-default",
+        departmentName: "Restaurant",
+        serviceMode: "prepay",
+      },
+      {
+        id: "zone-deli",
+        name: "Deli",
+        departmentId: "department-deli",
+        departmentName: "Deli",
+        serviceMode: "prepay",
+      },
+    ];
+    const listZoneOffers = vi.fn();
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      listZoneOffers,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await c.updateComplete;
+    const select = c.shadowRoot!.querySelector<HTMLSelectElement>("#service-zone")!;
+    select.value = "zone-deli";
+    select.dispatchEvent(new Event("change"));
+    await flush(el);
+
+    expect(select.value).toBe("zone-counter");
+    expect(c.selectedServiceZoneId).toBe("zone-counter");
+    expect(listZoneOffers).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      t("service_zone.basket_active"),
+    );
   });
 
   it("ignores a late counter-zone response and keeps the accepted zone for new orders", async () => {

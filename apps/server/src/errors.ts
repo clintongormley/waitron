@@ -1785,5 +1785,11 @@ declare module "@waitron/shared" {
      * without learning any module's namespaces. A non-`AppError` throw is not wrapped. Never renamed
      * once shipped. */
     "restore.hook_failed": { module: string; code: string };
+    // The server's working-order paths throw these contributed venue-service codes directly.
+    "service_zone.mode_incompatible": {
+      zoneId: string;
+      expected: string;
+      actual: string;
+    };
   }
 }

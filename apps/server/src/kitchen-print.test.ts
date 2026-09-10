@@ -3,7 +3,6 @@ import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  CORE_MIGRATIONS,
   asAppUser,
   optionGroupItems,
   optionGroups,
@@ -17,6 +16,7 @@ import type { Database, Doneness, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToLocation, createCatalogue, createProduct } from "@waitron/catalogue";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, deactivatePrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import {
@@ -40,7 +40,10 @@ import "./errors.js";
 // independence (ruling R-D), and never-block (no socket). PGlite is in-process WASM, so "no socket
 // opened" is a clean structural proof, exactly as outbox.test.ts relies on.
 const LOCALE = "es-ES";
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 let db: Database;
 beforeAll(() => {
   db = suite.db;

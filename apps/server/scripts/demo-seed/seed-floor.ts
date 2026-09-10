@@ -21,6 +21,7 @@ export interface SeedFloorInput {
   tenantId: string;
   locationId: string;
   locale: SeedLocale;
+  menuIds?: string[];
 }
 
 /**
@@ -59,17 +60,55 @@ function toTableCfg(tenantId: string, locationId: string, locale: SeedLocale): T
  */
 export async function seedFloor(
   tx: Transaction,
-  { tenantId, locationId, locale }: SeedFloorInput,
+  { tenantId, locationId, locale, menuIds = [] }: SeedFloorInput,
 ): Promise<void> {
   const cfg = toTableCfg(tenantId, locationId, locale);
 
+  const { rows: defaults } = await tx.execute<{ department_id: string; zone_id: string }>(sql`
+    select department_id, zone_id from zone_service_policies
+    where tenant_id = ${tenantId} and location_id = ${locationId} and is_counter_default
+    limit 1`);
+  const defaultPolicy = defaults[0];
+  if (defaultPolicy === undefined) {
+    throw new Error(`seedFloor: no default service zone for location ${locationId}`);
+  }
+
   const zoneIds = new Map<string, string>();
   for (const zone of DEMO_ZONES) {
-    const created = await createZone(tx, cfg, {
-      name: zone.name[locale],
-      displayOrder: zone.displayOrder,
-    });
-    zoneIds.set(zone.key, created.id);
+    const zoneId =
+      zone.key === "bar"
+        ? defaultPolicy.zone_id
+        : (
+            await createZone(tx, cfg, {
+              name: zone.name[locale],
+              displayOrder: zone.displayOrder,
+            })
+          ).id;
+    if (zone.key === "bar") {
+      await tx.execute(sql`
+        update floor_zones set name = ${zone.name[locale]}, display_order = ${zone.displayOrder}
+        where tenant_id = ${tenantId} and id = ${zoneId}`);
+    } else {
+      await tx.execute(sql`
+        insert into zone_service_policies
+          (tenant_id, location_id, zone_id, department_id, service_mode, is_counter_default)
+        values (
+          ${tenantId}, ${locationId}, ${zoneId}, ${defaultPolicy.department_id}, null, false
+        )`);
+    }
+    for (const [index, menuId] of menuIds.entries()) {
+      await tx.execute(sql`
+        insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+        values (${tenantId}, ${zoneId}, ${menuId}, ${index})
+        on conflict (tenant_id, zone_id, menu_id)
+        do update set display_order = excluded.display_order`);
+      if (index === 0) {
+        await tx.execute(sql`
+          update zone_service_policies set default_menu_id = ${menuId}
+          where tenant_id = ${tenantId} and zone_id = ${zoneId}`);
+      }
+    }
+    zoneIds.set(zone.key, zoneId);
   }
 
   for (const table of DEMO_TABLES) {

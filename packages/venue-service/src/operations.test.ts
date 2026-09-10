@@ -495,7 +495,10 @@ describe("venue service routing", () => {
           zone.rows[0]!.id,
           "00000000-0000-4000-8000-000000000099",
         ),
-      ).rejects.toMatchObject({ code: "route.missing" });
+      ).rejects.toMatchObject({
+        code: "route.subject_not_found",
+        params: { subject: "product" },
+      });
     });
   });
 
@@ -543,16 +546,15 @@ describe("venue service routing", () => {
       await expect(
         resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
       ).rejects.toMatchObject({ code: "route.missing" });
-      await createPreparationRoute(
-        tx,
-        { tenantId, locationId },
-        {
-          categoryId: category.id,
-          target: { kind: "station", stationId: station.rows[0]!.id },
-        },
-      );
       await expect(
-        resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
+        createPreparationRoute(
+          tx,
+          { tenantId, locationId },
+          {
+            categoryId: category.id,
+            target: { kind: "station", stationId: station.rows[0]!.id },
+          },
+        ),
       ).rejects.toMatchObject({ code: "route.station_inactive" });
     });
   });

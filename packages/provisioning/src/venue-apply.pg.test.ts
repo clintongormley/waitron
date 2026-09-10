@@ -122,6 +122,10 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     // The fiscal module's seed ran inside the venue transaction and reported its SIF line.
     expect(result.seeded).toEqual([
       {
+        module: "catalogue",
+        report: "initial menu ready",
+      },
+      {
         module: "venue-service",
         report: "default department and counter zone ready",
       },

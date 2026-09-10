@@ -5,6 +5,12 @@ import type { Database } from "@waitron/db";
 export async function clearProvisionFixture(db: Database): Promise<void> {
   await db.transaction(async (tx) => {
     for (const table of [
+      "department_hours",
+      "preparation_routes",
+      "device_zone_defaults",
+      "zone_menus",
+      "zone_service_policies",
+      "departments",
       "tenant_credentials",
       "management_sessions",
       "device_profiles",
@@ -17,7 +23,10 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "nodes",
       "tills",
       "kitchen_stations",
+      "floor_zones",
+      "location_catalogues",
       "locations",
+      "catalogues",
       "tenants",
       "deployment",
     ]) {

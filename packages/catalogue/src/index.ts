@@ -7,4 +7,6 @@ export * from "./invoice-descriptions.js";
 export * from "./media.js";
 export * from "./schema/menu.js";
 export { CATALOGUE_MIGRATIONS } from "./migrations.js";
+export { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
+export { CATALOGUE_PROVISIONING } from "./provisioning.js";
 export { CATALOGUE_CLASSIFICATION } from "./classification.js";

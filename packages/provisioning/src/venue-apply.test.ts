@@ -78,9 +78,8 @@ describe("applyVenue", () => {
            where location_id = ${result.locationId} and is_default and active)::int as default_departments,
         (select count(*) from zone_service_policies
            where location_id = ${result.locationId} and is_counter_default)::int as counter_zones`);
-    // KDS-1: applyVenue seeds exactly one active default kitchen station for the location, so a fresh
-    // venue can fire the moment it exists (fireLines' fallback). Proven by deletion — dropping the
-    // create-location station insert makes default_stations 0.
+    // The initial kitchen station gives configuration a valid preparation target before the venue
+    // adds more specific category, product, and zone routes.
     expect(counts.rows[0]).toEqual({
       tenants: 1,
       nodes: 1,
@@ -107,6 +106,10 @@ describe("applyVenue", () => {
     expect(sif.rows[0]?.nif).toBe("B12345678");
     expect(sif.rows[0]?.numero_instalacion).toBeGreaterThanOrEqual(1);
     expect(result.seeded).toEqual([
+      {
+        module: "catalogue",
+        report: "initial menu ready",
+      },
       {
         module: "venue-service",
         report: "default department and counter zone ready",
@@ -564,11 +567,12 @@ describe("applyVenue", () => {
       });
       expect(seeded).toContain(result.nodeId);
       expect(result.seeded.map((s) => s.module)).toEqual([
+        "catalogue",
         "venue-service",
         "fiscal-verifactu",
         "probe",
       ]);
-      expect(result.seeded[2]).toEqual({ module: "probe", report: `recorded ${result.nodeId}` });
+      expect(result.seeded[3]).toEqual({ module: "probe", report: `recorded ${result.nodeId}` });
     });
 
     it("a throwing seed rolls the whole venue back — no tenant row survives", async () => {

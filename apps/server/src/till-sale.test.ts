@@ -270,6 +270,10 @@ describe("recordTillSale", () => {
     expect(result.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
     expect(result.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     expect(typeof result.qr).toBe("string"); // regime verification URL (may be empty)
+    const prep = await suite.admin.execute<{ count: number }>(sql`
+      select count(*)::int as count from ticket_items
+      where tenant_id = ${cfg.tenantId}`);
+    expect(prep.rows).toEqual([{ count: 1 }]);
 
     // A genuine chained fiscal record exists — one for this tenant's single sale.
     const rows = await withTenant(suite.admin, cfg.tenantId, async (tx) => {

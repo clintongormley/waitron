@@ -97,7 +97,10 @@ const suite = usePgliteDb({
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
     // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
     // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are.
-    await seedKitchenStation(db, { tenantId, locationId: brandLocationId(loc.rows[0]!.id) });
+    const defaultStationId = await seedKitchenStation(db, {
+      tenantId,
+      locationId: brandLocationId(loc.rows[0]!.id),
+    });
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
       values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
@@ -180,6 +183,9 @@ const suite = usePgliteDb({
           sectionId: section.id,
           grossPrice: "1.75",
         });
+        await tx.execute(sql`
+          insert into preparation_routes (tenant_id, location_id, product_id, station_id)
+          values (${tenantId}, ${loc.rows[0]!.id}, ${p.id}, ${defaultStationId})`);
 
         const hiddenMenu = await createCatalogue(tx, tenantId, { name: "Staff" });
         const hiddenSection = await createMenuSection(tx, tenantId, {
@@ -1395,6 +1401,35 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     });
   });
 
+  it("prefers the enrolled device's default service zone", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const sessionId = await openSession(suite.db);
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    const deviceId = deviceCookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0]!;
+    const second = await suite.db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${cfg.tenantId}, ${cfg.locationId}, ${`Device zone ${deviceId}`}) returning id`);
+    await suite.db.execute(sql`
+      insert into zone_service_policies
+        (tenant_id, location_id, zone_id, department_id, service_mode)
+      select ${cfg.tenantId}, ${cfg.locationId}, ${second.rows[0]!.id}, department_id, 'prepay'
+      from zone_service_policies
+      where tenant_id = ${cfg.tenantId} and zone_id = ${counterZoneId}`);
+    await suite.db.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id)
+      values (${cfg.tenantId}, ${second.rows[0]!.id}, ${aguaProduct.catalogueId})`);
+    await suite.db.execute(sql`
+      insert into device_zone_defaults (tenant_id, device_id, zone_id)
+      values (${cfg.tenantId}, ${deviceId}, ${second.rows[0]!.id})`);
+
+    const res = await app.request("/api/default-service-zone/offers", {
+      headers: { cookie: `${SESSION_COOKIE}=${sessionId}; ${deviceCookie}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ context: { zoneId: second.rows[0]!.id } });
+  });
+
   it("returns the offers allowed in an explicit service zone", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1601,7 +1636,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
       body: JSON.stringify({
         id: randomUUID(),
-        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
         simulationOutcome: "captured",
       }),
     });
@@ -1625,7 +1660,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
       body: JSON.stringify({
         id: "not-a-uuid",
-        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
       }),
     });
     expect(res.status).toBe(400);
@@ -1642,7 +1677,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
 async function park(
   app: Hono,
   cookie: string,
-  body: { id: string; lines: { productId: string; quantity: string }[]; label?: string },
+  body: { id: string; lines: { menuItemId: string; quantity: string }[]; label?: string },
 ): Promise<Response> {
   return app.request("/api/working-orders", {
     method: "POST",
@@ -1707,7 +1742,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 
     const res = await park(app, cookie, {
       id,
-      lines: [{ productId: aguaProduct.id, quantity: "2" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "2" }],
       label: "Mesa 4",
     });
     expect(res.status).toBe(200);
@@ -1762,6 +1797,26 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
   });
 
+  it("POST rejects a product id that bypasses the zone's menu offers", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const res = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: randomUUID(),
+        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "lines" } },
+    });
+  });
+
   it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b park sibling)", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1773,7 +1828,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     // empty-basket early-out so the INSERT is reached in the RED state; the route screen refuses it 400.
     const res = await park(app, cookie, {
       id: "not-a-uuid",
-      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -1789,13 +1844,13 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 
     const parked = await park(app, cookie, {
       id,
-      lines: [{ productId: aguaProduct.id, quantity: "2" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "2" }],
       label: "Mesa 7",
     });
     const { orderNumber } = (await parked.json()) as { orderNumber: number };
 
     // GET list carries this order's summary. `total` is the GROSS (VAT-inclusive) draft total the
-    // operator saw: 2 × 1.50 = 3.00 gross (NOT the net base 2.48 the filed sale line carries). Assert
+    // operator saw: 2 × 1.75 = 3.50 gross. Assert
     // containment — the suite shares one node, so other tests' open orders also list.
     const list = await app.request("/api/working-orders", { headers: { cookie } });
     expect(list.status).toBe(200);
@@ -1807,18 +1862,29 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       total: string;
     }[];
     expect(summaries).toContainEqual(
-      expect.objectContaining({ id, orderNumber, label: "Mesa 7", itemCount: 1, total: "3.00" }),
+      expect.objectContaining({ id, orderNumber, label: "Mesa 7", itemCount: 1, total: "3.50" }),
     );
 
-    // GET /:id rebuilds the basket inputs (product_id + quantity, in line order) — no stored price.
+    // GET /:id rebuilds the basket from the frozen menu offer and returns its product details.
     // `quantity` reads back at the column's numeric(_, 3) scale ("2.000", not the sent "2").
     const got = await app.request(`/api/working-orders/${id}`, { headers: { cookie } });
     expect(got.status).toBe(200);
-    expect(await got.json()).toEqual({
+    expect(await got.json()).toMatchObject({
       id,
       orderNumber,
       label: "Mesa 7",
-      lines: [{ productId: aguaProduct.id, quantity: "2.000" }],
+      lines: [
+        {
+          menuItemId: aguaOfferId,
+          productId: aguaProduct.id,
+          quantity: "2.000",
+          product: {
+            menuItemId: aguaOfferId,
+            productId: aguaProduct.id,
+            unitPrice: "1.75",
+          },
+        },
+      ],
     });
 
     // PUT replaces the whole basket + label — a 200 with no body — and a re-retrieve reflects it.
@@ -1826,7 +1892,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
-        lines: [{ productId: aguaProduct.id, quantity: "5" }],
+        lines: [{ menuItemId: aguaOfferId, quantity: "5" }],
         label: "Mesa 7 bis",
       }),
     });
@@ -1835,11 +1901,22 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const afterPut = await (
       await app.request(`/api/working-orders/${id}`, { headers: { cookie } })
     ).json();
-    expect(afterPut).toEqual({
+    expect(afterPut).toMatchObject({
       id,
       orderNumber,
       label: "Mesa 7 bis",
-      lines: [{ productId: aguaProduct.id, quantity: "5.000" }],
+      lines: [
+        {
+          menuItemId: aguaOfferId,
+          productId: aguaProduct.id,
+          quantity: "5.000",
+          product: {
+            menuItemId: aguaOfferId,
+            productId: aguaProduct.id,
+            unitPrice: "1.75",
+          },
+        },
+      ],
     });
 
     // DELETE abandons it — a 200 with no body — after which retrieve is 404 and it leaves the list.
@@ -1872,7 +1949,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}`, { method: "DELETE", headers: { cookie } });
 
     // The order now sits in the terminal `abandoned` state, so an edit is refused 409 — the mutation
@@ -1880,7 +1957,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const put = await app.request(`/api/working-orders/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "2" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId: aguaOfferId, quantity: "2" }] }),
     });
     expect(put.status).toBe(409);
     expect(await put.json()).toMatchObject({ error: { code: "working_order.not_open" } });
@@ -1953,7 +2030,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     const id = randomUUID();
     await park(app, cookie, {
       id,
-      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
       label: "Mesa 2",
     });
 
@@ -1983,7 +2060,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
@@ -2032,7 +2109,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
     const id = randomUUID();
     await park(app, cookie, {
       id,
-      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
       label: "Mesa 5",
     });
 
@@ -2094,7 +2171,7 @@ describe("KDS-1 station-display operate routes", () => {
    *  the order id — the seed the queue/bump tests read from. */
   async function placeFired(app: Hono, cookie: string, label?: string): Promise<string> {
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }], label });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }], label });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
@@ -2234,8 +2311,8 @@ describe("KDS-1 station-display operate routes", () => {
     await park(app, cookie, {
       id,
       lines: [
-        { productId: aguaProduct.id, quantity: "1" },
-        { productId: aguaProduct.id, quantity: "1" },
+        { menuItemId: aguaOfferId, quantity: "1" },
+        { menuItemId: aguaOfferId, quantity: "1" },
       ],
       label: "Mesa 9",
     });
@@ -2330,7 +2407,7 @@ describe("/api/working-orders/:id/cancel", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
@@ -2355,7 +2432,7 @@ describe("/api/working-orders/:id/cancel", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
@@ -2447,8 +2524,8 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
         lines: [
-          { productId: aguaProduct.id, quantity: "1" },
-          { productId: aguaProduct.id, quantity: "1" },
+          { menuItemId: aguaOfferId, quantity: "1" },
+          { menuItemId: aguaOfferId, quantity: "1" },
         ],
       }),
     });

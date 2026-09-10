@@ -9,6 +9,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
 } from "@waitron/catalogue";
 import { CASA_DELGADO, MENU_DEL_DIA, type SeedCatalogue, type SeedLocale } from "./menu.js";
@@ -25,6 +27,8 @@ export interface SeedCataloguesResult {
   /** image basename → created product id, for Task 9's media attach and the sales generator. Every
    * seeded product appears exactly once (the menu's image basenames are unique across both menus). */
   productsByImage: Map<string, string>;
+  menuItemsByProduct: Map<string, string>;
+  menuIds: string[];
 }
 
 /** The logical routing targets a seed category names, mapped to their concrete `kitchen_stations.id`. */
@@ -68,10 +72,25 @@ export async function seedCatalogues(
 ): Promise<SeedCataloguesResult> {
   const stationIds = await resolveStationIds(tx, tenantId, locationId);
   const productsByImage = new Map<string, string>();
+  const menuItemsByProduct = new Map<string, string>();
 
-  const seedOne = async (data: SeedCatalogue): Promise<string> => {
-    const catalogue = await createCatalogue(tx, tenantId, { name: data.name[locale] });
-    for (const cat of data.categories) {
+  const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
+    select default_menu_id as id from zone_service_policies
+    where tenant_id = ${tenantId} and location_id = ${locationId} and is_counter_default
+      and default_menu_id is not null
+    limit 1`);
+
+  const seedOne = async (data: SeedCatalogue, existingMenuId?: string): Promise<string> => {
+    const catalogue =
+      existingMenuId === undefined
+        ? await createCatalogue(tx, tenantId, { name: data.name[locale] })
+        : { id: existingMenuId };
+    if (existingMenuId !== undefined) {
+      await tx.execute(sql`
+        update catalogues set name = ${data.name[locale]}
+        where tenant_id = ${tenantId} and id = ${existingMenuId}`);
+    }
+    for (const [categoryIndex, cat] of data.categories.entries()) {
       const category = await createCategory(tx, tenantId, { name: cat.name[locale] });
       if (cat.station !== null) {
         // The create op takes no station; set the route with a parameterised update. Both the id and
@@ -80,7 +99,19 @@ export async function seedCatalogues(
           sql`update categories set station_id = ${stationIds[cat.station]} where id = ${category.id}`,
         );
       }
-      for (const product of cat.products) {
+      await tx.execute(sql`
+        insert into preparation_routes
+          (tenant_id, location_id, category_id, station_id, no_preparation)
+        values (
+          ${tenantId}, ${locationId}, ${category.id},
+          ${cat.station === null ? null : stationIds[cat.station]}, ${cat.station === null}
+        )`);
+      const section = await createMenuSection(tx, tenantId, {
+        menuId: catalogue.id,
+        name: { [locale]: cat.name[locale] },
+        displayOrder: categoryIndex,
+      });
+      for (const [productIndex, product] of cat.products.entries()) {
         const created = await createProduct(tx, tenantId, {
           catalogueId: catalogue.id,
           categoryId: category.id,
@@ -92,6 +123,14 @@ export async function seedCatalogues(
           vatClass: product.vatClass,
           image: product.image,
         });
+        const menuItem = await createMenuItem(tx, tenantId, {
+          menuId: catalogue.id,
+          productId: created.id,
+          sectionId: section.id,
+          grossPrice: product.unitPrice,
+          displayOrder: productIndex,
+        });
+        menuItemsByProduct.set(created.id, menuItem.id);
         if (productsByImage.has(product.image)) {
           throw new Error(
             `demo-seed: duplicate image basename '${product.image}' — image basenames must be unique across the menu`,
@@ -103,11 +142,11 @@ export async function seedCatalogues(
     return catalogue.id;
   };
 
-  const casaId = await seedOne(CASA_DELGADO);
+  const casaId = await seedOne(CASA_DELGADO, provisionedMenus[0]?.id);
   const diaId = await seedOne(MENU_DEL_DIA);
 
   await assignCatalogueToLocation(tx, locationId, casaId);
   await addCatalogueToLocation(tx, tenantId, locationId, diaId);
 
-  return { productsByImage };
+  return { productsByImage, menuItemsByProduct, menuIds: [casaId, diaId] };
 }

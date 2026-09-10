@@ -53,12 +53,20 @@ export async function seedDemoRestaurant(
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
   const products = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
-      locationId,
+    const { productsByImage, menuItemsByProduct, menuIds } = await seedCatalogues(
+      tx,
+      brandTenantId(tenantId),
+      {
+        locationId,
+        locale,
+      },
+    );
+    await seedOptions(tx, brandTenantId(tenantId), {
+      productsByImage,
+      menuItemsByProduct,
       locale,
     });
-    await seedOptions(tx, brandTenantId(tenantId), { productsByImage, locale });
-    await seedFloor(tx, { tenantId, locationId, locale });
+    await seedFloor(tx, { tenantId, locationId, locale, menuIds });
     await seedStaff(tx, brandTenantId(tenantId));
     await seedMedia(tx, { mediaDir, productsByImage });
     return (await listAvailableProducts(tx, locationId)).products;

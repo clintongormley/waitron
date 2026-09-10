@@ -401,7 +401,7 @@ export async function payWorkingOrder(
       }
 
       const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
-      if (locked === undefined && serviceContext?.serviceMode === "prepay") {
+      if (locked === undefined && (serviceContext?.serviceMode ?? cfg.orderFlow) === "prepay") {
         await fireLines(
           tx,
           cfg,

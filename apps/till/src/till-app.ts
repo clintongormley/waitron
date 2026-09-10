@@ -933,14 +933,23 @@ export class TillApp extends LitElement {
     // A fresh session reloads the floor in full — reset the "already loaded once" flag beside the other
     // per-session resets (SP-B2.1 review). The full load below (or a later floor tab-select) re-sets it.
     this.#floorLoaded = false;
-    const { menus, offers, zones, context } = await this.api.listDefaultZoneOffers();
-    this.products = offers.map(menuOfferToTillProduct);
-    this.menus = menus;
-    this.counterServiceZones = zones ?? [];
-    this.counterServiceZoneId = context.zoneId;
-    this.api.setServiceZone(context.zoneId);
-    if (zones !== undefined && context.serviceMode !== "table_tab")
-      this.orderFlow = context.serviceMode;
+    let offerLoadFailed = false;
+    try {
+      const { menus, offers, zones, context } = await this.api.listDefaultZoneOffers();
+      this.products = offers.map(menuOfferToTillProduct);
+      this.menus = menus;
+      this.counterServiceZones = zones ?? [];
+      this.counterServiceZoneId = context.zoneId;
+      this.api.setServiceZone(context.zoneId);
+      if (zones !== undefined && context.serviceMode !== "table_tab")
+        this.orderFlow = context.serviceMode;
+    } catch {
+      offerLoadFailed = true;
+      this.products = [];
+      this.menus = [];
+      this.counterServiceZones = [];
+      this.counterServiceZoneId = "";
+    }
     // A fresh login starts on the location default, regardless of the previous menu preference.
     this.#selectMenu(this.#defaultCatalogueId());
     this.#selectDiet(null);
@@ -949,7 +958,7 @@ export class TillApp extends LitElement {
     // FP-2: gate the on-till floor editor on the server-computed `till.configure` capability handed down
     // in the session response. Convenience only — the placement route re-checks server-side.
     this.canEdit = canConfigureTill;
-    this.errorKey = undefined;
+    this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
     // An operator is now logged in — hold the screen awake and arm the idle-logout timer (Task 9).
     this.#configureSessionActivity();
     // Where the operator lands after login: a handheld waiter goes to the face-set's post-lock face
@@ -1073,11 +1082,12 @@ export class TillApp extends LitElement {
 
   async #onCounterZoneSelected(event: Event): Promise<void> {
     const { zoneId } = (event as CustomEvent<{ zoneId: string }>).detail;
-    if (
-      this.#store.lines.length > 0 ||
-      !this.counterServiceZones.some((zone) => zone.id === zoneId)
-    )
+    if (this.#store.lines.length > 0) {
+      this.errorKey = "service_zone.basket_active";
+      this.requestUpdate();
       return;
+    }
+    if (!this.counterServiceZones.some((zone) => zone.id === zoneId)) return;
     const request = ++this.#counterOfferRequest;
     try {
       const { menus, offers, defaultMenuId, context } = await this.api.listZoneOffers(zoneId);
@@ -1849,7 +1859,7 @@ export class TillApp extends LitElement {
    * remembers its new working-order id; an OCCUPIED table already has one, resolved from the read-model
    * ({@link TableState.tabId}, present iff `hasOpenTab`). Either way the app moves to the table-ordering
    * screen, which reads {@link activeTabId} (Task 9). Awaits `openTab` on the happy path like
-   * {@link TillApp.#onLoggedIn}'s `listProducts`.
+   * {@link TillApp.#onLoggedIn}'s zone-offer load.
    */
   async #onOpenTable(event: Event): Promise<void> {
     const { tableId, hasOpenTab } = (event as CustomEvent<{ tableId: string; hasOpenTab: boolean }>)

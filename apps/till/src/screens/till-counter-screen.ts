@@ -244,7 +244,15 @@ export class TillCounterScreen extends LitElement {
   #pickServiceZone(event: Event): void {
     const select = event.currentTarget as HTMLSelectElement;
     if (this.store.lines.length > 0) {
+      const requestedZoneId = select.value;
       select.value = this.selectedServiceZoneId;
+      this.dispatchEvent(
+        new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
+          detail: { zoneId: requestedZoneId },
+          bubbles: true,
+          composed: true,
+        }),
+      );
       return;
     }
     this.dispatchEvent(
@@ -257,7 +265,7 @@ export class TillCounterScreen extends LitElement {
   }
 
   #refreshServiceZone(): void {
-    if (this.store.lines.length > 0 || this.selectedServiceZoneId === "") return;
+    if (this.selectedServiceZoneId === "" || this.store.lines.length > 0) return;
     this.dispatchEvent(
       new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
         detail: { zoneId: this.selectedServiceZoneId },
@@ -313,6 +321,7 @@ export class TillCounterScreen extends LitElement {
               <wt-button
                 class="service-zone-refresh"
                 variant="secondary"
+                ?disabled=${this.store.lines.length > 0}
                 @click=${this.#refreshServiceZone}
               >
                 ${t("service_zone.refresh")}

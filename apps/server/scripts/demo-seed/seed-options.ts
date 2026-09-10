@@ -19,6 +19,7 @@
 import {
   createOptionGroup,
   createOptionGroupItem,
+  setMenuItemOptionGroups,
   setProductOptionGroups,
 } from "@waitron/catalogue";
 import type { TenantId } from "@waitron/shared";
@@ -28,6 +29,7 @@ import { CASA_DELGADO, MENU_DEL_DIA, PRODUCT_OPTION_GROUPS, type SeedLocale } fr
 export interface SeedOptionsInput {
   /** image basename -> product id, from `seedCatalogues`. */
   productsByImage: Map<string, string>;
+  menuItemsByProduct: Map<string, string>;
   /** Which of the two authored locales each group/item name is created under (feature B "author bare,
    *  file/display full-tag" — content authored bare here, single-locale on the row, like `SeedProduct`
    *  descriptions in `seedCatalogues`). */
@@ -56,7 +58,7 @@ function pricingUnitFor(image: string): "each" | "weight" | undefined {
 export async function seedOptions(
   tx: Transaction,
   tenantId: TenantId,
-  { productsByImage, locale }: SeedOptionsInput,
+  { productsByImage, menuItemsByProduct, locale }: SeedOptionsInput,
 ): Promise<void> {
   for (const { productImage, groups } of PRODUCT_OPTION_GROUPS) {
     const productId = productsByImage.get(productImage);
@@ -72,6 +74,8 @@ export async function seedOptions(
     }
 
     const groupIds: string[] = [];
+    const menuGroups: { groupId: string; options: { optionId: string; priceDelta: string }[] }[] =
+      [];
     for (const group of groups) {
       const created = await createOptionGroup(tx, tenantId, {
         name: { [locale]: group.name[locale] },
@@ -83,16 +87,24 @@ export async function seedOptions(
       // `listAvailableProducts`) would otherwise fall back to the tiebreaker `id` — a random uuid —
       // rather than the authored order. Pass the array index explicitly so "Small" sorts before
       // "Large", "Rare" before "Medium" before "Well done", etc.
+      const menuOptions: { optionId: string; priceDelta: string }[] = [];
       for (const [index, item] of group.items.entries()) {
-        await createOptionGroupItem(tx, tenantId, created.id, {
+        const createdItem = await createOptionGroupItem(tx, tenantId, created.id, {
           name: { [locale]: item.name[locale] },
           priceDelta: item.priceDelta,
           vatClass: item.vatClass,
           sort: index,
         });
+        menuOptions.push({ optionId: createdItem.id, priceDelta: item.priceDelta });
       }
       groupIds.push(created.id);
+      menuGroups.push({ groupId: created.id, options: menuOptions });
     }
     await setProductOptionGroups(tx, tenantId, productId, groupIds);
+    const menuItemId = menuItemsByProduct.get(productId);
+    if (menuItemId === undefined) {
+      throw new Error(`seedOptions: no menu item for product '${productId}'`);
+    }
+    await setMenuItemOptionGroups(tx, tenantId, menuItemId, menuGroups);
   }
 }

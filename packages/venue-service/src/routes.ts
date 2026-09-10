@@ -20,6 +20,7 @@ import {
   listDepartments,
   listPreparationRoutes,
   listServiceZones,
+  setDeviceDefaultZone,
 } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import "./errors.js";
@@ -35,7 +36,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department.not_found": 404,
   "service_zone.not_found": 404,
   "catalogue.not_found": 404,
+  "route.subject_not_found": 404,
   "route.missing": 409,
+  "route.station_inactive": 409,
+  "route.duplicate": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "invoice_first", "ticket_then_pay"]);
@@ -45,6 +49,13 @@ function requireMode(value: unknown, field: string): ServiceMode {
     throw new AppError("management.request_invalid", { field });
   }
   return value as ServiceMode;
+}
+
+function requireDisplayOrder(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new AppError("management.request_invalid", { field: "displayOrder" });
+  }
+  return value;
 }
 
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
@@ -116,9 +127,22 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<Record<string, unknown>>(c);
         await gated(sessionId, (tx) =>
           allowMenuInZone(tx, ctx.cfg, zoneId, menuId, {
+            displayOrder:
+              body.displayOrder === undefined ? undefined : requireDisplayOrder(body.displayOrder),
             makeDefault: body.makeDefault === true,
           }),
         );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/devices/:deviceId/default-zone", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const deviceId = requireUuidParam(c.req.param("deviceId"), "DeviceId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const zoneId = requireBodyUuid(body.zoneId, "zoneId");
+        await gated(sessionId, (tx) => setDeviceDefaultZone(tx, ctx.cfg, deviceId, zoneId));
         return c.body(null, 204);
       }),
     );

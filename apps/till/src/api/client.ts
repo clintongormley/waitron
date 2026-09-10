@@ -1623,9 +1623,9 @@ export class TillApi {
    * `to` — the Mode-P pickup for an order that pays at order and so never places (Modes I/T fire
    * automatically when `placeOrder` runs). The server's reworked route no longer enqueues one order row;
    * it fires the order's lines through `fireLines`, inserting one `ticket_items` row per line, each routed
-   * to a station (product ?? category ?? default) SNAPSHOTTED at fire time. A non-settled/absent/foreign
+   * from its frozen service zone and snapshotted at fire time. A non-settled/absent/foreign
    * id rejects `{ code: "working_order.not_settled" }`; a re-fire of an already-sent order
-   * `{ code: "ticket.already_fired" }`; a venue with no default station `{ code: "station.no_default" }`.
+   * `{ code: "ticket.already_fired" }`; incomplete routing `{ code: "route.missing" }`.
    */
   async sendToPrep(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", {});

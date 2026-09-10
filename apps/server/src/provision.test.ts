@@ -134,7 +134,16 @@ describe("provisionVenue", () => {
       expect((id as string).length).toBeGreaterThan(0);
     }
     expect(result.seriesIds).toHaveLength(2);
-    expect(result.seeded.map((s) => s.module)).toEqual(["fiscal-verifactu"]);
+    expect(result.seeded.map((s) => s.module)).toEqual([
+      "catalogue",
+      "venue-service",
+      "fiscal-verifactu",
+    ]);
+    const defaults = await db.execute<{ menus: number; zone_menus: number }>(sql`
+      select
+        (select count(*)::int from catalogues where tenant_id = ${result.tenantId}) as menus,
+        (select count(*)::int from zone_menus where tenant_id = ${result.tenantId}) as zone_menus`);
+    expect(defaults.rows[0]).toEqual({ menus: 1, zone_menus: 1 });
 
     // The box is now stamped for the requested environment.
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
@@ -162,8 +171,8 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: gbVenueRequest(nextNif()) },
     );
 
-    // No fiscal seed ran (fiscal-none contributes none), so nothing was seeded.
-    expect(result.seeded).toEqual([]);
+    // The generic venue-service seed runs; the selected no-regime fiscal module contributes no seed.
+    expect(result.seeded.map((s) => s.module)).toEqual(["catalogue", "venue-service"]);
     expect(result.seriesIds).toHaveLength(2);
     // No registro_sif, no chain — but the node and its two series exist.
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 2, nodes: 1, registros: 0 });

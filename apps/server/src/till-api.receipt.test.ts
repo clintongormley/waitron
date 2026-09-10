@@ -15,6 +15,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
   listAvailableProducts,
 } from "@waitron/catalogue";
@@ -114,7 +116,7 @@ function printCfg(cfg: TillConfig): PrintConfig {
  *  order-independent (CLAUDE.md §4). */
 async function setupVenue(): Promise<{
   cfg: TillConfig;
-  each: AvailableProduct;
+  each: AvailableProduct & { menuItemId: string };
   operatorId: string;
   supervisorId: string;
 }> {
@@ -160,7 +162,7 @@ async function setupVenue(): Promise<{
       await asAppUser(tx);
       const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
       const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
-      await createProduct(tx, cfg.tenantId, {
+      const product = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         descriptions: { [LOCALE]: "Agua mineral" },
@@ -169,6 +171,30 @@ async function setupVenue(): Promise<{
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+      const section = await createMenuSection(tx, cfg.tenantId, {
+        menuId: cat.id,
+        name: { [LOCALE]: "Bebidas" },
+      });
+      const menuItem = await createMenuItem(tx, cfg.tenantId, {
+        menuId: cat.id,
+        productId: product.id,
+        sectionId: section.id,
+        grossPrice: "1.50",
+      });
+      await tx.execute(sql`
+        insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+        select ${cfg.tenantId}, zone_id, ${cat.id}, 0
+        from zone_service_policies
+        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+          and is_counter_default`);
+      await tx.execute(sql`
+        update zone_service_policies set default_menu_id = ${cat.id}
+        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+          and is_counter_default`);
+      await tx.execute(sql`
+        insert into preparation_routes
+          (tenant_id, location_id, category_id, station_id, no_preparation)
+        values (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id}, null, true)`);
       const staff = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
         values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
@@ -177,7 +203,7 @@ async function setupVenue(): Promise<{
         values (${cfg.tenantId}, 'Responsable', ${hashPin("5555")}, 'supervisor') returning id`);
       const { products: available } = await listAvailableProducts(tx, cfg.locationId);
       return {
-        each: available.find((p) => p.pricingUnit === "each")!,
+        each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
         operatorId: staff.rows[0]!.id,
         supervisorId: supervisor.rows[0]!.id,
       };
@@ -351,7 +377,7 @@ async function ringSale(
   app: Hono,
   cfg: TillConfig,
   cookie: string,
-  productId: string,
+  menuItemId: string,
 ): Promise<string> {
   const deviceCookie = await enrolTillCookie(cfg);
   const workingOrderId = randomUUID();
@@ -360,7 +386,7 @@ async function ringSale(
     headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
     body: JSON.stringify({
       workingOrderId,
-      lines: [{ productId, quantity: "1" }],
+      lines: [{ menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     }),
   });
@@ -394,7 +420,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
 
-    const workingOrderId = await ringSale(app, cfg, cookie, each.id);
+    const workingOrderId = await ringSale(app, cfg, cookie, each.menuItemId);
     // The filed sale exists, but mode 'never' enqueued no auto job.
     expect(await registroCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
@@ -430,7 +456,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const workingOrderId = await ringSale(app, cfg, cookie, each.id);
+    const workingOrderId = await ringSale(app, cfg, cookie, each.menuItemId);
 
     for (let i = 0; i < 2; i++) {
       const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
@@ -469,7 +495,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const workingOrderId = await ringSale(app, cfg, cookie, each.id);
+    const workingOrderId = await ringSale(app, cfg, cookie, each.menuItemId);
 
     const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
       method: "POST",

@@ -420,6 +420,7 @@ export const en = {
   "service_zone.label": "Service area",
   "service_zone.refresh": "Refresh menus",
   "service_zone.load_error": "Could not load menus for this service area",
+  "service_zone.basket_active": "Clear the basket before changing service area",
   // Server status (till-reroute §4.4)
   "server.on": "On:",
   "server.unknown": "checking",
@@ -690,6 +691,7 @@ export const es: Record<StringKey, string> = {
   "service_zone.label": "Zona de servicio",
   "service_zone.refresh": "Actualizar menús",
   "service_zone.load_error": "No se pudieron cargar los menús de esta zona",
+  "service_zone.basket_active": "Vacía la cesta antes de cambiar de zona de servicio",
   "server.on": "Activo:",
   "server.unknown": "comprobando",
   "server.unreachable": "sin conexión",

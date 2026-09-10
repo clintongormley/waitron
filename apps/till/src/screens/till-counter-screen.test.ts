@@ -128,7 +128,8 @@ describe("till-counter-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>(".service-zone-refresh")!.click();
 
     expect(select.value).toBe("upstairs");
-    expect(spy).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy.mock.calls[0]![0].detail).toEqual({ zoneId: "downstairs" });
   });
 
   // SALE-PATH GUARD (SP-B4): a counter tab must ALWAYS yield the four sale-critical cards. The screen

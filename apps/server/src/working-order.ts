@@ -113,7 +113,8 @@ type PricedBasket = PricedLines;
 export type LineExtras = { note?: string; doneness?: Doneness };
 
 /**
- * Price requested lines from this location's sellable catalogue. Return both the
+ * Price requested lines from a zone's menu offers, or from the legacy location catalogue when the
+ * order has no service context. Return both the
  * insertable line snapshots and the basket result so a caller filing the same basket
  * can reuse it. Stored gross unit prices preserve the price agreed at add time.
  */
@@ -158,14 +159,11 @@ async function priceOrderLines(
     return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
   }
   const catalogue = await listAvailableProducts(tx, cfg.locationId);
-  const usesOffers = requestedLines.some((line) => line.menuItemId !== undefined);
+  const usesOffers = zoneId !== undefined;
   const offerBySelectionId = new Map<
     string,
     Awaited<ReturnType<typeof VENUE_SERVICE.resolveZoneOffer>>
   >();
-  if (usesOffers && zoneId === undefined) {
-    throw new AppError("service_zone.default_missing", {});
-  }
   if (usesOffers) {
     for (const line of requestedLines) {
       if (line.menuItemId === undefined || line.productId !== undefined) {
@@ -772,7 +770,6 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-
   // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows,
   // keeping the raw price so the caller need not re-derive it — `priceOrderLines`'s own doc-comment
   // explains the zip and why `priced` is threaded back out.
@@ -1003,14 +1000,10 @@ async function lockOpenTab(tx: Transaction, cfg: TillConfig, tabId: string): Pro
  * pickup) and a tab's round-send ({@link addTabRound}) — so routing and the snapshot rule live in ONE
  * place, replacing #63's single `order_prep` row per order with a per-line/per-station model.
  *
- * Each line resolves `product.station_id ?? category.station_id ?? the location's default station`
- * (§2b): a per-product override wins over the product's category default, which wins over the venue's
- * single `is_default` kitchen station. The resolved id is WRITTEN onto the ticket item, so re-pointing
- * the product's or category's station later never moves an already-fired item — the load-bearing
- * snapshot (`ticket_items.station_id`'s own schema comment). If a line resolves NEITHER a product- nor
- * category-level route AND the venue has no default station, firing FAILS LOUD with
- * `station.no_default` (§2b: a misconfiguration must not silently drop food from the kitchen), naming
- * the venue so the operator can fix it.
+ * An order with a frozen service context uses the venue-service route selected by zone, product and
+ * category; `no_preparation` skips the line. A context-less legacy order uses the older product,
+ * category and location-default station chain. The resolved station is WRITTEN onto the ticket item,
+ * so later configuration changes never move an already-fired item.
  *
  * `node_id = cfg.nodeId` (node-scoped, as `order_prep` was); `working_order_id = orderId` is the
  * denormalised grouping key; `working_order_line_id` is the fired line, whose `(tenant_id,
@@ -1030,7 +1023,8 @@ export async function fireLines(
   // A CHILD modifier line (ordering modifiers, Task 2/7) carries `parent_line_id` set and NO product —
   // it is part of its parent dish, not its own kitchen ticket, so it must get NEITHER a `ticket_items`
   // row NOR an independent station resolution (a modifier never routes to its own station, and a
-  // productless child would otherwise fall to the default station or fail `station.no_default`). This is
+  // productless child would otherwise fall to the legacy default station or fail
+  // `station.no_default`). This is
   // the SHARED fire chokepoint (placeOrder / sendToPrep / addTabRound all pass through here), so the
   // parent-only filter lives HERE — keyed on `parent_line_id IS NULL`, the semantic "is a top-level
   // line" — covering every caller by construction rather than being repeated at each. `productId` stays
@@ -1062,8 +1056,9 @@ export async function fireLines(
     return;
   }
   lines = parentLines;
-  // The venue's single fallback station (its `is_default` row, if any) — read ONCE; each line falls to
-  // it when neither the product nor its category names a route. The `active` filter is load-bearing:
+  // The venue's legacy fallback station (its `is_default` row, if any) — read ONCE for context-less
+  // orders; each such line falls to it when neither the product nor its category names a route. The
+  // `active` filter is required:
   // `deactivateStation` leaves `is_default=true` on a deactivated default, so without it a dead station
   // is still resolved here and lines route to a queue the till/station display (active-only) never
   // surface — food silently dropped. Requiring `active` makes a venue whose only default is deactivated
@@ -1080,8 +1075,8 @@ export async function fireLines(
     );
   const defaultStationId = fallback?.id ?? null;
 
-  // Read product and category station overrides in one batch. A missing category
-  // yields a null route; modifier children have already been removed from this list.
+  // Read the legacy product and category station overrides in one batch. A missing category yields a
+  // null route; modifier children have already been removed from this list.
   const productIds = [
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
@@ -1510,8 +1505,7 @@ export async function addTabRound(
   // Price the round (locks each new gross unit at add-time), then APPEND: renumber from maxLineNo+1,
   // never touching existing lines. `priceOrderLines` numbers its rows 1..n in `lines` order, so row i
   // maps to maxLineNo + i + 1.
-  const usesOffers = lines.some((line) => line.menuItemId !== undefined);
-  const context = usesOffers ? await VENUE_SERVICE.getOrderContext(tx, cfg, tabId) : undefined;
+  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
   const { lineRows, lineContexts } = await priceOrderLines(tx, cfg, tabId, lines, context?.zoneId);
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
   // TS-1 appends the round; KDS-1 fires it (design §3b, the tab round-send fire point) — insert the new
@@ -1817,14 +1811,15 @@ export async function moveTabLines(
   const fromContext = await VENUE_SERVICE.findOrderContext(tx, cfg, fromTabId);
   const toContext = await VENUE_SERVICE.findOrderContext(tx, cfg, toTabId);
   if (
-    fromContext !== null &&
-    toContext !== null &&
-    fromContext.serviceMode !== toContext.serviceMode
+    (fromContext === null) !== (toContext === null) ||
+    (fromContext !== null &&
+      toContext !== null &&
+      fromContext.serviceMode !== toContext.serviceMode)
   ) {
     throw new AppError("service_zone.mode_incompatible", {
-      zoneId: toContext.zoneId,
-      expected: fromContext.serviceMode,
-      actual: toContext.serviceMode,
+      zoneId: toContext?.zoneId ?? "unscoped",
+      expected: fromContext?.serviceMode ?? "unscoped",
+      actual: toContext?.serviceMode ?? "unscoped",
     });
   }
 
@@ -3212,7 +3207,7 @@ export async function placeOrder(
     });
 
     // Placing = firing to the kitchen (KDS-1 §3b): one `ticket_items` row per PARENT dish line, each
-    // routed to a station (product ?? category ?? default) SNAPSHOTTED at fire time, replacing #63's
+    // routed through its frozen service zone and SNAPSHOTTED at fire time, replacing #63's
     // single `order_prep` row per order. Read ALL the order's lines (id + product + parent link, in
     // line order) and hand them to `fireLines`, which fires the parents and skips child modifier lines
     // (a modifier is part of its dish, not its own ticket item). Ticket items advance queued →

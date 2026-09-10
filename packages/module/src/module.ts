@@ -174,7 +174,7 @@ export interface VenueServiceContribution {
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },
-    input: { zoneId?: string | null },
+    input: { zoneId?: string | null; deviceId?: string | null },
   ): Promise<OrderServiceContext>;
   resolveZoneOffer(
     tx: Transaction,

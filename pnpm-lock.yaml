@@ -476,6 +476,9 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared

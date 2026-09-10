@@ -452,6 +452,14 @@ export async function importConfigurationTables(
     }
   }
 
+  // A fresh venue points its location at the initial catalogue created by catalogue provisioning.
+  // The imported catalogue set replaces that seed, so release the foreign key before deletion; the
+  // remapped source default is restored by applyPreparedLocation after the rows are inserted.
+  await tx.execute(sql`
+    update locations set catalogue_id = null
+    where tenant_id = ${target.tenantId} and id = ${target.locationId}
+  `);
+
   for (const [declaration] of [...checked].reverse()) {
     if (declaration.name === "persons") {
       await tx.execute(sql`

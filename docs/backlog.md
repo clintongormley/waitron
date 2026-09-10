@@ -791,17 +791,22 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
 
 - **Venue departments and menu model — ordering foundation implemented (owner, 2026-09-09;
   branch `menus`, PR pending).** One venue contains Restaurant/bar and Deli departments with their
-  own zones, menus, service defaults, hours and staffing, sharing products and preparation stations. One
-  product can have different prices/modifiers on different menus; zone/category routing selects
-  the preparation station. Same legal seller is the working assumption, to confirm before go-live.
+  own zones, menus and service defaults while sharing products and preparation stations. One product
+  can have different prices/modifiers on different menus; zone/category routing selects the preparation
+  station. The schema records department hours; enforcing those hours and assigning staff remain later
+  work. Same legal seller is the working assumption, to confirm before go-live.
   [Design](superpowers/specs/2026-09-09-venue-departments-and-menus-design.md) and
   [implementation plan](superpowers/plans/2026-09-09-venue-departments-and-menus.md) record the
   delivered slice and remaining work. The branch adds menu-item pricing, zone offer selection,
   frozen service context, zone/category preparation routing, context-preserving order transfers,
-  counter preparation fire and a one-operational-venue guard. Follow-ups are the dashboard authoring
-  replacement, removal of legacy product/menu price and fixed-station fields, hours, workforce
-  assignments, department attribution/reporting, demo/replication smoke and the till menu-refresh
-  defect. Inventory, recipe depth and multi-venue cloud management remain separate work.
+  counter preparation fire, device-specific default zones, configuration transfer, a fresh venue's
+  initial menu/zone assignment and a one-operational-venue provisioning guard. The demo seed now writes
+  menu offers, zone assignments and preparation rules. Follow-ups are the dashboard authoring
+  replacement; removal of legacy product/menu price and fixed-station fields; department/zone
+  activation rules and an order-readiness check; enforcement of hours; workforce assignments;
+  immutable department attribution and reporting; explicit one-venue checks at boot and standby
+  adoption; the exact Restaurant/Deli departmental demo plus replication smoke; and the till
+  menu-refresh defect. Inventory, recipe depth and multi-venue cloud management remain separate work.
 - **Modifiers / quantity deferred follow-ons** (all landed — #184/#186/#187/#190/#193): on-screen
   expo/station-queue/tab modifier `×N`; extract the shared `#allergens` render across
   basket/station-queue/expo; fold the base-allergen `products` join into the KDS queue select; the

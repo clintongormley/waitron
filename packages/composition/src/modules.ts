@@ -1,5 +1,9 @@
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
-import { CATALOGUE_CLASSIFICATION } from "@waitron/catalogue";
+import {
+  CATALOGUE_CLASSIFICATION,
+  CATALOGUE_CONFIGURATION_TRANSFER,
+  CATALOGUE_PROVISIONING,
+} from "@waitron/catalogue";
 import { CORE_CLASSIFICATION, CORE_CONFIGURATION_TRANSFER } from "@waitron/db";
 import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
@@ -23,6 +27,7 @@ import { WORKFORCE_CLASSIFICATION, WORKFORCE_CONFIGURATION_TRANSFER } from "@wai
 import {
   VENUE_SERVICE,
   VENUE_SERVICE_CLASSIFICATION,
+  VENUE_SERVICE_CONFIGURATION_TRANSFER,
   VENUE_SERVICE_PERMISSIONS,
   VENUE_SERVICE_PROVISIONING,
   VENUE_SERVICE_ROUTES,
@@ -77,7 +82,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../catalogue/drizzle",
     },
     classification: CATALOGUE_CLASSIFICATION,
-    configurationTransfer: { kind: "none" },
+    configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
+    provisioning: CATALOGUE_PROVISIONING,
   },
   {
     name: "venue-service",
@@ -91,7 +97,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     },
     classification: VENUE_SERVICE_CLASSIFICATION,
     venueService: VENUE_SERVICE,
-    configurationTransfer: { kind: "none" },
+    configurationTransfer: VENUE_SERVICE_CONFIGURATION_TRANSFER,
     provisioning: VENUE_SERVICE_PROVISIONING,
     routes: VENUE_SERVICE_ROUTES,
     permissions: VENUE_SERVICE_PERMISSIONS,

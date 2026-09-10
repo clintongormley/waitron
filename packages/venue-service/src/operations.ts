@@ -1,11 +1,21 @@
 import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
-import { catalogues, floorZones, kitchenStations, products, workingOrderLines } from "@waitron/db";
+import {
+  catalogues,
+  categories,
+  devices,
+  floorZones,
+  isUniqueViolation,
+  kitchenStations,
+  products,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { listMenuOffers, type MenuOffer } from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode } from "@waitron/module";
 import { AppError, type LocationId, type TenantId } from "@waitron/shared";
 import {
   departments,
+  deviceZoneDefaults,
   orderServiceContexts,
   preparationRoutes,
   workingLineContexts,
@@ -213,7 +223,13 @@ export async function resolveZoneContext(
       defaultMenuId: zoneServicePolicies.defaultMenuId,
     })
     .from(zoneServicePolicies)
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .innerJoin(
+      departments,
+      and(
+        eq(departments.tenantId, zoneServicePolicies.tenantId),
+        eq(departments.id, zoneServicePolicies.departmentId),
+      ),
+    )
     .where(
       and(
         eq(zoneServicePolicies.tenantId, cfg.tenantId),
@@ -251,17 +267,24 @@ export async function listZoneOffers(
     )
     .where(and(eq(zoneMenus.tenantId, cfg.tenantId), eq(zoneMenus.zoneId, zoneId)))
     .orderBy(zoneMenus.displayOrder, zoneMenus.menuId);
+  const menuOrder = new Map(menus.map((menu, index) => [menu.id, index]));
+  const offers = await listMenuOffers(
+    tx,
+    cfg.tenantId,
+    menus.map((menu) => menu.id),
+  );
+  offers.sort(
+    (left, right) =>
+      (menuOrder.get(left.menuId) ?? Number.MAX_SAFE_INTEGER) -
+      (menuOrder.get(right.menuId) ?? Number.MAX_SAFE_INTEGER),
+  );
   return {
     defaultMenuId: context.defaultMenuId,
     menus: menus.map((menu) => ({
       ...menu,
       isDefault: menu.id === context.defaultMenuId,
     })),
-    offers: await listMenuOffers(
-      tx,
-      cfg.tenantId,
-      menus.map((menu) => menu.id),
-    ),
+    offers,
   };
 }
 
@@ -269,7 +292,7 @@ export async function listZoneOffers(
 export async function resolveNewOrderZone(
   tx: Transaction,
   cfg: VenueScope,
-  input: { zoneId?: string | null },
+  input: { zoneId?: string | null; deviceId?: string | null },
 ): Promise<{
   zoneId: string;
   departmentId: string;
@@ -279,6 +302,28 @@ export async function resolveNewOrderZone(
 }> {
   if (input.zoneId !== undefined && input.zoneId !== null) {
     return resolveZoneContext(tx, cfg, input.zoneId);
+  }
+  if (input.deviceId !== undefined && input.deviceId !== null) {
+    const [deviceDefault] = await tx
+      .select({ zoneId: deviceZoneDefaults.zoneId })
+      .from(deviceZoneDefaults)
+      .innerJoin(
+        zoneServicePolicies,
+        and(
+          eq(zoneServicePolicies.tenantId, deviceZoneDefaults.tenantId),
+          eq(zoneServicePolicies.zoneId, deviceZoneDefaults.zoneId),
+        ),
+      )
+      .where(
+        and(
+          eq(deviceZoneDefaults.tenantId, cfg.tenantId),
+          eq(deviceZoneDefaults.deviceId, input.deviceId),
+          eq(zoneServicePolicies.locationId, cfg.locationId),
+        ),
+      );
+    if (deviceDefault !== undefined) {
+      return resolveZoneContext(tx, cfg, deviceDefault.zoneId);
+    }
   }
   const [policy] = await tx
     .select({ zoneId: zoneServicePolicies.zoneId })
@@ -292,6 +337,36 @@ export async function resolveNewOrderZone(
     );
   if (policy === undefined) throw new AppError("service_zone.default_missing", {});
   return resolveZoneContext(tx, cfg, policy.zoneId);
+}
+
+/** Set the initial counter zone for one enrolled device at this venue. */
+export async function setDeviceDefaultZone(
+  tx: Transaction,
+  cfg: VenueScope,
+  deviceId: string,
+  zoneId: string,
+): Promise<void> {
+  const [device] = await tx
+    .select({ id: devices.id })
+    .from(devices)
+    .where(
+      and(
+        eq(devices.tenantId, cfg.tenantId),
+        eq(devices.locationId, cfg.locationId),
+        eq(devices.id, deviceId),
+        eq(devices.active, true),
+      ),
+    );
+  if (device === undefined)
+    throw new AppError("route.subject_not_found", { subject: "device", id: deviceId });
+  await resolveZoneContext(tx, cfg, zoneId);
+  await tx
+    .insert(deviceZoneDefaults)
+    .values({ tenantId: cfg.tenantId, deviceId, zoneId })
+    .onConflictDoUpdate({
+      target: [deviceZoneDefaults.tenantId, deviceZoneDefaults.deviceId],
+      set: { zoneId },
+    });
 }
 
 /** Resolve a selling identity only when its menu is assigned to the service zone. */
@@ -509,19 +584,64 @@ export async function createPreparationRoute(
     target: PreparationRoute;
   },
 ): Promise<string> {
-  const [row] = await tx
-    .insert(preparationRoutes)
-    .values({
-      tenantId: cfg.tenantId,
-      locationId: cfg.locationId,
-      zoneId: input.zoneId ?? null,
-      categoryId: input.categoryId ?? null,
-      productId: input.productId ?? null,
-      stationId: input.target.kind === "station" ? input.target.stationId : null,
-      noPreparation: input.target.kind === "no_preparation",
-    })
-    .returning({ id: preparationRoutes.id });
-  return row!.id;
+  if (input.zoneId !== undefined && input.zoneId !== null) {
+    await resolveZoneContext(tx, cfg, input.zoneId);
+  }
+  if (input.categoryId !== undefined && input.categoryId !== null) {
+    const [category] = await tx
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.tenantId, cfg.tenantId), eq(categories.id, input.categoryId)));
+    if (category === undefined) {
+      throw new AppError("route.subject_not_found", {
+        subject: "category",
+        id: input.categoryId,
+      });
+    }
+  }
+  if (input.productId !== undefined && input.productId !== null) {
+    const [product] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.tenantId, cfg.tenantId), eq(products.id, input.productId)));
+    if (product === undefined) {
+      throw new AppError("route.subject_not_found", { subject: "product", id: input.productId });
+    }
+  }
+  if (input.target.kind === "station") {
+    const [station] = await tx
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(
+        and(
+          eq(kitchenStations.tenantId, cfg.tenantId),
+          eq(kitchenStations.locationId, cfg.locationId),
+          eq(kitchenStations.id, input.target.stationId),
+          eq(kitchenStations.active, true),
+        ),
+      );
+    if (station === undefined) {
+      throw new AppError("route.station_inactive", { stationId: input.target.stationId });
+    }
+  }
+  try {
+    const [row] = await tx
+      .insert(preparationRoutes)
+      .values({
+        tenantId: cfg.tenantId,
+        locationId: cfg.locationId,
+        zoneId: input.zoneId ?? null,
+        categoryId: input.categoryId ?? null,
+        productId: input.productId ?? null,
+        stationId: input.target.kind === "station" ? input.target.stationId : null,
+        noPreparation: input.target.kind === "no_preparation",
+      })
+      .returning({ id: preparationRoutes.id });
+    return row!.id;
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new AppError("route.duplicate", {});
+    throw error;
+  }
 }
 
 export async function listPreparationRoutes(tx: Transaction, cfg: VenueScope) {
@@ -560,7 +680,9 @@ export async function resolvePreparationRoute(
     .select({ categoryId: products.categoryId })
     .from(products)
     .where(and(eq(products.id, productId), eq(products.tenantId, cfg.tenantId)));
-  if (product === undefined) throw new AppError("route.missing", { zoneId, productId });
+  if (product === undefined) {
+    throw new AppError("route.subject_not_found", { subject: "product", id: productId });
+  }
   const [route] = await tx
     .select({
       stationId: preparationRoutes.stationId,

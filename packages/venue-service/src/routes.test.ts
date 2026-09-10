@@ -176,6 +176,15 @@ describe("venue service management routes", () => {
       },
     );
     expect(route.status).toBe(201);
+    expect(
+      (
+        await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
+          zoneId: fx.zoneId,
+          categoryId: fx.categoryId,
+          stationId: fx.stationId,
+        })
+      ).status,
+    ).toBe(409);
 
     const listed = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
     expect(listed.status).toBe(200);
@@ -270,5 +279,16 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(400);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/devices/${crypto.randomUUID()}/default-zone`,
+          fx.managerCookie,
+          { zoneId: fx.zoneId },
+        )
+      ).status,
+    ).toBe(404);
   });
 });

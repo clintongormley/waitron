@@ -1,7 +1,7 @@
 # Venue departments and menus: implementation plan
 
-**Status:** foundation slice implemented on branch `menus`; the remaining authoring, hours, staffing
-and reporting work stays in this plan as follow-up scope.
+**Status:** foundation slice implemented on branch `menus`; the remaining authoring, activation,
+hours, staffing, reporting and operational validation work stays in this plan as follow-up scope.
 **Driver:** Codex direct session.
 **Design:** [venue departments, menus and preparation routing](../specs/2026-09-09-venue-departments-and-menus-design.md).
 **Branch at preparation:** `menus`, baseline `67047fb3`. Continue in the registered
@@ -309,15 +309,20 @@ The `menus` branch delivers this first reviewable slice:
 | Menu offers | A product can have separately priced menu offers and offer-specific modifier prices. | `packages/catalogue/src/operations.test.ts`; commits `67fbb417`, `8898d5ce` |
 | Venue service | Departments, zone policies, allowed/default menus, preparation rules and frozen order/line context are module-owned. Manager routes expose the configuration operations. | `packages/venue-service/src/operations.test.ts`, `routes.test.ts`; commits `67fbb417`, `9089f1cd`, `bf685c47` |
 | Till and server | New lines use `menuItemId`; a counter order selects a service zone; table orders use their table zone; stored service mode governs later actions. | `apps/server/src/working-order.test.ts`, `till-api.test.ts`; `apps/till/src/till-app.test.ts`; commits `8898d5ce` through `198c7f7e` |
-| Preparation | Routing resolves from the frozen zone and product/category specificity. Integrated prepay orders fire preparation in the sale transaction. | `apps/server/src/till-sale.test.ts`, `till-sale-integrated.pg.test.ts`; commits `c18df62c`, `7f171d98` |
+| Preparation | Routing resolves from the frozen zone and product/category specificity. Manual and integrated prepay orders fire preparation in the sale transaction. | `apps/server/src/till-sale.test.ts`, `till-sale-integrated.pg.test.ts`; commits `c18df62c`, `7f171d98` |
 | Existing orders | Quantity edits keep price and line identity; parked orders restore modifiers and customisation; split, merge and transfer retain service and line context. | `apps/server/src/working-order.test.ts`, `move-merge.test.ts`, `split-bill.test.ts`; commits `44bc72f4`, `7dde626b`, `51fb9b47` |
 | Deployment | A same-venue provisioning retry is idempotent; a second distinct venue is refused, including competing real-PostgreSQL requests. | `packages/provisioning/src/venue-apply.test.ts`, `venue-apply.pg.test.ts`; commit `cb96c232` |
+| Fresh setup | Provisioning creates an initial menu, default department and counter zone, connects that menu to the zone, and exports both modules' configuration. | `apps/server/src/provision.test.ts`, `packages/catalogue/src/provisioning.ts`, `packages/{catalogue,venue-service}/src/configuration-transfer.ts` |
+| Till defaults | A configured device default selects the initial counter zone; an omitted HTTP zone resolves to the venue default before menu-offer pricing. | `apps/server/src/till-api.test.ts`, `packages/venue-service/src/operations.ts` |
+| Demo compatibility | The existing demo now authors menu sections/items, assigns its menus to service zones and creates preparation rules. | `apps/server/scripts/demo-seed/seed-options.test.ts`, `seed-catalogue.ts`, `seed-floor.ts` |
 
 The following planned work is not part of this branch: removing the legacy product catalogue/price
 and fixed-station authoring fields; replacing the dashboard's Catalogue and Location menus screens;
-department and zone hours; workforce assignments; immutable sold-line department attribution and
-department reporting; the full Restaurant/Deli demo and replication smoke. The backlog keeps these
-as explicit follow-ups rather than describing the foundation branch as the whole plan.
+department/zone deactivation and readiness rules; enforcing department and zone hours; workforce
+assignments; immutable sold-line department attribution and department reporting; explicit
+single-venue validation at boot and standby adoption; converting the demo into the exact
+Restaurant/Deli departmental example; and replication smoke. The backlog keeps these as explicit
+follow-ups rather than describing the foundation branch as the whole plan.
 
 Focused validation recorded before final branch review:
 

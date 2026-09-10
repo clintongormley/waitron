@@ -401,6 +401,68 @@ export async function setMenuItemOptionGroups(
     options: { optionId: string; priceDelta: string }[];
   }[],
 ): Promise<void> {
+  const [menuItem] = await tx
+    .select({ productId: menuItems.productId })
+    .from(menuItems)
+    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, menuItemId)));
+  if (menuItem === undefined)
+    throw new AppError("catalogue.not_found", { catalogueId: menuItemId });
+
+  const groupIds = groups.map((group) => group.groupId);
+  if (new Set(groupIds).size !== groupIds.length) {
+    throw new AppError("options.group_invalid", { reason: "duplicate" });
+  }
+  if (groupIds.length > 0) {
+    const attached = await tx
+      .select({ groupId: productOptionGroups.groupId })
+      .from(productOptionGroups)
+      .where(
+        and(
+          eq(productOptionGroups.tenantId, tenantId),
+          eq(productOptionGroups.productId, menuItem.productId),
+          inArray(productOptionGroups.groupId, groupIds),
+        ),
+      );
+    if (attached.length !== groupIds.length) {
+      throw new AppError("options.group_invalid", { reason: "not_attached" });
+    }
+
+    const definitions = await tx
+      .select({ id: optionGroups.id, minSelect: optionGroups.minSelect })
+      .from(optionGroups)
+      .where(and(eq(optionGroups.tenantId, tenantId), inArray(optionGroups.id, groupIds)));
+    const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
+    for (const group of groups) {
+      const definition = definitionById.get(group.groupId);
+      if (definition === undefined) {
+        throw new AppError("options.group_invalid", { reason: "not_attached" });
+      }
+      const optionIds = group.options.map((option) => option.optionId);
+      if (new Set(optionIds).size !== optionIds.length) {
+        throw new AppError("options.item_invalid", { reason: "duplicate" });
+      }
+      if (optionIds.length < definition.minSelect) {
+        throw new AppError("options.group_invalid", { reason: "insufficient_options" });
+      }
+      if (optionIds.length > 0) {
+        const matchingOptions = await tx
+          .select({ id: optionGroupItems.id })
+          .from(optionGroupItems)
+          .where(
+            and(
+              eq(optionGroupItems.tenantId, tenantId),
+              eq(optionGroupItems.groupId, group.groupId),
+              eq(optionGroupItems.active, true),
+              inArray(optionGroupItems.id, optionIds),
+            ),
+          );
+        if (matchingOptions.length !== optionIds.length) {
+          throw new AppError("options.item_invalid", { reason: "wrong_group_or_inactive" });
+        }
+      }
+    }
+  }
+
   await tx
     .delete(menuItemOptionGroups)
     .where(
@@ -450,7 +512,7 @@ export async function listMenuOffers(
       descriptions: products.descriptions,
       pricingUnit: products.pricingUnit,
       vatClass: products.vatClass,
-      category: categories.name,
+      category: sql<string>`coalesce(${categories.name}, 'Uncategorised')`,
       allergens: products.allergens,
       diet: products.diet,
       dietDerivation: products.dietDerivation,
@@ -470,7 +532,7 @@ export async function listMenuOffers(
       products,
       and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
     )
-    .innerJoin(
+    .leftJoin(
       categories,
       and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
     )

@@ -174,11 +174,12 @@ export async function applyVenue(
                ${action.operationDescription}, ${action.fiscalTerritory}, ${action.addressLine1},
                ${action.addressLine2}, ${action.postalCode}, ${action.city}, ${action.province},
                ${action.timeZone}, ${action.dayCutover})`);
-          // KDS-1: seed this location's DEFAULT kitchen station so firing (placeOrder / sendToPrep / a
-          // tab's round-send → fireLines) has a fallback the instant the venue exists. Spec §2a ("one
-          // default") + §2b: a location with NO default station makes firing a fail-loud
-          // `station.no_default` misconfiguration, so a fresh venue must ship one. The owner
-          // inserts it in the location's transaction. The operator can rename it later via updateStation; `station.no_default` then guards any venue
+          // KDS-1: seed this location's DEFAULT kitchen station so a context-less legacy order has a
+          // fallback. Service-context orders use explicit preparation routes instead. Spec §2a ("one
+          // default") + §2b: a location with NO default station makes legacy firing a fail-loud
+          // `station.no_default` misconfiguration, so a fresh venue must ship one. The owner inserts it
+          // in the location's transaction. The operator can rename it later via updateStation;
+          // `station.no_default` then guards any venue
           // left with no ACTIVE default station — including one whose sole default was DEACTIVATED
           // (fireLines' fallback requires `is_default AND active`) — not a fresh venue, which always ships
           // this one.
