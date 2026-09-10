@@ -86,16 +86,22 @@ type RecoveryCode = ErrorCode | "server.boot_incomplete";
  * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
  * 2026-09-10).
+ *
+ * Every restore-or-reinstall action also names whoever installed the box: the reader has no
+ * terminal, and often no backup and no installer either, so that person is their only real next
+ * step.
  */
 export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>> = {
   "provisioning.database_ahead": {
     title:
       "This box's database was set up by a different version of Waitron than the one installed.",
-    action: "Restore it from a backup, or reinstall.",
+    action:
+      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
   },
   "provisioning.schema_mismatch": {
     title: "The box's database does not match the installed software.",
-    action: "Restore it from a backup, or reinstall.",
+    action:
+      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
   },
   "provisioning.database_unreachable": {
     title: "The box's database is not responding.",
@@ -103,7 +109,8 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
   },
   "provisioning.database_not_owned": {
     title: "The box's database belongs to another program.",
-    action: "Restore it from a backup, or reinstall.",
+    action:
+      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
   },
   "provisioning.admin_uri_not_a_url": {
     title: "The box's database address is not a valid address.",
@@ -111,7 +118,8 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
   },
   "migrations.incomplete": {
     title: "The box's database was only partly updated.",
-    action: "Restore it from a backup, or reinstall.",
+    action:
+      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
   },
   "server.config_missing": {
     title: "The box's configuration is incomplete.",

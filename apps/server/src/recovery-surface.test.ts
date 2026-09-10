@@ -128,6 +128,22 @@ describe("curated operator text", () => {
     expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
   });
 
+  // "Restore it from a backup, or reinstall" is not an action for the reader this page has: a
+  // restaurant operator with no terminal, usually no backup and no installer. Every action that says
+  // it must also name the person who can do it, or the page stops being actionable exactly where the
+  // failure is worst.
+  it("points an operator with no backup at whoever installed the box", () => {
+    const restoreActions = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
+      /restore it from a backup, or reinstall/i.test(text.action),
+    );
+    expect(restoreActions.length).toBeGreaterThan(0);
+    for (const [code, text] of restoreActions) {
+      expect(text.action, `${code} offers a restore with no fallback`).toMatch(
+        /ask whoever installed this box/i,
+      );
+    }
+  });
+
   // The CONVERSE of the test above, and the one that matters: every code the entrypoint can
   // actually persist must have an entry. Without it the table can rot into uselessness one new code
   // at a time, each falling silently to the generic line — which is what `unknown` did to the first
