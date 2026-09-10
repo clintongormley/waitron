@@ -35,6 +35,24 @@ export interface ZoneMenu {
   displayOrder: number;
   isDefault: boolean;
 }
+export type VenueReadinessIssue =
+  | { code: "venue.department_missing" }
+  | { code: "zone.department_missing"; zoneId: string; zoneName: string }
+  | { code: "zone.menu_missing"; zoneId: string; zoneName: string }
+  | {
+      code: "zone.menu_empty";
+      zoneId: string;
+      zoneName: string;
+      menuId: string;
+      menuName: string;
+    }
+  | {
+      code: "zone.route_missing";
+      zoneId: string;
+      zoneName: string;
+      productId: string;
+      productName: string;
+    };
 export interface NamedRow {
   id: string;
   name: string;
@@ -48,6 +66,7 @@ export interface VenueServiceModel {
   routes: PreparationRoute[];
   hours: HoursInterval[];
   zoneMenus: ZoneMenu[];
+  readiness: VenueReadinessIssue[];
 }
 export interface VenueServiceChoices {
   menus: (NamedRow & { active: boolean })[];
@@ -117,6 +136,10 @@ export class VenueServiceApi {
     defaultServiceMode: ServiceMode;
   }): Promise<Department> {
     return this.request("/management-api/venue-service/departments", "POST", input);
+  }
+
+  deactivateDepartment(departmentId: string): Promise<void> {
+    return this.request(`/management-api/venue-service/departments/${departmentId}`, "DELETE");
   }
 
   createMenu(name: string): Promise<NamedRow> {

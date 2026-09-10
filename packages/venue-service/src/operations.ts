@@ -218,6 +218,189 @@ export async function createDepartment(
   return { ...row!, defaultServiceMode: row!.defaultServiceMode as ServiceMode };
 }
 
+export async function deactivateDepartment(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+): Promise<void> {
+  const [department] = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(
+      and(
+        eq(departments.id, departmentId),
+        eq(departments.tenantId, cfg.tenantId),
+        eq(departments.locationId, cfg.locationId),
+      ),
+    )
+    .for("update");
+  if (department === undefined) throw new AppError("department.not_found", { departmentId });
+
+  const [activeZone] = await tx
+    .select({ id: floorZones.id })
+    .from(zoneServicePolicies)
+    .innerJoin(
+      floorZones,
+      and(
+        eq(floorZones.tenantId, zoneServicePolicies.tenantId),
+        eq(floorZones.id, zoneServicePolicies.zoneId),
+      ),
+    )
+    .where(
+      and(
+        eq(zoneServicePolicies.tenantId, cfg.tenantId),
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        eq(zoneServicePolicies.departmentId, departmentId),
+        eq(floorZones.active, true),
+      ),
+    )
+    .limit(1);
+  if (activeZone !== undefined) {
+    throw new AppError("department.has_active_zones", { departmentId, zoneId: activeZone.id });
+  }
+  await tx
+    .update(departments)
+    .set({ active: false })
+    .where(and(eq(departments.tenantId, cfg.tenantId), eq(departments.id, departmentId)));
+}
+
+export type VenueReadinessIssue =
+  | { code: "venue.department_missing" }
+  | { code: "zone.department_missing"; zoneId: string; zoneName: string }
+  | { code: "zone.menu_missing"; zoneId: string; zoneName: string }
+  | {
+      code: "zone.menu_empty";
+      zoneId: string;
+      zoneName: string;
+      menuId: string;
+      menuName: string;
+    }
+  | {
+      code: "zone.route_missing";
+      zoneId: string;
+      zoneName: string;
+      productId: string;
+      productName: string;
+    };
+
+/** Describe configuration that prevents an active zone from accepting new orders. */
+export async function listVenueReadiness(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<VenueReadinessIssue[]> {
+  const activeDepartments = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(
+      and(
+        eq(departments.tenantId, cfg.tenantId),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    );
+  if (activeDepartments.length === 0) return [{ code: "venue.department_missing" }];
+
+  const zones = await tx
+    .select({
+      id: floorZones.id,
+      name: floorZones.name,
+      departmentId: zoneServicePolicies.departmentId,
+      departmentActive: departments.active,
+      defaultMenuId: zoneServicePolicies.defaultMenuId,
+      assignedMenuId: zoneMenus.menuId,
+    })
+    .from(floorZones)
+    .leftJoin(
+      zoneServicePolicies,
+      and(
+        eq(zoneServicePolicies.tenantId, floorZones.tenantId),
+        eq(zoneServicePolicies.zoneId, floorZones.id),
+      ),
+    )
+    .leftJoin(
+      departments,
+      and(
+        eq(departments.tenantId, zoneServicePolicies.tenantId),
+        eq(departments.id, zoneServicePolicies.departmentId),
+      ),
+    )
+    .leftJoin(
+      zoneMenus,
+      and(
+        eq(zoneMenus.tenantId, zoneServicePolicies.tenantId),
+        eq(zoneMenus.zoneId, zoneServicePolicies.zoneId),
+        eq(zoneMenus.menuId, zoneServicePolicies.defaultMenuId),
+      ),
+    )
+    .where(
+      and(
+        eq(floorZones.tenantId, cfg.tenantId),
+        eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    )
+    .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
+
+  const issues = zones.flatMap((zone): VenueReadinessIssue[] => {
+    if (zone.departmentId === null || zone.departmentActive !== true) {
+      return [{ code: "zone.department_missing", zoneId: zone.id, zoneName: zone.name }];
+    }
+    if (zone.defaultMenuId === null || zone.assignedMenuId === null) {
+      return [{ code: "zone.menu_missing", zoneId: zone.id, zoneName: zone.name }];
+    }
+    return [];
+  });
+  for (const zone of zones) {
+    if (
+      zone.departmentId === null ||
+      zone.departmentActive !== true ||
+      zone.defaultMenuId === null ||
+      zone.assignedMenuId === null
+    ) {
+      continue;
+    }
+    const available = await listZoneOffers(tx, cfg, zone.id);
+    for (const menu of available.menus) {
+      if (!available.offers.some((offer) => offer.menuId === menu.id)) {
+        issues.push({
+          code: "zone.menu_empty",
+          zoneId: zone.id,
+          zoneName: zone.name,
+          menuId: menu.id,
+          menuName: menu.name,
+        });
+      }
+    }
+    const productsById = new Map(
+      available.offers.map((offer) => [
+        offer.productId,
+        Object.values(offer.descriptions)[0] ?? offer.productId,
+      ]),
+    );
+    for (const [productId, productName] of productsById) {
+      try {
+        await resolvePreparationRoute(tx, cfg, zone.id, productId);
+      } catch (error) {
+        if (
+          error instanceof AppError &&
+          (error.code === "route.missing" || error.code === "route.station_inactive")
+        ) {
+          issues.push({
+            code: "zone.route_missing",
+            zoneId: zone.id,
+            zoneName: zone.name,
+            productId,
+            productName,
+          });
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+  return issues;
+}
+
 export async function configureZone(
   tx: Transaction,
   cfg: VenueScope,

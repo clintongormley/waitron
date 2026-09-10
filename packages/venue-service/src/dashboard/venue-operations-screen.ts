@@ -1,7 +1,12 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import type { ServiceMode, VenueServiceApi, VenueServiceView } from "./client.js";
+import type {
+  ServiceMode,
+  VenueReadinessIssue,
+  VenueServiceApi,
+  VenueServiceView,
+} from "./client.js";
 import { t } from "./strings.js";
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
@@ -236,6 +241,40 @@ export class VenueOperationsScreen extends LitElement {
       );
   }
 
+  #readinessMessage(issue: VenueReadinessIssue): string {
+    switch (issue.code) {
+      case "venue.department_missing":
+        return t("venue.readiness.department_missing");
+      case "zone.department_missing":
+        return `${issue.zoneName} ${t("venue.readiness.zone_department_missing")}`;
+      case "zone.menu_missing":
+        return `${issue.zoneName} ${t("venue.readiness.zone_menu_missing")}`;
+      case "zone.menu_empty":
+        return `${issue.menuName} ${t("venue.readiness.menu_empty")} ${issue.zoneName}.`;
+      case "zone.route_missing":
+        return `${issue.productName} ${t("venue.readiness.route_missing")} ${issue.zoneName}.`;
+    }
+  }
+
+  #readiness() {
+    const issues = this.model!.readiness;
+    return html`<section class="panel" data-test="readiness">
+      <h2>${t("venue.readiness")}</h2>
+      ${
+        issues.length === 0
+          ? html`<p>${t("venue.readiness.ok")}</p>`
+          : html`<ul role="alert">
+              ${issues.map(
+                (issue, index) =>
+                  html`<li data-test=${`readiness-issue-${index}`}>
+                    ${this.#readinessMessage(issue)}
+                  </li>`,
+              )}
+            </ul>`
+      }
+    </section>`;
+  }
+
   #departments() {
     const model = this.model!;
     return html`<section>
@@ -254,6 +293,14 @@ export class VenueOperationsScreen extends LitElement {
                     <ul>
                       ${this.#hoursFor(department.id).map((line) => html`<li>${line}</li>`)}
                     </ul>
+                    <wt-button
+                      variant="secondary"
+                      data-test=${`deactivate-department-${department.id}`}
+                      ?disabled=${this.busy || !department.active}
+                      @click=${() =>
+                        void this.#save(() => this.api.deactivateDepartment(department.id))}
+                      >${t("venue.deactivate_department")}</wt-button
+                    >
                   </article>`,
               )}
             </div>`
@@ -494,7 +541,7 @@ export class VenueOperationsScreen extends LitElement {
       ${
         this.model === undefined
           ? nothing
-          : html`${this.#departments()}${this.#menus()}${this.#zones()}${this.#routing()}`
+          : html`${this.#readiness()}${this.#departments()}${this.#menus()}${this.#zones()}${this.#routing()}`
       }`;
   }
 }

@@ -15,7 +15,14 @@ describe("VenueServiceApi", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ departments: [], zones: [], routes: [], hours: [], zoneMenus: [] }),
+        jsonResponse({
+          departments: [],
+          zones: [],
+          routes: [],
+          hours: [],
+          zoneMenus: [],
+          readiness: [],
+        }),
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "m1", name: "Restaurant", active: true }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "c1", name: "Cocktails" }]))
@@ -53,6 +60,7 @@ describe("VenueServiceApi", () => {
       tradingName: "Casa Delgado Deli",
       defaultServiceMode: "prepay",
     });
+    await api.deactivateDepartment("d1");
     await api.replaceHours("d1", [{ weekday: 1, opensAt: "09:00", closesAt: "18:00" }]);
     await api.configureZone("z1", { departmentId: "d1", serviceMode: null });
     await api.allowMenu("z1", "m1", { displayOrder: 0, makeDefault: true });
@@ -68,6 +76,7 @@ describe("VenueServiceApi", () => {
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/departments", "POST"],
+      ["/management-api/venue-service/departments/d1", "DELETE"],
       ["/management-api/venue-service/departments/d1/hours", "PUT"],
       ["/management-api/venue-service/zones/z1", "PUT"],
       ["/management-api/venue-service/zones/z1/menus/m1", "PUT"],

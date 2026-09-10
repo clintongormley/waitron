@@ -17,10 +17,12 @@ import {
   configureZone,
   createDepartment,
   createPreparationRoute,
+  deactivateDepartment,
   listDepartments,
   listDepartmentHours,
   listPreparationRoutes,
   listServiceZones,
+  listVenueReadiness,
   listZoneMenuAssignments,
   replaceDepartmentHours,
   setDeviceDefaultZone,
@@ -37,6 +39,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "department.not_found": 404,
+  "department.has_active_zones": 409,
   "service_zone.not_found": 404,
   "catalogue.not_found": 404,
   "route.subject_not_found": 404,
@@ -83,8 +86,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           routes: await listPreparationRoutes(tx, ctx.cfg),
           hours: await listDepartmentHours(tx, ctx.cfg),
           zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
+          readiness: await listVenueReadiness(tx, ctx.cfg),
         }));
         return c.json(result);
+      }),
+    );
+
+    app.delete("/management-api/venue-service/departments/:departmentId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        await gated(sessionId, (tx) => deactivateDepartment(tx, ctx.cfg, departmentId));
+        return c.body(null, 204);
       }),
     );
 

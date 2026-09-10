@@ -24,10 +24,12 @@ import {
   configureZone,
   createDepartment,
   createPreparationRoute,
+  deactivateDepartment,
   allowMenuInZone,
   getOrderServiceContext,
   listWorkingLineContexts,
   listServiceZones,
+  listVenueReadiness,
   listZoneOffers,
   recordOrderServiceContext,
   recordWorkingLineContexts,
@@ -56,6 +58,107 @@ async function scoped<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>):
 }
 
 describe("venue service routing", () => {
+  it("reports incomplete active zones and refuses to deactivate their department", async () => {
+    const rawTenantId = await seedTenant(db);
+    const tenantId = brandTenantId(rawTenantId);
+    const location = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+    const locationId = brandLocationId(location.rows[0]!.id);
+    const zone = await db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+
+    await scoped(tenantId, async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { tenantId, locationId },
+        { name: "Restaurant", defaultServiceMode: "table_tab" },
+      );
+      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+        { code: "zone.department_missing", zoneId: zone.rows[0]!.id, zoneName: "Terrace" },
+      ]);
+
+      await configureZone(
+        tx,
+        { tenantId, locationId },
+        {
+          zoneId: zone.rows[0]!.id,
+          departmentId: department.id,
+        },
+      );
+      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+        { code: "zone.menu_missing", zoneId: zone.rows[0]!.id, zoneName: "Terrace" },
+      ]);
+
+      const menu = await createCatalogue(tx, tenantId, { name: "Terrace menu" });
+      await allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id, {
+        makeDefault: true,
+      });
+      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+        {
+          code: "zone.menu_empty",
+          zoneId: zone.rows[0]!.id,
+          zoneName: "Terrace",
+          menuId: menu.id,
+          menuName: "Terrace menu",
+        },
+      ]);
+
+      const category = await createCategory(tx, tenantId, { name: "Drinks" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        descriptions: { en: "Sparkling water" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      const section = await createMenuSection(tx, tenantId, {
+        menuId: menu.id,
+        name: { en: "Drinks" },
+      });
+      await createMenuItem(tx, tenantId, {
+        menuId: menu.id,
+        productId: product.id,
+        sectionId: section.id,
+        grossPrice: "3.00",
+      });
+      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+        {
+          code: "zone.route_missing",
+          zoneId: zone.rows[0]!.id,
+          zoneName: "Terrace",
+          productId: product.id,
+          productName: "Sparkling water",
+        },
+      ]);
+      await createPreparationRoute(
+        tx,
+        { tenantId, locationId },
+        {
+          productId: product.id,
+          target: { kind: "no_preparation" },
+        },
+      );
+      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([]);
+      await expect(
+        deactivateDepartment(tx, { tenantId, locationId }, department.id),
+      ).rejects.toMatchObject({
+        code: "department.has_active_zones",
+        params: { departmentId: department.id, zoneId: zone.rows[0]!.id },
+      });
+
+      await tx.execute(sql`update floor_zones set active = false where id = ${zone.rows[0]!.id}`);
+      await expect(
+        deactivateDepartment(tx, { tenantId, locationId }, department.id),
+      ).resolves.toBeUndefined();
+      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+        { code: "venue.department_missing" },
+      ]);
+    });
+  });
+
   it("routes one cocktail to the bar serving its service zone", async () => {
     const rawTenantId = await seedTenant(db);
     const tenantId = brandTenantId(rawTenantId);

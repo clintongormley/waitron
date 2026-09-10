@@ -10,6 +10,15 @@ afterEach(() => {
 });
 
 const model: VenueServiceView = {
+  readiness: [
+    {
+      code: "zone.route_missing",
+      zoneId: "z1",
+      zoneName: "Dining room",
+      productId: "p1",
+      productName: "Negroni",
+    },
+  ],
   departments: [
     {
       id: "d1",
@@ -88,6 +97,21 @@ describe("venue operations screen", () => {
     expect(text).toContain("Monday 09:00–18:00");
     expect(text).toContain("Negroni");
     expect(text).toContain("11.00");
+    expect(text).toContain("Dining room");
+    expect(el.shadowRoot!.querySelector('[data-test="readiness-issue-0"]')!.textContent).toContain(
+      "Negroni",
+    );
+  });
+
+  it("deactivates a department that has no active zones", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      deactivateDepartment: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    (el.shadowRoot!.querySelector('[data-test="deactivate-department-d2"]') as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.deactivateDepartment).toHaveBeenCalledWith("d2");
   });
 
   it("creates a second department from the required management fields", async () => {

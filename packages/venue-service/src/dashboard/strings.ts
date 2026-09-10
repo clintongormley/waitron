@@ -43,6 +43,14 @@ const en = {
   "venue.load_error": "The venue configuration could not be loaded.",
   "venue.save_error": "The change could not be saved.",
   "venue.empty": "No departments have been configured.",
+  "venue.readiness": "Ready for service",
+  "venue.readiness.ok": "Every active service zone is ready to take orders.",
+  "venue.readiness.department_missing": "Create an active department before service.",
+  "venue.readiness.zone_department_missing": "needs an active department.",
+  "venue.readiness.zone_menu_missing": "needs a default menu.",
+  "venue.readiness.menu_empty": "has no products for",
+  "venue.readiness.route_missing": "needs a preparation route in",
+  "venue.deactivate_department": "Deactivate department",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -88,6 +96,14 @@ const es: Record<keyof typeof en, string> = {
   "venue.load_error": "No se pudo cargar la configuración del local.",
   "venue.save_error": "No se pudo guardar el cambio.",
   "venue.empty": "No hay departamentos configurados.",
+  "venue.readiness": "Preparado para el servicio",
+  "venue.readiness.ok": "Todas las zonas activas están preparadas para aceptar pedidos.",
+  "venue.readiness.department_missing": "Crea un departamento activo antes del servicio.",
+  "venue.readiness.zone_department_missing": "necesita un departamento activo.",
+  "venue.readiness.zone_menu_missing": "necesita una carta predeterminada.",
+  "venue.readiness.menu_empty": "no tiene productos para",
+  "venue.readiness.route_missing": "necesita una ruta de preparación en",
+  "venue.deactivate_department": "Desactivar departamento",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };

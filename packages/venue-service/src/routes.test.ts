@@ -109,7 +109,7 @@ async function fixture(): Promise<Fixture> {
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   cookie?: string,
   body?: unknown,
@@ -236,7 +236,41 @@ describe("venue service management routes", () => {
         { departmentId: department.id, weekday: 6, opensAt: "18:00:00", closesAt: "01:00:00" },
       ],
       zoneMenus: [{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 0, isDefault: true }],
+      readiness: [
+        {
+          code: "zone.menu_empty",
+          zoneId: fx.zoneId,
+          menuId: fx.menuId,
+        },
+      ],
     });
+
+    const blocked = await send(
+      fx.app,
+      "DELETE",
+      `/management-api/venue-service/departments/${department.id}`,
+      fx.managerCookie,
+    );
+    expect(blocked.status).toBe(409);
+
+    const spare = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/departments",
+      fx.managerCookie,
+      { name: "Events", defaultServiceMode: "prepay" },
+    );
+    const spareDepartment = (await spare.json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "DELETE",
+          `/management-api/venue-service/departments/${spareDepartment.id}`,
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(204);
   });
 
   it("accepts inherited service mode and an explicit no-preparation route", async () => {
