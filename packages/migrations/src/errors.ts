@@ -38,10 +38,24 @@ declare module "@waitron/shared" {
     "migrations.set_missing": { name: string; folder: string };
     /**
      * A set's `table` is not a drizzle journal-table name (`__drizzle_migrations_<lowercase>`).
-     * `appliedSchemaVersion` interpolates the table name into a `count(*)` over it — an identifier
-     * a bind parameter cannot carry (§3) — so the name is validated before it reaches the SQL,
-     * rather than trusting that "callers only pass safe values".
+     * `appliedSchemaVersion` and `journalHashes` both interpolate the table name into a query over
+     * it — an identifier a bind parameter cannot carry (§3) — so the name is validated before it
+     * reaches the SQL, rather than trusting that "callers only pass safe values".
      */
     "migrations.invalid_table": { table: string };
+    /**
+     * A migration set reported success with fewer migrations applied than the image ships.
+     *
+     * Drizzle decides what to apply from `max(created_at)` alone — never a journal index or a hash
+     * (`drizzle-orm@0.45.2/pg-core/dialect.js:56-62`) — so a migration whose `when` sits below a
+     * value the database already recorded is never applied, and nothing is raised. Measured
+     * 2026-09-10: a database at the core set's entry 1 upgraded to HEAD with 10 of 15 migrations
+     * applied and no error. The wrong schema then surfaces as an unclassified driver failure in
+     * whatever query first touches it, which is the diagnosability defect this branch exists to
+     * remove.
+     *
+     * Both counts are journal lengths — public facts about a build artefact, never data.
+     */
+    "migrations.incomplete": { set: string; applied: number; expected: number };
   }
 }
