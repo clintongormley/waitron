@@ -377,15 +377,6 @@ declare module "@waitron/shared" {
      * reinstall, never an automatic repair.
      */
     "provisioning.database_ahead": { set: string; unknownMigrations: string[] };
-    /**
-     * A driver failure whose SQLSTATE says the database does not carry the schema this image
-     * expects — an undefined table, column or object, or an enum label the image does not have.
-     * Produced by `classifyBootFailure` (`apps/server/src/boot-failure.ts`) as a CLASSIFICATION of
-     * an already-thrown driver error, so nothing constructs it with params today; `sqlState` is
-     * declared because it is the one fact a future thrower would carry, and the params of a shipped
-     * code cannot be widened later without changing a contract.
-     */
-    "provisioning.schema_mismatch": { sqlState: string };
     /** The instance is not set up for native logical replication. `missing` lists each unmet
      * precondition in words (`wal_level is not logical`, `replication role missing`,
      * `migrator lacks pg_create_subscription`, …) — the box image / operator runs the bootstrap

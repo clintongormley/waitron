@@ -218,6 +218,24 @@ declare module "@waitron/shared" {
      */
     "provisioning.database_unreachable": { attempts: number };
     /**
+     * A driver failure whose SQLSTATE says the database does not carry the schema this image
+     * expects — an undefined table, column or object, or an enum label the image does not have.
+     *
+     * `classifyBootFailure` (`boot-failure.ts`) returns this and `provisioning.database_unreachable`
+     * above from the same function, so the two live in the same registry. Nothing constructs it with
+     * params today: it is a CLASSIFICATION of an already-thrown driver error, and the page renders
+     * fixed text keyed on the code alone. `sqlState` is declared because it is the one fact a future
+     * thrower would carry and a shipped code's params cannot be widened later; `string | null`
+     * matches both classification siblings above, since a socket failure carries no SQLSTATE.
+     *
+     * `provisioning.*`, not `server.*`, for the reason those two siblings record: the domain concept
+     * is the deployment's database, and `server.*` is reserved for facts about the process itself
+     * (CLAUDE.md §3). Declared here rather than in `packages/provisioning/src/errors.ts` — where the
+     * spec's §4.1 put it — because this host is its only producer; §9's addendum records the
+     * deviation. Never renamed once shipped.
+     */
+    "provisioning.schema_mismatch": { sqlState: string | null };
+    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *

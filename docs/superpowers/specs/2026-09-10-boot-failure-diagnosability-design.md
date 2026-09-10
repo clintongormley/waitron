@@ -276,6 +276,12 @@ plan was written. §8's open question is closed, and two of the findings changed
   `sqlStateOf` uses (five) and includes each level's name and message, plus an `AppError`'s params —
   `migrations.incomplete`'s counts and `database_ahead`'s hashes are the diagnosis. All of it still
   goes through `redactSecrets` and none of it reaches the page (§5 unchanged, pinned by test).
+- **`provisioning.schema_mismatch` is declared in `apps/server/src/errors.ts`, not the provisioning
+  registry §4.1 names.** §4.1's reasoning is about the `provisioning.` PREFIX, which is unchanged;
+  which FILE declares a code is a separate question, and this host is the code's only producer —
+  `classifyBootFailure` returns it two lines from `provisioning.database_unreachable`, which already
+  lives there with a paragraph arguing exactly this. `provisioning.database_ahead` stays in
+  `packages/provisioning/src/errors.ts`, because `schema-ahead.ts` really does throw it.
 - **§4.1's schema-mismatch table LOST `22P02`, a deliberate deviation from this spec.** Run on
   PostgreSQL 18, `select 'not-a-uuid'::uuid` returns `22P02` — the same SQLSTATE as an enum label the
   image does not have — so the state cannot tell a malformed VALUE from a missing schema, and this
