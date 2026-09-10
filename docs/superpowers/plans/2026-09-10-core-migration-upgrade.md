@@ -261,7 +261,8 @@ ALTER TABLE "printers"
 ```
 
 Note the comment says "the bluetooth label", not `'bluetooth'` in single quotes. Task 2's guard reads
-raw SQL text, and a quoted literal in a comment is indistinguishable from one in a predicate.
+raw SQL text; it strips comments before searching, so a quoted label in prose is tolerated, but
+leaving it unquoted keeps the file readable to a guard that only ever reads text.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -395,12 +396,22 @@ the four bare literals back — and re-run. Expected: the `core` case FAILS, nam
 `0013_central_printer_provisioning` and `0014_central_printer_provisioning_sql`. Restore with
 `git checkout -- packages/db/drizzle/` and re-run: every set PASSES.
 
-Then prove the comment-stripping matters, which is a separate guard inside the guard: temporarily
-change `withoutComments` to `return sql;` and re-run. Expected: `core` FAILS, because Task 1's own
-explanatory comment mentions the label. Restore it.
+**As implemented, this guard needed a correction the plan's first draft got wrong**, recorded here
+because the shape recurs: the plan's rule was "the label must never appear again as a quoted
+literal", which the fix in Task 1 violates — `transport::text = 'bluetooth'` still contains the
+quoted label. The guard therefore failed on the fixed tree and its message told you to do the thing
+you had already done. The implementation subtracts a literal on the right of an explicit `::text`
+comparison before searching (`/::\s*text\s*(?:=|<>|!=)\s*'[^']*'/gi`), because a text comparison
+never resolves the literal to the enum type. Every other spelling is still reported.
 
-**Report all three outcomes.** A guard seen only to pass proves nothing, and a guard whose two
-directions give the same answer measures nothing (CLAUDE.md §1).
+The comment-stripping direction the plan asked for is ALSO wrong as written: it expected `core` to
+fail with stripping removed "because Task 1's own comment mentions the label", but Task 1 deliberately
+writes that label unquoted, so both directions give the same answer and the run measures nothing. The
+honest proof is to INJECT a quoted label into a comment, confirm the guard trips without stripping
+and passes with it, then revert the injection. Do that instead.
+
+**Report every outcome.** A guard seen only to pass proves nothing, and a guard whose two directions
+give the same answer measures nothing (CLAUDE.md §1).
 
 - [ ] **Step 3: Commit**
 
