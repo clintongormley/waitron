@@ -831,6 +831,9 @@ describe("the sharded packages' scripts", () => {
       expect(shard, `${pkg} has no test:shard script`).toBeDefined();
       expect(shard).toContain("--coverage");
       expect(shard).toContain("--reporter=blob");
+      expect(shard, `${pkg} must print failures even when the coverage merge is skipped`).toContain(
+        "--reporter=default",
+      );
       for (const metric of ["statements", "lines", "functions", "branches"]) {
         expect(shard, `${pkg} test:shard must zero the ${metric} threshold`).toContain(
           `--coverage.thresholds.${metric}=0`,

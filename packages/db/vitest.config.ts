@@ -45,12 +45,8 @@ export default defineConfig({
       // src/testing/** used to be excluded wholesale as "harness code, not
       // product code" — but that hid the fact that describeEachTarget,
       // postgresTarget, and migrated were never executed by any test (fixed
-      // by harness.test.ts's Target.create() smoke test). Only
-      // dockerAvailable's Docker-absent branch is genuinely unreachable by
-      // construction on a machine where Docker is present — mocking it would
-      // measure the mock, not this code — so that one branch is ignored
-      // in-place with a `v8 ignore` comment instead, and the rest of
-      // src/testing/** is now held to the same thresholds as src/.
+      // by harness.test.ts's Target.create() smoke test). The harness is held
+      // to the same thresholds as src/, including simulated CLI failures.
       //
       // drizzle.config.ts is a drizzle-kit CLI input, never imported at
       // runtime — the same role as the vite/vitest/etc. configs

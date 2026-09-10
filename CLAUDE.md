@@ -362,6 +362,15 @@ unfiltered `main` run, not a wrong hook.
 
 ## 4. Testing
 
+- **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.**
+  Preloading that library before the old module mocks reproduces `startRegistration is not a spy`
+  and `mockClear is not a function`; the credential stubs pass with the same preload. Do not rely
+  on a module mock replacing an already-loaded browser ES module. Evidence and limits:
+  `docs/superpowers/specs/2026-09-10-ci-test-failures.md`.
+- **Reuse a supplied test container before probing Docker again.** A failing `docker info` command
+  is not evidence that a container global setup already started is absent. Run 34507423350 failed
+  `deployment.test.ts` at this redundant check; `harness.docker.test.ts` injects a CLI timeout to
+  verify the shared-container path and retains the required-Docker failure without either signal.
 - **Two targets.** **PGlite** (`createPgliteDb` + `runMigrations`) is hermetic and fast, but every
   connection is a superuser (grants are not enforced; triggers still fire) and every query serialises
   onto one backend, so a contention test on PGlite is a **false pass**. **Real Postgres** via

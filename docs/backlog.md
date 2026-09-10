@@ -565,13 +565,12 @@ unchanged, so no new H2 receipt
      *Debt → CI / test infra*. (h) A hung real-PG suite LEAKS its
      running cluster containers (Ryuk off), starving the next run; `pnpm reap` only removes labelled
      containers older than 2h, so a fresh leak survives — inspect creation times, ownership and attached volumes, then remove only your own
-     confirmed leftovers before re-validating. (i) the dashboard browser suites flake on CI with `vi.mock("@simplewebauthn/browser")` not
-     applying — first `staff-screen.test.ts` (`mockClear is not a function`), then #302's CI hit
-     `profile-screen.test.ts:216` (`startRegistration is not a spy`); both pass on re-run and locally
-     (profile-screen 4/4 local). Now confirmed RECURRENT, so it is the real vitest browser-mode
-     module-mock-hoisting bug to fix (not re-run) — in flight in the `flaky-test` worktree (Codex,
-     2026-09-10), alongside the venue-service (#297) browser-package CI-grouping fix and a
-     `@waitron/db` shard-1/3 real-PG flake seen on the same #302 run.
+     confirmed leftovers before re-validating. (i) **Fix prepared in [#303](https://github.com/clintongormley/waitron/pull/303) (2026-09-10):**
+     the browser WebAuthn mock failure recurred in `profile-screen.test.ts` in run 34507423350.
+     Login/profile tests now stub `navigator.credentials` and exercise the real library, including
+     its option/response conversion. The same run's db failure was `deployment.test.ts` reporting
+     Docker absent after global setup had started PostgreSQL; the availability check now reuses that
+     supplied container. [Reproductions and limits](superpowers/specs/2026-09-10-ci-test-failures.md).
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
 `packages/composition`, every NEW module package, `apps/dashboard` module screens,
