@@ -262,7 +262,8 @@ design-review section apply.
   `print_jobs` retention sweep (spec §7); **3.** **central printer provisioning redesign** — **spec
   written 2026-09-09**,
   [2026-09-09-central-printer-provisioning-design.md](superpowers/specs/2026-09-09-central-printer-provisioning-design.md);
-  **plan next.** Subsumes the bare "un-pin IP printers" (failover-printing §4a). The brainstorm
+  **plan written and BUILT this branch (feat/central-printer-provisioning, finishing).** Subsumes the
+  bare "un-pin IP printers" (failover-printing §4a). The brainstorm
   extended the recorded owner decisions: **the serving agent is DERIVED from live capability, never
   stored** (`printers.agent_id` removed for EVERY transport, not just IP) — IP served by any box in
   the venue, USB/Bluetooth by the box currently reporting the device's stable key; printers keyed on
@@ -1178,7 +1179,8 @@ virtual PDF printer + `print_jobs` retention (nothing deletes a job today). **Re
   firmware failover, but it *does* confirm physical print.)
 - **Failover printing** ([design](superpowers/specs/2026-08-26-failover-printing-design.md)) — the
   lease/reclaim for stuck jobs LANDED (#138). Follow-ons: un-pin an IP printer from its single `agent_id`
-  (any LAN agent serves; distinct-agents race test + location-scoped-authz review); agents share the
+  — **DONE by central-printer-provisioning** (`agent_id` dropped for every transport, any LAN agent
+  serves, distinct-agents race test added, authz moved to venue + visible-keys); agents share the
   till's `[local → cloud]` failover list; **a till hosts a print agent** (the majority single-box
   venue's box-death path — high importance, but needs an on-device agent → a native app → **parked
   behind the go-native decision**); at-least-once delivery + active failure escalation at the till/KDS
