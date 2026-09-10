@@ -160,9 +160,11 @@ steps take owner sign-off at land):
    (device-join-and-accept-design.md §7). Standalone, containerised, follows the primary like the
    till. Printer failover in its on-prem form rides on it.
 4. **Payments: card readers.** Stripe Terminal is built. SumUp is built only after its four questions
-   are answered — **SENT to SumUp 2026-09-08, awaiting reply**
-   ([research/2026-09-08-sumup-questions.md](research/2026-09-08-sumup-questions.md)); question 4 (offline
-   after pairing) is design-invalidating, so the build waits on it.
+   are answered — sent to SumUp 2026-09-08, no reply; **the owner now has a Solo, so the answers are
+   measured instead**: runbook
+   [research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md), runs
+   from 2026-09-11 ([the questions](research/2026-09-08-sumup-questions.md)). Question 4 (standalone use
+   after pairing) is design-invalidating, so the build waits on that experiment's result.
 5. **The in-app walkthrough** — tables, sales, kitchen, bookings, tips, shifts: mostly built;
    [ui-review.md](ui-review.md) is the tracker. Plus the counter kitchen fire and the pricing
    adjustments under *Product work still open*.
@@ -296,7 +298,9 @@ design-review section apply.
   the dashboard's shared `#submit`. *Live dashboard→register→print e2e still owed* — the test box is
   un-onboarded (no tenant/deployment yet); onboard it, then approve the agent, register the USB printer,
   and print a real job.
-  **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
+  **4.** SumUp once the Solo experiments
+  ([research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md)) are
+  run and recorded. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
 - **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
   `packages/sync`, `packages/membership`, `packages/db`'s harness, `apps/server`'s promote / rejoin /
@@ -734,7 +738,7 @@ capabilities on the profile) #231 + its follow-on batch #234 · fixed dev pairin
   apps import (extracting the till widgets off their live stores/props); #223's silhouettes are the
   placeholder. A separate, larger initiative.
 - **Visual theme editor** · **NFC pairing runtime + payment routing** (payments-gated on the SumUp
-  questions) · **community canvas sharing**.
+  Solo experiments) · **community canvas sharing**.
 - **Location-consistency guard** (SP-A.2 follow-up 1): nothing enforces that a sale-capable device's
   register lives in the box's configured location, so a mis-provisioned device could stamp a fiscal
   record's operation description with a different site. Add a guard at enrol or first sale.
@@ -924,7 +928,7 @@ for the projected remainder.
   permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a large
   backend change. (Bookings SP2's `getMe` permission set is the first step off the coarse role gate.)
 - **Payment-provider config UI** (Stripe / SumUp / …) — none today (provider is env-stamped, sealed via
-  the credentials CLI); also gated on the SumUp offline question (*Debt → SumUp*).
+  the credentials CLI); also gated on the SumUp standalone-after-pairing experiment (*Debt → SumUp*).
 - **AEAT cert / Veri*Factu management UI** — first-run only today (`apps/setup` cert screen);
   `cert-expiry.ts` monitors but there is no view/rotate/renew surface. The cert-distribution rebuild
   (Track B item 3) adds the install/replace endpoint this UI would call.
@@ -1632,10 +1636,18 @@ genuinely-decision-bearing.
 - **Four unverified questions, one design-invalidating**
   ([sumup provider spec](superpowers/specs/2026-07-30-sumup-card-present-provider-design.md) §7;
   the send-ready form is [research/2026-09-08-sumup-questions.md](research/2026-09-08-sumup-questions.md),
-  **SENT 2026-09-08, awaiting reply**), wanted **before** the SumUp provider is built. The decisive one: **does the reader still work
+  sent 2026-09-08, no reply by 2026-09-10), wanted **before** the SumUp provider is built. **The owner
+  bought a Solo, so they are answered by experiment instead**:
+  [research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md), runs
+  from 2026-09-11, each experiment stating its failing case up front; results go back into the spec's
+  §7 as dated lines. The decisive one: **does the reader still work
   standalone/offline once paired to SumUp's cloud?** If not, the deli-hardware outage path (assumes a card
   can be taken when the internet is down) must be rewritten. The other three: may we *supply* the
-  idempotency key; are reader webhooks signed like online ones; does `void` map onto the refund endpoint.
+  idempotency key (the docs read 2026-09-10 offer `affiliate.foreign_transaction_id` as a client-supplied
+  lookup key, not an idempotency key — the experiment tests both); are reader webhooks signed like online
+  ones (the online-payments page read 2026-09-10 no longer describes a signature at all and says to
+  confirm every event by API call); does `void` map onto the refund endpoint (which has moved to
+  `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds`).
 
 **Bizum (parked research, 2026-08-30 — no decision, revisit when payment providers are built):**
 

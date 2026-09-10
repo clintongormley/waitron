@@ -82,6 +82,13 @@ The availability check now uses the handle supplied by global setup before
 considering the CLI fallback. Database connections and new container starts still
 run and can fail; this change does not retry or suppress those failures.
 
+*Follow-up (#306, 2026-09-10):* the CLI-fallback probe — reached when global setup has NOT supplied a
+handle, e.g. a fixture that starts its own containers such as the sync two-node replication test — now
+RETRIES a not-ready daemon a bounded number of times (`probeDockerCli` in
+`packages/db/src/testing/harness.ts`) before caching "absent", closing the daemon-readiness race this
+paragraph left open (the intermittent `test-sync` "cannot degrade to a hermetic run" failure on `main`).
+A missing `docker` binary (ENOENT) still fails fast, so REQUIRE_DOCKER stays loud.
+
 ## Failure visibility
 
 Both sharded packages (`db` and `server`) retain the blob reporter and add the
