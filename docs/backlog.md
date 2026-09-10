@@ -32,6 +32,12 @@ Still open: named passkeys and passkey-based reauthentication for an account wit
 operator screen that stores Google provider credentials in the vault. Turnstile and SMS verification
 belong to the later optional cloud/remote offering.
 
+**Dashboard login shortcuts: design agreed, implementation pending** (owner, 2026-09-10;
+`login-screen` worktree). The [implementation plan](superpowers/plans/2026-09-10-login-screen.md)
+covers separate authenticator verification, activation validation/resend, passkey autofill and
+cancellation, and remembered email/method shortcuts with opt-in persistence on shared devices.
+Keep public outcomes independent of account status and passkey enrolment.
+
 **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
 bypass, so a docs-only change is pushed straight to `main` — no PR, no CI wait. Branch, `commit -s`,
 fast-forward `main`, push. Feature/code still goes through a PR.
