@@ -929,6 +929,15 @@ for the projected remainder.
   backend change. (Bookings SP2's `getMe` permission set is the first step off the coarse role gate.)
 - **Payment-provider config UI** (Stripe / SumUp / …) — none today (provider is env-stamped, sealed via
   the credentials CLI); also gated on the SumUp standalone-after-pairing experiment (*Debt → SumUp*).
+- **More than one card provider loaded at once** (e.g. SumUp Solo and Square side by side) — today a till
+  drives exactly ONE (`WAITRON_TILL_CARD_PROVIDER` is a single `CardProvider` enum; `buildCardProvider`
+  returns one `PaymentProvider`; the pay path drives that single `deps.cardProvider`). A venue with two
+  acquirers, or a counter routing walk-up-reader vs. Tap-to-Pay to different providers, needs a SET of
+  providers chosen per pay call by something the call carries (reader id / staff tender choice), not one
+  boot-time pick. Touches `CardProvider`, `buildCardProvider`, the till pay routing, and the credential
+  seal (one `payments.<provider>` purpose per configured provider rather than one). The `payments.provider`
+  column already records which provider took each tender, so the ledger side is ready. Look-at item, no
+  decision yet.
 - **AEAT cert / Veri*Factu management UI** — first-run only today (`apps/setup` cert screen);
   `cert-expiry.ts` monitors but there is no view/rotate/renew surface. The cert-distribution rebuild
   (Track B item 3) adds the install/replace endpoint this UI would call.
