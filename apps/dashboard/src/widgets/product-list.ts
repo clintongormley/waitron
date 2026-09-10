@@ -84,7 +84,7 @@ export class ProductList extends LitElement {
                     aria-hidden="true"
                   ></span>`
                 : html`<span class="thumb" data-test="thumb"
-                    ><img src=${`/media/${product.image}`} alt=${name}
+                    ><img src=${`/media/${product.image}`} alt=""
                   /></span>`
             }
             <strong>${name}</strong>

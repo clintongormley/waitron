@@ -168,15 +168,15 @@ describe("product-list", () => {
     expect(pills[0]!.textContent).not.toBe(pills[1]!.textContent);
   });
 
-  it("renders a thumbnail <img> served from /media with alt text when image is set", async () => {
+  it("renders a decorative thumbnail served from /media when image is set", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ image: "abc123.webp", descriptions: { es: "Croquetas" } })],
     });
     const img = (await tableRoot(el)).querySelector<HTMLImageElement>("[data-test=thumb] img")!;
     expect(img).not.toBeNull();
     expect(img.getAttribute("src")).toBe("/media/abc123.webp");
-    // A meaningful alt (the product name), never an empty string on a content image.
-    expect(img.getAttribute("alt")).toBe("Croquetas");
+    // The adjacent strong element already names the product, so repeating it as alt text is noisy.
+    expect(img.getAttribute("alt")).toBe("");
     expect((await tableRoot(el)).querySelector("[data-test=thumb-placeholder]")).toBeNull();
   });
 
