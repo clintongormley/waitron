@@ -2958,10 +2958,11 @@ export async function updateHeldOrder(
         ) {
           return false;
         }
-        const sameIdentity = line.menuItemId !== undefined
-          ? contextByLine.get(stored.id)?.menuItemId === line.menuItemId &&
+        const sameIdentity =
+          line.menuItemId !== undefined
+            ? contextByLine.get(stored.id)?.menuItemId === line.menuItemId &&
               line.productId === undefined
-          : line.productId === stored.productId && line.menuItemId === undefined;
+            : line.productId === stored.productId && line.menuItemId === undefined;
         if (!sameIdentity) return false;
         const requestedOptions = new Map<string, number>();
         for (const option of line.options ?? []) {
