@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
+import { t } from "../i18n/t.js";
 import type { ProfileScreen } from "./profile-screen.js";
 import "./profile-screen.js";
 
@@ -273,7 +274,14 @@ describe("your profile", () => {
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(api.beginTotp).toHaveBeenCalledWith({ currentPassword: "current" });
-    expect(el.shadowRoot!.textContent).toContain("SECRET");
+    const qr = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=authenticator-qr]")!;
+    expect(qr.src).toMatch(/^data:image\/png;base64,/);
+    expect(qr.alt).toBe(t("profile.authenticator_qr_alt"));
+    const fallback = el.shadowRoot!.querySelector<HTMLDetailsElement>(
+      "[data-test=authenticator-key-fallback]",
+    )!;
+    expect(fallback.open).toBe(false);
+    expect(fallback.textContent).toContain("SECRET");
     input(el, "setupCode", "123456");
     await click(el, "save");
     expect(api.finishTotp).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", "123456");

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { encryptTotpSecret, hashPassword, hashPin } from "@waitron/identity";
 import { DEFAULT_RECEIPT } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
@@ -26,6 +26,7 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & st
 // serve every tenant these tests provision.
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
+const ACCOUNT_ACTION_CODE_KEY = Buffer.alloc(32, 21);
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -132,6 +133,7 @@ function mountApp(
       origin: "http://localhost",
       sendAccountEmail,
       passwordThrottle,
+      accountActionCodeKey: ACCOUNT_ACTION_CODE_KEY,
       ...(google === undefined
         ? {}
         : {
@@ -313,6 +315,29 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect((await attempt(MANAGER_EMAIL, PASSWORD)).status).toBe(200);
     for (let i = 0; i < 4; i++) expect((await attempt(MANAGER_EMAIL)).status).toBe(401);
     expect((await attempt(MANAGER_EMAIL)).status).toBe(429);
+  });
+
+  it("does not count the expected authenticator transition as a failed password", async () => {
+    const { tenantId } = await setupTenant();
+    await withTenant(suite.admin, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(sql`
+        insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role, totp_secret)
+        values (${tenantId}, 'Factor Manager', 'factor@example.com', ${hashPin("1234")},
+          ${hashPassword(PASSWORD)}, 'manager',
+          ${encryptTotpSecret("JBSWY3DPEHPK3PXP", { version: 1, key: ACCOUNT_ACTION_CODE_KEY })})
+      `);
+    });
+    const finish = vi.fn();
+    const app = mountApp(tenantId, undefined, { begin: vi.fn(() => finish) });
+    const response = await app.request("/management-api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "factor@example.com", password: PASSWORD }),
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: { code: "totp.required", params: {} } });
+    expect(finish).toHaveBeenCalledWith("error");
   });
   // ── The four required core assertions (task-6 brief) ───────────────────────────────────────────
 
@@ -532,6 +557,76 @@ describe("Management API staff + session routes over real Postgres", () => {
     await expect(login(app, STAFF_EMAIL, "a replacement password")).resolves.toMatch(
       /^waitron_management_session=/,
     );
+  });
+
+  it("inspects an invitation without consuming it and resends only for a pending account", async () => {
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId, async (message) => {
+      sent.push(message);
+    });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const created = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(invitationBody("Pending", "pending-inspect@x.com")),
+    });
+    expect(created.status).toBe(201);
+    const original = sent[0]!;
+    const token = new URL(original.actionUrl).searchParams.get("token")!;
+
+    const inspected = await app.request("/management-api/account-actions/inspect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, purpose: "invitation" }),
+    });
+    expect(inspected.status).toBe(200);
+    expect(await inspected.json()).toEqual({
+      email: "pending-inspect@x.com",
+      purpose: "invitation",
+    });
+    expect(inspected.headers.get("set-cookie")).toBeNull();
+
+    const completed = await app.request("/management-api/account-actions/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token,
+        purpose: "invitation",
+        password: "a replacement password",
+        pin: "4321",
+      }),
+    });
+    expect(completed.status).toBe(200);
+    expect(completed.headers.get("set-cookie")).toContain("waitron_management_session=");
+
+    const unknown = await app.request("/management-api/invitation-resend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "unknown@x.com" }),
+    });
+    const active = await app.request("/management-api/invitation-resend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: MANAGER_EMAIL }),
+    });
+    expect([unknown.status, active.status]).toEqual([202, 202]);
+    expect(sent).toHaveLength(1);
+
+    const secondCreated = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(invitationBody("Pending Again", "pending-resend@x.com")),
+    });
+    expect(secondCreated.status).toBe(201);
+    const resent = await app.request("/management-api/invitation-resend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "  PENDING-RESEND@X.COM  " }),
+    });
+    expect(resent.status).toBe(202);
+    await vi.waitFor(() => expect(sent).toHaveLength(3));
+    expect(sent[2]!.email).toBe("pending-resend@x.com");
   });
 
   it("creates a person with an email and lists it back", async () => {

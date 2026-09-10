@@ -290,6 +290,7 @@ describe("Me API over real Postgres (the identity property: the session's person
       (await who.json()) as {
         personId: string;
         role: string;
+        email: string | null;
         locale: string | null;
         venueLocale: string;
         venueName: string;
@@ -301,6 +302,7 @@ describe("Me API over real Postgres (the identity property: the session's person
     ).toEqual({
       personId: p,
       role: "staff",
+      email: null,
       sessionExpiresInSeconds: 1800,
       sessionIdleTimeoutSeconds: 1800,
       locale: null,

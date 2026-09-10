@@ -8,9 +8,9 @@ import { LoginScreen } from "./login-screen.js";
 
 // Keep the real WebAuthn library; stub only the hardware boundary so an earlier
 // library import still reaches the stub when the operator starts the ceremony.
-beforeEach(() => {
-  vi.spyOn(navigator.credentials, "get").mockResolvedValue({
-    id: "cred-abc",
+function passkeyCredential(id = "cred-abc"): PublicKeyCredential {
+  return {
+    id,
     rawId: new Uint8Array([1]).buffer,
     type: "public-key",
     authenticatorAttachment: "platform",
@@ -22,12 +22,20 @@ beforeEach(() => {
     },
     getClientExtensionResults: () => ({}),
     toJSON: vi.fn(),
-  } as PublicKeyCredential);
+  } as PublicKeyCredential;
+}
+
+beforeEach(() => {
+  vi.spyOn(navigator.credentials, "get").mockResolvedValue(passkeyCredential());
 });
 
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
 afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
+});
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
@@ -36,6 +44,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     requestPasswordReset: vi.fn().mockResolvedValue(undefined),
+    requestInvitation: vi.fn().mockResolvedValue(undefined),
+    inspectAccountAction: vi.fn((_token, purpose) =>
+      Promise.resolve({ email: "new@example.test", purpose }),
+    ),
+    inspectAccountActionByCode: vi.fn((_email, _code, purpose) =>
+      Promise.resolve({ email: "new@example.test", purpose }),
+    ),
     completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1", authenticated: true }),
     completeAccountActionByCode: vi.fn().mockResolvedValue({ personId: "p1", authenticated: true }),
     passkeyAuthOptions: vi
@@ -71,15 +86,19 @@ async function continueWithEmail(el: LoginScreen, email = "owner@x.com"): Promis
 }
 
 async function openOtherWays(el: LoginScreen, email = "owner@x.com"): Promise<void> {
-  await continueWithEmail(el, email);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=try-another-way]")!.click();
+  Object.assign(el as unknown as Record<string, string>, { email, step: "other-ways" });
   await el.updateComplete;
 }
 
 async function openPassword(el: LoginScreen, email = "owner@x.com"): Promise<void> {
-  await openOtherWays(el, email);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
+  Object.assign(el as unknown as Record<string, string>, { email, step: "password" });
   await el.updateComplete;
+}
+
+function input(el: LoginScreen, name: string, value: string): void {
+  el.shadowRoot!.querySelector(`wt-input[name=${name}]`)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value } }),
+  );
 }
 
 describe("login-screen", () => {
@@ -106,11 +125,115 @@ describe("login-screen", () => {
     (el as unknown as { password: string }).password = "correct horse";
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
-    expect(await loggedIn).toEqual({ personId: "p1", accountSetup: false });
+    expect(await loggedIn).toEqual({
+      personId: "p1",
+      accountSetup: false,
+      loginMethod: "password",
+      rememberEmail: false,
+    });
     expect(api.login).toHaveBeenCalledWith({
       email: "owner@x.com",
       password: "correct horse",
     });
+  });
+
+  it("asks for an authenticator only after the password has verified", async () => {
+    const login = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "totp.required" })
+      .mockResolvedValueOnce({ personId: "p1" });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ login }),
+    });
+    await openPassword(el);
+    expect(el.shadowRoot!.querySelector("wt-input[name=one-time-code]")).toBeNull();
+    (el as unknown as { password: string }).password = "correct horse";
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    await flush(el);
+
+    const factor = el.shadowRoot!.querySelector("wt-input[name=one-time-code]");
+    expect(factor).not.toBeNull();
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBeNull();
+    factor!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "123456" } }));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]")!.click();
+    await flush(el);
+    expect(login).toHaveBeenNthCalledWith(1, {
+      email: "owner@x.com",
+      password: "correct horse",
+    });
+    expect(login).toHaveBeenNthCalledWith(2, {
+      email: "owner@x.com",
+      password: "correct horse",
+      totp: "123456",
+    });
+  });
+
+  it("opens password alternatives without an error when the automatic passkey prompt is cancelled", async () => {
+    vi.mocked(navigator.credentials.get).mockRejectedValueOnce(
+      new DOMException("Cancelled", "NotAllowedError"),
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    (el as unknown as { email: string }).email = "owner@x.com";
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("wt-input[name=password]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=passkey-login]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=reset-by-email]")).not.toBeNull();
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBeNull();
+  });
+
+  it("ignores a passkey result that arrives after the login screen is removed", async () => {
+    let resolveAuthentication!: (value: PublicKeyCredential) => void;
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveAuthentication = resolve;
+      }) as never,
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    (el as unknown as { email: string }).email = "owner@x.com";
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await flush(el);
+    el.remove();
+
+    resolveAuthentication(passkeyCredential("late-credential"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(loggedIn).not.toHaveBeenCalled();
+  });
+
+  it("opens directly on password for the last account in this tab", async () => {
+    sessionStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "owner@example.com", method: "password" }),
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    expect(el.shadowRoot!.querySelector("wt-input[name=password]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=login-context]")?.textContent).toContain(
+      "owner@example.com",
+    );
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=email]")?.value,
+    ).toBe("");
+  });
+
+  it("can forget an opted-in account from the returning login", async () => {
+    const saved = JSON.stringify({ email: "owner@example.com", method: "passkey" });
+    sessionStorage.setItem("waitron-login-preference", saved);
+    localStorage.setItem("waitron-login-preference", saved);
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    expect(
+      el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=remember-email]")?.checked,
+    ).toBeUndefined();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=forget-account]")!.click();
+    await el.updateComplete;
+    expect(sessionStorage.getItem("waitron-login-preference")).toBeNull();
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-input[name=email]")).not.toBeNull();
   });
 
   it("finishes password recovery at login without creating a session", async () => {
@@ -123,6 +246,7 @@ describe("login-screen", () => {
       "/manage/account?token=token-1&purpose=password_reset#email=new%40example.test",
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await flush(el);
     (el as unknown as { password: string }).password = "a replacement password";
     (el as unknown as { confirmPassword: string }).confirmPassword = "a replacement password";
     const events: Event[] = [];
@@ -132,6 +256,50 @@ describe("login-screen", () => {
     expect(events).toHaveLength(0);
     expect(el.shadowRoot!.textContent).toContain(codeMessage("password.reset_complete"));
     expect(el.shadowRoot!.querySelector("wt-input[name=email]")).not.toBeNull();
+  });
+
+  it("validates an emailed action before showing credential fields", async () => {
+    let resolveInspection!: (value: { email: string; purpose: "invitation" }) => void;
+    const inspection = new Promise<{ email: string; purpose: "invitation" }>((resolve) => {
+      resolveInspection = resolve;
+    });
+    const api = stubApi({ inspectAccountAction: vi.fn().mockReturnValue(inspection) });
+    history.replaceState(
+      null,
+      "",
+      "/manage/account?token=token-1&purpose=invitation#email=untrusted%40example.test",
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+
+    expect(el.shadowRoot!.querySelector("wt-input[name=new-password]")).toBeNull();
+    resolveInspection({ email: "pending@example.test", purpose: "invitation" });
+    await flush(el);
+
+    expect(api.inspectAccountAction).toHaveBeenCalledWith("token-1", "invitation");
+    expect(el.shadowRoot!.querySelector("wt-input[name=new-password]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-autofill-username]")!.value).toBe(
+      "pending@example.test",
+    );
+  });
+
+  it("offers a generic replacement invitation when the emailed action has expired", async () => {
+    const api = stubApi({
+      inspectAccountAction: vi.fn().mockRejectedValue({ code: "account_action.invalid" }),
+    });
+    history.replaceState(
+      null,
+      "",
+      "/manage/account?token=expired&purpose=invitation#email=pending%40example.test",
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("[data-test=resend-invitation]")).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=resend-invitation]")!.click();
+    await flush(el);
+
+    expect(api.requestInvitation).toHaveBeenCalledWith("pending@example.test");
+    expect(el.shadowRoot!.textContent).toContain(t("account.invitation_resent"));
   });
 
   it("cancels account setup and returns to a blank email form", async () => {
@@ -204,7 +372,7 @@ describe("login-screen", () => {
       required: input.required,
     }).toEqual({
       name: "email",
-      autocomplete: "username",
+      autocomplete: "username webauthn",
       required: true,
     });
 
@@ -270,7 +438,7 @@ describe("login-screen", () => {
     expect(actions.querySelector("wt-button:not([slot])")?.getAttribute("data-test")).toBe(
       "submit",
     );
-    expect(actions.nextElementSibling?.getAttribute("data-test")).toBe("try-another-way");
+    expect(actions.nextElementSibling?.classList.contains("alternative-list")).toBe(true);
   });
 
   it("groups account-setup credentials and lets each secret be revealed", async () => {
@@ -288,14 +456,12 @@ describe("login-screen", () => {
     });
     expect(inputs).toEqual([
       { name: "new-password", autocomplete: "new-password", required: true },
-      { name: "confirm-password", autocomplete: "new-password", required: true },
       { name: "new-pin", autocomplete: "off", required: true },
       { name: "confirm-pin", autocomplete: "off", required: true },
     ]);
 
     const labels = [
       ["account.show_new_password", "account.hide_new_password"],
-      ["account.show_confirm_password", "account.hide_confirm_password"],
       ["account.show_new_pin", "account.hide_new_pin"],
       ["account.show_confirm_pin", "account.hide_confirm_pin"],
     ] as const;
@@ -331,10 +497,14 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-invitation-code]")!.click();
     await el.updateComplete;
 
+    input(el, "invitation-code", "123456");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=validate-account-action]")!.click();
+    await flush(el);
+
     const submit = el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!;
     const click = vi.spyOn(submit, "click").mockImplementation(() => undefined);
     const fields = [...el.shadowRoot!.querySelectorAll("wt-input")];
-    expect(fields).toHaveLength(5);
+    expect(fields).toHaveLength(3);
     for (const field of fields) {
       const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
       input.focus();
@@ -355,16 +525,10 @@ describe("login-screen", () => {
     });
     await el.updateComplete;
 
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=try-another-way]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-invitation-code]")!.click();
     await el.updateComplete;
 
     expect([...el.shadowRoot!.querySelectorAll("wt-input")].map((field) => field.value)).toEqual([
-      "",
-      "",
-      "",
-      "",
       "",
     ]);
   });
@@ -374,10 +538,12 @@ describe("login-screen", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await openOtherWays(el, "new@example.test");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-invitation-code]")!.click();
+    await el.updateComplete;
+    input(el, "invitation-code", "123456");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=validate-account-action]")!.click();
+    await flush(el);
     Object.assign(el as unknown as Record<string, string>, {
-      invitationCode: "123456",
       password: "a replacement password",
-      confirmPassword: "a replacement password",
       pin: "4321",
       confirmPin: "4321",
     });
@@ -616,7 +782,12 @@ describe("login-screen", () => {
       el.addEventListener("logged-in", (e) => resolve((e as CustomEvent).detail)),
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
-    expect(await loggedIn).toEqual({ personId: "p1", accountSetup: true });
+    expect(await loggedIn).toEqual({
+      personId: "p1",
+      accountSetup: true,
+      loginMethod: "password",
+      rememberEmail: false,
+    });
     expect(api.completeAccountAction).toHaveBeenCalledWith(
       "token-1",
       "invitation",

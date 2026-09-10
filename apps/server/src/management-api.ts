@@ -36,6 +36,8 @@ import {
   endManagementSession,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
+  inspectAccountAction,
+  inspectAccountActionByCode,
   listActiveStaff,
   listPersons,
   loginManager,
@@ -47,6 +49,7 @@ import {
   resolveManagementSession,
   resetPersonLogin,
   requestPasswordResetAction,
+  requestInvitationAction,
   readOwnProfile,
   updatePersonDetails,
   verifyOwnCredentials,
@@ -236,6 +239,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "password.throttled": 429,
   "totp.invalid": 401,
+  "totp.required": 401,
   "google.invalid": 401,
   "google.already_linked": 409,
   "google.second_factor_required": 401,
@@ -248,9 +252,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // verify (`passkey.verification_failed`, also thrown on registration verify) is a failed credential
   // check, the same family as `password.invalid`. `passkey.challenge_expired` is a 400: the request was
   // well-formed but its challenge lapsed past `CHALLENGE_TTL_MS`, a client-retryable request-timing
-  // fault rather than a rejected credential. The auth-verify route ALSO surfaces `person.suspended`
-  // (403, below): `finishPasskeyAuthentication` gates on the credential owner's status the way
-  // `loginManager` gates a password login, so a person suspended after enrolling a passkey is refused.
+  // fault rather than a rejected credential. Non-active credential owners get the same verification
+  // failure as an unknown credential, so the public response does not disclose account status.
   "passkey.not_registered": 401,
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
@@ -642,6 +645,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();
+  const acceptPublicInvitation = createPasswordResetCooldown();
   const acceptInvitation = createPasswordResetCooldown();
   const passwordResetRateLimiter =
     deps.accountActionRateLimiters?.passwordReset ?? createAccountActionRateLimiter();
@@ -796,8 +800,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // (`withTenant` + `asAppUser`), in this database. `loginManager` resolves the person by EMAIL
   // (not a client-supplied id) and hardens against enumeration: an unknown email and a wrong
   // password BOTH surface as `password.invalid` (401), so the response never reveals which
-  // addresses have accounts; a suspended person surfaces as `person.suspended` (403), a
-  // missing/wrong TOTP as `totp.invalid` (401) — the identity credential codes `STATUS` maps. The
+  // addresses have accounts. A suspended person gets that same result. Once the password succeeds,
+  // a missing enrolled factor surfaces as `totp.required`; a wrong factor uses `totp.invalid`. The
   // body is read via `readJsonBody` (`read-json-body.ts`), which coerces an
   // empty/malformed/`null` body to `{}` so it never reaches `run` as an opaque 500 — see its doc
   // for the two degenerate-body cases it handles. This is the representative site the other
@@ -892,6 +896,76 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         if (issued !== null) void deliverAccountAction(deps, log, issued);
       }
       return c.body(null, 202);
+    }),
+  );
+
+  // Public invitation replacement is deliberately indistinguishable for pending, active, unknown,
+  // malformed, and mail-unavailable addresses. Only a pending account can receive a new action.
+  app.post("/management-api/invitation-resend", (c) =>
+    run(c, log, async () => {
+      const body = await readJsonBody<{ email?: unknown }>(c);
+      const key =
+        typeof body.email === "string" ? body.email.trim().toLowerCase() : "invalid-email";
+      passwordResetRateLimiter.check(key);
+      if (typeof body.email === "string" && acceptPublicInvitation(body.email)) {
+        const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          return requestInvitationAction(tx, {
+            tenantId: deps.cfg.tenantId,
+            email: body.email as string,
+            codeKey: accountActionCodeKey,
+          });
+        });
+        if (issued !== null) void deliverAccountAction(deps, log, issued);
+      }
+      return c.body(null, 202);
+    }),
+  );
+
+  // Inspection validates the emailed bearer token or short code without consuming it. Completion
+  // repeats the check and performs the credential change atomically.
+  app.post("/management-api/account-actions/inspect", (c) =>
+    run(c, log, async () => {
+      const body = await readJsonBody<{
+        token?: unknown;
+        email?: unknown;
+        code?: unknown;
+        purpose?: unknown;
+      }>(c);
+      completionRateLimiter.check(
+        typeof body.token === "string"
+          ? body.token
+          : typeof body.email === "string"
+            ? body.email
+            : "invalid-token",
+      );
+      if (
+        (typeof body.token !== "string" &&
+          (typeof body.email !== "string" || typeof body.code !== "string")) ||
+        (body.purpose !== "invitation" && body.purpose !== "password_reset")
+      ) {
+        throw new AppError("account_action.invalid", {});
+      }
+      const purpose = body.purpose;
+      const inspection = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        if (typeof body.token === "string") {
+          return inspectAccountAction(tx, {
+            tenantId: deps.cfg.tenantId,
+            token: body.token,
+            purpose,
+          });
+        }
+        return inspectAccountActionByCode(tx, {
+          tenantId: deps.cfg.tenantId,
+          email: body.email as string,
+          code: body.code as string,
+          purpose,
+          codeKey: accountActionCodeKey,
+        });
+      });
+      if (inspection === null) throw new AppError("account_action.invalid", {});
+      return c.json(inspection);
     }),
   );
 

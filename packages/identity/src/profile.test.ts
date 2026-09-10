@@ -294,6 +294,9 @@ describe("your profile", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "totp.invalid" });
+    expect((await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).hasTotp).toBe(
+      false,
+    );
     const recovery = await withTenant(suite.db, f.tenantId, (tx) =>
       finishOwnTotpEnrollment(tx, {
         ...f,

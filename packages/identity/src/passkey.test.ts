@@ -584,7 +584,7 @@ describe("passkey authentication", () => {
 
     const begun = await beginAuth();
     expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
-      "person.suspended",
+      "passkey.verification_failed",
     );
 
     // No management session was minted for the suspended person.

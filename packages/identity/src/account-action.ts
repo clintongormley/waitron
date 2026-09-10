@@ -234,6 +234,130 @@ export interface AccountActionCompletion {
   session: ManagementSession | null;
 }
 
+export interface AccountActionInspection {
+  email: string;
+  purpose: CredentialActionPurpose;
+}
+
+function statusAcceptsPurpose(
+  status: "pending" | "active" | "suspended",
+  purpose: CredentialActionPurpose,
+): boolean {
+  return purpose === "invitation" ? status === "pending" : status === "active";
+}
+
+/** Validate a bearer action without consuming it or opening a session. Completion checks it again. */
+export async function inspectAccountAction(
+  tx: Transaction,
+  input: {
+    tenantId: string;
+    token: string;
+    purpose: CredentialActionPurpose;
+    now?: Date;
+  },
+): Promise<AccountActionInspection> {
+  const nowIso = (input.now ?? new Date()).toISOString();
+  const [action] = await tx
+    .select({ email: persons.email, status: persons.status })
+    .from(managementAccountActions)
+    .innerJoin(
+      persons,
+      and(
+        eq(persons.id, managementAccountActions.personId),
+        eq(persons.tenantId, managementAccountActions.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(managementAccountActions.tenantId, input.tenantId),
+        eq(managementAccountActions.tokenHash, hashToken(input.token)),
+        eq(managementAccountActions.purpose, input.purpose),
+        isNull(managementAccountActions.usedAt),
+        gt(managementAccountActions.expiresAt, nowIso),
+      ),
+    )
+    .limit(1);
+  if (
+    action?.email === null ||
+    action === undefined ||
+    !statusAcceptsPurpose(action.status, input.purpose)
+  ) {
+    throw new AppError("account_action.invalid", {});
+  }
+  return { email: action.email, purpose: input.purpose };
+}
+
+/** Validate an emailed short code without consuming it. A wrong guess is still counted. */
+export async function inspectAccountActionByCode(
+  tx: Transaction,
+  input: {
+    tenantId: string;
+    email: string;
+    code: string;
+    purpose: CredentialActionPurpose;
+    codeKey: Buffer;
+    now?: Date;
+  },
+): Promise<AccountActionInspection | null> {
+  const nowIso = (input.now ?? new Date()).toISOString();
+  const email = normalizeEmail(input.email);
+  const [action] = await tx
+    .select({
+      id: managementAccountActions.id,
+      codeHash: managementAccountActions.codeHash,
+      status: persons.status,
+      email: persons.email,
+    })
+    .from(managementAccountActions)
+    .innerJoin(
+      persons,
+      and(
+        eq(persons.id, managementAccountActions.personId),
+        eq(persons.tenantId, managementAccountActions.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(managementAccountActions.tenantId, input.tenantId),
+        eq(managementAccountActions.purpose, input.purpose),
+        eq(sql`lower(${persons.email})`, email),
+        isNull(managementAccountActions.usedAt),
+        gt(managementAccountActions.expiresAt, nowIso),
+        gt(managementAccountActions.codeExpiresAt, nowIso),
+        lt(managementAccountActions.codeAttempts, ACCOUNT_ACTION_CODE_ATTEMPTS),
+      ),
+    )
+    .orderBy(sql`${managementAccountActions.createdAt} desc`)
+    .limit(1)
+    .for("update");
+  if (
+    action === undefined ||
+    action.codeHash === null ||
+    action.email === null ||
+    !statusAcceptsPurpose(action.status, input.purpose)
+  ) {
+    return null;
+  }
+  const supplied = Buffer.from(
+    hashCode(input.codeKey, input.tenantId, email, input.purpose, input.code),
+    "hex",
+  );
+  const stored = Buffer.from(action.codeHash, "hex");
+  if (stored.length !== supplied.length || !timingSafeEqual(stored, supplied)) {
+    await tx
+      .update(managementAccountActions)
+      .set({ codeAttempts: sql`${managementAccountActions.codeAttempts} + 1` })
+      .where(
+        and(
+          eq(managementAccountActions.tenantId, input.tenantId),
+          eq(managementAccountActions.id, action.id),
+        ),
+      );
+    return null;
+  }
+  return { email: action.email, purpose: input.purpose };
+}
+
 async function finishClaimedAction(
   tx: Transaction,
   input: CompletionInput,
@@ -305,6 +429,34 @@ export async function requestPasswordResetAction(
     tenantId: input.tenantId,
     personId: person.id,
     purpose: "password_reset",
+    now: input.now,
+  });
+}
+
+/** Find and lock a pending account before replacing its invitation; unknown states remain silent. */
+export async function requestInvitationAction(
+  tx: Transaction,
+  input: { tenantId: string; email: string; codeKey: Buffer; now?: Date },
+): Promise<IssuedAccountAction | null> {
+  const email = normalizeEmail(input.email);
+  if (!isValidEmail(email)) return null;
+  const [person] = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(
+      and(
+        eq(persons.tenantId, input.tenantId),
+        eq(sql`lower(${persons.email})`, email),
+        eq(persons.status, "pending"),
+      ),
+    )
+    .for("update");
+  if (person === undefined) return null;
+  return issueAccountAction(tx, {
+    tenantId: input.tenantId,
+    personId: person.id,
+    purpose: "invitation",
+    codeKey: input.codeKey,
     now: input.now,
   });
 }

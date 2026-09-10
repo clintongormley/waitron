@@ -4,6 +4,7 @@ import {
   startRegistration,
   type PublicKeyCredentialCreationOptionsJSON,
 } from "@simplewebauthn/browser";
+import { toDataURL } from "qrcode";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -112,6 +113,12 @@ export class ProfileScreen extends LitElement {
         fill: none;
         stroke: currentColor;
       }
+      .authenticator-qr {
+        display: block;
+        width: min(15rem, 100%);
+        height: auto;
+        margin: var(--wt-space-4) auto;
+      }
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
@@ -129,6 +136,7 @@ export class ProfileScreen extends LitElement {
   private venueLocale = "";
   private removingId = "";
   @state() private totpSetup: { enrollmentId: string; secret: string; uri: string } | null = null;
+  @state() private totpQr = "";
   @state() private recoveryCodes: string[] = [];
   @state() private googleConfigured = false;
   @state() private privacyNoticeUrl = "";
@@ -162,6 +170,7 @@ export class ProfileScreen extends LitElement {
     this.saved = false;
     this.visible = new Set();
     this.totpSetup = null;
+    this.totpQr = "";
     if (mode !== "codes") this.recoveryCodes = [];
     this.fields = {
       ...emptyFields(),
@@ -295,7 +304,13 @@ export class ProfileScreen extends LitElement {
       else if (this.mode === "pin") await this.api.changePin({ pin: f.pin, ...credentials });
       else if (this.mode === "remove") await this.api.removePasskey(this.removingId, credentials);
       else if (this.mode === "totp" && this.totpSetup === null) {
-        this.totpSetup = await this.api.beginTotp(credentials);
+        const setup = await this.api.beginTotp(credentials);
+        this.totpQr = await toDataURL(setup.uri, {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          width: 240,
+        });
+        this.totpSetup = setup;
         this.fields = { ...this.fields, currentPassword: "", totp: "" };
         return;
       } else if (this.mode === "totp") {
@@ -574,11 +589,19 @@ export class ProfileScreen extends LitElement {
                     this.mode === "totp" && this.totpSetup !== null
                       ? html`
                           <p>${t("profile.authenticator_scan")}</p>
-                          <code>${this.totpSetup.uri}</code>
-                          <p>
-                            ${t("profile.authenticator_secret")}:
-                            <code>${this.totpSetup.secret}</code>
-                          </p>
+                          <img
+                            class="authenticator-qr"
+                            data-test="authenticator-qr"
+                            src=${this.totpQr}
+                            alt=${t("profile.authenticator_qr_alt")}
+                          />
+                          <details data-test="authenticator-key-fallback">
+                            <summary>${t("profile.authenticator_cannot_scan")}</summary>
+                            <p>
+                              ${t("profile.authenticator_secret")}:
+                              <code>${this.totpSetup.secret}</code>
+                            </p>
+                          </details>
                           ${this.#input("setupCode", "profile.totp", "text", "one-time-code")}
                         `
                       : nothing

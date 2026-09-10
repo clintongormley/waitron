@@ -177,6 +177,7 @@ describe("mountMeApi — whoami", () => {
       (await res.json()) as {
         personId: string;
         role: string;
+        email: string | null;
         locale: string | null;
         venueLocale: string;
         venueName: string;
@@ -189,6 +190,7 @@ describe("mountMeApi — whoami", () => {
     ).toEqual({
       personId: me,
       role: "staff",
+      email: null,
       locale: null,
       venueLocale: VENUE_LOCALE,
       venueName: "Test SL",
@@ -229,6 +231,7 @@ describe("mountMeApi — whoami", () => {
       (await res.json()) as {
         personId: string;
         role: string;
+        email: string | null;
         locale: string | null;
         venueLocale: string;
         venueName: string;
@@ -241,6 +244,7 @@ describe("mountMeApi — whoami", () => {
     ).toEqual({
       personId: localed,
       role: "staff",
+      email: null,
       locale: "es-ES",
       venueLocale: VENUE_LOCALE,
       venueName: "Test SL",

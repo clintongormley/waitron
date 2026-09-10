@@ -201,10 +201,11 @@ unfiltered `main` run, not a wrong hook.
   when a session exists. Use the tenant name, not a location: a deployment database has one tenant
   and that tenant can contain several locations (`packages/db/src/schema/tenants.ts`).
 - **Dashboard login is passkey-first without account enumeration.** After any syntactically valid
-  email, show the same passkey step; password and account recovery live behind **Try another way**.
-  Never select that public next step from server-side passkey enrolment, because the different UI
-  outcome would reveal whether the account has a passkey. Let the WebAuthn ceremony establish whether
-  the operator can provide one (`apps/dashboard/src/screens/login-screen.ts`).
+  email, start the same passkey ceremony. If it is cancelled, open the password form and show passkey
+  and recovery alongside it without an error. Never select that public next step from server-side
+  passkey enrolment, because the different UI outcome would reveal whether the account has a passkey.
+  A remembered account may skip email entry, but the preference is written only after authenticated
+  identity is known (`apps/dashboard/src/screens/login-screen.ts`).
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
   `db.series_not_found` (design note atop `packages/shared/src/errors.ts`). Codes are **never renamed
   once shipped**; deprecate and add a sibling. `server.*` is reserved for facts about the process

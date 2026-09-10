@@ -68,11 +68,15 @@ export {
   ACCOUNT_ACTION_CODE_TTL_MS,
   completeAccountAction,
   completeAccountActionByCode,
+  inspectAccountAction,
+  inspectAccountActionByCode,
   issueAccountAction,
+  requestInvitationAction,
   requestPasswordResetAction,
 } from "./account-action.js";
 export type {
   AccountActionCompletion,
+  AccountActionInspection,
   AccountActionPurpose,
   IssuedAccountAction,
 } from "./account-action.js";

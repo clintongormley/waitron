@@ -129,7 +129,7 @@ describe("loginManager", () => {
         }),
       ),
     );
-    expect(missing).toBe("totp.invalid");
+    expect(missing).toBe("totp.required");
     const session = await run((tx) =>
       loginManager(tx, {
         tenantId,
@@ -141,14 +141,17 @@ describe("loginManager", () => {
     );
     expect(session.personId).toBe(personId);
   });
-  it("rejects login for a suspended person", async () => {
+  it("makes a suspended email login indistinguishable from a wrong password", async () => {
     await seedManager(suite.db, tenantId, { email: "owner-suspended@x.com", status: "suspended" });
+    const spy = vi.mocked(verifyPassword);
+    spy.mockClear();
     const code = await run((tx) =>
       codeOf(() =>
         loginManager(tx, { tenantId, email: "owner-suspended@x.com", password: "correct horse" }),
       ),
     );
-    expect(code).toBe("person.suspended");
+    expect(code).toBe("password.invalid");
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });
 

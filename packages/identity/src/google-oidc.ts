@@ -149,9 +149,7 @@ export async function loginWithGoogle(
     .select({ id: persons.id, status: persons.status, totpSecret: persons.totpSecret })
     .from(persons)
     .where(and(eq(persons.tenantId, input.tenantId), eq(persons.googleSubject, input.subject)));
-  if (person === undefined || person.status === "pending") throw new AppError("google.invalid", {});
-  if (person.status === "suspended")
-    throw new AppError("person.suspended", { personId: person.id });
+  if (person === undefined || person.status !== "active") throw new AppError("google.invalid", {});
   if (person.totpSecret !== null) throw new AppError("google.second_factor_required", {});
   return startManagementSession(tx, { tenantId: input.tenantId, personId: person.id });
 }

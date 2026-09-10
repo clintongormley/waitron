@@ -344,13 +344,8 @@ export async function finishPasskeyAuthentication(
       ),
     );
   if (cred === undefined) throw new AppError("passkey.not_registered", {});
-  // Refuse a person suspended AFTER enrolling this passkey, BEFORE minting a session — the same gate
-  // `loginManager` applies to a password login, and the same `persons.status` re-read
-  // `resolveManagementSession` runs on every authenticated request. Placed before the verifier,
-  // mirroring `loginManager`, which checks suspension before verifying the password.
-  if (cred.status === "suspended") {
-    throw new AppError("person.suspended", { personId: cred.personId });
-  }
+  // This public endpoint must not reveal that the returned credential belongs to a suspended or
+  // pending account. No session is minted for any non-active owner.
   if (cred.status !== "active") throw new AppError("passkey.verification_failed", {});
 
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched assertion (a bad

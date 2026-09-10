@@ -1,8 +1,6 @@
 # Faster dashboard login
 
-Status: design agreed with the owner on 2026-09-10; implementation has not started.
-Continue in the existing `login-screen` branch and worktree. This document contains both the
-agreed design and the implementation sequence for the next Sol session.
+Status: implemented and validated on the `login-screen` branch.
 
 You may sign in several times during a working day. The returning path should take a password
 and Enter, or a passkey button and device verification. An authenticator code adds a step only
@@ -26,6 +24,8 @@ when your account requires it. Account activation stays separate from ordinary l
 - Password submission contains no authenticator field. After a correct password, request an
   authenticator code only if enrolled, with an explicit saved-recovery-code alternative. Issue no
   management session or cookie until every required factor succeeds.
+- Authenticator enrollment presents the setup URI as a QR code. Keep the long setup key as a manual
+  fallback and do not enable the factor until the server verifies a current six-digit code.
 - Suspended and unknown accounts receive generic public login failures. Enforce account status
   on the server for password, passkey, Google, activation and reset paths; never reactivate a
   suspended account through recovery. Preserve useful suspension explanations inside an already
