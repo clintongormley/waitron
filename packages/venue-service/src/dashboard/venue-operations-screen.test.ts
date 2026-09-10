@@ -44,7 +44,16 @@ const model: VenueServiceView = {
       serviceMode: "table_tab",
     },
   ],
-  routes: [],
+  routes: [
+    {
+      id: "r1",
+      zoneId: "z1",
+      categoryId: "c1",
+      productId: null,
+      stationId: "s1",
+      noPreparation: false,
+    },
+  ],
   hours: [{ departmentId: "d2", weekday: 1, opensAt: "09:00:00", closesAt: "18:00:00" }],
   zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
   menus: [
@@ -96,7 +105,13 @@ describe("venue operations screen", () => {
     expect(text).toContain("Deli takeaway");
     expect(text).toContain("Monday 09:00–18:00");
     expect(text).toContain("Negroni");
-    expect(text).toContain("11.00");
+    expect(
+      (
+        el
+          .shadowRoot!.querySelector('[data-test="menu-offers-m1"]')!
+          .shadowRoot!.querySelector('[name="offer-price-i1"]') as HTMLInputElement
+      ).value,
+    ).toBe("11.00");
     expect(text).toContain("Dining room");
     expect(el.shadowRoot!.querySelector('[data-test="readiness-issue-0"]')!.textContent).toContain(
       "Negroni",
@@ -166,6 +181,26 @@ describe("venue operations screen", () => {
     });
   });
 
+  it("edits and removes an offer from the shared data table", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      deactivateMenuItem: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const table = el.shadowRoot!.querySelector('[data-test="menu-offers-m1"]');
+    expect(table?.tagName).toBe("WT-DATA-TABLE");
+    const price = table!.shadowRoot!.querySelector('[name="offer-price-i1"]') as HTMLInputElement;
+    price.value = "12.50";
+    (table!.shadowRoot!.querySelector('[data-test="save-offer-i1"]') as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: "12.50" });
+
+    (table!.shadowRoot!.querySelector('[data-test="remove-offer-i1"]') as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.deactivateMenuItem).toHaveBeenCalledWith("m1", "i1");
+  });
+
   it("routes a product exception for one zone", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
@@ -183,5 +218,18 @@ describe("venue operations screen", () => {
       zoneId: "z1",
       stationId: "s1",
     });
+  });
+
+  it("removes a preparation route from the shared data table", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      deleteRoute: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const table = el.shadowRoot!.querySelector('[data-test="preparation-routes"]')!;
+    expect(table.tagName).toBe("WT-DATA-TABLE");
+    (table.shadowRoot!.querySelector('[data-test="remove-route-r1"]') as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.deleteRoute).toHaveBeenCalledWith("r1");
   });
 });

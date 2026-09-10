@@ -405,7 +405,7 @@ describe("mountCatalogueApi — products", () => {
     });
     const productId = ((await createdProduct.json()) as { id: string }).id;
 
-    const createOffer = async (menuId: string, grossPrice: string) => {
+    const createOffer = async (menuId: string, grossPrice: string): Promise<string> => {
       const sectionResponse = await send(
         app,
         "POST",
@@ -418,9 +418,10 @@ describe("mountCatalogueApi — products", () => {
         body: { productId, sectionId, grossPrice, displayOrder: 0 },
       });
       expect(response.status).toBe(201);
+      return ((await response.json()) as { id: string }).id;
     };
-    await createOffer(upstairsMenuId, "11.00");
-    await createOffer(downstairsMenuId, "9.00");
+    const upstairsItemId = await createOffer(upstairsMenuId, "11.00");
+    const downstairsItemId = await createOffer(downstairsMenuId, "9.00");
 
     const upstairs = await send(app, "GET", `/management-api/catalogues/${upstairsMenuId}/offers`);
     const downstairs = await send(
@@ -434,6 +435,30 @@ describe("mountCatalogueApi — products", () => {
     expect(
       ((await downstairs.json()) as { productId: string; grossPrice: string }[])[0],
     ).toMatchObject({ productId, grossPrice: "9.00" });
+
+    expect(
+      (
+        await send(
+          app,
+          "PATCH",
+          `/management-api/catalogues/${upstairsMenuId}/items/${upstairsItemId}`,
+          { body: { grossPrice: "12.50" } },
+        )
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(
+          app,
+          "DELETE",
+          `/management-api/catalogues/${downstairsMenuId}/items/${downstairsItemId}`,
+        )
+      ).status,
+    ).toBe(204);
+    const updated = await send(app, "GET", `/management-api/catalogues/${upstairsMenuId}/offers`);
+    const removed = await send(app, "GET", `/management-api/catalogues/${downstairsMenuId}/offers`);
+    expect(((await updated.json()) as { grossPrice: string }[])[0]!.grossPrice).toBe("12.50");
+    expect(await removed.json()).toEqual([]);
   });
 
   it("GET /management-api/catalogues/:id/products with a non-uuid id → shared.invalid_id 400", async () => {

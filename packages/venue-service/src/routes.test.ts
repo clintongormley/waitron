@@ -194,6 +194,7 @@ describe("venue service management routes", () => {
       },
     );
     expect(route.status).toBe(201);
+    const routeId = ((await route.json()) as { id: string }).id;
     expect(
       (
         await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
@@ -244,6 +245,16 @@ describe("venue service management routes", () => {
         },
       ],
     });
+    expect(
+      (
+        await send(
+          fx.app,
+          "DELETE",
+          `/management-api/venue-service/routes/${routeId}`,
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(204);
 
     const blocked = await send(
       fx.app,

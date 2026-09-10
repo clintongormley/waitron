@@ -27,6 +27,7 @@ import {
   createOptionGroupItem,
   createProduct,
   deactivateCatalogue,
+  deactivateMenuItem,
   deactivateProduct,
   listAccessibleCatalogues,
   listAvailableProducts,
@@ -45,6 +46,7 @@ import {
   setProductOptionGroups,
   updateOptionGroup,
   updateOptionGroupItem,
+  updateMenuItem,
   updateProduct,
 } from "./operations.js";
 import { AppError } from "@waitron/shared";
@@ -167,6 +169,14 @@ describe("catalogue operations", () => {
           ],
         },
       ]);
+
+      await updateMenuItem(tx, tenantId, downstairs.id, eleven.id, { grossPrice: "12.50" });
+      expect((await listMenuOffers(tx, tenantId, [downstairs.id]))[0]!.grossPrice).toBe("12.50");
+      await deactivateMenuItem(tx, tenantId, downstairs.id, eleven.id);
+      await expect(listMenuOffers(tx, tenantId, [downstairs.id])).resolves.toEqual([]);
+      await expect(
+        updateMenuItem(tx, tenantId, downstairs.id, crypto.randomUUID(), { grossPrice: "8.00" }),
+      ).rejects.toMatchObject({ code: "menu_item.not_found" });
     });
   });
 

@@ -1,7 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-data-table.js";
 import type {
+  MenuOffer,
   ServiceMode,
   VenueReadinessIssue,
   VenueServiceApi,
@@ -159,6 +161,116 @@ export class VenueOperationsScreen extends LitElement {
         displayOrder: 0,
       });
     });
+  }
+
+  #saveOffer(menuId: string, menuItemId: string, root: ParentNode): void {
+    const grossPrice = this.#value(`offer-price-${menuItemId}`, root);
+    if (grossPrice === "") {
+      this.error = t("venue.required");
+      return;
+    }
+    void this.#save(() => this.api.updateMenuItem(menuId, menuItemId, { grossPrice }));
+  }
+
+  #offerColumns(menuId: string): DataTableColumn<MenuOffer>[] {
+    return [
+      {
+        key: "section",
+        label: t("venue.section"),
+        cell: (offer) => this.#name(offer.sectionName),
+        sortValue: (offer) => this.#name(offer.sectionName),
+      },
+      {
+        key: "product",
+        label: t("venue.product"),
+        cell: (offer) => this.#name(offer.descriptions),
+        sortValue: (offer) => this.#name(offer.descriptions),
+      },
+      {
+        key: "price",
+        label: t("venue.price"),
+        align: "end",
+        cell: (offer) =>
+          html`<input
+            name=${`offer-price-${offer.id}`}
+            inputmode="decimal"
+            .value=${offer.grossPrice}
+            aria-label=${`${t("venue.price")}: ${this.#name(offer.descriptions)}`}
+          />`,
+        sortValue: (offer) => Number(offer.grossPrice),
+      },
+      {
+        key: "actions",
+        label: t("venue.actions"),
+        cell: (offer) =>
+          html`<span class="actions">
+            <wt-button
+              variant="secondary"
+              data-test=${`save-offer-${offer.id}`}
+              ?disabled=${this.busy}
+              @click=${(event: Event) =>
+              this.#saveOffer(
+                menuId,
+                offer.id,
+                (event.currentTarget as Node).getRootNode() as ShadowRoot,
+              )}
+              >${t("venue.save_price")}</wt-button
+            ><wt-button
+              variant="secondary"
+              data-test=${`remove-offer-${offer.id}`}
+              ?disabled=${this.busy}
+              @click=${() => void this.#save(() => this.api.deactivateMenuItem(menuId, offer.id))}
+              >${t("venue.remove_offer")}</wt-button
+            >
+          </span>`,
+      },
+    ];
+  }
+
+  #routeColumns(): DataTableColumn<VenueServiceView["routes"][number]>[] {
+    const model = this.model!;
+    return [
+      {
+        key: "subject",
+        label: t("venue.product_or_category"),
+        cell: (route) =>
+          route.productId === null
+            ? (model.categories.find((category) => category.id === route.categoryId)?.name ??
+              route.categoryId)
+            : (model.products.find((product) => product.id === route.productId)?.descriptions.en ??
+              model.products.find((product) => product.id === route.productId)?.descriptions.es ??
+              route.productId),
+      },
+      {
+        key: "zone",
+        label: t("venue.zones"),
+        cell: (route) =>
+          route.zoneId === null
+            ? t("venue.all_zones")
+            : (model.floorZones.find((zone) => zone.id === route.zoneId)?.name ?? route.zoneId),
+      },
+      {
+        key: "station",
+        label: t("venue.station"),
+        cell: (route) =>
+          route.noPreparation
+            ? t("venue.no_preparation")
+            : (model.stations.find((station) => station.id === route.stationId)?.name ??
+              route.stationId),
+      },
+      {
+        key: "actions",
+        label: t("venue.actions"),
+        cell: (route) =>
+          html`<wt-button
+            variant="secondary"
+            data-test=${`remove-route-${route.id}`}
+            ?disabled=${this.busy}
+            @click=${() => void this.#save(() => this.api.deleteRoute(route.id))}
+            >${t("venue.remove_route")}</wt-button
+          >`,
+      },
+    ];
   }
 
   #name(names: Record<string, string>): string {
@@ -438,19 +550,14 @@ export class VenueOperationsScreen extends LitElement {
           );
           return html`<article class="panel" data-menu=${menu.id}>
             <h3>${menu.name}</h3>
-            ${
-              offers.length === 0
-                ? html`<p class="muted">${t("venue.no_offers")}</p>`
-                : html`<ul>
-                    ${offers.map(
-                      (offer) =>
-                        html`<li>
-                          ${this.#name(offer.sectionName)} — ${this.#name(offer.descriptions)} —
-                          ${offer.grossPrice}
-                        </li>`,
-                    )}
-                  </ul>`
-            }
+            ${html`<wt-data-table
+              data-test=${`menu-offers-${menu.id}`}
+              aria-label=${menu.name}
+              .rows=${offers}
+              .columns=${this.#offerColumns(menu.id)}
+              .rowKey=${(offer: MenuOffer) => offer.id}
+              .emptyMessage=${t("venue.no_offers")}
+            ></wt-data-table>`}
             <div class="form-row">
               <label
                 >${t("venue.product")} <span class="required">*</span
@@ -489,9 +596,14 @@ export class VenueOperationsScreen extends LitElement {
     const model = this.model!;
     return html`<section>
       <h2>${t("venue.routing")}</h2>
-      <ul>
-        ${model.routes.map((route) => html`<li>${route.productId === null ? (model.categories.find((c) => c.id === route.categoryId)?.name ?? route.categoryId) : (model.products.find((p) => p.id === route.productId)?.descriptions.en ?? model.products.find((p) => p.id === route.productId)?.descriptions.es ?? route.productId)} → ${route.noPreparation ? t("venue.no_preparation") : (model.stations.find((s) => s.id === route.stationId)?.name ?? route.stationId)} (${route.zoneId === null ? t("venue.all_zones") : (model.floorZones.find((z) => z.id === route.zoneId)?.name ?? route.zoneId)})</li>`)}
-      </ul>
+      <wt-data-table
+        data-test="preparation-routes"
+        aria-label=${t("venue.routing")}
+        .rows=${model.routes}
+        .columns=${this.#routeColumns()}
+        .rowKey=${(route: VenueServiceView["routes"][number]) => route.id}
+        .emptyMessage=${t("venue.routing")}
+      ></wt-data-table>
       <div class="panel form-row">
         <label
           >${t("venue.product_or_category")} <span class="required">*</span

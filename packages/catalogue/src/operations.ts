@@ -391,6 +391,49 @@ export async function createMenuItem(
   return row!;
 }
 
+export async function updateMenuItem(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuId: string,
+  menuItemId: string,
+  patch: { sectionId?: string; grossPrice?: string; displayOrder?: number },
+): Promise<void> {
+  const [row] = await tx
+    .update(menuItems)
+    .set(patch)
+    .where(
+      and(
+        eq(menuItems.tenantId, tenantId),
+        eq(menuItems.menuId, menuId),
+        eq(menuItems.id, menuItemId),
+        eq(menuItems.active, true),
+      ),
+    )
+    .returning({ id: menuItems.id });
+  if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
+}
+
+export async function deactivateMenuItem(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuId: string,
+  menuItemId: string,
+): Promise<void> {
+  const [row] = await tx
+    .update(menuItems)
+    .set({ active: false })
+    .where(
+      and(
+        eq(menuItems.tenantId, tenantId),
+        eq(menuItems.menuId, menuId),
+        eq(menuItems.id, menuItemId),
+        eq(menuItems.active, true),
+      ),
+    )
+    .returning({ id: menuItems.id });
+  if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
+}
+
 /** Replace the groups and choices offered for one menu item, including their menu-specific prices. */
 export async function setMenuItemOptionGroups(
   tx: Transaction,

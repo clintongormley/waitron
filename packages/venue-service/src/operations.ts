@@ -952,6 +952,24 @@ export async function listPreparationRoutes(tx: Transaction, cfg: VenueScope) {
     );
 }
 
+export async function deletePreparationRoute(
+  tx: Transaction,
+  cfg: VenueScope,
+  routeId: string,
+): Promise<void> {
+  const [row] = await tx
+    .delete(preparationRoutes)
+    .where(
+      and(
+        eq(preparationRoutes.id, routeId),
+        eq(preparationRoutes.tenantId, cfg.tenantId),
+        eq(preparationRoutes.locationId, cfg.locationId),
+      ),
+    )
+    .returning({ id: preparationRoutes.id });
+  if (row === undefined) throw new AppError("route.not_found", { routeId });
+}
+
 /** Resolve zone/product, zone/category, venue/product, then venue/category. */
 export async function resolvePreparationRoute(
   tx: Transaction,

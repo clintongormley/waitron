@@ -13,6 +13,7 @@ declare module "@waitron/shared" {
       actual: string;
     };
     "route.missing": { zoneId: string; productId: string };
+    "route.not_found": { routeId: string };
     "route.subject_not_found": { subject: string; id: string };
     "route.duplicate": Record<string, never>;
     "route.station_inactive": { stationId: string };

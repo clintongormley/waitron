@@ -25,6 +25,7 @@ import {
   createDepartment,
   createPreparationRoute,
   deactivateDepartment,
+  deletePreparationRoute,
   allowMenuInZone,
   getOrderServiceContext,
   listWorkingLineContexts,
@@ -580,7 +581,7 @@ describe("venue service routing", () => {
         unitPrice: "0.00",
         vatClass: "reduced",
       });
-      await createPreparationRoute(
+      const routeId = await createPreparationRoute(
         tx,
         { tenantId, locationId },
         {
@@ -591,6 +592,10 @@ describe("venue service routing", () => {
       await expect(
         resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
       ).resolves.toEqual({ kind: "no_preparation" });
+      await deletePreparationRoute(tx, { tenantId, locationId }, routeId);
+      await expect(
+        resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
+      ).rejects.toMatchObject({ code: "route.missing" });
       await expect(
         resolvePreparationRoute(
           tx,

@@ -26,6 +26,7 @@ import {
   createOptionGroup,
   createOptionGroupItem,
   createProduct,
+  deactivateMenuItem,
   listCatalogues,
   listCataloguesForLocation,
   listCategories,
@@ -39,6 +40,7 @@ import {
   setProductOptionGroups,
   updateOptionGroup,
   updateOptionGroupItem,
+  updateMenuItem,
   updateProduct,
   validateImageBytes,
   type CreateOptionGroupInput,
@@ -107,6 +109,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "catalogue.not_found": 404,
+  "menu_item.not_found": 404,
   "allergen.invalid_code": 400,
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
@@ -375,6 +378,36 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         }),
       );
       return c.json(created, 201);
+    }),
+  );
+
+  app.patch("/management-api/catalogues/:id/items/:itemId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (body.grossPrice !== undefined && typeof body.grossPrice !== "string") {
+        throw new AppError("management.request_invalid", { field: "grossPrice" });
+      }
+      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      await gated(sessionId, (tx) =>
+        updateMenuItem(tx, tenantId, menuId, menuItemId, {
+          ...(body.grossPrice === undefined ? {} : { grossPrice: body.grossPrice as string }),
+          ...(displayOrder === undefined ? {} : { displayOrder }),
+        }),
+      );
+      return c.body(null, 204);
+    }),
+  );
+
+  app.delete("/management-api/catalogues/:id/items/:itemId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
+      await gated(sessionId, (tx) => deactivateMenuItem(tx, tenantId, menuId, menuItemId));
+      return c.body(null, 204);
     }),
   );
 

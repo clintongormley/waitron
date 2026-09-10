@@ -65,6 +65,7 @@ describe("VenueServiceApi", () => {
     await api.configureZone("z1", { departmentId: "d1", serviceMode: null });
     await api.allowMenu("z1", "m1", { displayOrder: 0, makeDefault: true });
     await api.createRoute({ zoneId: "z1", categoryId: "c1", stationId: "s1" });
+    await api.deleteRoute("r1");
     await api.createMenu("Terrace drinks");
     await api.createMenuSection("m1", { name: { en: "Cocktails" }, displayOrder: 0 });
     await api.createMenuItem("m1", {
@@ -73,6 +74,8 @@ describe("VenueServiceApi", () => {
       grossPrice: "11.00",
       displayOrder: 0,
     });
+    await api.updateMenuItem("m1", "i1", { grossPrice: "12.50" });
+    await api.deactivateMenuItem("m1", "i1");
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/departments", "POST"],
@@ -81,9 +84,12 @@ describe("VenueServiceApi", () => {
       ["/management-api/venue-service/zones/z1", "PUT"],
       ["/management-api/venue-service/zones/z1/menus/m1", "PUT"],
       ["/management-api/venue-service/routes", "POST"],
+      ["/management-api/venue-service/routes/r1", "DELETE"],
       ["/management-api/catalogues", "POST"],
       ["/management-api/catalogues/m1/sections", "POST"],
       ["/management-api/catalogues/m1/items", "POST"],
+      ["/management-api/catalogues/m1/items/i1", "PATCH"],
+      ["/management-api/catalogues/m1/items/i1", "DELETE"],
     ]);
   });
 });

@@ -18,6 +18,7 @@ import {
   createDepartment,
   createPreparationRoute,
   deactivateDepartment,
+  deletePreparationRoute,
   listDepartments,
   listDepartmentHours,
   listPreparationRoutes,
@@ -43,6 +44,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "service_zone.not_found": 404,
   "catalogue.not_found": 404,
   "route.subject_not_found": 404,
+  "route.not_found": 404,
   "route.missing": 409,
   "route.station_inactive": 409,
   "route.duplicate": 409,
@@ -237,6 +239,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           }),
         );
         return c.json({ id }, 201);
+      }),
+    );
+
+    app.delete("/management-api/venue-service/routes/:routeId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const routeId = requireUuidParam(c.req.param("routeId"), "PreparationRouteId");
+        await gated(sessionId, (tx) => deletePreparationRoute(tx, ctx.cfg, routeId));
+        return c.body(null, 204);
       }),
     );
   },

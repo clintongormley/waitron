@@ -160,6 +160,14 @@ export class VenueServiceApi {
     return this.request(`/management-api/catalogues/${menuId}/items`, "POST", input);
   }
 
+  updateMenuItem(menuId: string, menuItemId: string, input: { grossPrice: string }): Promise<void> {
+    return this.request(`/management-api/catalogues/${menuId}/items/${menuItemId}`, "PATCH", input);
+  }
+
+  deactivateMenuItem(menuId: string, menuItemId: string): Promise<void> {
+    return this.request(`/management-api/catalogues/${menuId}/items/${menuItemId}`, "DELETE");
+  }
+
   replaceHours(departmentId: string, hours: Omit<HoursInterval, "departmentId">[]): Promise<void> {
     return this.request(`/management-api/venue-service/departments/${departmentId}/hours`, "PUT", {
       hours,
@@ -193,5 +201,9 @@ export class VenueServiceApi {
     noPreparation?: boolean;
   }): Promise<{ id: string }> {
     return this.request("/management-api/venue-service/routes", "POST", input);
+  }
+
+  deleteRoute(routeId: string): Promise<void> {
+    return this.request(`/management-api/venue-service/routes/${routeId}`, "DELETE");
   }
 }
