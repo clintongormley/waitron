@@ -16,7 +16,9 @@ const VERIFY_ERROR_CODES = new Set([
 ]);
 
 const CA_FILE = "server-ca.crt";
-const REFRESH_INTERVAL_MS = 60 * 60 * 1000; // once per hour
+const REFRESH_INTERVAL_MS = 60 * 60 * 1000; // once per hour, once a CA is pinned (rotation)
+const INITIAL_RETRY_INTERVAL_MS = 10_000; // 10s, until the first CA is obtained
+const DEFAULT_CA_FETCH_TIMEOUT_MS = 5_000;
 
 export interface ServerTrustOptions {
   serverUrl: string | undefined;
@@ -24,6 +26,7 @@ export interface ServerTrustOptions {
   fetch?: typeof fetch;
   caEndpointFetch?: typeof fetch;
   now?: () => number;
+  caFetchTimeoutMs?: number;
   log?: (msg: string, fields?: Record<string, unknown>) => void;
 }
 
@@ -48,6 +51,7 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
   const baseFetch = opts.fetch ?? fetch;
   const caFetch = opts.caEndpointFetch ?? fetch;
   const now = opts.now ?? Date.now;
+  const caFetchTimeoutMs = opts.caFetchTimeoutMs ?? DEFAULT_CA_FETCH_TIMEOUT_MS;
   const log = opts.log ?? ((): void => {});
   const caPath = join(opts.stateDir, CA_FILE);
   const caUrl = opts.serverUrl === undefined ? undefined : caUrlFor(opts.serverUrl);
@@ -75,13 +79,17 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
     /* none yet */
   }
 
-  /** Fetch /ca.crt, throttled to once per hour. Returns true when the CA bytes changed. */
+  /** Fetch /ca.crt, throttled. Returns true when the CA bytes changed. Until the first CA is
+   * obtained the throttle is short (a failed first-boot fetch must not disable printing for an
+   * hour); once a CA is pinned the hourly interval covers rotation. Best-effort: a persistence
+   * failure never rejects — in-memory trust is already updated. */
   const refresh = async (): Promise<boolean> => {
-    if (now() - lastFetchAt < REFRESH_INTERVAL_MS) return false;
+    const interval = caPem === undefined ? INITIAL_RETRY_INTERVAL_MS : REFRESH_INTERVAL_MS;
+    if (now() - lastFetchAt < interval) return false;
     lastFetchAt = now();
     let pem: string;
     try {
-      const res = await caFetch(caUrl);
+      const res = await caFetch(caUrl, { signal: AbortSignal.timeout(caFetchTimeoutMs) });
       if (!res.ok) return false;
       pem = await res.text();
     } catch {
@@ -91,16 +99,34 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
     const changed = caPem !== undefined;
     caPem = pem;
     rebuild();
-    await mkdir(opts.stateDir, { recursive: true });
-    const tmp = `${caPath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-    await writeFile(tmp, pem, { mode: 0o644 });
-    await rename(tmp, caPath);
+    try {
+      await mkdir(opts.stateDir, { recursive: true });
+      const tmp = `${caPath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+      await writeFile(tmp, pem, { mode: 0o644 });
+      await rename(tmp, caPath);
+    } catch (error) {
+      // Best-effort cache: in-memory trust is already updated; only the on-disk copy failed.
+      log("server CA persist failed", { caUrl, error: String(error) });
+    }
     log(changed ? "server CA changed" : "server CA pinned", { caUrl });
     return true;
   };
 
-  // One best-effort refresh at boot (covers a first run with no persisted CA).
-  await refresh();
+  // Boot: a usable cached CA already serves trust, so refresh in the background rather than blocking
+  // the agent loop and the 9110 setup page on a slow /ca.crt. With no cached CA, try once but bound
+  // the wait so a hung landing endpoint cannot stall boot.
+  if (caPem !== undefined) {
+    void refresh();
+  } else {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      refresh(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, caFetchTimeoutMs);
+      }),
+    ]);
+    if (timer !== undefined) clearTimeout(timer);
+  }
 
   const trusting = (async (input, init) => {
     const withDispatcher = (): RequestInit =>
