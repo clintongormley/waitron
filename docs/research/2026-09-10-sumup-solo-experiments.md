@@ -565,6 +565,42 @@ which one matters to the sweep.
 5. Only then start the `@waitron/payments-sumup` build, from the spec plus these receipts. The
    reconciler's matching rule for standalone payments is designed against the 1b history entry.
 
+## 7. Through the adapter
+
+`@waitron/payments-sumup` is built (`feat/payments-sumup`); its live sandbox suite
+(`packages/payments-sumup/src/collect.sandbox.test.ts`) drives experiments 0.6, 2a and 4a through
+the real `sumupClient`/`SumUpCloudProvider` binding instead of curl. It self-skips unless
+`SUMUP_API_KEY`, `SUMUP_MERCHANT_CODE` and `SUMUP_READER_ID` are set (optional
+`SUMUP_AFFILIATE_APP_ID`/`SUMUP_AFFILIATE_KEY`):
+
+```bash
+SUMUP_API_KEY=… SUMUP_MERCHANT_CODE=… SUMUP_READER_ID=… pnpm --filter @waitron/payments-sumup test:sandbox
+```
+
+Tomorrow's plug-in checklist, once 0–1's curl run has answered the standalone question:
+
+1. Run the runbook's sections 0–1 with curl first (pairing, the control run, the standalone
+   question). The adapter needs the reader id from 0.4.
+2. `wa-wt demo waitron-feat-payments-sumup` (the dev stack from the worktree — CLAUDE.md §6), then
+   seal the credential from a file outside the repo:
+   ```bash
+   cat > ~/.sumup-experiments/credential.json <<'EOF'
+   {"apiKey":"…","merchantCode":"…","affiliateAppId":"…","affiliateKey":"…"}
+   EOF
+   pnpm --filter @waitron/credentials build && node packages/credentials/dist/bin.js set --tenant <tenant uuid from apps/server/.env> --purpose payments.sumup --file ~/.sumup-experiments/credential.json
+   ```
+   (`-` for both affiliate fields if 0.2 produced no affiliate key.)
+3. In the worktree's `apps/server/.env`: `WAITRON_TILL_CARD_PROVIDER=sumup_cloud`,
+   `WAITRON_TILL_SUMUP_READER_ID=<reader id from 0.4>`. Restart the stack. Boot fails loudly if the
+   credential is missing or unusable.
+4. On the till (http://localhost:5190, enrolled with pairing code `DEMO`): ring a €1 item, Card.
+   The Solo wakes. Tap. The ticket prints. Cancel the sale from the dashboard → the refund lands
+   (experiment 4a through the adapter).
+5. Pull the reader's Wi-Fi mid-checkout, or simply do not tap: after two minutes the till shows the
+   timed-out screen (cash / manual card offered); `pnpm --filter @waitron/server` logs show
+   `resolve_pending.complete` on the next pass resolving the row. That is experiment 5a through the
+   adapter.
+
 ## Provenance (all read 2026-09-10)
 
 SumUp publishes its API description as one OpenAPI file; where a web page and that file disagree

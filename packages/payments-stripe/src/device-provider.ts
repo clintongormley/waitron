@@ -295,6 +295,13 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     });
   }
 
+  /** The device SDK returns a terminal outcome before `collect` writes its row, so this adapter
+   * never leaves a row `attempting`; a pending-outcome sweep has nothing to resolve. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface
+  resolvePending(_now: Date): Promise<ForwardResult> {
+    return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+  }
+
   /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
    * place a transaction's is. Delegates to the shared `reverseViaStripe` (the design's "shared with StripeTerminalProvider, not re-implemented"); the on-device client's `refund` satisfies `StripeRefunder` structurally.
    * The reversal checks the returned payment's tenant id before any money moves. */

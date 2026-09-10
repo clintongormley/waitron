@@ -303,6 +303,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/country-packs",
   "@waitron/dashboard-kit",
   "@waitron/payments-stripe",
+  "@waitron/payments-sumup",
   "@waitron/identity",
   "@waitron/workforce",
   "@waitron/credentials",

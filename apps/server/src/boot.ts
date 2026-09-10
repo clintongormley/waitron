@@ -27,6 +27,8 @@ import {
   StripeTerminalProvider,
 } from "@waitron/payments-stripe";
 import { SimulatorPaymentProvider, type PaymentProvider } from "@waitron/payments";
+import { SumUpCloudProvider } from "@waitron/payments-sumup";
+import { recordIncidentOnce } from "@waitron/core";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
@@ -78,7 +80,7 @@ import {
 } from "./health.js";
 import { runLoop, realSleep } from "./loop.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
-import { runPass, DRAIN_DUTY } from "./pass.js";
+import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import {
   cardClientResolver,
@@ -87,6 +89,8 @@ import {
   defaultMakeStripe,
 } from "./stripe-account.js";
 import type { StripeAccountDeps } from "./stripe-account.js";
+import { sumupClientResolver } from "./sumup-account.js";
+import type { SumUpAccountDeps } from "./sumup-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountNodeApi } from "./node-api.js";
@@ -313,6 +317,7 @@ export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export async function buildCardProvider(
   cfg: TillConfig,
   deps: StripeAccountDeps,
+  sumupDeps: SumUpAccountDeps,
   onboardingIntent?: OnboardingIntent,
   paymentTestProviders = false,
 ): Promise<PaymentProvider | undefined> {
@@ -337,6 +342,19 @@ export async function buildCardProvider(
       resolveReader: () => Promise.resolve(readerId),
     });
   }
+  if (cfg.cardProvider === "sumup_cloud") {
+    const client = await sumupClientResolver(sumupDeps)(cfg.tenantId);
+    // Present because `loadTillConfig` `required`s WAITRON_TILL_SUMUP_READER_ID on exactly this branch.
+    const readerId = cfg.sumupReaderId!;
+    return new SumUpCloudProvider({
+      client,
+      db: deps.db,
+      tenantId: cfg.tenantId,
+      nodeId: cfg.nodeId,
+      resolveReader: () => Promise.resolve(readerId),
+      incidents: recordIncidentOnce,
+    });
+  }
   // `stripe_on_device` — the handheld Tap-to-Pay flow, which mints its own connection token and needs
   // no server-side reader id (till-config.ts requires none for this branch).
   const client = await cardDeviceClientResolver(deps)(cfg.tenantId);
@@ -346,6 +364,43 @@ export async function buildCardProvider(
     tenantId: cfg.tenantId,
     nodeId: cfg.nodeId,
   });
+}
+
+/** Run the card provider's own `resolvePending` sweep on every tick, wrapping (not replacing) the
+ * singleton fiscal pass. Independent of the singleton gate because the sweep resolves THIS node's
+ * own `attempting` card rows — a sell-only local secondary that takes card sales must sweep them
+ * even though it never drains/reconciles (`singletonPass` returns an empty pass there). Log-only:
+ * NOT a health-tracked `Duty`, because `createHealthState` seeds every `ALL_DUTIES` member on every
+ * node and a conditional duty that never runs on a no-card node would read stale on the staleness
+ * check → `/health` 503. A stuck sweep surfaces as `resolve_pending.failed`, the channel a mirror's
+ * stalled pull uses; it is a card-settlement backstop, not a fiscal-legal or process-liveness
+ * signal, so it does not gate `/health` (the deferred SumUp reconciler is the same tier, likewise
+ * off it). The returned `nextDueAt` is logged, not yet used to pace the loop.
+ *
+ * Exported for a direct unit test (`boot-pending-sweep.test.ts`) — a stubbed `inner` + a fake
+ * provider, no container — the same "exported for a direct test subject" reasoning `buildCardProvider`
+ * carries; the full loop wiring is exercised only through a real boot. */
+export function withPendingSweep(
+  inner: (now: Date) => Promise<PassReport>,
+  provider: PaymentProvider | undefined,
+  log: Logger,
+): (now: Date) => Promise<PassReport> {
+  if (provider === undefined) return inner;
+  return async (now) => {
+    const report = await inner(now);
+    try {
+      const r = await provider.resolvePending(now);
+      log("info", "resolve_pending.complete", {
+        captured: r.forwarded,
+        failed: r.declined,
+        incidentsRaised: r.incidentsRaised,
+        nextDueAt: r.nextDueAt?.toISOString() ?? null,
+      });
+    } catch (error) {
+      log("warn", "resolve_pending.failed", { error: String(error) });
+    }
+    return report;
+  };
 }
 
 /**
@@ -1704,6 +1759,9 @@ export async function startServer(
       environment: config.environment,
       makeStripe: defaultMakeStripe,
     },
+    // The SumUp resolver's deps — the same vault handle + ring, reading this tenant's `payments.sumup`
+    // credential. No injected `fetch`: the live host uses the global one; only a test observes calls.
+    { db, ring },
     config.onboardingIntent,
     config.paymentTestProviders,
   );
@@ -2383,56 +2441,63 @@ export async function startServer(
     // token) still reports healthy; those surface as `sync.pull_failed` log lines. Real
     // replication-lag monitoring belongs to the hosting slice (like real per-user auth), out of scope
     // for the C2a stand-in.
-    pass: singletonPass(
-      () => holders.singletonRole.current,
-      (at) =>
-        runPass(
-          {
-            // The regime owns the submission transport: `enabledFiscal.drain` builds a per-pass mTLS
-            // resolver (one TLS pool per tenant with due work, released in its own `finally`) and runs
-            // the pass. The host injects only the vault ring, the deployment identity and the cadence —
-            // `config.environment` is the `WAITRON_ENV`-derived value `deployment-guard.ts` pinned
-            // against the database at boot, and the regime's `entorno` guard refuses any due registro
-            // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
-            drain: (at2) =>
-              runFiscalDrain(
-                config,
-                (at3) =>
-                  enabledFiscal.drain(
-                    {
-                      db,
-                      ring,
-                      environment: config.environment,
-                      skipRetryMs: config.skipRetryMs,
-                      log,
-                    },
-                    at3,
-                  ),
-                at2,
-              ),
-            // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
-            // on the next pass rather than after a restart.
-            reconcile: async (at2) =>
-              runDue(
-                {
-                  db,
-                  duties: [duty],
-                  horizonDays: config.scheduler.horizonDays,
-                  maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
-                  maxAttempts: config.scheduler.maxAttempts,
-                  backoffBaseMs: config.scheduler.backoffBaseMs,
-                  staleAfterMs: config.scheduler.staleAfterMs,
-                  skipRetryMs: config.skipRetryMs,
-                },
-                await credentialTenants(db, "payments.stripe"),
-                at2,
-              ),
-            awaitingCert: awaitingFiscalCert,
-            monotonicMs: () => performance.now(),
-            log,
-          },
-          at,
-        ),
+    // `withPendingSweep` runs the card provider's `resolvePending` sweep around the singleton fiscal
+    // pass on EVERY trading node with a provider (primary or sell-only secondary), returning the
+    // inner `PassReport` unchanged so the `/health` contract is untouched (see its own header).
+    pass: withPendingSweep(
+      singletonPass(
+        () => holders.singletonRole.current,
+        (at) =>
+          runPass(
+            {
+              // The regime owns the submission transport: `enabledFiscal.drain` builds a per-pass mTLS
+              // resolver (one TLS pool per tenant with due work, released in its own `finally`) and runs
+              // the pass. The host injects only the vault ring, the deployment identity and the cadence —
+              // `config.environment` is the `WAITRON_ENV`-derived value `deployment-guard.ts` pinned
+              // against the database at boot, and the regime's `entorno` guard refuses any due registro
+              // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
+              drain: (at2) =>
+                runFiscalDrain(
+                  config,
+                  (at3) =>
+                    enabledFiscal.drain(
+                      {
+                        db,
+                        ring,
+                        environment: config.environment,
+                        skipRetryMs: config.skipRetryMs,
+                        log,
+                      },
+                      at3,
+                    ),
+                  at2,
+                ),
+              // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
+              // on the next pass rather than after a restart.
+              reconcile: async (at2) =>
+                runDue(
+                  {
+                    db,
+                    duties: [duty],
+                    horizonDays: config.scheduler.horizonDays,
+                    maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
+                    maxAttempts: config.scheduler.maxAttempts,
+                    backoffBaseMs: config.scheduler.backoffBaseMs,
+                    staleAfterMs: config.scheduler.staleAfterMs,
+                    skipRetryMs: config.skipRetryMs,
+                  },
+                  await credentialTenants(db, "payments.stripe"),
+                  at2,
+                ),
+              awaitingCert: awaitingFiscalCert,
+              monotonicMs: () => performance.now(),
+              log,
+            },
+            at,
+          ),
+      ),
+      cardProvider,
+      log,
     ),
     now,
     sleep: realSleep,

@@ -10,6 +10,7 @@ describe("PURPOSES", () => {
       "fiscal.aeat",
       "membership.node_key",
       "payments.stripe",
+      "payments.sumup",
       "sync.mirror_token",
     ]);
   });
@@ -37,6 +38,32 @@ describe("PURPOSES", () => {
     expect(PURPOSES["fiscal.aeat"]).toEqual(["pfxBase64", "passphrase", "certKind"]);
     expect(() =>
       validatePayload("fiscal.aeat", { pfxBase64: "AAA=", passphrase: "s3cret" }),
+    ).toThrow(/credentials.invalid_payload/);
+  });
+});
+
+describe("payments.sumup purpose", () => {
+  it("names every field the SumUp cloud client is constructed from", () => {
+    // sumupClient({ apiKey, merchantCode, affiliate: { appId, key } }) — the affiliate pair carries
+    // our payment_ref to SumUp. If that constructor's field list changes, this test changes with it.
+    expect([...PURPOSES["payments.sumup"]].sort()).toEqual([
+      "affiliateAppId",
+      "affiliateKey",
+      "apiKey",
+      "merchantCode",
+    ]);
+  });
+  it("validatePayload accepts the four fields and rejects a payload missing one", () => {
+    expect(() =>
+      validatePayload("payments.sumup", {
+        apiKey: "sup_sk_x",
+        merchantCode: "MABC123",
+        affiliateAppId: "com.waitron.pos",
+        affiliateKey: "aff-key",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validatePayload("payments.sumup", { apiKey: "sup_sk_x", merchantCode: "MABC123" }),
     ).toThrow(/credentials.invalid_payload/);
   });
 });

@@ -147,6 +147,13 @@ export class StripeTerminalProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
+  /** `drive` resolves every stall and error to `failed` inside `collect` (it cancels the reader
+   * action first), so this adapter never leaves a row `attempting`. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface
+  resolvePending(_now: Date): Promise<ForwardResult> {
+    return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+  }
+
   /** Drive the reader from PaymentIntent creation through to a terminal outcome, entirely outside a
    * DB transaction. Returns `{ captured: true, ... }` on success and `{ captured: false }` on every
    * failure mode — a network error at ANY step (create, process, or the poll loop itself, including a

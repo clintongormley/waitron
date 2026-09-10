@@ -1233,6 +1233,7 @@ jobs:
           set -- "$@" --filter "!@waitron/country-packs"
           set -- "$@" --filter "!@waitron/dashboard-kit"
           set -- "$@" --filter "!@waitron/payments-stripe"
+          set -- "$@" --filter "!@waitron/payments-sumup"
           set -- "$@" --filter "!@waitron/identity"
           set -- "$@" --filter "!@waitron/workforce"
           set -- "$@" --filter "!@waitron/credentials"

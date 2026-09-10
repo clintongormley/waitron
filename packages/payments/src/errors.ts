@@ -67,6 +67,14 @@ declare module "@waitron/shared" {
      * previously offline-accepted payment. The sale already chained and is immutable, so this is a
      * staff-facing uncollected-receivable / bad-debt notice for the till, not a fiscal reversal. */
     "payment.offline_forward_declined": { paymentRef: string; amount: string };
+    /** Raised as an INCIDENT (never thrown) by a `resolvePending` sweep when the processor's outcome
+     * is neither a capture nor a certain refusal: `REFUNDED` (money moved and came back through a
+     * payment that never carried a sale), a status this adapter does not know, or — with `status:
+     * "not_found"` — a row past the grace period the processor holds NO transaction for that we
+     * cannot correlate to a key it recorded (a create it may have accepted but whose response was
+     * lost, an uncertain charge a human must reconcile). The row is resolved `failed` so the sweep
+     * terminates; the incident is what makes a human look. */
+    "payment.pending_outcome_unactionable": { paymentRef: string; status: string };
     /** Raised as an INCIDENT (never thrown) by a reconcile sweep: payments we believe settled that
      * the processor's report still shows nothing for, past the in-flight tolerance. AGGREGATED —
      * one incident per (till, code) carrying every payment, because the open-incident dedup index

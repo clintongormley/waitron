@@ -33,6 +33,7 @@ export {
   insertFailedPayment,
   insertInitiated,
   listAcceptedOffline,
+  listAttempting,
   listReconcilable,
   markReconcileRemediated,
   recordFailedRefund,
@@ -41,9 +42,11 @@ export {
   resolvePaymentTenant,
   settleForwarded,
   settleInitiated,
+  stampAttemptingRef,
   tillsForWorkingOrders,
 } from "./store.js";
 export type {
+  AttemptingPayment,
   CapturedPaymentForOrder,
   ForwardablePayment,
   PaymentRecord,

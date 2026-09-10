@@ -13,6 +13,7 @@ import {
 import type { TenantId } from "@waitron/shared";
 import { StripeOnDeviceProvider, StripeTerminalProvider } from "@waitron/payments-stripe";
 import { SimulatorPaymentProvider } from "@waitron/payments";
+import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { buildCardProvider } from "./boot.js";
 import type { CardProvider, TillConfig } from "./till-config.js";
@@ -44,7 +45,7 @@ const ring = loadKeyRing(KEY_ENV);
 function cfgFor(
   tenantId: TenantId,
   cardProvider: CardProvider,
-  stripeReaderId?: string,
+  readerIds: { stripeReaderId?: string; sumupReaderId?: string } = {},
 ): TillConfig {
   return {
     tenantId,
@@ -55,7 +56,8 @@ function cfgFor(
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     cardProvider,
-    ...(stripeReaderId === undefined ? {} : { stripeReaderId }),
+    ...(readerIds.stripeReaderId === undefined ? {} : { stripeReaderId: readerIds.stripeReaderId }),
+    ...(readerIds.sumupReaderId === undefined ? {} : { sumupReaderId: readerIds.sumupReaderId }),
     tipsEnabled: false,
     orderFlow: "prepay",
   };
@@ -90,12 +92,41 @@ function deps() {
   };
 }
 
+/** The SumUp resolver deps — same vault handle + ring; no injected `fetch` (the client is built but
+ * never called on this path, so it never reaches the network). */
+function sumupDeps() {
+  return { db: suite.db, ring };
+}
+
+/** Seeds a `payments.sumup` credential (no affiliate key) for a fresh tenant and returns its id. */
+async function seedTenantWithSumUpKey(): Promise<TenantId> {
+  const tenantId = await seedTenant(suite.db);
+  await withTenant(suite.db, tenantId, (tx) =>
+    putCredential(tx, ring, {
+      tenantId,
+      purpose: "payments.sumup",
+      value: {
+        apiKey: "sup_sk_x",
+        merchantCode: "MABC123",
+        affiliateAppId: "-",
+        affiliateKey: "-",
+      },
+    }),
+  );
+  return tenantId;
+}
+
 describe("buildCardProvider", () => {
   it.each(["demo", "prepare"] as const)(
     "builds the local simulator for %s without reading Stripe credentials",
     async (intent) => {
       const tenantId = await seedTenant(suite.db);
-      const provider = await buildCardProvider(cfgFor(tenantId, "none"), deps(), intent);
+      const provider = await buildCardProvider(
+        cfgFor(tenantId, "none"),
+        deps(),
+        sumupDeps(),
+        intent,
+      );
       expect(provider).toBeInstanceOf(SimulatorPaymentProvider);
       expect(provider?.provider).toBe("simulator");
     },
@@ -105,13 +136,17 @@ describe("buildCardProvider", () => {
     // A tenant with NO Stripe credential: proof the `none` branch short-circuits before any read —
     // a credential lookup here would throw `credentials.missing` instead of returning undefined.
     const tenantId = await seedTenant(suite.db);
-    const provider = await buildCardProvider(cfgFor(tenantId, "none"), deps());
+    const provider = await buildCardProvider(cfgFor(tenantId, "none"), deps(), sumupDeps());
     expect(provider).toBeUndefined();
   });
 
   it("builds a StripeTerminalProvider for cardProvider 'stripe_terminal'", async () => {
     const tenantId = await seedTenantWithStripeKey("sk_test_terminal");
-    const provider = await buildCardProvider(cfgFor(tenantId, "stripe_terminal", "tmr_1"), deps());
+    const provider = await buildCardProvider(
+      cfgFor(tenantId, "stripe_terminal", { stripeReaderId: "tmr_1" }),
+      deps(),
+      sumupDeps(),
+    );
     expect(provider).toBeInstanceOf(StripeTerminalProvider);
     expect(provider?.provider).toBe("stripe");
   });
@@ -119,8 +154,9 @@ describe("buildCardProvider", () => {
   it("uses an explicitly configured Stripe test provider on a Prepare node", async () => {
     const tenantId = await seedTenantWithStripeKey("sk_test_prepare");
     const provider = await buildCardProvider(
-      cfgFor(tenantId, "stripe_terminal", "tmr_1"),
+      cfgFor(tenantId, "stripe_terminal", { stripeReaderId: "tmr_1" }),
       deps(),
+      sumupDeps(),
       "prepare",
       true,
     );
@@ -129,7 +165,11 @@ describe("buildCardProvider", () => {
 
   it("builds a StripeOnDeviceProvider for cardProvider 'stripe_on_device'", async () => {
     const tenantId = await seedTenantWithStripeKey("sk_test_device");
-    const provider = await buildCardProvider(cfgFor(tenantId, "stripe_on_device"), deps());
+    const provider = await buildCardProvider(
+      cfgFor(tenantId, "stripe_on_device"),
+      deps(),
+      sumupDeps(),
+    );
     expect(provider).toBeInstanceOf(StripeOnDeviceProvider);
     expect(provider?.provider).toBe("stripe");
   });
@@ -140,7 +180,35 @@ describe("buildCardProvider", () => {
     // `credentials.missing` rather than returning a half-built provider.
     const tenantId = await seedTenant(suite.db);
     await expect(
-      buildCardProvider(cfgFor(tenantId, "stripe_terminal", "tmr_1"), deps()),
+      buildCardProvider(
+        cfgFor(tenantId, "stripe_terminal", { stripeReaderId: "tmr_1" }),
+        deps(),
+        sumupDeps(),
+      ),
+    ).rejects.toMatchObject({ code: "credentials.missing" });
+  });
+
+  it("builds a SumUpCloudProvider for cardProvider 'sumup_cloud'", async () => {
+    const tenantId = await seedTenantWithSumUpKey();
+    const provider = await buildCardProvider(
+      cfgFor(tenantId, "sumup_cloud", { sumupReaderId: "rdr_1" }),
+      deps(),
+      sumupDeps(),
+    );
+    expect(provider).toBeInstanceOf(SumUpCloudProvider);
+    expect(provider?.provider).toBe("sumup");
+  });
+
+  it("fails loudly (does not build a provider) when a sumup_cloud tenant has no SumUp credential", async () => {
+    // The same boot-time guard the Stripe path keeps: a sumup_cloud cfg whose tenant carries no
+    // `payments.sumup` credential must fail the boot here, not on the first card sale.
+    const tenantId = await seedTenant(suite.db);
+    await expect(
+      buildCardProvider(
+        cfgFor(tenantId, "sumup_cloud", { sumupReaderId: "rdr_1" }),
+        deps(),
+        sumupDeps(),
+      ),
     ).rejects.toMatchObject({ code: "credentials.missing" });
   });
 });

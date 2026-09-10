@@ -162,6 +162,13 @@ export class FakePaymentProvider implements PaymentProvider {
     });
   }
 
+  /** The fake's `collect` resolves in one transaction (it never leaves a row `attempting`), so a
+   * pending-outcome sweep has nothing to resolve. */
+  resolvePending(now: Date): Promise<ForwardResult> {
+    void now;
+    return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+  }
+
   async void(ref: string): Promise<PaymentResult> {
     const row = await this.db.transaction(async (tx) => {
       const found = await this.require(tx, ref);

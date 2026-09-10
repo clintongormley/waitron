@@ -271,4 +271,15 @@ describe("FakePaymentProvider.forward", () => {
     const result = await provider.forward(new Date());
     expect(result).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   });
+
+  it("resolvePending is all-zeros (the fake's collect resolves in one transaction)", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db, s.tenantId);
+    await expect(provider.resolvePending(new Date())).resolves.toEqual({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    });
+  });
 });

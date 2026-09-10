@@ -96,7 +96,7 @@ export interface TillInfo {
    * bundle-decoupling rationale as every other type in this file. `[]` for a venue with no courses.
    */
   courses: TillCourse[];
-  cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "simulator";
+  cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
   tipsEnabled: boolean;
   receipt: ReceiptConfig;
   /**
@@ -1014,10 +1014,11 @@ export interface ExpoOrder {
  * as every other type in this file. A DELIBERATE divergence from {@link TillSaleResult}'s
  * throw-or-ticket shape: a decline/stall/offline-refusal is DATA, never a thrown `{ code }` — nothing
  * may block a sale on anything but the sale itself (CLAUDE.md §5) — so the caller branches on
- * `outcome` instead of catching. `timeout` is reserved: the server currently collapses a poll-window
- * stall into `declined` too (`toPayOutcome`'s own doc, `apps/server/src/till-sale.ts:1217-1225`) —
- * "every other non-terminal state — today just `failed` … maps to `declined`" — so a client that
- * branches on `timeout` today would never see it fire.
+ * `outcome` instead of catching. `timeout` now fires: the SumUp adapter reports a poll-window stall
+ * as `attempting` (the row stays open for `resolvePending`), which {@link toPayOutcome} maps to
+ * `timeout`; Stripe still collapses a stall into `declined`. The till renders `timeout` and
+ * `declined` identically today (retry or take cash) — a deliberate single treatment, not a sign the
+ * arm is dead.
  */
 export type PayOutcome =
   | { outcome: "captured"; ticket: TillSaleResult }
