@@ -238,6 +238,15 @@ design-review section apply.
   server by default (`WAITRON_SERVER_URL=https://127.0.0.1`, the agent fetches and pins the box CA from
   the landing listener), with a hot-plug-safe `/dev:/dev:ro` + major-180 device mount. Spec
   [2026-09-10-print-agent-box-wiring-design.md](superpowers/specs/2026-09-10-print-agent-box-wiring-design.md).
+  *Verified live on the real box 2026-09-10 (PR #308): agent joins over HTTPS with the pinned CA, sees
+  `/dev/usb/lp0` as the `node` user, and a dashboard "test print" prints a physical slip end-to-end.*
+  *Two dashboard join-UI follow-ups surfaced during that live test (both `apps/dashboard`, pre-existing
+  from the #289/#304 join flow, NOT the box-wiring branch): the "print agents waiting to join" list does
+  not live-update (a knock only appears after a manual page refresh), and the pairing window's "Open
+  until …" timestamp renders in UTC instead of the venue's local time zone.*
+  *Op note: `try-branch.sh` swaps images against the box's INSTALLED compose, so testing a compose change
+  (like this one) on a box prepared from older `main` needs its `compose.yml` refreshed first; out of
+  scope for try-branch's image-swap contract.*
 - **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, `packages/print-agent` +
   `apps/print-agent` (new), `packages/payments*`, the printer/payment routes in `apps/server`. Work, in
   order: **1.** the print agent process — spec
