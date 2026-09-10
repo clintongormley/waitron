@@ -225,8 +225,11 @@ declare module "@waitron/shared" {
      * above from the same function, so the two live in the same registry. Nothing constructs it with
      * params today: it is a CLASSIFICATION of an already-thrown driver error, and the page renders
      * fixed text keyed on the code alone. `sqlState` is declared because it is the one fact a future
-     * thrower would carry and a shipped code's params cannot be widened later; `string | null`
-     * matches both classification siblings above, since a socket failure carries no SQLSTATE.
+     * thrower would carry and a shipped code's params cannot be widened later, and `string | null`
+     * copies `provisioning.replication_bootstrap_failed` above — the only sibling with this param.
+     * `provisioning.database_unreachable`, the other code `classifyBootFailure` returns, carries no
+     * `sqlState` field at all — it reports `attempts` — so it is not a precedent for this shape: one
+     * of its two paths is a socket failure, which has no SQLSTATE to carry.
      *
      * `provisioning.*`, not `server.*`, for the reason those two siblings record: the domain concept
      * is the deployment's database, and `server.*` is reserved for facts about the process itself

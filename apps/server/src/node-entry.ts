@@ -211,14 +211,24 @@ export interface EntryDeps {
   /** Executes a staged restore before loadBoxEnv/startServer opens application pools. */
   runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
   /** Refuses a database migrated by a different image. Injected so `runEntry` stays unit-testable;
-   *  it defaults to the real `assertNotAhead` above, like every other optional dependency here — a
-   *  caller that omits it gets the guard, not a silence no test could notice. */
+   *  it defaults to the real `assertNotAhead` BELOW in this file, as `runStagedRestore` above
+   *  defaults to the real one — because it is a GUARD. A no-op default is lost by any caller that
+   *  forgets the dependency, and lost silently: nothing throws and nothing logs. (`reportFailure`
+   *  below does default to a no-op; its own doc says why that one is different.) */
   assertNotAhead?: (migrationsDatabaseUrl: string, migrationsRoot: string) => Promise<void>;
   /**
    * The INSTALLER's channel — the container's stdout, which is `docker logs`, never the
    * `waitron.log` the recovery page tails. It is the one place the caught error's own words may
    * appear, and only after `redactSecrets`. Injected so the failure path is unit-covered; a test
    * that omits it gets the no-op below and asserts nothing about it.
+   *
+   * It keeps that no-op default, unlike `assertNotAhead` above, because it is diagnostic OUTPUT and
+   * not a guard: omitting it loses detail from `docker logs` and changes no outcome — the boot still
+   * throws, `main` at the bottom of this file still writes the structured `server.boot_failed` line,
+   * and the recovery page still shows the classified code. `main` is `runEntry`'s only non-test
+   * caller and wires the real stdout write. A real-stdout default would instead print a stack for
+   * every unit test that exercises a failing boot without supplying it: replacing the no-op with a
+   * marker write printed it twelve times from `node-entry.test.ts` alone (measured 2026-09-11).
    */
   reportFailure?: (text: string) => void;
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;

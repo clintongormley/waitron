@@ -682,11 +682,12 @@ describe("runEntry", () => {
     expect(order).toEqual(["ensureInstance", "assertNotAhead", "startServer"]);
   });
 
-  // `assertNotAhead` used to default to `() => Promise.resolve()`, alone among this interface's
-  // optional dependencies — every other one defaults to the real implementation, the line above it
-  // being `deps.runStagedRestore ?? runStagedRestore`. A no-op default loses the guard for any caller
-  // that forgets the dependency, and silently: nothing throws, nothing logs, the server just starts
-  // against a database the image cannot read.
+  // `assertNotAhead` used to default to `() => Promise.resolve()`. Not alone in defaulting to a
+  // no-op — `reportFailure` still does, deliberately — but it is the only one of this interface's
+  // optional dependencies that is a GUARD, and the guard-shaped one next to it defaults to the real
+  // implementation (`deps.runStagedRestore ?? runStagedRestore`). A no-op default loses the guard for
+  // any caller that forgets the dependency, and silently: nothing throws, nothing logs, the server
+  // just starts against a database the image cannot read.
   //
   // The probe: omit the dependency and hand `ensureInstance` a URL whose port refuses instantly
   // (127.0.0.1:1). The real default opens a connection there, so the boot fails and the server is
