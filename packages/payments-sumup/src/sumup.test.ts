@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
@@ -6,6 +7,7 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
+import { getPaymentByRef, insertAttempting } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeSumUp } from "./testing/fake-sumup.js";
 import { SumUpCloudProvider } from "./provider.js";
@@ -54,9 +56,56 @@ describe("the sumup cloud adapter against a real database", () => {
     }
   });
 
-  // Written now, asserted in Task 4: a second tenant's attempting row for provider "sumup" must
-  // still be attempting after this tenant's provider sweeps. The two-tenant probe runs here and not
-  // on PGlite because CLAUDE.md §3's till-reroute receipt: only a run as `app_user` on a real
-  // cluster caught the by-id leak. Task 4 lands `resolvePending`, then fills this in.
-  it.todo("resolvePending as app_user never touches another tenant's attempting row");
+  // A second tenant's attempting row for provider "sumup" must still be attempting after this
+  // tenant's provider sweeps. The two-tenant probe runs here and not on PGlite because CLAUDE.md
+  // §3's till-reroute receipt: only a run as `app_user` on a real cluster caught the by-id leak
+  // (PGlite connects as superuser and sees every tenant regardless of the query's own predicate).
+  it("resolvePending as app_user resolves only its own tenant's rows (a second tenant's stays attempting)", async () => {
+    const a = await seedWorkingOrder(suite.admin, freshNif());
+    const b = await seedWorkingOrder(suite.admin, freshNif());
+    const fake = new FakeSumUp();
+    for (const t of [a, b]) {
+      await withTenant(suite.admin, t.tenantId, (tx) =>
+        insertAttempting(tx, {
+          tenantId: t.tenantId,
+          workingOrderId: t.workingOrderId,
+          provider: "sumup",
+          paymentRef: `ref-${t.tenantId}`,
+          amount: decimal("1.00"),
+        }),
+      );
+      fake.hold({
+        foreignTransactionId: `ref-${t.tenantId}`,
+        status: "SUCCESSFUL",
+        amount: decimal("1.00"),
+      });
+    }
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const provider = new SumUpCloudProvider({
+        client: fake,
+        db: probe,
+        tenantId: brandTenantId(a.tenantId),
+        nodeId: NODE,
+        resolveReader: () => Promise.resolve("rdr_1"),
+        incidents: () => Promise.resolve(true),
+      });
+      expect((await provider.resolvePending(new Date())).forwarded).toBe(1);
+    } finally {
+      await probe.close();
+    }
+    const stateOf = async (t: typeof a) => {
+      const r = await withTenant(suite.admin, t.tenantId, (tx) =>
+        getPaymentByRef(tx, {
+          tenantId: t.tenantId,
+          provider: "sumup",
+          paymentRef: `ref-${t.tenantId}`,
+        }),
+      );
+      if (r === undefined) throw new Error(`no payments row for tenant ${t.tenantId}`);
+      return r;
+    };
+    expect((await stateOf(a)).state).toBe("captured");
+    expect((await stateOf(b)).state).toBe("attempting");
+  });
 });
