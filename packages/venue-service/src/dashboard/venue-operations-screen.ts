@@ -209,11 +209,11 @@ export class VenueOperationsScreen extends LitElement {
               data-test=${`save-offer-${offer.id}`}
               ?disabled=${this.busy}
               @click=${(event: Event) =>
-              this.#saveOffer(
-                menuId,
-                offer.id,
-                (event.currentTarget as Node).getRootNode() as ShadowRoot,
-              )}
+                this.#saveOffer(
+                  menuId,
+                  offer.id,
+                  (event.currentTarget as Node).getRootNode() as ShadowRoot,
+                )}
               >${t("venue.save_price")}</wt-button
             ><wt-button
               variant="secondary"
