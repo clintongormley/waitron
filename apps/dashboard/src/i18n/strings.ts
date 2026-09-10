@@ -43,6 +43,7 @@ export const en = {
   "form.confirm_pin_required": "Confirm the PIN",
   "form.email_required": "Enter an email address",
   "form.password_required": "Enter a password",
+  "form.factor_required": "Enter your authenticator or recovery code",
   "form.confirm_password_required": "Confirm the password",
   // Shell nav
   "nav.sections": "Sections",
@@ -887,6 +888,7 @@ export const es: Record<StringKey, string> = {
   "form.confirm_pin_required": "Confirma el PIN",
   "form.email_required": "Introduce una dirección de correo",
   "form.password_required": "Introduce una contraseña",
+  "form.factor_required": "Introduce el código del autenticador o de recuperación",
   "form.confirm_password_required": "Confirma la contraseña",
   "nav.sections": "Secciones",
   "nav.toggle": "Mostrar u ocultar la navegación",

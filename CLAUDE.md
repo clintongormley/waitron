@@ -200,12 +200,14 @@ unfiltered `main` run, not a wrong hook.
   tenant's legal name on login and every authenticated screen. Put Logout at the trailing edge only
   when a session exists. Use the tenant name, not a location: a deployment database has one tenant
   and that tenant can contain several locations (`packages/db/src/schema/tenants.ts`).
-- **Dashboard login is passkey-first without account enumeration.** After any syntactically valid
-  email, start the same passkey ceremony. If it is cancelled, open the password form and show passkey
+- **Dashboard login is passkey-first without account enumeration.** On the initial email screen,
+  offer passive browser passkey autofill when supported. After any syntactically valid email, start
+  the same explicit passkey ceremony. If it is cancelled, open the password form and show passkey
   and recovery alongside it without an error. Never select that public next step from server-side
   passkey enrolment, because the different UI outcome would reveal whether the account has a passkey.
   A remembered account may skip email entry, but the preference is written only after authenticated
-  identity is known (`apps/dashboard/src/screens/login-screen.ts`).
+  identity is known and an explicit logout never opens a modal prompt
+  (`apps/dashboard/src/screens/login-screen.ts`).
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
   `db.series_not_found` (design note atop `packages/shared/src/errors.ts`). Codes are **never renamed
   once shipped**; deprecate and add a sibling. `server.*` is reserved for facts about the process

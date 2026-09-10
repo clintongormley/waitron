@@ -600,6 +600,9 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(completed.status).toBe(200);
     expect(completed.headers.get("set-cookie")).toContain("waitron_management_session=");
 
+    const actionsBeforeIneligibleResends = await suite.admin.execute<{ count: string }>(sql`
+      select count(*) as count from management_account_actions where tenant_id = ${tenantId}`);
+
     const unknown = await app.request("/management-api/invitation-resend", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -611,7 +614,11 @@ describe("Management API staff + session routes over real Postgres", () => {
       body: JSON.stringify({ email: MANAGER_EMAIL }),
     });
     expect([unknown.status, active.status]).toEqual([202, 202]);
-    expect(sent).toHaveLength(1);
+    const actionsAfterIneligibleResends = await suite.admin.execute<{ count: string }>(sql`
+      select count(*) as count from management_account_actions where tenant_id = ${tenantId}`);
+    expect(actionsAfterIneligibleResends.rows[0]!.count).toBe(
+      actionsBeforeIneligibleResends.rows[0]!.count,
+    );
 
     const secondCreated = await app.request("/management-api/staff", {
       method: "POST",

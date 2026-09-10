@@ -407,7 +407,7 @@ async function finishClaimedAction(
   };
 }
 
-/** Find an active account without making an unknown or malformed email observable to the caller. */
+/** Find and lock an active account before replacing its reset action; unknown states remain silent. */
 export async function requestPasswordResetAction(
   tx: Transaction,
   input: { tenantId: string; email: string; now?: Date },
@@ -420,10 +420,11 @@ export async function requestPasswordResetAction(
     .where(
       and(
         eq(persons.tenantId, input.tenantId),
-        eq(persons.email, email),
+        eq(sql`lower(${persons.email})`, email),
         eq(persons.status, "active"),
       ),
-    );
+    )
+    .for("update");
   if (person === undefined) return null;
   return issueAccountAction(tx, {
     tenantId: input.tenantId,

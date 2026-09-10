@@ -1,6 +1,10 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { startAuthentication, WebAuthnAbortService } from "@simplewebauthn/browser";
+import {
+  browserSupportsWebAuthnAutofill,
+  startAuthentication,
+  WebAuthnAbortService,
+} from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -10,7 +14,12 @@ import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi } from "../api/client.js";
-import { forgetLoginPreference, readLoginPreference } from "../login-preference.js";
+import {
+  clearTabLoginPreference,
+  disablePersistentLoginPreference,
+  forgetLoginPreference,
+  readLoginPreference,
+} from "../login-preference.js";
 // The pre-login language chooser (per-user-language-preference). It emits a composed `locale-selected`;
 // `dashboard-app` turns a pre-login pick into a transient `setLocale` (nothing is persisted).
 import "../widgets/language-chooser.js";
@@ -174,6 +183,8 @@ export class LoginScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.token !== null && this.actionPurpose !== null) void this.#inspectAccountAction();
+    else if (this.rememberedLogin === null) void this.#conditionalPasskeyLogin();
+    else if (this.step === "password") this.#focusField("password");
     void this.api
       .getGoogleConfig()
       .then(({ configured, privacyNoticeUrl }) => {
@@ -188,7 +199,19 @@ export class LoginScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearInterval(this.resetTimer);
+    this.#cancelPasskeyCeremony();
+  }
+
+  #focusField(name: string): void {
+    void this.updateComplete.then(() => {
+      if (this.isConnected)
+        this.shadowRoot?.querySelector<HTMLElement>(`wt-input[name=${name}]`)?.focus();
+    });
+  }
+
+  #cancelPasskeyCeremony(): void {
     this.passkeyAttempt += 1;
+    this.busy = false;
     WebAuthnAbortService.cancelCeremony();
   }
 
@@ -276,12 +299,14 @@ export class LoginScreen extends LitElement {
   }
 
   #showInvitationCode(): void {
+    this.#cancelPasskeyCeremony();
     this.#clearSecrets();
     this.actionPurpose = "invitation";
     this.errorKey = null;
     this.actionValidated = false;
     this.invitationResent = false;
     this.step = "code";
+    this.#focusField("invitation-code");
   }
 
   #submitAccountOnEnter(event: KeyboardEvent): void {
@@ -312,19 +337,23 @@ export class LoginScreen extends LitElement {
   }
 
   #showOtherWays(): void {
-    this.passwordVisible = false;
+    this.#cancelPasskeyCeremony();
+    this.#clearSecrets();
     this.errorKey = null;
-    this.passwordError = "";
     this.step = "other-ways";
   }
 
   #showPasswordStep(): void {
-    this.passwordVisible = false;
+    this.#cancelPasskeyCeremony();
+    this.#clearSecrets();
     this.errorKey = null;
     this.step = "password";
+    this.#focusField("password");
   }
 
   #cancelLogin(): void {
+    this.#cancelPasskeyCeremony();
+    clearTabLoginPreference();
     this.email = "";
     this.#clearSecrets();
     this.invitationCode = "";
@@ -334,10 +363,11 @@ export class LoginScreen extends LitElement {
     this.hasRememberedAccount = false;
     this.rememberEmail = false;
     this.step = "email";
+    this.#focusField("email");
   }
 
   #forgetAccount(): void {
-    forgetLoginPreference();
+    forgetLoginPreference(this.email);
     this.#cancelLogin();
   }
 
@@ -375,6 +405,7 @@ export class LoginScreen extends LitElement {
       this.actionPurpose = inspection.purpose;
       this.actionValidated = true;
       this.invitationResent = false;
+      this.#focusField("new-password");
     } catch (error) {
       this.errorKey = codeOf(error);
       if (this.token === null) this.invitationCodeError = codeMessage(this.errorKey);
@@ -399,10 +430,15 @@ export class LoginScreen extends LitElement {
 
   async #submit(): Promise<void> {
     if (this.busy) return;
+    if (this.step === "factor" && this.secondFactor === "") {
+      this.secondFactorError = t("form.factor_required");
+      return;
+    }
     if (this.password === "") {
       this.passwordError = t("form.password_required");
       return;
     }
+    this.#cancelPasskeyCeremony();
     this.busy = true;
     this.errorKey = null;
     try {
@@ -433,6 +469,7 @@ export class LoginScreen extends LitElement {
       if (this.errorKey === "totp.required") {
         this.errorKey = null;
         this.step = "factor";
+        this.#focusField("one-time-code");
       } else if (this.errorKey === "totp.invalid") {
         this.secondFactorError = codeMessage(this.errorKey);
       }
@@ -518,6 +555,7 @@ export class LoginScreen extends LitElement {
               )
             : await this.api.completeAccountAction(this.token, this.actionPurpose, this.password);
       const accountSetup = this.actionPurpose === "invitation";
+      const completedEmail = this.email;
       this.#cancelAccountAction();
       if (out.authenticated) {
         this.dispatchEvent(
@@ -533,7 +571,9 @@ export class LoginScreen extends LitElement {
           }),
         );
       } else {
+        this.email = completedEmail;
         this.noticeCode = "password.reset_complete";
+        this.#focusField("email");
       }
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -564,6 +604,8 @@ export class LoginScreen extends LitElement {
    */
   async #passkeyLogin(): Promise<void> {
     if (this.busy) return;
+    this.#cancelPasskeyCeremony();
+    if (this.step === "password" || this.step === "factor") this.#clearSecrets();
     const attempt = ++this.passkeyAttempt;
     this.busy = true;
     this.errorKey = null;
@@ -590,16 +632,57 @@ export class LoginScreen extends LitElement {
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
       if (
-        error instanceof DOMException &&
+        error instanceof Error &&
         (error.name === "NotAllowedError" || error.name === "AbortError")
       ) {
         this.errorKey = null;
         this.step = "password";
+        this.#focusField("password");
       } else {
         this.errorKey = codeOf(error, "passkey.verification_failed");
       }
     } finally {
       if (attempt === this.passkeyAttempt) this.busy = false;
+    }
+  }
+
+  async #conditionalPasskeyLogin(): Promise<void> {
+    try {
+      if (!(await browserSupportsWebAuthnAutofill())) return;
+    } catch {
+      return;
+    }
+    await this.updateComplete;
+    if (!this.isConnected || this.step !== "email" || this.token !== null) return;
+    const attempt = ++this.passkeyAttempt;
+    try {
+      const { challengeHandle, options } = await this.api.passkeyAuthOptions();
+      if (!this.isConnected || attempt !== this.passkeyAttempt || this.step !== "email") return;
+      const response = await startAuthentication({
+        optionsJSON: options as unknown as PublicKeyCredentialRequestOptionsJSON,
+        useBrowserAutofill: true,
+        // The eligible email input lives in this component's shadow root, which the library's
+        // document-level query cannot see. The component renders that input before this call.
+        verifyBrowserAutofillInput: false,
+      });
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      const out = await this.api.passkeyAuthVerify({ challengeHandle, response });
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      this.dispatchEvent(
+        new CustomEvent("logged-in", {
+          detail: { ...out, loginMethod: "passkey", rememberEmail: this.rememberEmail },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch (error) {
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      if (!(
+        error instanceof Error &&
+        (error.name === "NotAllowedError" || error.name === "AbortError")
+      )) {
+        this.errorKey = codeOf(error, "passkey.verification_failed");
+      }
     }
   }
 
@@ -649,8 +732,10 @@ export class LoginScreen extends LitElement {
         data-test="remember-email"
         type="checkbox"
         .checked=${this.rememberEmail}
-        @change=${(event: Event) =>
-          (this.rememberEmail = (event.currentTarget as HTMLInputElement).checked)}
+        @change=${(event: Event) => {
+          this.rememberEmail = (event.currentTarget as HTMLInputElement).checked;
+          if (!this.rememberEmail) disablePersistentLoginPreference(this.email);
+        }}
       />
       ${t("login.remember_email")}
     </label>`;
@@ -730,7 +815,7 @@ export class LoginScreen extends LitElement {
                   </wt-form-actions>
                   ${
                     this.actionPurpose === "invitation" &&
-                    this.errorKey === "account_action.invalid"
+                    (this.errorKey === "account_action.invalid" || this.invitationResent)
                       ? html`<wt-button
                           variant="ghost"
                           data-test="resend-invitation"
@@ -879,6 +964,7 @@ export class LoginScreen extends LitElement {
                   ${this.#renderLoginContext()}
                   <h1>${t("login.use_passkey_heading")}</h1>
                   <p class="alternative-hint">${t("login.passkey_hint")}</p>
+                  ${this.#rememberChoice()}
                   <wt-form-actions>
                     <wt-button
                       slot="cancel"

@@ -1,5 +1,6 @@
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -25,12 +26,21 @@ function passkeyCredential(id = "cred-abc"): PublicKeyCredential {
   } as PublicKeyCredential;
 }
 
+let conditionalMediationAvailable: ReturnType<typeof vi.fn>;
 beforeEach(() => {
+  conditionalMediationAvailable = vi.fn().mockResolvedValue(false);
+  vi.stubGlobal(
+    "PublicKeyCredential",
+    class {
+      static isConditionalMediationAvailable = conditionalMediationAvailable;
+    },
+  );
   vi.spyOn(navigator.credentials, "get").mockResolvedValue(passkeyCredential());
 });
 
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
+afterEach(() => vi.unstubAllGlobals());
 afterEach(() => vi.useRealTimers());
 afterEach(() => {
   sessionStorage.clear();
@@ -168,6 +178,74 @@ describe("login-screen", () => {
     });
   });
 
+  it("explains an empty authenticator submission without repeating the password check", async () => {
+    const login = vi.fn().mockRejectedValueOnce({ code: "totp.required" });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ login }),
+    });
+    await openPassword(el);
+    (el as unknown as { password: string }).password = "correct horse";
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]")!.click();
+    await el.updateComplete;
+
+    expect(login).toHaveBeenCalledTimes(1);
+    const factor = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
+      "wt-input[name=one-time-code]",
+    )!;
+    expect(factor.error).toBe(t("form.factor_required"));
+    expect(
+      el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.textContent,
+    ).toContain(t("form.factor_required"));
+  });
+
+  it("starts conditional passkey autofill on the first email screen", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(new Promise(() => undefined));
+    const api = stubApi();
+    await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+
+    await vi.waitFor(() =>
+      expect(navigator.credentials.get).toHaveBeenCalledWith({
+        publicKey: {
+          challenge: new Uint8Array([1, 2, 3]).buffer,
+          allowCredentials: [],
+        },
+        mediation: "conditional",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect(api.passkeyAuthOptions).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a pending conditional ceremony before submitting a password", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(new Promise(() => undefined));
+    const cancelCeremony = vi
+      .spyOn(WebAuthnAbortService, "cancelCeremony")
+      .mockImplementation(() => undefined);
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+    Object.assign(el as unknown as Record<string, string>, {
+      email: "owner@example.com",
+      password: "correct horse",
+      step: "password",
+    });
+    await el.updateComplete;
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    await flush(el);
+
+    expect(cancelCeremony).toHaveBeenCalled();
+    expect(api.login).toHaveBeenCalledWith({
+      email: "owner@example.com",
+      password: "correct horse",
+    });
+  });
+
   it("opens password alternatives without an error when the automatic passkey prompt is cancelled", async () => {
     vi.mocked(navigator.credentials.get).mockRejectedValueOnce(
       new DOMException("Cancelled", "NotAllowedError"),
@@ -209,6 +287,7 @@ describe("login-screen", () => {
       JSON.stringify({ email: "owner@example.com", method: "password" }),
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
     expect(el.shadowRoot!.querySelector("wt-input[name=password]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=login-context]")?.textContent).toContain(
       "owner@example.com",
@@ -219,6 +298,19 @@ describe("login-screen", () => {
     expect(
       el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=email]")?.value,
     ).toBe("");
+    expect(sessionStorage.getItem("waitron-login-preference")).toBeNull();
+  });
+
+  it("focuses the password field for a remembered password account", async () => {
+    sessionStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "owner@example.com", method: "password" }),
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
+    const field =
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=password]")!;
+    expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
   });
 
   it("can forget an opted-in account from the returning login", async () => {
@@ -227,13 +319,26 @@ describe("login-screen", () => {
     localStorage.setItem("waitron-login-preference", saved);
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     expect(
-      el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=remember-email]")?.checked,
-    ).toBeUndefined();
+      el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=remember-email]")!.checked,
+    ).toBe(true);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=forget-account]")!.click();
     await el.updateComplete;
     expect(sessionStorage.getItem("waitron-login-preference")).toBeNull();
     expect(localStorage.getItem("waitron-login-preference")).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-input[name=email]")).not.toBeNull();
+  });
+
+  it("can stop remembering a returning passkey account without losing the tab shortcut", async () => {
+    const saved = JSON.stringify({ email: "owner@example.com", method: "passkey" });
+    sessionStorage.setItem("waitron-login-preference", saved);
+    localStorage.setItem("waitron-login-preference", saved);
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    const remember = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=remember-email]")!;
+    remember.checked = false;
+    remember.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    expect(sessionStorage.getItem("waitron-login-preference")).toBe(saved);
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
   });
 
   it("finishes password recovery at login without creating a session", async () => {
@@ -248,14 +353,15 @@ describe("login-screen", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await flush(el);
     (el as unknown as { password: string }).password = "a replacement password";
-    (el as unknown as { confirmPassword: string }).confirmPassword = "a replacement password";
     const events: Event[] = [];
     el.addEventListener("logged-in", (event) => events.push(event));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
     await flush(el);
     expect(events).toHaveLength(0);
     expect(el.shadowRoot!.textContent).toContain(codeMessage("password.reset_complete"));
-    expect(el.shadowRoot!.querySelector("wt-input[name=email]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=email]")!.value,
+    ).toBe("new@example.test");
   });
 
   it("validates an emailed action before showing credential fields", async () => {
@@ -300,6 +406,7 @@ describe("login-screen", () => {
 
     expect(api.requestInvitation).toHaveBeenCalledWith("pending@example.test");
     expect(el.shadowRoot!.textContent).toContain(t("account.invitation_resent"));
+    expect(el.shadowRoot!.querySelector("[data-test=resend-invitation]")).not.toBeNull();
   });
 
   it("cancels account setup and returns to a blank email form", async () => {
@@ -518,7 +625,6 @@ describe("login-screen", () => {
     await openPassword(el, "new@example.test");
     Object.assign(el as unknown as Record<string, string>, {
       password: "old login password",
-      confirmPassword: "old confirmation",
       secondFactor: "old recovery code",
       pin: "1234",
       confirmPin: "1234",
@@ -765,7 +871,7 @@ describe("login-screen", () => {
     expect(username.value).toBe("owner@x.com");
   });
 
-  it("completes a token link with matching passwords and logs in", async () => {
+  it("completes an invitation token with one password and logs in", async () => {
     const api = stubApi();
     history.replaceState(
       null,
@@ -774,7 +880,6 @@ describe("login-screen", () => {
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     (el as unknown as { password: string }).password = "a replacement password";
-    (el as unknown as { confirmPassword: string }).confirmPassword = "a replacement password";
     (el as unknown as { pin: string }).pin = "4321";
     (el as unknown as { confirmPin: string }).confirmPin = "4321";
     await el.updateComplete;

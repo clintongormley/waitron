@@ -1,14 +1,19 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearTabLoginPreference,
+  disablePersistentLoginPreference,
   forgetLoginPreference,
   readLoginPreference,
   rememberSuccessfulLogin,
 } from "./login-preference.js";
 
-afterEach(() => {
+function clearStorage(): void {
   sessionStorage.clear();
   localStorage.clear();
-});
+}
+
+beforeEach(clearStorage);
+afterEach(clearStorage);
 
 describe("login preference", () => {
   it("retains an authenticated email and method for this tab without persistent consent", () => {
@@ -41,5 +46,35 @@ describe("login preference", () => {
     forgetLoginPreference();
     expect(sessionStorage.length).toBe(0);
     expect(localStorage.length).toBe(0);
+  });
+
+  it("falls back when browser storage access is denied", () => {
+    const local = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new DOMException("Denied", "SecurityError");
+    });
+    expect(readLoginPreference()).toBeNull();
+    expect(() => forgetLoginPreference("owner@example.com")).not.toThrow();
+    local.mockRestore();
+  });
+
+  it("clears a tab choice without deleting persistent consent for that account", () => {
+    const saved = JSON.stringify({ email: "owner@example.com", method: "passkey" });
+    sessionStorage.setItem("waitron-login-preference", saved);
+    localStorage.setItem("waitron-login-preference", saved);
+    clearTabLoginPreference();
+    expect(sessionStorage.getItem("waitron-login-preference")).toBeNull();
+    expect(localStorage.getItem("waitron-login-preference")).toBe(saved);
+  });
+
+  it("removes persistence only for the account being shown", () => {
+    const tab = JSON.stringify({ email: "staff@example.com", method: "passkey" });
+    const saved = JSON.stringify({ email: "owner@example.com", method: "password" });
+    sessionStorage.setItem("waitron-login-preference", tab);
+    localStorage.setItem("waitron-login-preference", saved);
+    forgetLoginPreference("staff@example.com");
+    expect(sessionStorage.getItem("waitron-login-preference")).toBeNull();
+    expect(localStorage.getItem("waitron-login-preference")).toBe(saved);
+    disablePersistentLoginPreference("owner@example.com");
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
   });
 });

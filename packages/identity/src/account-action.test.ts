@@ -311,9 +311,10 @@ describe("management account actions", () => {
 
   it("finds password-reset accounts by normalized email without revealing unknown addresses", async () => {
     const personId = await seedManager(suite.db, tenantId, { email: "known@x.com" });
+    await suite.db.execute(sql`update persons set email = 'Known@X.com' where id = ${personId}`);
     await expect(
       run((tx) => requestPasswordResetAction(tx, { tenantId, email: "  KNOWN@X.COM  " })),
-    ).resolves.toMatchObject({ personId, email: "known@x.com" });
+    ).resolves.toMatchObject({ personId, email: "Known@X.com" });
     await expect(
       run((tx) => requestPasswordResetAction(tx, { tenantId, email: "unknown@x.com" })),
     ).resolves.toBeNull();
@@ -337,6 +338,10 @@ describe("management account actions", () => {
         }),
       ),
     ).resolves.toEqual({ personId, session: null });
+    const person = await suite.db.execute<{ totp_secret: string | null }>(
+      sql`select totp_secret from persons where id = ${personId}`,
+    );
+    expect(person.rows[0]!.totp_secret).toBe("sealed-placeholder");
   });
 
   it("refuses an expired token", async () => {

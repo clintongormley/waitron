@@ -494,11 +494,11 @@ describe("passkey authentication", () => {
     );
   });
 
-  it("throws passkey.not_registered when no credential matches the returned id", async () => {
+  it("uses the generic verification failure when no credential matches the returned id", async () => {
     const begun = await beginAuth();
     // No credential was seeded for this id.
     expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-unknown"))).toBe(
-      "passkey.not_registered",
+      "passkey.verification_failed",
     );
     // The unrecognised credential short-circuits before the verifier is reached.
     expect(mockVerifyAuth).not.toHaveBeenCalled();

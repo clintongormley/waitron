@@ -304,16 +304,27 @@ locales) edge. Do not show Logout before authentication.
 
 ### Dashboard authentication
 
-After a syntactically valid email address, start passkey login as the primary method. Render the same
-passkey-first step for every valid address: choosing the next screen from server-side passkey
-enrolment would reveal whether an account has a passkey. If the device prompt is cancelled, open the
-password form without an error and show passkey and recovery actions alongside it. The WebAuthn
-ceremony itself determines whether the user can provide an enrolled passkey.
+Offer passive passkey autofill on the initial email screen when the browser supports it. After a
+syntactically valid email address is submitted, start an explicit passkey prompt as the primary
+method. Render the same passkey-first step for every valid address: choosing the next screen from
+server-side passkey enrolment would reveal whether an account has a passkey. If the device prompt is
+cancelled, open the password form without an error and show passkey and recovery actions alongside
+it. A remembered account skips email entry but waits for an explicit passkey click or focuses the
+password field; logout never opens a modal device prompt.
 
 On login, put **Try another way** below the Cancel and primary action buttons. **Cancel** ends the
 whole sign-in attempt and returns to an empty email form, clearing credentials and errors. Password
 recovery opens a separate **Check your email** screen with the address, delivery guidance, and a
 one-minute resend countdown. Keep the same confirmation for known and unknown addresses.
+
+Offer **Remember my email on this device** on credential screens. It stores only the successfully
+authenticated email and method. **Use another account** clears the current tab shortcut while
+retaining an opted-in device preference; **Forget this account** removes the matching account from
+both. Turning the checkbox off removes that account's device preference immediately.
+
+Keep an authenticator or recovery code off the password form. Request it on a separate screen only
+after the server accepts the password and says the account requires a second factor. Keep the
+password in component memory for the second request, and issue no session before both checks pass.
 
 Invitation links validate their action before showing new credentials. An invalid or expired
 invitation can request a replacement with the same acknowledgement for every account state. The

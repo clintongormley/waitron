@@ -110,6 +110,27 @@ describe("loginManager", () => {
     // remove the dummy verifyPassword in completeManagerLogin's null branch and this goes red.
     expect(spy).toHaveBeenCalledTimes(1);
   });
+  it("makes a pending account pay for one KDF and return the generic password failure", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "manager");
+    await run((tx) =>
+      tx.execute(
+        sql`update persons set email = 'owner-pending@x.com', status = 'pending' where id = ${personId}`,
+      ),
+    );
+    const spy = vi.mocked(verifyPassword);
+    spy.mockClear();
+    const code = await run((tx) =>
+      codeOf(() =>
+        loginManager(tx, {
+          tenantId,
+          email: "owner-pending@x.com",
+          password: "anything",
+        }),
+      ),
+    );
+    expect(code).toBe("password.invalid");
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
   it("requires a valid TOTP when one is enrolled", async () => {
     const personId = await seedManager(suite.db, tenantId, { email: "owner-totp@x.com" });
     const secret = generateSecret();
@@ -157,9 +178,9 @@ describe("loginManager", () => {
 
 // The by-id entry point the C2b mirror-bundle route uses to authenticate the primary's admin — a
 // server-to-server flow carrying an id, so it resolves by id rather than treating the id as an email.
-// Behaviour is `loginManager`'s,
-// minus email lookup: an UNKNOWN id is `person.not_found` (no enumeration surface here), and every
-// post-lookup check is the shared `completeManagerLogin`.
+// An UNKNOWN id is `person.not_found` because this trusted path has no public enumeration surface.
+// The shared credential checks retain the by-id flow's established suspension and missing-factor
+// errors, while the public email path deliberately folds those account-state distinctions away.
 describe("loginManagerById", () => {
   it("logs in a low-level fixture by id + password without depending on email", async () => {
     const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
@@ -188,8 +209,8 @@ describe("loginManagerById", () => {
     expect(code).toBe("password.invalid");
   });
   it("rejects a suspended person with person.suspended", async () => {
-    // Seed a low-level person WITH a password, then suspend — the shared suspension gate fires before
-    // the password check, the same as the email path.
+    // Seed a low-level person WITH a password, then suspend. This trusted by-id path retains the
+    // explicit suspension result that the public email path deliberately hides.
     const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
     await run((tx) =>
       tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),

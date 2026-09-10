@@ -1,6 +1,7 @@
 # Faster dashboard login
 
-Status: implemented and validated on the `login-screen` branch.
+Status: implemented with automated validation on the `login-screen` branch. Native passkey prompts
+and scanning the QR code with a physical authenticator remain device checks before deployment.
 
 You may sign in several times during a working day. The returning path should take a password
 and Enter, or a passkey button and device verification. An authenticator code adds a step only
@@ -188,6 +189,22 @@ no-enrolment-lookup invariant while documenting the local remembered-method exce
 add dated pointers to historical specs instead of rewriting history. Update the backlog when this
 work's state changes. Commit with sign-off and hooks enabled. Announce readiness for `finish-branch`
 after implementation and validation; finishing and landing remain separate owner actions.
+
+## Validation recorded 2026-09-10
+
+- `pnpm --filter @waitron/dashboard test:coverage` passed.
+- `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/identity test:coverage` passed,
+  including real-PostgreSQL action-issuance races. Deleting either person-row lock made its
+  concurrency control fail with two successful operations.
+- `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test:coverage` passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, and
+  `TESTCONTAINERS_RYUK_DISABLED=true pnpm test` passed for the complete workspace after the final
+  rebase onto `origin/main`.
+
+The browser profile test checks that authenticator setup produces a QR image. Identity tests reject
+an incorrect current code, store no factor before confirmation, and store the encrypted secret only
+after a valid current code. These automated checks do not prove that a particular phone can scan the
+rendered image or that its native passkey prompt behaves correctly; those remain device checks.
 
 ## Source receipts and limits
 

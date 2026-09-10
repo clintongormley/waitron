@@ -27,7 +27,18 @@ function parse(value: string | null): Omit<LoginPreference, "persistent"> | null
   }
 }
 
-function read(storage: Storage): Omit<LoginPreference, "persistent"> | null {
+type StorageName = "sessionStorage" | "localStorage";
+
+function getStorage(name: StorageName): Storage | null {
+  try {
+    return window[name];
+  } catch {
+    return null;
+  }
+}
+
+function read(storage: Storage | null): Omit<LoginPreference, "persistent"> | null {
+  if (storage === null) return null;
   try {
     return parse(storage.getItem(KEY));
   } catch {
@@ -36,8 +47,8 @@ function read(storage: Storage): Omit<LoginPreference, "persistent"> | null {
 }
 
 export function readLoginPreference(): LoginPreference | null {
-  const tab = read(sessionStorage);
-  const saved = read(localStorage);
+  const tab = read(getStorage("sessionStorage"));
+  const saved = read(getStorage("localStorage"));
   const preference = tab ?? saved;
   if (preference === null) return null;
   return {
@@ -54,26 +65,47 @@ export function rememberSuccessfulLogin(
   const email = emailValue.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
   const serialized = JSON.stringify({ email, method });
+  const tab = getStorage("sessionStorage");
+  const saved = getStorage("localStorage");
   try {
-    sessionStorage.setItem(KEY, serialized);
+    tab?.setItem(KEY, serialized);
   } catch {
     // The shortcut is optional; authentication does not depend on browser storage.
   }
   try {
     if (persistent) {
-      localStorage.setItem(KEY, serialized);
-    } else if (read(localStorage)?.email === email) {
-      localStorage.removeItem(KEY);
+      saved?.setItem(KEY, serialized);
+    } else if (read(saved)?.email === email) {
+      saved?.removeItem(KEY);
     }
   } catch {
     // The current-tab shortcut above remains useful when persistent storage is unavailable.
   }
 }
 
-export function forgetLoginPreference(): void {
-  for (const storage of [sessionStorage, localStorage]) {
-    try {
+function removeMatching(storage: Storage | null, email?: string): void {
+  if (storage === null) return;
+  try {
+    if (email === undefined || read(storage)?.email === email.trim().toLowerCase()) {
       storage.removeItem(KEY);
+    }
+  } catch {
+    // A denied store is already equivalent to forgetting it for this page.
+  }
+}
+
+export function clearTabLoginPreference(): void {
+  removeMatching(getStorage("sessionStorage"));
+}
+
+export function disablePersistentLoginPreference(email: string): void {
+  removeMatching(getStorage("localStorage"), email);
+}
+
+export function forgetLoginPreference(email?: string): void {
+  for (const name of ["sessionStorage", "localStorage"] as const) {
+    try {
+      removeMatching(getStorage(name), email);
     } catch {
       // A denied store is already equivalent to forgetting it for this page.
     }
