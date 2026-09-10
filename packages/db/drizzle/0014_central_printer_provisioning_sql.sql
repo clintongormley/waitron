@@ -10,14 +10,22 @@ ALTER TABLE "printers" DROP CONSTRAINT IF EXISTS "printers_agent_fk";
 --> statement-breakpoint
 ALTER TABLE "printers" DROP CONSTRAINT IF EXISTS "printers_transport_fields_ck";
 --> statement-breakpoint
--- Which connection field a transport requires, keyed on the device now (no agent_id): usb/bluetooth
--- need local_key, network_tcp needs host, cloud_poll needs poll_id.
+-- Which connection field a transport requires, keyed on the device now (no agent_id): usb and
+-- bluetooth need local_key, network_tcp needs host, cloud_poll needs poll_id.
+--
+-- The column is cast to text rather than compared to a bare enum literal. 0013 adds the bluetooth
+-- label to print_transport, and drizzle applies every pending migration of a set in ONE transaction
+-- (drizzle-orm@0.45.2/pg-core/dialect.js:60); PostgreSQL refuses to USE a label added in the
+-- transaction that added it unless the type was created there too. Naming the label here therefore
+-- migrates a virgin database, where 0000 creates the type in the same batch, and aborts every
+-- upgrade of an existing one with 55P04. Comparing text is the same predicate: an enum's text form
+-- is its label. Proven both ways by packages/db/src/migrate-upgrade.pg.test.ts.
 ALTER TABLE "printers"
   ADD CONSTRAINT "printers_transport_fields_ck" CHECK (
-    (transport = 'usb'         AND local_key IS NOT NULL)
-    OR (transport = 'bluetooth'   AND local_key IS NOT NULL)
-    OR (transport = 'network_tcp' AND host      IS NOT NULL)
-    OR (transport = 'cloud_poll'  AND poll_id   IS NOT NULL)
+    (transport::text = 'usb'         AND local_key IS NOT NULL)
+    OR (transport::text = 'bluetooth'   AND local_key IS NOT NULL)
+    OR (transport::text = 'network_tcp' AND host      IS NOT NULL)
+    OR (transport::text = 'cloud_poll'  AND poll_id   IS NOT NULL)
   );
 --> statement-breakpoint
 -- One registered printer per physical USB/BT device per venue; a NULL local_key (network_tcp/
