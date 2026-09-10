@@ -159,12 +159,12 @@ steps take owner sign-off at land):
    `apps/print-agent` container host, joining a venue over the shared `join_requests` table
    (device-join-and-accept-design.md §7). Standalone, containerised, follows the primary like the
    till. Printer failover in its on-prem form rides on it.
-4. **Payments: card readers.** Stripe Terminal is built. SumUp is built only after its four questions
-   are answered — sent to SumUp 2026-09-08, no reply; **the owner now has a Solo, so the answers are
-   measured instead**: runbook
+4. **Payments: card readers.** Stripe Terminal is built. **SumUp LANDED #309** — built defensively
+   against the unrun experiments rather than waiting on SumUp's inbox (no reply to the 2026-09-08
+   questions). The owner now has a Solo, so the four questions are measured through the adapter: runbook
    [research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md), runs
-   from 2026-09-11 ([the questions](research/2026-09-08-sumup-questions.md)). Question 4 (standalone use
-   after pairing) is design-invalidating, so the build waits on that experiment's result.
+   from 2026-09-11. Question 4 (standalone use after pairing) is design-invalidating for the card-outage
+   path; if it fails, the deli-hardware outage design must be rewritten.
 5. **The in-app walkthrough** — tables, sales, kitchen, bookings, tips, shifts: mostly built;
    [ui-review.md](ui-review.md) is the tracker. Plus the counter kitchen fire and the pricing
    adjustments under *Product work still open*.
@@ -324,11 +324,15 @@ design-review section apply.
   the dashboard's shared `#submit`. *Live dashboard→register→print e2e still owed* — the test box is
   un-onboarded (no tenant/deployment yet); onboard it, then approve the agent, register the USB printer,
   and print a real job.
-  **4.** SumUp — **IN BUILD** (`feat/payments-sumup`, plan `2026-09-10-payments-sumup.md`); the
-  runbook's experiments
-  ([research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md))
-  run through the build on 2026-09-11. The manual receipt for 1 is the owner's HP
-  LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
+  **4.** SumUp — **LANDED #309** (`@waitron/payments-sumup`: `collect`, the `resolvePending` sweep,
+  reversals, the `fetch` binding, and the server wiring — a `sumup_cloud` till provider + a
+  `payments.sumup` sealed credential). Built defensively against the still-unrun experiments; the live
+  experiments
+  ([research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md)) run
+  through the adapter on 2026-09-11 — plug-in steps in that runbook's §7, results go into the spec §7.
+  Question 4 (standalone-after-pairing) still governs whether the deli's card-outage path holds. The
+  manual receipt for 1 is the owner's HP LaserJet at `192.168.20.56:9100` (TCP path only — not an
+  ESC/POS device).
 - **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
   `packages/sync`, `packages/membership`, `packages/db`'s harness, `apps/server`'s promote / rejoin /
   box-* / membership code, `CLAUDE.md` §2–§5. Work: the on-prem mirror end to end, the cert-distribution
@@ -1669,11 +1673,11 @@ genuinely-decision-bearing.
 
 **SumUp:**
 
-- **Four unverified questions, one design-invalidating**
-  ([sumup provider spec](superpowers/specs/2026-07-30-sumup-card-present-provider-design.md) §7;
+- **Provider LANDED #309, built against the 2026-09-10 docs; four questions still settle by live
+  experiment** ([sumup provider spec](superpowers/specs/2026-07-30-sumup-card-present-provider-design.md) §7;
   the send-ready form is [research/2026-09-08-sumup-questions.md](research/2026-09-08-sumup-questions.md),
-  sent 2026-09-08, no reply by 2026-09-10), wanted **before** the SumUp provider is built. **The owner
-  bought a Solo, so they are answered by experiment instead**:
+  sent 2026-09-08, no reply). The build did NOT wait on the answers — it ships defensively and the
+  experiments confirm the assumptions on the real reader:
   [research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md), runs
   from 2026-09-11, each experiment stating its failing case up front; results go back into the spec's
   §7 as dated lines. The decisive one: **does the reader still work
@@ -1684,9 +1688,24 @@ genuinely-decision-bearing.
   ones (the online-payments page read 2026-09-10 no longer describes a signature at all and says to
   confirm every event by API call); does `void` map onto the refund endpoint (which has moved to
   `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds`).
-- **Follow-up:** lift `reverseViaStripe` and `reverseViaSumUp` into one neutral `@waitron/payments`
-  reversal primitive (structural refunder seam) — deferred from the SumUp build because two shipped
-  Stripe providers depend on the existing one.
+- **Deferred follow-ups from #309** (recorded so a fresh session can pick them up cold):
+  - **The SumUp reconciler** — the settlement-report audit + orphan self-heal (spec §6). The
+    `resolvePending` sweep is the interim backstop; the reconciler is what closes the no-affiliate
+    lost-response window BELOW (self-healing the orphan a §309 sweep can only surface as an incident).
+  - **The no-affiliate lost-create residual, now SURFACED not silent** — the finish-branch run-it seat
+    reproduced that without an affiliate key, a create SumUp accepted whose response is lost cannot be
+    correlated, so the sweep (post-grace) resolves it `failed`; #309 made that raise a
+    `payment.pending_outcome_unactionable` incident (a human reconciles) instead of concealing a
+    possible charge. The affiliate key closes the window entirely; the reconciler self-heals it. Prefer
+    configuring the affiliate key.
+  - **Bound the HTTP body read too** — #309's `AbortController` deadline in `sumup-client.ts` bounds the
+    response-header wait (which is where a hung SumUp call actually stalls); a mid-body stall on SumUp's
+    tiny JSON is not bounded. One-liner: move `clearTimeout` after `res.text()`.
+  - **Webhooks, the Square Terminal adapter, and reader-provisioning UI** — spec §6 deferred; polling is
+    the floor, so none is launch work.
+  - **Lift `reverseViaStripe` + `reverseViaSumUp`** into one neutral `@waitron/payments` reversal
+    primitive (structural refunder seam) — deferred because two shipped Stripe providers depend on the
+    existing one; do it when it can be reviewed for both vendors together.
 
 **Bizum (parked research, 2026-08-30 — no decision, revisit when payment providers are built):**
 
