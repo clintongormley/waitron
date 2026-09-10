@@ -267,3 +267,11 @@ plan was written. §8's open question is closed, and two of the findings changed
   boot it with `provisioning.database_ahead`. That is the check working, not a fault: the database
   really was migrated by a different image. The remedy for a disposable database is
   `wa-wt reset demo`; for a real box it is the page's own action.
+- **§4.4's channel carries the CAUSE CHAIN and an `AppError`'s params, not just the outer error.**
+  Run against real PostgreSQL 18: drizzle wraps the driver error, so `select absent_column` gives an
+  outer `Failed query: select absent_column` and puts `column "absent_column" does not exist` in
+  `cause` alone — the first implementation reported only the outer error and the captured installer
+  output held drizzle's query wrapper and no reason. The reporter now walks `cause` to the same bound
+  `sqlStateOf` uses (five) and includes each level's name and message, plus an `AppError`'s params —
+  `migrations.incomplete`'s counts and `database_ahead`'s hashes are the diagnosis. All of it still
+  goes through `redactSecrets` and none of it reaches the page (§5 unchanged, pinned by test).

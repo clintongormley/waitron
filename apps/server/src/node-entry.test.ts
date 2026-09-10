@@ -456,6 +456,136 @@ describe("runEntry", () => {
     expect(reported).not.toContain("hunter2");
   });
 
+  // Drizzle does not re-expose the driver's error: it wraps it, so the outer message is
+  // "Failed query: …" and the reason is only in `cause`. Measured against real PostgreSQL 18 with
+  // drizzle's own `db.execute(sql`select absent_column`)`:
+  //   outer message: Failed query: select absent_column\nparams:
+  //   cause message: column "absent_column" does not exist   (cause.code 42703)
+  // Reporting the outer error alone is what left the captured installer output with drizzle's query
+  // wrapper and no reason at all (spec §4.4 exists so the installer can read the real reason).
+  it("walks the cause chain so a wrapped driver error's real reason reaches the installer", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new Error("Failed query: select absent_column\nparams: ", {
+                cause: Object.assign(new Error('column "absent_column" does not exist'), {
+                  code: "42703",
+                }),
+              }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain('column "absent_column" does not exist');
+    // The outer wrapper still travels — the query text is diagnostic too, and dropping it would be
+    // the same defect in the other direction.
+    expect(reported).toContain("Failed query: select absent_column");
+  });
+
+  // An `AppError`'s params ARE the diagnosis for the two codes this branch added:
+  // `migrations.incomplete`'s counts say how far a partly-applied set got, and `database_ahead`'s
+  // hashes name the migrations the image has no file for. Dropping them left the installer with a
+  // code they already had from the structured line.
+  it("carries an AppError's params to the installer, scrubbed like everything else", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new AppError("migrations.incomplete", { set: "core", applied: 10, expected: 15 }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("core");
+    expect(reported).toContain("10");
+    expect(reported).toContain("15");
+  });
+
+  // Proven by construction rather than reasoned about: a boot error whose params will not serialise
+  // must still report the error. Without the fallback the JSON throw becomes the boot's outcome and
+  // replaces the very reason this channel exists to carry. `as never` because the registry's typed
+  // params cannot express a cycle — the guard is for a value that reaches here regardless.
+  it("still reports a failure whose params will not serialise", async () => {
+    const cyclic: Record<string, unknown> = { set: "core" };
+    cyclic.self = cyclic;
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(new AppError("migrations.incomplete", cyclic as never)),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("migrations.incomplete");
+    expect(reported).toContain("params: (not serialisable)");
+  });
+
+  // The bound `sqlStateOf` uses, for the same reason — a self-referential `cause` must not spin.
+  it("stops walking a self-referential cause rather than spinning", async () => {
+    const reportFailure = vi.fn();
+    const looped: Error & { cause?: unknown } = new Error("loops on itself");
+    looped.cause = looped;
+    await expect(
+      runEntry(
+        deps({ reportFailure, startServer: vi.fn<StartServer>(() => Promise.reject(looped)) }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("loops on itself");
+  });
+
+  // The page must stay exactly as it was: the cause chain and the params are the INSTALLER's
+  // channel, and spec §5 says neither may reach the unauthenticated page. Probe and control in one
+  // test, because a page that rendered nothing would pass the first half alone.
+  it("keeps the walked cause chain and the params off the page", async () => {
+    const reportFailure = vi.fn();
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new AppError("provisioning.database_ahead", {
+                set: "core",
+                unknownMigrations: ["deadbeefhash"],
+              }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    const body = await (
+      await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).not.toContain("deadbeefhash");
+    // The page says its curated line and the code, and nothing from the params.
+    expect(body).toContain("provisioning.database_ahead");
+
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("deadbeefhash");
+  });
+
   // The spec §5 probe, and the only place it can honestly live: the poisoned message has to be
   // INJECTED as a real boot failure and then followed to BOTH channels. A test that renders a page
   // the message never reached would pass against an implementation that leaks everywhere.

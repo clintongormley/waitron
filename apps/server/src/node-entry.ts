@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
 import pg from "pg";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { createPostgresDb } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
@@ -305,6 +305,56 @@ async function persistState(deps: EntryDeps, next: RecoveryState): Promise<void>
   }
 }
 
+/** The same bound `sqlStateOf` walks (`packages/shared/src/sql-state.ts`), and for the same reason:
+ * a self-referential `cause` must not spin, not because five levels are known to be needed. */
+const MAX_CAUSE_DEPTH = 5;
+
+/** An `AppError`'s params as one line, or a placeholder when they will not serialise. */
+function paramsLine(params: unknown): string {
+  try {
+    return `params: ${JSON.stringify(params)}`;
+  } catch {
+    return "params: (not serialisable)";
+  }
+}
+
+/**
+ * What the installer's channel gets for a failed boot: the outer error's name, message and stack,
+ * then every wrapped `cause` below it by name and message, and an `AppError`'s params at whichever
+ * level carries them — all through `redactSecrets`, because this is the one place the caught error's
+ * own words may appear (spec §4.4) and it is `docker logs`, never the page.
+ *
+ * The chain is walked because the outer error is usually not the reason. Drizzle wraps the driver's
+ * error rather than re-exposing it: measured against real PostgreSQL 18, `select absent_column`
+ * gives an outer `Failed query: select absent_column` and puts `column "absent_column" does not
+ * exist` in `cause` alone — so reporting the outer error is reporting the query wrapper and nothing
+ * else. Params travel for the same reason: `migrations.incomplete`'s counts and
+ * `provisioning.database_ahead`'s hashes ARE the diagnosis, and the code alone was already in the
+ * structured `server.boot_failed` line.
+ *
+ * Only the outer stack is included. A stack per level triples the output for the frames of a driver
+ * the installer cannot act on; the names and messages are what name the fault.
+ */
+function failureDetail(error: unknown): string {
+  const lines: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    const prefix = depth === 0 ? "" : "caused by: ";
+    if (current instanceof Error) {
+      lines.push(`${prefix}${current.name}: ${current.message}`);
+      if (depth === 0) lines.push(current.stack ?? "(no stack)");
+      if (isAppError(current)) lines.push(paramsLine(current.params));
+    } else {
+      lines.push(`${prefix}non-error thrown: ${String(current)}`);
+    }
+    if (typeof current !== "object" || current === null) break;
+    const cause: unknown = (current as { cause?: unknown }).cause;
+    if (cause === undefined || cause === current) break;
+    current = cause;
+  }
+  return redactSecrets(lines.join("\n"));
+}
+
 /**
  * One container start: decide the level, bring the cluster into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
@@ -417,13 +467,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     server = await deps.startServer(env, deps.baseEnv);
   } catch (error) {
     // The installer's channel first, so the real reason survives even if the state write fails.
-    // Name, message and stack — scrubbed — because `codeOf` alone is what left the first real box's
-    // operator and its developer with the single word "unknown" (spec §1).
-    const detail =
-      error instanceof Error
-        ? `${error.name}: ${error.message}\n${error.stack ?? "(no stack)"}`
-        : `non-error thrown: ${String(error)}`;
-    (deps.reportFailure ?? (() => {}))(redactSecrets(detail));
+    (deps.reportFailure ?? (() => {}))(failureDetail(error));
     // Same count as the pre-boot write — one attempt is one failure, not two — now carrying the
     // classified code for the page. Rethrown so the process exits non-zero and Docker restarts.
     await persistState(deps, afterFailure(state, classifyBootFailure(error), new Date()));
