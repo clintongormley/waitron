@@ -292,10 +292,10 @@ describe("configuration transfer database path", () => {
            'Kitchen agent', 'source-agent-token', true)`);
       await tx.execute(sql`
         insert into printers
-          (id, tenant_id, location_id, name, transport, agent_id, usb_path, active)
+          (id, tenant_id, location_id, name, transport, local_key, active)
         values
           ('55555555-aaaa-aaaa-aaaa-555555555555', ${source.tenantId}, ${source.locationId},
-           'Kitchen printer', 'usb', '44444444-aaaa-aaaa-aaaa-444444444444', '/dev/usb/lp0', true)`);
+           'Kitchen printer', 'usb', 'B120300001', true)`);
       await tx.execute(sql`
         insert into sales
           (tenant_id, till_id, series_id, node_id, invoice_number, issued_at,
@@ -372,7 +372,7 @@ describe("configuration transfer database path", () => {
         (select count(*)::int from print_agents
           where tenant_id = ${target.tenantId} and not active) as inactive_agents,
         (select count(*)::int from printers
-          where tenant_id = ${target.tenantId} and not active and usb_path = '/dev/usb/lp0') as inactive_printers,
+          where tenant_id = ${target.tenantId} and not active and local_key = 'B120300001') as inactive_printers,
         (select count(*)::int from print_agents
           where tenant_id = ${target.tenantId} and token_hash = 'source-agent-token') as source_agent_secrets,
         (select count(*)::int from employments where tenant_id = ${target.tenantId}) as employments,

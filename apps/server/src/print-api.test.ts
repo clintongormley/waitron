@@ -366,7 +366,7 @@ describe("the deleted enrol/codes routes are gone", () => {
   });
 });
 
-describe("GET /print-api/agent/jobs — the pull carries nodeId + servers", () => {
+describe("POST /print-api/agent/jobs — the pull carries nodeId + servers", () => {
   it("echoes this node's id and the venue's routable servers (primary first) alongside the jobs", async () => {
     const app = mountApp({ pairingOpen: true });
     const { agentId, token } = await joinAndAccept(app);
