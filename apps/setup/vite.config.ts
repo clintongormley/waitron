@@ -15,10 +15,8 @@ export default defineConfig({
     // duplicate `pnpm dev`, which also collides 8080).
     strictPort: true,
     proxy: {
-      // The setup box serves its `/setup-api` routes over HTTPS with a SELF-SIGNED certificate
-      // (apps/server/scripts/dev-onboard.ts), so the dev proxy target is `https://` and needs
-      // `secure: false` to accept that self-signed leaf. till/dashboard proxy plain-HTTP boxes and
-      // so use bare string targets; setup needs Vite's proxy OBJECT form for the `secure` flag.
+      // The box serves its API over HTTPS with a self-signed certificate in development, so every
+      // app's Vite proxy uses `secure: false` to accept that leaf.
       "/setup-api": { target: "https://127.0.0.1:8080", secure: false },
     },
   },

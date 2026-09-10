@@ -263,7 +263,7 @@ describe("login-screen", () => {
     expect(actions.nextElementSibling?.getAttribute("data-test")).toBe("try-another-way");
   });
 
-  it("names account-setup passwords for password managers", async () => {
+  it("groups account-setup credentials and lets each secret be revealed", async () => {
     history.replaceState(
       null,
       "",
@@ -271,16 +271,41 @@ describe("login-screen", () => {
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await el.updateComplete;
-    const inputs = [...el.shadowRoot!.querySelectorAll("wt-input")].map((field) => {
+    const fields = [...el.shadowRoot!.querySelectorAll("wt-input")];
+    const inputs = fields.map((field) => {
       const input = field.shadowRoot!.querySelector("input")!;
       return { name: input.name, autocomplete: input.autocomplete, required: input.required };
     });
     expect(inputs).toEqual([
       { name: "new-password", autocomplete: "new-password", required: true },
+      { name: "confirm-password", autocomplete: "new-password", required: true },
       { name: "new-pin", autocomplete: "off", required: true },
       { name: "confirm-pin", autocomplete: "off", required: true },
-      { name: "confirm-password", autocomplete: "new-password", required: true },
     ]);
+
+    for (const field of fields) {
+      const toggle = field.querySelector<HTMLElement>("wt-button[slot=end]");
+      expect(toggle?.ariaLabel).toBe(t("login.show_password"));
+    }
+
+    const passwordField = fields[0]!;
+    const confirmPasswordField = fields[1]!;
+    passwordField.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "secret words" } }),
+    );
+    passwordField.querySelector<HTMLElement>("wt-button[slot=end]")!.click();
+    await el.updateComplete;
+    expect(passwordField.shadowRoot!.querySelector<HTMLInputElement>("input")!.type).toBe("text");
+    expect(passwordField.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe(
+      "secret words",
+    );
+    expect(confirmPasswordField.shadowRoot!.querySelector<HTMLInputElement>("input")!.type).toBe(
+      "password",
+    );
+    expect(passwordField.querySelector<HTMLElement>("wt-button[slot=end]")!.ariaLabel).toBe(
+      t("login.hide_password"),
+    );
+
     const username = el.shadowRoot!.querySelector<HTMLInputElement>("[data-autofill-username]")!;
     expect(username.name).toBe("email");
     expect(username.autocomplete).toBe("username");

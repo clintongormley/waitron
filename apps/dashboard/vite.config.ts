@@ -13,10 +13,10 @@ export default defineConfig({
     // duplicate `pnpm dev`, which also collides 8080).
     strictPort: true,
     proxy: {
-      "/management-api": "http://127.0.0.1:8080",
+      "/management-api": { target: "https://127.0.0.1:8080", secure: false },
       // Product images the catalogue screens render (`<img src="/media/<sha256>.<ext>">`) are served
       // same-origin in production; in dev the app runs on its own port, so proxy `/media` to the API.
-      "/media": "http://127.0.0.1:8080",
+      "/media": { target: "https://127.0.0.1:8080", secure: false },
     },
   },
 });

@@ -132,6 +132,10 @@ export class LoginScreen extends LitElement {
   @state() private step: "email" | "passkey" | "password" | "other-ways" | "reset-sent" | "code" =
     "email";
   @state() private passwordVisible = false;
+  @state() private newPasswordVisible = false;
+  @state() private confirmPasswordVisible = false;
+  @state() private pinVisible = false;
+  @state() private confirmPinVisible = false;
   @state() private token: string | null = new URLSearchParams(window.location.search).get("token");
   @state() private actionPurpose: AccountActionPurpose | null = actionPurposeFromUrl();
   @state() private resetSeconds = 0;
@@ -280,6 +284,10 @@ export class LoginScreen extends LitElement {
     this.confirmPin = "";
     this.invitationCode = "";
     this.passwordVisible = false;
+    this.newPasswordVisible = false;
+    this.confirmPasswordVisible = false;
+    this.pinVisible = false;
+    this.confirmPinVisible = false;
     this.errorKey = null;
     this.emailError = "";
     this.passwordError = "";
@@ -511,12 +519,12 @@ export class LoginScreen extends LitElement {
         </p>`;
   }
 
-  #renderPasswordIcon() {
+  #renderPasswordIcon(visible: boolean) {
     return html`
       <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
         <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
         <circle cx="8" cy="8" r="2"></circle>
-        ${this.passwordVisible ? html`<path d="m2 2 12 12"></path>` : nothing}
+        ${visible ? html`<path d="m2 2 12 12"></path>` : nothing}
       </svg>
     `;
   }
@@ -561,11 +569,55 @@ export class LoginScreen extends LitElement {
             autocomplete="new-password"
             required
             label=${t("account.new_password")}
-            type="password"
+            type=${this.newPasswordVisible ? "text" : "password"}
             error=${this.passwordError}
             .value=${this.password}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
-          ></wt-input>
+          >
+            <wt-button
+              class="password-toggle"
+              slot="end"
+              variant="ghost"
+              data-test="toggle-new-password"
+              aria-label=${
+                this.newPasswordVisible ? t("login.hide_password") : t("login.show_password")
+              }
+              ?disabled=${this.busy}
+              @click=${() => (this.newPasswordVisible = !this.newPasswordVisible)}
+              >${this.#renderPasswordIcon(this.newPasswordVisible)}</wt-button
+            >
+          </wt-input>
+          <wt-input
+            class="field"
+            name="confirm-password"
+            autocomplete="new-password"
+            required
+            label=${t("account.confirm_password")}
+            type=${this.confirmPasswordVisible ? "text" : "password"}
+            error=${this.confirmPasswordError}
+            .value=${this.confirmPassword}
+            @keydown=${(e: KeyboardEvent) =>
+              this.actionPurpose === "password_reset"
+                ? submitOnEnter(
+                    e,
+                    this.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]"),
+                  )
+                : undefined}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onConfirmPasswordChange(e)}
+          >
+            <wt-button
+              class="password-toggle"
+              slot="end"
+              variant="ghost"
+              data-test="toggle-confirm-password"
+              aria-label=${
+                this.confirmPasswordVisible ? t("login.hide_password") : t("login.show_password")
+              }
+              ?disabled=${this.busy}
+              @click=${() => (this.confirmPasswordVisible = !this.confirmPasswordVisible)}
+              >${this.#renderPasswordIcon(this.confirmPasswordVisible)}</wt-button
+            >
+          </wt-input>
           ${
             this.actionPurpose === "invitation"
               ? html`
@@ -575,38 +627,52 @@ export class LoginScreen extends LitElement {
                     autocomplete="off"
                     required
                     label=${t("account.new_pin")}
-                    type="password"
+                    type=${this.pinVisible ? "text" : "password"}
                     error=${this.pinError}
                     .value=${this.pin}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
-                  ></wt-input>
+                  >
+                    <wt-button
+                      class="password-toggle"
+                      slot="end"
+                      variant="ghost"
+                      data-test="toggle-new-pin"
+                      aria-label=${
+                        this.pinVisible ? t("login.hide_password") : t("login.show_password")
+                      }
+                      ?disabled=${this.busy}
+                      @click=${() => (this.pinVisible = !this.pinVisible)}
+                      >${this.#renderPasswordIcon(this.pinVisible)}</wt-button
+                    >
+                  </wt-input>
                   <wt-input
                     class="field"
                     name="confirm-pin"
                     autocomplete="off"
                     required
                     label=${t("account.confirm_pin")}
-                    type="password"
+                    type=${this.confirmPinVisible ? "text" : "password"}
                     error=${this.confirmPinError}
                     .value=${this.confirmPin}
                     @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]"))}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onConfirmPinChange(e)}
-                  ></wt-input>
+                  >
+                    <wt-button
+                      class="password-toggle"
+                      slot="end"
+                      variant="ghost"
+                      data-test="toggle-confirm-pin"
+                      aria-label=${
+                        this.confirmPinVisible ? t("login.hide_password") : t("login.show_password")
+                      }
+                      ?disabled=${this.busy}
+                      @click=${() => (this.confirmPinVisible = !this.confirmPinVisible)}
+                      >${this.#renderPasswordIcon(this.confirmPinVisible)}</wt-button
+                    >
+                  </wt-input>
                 `
               : nothing
           }
-          <wt-input
-            class="field"
-            name="confirm-password"
-            autocomplete="new-password"
-            required
-            label=${t("account.confirm_password")}
-            type="password"
-            error=${this.confirmPasswordError}
-            .value=${this.confirmPassword}
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]"))}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onConfirmPasswordChange(e)}
-          ></wt-input>
           <wt-form-actions>
             <wt-button
               slot="cancel"
@@ -727,7 +793,7 @@ export class LoginScreen extends LitElement {
                         }
                         ?disabled=${this.busy}
                         @click=${() => (this.passwordVisible = !this.passwordVisible)}
-                        >${this.#renderPasswordIcon()}</wt-button
+                        >${this.#renderPasswordIcon(this.passwordVisible)}</wt-button
                       >
                     </wt-input>
                     <wt-input
