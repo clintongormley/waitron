@@ -1,8 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 // Value imports (not `import type`): pull in the widget modules for their `@customElement` side
@@ -27,21 +26,15 @@ import type {
   OptionGroupPatch,
   Product,
   ProductInput,
-  Station,
 } from "../api/client.js";
 
 /**
  * The management dashboard's CATALOGUE SCREEN: the composition point (sibling of
  * `dashboard-staff-screen`) that wires the pure-display `<dashboard-product-list>`, the
  * `<dashboard-product-form>` create/edit dialog and the `<dashboard-category-manager>` panel to the
- * injected `DashboardApi`. It is the single owner of the selected catalogue, the form's open state and
- * the loaded catalogues/categories/products.
- *
- * ON CONNECT it loads catalogues + categories, picks the first catalogue and loads its products.
- * Because a product needs a catalogue (`products.catalogue_id` is `NOT NULL`), when NO catalogue
- * exists the screen prompts to create one first and hides the add-product affordance — a
- * create-catalogue field then calls `createCatalogue` and reloads. A catalogue selector switches which
- * catalogue's products show.
+ * injected `DashboardApi`. It loads reusable products across every menu and removes duplicate product
+ * identities before display. Menus, menu sections, selling prices and routing are managed on the venue
+ * operations screen.
  *
  * `active` IS SETTABLE ON CREATE. `#onCreateProduct` threads the form's `active` straight into the
  * `ProductInput`, so a create-INACTIVE is ONE atomic request — never a create-then-patch that could
@@ -62,7 +55,6 @@ import type {
 export class CatalogueScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -74,34 +66,13 @@ export class CatalogueScreen extends LitElement {
         gap: var(--wt-space-3);
         margin-bottom: var(--wt-space-4);
       }
-      .actions {
-        display: flex;
-        align-items: flex-end;
-        gap: var(--wt-space-3);
-      }
       .title {
         margin: 0;
         font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
-      .picker {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        color: var(--wt-color-text);
-      }
       .prompt {
         color: var(--wt-color-text);
-      }
-      .new-catalogue {
-        display: flex;
-        align-items: flex-end;
-        gap: var(--wt-space-3);
-        margin-top: var(--wt-space-4);
-      }
-      .field {
-        flex: 1;
-        min-width: 0;
       }
       .categories {
         margin-top: var(--wt-space-6);
@@ -127,9 +98,6 @@ export class CatalogueScreen extends LitElement {
   @state() private catalogues: CatalogueSummary[] = [];
   @state() private categories: CategorySummary[] = [];
   @state() private products: Product[] = [];
-  /** The venue's active kitchen stations (KDS-1), loaded on connect and threaded to the category
-   * manager + product form as the options their station-routing selects offer. */
-  @state() private stations: Station[] = [];
   /** The venue's active kitchen courses (KDS-2), loaded on connect and threaded to the product form as
    * the options its default-course select offers. */
   @state() private courses: Course[] = [];
@@ -156,17 +124,14 @@ export class CatalogueScreen extends LitElement {
   @state() private formOpen = false;
   /** The product the form is open for (null for a create). */
   @state() private editingProduct: Product | null = null;
-  @state() private newCatalogueName = "";
   @state() private errorKey: string | null = null;
   // Single-flight for product create/update, passed DOWN to the form as `.busy` so its confirm
   // disables while a mutation round-trips. Reactive because the form renders off it; set synchronously
   // at handler entry so a double-fired event files at most one mutation.
   @state() private busy = false;
 
-  // Separate re-entrancy guards for the two other create flows (nothing renders off them, so plain
-  // fields, like the staff screen's `#creating`).
+  // Separate re-entrancy guards for the other create flows.
   #savingCategory = false;
-  #savingCatalogue = false;
   #savingOptionGroup = false;
   @state() private savingOptionGroupItem = false;
 
@@ -176,24 +141,17 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * (Re)load catalogues + categories, then the selected catalogue's products. Called on connect and
-   * after a catalogue is created. Picks the first catalogue when the current selection is gone (or
-   * unset); when NO catalogue exists it clears the selection and the product list (the no-catalogue
-   * prompt renders instead). Also loads every reusable option group (Task 12) — a venue-wide list, not
-   * scoped to a catalogue, so it belongs beside stations/courses rather than in `#applyCatalogues`. A
-   * rejection anywhere becomes the `errorKey` banner.
+   * Load menus, categories, courses and reusable option groups, then collect each menu's products.
    */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [catalogues, categories, stations, courses, optionGroups] = await Promise.all([
+      const [catalogues, categories, courses, optionGroups] = await Promise.all([
         this.api.listCatalogues(),
         this.api.listCategories(),
-        this.api.listStations(),
         this.api.listCourses(),
         this.api.listOptionGroups(),
       ]);
-      this.stations = stations;
       this.courses = courses;
       this.optionGroups = optionGroups;
       await this.#applyCatalogues(catalogues, categories);
@@ -203,24 +161,9 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * Reload catalogues + categories + the selected catalogue's products WITHOUT re-fetching stations —
-   * the targeted reload a catalogue create needs. Stations do not change when a catalogue is created, so
-   * routing {@link #createCatalogue} through the broad {@link #load} would issue an avoidable
-   * `GET /management-api/stations`. Throws to its caller's catch (the create handler's) on rejection.
-   */
-  async #reloadCatalogues(): Promise<void> {
-    const [catalogues, categories] = await Promise.all([
-      this.api.listCatalogues(),
-      this.api.listCategories(),
-    ]);
-    await this.#applyCatalogues(catalogues, categories);
-  }
-
-  /**
    * Adopt a freshly-fetched catalogue + category set: store them, resolve the selection (keep the current
    * one if it still exists, else the first; clear when none), and load that catalogue's products. Shared
-   * by the full {@link #load} and the stations-skipping {@link #reloadCatalogues} so the selection logic
-   * lives in one place.
+   * by the initial load so product identity is independent of which menu offers it.
    */
   async #applyCatalogues(
     catalogues: CatalogueSummary[],
@@ -236,33 +179,22 @@ export class CatalogueScreen extends LitElement {
     if (!catalogues.some((c) => c.id === this.selectedCatalogueId)) {
       this.selectedCatalogueId = catalogues[0]!.id;
     }
-    this.products = await this.api.listProducts(this.selectedCatalogueId);
+    const lists = await Promise.all(
+      catalogues.map((catalogue) => this.api.listProducts(catalogue.id)),
+    );
+    this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
   }
 
-  /** Reload the selected catalogue's products (after a create/update). Throws to its caller's catch. */
+  /** Reload every reusable product across the current menus after a create or update. */
   async #reloadProducts(): Promise<void> {
-    this.products = await this.api.listProducts(this.selectedCatalogueId);
+    const lists = await Promise.all(
+      this.catalogues.map((catalogue) => this.api.listProducts(catalogue.id)),
+    );
+    this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
   }
 
-  /** The catalogue selector changed. Native `change` is `composed:false`; `stopPropagation` is
-   * defensive consistency with the composed handlers (the login-screen pattern). Reload the products
-   * for the newly selected catalogue. */
-  #onSelectCatalogue(event: Event): void {
-    event.stopPropagation();
-    this.selectedCatalogueId = (event.target as HTMLSelectElement).value;
-    void this.#switchCatalogue();
-  }
-
-  async #switchCatalogue(): Promise<void> {
-    this.errorKey = null;
-    try {
-      await this.#reloadProducts();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
-  }
-
-  /** Open the create form for the selected catalogue. Clears any prior error and the edit target.
+  /** Open the create form. The first menu remains a temporary storage detail until the legacy product
+   * owner column is removed; menu publication and price are still authored separately. Clears any prior error and the edit target.
    * `attachedGroupIds` resets to `[]` — a new product has no id yet, so there is nothing to read back
    * (Task 12's attach section starts with nothing picked). */
   #openForm(): void {
@@ -388,43 +320,8 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * Route a CATEGORY to a station (KDS-1) from the category manager's `set-category-station` event.
-   * `stopPropagation` keeps the composed event inside this screen. A rejection becomes the `errorKey`
-   * banner; there is no reload — the catalogue read does not project a category's routing, so a resync
-   * would show nothing new (the write itself is authoritative server-side).
-   */
-  async #onSetCategoryStation(
-    event: CustomEvent<{ categoryId: string; stationId: string | null }>,
-  ): Promise<void> {
-    event.stopPropagation();
-    this.errorKey = null;
-    try {
-      await this.api.setCategoryStation(event.detail.categoryId, event.detail.stationId);
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
-  }
-
-  /**
-   * Override a PRODUCT's route to a station (KDS-1) from the product form's `set-product-station`
-   * event — the same shape as {@link #onSetCategoryStation}. A rejection becomes the `errorKey` banner;
-   * no reload for the same reason (the product read projects no `station_id`).
-   */
-  async #onSetProductStation(
-    event: CustomEvent<{ productId: string; stationId: string | null }>,
-  ): Promise<void> {
-    event.stopPropagation();
-    this.errorKey = null;
-    try {
-      await this.api.setProductStation(event.detail.productId, event.detail.stationId);
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
-  }
-
-  /**
    * Set (or clear) a PRODUCT's default kitchen course (KDS-2) from the product form's
-   * `set-product-course` event — the same shape as {@link #onSetProductStation}. A rejection becomes the
+   * `set-product-course` event. A rejection becomes the
    * `errorKey` banner; no reload for the same reason (the product read projects no `course_id`).
    */
   async #onSetProductCourse(
@@ -556,33 +453,6 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
-  /** Capture the new-catalogue field. `stopPropagation` keeps its composed `wt-change` inside this
-   * screen (the house field-handler pattern). */
-  #onNewCatalogueNameChange(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.newCatalogueName = event.detail.value;
-  }
-
-  /** Create the first (or a further) catalogue, then reload everything and select it. An empty or
-   * whitespace-only name is a no-op; a rejection becomes the error banner. Single-flight. */
-  async #createCatalogue(): Promise<void> {
-    const name = this.newCatalogueName.trim();
-    if (name === "") return;
-    if (this.#savingCatalogue) return;
-    this.#savingCatalogue = true;
-    this.errorKey = null;
-    try {
-      const created = await this.api.createCatalogue(name);
-      this.newCatalogueName = "";
-      this.selectedCatalogueId = created.id;
-      await this.#reloadCatalogues();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    } finally {
-      this.#savingCatalogue = false;
-    }
-  }
-
   override render(): TemplateResult {
     const hasCatalogue = this.catalogues.length > 0;
     return html`
@@ -590,28 +460,12 @@ export class CatalogueScreen extends LitElement {
         <h1 class="title">${t("catalogue.title")}</h1>
         ${
           hasCatalogue
-            ? html`<div class="actions">
-                <label class="picker"
-                  >${t("catalogue.picker")}
-                  <select
-                    data-test="catalogue-select"
-                    @change=${(e: Event) => this.#onSelectCatalogue(e)}
-                  >
-                    ${this.catalogues.map(
-                      (c) =>
-                        html`<option value=${c.id} .selected=${c.id === this.selectedCatalogueId}>
-                          ${c.name}
-                        </option>`,
-                    )}
-                  </select>
-                </label>
-                <wt-button
-                  variant="primary"
-                  data-test="add-product"
-                  @click=${() => this.#openForm()}
-                  >${t("catalogue.add_product")}</wt-button
-                >
-              </div>`
+            ? html`<wt-button
+                variant="primary"
+                data-test="add-product"
+                @click=${() => this.#openForm()}
+                >${t("catalogue.add_product")}</wt-button
+              >`
             : nothing
         }
       </div>
@@ -625,31 +479,10 @@ export class CatalogueScreen extends LitElement {
           : html`<p class="prompt" data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
 
-      <section class="new-catalogue">
-        <wt-input
-          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-catalogue]"))}
-          class="field"
-          data-test="new-catalogue-name"
-          label=${t("catalogue.new")}
-          .value=${this.newCatalogueName}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewCatalogueNameChange(e)}
-        ></wt-input>
-        <wt-button
-          variant="secondary"
-          data-test="create-catalogue"
-          @click=${() => void this.#createCatalogue()}
-          >${t("catalogue.create")}</wt-button
-        >
-      </section>
-
       <section class="categories">
         <dashboard-category-manager
           .categories=${this.categories}
-          .stations=${this.stations}
           @create-category=${(e: CustomEvent<{ name: string }>) => this.#onCreateCategory(e)}
-          @set-category-station=${(
-            e: CustomEvent<{ categoryId: string; stationId: string | null }>,
-          ) => void this.#onSetCategoryStation(e)}
         ></dashboard-category-manager>
       </section>
 
@@ -683,7 +516,6 @@ export class CatalogueScreen extends LitElement {
         .open=${this.formOpen}
         .catalogueId=${this.selectedCatalogueId}
         .categories=${this.categories}
-        .stations=${this.stations}
         .courses=${this.courses}
         .optionGroups=${this.optionGroups}
         .attachedGroupIds=${this.attachedGroupIds}
@@ -692,8 +524,6 @@ export class CatalogueScreen extends LitElement {
         .busy=${this.busy}
         @create-product=${(e: CustomEvent<CreateProductDetail>) => void this.#onCreateProduct(e)}
         @update-product=${(e: CustomEvent<UpdateProductDetail>) => void this.#onUpdateProduct(e)}
-        @set-product-station=${(e: CustomEvent<{ productId: string; stationId: string | null }>) =>
-          void this.#onSetProductStation(e)}
         @set-product-course=${(e: CustomEvent<{ productId: string; courseId: string | null }>) =>
           void this.#onSetProductCourse(e)}
         @wt-close=${() => (this.formOpen = false)}

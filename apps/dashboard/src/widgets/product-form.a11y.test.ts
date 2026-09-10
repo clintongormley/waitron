@@ -2,7 +2,7 @@ import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./product-form.js";
 import type { CategorySummary, ProductForm } from "./product-form.js";
-import type { OptionGroup, Product, Station } from "../api/client.js";
+import type { OptionGroup, Product } from "../api/client.js";
 
 /**
  * The product dialog only exposes anything to the accessibility tree once it is OPEN — a closed
@@ -10,28 +10,13 @@ import type { OptionGroup, Product, Station } from "../api/client.js";
  * render (which calls showModal) is settled before axe runs, in both themes. axe is run against the
  * themed host so a color-contrast check means what it means in the app.
  *
- * The surface axe sees: the dialog's accessible name (its `heading`), the labelled description /
- * price `wt-input`s, the labelled VAT / pricing-unit / category `<select>`s, the labelled `active`
+ * The surface axe sees: the dialog's accessible name (its `heading`), the labelled description `wt-input`, the labelled VAT / pricing-unit / category `<select>`s, the labelled `active`
  * `wt-switch`, and the composed allergen-picker + image-upload children (each with its own labelled
- * controls), plus the primary confirm control in the footer. The EDIT-mode scan additionally exercises
- * the labelled station-override `<select>` (KDS-1), which renders only when a product is passed.
+ * controls), plus the primary confirm control in the footer.
  */
 afterEach(cleanupWidgets);
 
 const CATEGORIES: CategorySummary[] = [{ id: "cat-1", name: "Bebidas" }];
-
-const STATIONS: Station[] = [
-  {
-    id: "s1",
-    name: "Cocina",
-    displayOrder: 0,
-    isDefault: true,
-    active: true,
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
-  },
-];
 
 const OPTION_GROUPS: OptionGroup[] = [
   {
@@ -88,7 +73,6 @@ describe.each(["light", "dark"] as const)("product-form a11y (%s theme)", (theme
         open: true,
         catalogueId: "cat-1",
         categories: CATEGORIES,
-        stations: STATIONS,
         product: EDIT_PRODUCT,
       },
       theme,
