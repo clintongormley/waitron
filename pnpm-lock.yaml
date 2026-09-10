@@ -1078,6 +1078,9 @@ importers:
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../bookings
+      '@waitron/catalogue':
+        specifier: workspace:*
+        version: link:../catalogue
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -1096,6 +1099,9 @@ importers:
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../scheduler
+      '@waitron/venue-service':
+        specifier: workspace:*
+        version: link:../venue-service
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../workforce
