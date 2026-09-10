@@ -156,6 +156,56 @@ describe("the container image's environment", () => {
   });
 });
 
+describe("the run-from-web installer", () => {
+  // Read tolerantly: before install.sh exists this is "" so the assertions below go red (the content
+  // checks fail; the only()-based ones throw) rather than the file read throwing at import.
+  let INSTALL = "";
+  try {
+    INSTALL = read("deploy/install.sh");
+  } catch {
+    /* not created yet */
+  }
+
+  it("is a bash script", () => {
+    expect(INSTALL).toMatch(/^#!.*\bbash\b/);
+  });
+
+  it("fetches from the repository's public raw endpoint", () => {
+    expect(INSTALL).toContain("raw.githubusercontent.com/clintongormley/waitron");
+  });
+
+  it("defaults to main and lets WAITRON_REF override it", () => {
+    // The honest default today — the repo has no release tags — kept overridable so a real box can
+    // pin a revision rather than track whatever last landed on main.
+    expect(only(INSTALL, /\$\{WAITRON_REF:-([\w.-]+)\}/, "install.sh default ref")).toBe("main");
+  });
+
+  it("downloads exactly the files prepare.sh copies from its own directory, plus prepare.sh", () => {
+    // Set-equality between the installer's FILES array and prepare.sh's own copy targets, so the two
+    // cannot drift in EITHER direction: a file prepare.sh starts copying that the installer forgets
+    // fails this, and so does a file the installer fetches that nothing needs. Parsing the array (not
+    // a substring search) is deliberate — "prepare.sh" appears on other lines, so a toContain() over
+    // the whole file would pass even with it dropped from the download list.
+    const required = new Set([
+      ...[...PREPARE.matchAll(/\$SOURCE_DIR\/([\w.-]+)/g)].map((m) => m[1]),
+      "prepare.sh",
+    ]);
+    expect(required).toContain("compose.yml");
+    const listed = only(INSTALL, /FILES=\(([^)]*)\)/, "install.sh FILES array")
+      .split(/\s+/)
+      .filter(Boolean);
+    expect(new Set(listed)).toEqual(required);
+  });
+
+  it("delegates to prepare.sh rather than doing its work itself", () => {
+    // A thin fetch-and-hand-off wrapper: it runs prepare.sh via bash and does NOT reimplement what
+    // prepare.sh owns — installing Docker (`docker compose`) or minting the password (`openssl`).
+    expect(INSTALL).toMatch(/\bbash\b[^\n]*prepare\.sh/);
+    expect(INSTALL).not.toMatch(/docker\s+compose/);
+    expect(INSTALL).not.toMatch(/openssl/);
+  });
+});
+
 describe("every copy of the box's hostname", () => {
   it("is the one boot.ts declares", () => {
     expect(IMAGE_ENV.WAITRON_MANAGEMENT_RP_ID).toBe(HOSTNAME);

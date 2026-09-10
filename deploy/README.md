@@ -14,13 +14,24 @@ backed up the box.
 
 ## Preparing a box
 
-Once per box, by whoever prepares it — never by the restaurant:
+Once per box, by whoever prepares it — never by the restaurant. On a box that already has this
+directory, run the script directly:
 
 ```bash
 sudo ./prepare.sh
 ```
 
-It installs Docker Engine and the compose plugin if they are missing (Debian and Ubuntu only; on
+Or, from nothing but a fresh Debian/Ubuntu box with internet, fetch and run in one line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/install.sh | sudo bash
+```
+
+`install.sh` downloads `prepare.sh` and the files it needs, then hands off to it — everything below
+is unchanged. Pin a revision instead of tracking `main` with `WAITRON_REF`, and every `prepare.sh`
+variable still passes through: `curl … | sudo WAITRON_REF=<tag-or-sha> WAITRON_DIR=/srv/waitron bash`.
+
+`prepare.sh` installs Docker Engine and the compose plugin if they are missing (Debian and Ubuntu only; on
 anything else it says so and exits 2), enables the daemon at boot, copies `compose.yml` and
 `.env.example` into `/opt/waitron`, generates the box's `POSTGRES_PASSWORD` into `/opt/waitron/.env`,
 pulls the images and starts them. It is non-interactive and idempotent: running it twice does
