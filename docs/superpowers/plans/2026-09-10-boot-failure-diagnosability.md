@@ -326,7 +326,11 @@ what this function already has. Replace the migrate loop (currently
             { name: set.migrationsTable, table: set.migrationsTable, from: set.migrationsFolder },
             null,
           );
-          if (applied !== expected) {
+          // `<`, NOT `!==`: a database with MORE journal rows than this image ships is AHEAD, which
+          // is a different fact with a different remedy and its own code
+          // (`provisioning.database_ahead`). Reporting it as "incomplete" would misname exactly the
+          // kind of wrong state this branch exists to stop misnaming.
+          if (applied < expected) {
             throw new AppError("migrations.incomplete", {
               set: set.migrationsTable,
               applied,
