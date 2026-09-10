@@ -15,6 +15,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
 } from "@waitron/catalogue";
 import {
@@ -62,6 +64,9 @@ let aguaProduct: { id: string; catalogueId: string };
 // `GET /api/products` response can be proven to carry BOTH the `menus` list (default flagged) and
 // products drawn from every accessible catalogue, not just the default one.
 let cervezaProduct: { id: string; catalogueId: string };
+let counterZoneId: string;
+let aguaOfferId: string;
+let hiddenAguaOfferId: string;
 // SP-A.2 cutover: the sale routes (`/api/sales`, `/api/pay`, place, collect) now resolve `till_id` from
 // the authenticated enrolled device. This suite's single seeded tenant gets ONE enrolled `till` device
 // (bound to `cfg.tillId`) in setup; the happy-path place/sale calls carry its cookie so they reach the
@@ -92,7 +97,10 @@ const suite = usePgliteDb({
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
     // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
     // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are.
-    await seedKitchenStation(db, { tenantId, locationId: brandLocationId(loc.rows[0]!.id) });
+    const defaultStationId = await seedKitchenStation(db, {
+      tenantId,
+      locationId: brandLocationId(loc.rows[0]!.id),
+    });
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
       values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
@@ -119,38 +127,92 @@ const suite = usePgliteDb({
     // on the APP role via the catalogue helpers — the same `withTenant` + `asAppUser` path the route
     // reads them back through — so the active/assignment filters are real, not bypassed by a
     // superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
-    const { agua, cerveza } = await withTenant(db, tenantId, async (tx) => {
-      await asAppUser(tx);
-      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
-      const p = await createProduct(tx, tenantId, {
-        catalogueId: cat.id,
-        categoryId: bebidas.id,
-        descriptions: { es: "Agua mineral" },
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-        // An EU-14 allergen declaration on the seeded product, so `GET /api/products` has a non-null
-        // `allergens` map to carry back — the field this route carries through unchanged.
-        allergens: { sulphites: { presence: "may_contain" } },
-      });
-      await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
+    const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTenant(
+      db,
+      tenantId,
+      async (tx) => {
+        await asAppUser(tx);
+        const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+        const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+        const p = await createProduct(tx, tenantId, {
+          catalogueId: cat.id,
+          categoryId: bebidas.id,
+          descriptions: { es: "Agua mineral" },
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "general",
+          // An EU-14 allergen declaration on the seeded product, so `GET /api/products` has a non-null
+          // `allergens` map to carry back — the field this route carries through unchanged.
+          allergens: { sulphites: { presence: "may_contain" } },
+        });
+        await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
 
-      const cat2 = await createCatalogue(tx, tenantId, { name: "Happy Hour" });
-      const p2 = await createProduct(tx, tenantId, {
-        catalogueId: cat2.id,
-        categoryId: bebidas.id,
-        descriptions: { es: "Cerveza" },
-        pricingUnit: "each",
-        unitPrice: "2.50",
-        vatClass: "general",
-      });
-      await addCatalogueToLocation(tx, tenantId, loc.rows[0]!.id, cat2.id);
+        const cat2 = await createCatalogue(tx, tenantId, { name: "Happy Hour" });
+        const p2 = await createProduct(tx, tenantId, {
+          catalogueId: cat2.id,
+          categoryId: bebidas.id,
+          descriptions: { es: "Cerveza" },
+          pricingUnit: "each",
+          unitPrice: "2.50",
+          vatClass: "general",
+        });
+        await addCatalogueToLocation(tx, tenantId, loc.rows[0]!.id, cat2.id);
 
-      return { agua: { ...p, catalogueId: cat.id }, cerveza: { ...p2, catalogueId: cat2.id } };
-    });
+        const department = await tx.execute<{ id: string }>(sql`
+        insert into departments
+          (tenant_id, location_id, name, trading_name, default_service_mode)
+        values (${tenantId}, ${loc.rows[0]!.id}, 'Restaurant', 'Restaurant', 'prepay')
+        returning id`);
+        const zone = await tx.execute<{ id: string }>(sql`
+        insert into floor_zones (tenant_id, location_id, name)
+        values (${tenantId}, ${loc.rows[0]!.id}, 'Counter') returning id`);
+        await tx.execute(sql`
+        insert into zone_service_policies
+          (tenant_id, location_id, zone_id, department_id, default_menu_id, is_counter_default)
+        values (${tenantId}, ${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
+        await tx.execute(sql`
+        insert into zone_menus (tenant_id, zone_id, menu_id)
+        values (${tenantId}, ${zone.rows[0]!.id}, ${cat.id})`);
+        const section = await createMenuSection(tx, tenantId, {
+          menuId: cat.id,
+          name: { es: "Bebidas" },
+        });
+        const offer = await createMenuItem(tx, tenantId, {
+          menuId: cat.id,
+          productId: p.id,
+          sectionId: section.id,
+          grossPrice: "1.75",
+        });
+        await tx.execute(sql`
+          insert into preparation_routes (tenant_id, location_id, product_id, station_id)
+          values (${tenantId}, ${loc.rows[0]!.id}, ${p.id}, ${defaultStationId})`);
+
+        const hiddenMenu = await createCatalogue(tx, tenantId, { name: "Staff" });
+        const hiddenSection = await createMenuSection(tx, tenantId, {
+          menuId: hiddenMenu.id,
+          name: { es: "Staff" },
+        });
+        const hiddenOffer = await createMenuItem(tx, tenantId, {
+          menuId: hiddenMenu.id,
+          productId: p.id,
+          sectionId: hiddenSection.id,
+          grossPrice: "0.50",
+        });
+
+        return {
+          agua: { ...p, catalogueId: cat.id },
+          cerveza: { ...p2, catalogueId: cat2.id },
+          zoneId: zone.rows[0]!.id,
+          offerId: offer.id,
+          hiddenOfferId: hiddenOffer.id,
+        };
+      },
+    );
     aguaProduct = { id: agua.id, catalogueId: agua.catalogueId };
     cervezaProduct = { id: cerveza.id, catalogueId: cerveza.catalogueId };
+    counterZoneId = zoneId;
+    aguaOfferId = offerId;
+    hiddenAguaOfferId = hiddenOfferId;
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
@@ -1323,6 +1385,68 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 });
 
 describe("GET /api/products (session-guarded catalogue)", () => {
+  it("returns the configured default counter zone and its offers", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = await openSession(suite.db);
+
+    const res = await app.request("/api/default-service-zone/offers", {
+      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      context: { zoneId: counterZoneId, serviceMode: "prepay" },
+      zones: [{ id: counterZoneId, name: "Counter" }],
+      offers: [{ id: aguaOfferId, grossPrice: "1.75" }],
+    });
+  });
+
+  it("prefers the enrolled device's default service zone", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const sessionId = await openSession(suite.db);
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    const deviceId = deviceCookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0]!;
+    const second = await suite.db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${cfg.tenantId}, ${cfg.locationId}, ${`Device zone ${deviceId}`}) returning id`);
+    await suite.db.execute(sql`
+      insert into zone_service_policies
+        (tenant_id, location_id, zone_id, department_id, service_mode)
+      select ${cfg.tenantId}, ${cfg.locationId}, ${second.rows[0]!.id}, department_id, 'prepay'
+      from zone_service_policies
+      where tenant_id = ${cfg.tenantId} and zone_id = ${counterZoneId}`);
+    await suite.db.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id)
+      values (${cfg.tenantId}, ${second.rows[0]!.id}, ${aguaProduct.catalogueId})`);
+    await suite.db.execute(sql`
+      insert into device_zone_defaults (tenant_id, device_id, zone_id)
+      values (${cfg.tenantId}, ${deviceId}, ${second.rows[0]!.id})`);
+
+    const res = await app.request("/api/default-service-zone/offers", {
+      headers: { cookie: `${SESSION_COOKIE}=${sessionId}; ${deviceCookie}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ context: { zoneId: second.rows[0]!.id } });
+  });
+
+  it("returns the offers allowed in an explicit service zone", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = await openSession(suite.db);
+
+    const res = await app.request(`/api/service-zones/${counterZoneId}/offers`, {
+      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      context: { zoneId: counterZoneId, serviceMode: "prepay" },
+      defaultMenuId: aguaProduct.catalogueId,
+      menus: [{ id: aguaProduct.catalogueId, name: "Carta", isDefault: true }],
+      offers: [{ id: aguaOfferId, productId: aguaProduct.id, grossPrice: "1.75" }],
+    });
+  });
+
   it("REJECTS (401 session.required) when no cookie is present — proves the requireSession guard", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1512,7 +1636,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
       body: JSON.stringify({
         id: randomUUID(),
-        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
         simulationOutcome: "captured",
       }),
     });
@@ -1536,7 +1660,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
       body: JSON.stringify({
         id: "not-a-uuid",
-        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
       }),
     });
     expect(res.status).toBe(400);
@@ -1553,7 +1677,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
 async function park(
   app: Hono,
   cookie: string,
-  body: { id: string; lines: { productId: string; quantity: string }[]; label?: string },
+  body: { id: string; lines: { menuItemId: string; quantity: string }[]; label?: string },
 ): Promise<Response> {
   return app.request("/api/working-orders", {
     method: "POST",
@@ -1618,7 +1742,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 
     const res = await park(app, cookie, {
       id,
-      lines: [{ productId: aguaProduct.id, quantity: "2" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "2" }],
       label: "Mesa 4",
     });
     expect(res.status).toBe(200);
@@ -1635,6 +1759,64 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(rows.rows[0]).toMatchObject({ status: "open", till_id: cfg.tillId });
   });
 
+  it("POST prices an allowed menu offer and rejects an offer outside the selected zone", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const allowedId = randomUUID();
+    const allowed = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: allowedId,
+        zoneId: counterZoneId,
+        lines: [{ menuItemId: aguaOfferId, quantity: "2" }],
+      }),
+    });
+    expect(allowed.status).toBe(200);
+    const priced = await suite.db.execute<{ unit_price_gross: string }>(sql`
+      select unit_price_gross from working_order_lines where working_order_id = ${allowedId}`);
+    expect(priced.rows).toEqual([{ unit_price_gross: "1.75" }]);
+
+    const rejected = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: randomUUID(),
+        zoneId: counterZoneId,
+        lines: [{ menuItemId: hiddenAguaOfferId, quantity: "1" }],
+      }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toMatchObject({
+      error: {
+        code: "service_zone.offer_not_allowed",
+        params: { zoneId: counterZoneId, menuItemId: hiddenAguaOfferId },
+      },
+    });
+  });
+
+  it("POST rejects a product id that bypasses the zone's menu offers", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const res = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: randomUUID(),
+        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "lines" } },
+    });
+  });
+
   it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b park sibling)", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1646,7 +1828,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     // empty-basket early-out so the INSERT is reached in the RED state; the route screen refuses it 400.
     const res = await park(app, cookie, {
       id: "not-a-uuid",
-      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -1662,13 +1844,13 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 
     const parked = await park(app, cookie, {
       id,
-      lines: [{ productId: aguaProduct.id, quantity: "2" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "2" }],
       label: "Mesa 7",
     });
     const { orderNumber } = (await parked.json()) as { orderNumber: number };
 
     // GET list carries this order's summary. `total` is the GROSS (VAT-inclusive) draft total the
-    // operator saw: 2 × 1.50 = 3.00 gross (NOT the net base 2.48 the filed sale line carries). Assert
+    // operator saw: 2 × 1.75 = 3.50 gross. Assert
     // containment — the suite shares one node, so other tests' open orders also list.
     const list = await app.request("/api/working-orders", { headers: { cookie } });
     expect(list.status).toBe(200);
@@ -1680,18 +1862,29 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       total: string;
     }[];
     expect(summaries).toContainEqual(
-      expect.objectContaining({ id, orderNumber, label: "Mesa 7", itemCount: 1, total: "3.00" }),
+      expect.objectContaining({ id, orderNumber, label: "Mesa 7", itemCount: 1, total: "3.50" }),
     );
 
-    // GET /:id rebuilds the basket inputs (product_id + quantity, in line order) — no stored price.
+    // GET /:id rebuilds the basket from the frozen menu offer and returns its product details.
     // `quantity` reads back at the column's numeric(_, 3) scale ("2.000", not the sent "2").
     const got = await app.request(`/api/working-orders/${id}`, { headers: { cookie } });
     expect(got.status).toBe(200);
-    expect(await got.json()).toEqual({
+    expect(await got.json()).toMatchObject({
       id,
       orderNumber,
       label: "Mesa 7",
-      lines: [{ productId: aguaProduct.id, quantity: "2.000" }],
+      lines: [
+        {
+          menuItemId: aguaOfferId,
+          productId: aguaProduct.id,
+          quantity: "2.000",
+          product: {
+            menuItemId: aguaOfferId,
+            productId: aguaProduct.id,
+            unitPrice: "1.75",
+          },
+        },
+      ],
     });
 
     // PUT replaces the whole basket + label — a 200 with no body — and a re-retrieve reflects it.
@@ -1699,7 +1892,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
-        lines: [{ productId: aguaProduct.id, quantity: "5" }],
+        lines: [{ menuItemId: aguaOfferId, quantity: "5" }],
         label: "Mesa 7 bis",
       }),
     });
@@ -1708,11 +1901,22 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const afterPut = await (
       await app.request(`/api/working-orders/${id}`, { headers: { cookie } })
     ).json();
-    expect(afterPut).toEqual({
+    expect(afterPut).toMatchObject({
       id,
       orderNumber,
       label: "Mesa 7 bis",
-      lines: [{ productId: aguaProduct.id, quantity: "5.000" }],
+      lines: [
+        {
+          menuItemId: aguaOfferId,
+          productId: aguaProduct.id,
+          quantity: "5.000",
+          product: {
+            menuItemId: aguaOfferId,
+            productId: aguaProduct.id,
+            unitPrice: "1.75",
+          },
+        },
+      ],
     });
 
     // DELETE abandons it — a 200 with no body — after which retrieve is 404 and it leaves the list.
@@ -1745,7 +1949,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}`, { method: "DELETE", headers: { cookie } });
 
     // The order now sits in the terminal `abandoned` state, so an edit is refused 409 — the mutation
@@ -1753,7 +1957,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const put = await app.request(`/api/working-orders/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "2" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId: aguaOfferId, quantity: "2" }] }),
     });
     expect(put.status).toBe(409);
     expect(await put.json()).toMatchObject({ error: { code: "working_order.not_open" } });
@@ -1826,7 +2030,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     const id = randomUUID();
     await park(app, cookie, {
       id,
-      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
       label: "Mesa 2",
     });
 
@@ -1856,7 +2060,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
@@ -1905,7 +2109,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
     const id = randomUUID();
     await park(app, cookie, {
       id,
-      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
       label: "Mesa 5",
     });
 
@@ -1967,7 +2171,7 @@ describe("KDS-1 station-display operate routes", () => {
    *  the order id — the seed the queue/bump tests read from. */
   async function placeFired(app: Hono, cookie: string, label?: string): Promise<string> {
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }], label });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }], label });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
@@ -2107,8 +2311,8 @@ describe("KDS-1 station-display operate routes", () => {
     await park(app, cookie, {
       id,
       lines: [
-        { productId: aguaProduct.id, quantity: "1" },
-        { productId: aguaProduct.id, quantity: "1" },
+        { menuItemId: aguaOfferId, quantity: "1" },
+        { menuItemId: aguaOfferId, quantity: "1" },
       ],
       label: "Mesa 9",
     });
@@ -2203,7 +2407,7 @@ describe("/api/working-orders/:id/cancel", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
@@ -2228,7 +2432,7 @@ describe("/api/working-orders/:id/cancel", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
@@ -2285,6 +2489,23 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       insert into floor_zones (tenant_id, location_id, name)
       values (${cfg.tenantId}, ${cfg.locationId}, 'Comedor') returning id`);
     const zoneId = zoneRow.rows[0]!.id;
+    await suite.db.execute(sql`
+      with department as (
+        insert into departments
+          (tenant_id, location_id, name, trading_name, default_service_mode)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Dining room', 'Restaurant', 'table_tab')
+        returning id
+      )
+      insert into zone_service_policies
+        (tenant_id, location_id, zone_id, department_id)
+      select ${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, department.id
+      from department`);
+    await suite.db.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id)
+      values (${cfg.tenantId}, ${zoneId}, ${aguaProduct.catalogueId})`);
+    await suite.db.execute(sql`
+      update zone_service_policies set default_menu_id = ${aguaProduct.catalogueId}
+      where tenant_id = ${cfg.tenantId} and zone_id = ${zoneId}`);
 
     // Create a table IN that zone through the till route, so `createTable`'s zoneId assignment (and its
     // composite zone FK) is exercised — not a raw insert.
@@ -2303,8 +2524,8 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
         lines: [
-          { productId: aguaProduct.id, quantity: "1" },
-          { productId: aguaProduct.id, quantity: "1" },
+          { menuItemId: aguaOfferId, quantity: "1" },
+          { menuItemId: aguaOfferId, quantity: "1" },
         ],
       }),
     });

@@ -141,6 +141,19 @@ describe("till-table-order-screen", () => {
     expect(grid(el).store.lineCount).toBe(0);
   });
 
+  it("sends a zone offer by menu-item identity", async () => {
+    const offer = { ...cafe, menuItemId: "offer-cafe", productId: cafe.id };
+    const { el } = await mount({ products: [offer] });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (event) => (captured = event as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+
+    expect(captured!.detail.lines).toEqual([{ menuItemId: "offer-cafe", quantity: "1" }]);
+  });
+
   it("disables Enviar ronda while the current round is empty", async () => {
     const { el } = await mount();
     const send = el.shadowRoot!.querySelector("[data-send-round]")!;

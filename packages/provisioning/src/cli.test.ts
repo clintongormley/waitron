@@ -1353,10 +1353,9 @@ describe("runCli venue", () => {
     expect(h.closes()).toBe(1);
   });
 
-  it("re-provisions when the SAME fiscal identity is already present (D8 second shop)", async () => {
-    // The guard refuses only a FOREIGN identity, never an idempotent re-run: a database already
-    // holding ES/B12345678 (the VENUE_ARGS identity) proceeds to apply, where `applyVenue`'s
-    // `ON CONFLICT DO NOTHING` reuses the tenant and adds a shop.
+  it("passes the SAME fiscal identity to the single-venue apply guard", async () => {
+    // The tenant guard refuses a foreign identity. A database already holding ES/B12345678 proceeds
+    // to applyVenue, where the exact same venue is reused and different venue details are refused.
     const h = harness({
       env: VENUE_ENV,
       readTenants: async () => [{ country: "ES", taxId: "B12345678" }],

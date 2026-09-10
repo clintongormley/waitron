@@ -68,7 +68,7 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
 }
 
 describe("seedFloor", () => {
-  it("creates the three zones, ~16 placed tables, and the four service statuses", async () => {
+  it("creates restaurant and deli service zones, the placed restaurant floor, and statuses", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
     const res = await withTenant(suite.admin, tenantId, async (tx) => {
@@ -94,8 +94,13 @@ describe("seedFloor", () => {
       return { zones, tables, statuses };
     });
 
-    // Three active zones, in the authored order.
-    expect(res.zones.map((z) => z.name)).toEqual(["Comedor", "Terraza", "Barra"]);
+    expect(res.zones.map((z) => z.name)).toEqual([
+      "Dining room",
+      "Terrace",
+      "Downstairs bar",
+      "Upstairs bar",
+      "Deli counter",
+    ]);
     expect(res.zones.every((z) => z.active)).toBe(true);
 
     // ~16 tables, each placed (a live zone, a capacity, and a full spatial placement).

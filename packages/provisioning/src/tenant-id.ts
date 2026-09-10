@@ -40,7 +40,7 @@ function uuidV5(name: string, namespace: string): string {
  * guard (apps/server) recomputes the id from the RAW request to look the tenant up by id, and
  * normalizing here keeps that lookup aligned with the id `planVenue`/`applyVenue` stored. Without it,
  * `es`/`ES` for one business would derive two ids and mint two permanent, unmergeable tenants — a
- * re-run meant to add a shop would silently start a second SIF/hash chain (§5). ISO-3166 alpha-2 is
+ * same-venue retry would silently start a second SIF/hash chain (§5). ISO-3166 alpha-2 is
  * upper-case by convention; there is no data to preserve either way (pre-production, no backfill).
  */
 export function deriveTenantId(country: string, taxId: string): string {

@@ -57,6 +57,8 @@ export interface SelectedLineOption {
 
 /** One rung-up basket line: a product and how much of it (a count for `each`, a kg string for `weight`). */
 export interface OrderLine {
+  /** Stable server identity retained while editing a retrieved line. */
+  workingOrderLineId?: string;
   product: TillProduct;
   /** A count (e.g. "2") for an `each` product; a measured kg weight (e.g. "0.320") for `weight`. */
   quantity: string;
@@ -365,9 +367,9 @@ export class WorkingOrderStore {
   /**
    * Replace the basket with a RETRIEVED working order: adopt its `id` verbatim (so paying it later
    * keys the same idempotency slot the server persisted it under), swap in the given lines, and set
-   * the label. Callers pass ready {@link OrderLine}s — the app resolves a retrieved order's
-   * `{ productId, quantity }` against its loaded products and builds the `OrderLine[]` before calling
-   * here. A missing `label` clears any prior one. Notifies once.
+   * the label. Callers pass ready {@link OrderLine}s built from the stored offer snapshot when present,
+   * with product lookup retained for a context-less legacy line. A missing `label` clears any prior one.
+   * Notifies once.
    */
   loadFrom(id: string, lines: OrderLine[], label?: string): void {
     this.#id = id;

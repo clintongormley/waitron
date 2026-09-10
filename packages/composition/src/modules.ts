@@ -1,4 +1,9 @@
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
+import {
+  CATALOGUE_CLASSIFICATION,
+  CATALOGUE_CONFIGURATION_TRANSFER,
+  CATALOGUE_PROVISIONING,
+} from "@waitron/catalogue";
 import { CORE_CLASSIFICATION, CORE_CONFIGURATION_TRANSFER } from "@waitron/db";
 import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
@@ -19,6 +24,14 @@ import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_CLASSIFICATION, PAYMENTS_CONFIGURATION_TRANSFER } from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
 import { WORKFORCE_CLASSIFICATION, WORKFORCE_CONFIGURATION_TRANSFER } from "@waitron/workforce";
+import {
+  VENUE_SERVICE,
+  VENUE_SERVICE_CLASSIFICATION,
+  VENUE_SERVICE_CONFIGURATION_TRANSFER,
+  VENUE_SERVICE_PERMISSIONS,
+  VENUE_SERVICE_PROVISIONING,
+  VENUE_SERVICE_ROUTES,
+} from "@waitron/venue-service";
 import {
   WORKFORCE_ES_CLASSIFICATION,
   WORKFORCE_ES_CONFIGURATION_TRANSFER,
@@ -57,6 +70,37 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     // alongside the DB.
     backup: { nonDbState: [{ kind: "content-addressed-dir", source: "media" }] },
     configurationTransfer: CORE_CONFIGURATION_TRANSFER,
+  },
+  {
+    name: "catalogue",
+    version: "0.0.0",
+    tier: "mandatory",
+    requires: { core: "*" },
+    migrations: {
+      name: "catalogue",
+      table: "__drizzle_migrations_catalogue",
+      from: "../catalogue/drizzle",
+    },
+    classification: CATALOGUE_CLASSIFICATION,
+    configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
+    provisioning: CATALOGUE_PROVISIONING,
+  },
+  {
+    name: "venue-service",
+    version: "0.0.0",
+    tier: "mandatory",
+    requires: { core: "*", modules: { catalogue: "*" } },
+    migrations: {
+      name: "venue-service",
+      table: "__drizzle_migrations_venue_service",
+      from: "../venue-service/drizzle",
+    },
+    classification: VENUE_SERVICE_CLASSIFICATION,
+    venueService: VENUE_SERVICE,
+    configurationTransfer: VENUE_SERVICE_CONFIGURATION_TRANSFER,
+    provisioning: VENUE_SERVICE_PROVISIONING,
+    routes: VENUE_SERVICE_ROUTES,
+    permissions: VENUE_SERVICE_PERMISSIONS,
   },
   {
     name: "identity",

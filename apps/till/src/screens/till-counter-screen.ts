@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { selectStyles } from "../select-styles.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
 import type { TabDef } from "../layout.js";
@@ -22,6 +23,7 @@ import "../widgets/language-chooser.js";
 import type {
   HeldOrderSummary,
   OrderFlow,
+  ServiceZoneSummary,
   StationQueueGroup,
   TillApi,
   TillMenu,
@@ -57,6 +59,7 @@ const BRAND = "Waitron";
 export class TillCounterScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
@@ -100,6 +103,12 @@ export class TillCounterScreen extends LitElement {
         gap: var(--wt-space-3);
         padding: var(--wt-space-4);
       }
+
+      .service-zone {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
     `,
   ];
 
@@ -108,16 +117,18 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) api!: TillApi;
   /** The shared working order every widget reads and mutates. Set before the element connects. */
   @property({ attribute: false }) store!: WorkingOrderStore;
-  /** ALL sellable products across the location's accessible menus. The product grid shows only the
-   * SELECTED menu's (via {@link filterProductsByMenu}); the allergen lookup screen keeps the full set. */
+  /** Offers available in the current service zone. The product grid shows the selected menu's offers;
+   * the allergen lookup screen keeps the full zone set. */
   @property({ attribute: false }) products: TillProduct[] = [];
-  /** The location's accessible menus, handed to the menu switcher above the grid. With one menu (or none)
-   * the switcher renders nothing, so a single-menu location looks exactly as before. */
+  /** Menus available in the current service zone, handed to the switcher above the grid. */
   @property({ attribute: false }) menus: TillMenu[] = [];
   /** The menu (catalogue) the grid currently shows — narrows the grid via {@link filterProductsByMenu}
    * and marks the active switcher option. Owned by the app; a switcher pick bubbles up as `menu-selected`
    * for it to update. */
   @property() selectedMenuId = "";
+  /** Counter destinations available for a new order and the effective current selection. */
+  @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
+  @property() selectedServiceZoneId = "";
   /** The node's open parked orders, handed to the held-orders list (the app owns and refreshes them). */
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   /**
@@ -230,6 +241,40 @@ export class TillCounterScreen extends LitElement {
     this.selectedDiet = predicate;
   }
 
+  #pickServiceZone(event: Event): void {
+    const select = event.currentTarget as HTMLSelectElement;
+    if (this.store.lines.length > 0) {
+      const requestedZoneId = select.value;
+      select.value = this.selectedServiceZoneId;
+      this.dispatchEvent(
+        new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
+          detail: { zoneId: requestedZoneId },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      return;
+    }
+    this.dispatchEvent(
+      new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
+        detail: { zoneId: select.value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #refreshServiceZone(): void {
+    if (this.selectedServiceZoneId === "" || this.store.lines.length > 0) return;
+    this.dispatchEvent(
+      new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
+        detail: { zoneId: this.selectedServiceZoneId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   /** The tiles the grid shows: the selected menu's products ({@link filterProductsByMenu}), then narrowed
    *  to the active diet lens ({@link filterProductsByDiet}) when one is set. The allergen lookup screen
    *  keeps the FULL set (a tab may span menus, and allergen lookup must reach every product). */
@@ -259,6 +304,31 @@ export class TillCounterScreen extends LitElement {
    */
   #menuControls(): TemplateResult {
     return html`
+      ${
+        this.serviceZones.length > 0
+          ? html`<div class="service-zone">
+              <label for="service-zone">${t("service_zone.label")}</label>
+              <select
+                id="service-zone"
+                name="service-zone"
+                .value=${this.selectedServiceZoneId}
+                @change=${this.#pickServiceZone}
+              >
+                ${this.serviceZones.map(
+                  (zone) => html`<option value=${zone.id}>${zone.name}</option>`,
+                )}
+              </select>
+              <wt-button
+                class="service-zone-refresh"
+                variant="secondary"
+                ?disabled=${this.store.lines.length > 0}
+                @click=${this.#refreshServiceZone}
+              >
+                ${t("service_zone.refresh")}
+              </wt-button>
+            </div>`
+          : nothing
+      }
       <till-menu-switcher
         class="menu-switcher"
         .menus=${this.menus}

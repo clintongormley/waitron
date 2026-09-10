@@ -21,6 +21,24 @@ export async function readTenantIdentities(target: Database): Promise<TenantIden
   return rows.rows.map((row) => ({ country: row.country, taxId: row.tax_id }));
 }
 
+export async function readOperationalVenueIds(target: Database): Promise<string[]> {
+  const rows = await target.execute<{ id: string }>(sql`select id from locations order by id`);
+  return rows.rows.map((row) => row.id);
+}
+
+export function assertSingleOperationalVenue(
+  presentVenueIds: readonly string[],
+  configuredVenueId: string,
+): void {
+  if (presentVenueIds.length !== 1 || presentVenueIds[0] !== configuredVenueId) {
+    throw new AppError("provisioning.second_venue", {});
+  }
+}
+
+export function assertNoOperationalVenue(presentVenueIds: readonly string[]): void {
+  if (presentVenueIds.length > 0) throw new AppError("provisioning.second_venue", {});
+}
+
 /**
  * The one-tenant-per-database fiscal-safety DECISION, in ONE place. Every tenant-creation entry
  * point — the setup-api provision handler (`provisionVenue`), the `venue` CLI, and the mirror adopt

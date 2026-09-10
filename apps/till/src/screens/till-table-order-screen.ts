@@ -9,7 +9,7 @@ import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter
 import { productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
-import { toWireLineExtras, toWireOption } from "../state/order-line.js";
+import { toWireLineExtras, toWireOption, toWireProductIdentity } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
 // Side-effect imports register the reused widgets this screen composes — the round-scoped product
 // picker + basket, and the tab-pay tender — exactly as `till-counter-screen` registers its widgets.
@@ -517,7 +517,7 @@ export class TillTableOrderScreen extends LitElement {
   #sendRound(): void {
     const lines = this.#roundStore.lines.map((line) => {
       const roundLine: RoundLine = {
-        productId: line.product.id,
+        ...toWireProductIdentity(line.product),
         quantity: line.quantity,
         ...toWireLineExtras(line),
       };

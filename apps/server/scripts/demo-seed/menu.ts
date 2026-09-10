@@ -1,12 +1,11 @@
-// Demo menu content for the two-menu Casa Delgado seed (Phase 2, Task 6). This is DEV/DEMO data — it
+// Demo menu content for the three-menu Casa Delgado seed. This is DEV/DEMO data — it
 // stands up a plausible Spanish deli + restaurant for the multi-menu till demo and the sales
 // generator, NOT a real venue's catalogue. Plausibility, not fiscal/culinary accuracy, is the bar.
 //
-// Two catalogues (menus):
-//   - CASA_DELGADO — the à-la-carte menu: a deli COUNTER (weight-priced charcuterie, cheeses and
-//     conservas, routed to the kitchen "Cocina") plus a RESTAURANT (each-priced tapas, raciones,
-//     mains, desserts routed to "Cocina", and drinks routed to the bar "Barra").
+// Three catalogues (menus):
+//   - CASA_DELGADO — the restaurant menu: tapas, mains and desserts prepared in the kitchen.
 //   - MENU_DEL_DIA — the fixed-price lunch menu: a handful of each-priced courses, all kitchen.
+//   - DELI_TAKEAWAY — weight-priced charcuterie, cheeses and conservas for the deli counter.
 //
 // Content is authored under the BARE language tag (`en`/`es`) — the "author bare, file full-tag"
 // model of feature B. Every product carries BOTH bare locales (`en` + `es`) so `seedCatalogues` can
@@ -14,7 +13,7 @@
 // is the FULL tag its bare content files under — see `SEED_INVOICE_LOCALE`. Spanish
 // i18n VALUES are fine here — `apps/*` is out of the english-only guard's scope (CLAUDE.md §3); only
 // code IDENTIFIERS stay English. Each `image` is the committed PNG basename Task 9's media step
-// creates — this module only names them, and the names are UNIQUE across both catalogues so
+// creates — this module only names them, and the names are UNIQUE across the catalogues so
 // `seedCatalogues`' image→productId map has no collisions.
 //
 // VAT (Spanish IVA, GROSS/VAT-inclusive `unitPrice`): prepared/deli food is `reduced` (10%), basic
@@ -54,7 +53,7 @@ export interface SeedProduct {
  * `null` → no route (falls back to the location default at fire time). */
 export interface SeedCategory {
   name: Record<SeedLocale, string>;
-  station: "kitchen" | "bar" | null;
+  station: "kitchen" | "bar" | "deli" | null;
   products: SeedProduct[];
 }
 
@@ -165,7 +164,7 @@ export const PRODUCT_OPTION_GROUPS: SeedProductOptions[] = [
   },
 ];
 
-export const CASA_DELGADO: SeedCatalogue = {
+const COMBINED_CASA_DELGADO: SeedCatalogue = {
   name: { en: "Casa Delgado", es: "Casa Delgado" },
   categories: [
     // ── Deli counter (weight-priced, routed to the kitchen) ──────────────────────────────────────
@@ -476,6 +475,13 @@ export const CASA_DELGADO: SeedCatalogue = {
       station: "bar",
       products: [
         {
+          descriptions: { en: "Negroni", es: "Negroni" },
+          pricingUnit: "each",
+          unitPrice: "11.00",
+          vatClass: "general",
+          image: "negroni.png",
+        },
+        {
           descriptions: { en: "Glass of house red", es: "Copa de vino tinto de la casa" },
           pricingUnit: "each",
           unitPrice: "3.50",
@@ -520,6 +526,21 @@ export const CASA_DELGADO: SeedCatalogue = {
       ],
     },
   ],
+};
+
+/** The restaurant/bar menu and deli menu share one product catalogue in the demo source, then become
+ * separate sellable menus. This makes the department split visible without duplicating product copy. */
+export const CASA_DELGADO: SeedCatalogue = {
+  name: { en: "Casa Delgado", es: "Casa Delgado" },
+  categories: COMBINED_CASA_DELGADO.categories.slice(3),
+};
+
+export const DELI_TAKEAWAY: SeedCatalogue = {
+  name: { en: "Deli takeaway", es: "Charcutería para llevar" },
+  categories: COMBINED_CASA_DELGADO.categories.slice(0, 3).map((category) => ({
+    ...category,
+    station: "deli",
+  })),
 };
 
 export const MENU_DEL_DIA: SeedCatalogue = {

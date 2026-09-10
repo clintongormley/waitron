@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -29,13 +30,12 @@ import "./errors.js";
 // proven over real Postgres in `working-order.pg.test.ts`; here we prove only the HTTP surface —
 // the session guard, the malformed-`:id` screen, and the verb's status mapping — which fires at
 // the boundary before/around a single query, so a superuser PGlite backend is adequate (CLAUDE.md
-// §4). Sessions/persons live in identity, so the schema is CORE_MIGRATIONS + IDENTITY_MIGRATIONS.
-// Harness ported from `till-api.test.ts`.
+// §4). Harness ported from `till-api.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
@@ -295,6 +295,45 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
       sql`select tab_id from dining_tables where id = ${fromTable}`,
     );
     expect(freed.rows[0]!.tab_id).toBeNull();
+  });
+
+  it("refuses to merge a contextual tab with a context-less tab", async () => {
+    const app = new Hono();
+    const d = deps(suite.db);
+    mountTillApi(app, d, collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const { intoTabId, fromTabId } = await withTenant(suite.db, d.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const into = await createTable(tx, d.cfg, { label: "MC-into" });
+      const from = await createTable(tx, d.cfg, { label: "MC-from" });
+      const intoTab = await openTab(tx, d.cfg, { tableId: into.id });
+      const fromTab = await openTab(tx, d.cfg, { tableId: from.id });
+      const department = await tx.execute<{ id: string }>(sql`
+          insert into departments
+            (tenant_id, location_id, name, trading_name, default_service_mode)
+          values (${d.cfg.tenantId}, ${d.cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
+          returning id`);
+      const zone = await tx.execute<{ id: string }>(sql`
+          insert into floor_zones (tenant_id, location_id, name)
+          values (${d.cfg.tenantId}, ${d.cfg.locationId}, 'Dining room') returning id`);
+      await tx.execute(sql`
+          insert into order_service_contexts
+            (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+          values (
+            ${d.cfg.tenantId}, ${intoTab.tabId}, ${d.cfg.locationId}, ${zone.rows[0]!.id},
+            ${department.rows[0]!.id}, 'table_tab'
+          )`);
+      return { intoTabId: intoTab.tabId, fromTabId: fromTab.tabId };
+    });
+
+    const res = await app.request(`/api/tabs/${intoTabId}/merge`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ fromTabId, freeSourceTable: true }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "service_zone.mode_incompatible" } });
   });
 
   it("400 tab.merge_self when merging a tab into itself", async () => {

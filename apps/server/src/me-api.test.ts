@@ -200,6 +200,22 @@ describe("mountMeApi — whoami", () => {
     });
   });
 
+  it("never reports a session lifetime above the configured idle timeout", async () => {
+    const cookie = await cookieFor(me);
+    const sessionId = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);
+    await suite.db.execute(sql`
+      update management_sessions
+      set last_seen_at = ${new Date(Date.now() + 10_000).toISOString()}
+      where id = ${sessionId}`);
+
+    const res = await send(mountApp(), "GET", "/management-api/session/me", { cookie });
+
+    expect(res.status).toBe(200);
+    expect(
+      ((await res.json()) as { sessionExpiresInSeconds: number }).sessionExpiresInSeconds,
+    ).toBe(IDLE_TIMEOUT_MS / 1000);
+  });
+
   it("surfaces the SESSION person's own locale preference, distinct from the venue default", async () => {
     // `localed` carries `locale = 'es-ES'`, while `venueLocale` is en-GB — so this pins `locale` to the
     // person's preference and `venueLocale` to the boot default, two DIFFERENT sources. A mutant that

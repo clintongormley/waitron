@@ -10,7 +10,7 @@ import type { Product } from "../api/client.js";
  * color-contrast check means what it means in the app.
  *
  * The fixture covers all THREE allergen states (null=PENDING, {}=none, {…}=declared), both
- * active/inactive badges, and both a product WITH an image (the `<img>` + its `alt`) and one WITHOUT
+ * active/inactive badges, and both a product WITH a decorative image and one WITHOUT
  * (the placeholder) — so axe sees the whole rendered surface, every branch of the row template.
  */
 const products: Product[] = [

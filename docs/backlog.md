@@ -55,8 +55,12 @@ mechanism reached over WireGuard, when Waitron Cloud exists.
 
 **The shape we build for:**
 
-- **One tenant per node.** One primary, one or more warm mirrors, human promotion. A node belongs to
-  one taxpayer; no database ever holds two.
+- **One venue and one taxpayer per operational node group** (clarified 2026-09-09). One active primary,
+  one or more warm mirrors, human promotion. Restaurant/bar and deli can be departments within the
+  same venue and share preparation. A taxpayer with independent venues has separate node groups;
+  shared cloud management sits above them. This is the target; the
+  [department/menu plan](superpowers/plans/2026-09-09-venue-departments-and-menus.md) includes explicit
+  single-venue provisioning and boot checks.
 - **A mirror is on prem or in the cloud and is reached the same way** — URL + credentials over the
   same replication link. The only difference is that a cloud mirror is reached over WireGuard, so
   two containers on one machine joined by WireGuard IS the cloud test.
@@ -286,7 +290,7 @@ hosted in Spain (owner decision 2026-09-05), so asesor Q16 does not arise.
 :8080 (HTTP for leaf-less shared state, HTTPS when a development box leaf is present; the Vite
 proxies select the matching protocol). The till enrols itself on first load in dev mode — no code, no approval step. Till PIN **5555**;
 dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a believable demo
-restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16 tables), staff
+restaurant: three menus (~44 products with per-dish images), a floor plan (5 zones / ~16 tables), staff
 on PIN 5555, and ~28 days of back-dated preproduction sales — English by default, Spanish via
 `WAITRON_SEED_LOCALE=es-ES`. Use `wa-wt onboarding <worktree-name>` for a fresh shipping-style
 onboarding wizard. `wa-wt reset demo|onboarding [worktree-name]` wipes and rebuilds that target.
@@ -625,12 +629,13 @@ unchanged, so no new H2 receipt
      supplier country/identifier scheme before validating purchasing tax IDs; apply a pack's declared
      module preset when country-specific module toggling is needed; implement the currently refused
      foral, Canary, Ceuta and Melilla fiscal jurisdictions.
-5. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** With one tenant per database and a
-   dedicated cloud instance per tenant, the only multi-tenant service Waitron runs is a small control
-   plane: accounts (a customer of ours — one customer may own several taxpayers), subscriptions,
-   instances (which box/VM serves which tenant, its version; region Spain), a WireGuard keypair +
-   endpoint per box and the box's public names, version rollout per tenant. Still open from the relay
-   decision (§3): one name or two for LAN-vs-remote reach. Docs-only until designed.
+5. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** The 2026-09-09 department/menu design
+   clarifies the target as one operational database/node group per venue, with one taxpayer identity
+   in that group. One taxpayer may own several venues. A shared management layer would hold accounts,
+   subscriptions, venue/node-group discovery, versions, WireGuard endpoints and public names;
+   consolidated reporting and shared menu templates are later consumers. A separate database does
+   not require a dedicated physical cloud machine. Still open from the relay decision (§3): one name
+   or two for LAN-vs-remote reach. Docs-only until designed; no cloud implementation in the menu plan.
 6. **Reconsider the backup container against off-the-shelf** (brainstorm, not a mandate): `WBA1` +
    `artifact-cipher.ts` (whole-dump in memory, restorable only by Waitron code — `pg_dump | age`,
    tar).
@@ -784,15 +789,29 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
 
 **Ordering / menu (SP18):**
 
-- **Counter/walk-up kitchen fire (#193 follow-up) — the next actionable ordering slice.** The
-  counter/walk-up basket shows the note/doneness editor and the server persists both on
-  `working_order_lines`, but `/api/sales` (`recordTillSale` → `createOpenOrder`) never calls
-  `fireLines`, so a note/doneness typed on a counter sale reaches no kitchen surface. The owner
-  confirmed counter food DOES go to the kitchen (2026-09-01), so this is real work: make the walk-up
-  path fire kitchen tickets (mirror the table/tab round path, snapshotting note/doneness onto
-  `ticket_items`) and extend the KDS/expo/print reads to cover counter-fired tickets. Wire/state
-  already exist; only the counter fire path + its reads are missing. Keep the fiscal boundary intact
-  (note/doneness must NOT reach `sale_lines`/`computeHuella` — same guard as #193).
+- **Venue departments and menu model — ordering and management slice implemented (owner, 2026-09-09;
+  branch `menus`, PR pending).** One venue contains Restaurant/bar and Deli departments with their
+  own zones, menus and service defaults while sharing products and preparation stations. One product
+  can have different prices/modifiers on different menus; zone/category routing selects the preparation
+  station. The schema records department hours; enforcing those hours and assigning staff remain later
+  work. Same legal seller is the working assumption, to confirm before go-live.
+  [Design](superpowers/specs/2026-09-09-venue-departments-and-menus-design.md) and
+  [implementation plan](superpowers/plans/2026-09-09-venue-departments-and-menus.md) record the
+  delivered slice and remaining work. The branch adds menu-item pricing, zone offer selection,
+  frozen service context, zone/category preparation routing, context-preserving order transfers,
+  counter preparation fire, device-specific default zones, portable configuration transfer, a fresh venue's
+  initial menu/zone assignment and a one-operational-venue provisioning guard. Products and menus are
+  separate dashboard sections; menu offers and preparation routes can be created, edited or removed;
+  the venue screen shows departments, zones, hours, routes and readiness findings. Boot and standby
+  adoption enforce the operational venue boundary. The exact Restaurant/Deli demo includes shared
+  kitchen preparation, distinct flows and hours, and upstairs/downstairs bars that route the same
+  Negroni product locally while charging different menu prices. Follow-ups are removal of legacy
+  product/menu price and fixed-station compatibility fields; custom per-menu modifier authoring (new
+  offers currently copy the product's active choices); enforcement of hours and calendar
+  exceptions; workforce assignments; immutable department attribution and reporting; batched venue
+  readiness/offer queries; replication smoke; and the till menu-refresh defect. Inventory, recipe depth and multi-venue cloud management
+  remain separate work. Device-zone defaults are re-enrolled rather than transferred because device
+  enrolment rows are deliberately reset.
 - **Modifiers / quantity deferred follow-ons** (all landed — #184/#186/#187/#190/#193): on-screen
   expo/station-queue/tab modifier `×N`; extract the shared `#allergens` render across
   basket/station-queue/expo; fold the base-allergen `products` join into the KDS queue select; the

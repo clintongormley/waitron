@@ -15,8 +15,8 @@ export const ticketState = pgEnum("ticket_state", ["queued", "preparing", "ready
  * A per-line, per-station kitchen TICKET ITEM (KDS-1) — the replacement for `order_prep`'s
  * one-row-per-order model. A fire point (placeOrder / sendToPrep / a tab's round-send, reworked in
  * later tasks) inserts one row per new working-order line, with the line's station RESOLVED and
- * SNAPSHOTTED here at fire time (`product.station_id ?? category.station_id ?? the location's default
- * station`), so re-categorising a product later never reroutes food already sent. MUTABLE, node-scoped
+ * SNAPSHOTTED here at fire time (from the order's venue-service route, or the legacy fallback for a
+ * context-less order), so later routing changes never reroute food already sent. MUTABLE, node-scoped
  * and ephemeral, exactly as `order_prep` was: advances `queued → preparing → ready` independently of
  * the parent order's fiscal status (a settled Mode-P order still has its lines cooked). The one advance
  * gate is a KITCHEN one, not a fiscal one — KDS-2 holds an item (`fired_at` NULL) until its course fires.

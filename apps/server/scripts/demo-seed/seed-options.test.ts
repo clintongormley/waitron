@@ -74,11 +74,19 @@ describe("seedOptions", () => {
 
     const products = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
-        locationId,
+      const { productsByImage, menuItemsByProduct } = await seedCatalogues(
+        tx,
+        brandTenantId(tenantId),
+        {
+          locationId,
+          locale: LOCALE,
+        },
+      );
+      await seedOptions(tx, brandTenantId(tenantId), {
+        productsByImage,
+        menuItemsByProduct,
         locale: LOCALE,
       });
-      await seedOptions(tx, brandTenantId(tenantId), { productsByImage, locale: LOCALE });
       return (await listAvailableProducts(tx, locationId)).products;
     });
 

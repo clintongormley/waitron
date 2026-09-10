@@ -53,5 +53,9 @@ declare module "@waitron/shared" {
     /** The node's stamped filing module (`stamped`) is not the enabled slot's id (`enabled`): a node
      * provisioned under one regime must not boot under another. */
     "module.fiscal_slot_mismatch": { stamped: string; enabled: string };
+    /** No enabled module supplies venue menu, service-mode and preparation-route decisions. */
+    "module.venue_service_empty": Record<string, never>;
+    /** More than one enabled module supplies mutually competing venue-service decisions. */
+    "module.venue_service_ambiguous": { candidates: readonly string[] };
   }
 }

@@ -13,7 +13,6 @@ import type {
   DashboardApi,
   OptionGroup,
   Product,
-  Station,
 } from "../api/client.js";
 
 afterEach(cleanupWidgets);
@@ -21,29 +20,6 @@ afterEach(cleanupWidgets);
 const CATEGORIES: CategorySummary[] = [
   { id: "cat-bebidas", name: "Bebidas" },
   { id: "cat-postres", name: "Postres" },
-];
-
-const STATIONS: Station[] = [
-  {
-    id: "s1",
-    name: "Cocina",
-    displayOrder: 0,
-    isDefault: true,
-    active: true,
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
-  },
-  {
-    id: "s2",
-    name: "Plancha",
-    displayOrder: 1,
-    isDefault: false,
-    active: true,
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
-  },
 ];
 
 const COURSES: Course[] = [
@@ -141,6 +117,17 @@ describe("product-form", () => {
     expect(unit).toEqual(["each", "weight"]);
   });
 
+  it("keeps selling prices and preparation routing out of the product editor", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=unit-price]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=product-station]")).toBeNull();
+  });
+
   // The VAT and pricing-unit options carry localised LABELS while keeping their raw WIRE VALUES (the
   // CHECK-set tokens the create/update body sends) — the same render-edge translation staff-list uses.
   it("labels the VAT and unit options with localised names, keeping the wire values", async () => {
@@ -179,7 +166,6 @@ describe("product-form", () => {
   it("emits create-product with the assembled body, omitting allergens (PENDING) and image (unset)", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
     await setInput(el, "description-es", "Café con leche");
-    await setInput(el, "unit-price", "2.50");
     await setSelect(el, "vat-class", "reduced");
     await setSelect(el, "pricing-unit", "each");
     await setSelect(el, "category", "cat-bebidas");
@@ -191,7 +177,7 @@ describe("product-form", () => {
       catalogueId: "cat-1",
       categoryId: "cat-bebidas",
       descriptions: { es: "Café con leche" },
-      unitPrice: "2.50",
+      unitPrice: "0.00",
       vatClass: "reduced",
       pricingUnit: "each",
       active: true,
@@ -209,7 +195,6 @@ describe("product-form", () => {
   it("includes allergens and image in the create body when set", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
     await setInput(el, "description-es", "Tarta");
-    await setInput(el, "unit-price", "4.00");
     await emitAllergens(el, { gluten: { presence: "contains", source: "trigo" } });
     await emitImage(el, "sha.png");
 
@@ -319,14 +304,10 @@ describe("product-form", () => {
     const desc = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
       "[data-test=description-es]",
     )!;
-    const price = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
-      "[data-test=unit-price]",
-    )!;
     const vat = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=vat-class]")!;
     const unit = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=pricing-unit]")!;
     const category = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=category]")!;
     expect(desc.value).toBe("Té verde");
-    expect(price.value).toBe("1.20");
     expect(vat.value).toBe("super_reduced");
     expect(unit.value).toBe("weight");
     expect(category.value).toBe("cat-postres");
@@ -461,68 +442,7 @@ describe("product-form", () => {
     expect(fired).toBe(false);
   });
 
-  // ── Product → kitchen-station override routing (KDS-1) ──────────────────────────────────────────
-  // The override select is EDIT-MODE ONLY (a new product has no id yet and inherits its category
-  // route; an override is set on an existing product). It fires immediately on change (the floor
-  // zone-assign shape), not on Guardar, so it is a live side-write through its own event.
-
-  it("renders the station-override select in edit mode (an inherit option + one per station)", async () => {
-    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
-      open: true,
-      catalogueId: "cat-1",
-      categories: CATEGORIES,
-      product: EDIT_PRODUCT,
-      stations: STATIONS,
-    });
-    await el.updateComplete;
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=product-station]")!;
-    expect(Array.from(select.options).map((o) => o.value)).toEqual(["", "s1", "s2"]);
-  });
-
-  it("does NOT render the station-override select in create mode (no product yet)", async () => {
-    const { el } = await mountWidget<ProductForm>(
-      "dashboard-product-form",
-      baseProps({ stations: STATIONS }),
-    );
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=product-station]")).toBeNull();
-  });
-
-  it("emits set-product-station with the product id + picked station on change", async () => {
-    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
-      open: true,
-      catalogueId: "cat-1",
-      categories: CATEGORIES,
-      product: EDIT_PRODUCT,
-      stations: STATIONS,
-    });
-    await el.updateComplete;
-    const routed = nextEvent<{ productId: string; stationId: string | null }>(
-      el,
-      "set-product-station",
-    );
-    await setSelect(el, "product-station", "s2");
-    expect((await routed).detail).toEqual({ productId: "prod-1", stationId: "s2" });
-  });
-
-  it("emits set-product-station with a null stationId when the inherit option is picked", async () => {
-    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
-      open: true,
-      catalogueId: "cat-1",
-      categories: CATEGORIES,
-      product: EDIT_PRODUCT,
-      stations: STATIONS,
-    });
-    await el.updateComplete;
-    const routed = nextEvent<{ productId: string; stationId: string | null }>(
-      el,
-      "set-product-station",
-    );
-    await setSelect(el, "product-station", "");
-    expect((await routed).detail).toEqual({ productId: "prod-1", stationId: null });
-  });
-
-  // ── Product → default-course routing (KDS-2), the sibling of the station override above ─────────────
+  // ── Product → default-course routing (KDS-2) ───────────────────────────────────────────────────
 
   it("renders the default-course select in edit mode (a none option + one per course)", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {

@@ -163,9 +163,9 @@ it("has a sentence for each printing code (Impresoras screen)", () => {
   }
 });
 
-it("has a sentence for the location-menus screen code", () => {
+it("has a sentence for a missing catalogue", () => {
   // The location↔menu writes (apps/server/src/catalogue-api.ts) reject with `catalogue.not_found` when
-  // a catalogueId names no catalogue the tenant can see. The Location menus screen renders
+  // a catalogueId names no catalogue the tenant can see. The catalogue management surfaces render
   // codeMessage(errorKey), so it must map to real copy, never the raw wire code and never the GENERIC
   // fallback. `management.request_invalid` / `shared.invalid_id` and the gate codes are covered above.
   // Each language is compared against ITS OWN generic (the "es" copy against GENERIC_ES, the "en" copy

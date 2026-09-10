@@ -19,6 +19,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
 } from "@waitron/catalogue";
 import {
@@ -59,6 +61,10 @@ interface Seeded {
   cfg: TillConfig;
   cafeId: string;
   aguaId: string;
+  cafeMenuItemId: string;
+  aguaMenuItemId: string;
+  menuId: string;
+  categoryId: string;
   tableId: string;
 }
 
@@ -86,31 +92,56 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const { cafeId, aguaId, tableId } = await withTenant(db, tenantId, async (tx) => {
-    await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
-    const cafe = await createProduct(tx, tenantId, {
-      catalogueId: cat.id,
-      categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Café" },
-      pricingUnit: "each",
-      unitPrice: "1.50",
-      vatClass: "general",
+  const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } =
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+      const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+      const cafe = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: bebidas.id,
+        descriptions: { [LOCALE]: "Café" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      const agua = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: bebidas.id,
+        descriptions: { [LOCALE]: "Agua" },
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      await assignCatalogueToLocation(tx, locationId, cat.id);
+      const section = await createMenuSection(tx, tenantId, {
+        menuId: cat.id,
+        name: { [LOCALE]: "Bebidas" },
+      });
+      const cafeMenuItem = await createMenuItem(tx, tenantId, {
+        menuId: cat.id,
+        productId: cafe.id,
+        sectionId: section.id,
+        grossPrice: "1.50",
+      });
+      const aguaMenuItem = await createMenuItem(tx, tenantId, {
+        menuId: cat.id,
+        productId: agua.id,
+        sectionId: section.id,
+        grossPrice: "2.00",
+      });
+      const table = await createTable(tx, cfg, { label: "T1" });
+      return {
+        cafeId: cafe.id,
+        aguaId: agua.id,
+        cafeMenuItemId: cafeMenuItem.id,
+        aguaMenuItemId: aguaMenuItem.id,
+        menuId: cat.id,
+        categoryId: bebidas.id,
+        tableId: table.id,
+      };
     });
-    const agua = await createProduct(tx, tenantId, {
-      catalogueId: cat.id,
-      categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua" },
-      pricingUnit: "each",
-      unitPrice: "2.00",
-      vatClass: "general",
-    });
-    await assignCatalogueToLocation(tx, locationId, cat.id);
-    const table = await createTable(tx, cfg, { label: "T1" });
-    return { cafeId: cafe.id, aguaId: agua.id, tableId: table.id };
-  });
-  return { cfg, cafeId, aguaId, tableId };
+  return { cfg, cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId };
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -824,8 +855,29 @@ describe("listTablesWithState (occupancy)", () => {
   });
 
   it("reports pendingToServe (unserved tab lines), 0 for a free table, and carries zoneId", async () => {
-    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { cfg, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } = await setupVenue();
     const zone = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    await asApp(cfg, async (tx) => {
+      const department = await tx.execute<{ id: string }>(sql`
+        insert into departments
+          (tenant_id, location_id, name, trading_name, default_service_mode)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
+        returning id`);
+      await tx.execute(sql`
+        insert into zone_service_policies
+          (tenant_id, location_id, zone_id, department_id, service_mode, default_menu_id)
+        values (
+          ${cfg.tenantId}, ${cfg.locationId}, ${zone.id}, ${department.rows[0]!.id},
+          'table_tab', ${menuId}
+        )`);
+      await tx.execute(sql`
+        insert into zone_menus (tenant_id, zone_id, menu_id)
+        values (${cfg.tenantId}, ${zone.id}, ${menuId})`);
+      await tx.execute(sql`
+        insert into preparation_routes
+          (tenant_id, location_id, category_id, station_id, no_preparation)
+        values (${cfg.tenantId}, ${cfg.locationId}, ${categoryId}, null, true)`);
+    });
     // A SECOND table with no tab — exercises the LEFT-join-reads-0 branch for a free table.
     const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));
     await asApp(cfg, (tx) => updateTable(tx, cfg, tableId, { zoneId: zone.id }));
@@ -834,8 +886,8 @@ describe("listTablesWithState (occupancy)", () => {
       openTab(tx, cfg, {
         tableId,
         lines: [
-          { productId: cafeId, quantity: "1" },
-          { productId: aguaId, quantity: "1" },
+          { menuItemId: cafeMenuItemId, quantity: "1" },
+          { menuItemId: aguaMenuItemId, quantity: "1" },
         ],
       }),
     );

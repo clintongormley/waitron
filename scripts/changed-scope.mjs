@@ -211,10 +211,13 @@ export const DASHBOARD_PACKAGE = "@waitron/dashboard";
  */
 export const SETUP_PACKAGE = "@waitron/setup";
 
+/** The venue configuration module combines PGlite tests with a Chromium dashboard project. */
+export const VENUE_SERVICE_PACKAGE = "@waitron/venue-service";
+
 /**
  * The `test-server` shard's package: apps/server, the workspace's largest suite.
  *
- * Unlike the three browser packages above, this split is a MEASURED PERFORMANCE one, not a hang
+ * Unlike the browser packages above, this split is a MEASURED PERFORMANCE one, not a hang
  * mitigation. On the unfiltered `main` run 32417600304 (`gh run view 32417600304 --json jobs`)
  * apps/server was 341.7s of test-light's 358s wall-clock — its 63-file suite, 277s of that test
  * execution — so on its own it set test-light's floor, and no amount of re-sharding the other twenty
@@ -262,6 +265,7 @@ export const OWN_SHARD_PACKAGES = [
   TILL_PACKAGE,
   DASHBOARD_PACKAGE,
   SETUP_PACKAGE,
+  VENUE_SERVICE_PACKAGE,
   SERVER_PACKAGE,
   FISCAL_VERIFACTU_PACKAGE,
   "@waitron/bookings",
@@ -333,7 +337,7 @@ export const LIGHT_B_PACKAGES = [
  */
 export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite"];
 
-/** A gate that fires when one named package is in the resolved scope — nine of the eleven. */
+/** A gate that fires when one named package is in the resolved scope. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);
 
 /**
@@ -347,7 +351,7 @@ const runsInLightShard = (bin) => (name) =>
 /**
  * A gate that fires when the resolved scope holds a package in `bin` that declares tests — the two
  * light shards' predicate, the counterpart to `membership` for the single-package gates. The other
- * two of the eleven gates.
+ * two gates in this list.
  */
 const lightGate = (bin) => (inScope) => [...inScope].some(runsInLightShard(bin));
 
@@ -392,6 +396,7 @@ export const SCOPE_GATES = [
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "setup", covers: membership(SETUP_PACKAGE) },
+  { output: "venue_service", covers: membership(VENUE_SERVICE_PACKAGE) },
   { output: "server", covers: membership(SERVER_PACKAGE) },
   { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },
   { output: "bookings", covers: membership("@waitron/bookings") },

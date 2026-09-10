@@ -4,6 +4,7 @@ import { withTenant, type Database, type Transaction } from "@waitron/db";
 import { startManagementSession } from "@waitron/identity";
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import {
+  AppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   tenantId as brandTenantId,
@@ -11,6 +12,7 @@ import {
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { SeedReport, WaitronModule } from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
+import "./errors.js";
 
 export interface VenueApplyDeps {
   /** The OWNER connection to the TARGET database — the admin that ran `instance` and so owns the
@@ -42,13 +44,9 @@ export interface VenueResult {
  * there is no cluster DDL here, and a single transaction is what a partial venue must never be).
  * Every insert uses the ensure-tenant action's deterministic tenant id.
  *
- * Idempotency is `ON CONFLICT DO NOTHING` on the natural keys — the transaction-safe form of spec
- * D8's "insert, treat conflict as already-present" (a bare 23505 catch would poison the
- * transaction). It applies only where a natural key exists: the tenant (country, tax_id) and the
- * series (tenant, node, code). Location/till/node have no business key — a tenant legitimately has
- * many shops — so a re-run ADDS a shop; it never resumes a half-built one: each run creates a FRESH
- * node and runs every module's seed for it, so the fiscal seed mints a new installation number and
- * starts a new chain rather than forking one.
+ * A database contains one operational venue. Repeating the same plan returns the existing location,
+ * till, node and series without rerunning module seeds. A different location is refused. Locking the
+ * tenant row serialises competing same-tenant plans before either checks the existing location.
  */
 export async function applyVenue(
   actions: readonly VenueAction[],
@@ -71,6 +69,7 @@ export async function applyVenue(
     let locationId = "";
     let tillId = "";
     let nodeId = "";
+    let reusingVenue = false;
     const seeded: SeedReport[] = [];
     const seriesIds: string[] = [];
 
@@ -82,12 +81,12 @@ export async function applyVenue(
             insert into tenants (id, country, tax_id, legal_name)
             values (${action.tenantId}, ${action.country}, ${action.taxId}, ${action.legalName})
             on conflict (country, tax_id) do nothing`);
+          await tx.execute(sql`select id from tenants where id = ${tenantId} for update`);
           break;
         case "seed-admin":
           // Seed the tenant's admin ONCE. Like ensure-tenant's ON CONFLICT DO NOTHING, this makes a
           // re-run a no-op on a row keyed to the TENANT — the admin belongs to the tenant, not to a
-          // shop, so the D8 second-shop re-run (create-location/create-till/create-node deliberately
-          // ADD a shop each run) must not add a duplicate admin each time. A plain insert did exactly
+          // venue, so an idempotent same-venue re-run must not add a duplicate admin. A plain insert did exactly
           // that. `insert … select … where not exists` seeds the admin only if the tenant has none
           // yet (the explicit tenant_id and role='admin' predicates). Raw SQL like
           // every other insert — no @waitron/identity import; the `persons` table exists because the
@@ -108,12 +107,54 @@ export async function applyVenue(
           // capability validation and the `till.configure` gate run here too. seed-admin must have run
           // first (the admin is the only person who can open that session); a hand-built plan that
           // runs this before seed-admin is refused as a plan-integrity error, mirroring the ordering
-          // guards below. Idempotent: find-or-create by name, so a D8 second-shop re-run adds no
+          // guards below. Idempotent: find-or-create by name, so a same-venue re-run adds no
           // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's owner
           // transaction, exercised by venue-apply.pg.test.ts.
           await seedDeviceProfiles(tx, tenantId, action.profiles);
           break;
         case "create-location": {
+          const existing = await tx.execute<{
+            id: string;
+            name: string;
+            invoice_locales: string[];
+            operation_description: string;
+            fiscal_territory: string;
+            address_line1: string;
+            address_line2: string | null;
+            postal_code: string;
+            city: string;
+            province: string;
+            time_zone: string;
+            day_cutover: string;
+          }>(sql`
+            select id, name, invoice_locales, operation_description, fiscal_territory,
+                   address_line1, address_line2, postal_code, city, province, time_zone,
+                   day_cutover::text
+            from locations where tenant_id = ${tenantId} order by id`);
+          if (existing.rows.length > 1) {
+            throw new AppError("provisioning.second_venue", {});
+          }
+          if (existing.rows.length === 1) {
+            const row = existing.rows[0]!;
+            const matches =
+              row.name === action.name &&
+              JSON.stringify(row.invoice_locales) === JSON.stringify(action.invoiceLocales) &&
+              row.operation_description === action.operationDescription &&
+              row.fiscal_territory === action.fiscalTerritory &&
+              row.address_line1 === action.addressLine1 &&
+              row.address_line2 === action.addressLine2 &&
+              row.postal_code === action.postalCode &&
+              row.city === action.city &&
+              row.province === action.province &&
+              row.time_zone === action.timeZone &&
+              row.day_cutover === action.dayCutover;
+            if (!matches) {
+              throw new AppError("provisioning.second_venue", {});
+            }
+            locationId = row.id;
+            reusingVenue = true;
+            break;
+          }
           locationId = randomUUID();
           // `invoice_locales` is `text[]`. A JS array interpolated straight into a `sql` template
           // (`${action.invoiceLocales}`, as the brief drafted) is expanded by Drizzle into a
@@ -133,11 +174,12 @@ export async function applyVenue(
                ${action.operationDescription}, ${action.fiscalTerritory}, ${action.addressLine1},
                ${action.addressLine2}, ${action.postalCode}, ${action.city}, ${action.province},
                ${action.timeZone}, ${action.dayCutover})`);
-          // KDS-1: seed this location's DEFAULT kitchen station so firing (placeOrder / sendToPrep / a
-          // tab's round-send → fireLines) has a fallback the instant the venue exists. Spec §2a ("one
-          // default") + §2b: a location with NO default station makes firing a fail-loud
-          // `station.no_default` misconfiguration, so a fresh venue must ship one. The owner
-          // inserts it in the location's transaction. The operator can rename it later via updateStation; `station.no_default` then guards any venue
+          // KDS-1: seed this location's DEFAULT kitchen station so a context-less legacy order has a
+          // fallback. Service-context orders use explicit preparation routes instead. Spec §2a ("one
+          // default") + §2b: a location with NO default station makes legacy firing a fail-loud
+          // `station.no_default` misconfiguration, so a fresh venue must ship one. The owner inserts it
+          // in the location's transaction. The operator can rename it later via updateStation;
+          // `station.no_default` then guards any venue
           // left with no ACTIVE default station — including one whose sole default was DEACTIVATED
           // (fireLines' fallback requires `is_default AND active`) — not a fresh venue, which always ships
           // this one.
@@ -152,6 +194,17 @@ export async function applyVenue(
           // low-signal 22P02 (invalid uuid). Refuse it as a plan-integrity error instead. A plain
           // Error, NOT an operator-facing AppError code: this is a programming/plan bug, not input.
           if (locationId === "") throw new Error("applyVenue: create-till before create-location");
+          if (reusingVenue) {
+            const existing = await tx.execute<{ id: string; name: string }>(sql`
+              select id, name from tills
+              where tenant_id = ${tenantId} and location_id = ${locationId}
+              order by id limit 1`);
+            if (existing.rows[0] === undefined || existing.rows[0].name !== action.name) {
+              throw new AppError("provisioning.second_venue", {});
+            }
+            tillId = existing.rows[0].id;
+            break;
+          }
           tillId = randomUUID();
           await tx.execute(sql`
             insert into tills (id, tenant_id, location_id, name)
@@ -160,6 +213,27 @@ export async function applyVenue(
         case "create-node":
           // As create-till: create-node before create-location would insert an empty location_id.
           if (locationId === "") throw new Error("applyVenue: create-node before create-location");
+          if (reusingVenue) {
+            const existing = await tx.execute<{
+              id: string;
+              name: string;
+              filing_module: string;
+              tax_module: string;
+            }>(sql`
+              select id, name, filing_module, tax_module from nodes
+              where tenant_id = ${tenantId} and location_id = ${locationId}
+              order by id limit 1`);
+            if (
+              existing.rows[0] === undefined ||
+              existing.rows[0].name !== action.name ||
+              existing.rows[0].filing_module !== action.filingModule ||
+              existing.rows[0].tax_module !== action.taxModule
+            ) {
+              throw new AppError("provisioning.second_venue", {});
+            }
+            nodeId = existing.rows[0].id;
+            break;
+          }
           nodeId = randomUUID();
           await tx.execute(sql`
             insert into nodes (id, tenant_id, location_id, name, filing_module, tax_module)
@@ -175,6 +249,7 @@ export async function applyVenue(
               `applyVenue: seed-module names ${action.module}, which is not in deps.modules or declares no seed`,
             );
           }
+          if (reusingVenue) break;
           const report = await seed.run(tx, {
             tenantId: brandTenantId(tenantId),
             locationId: brandLocationId(locationId),
@@ -186,6 +261,17 @@ export async function applyVenue(
         case "create-series": {
           // create-series before create-node would insert an empty node_id.
           if (nodeId === "") throw new Error("applyVenue: create-series before create-node");
+          if (reusingVenue) {
+            const existing = await tx.execute<{ id: string }>(sql`
+              select id from invoice_series
+              where tenant_id = ${tenantId} and node_id = ${nodeId}
+                and code = ${action.code} and purpose = ${action.purpose}`);
+            if (existing.rows[0] === undefined) {
+              throw new AppError("provisioning.second_venue", {});
+            }
+            seriesIds.push(existing.rows[0].id);
+            break;
+          }
           const seriesId = randomUUID();
           const inserted = await tx.execute<{ id: string }>(sql`
             insert into invoice_series (id, tenant_id, node_id, code, purpose)

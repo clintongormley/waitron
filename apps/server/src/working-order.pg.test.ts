@@ -1417,13 +1417,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
   });
 
-  it("a pure walk-up never enters placed and opens no amendment log", async () => {
+  it("a pure prepay walk-up settles without placing and fires preparation", async () => {
     const { cfg, cafe } = await setupVenue();
     const id = randomUUID();
 
     // A walk-up settles open → settled in one transaction (till-sale.ts), never passing through
-    // `placed`, so placing's log never opens and no prep row is enqueued (design §3 — a walk-up
-    // finalises, pays and issues in one instant, with no placing gap).
+    // `placed`, so placing's log never opens. Prepay fires preparation in that same sale transaction.
     await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
       id,
       lines: [{ productId: cafe.id, quantity: "1" }],
@@ -1432,7 +1431,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await readAmendments(id)).toHaveLength(0); // no placing → no log (design §3)
-    expect(await ticketStateOf(id)).toBeNull(); // a walk-up never fires — fire is at place/send-to-prep
+    expect(await ticketStateOf(id)).toBe("queued");
   });
 });
 
@@ -1896,7 +1895,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       },
       OPERATOR,
     );
-    await sendToPrep({ db: suite.admin }, cfg, id); // Mode-P pickup fires the ticket item on the SETTLED order
     expect(await ticketStateOf(id)).toBe("queued");
     const [item] = await ticketItemIdsFor(id);
 
@@ -2135,7 +2133,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
   // The end-to-end proof the KDS-1 regression is closed. This RESTORES the base suite's "advancePrep
   // walks queued → preparing → ready → collected" assertion on the new ticket model: the branch had
   // rewritten it to stop at `ready` (CLAUDE.md §1 — a test rewritten to match the code hides the very
-  // regression it existed to catch). A Mode-P (prepay) order pays at order, is fired via sendToPrep,
+  // regression it existed to catch). A Mode-P (prepay) order pays and fires at order,
   // walks queued → preparing → ready, then is HANDED OVER — markCollected stamps `collected_at`, and it
   // drops off listStationQueue. Before the fix that stamp was impossible (a settled order was immutable),
   // so a fired Mode-P order's tickets lingered on the display forever.
@@ -2144,7 +2142,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
     const station = await defaultStationId(cfg);
     const id = randomUUID();
 
-    // Pay at order (open → settled in one tx — the Mode-P walk-up), then fire the settled order's lines.
+    // Pay and fire at order (open → settled in one transaction — the Mode-P walk-up).
     await payWorkingOrder(
       { db: suite.admin, backend, clock },
       cfg,
@@ -2155,7 +2153,6 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
       },
       OPERATOR,
     );
-    await sendToPrep({ db: suite.admin }, cfg, id);
     expect(
       (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
     ).toEqual([id]);
@@ -2204,11 +2201,10 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
   });
 
   it("refuses a settled order that was never fired (ticket.not_fired) — nothing on the kitchen queue to hand over", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
-    // Settled but NOT sent to prep — no ticket_items exist, so there is nothing on any station display to
-    // hand over. Stamping collected_at here would silently hide a LATER sendToPrep's fired lines, so it is
-    // refused rather than made a no-op.
+    // A context-less ticket-then-pay order settled through the direct pay primitive has no ticket item,
+    // so there is nothing on any station display to hand over.
     await payWorkingOrder(
       { db: suite.admin, backend, clock },
       cfg,
@@ -2239,7 +2235,6 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
       },
       OPERATOR,
     );
-    await sendToPrep({ db: suite.admin }, cfg, id);
     await markCollected({ db: suite.admin }, cfg, id); // first handover — allowed
     expect(await collectedAtSet(id)).toBe(true);
     // A second markCollected is refused BEFORE it reaches enforce_transition (whose non-null → non-null

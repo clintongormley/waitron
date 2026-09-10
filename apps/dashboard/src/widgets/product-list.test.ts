@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { allergenStateName, unitName, vatClassName } from "../i18n/domain.js";
+import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
 import { ProductList } from "./product-list.js";
 
 afterEach(cleanupWidgets);
+
+async function tableRoot(el: ProductList): Promise<ShadowRoot> {
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  return table.shadowRoot!;
+}
 
 /**
  * A representative product carrying every field the list reads; individual tests override the one
@@ -30,10 +36,10 @@ function product(overrides: Partial<Product> = {}): Product {
 }
 
 describe("product-list", () => {
-  it("renders one wt-card row per product", async () => {
+  it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const rows = el.shadowRoot!.querySelectorAll("wt-card[data-test=row]");
+    const rows = (await tableRoot(el)).querySelectorAll("tbody tr");
     expect(rows.length).toBe(3);
   });
 
@@ -42,7 +48,7 @@ describe("product-list", () => {
       product({ descriptions: { es: "Croquetas de jamón", en: "Ham croquettes" } }),
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const row = el.shadowRoot!.querySelector("[data-test=row]")!;
+    const row = (await tableRoot(el)).querySelector("tbody tr")!;
     expect(row.textContent).toContain("Croquetas de jamón");
     expect(row.textContent).not.toContain("Ham croquettes");
   });
@@ -55,7 +61,7 @@ describe("product-list", () => {
       products,
       primaryLocale: "es",
     });
-    expect(el.shadowRoot!.querySelector("[data-test=row]")!.textContent).toContain(
+    expect((await tableRoot(el)).querySelector("tbody tr")!.textContent).toContain(
       "Ham croquettes",
     );
   });
@@ -66,26 +72,22 @@ describe("product-list", () => {
       products,
       primaryLocale: "en",
     });
-    const row = el.shadowRoot!.querySelector("[data-test=row]")!;
+    const row = (await tableRoot(el)).querySelector("tbody tr")!;
     expect(row.textContent).toContain("Croquettes");
     expect(row.textContent).not.toContain("Croquetas");
   });
 
-  // The gross unitPrice is left as-is (money formatting is deferred); only the pricingUnit token is
-  // localised through the i18n layer — the raw `weight` token is never shown.
-  it("shows the gross unitPrice and the localised pricing unit", async () => {
+  it("does not present the legacy product price as a selling price", async () => {
     const products = [product({ unitPrice: "12.00", pricingUnit: "weight" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const text = el.shadowRoot!.querySelector("[data-test=row]")!.textContent!;
-    expect(text).toContain("12.00");
-    expect(text).toContain(unitName("weight", "es-ES"));
-    expect(text).not.toContain("weight");
+    const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
+    expect(text).not.toContain("12.00");
   });
 
   it("shows the localised vatClass name, not the raw token", async () => {
     const products = [product({ vatClass: "super_reduced" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const text = el.shadowRoot!.querySelector("[data-test=row]")!.textContent!;
+    const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
     expect(text).toContain(vatClassName("super_reduced", "es-ES"));
     expect(text).not.toContain("super_reduced");
   });
@@ -94,7 +96,7 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "on", active: true }), product({ id: "off", active: false })],
     });
-    const badges = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=active-badge]");
+    const badges = (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=active-badge]");
     expect(badges.length).toBe(2);
     // Each badge names its state in text (an a11y requirement — not conveyed by colour alone).
     expect(badges[0]!.getAttribute("data-active")).toBe("true");
@@ -110,7 +112,7 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ allergens: null })],
     });
-    const pill = el.shadowRoot!.querySelector<HTMLElement>("[data-test=allergen-state]")!;
+    const pill = (await tableRoot(el)).querySelector<HTMLElement>("[data-test=allergen-state]")!;
     expect(pill.getAttribute("data-state")).toBe("pending");
     expect(pill.textContent!.trim().length).toBeGreaterThan(0);
   });
@@ -119,7 +121,7 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ allergens: {} })],
     });
-    const pill = el.shadowRoot!.querySelector<HTMLElement>("[data-test=allergen-state]")!;
+    const pill = (await tableRoot(el)).querySelector<HTMLElement>("[data-test=allergen-state]")!;
     expect(pill.getAttribute("data-state")).toBe("none");
   });
 
@@ -127,7 +129,7 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ allergens: { gluten: { presence: "contains", source: "trigo" } } })],
     });
-    const pill = el.shadowRoot!.querySelector<HTMLElement>("[data-test=allergen-state]")!;
+    const pill = (await tableRoot(el)).querySelector<HTMLElement>("[data-test=allergen-state]")!;
     expect(pill.getAttribute("data-state")).toBe("declared");
   });
 
@@ -142,7 +144,7 @@ describe("product-list", () => {
         product({ id: "d", allergens: { milk: { presence: "contains" } } }),
       ],
     });
-    const pills = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=allergen-state]");
+    const pills = (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=allergen-state]");
     expect(pills[0]!.textContent!.trim()).toBe(allergenStateName("pending", "es-ES"));
     expect(pills[1]!.textContent!.trim()).toBe(allergenStateName("none", "es-ES"));
     expect(pills[2]!.textContent!.trim()).toBe(allergenStateName("declared", "es-ES"));
@@ -157,33 +159,33 @@ describe("product-list", () => {
       ],
     });
     const states = Array.from(
-      el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=allergen-state]"),
+      (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=allergen-state]"),
       (pill) => pill.getAttribute("data-state"),
     );
     expect(states).toEqual(["pending", "none", "declared"]);
     // PENDING and none are not the same rendered text (the whole point of the invariant).
-    const pills = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=allergen-state]");
+    const pills = (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=allergen-state]");
     expect(pills[0]!.textContent).not.toBe(pills[1]!.textContent);
   });
 
-  it("renders a thumbnail <img> served from /media with alt text when image is set", async () => {
+  it("renders a decorative thumbnail served from /media when image is set", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ image: "abc123.webp", descriptions: { es: "Croquetas" } })],
     });
-    const img = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=thumb] img")!;
+    const img = (await tableRoot(el)).querySelector<HTMLImageElement>("[data-test=thumb] img")!;
     expect(img).not.toBeNull();
     expect(img.getAttribute("src")).toBe("/media/abc123.webp");
-    // A meaningful alt (the product name), never an empty string on a content image.
-    expect(img.getAttribute("alt")).toBe("Croquetas");
-    expect(el.shadowRoot!.querySelector("[data-test=thumb-placeholder]")).toBeNull();
+    // The adjacent strong element already names the product, so repeating it as alt text is noisy.
+    expect(img.getAttribute("alt")).toBe("");
+    expect((await tableRoot(el)).querySelector("[data-test=thumb-placeholder]")).toBeNull();
   });
 
   it("renders a placeholder (no <img>) when image is null", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ image: null })],
     });
-    expect(el.shadowRoot!.querySelector("[data-test=thumb] img")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=thumb-placeholder]")).not.toBeNull();
+    expect((await tableRoot(el)).querySelector("[data-test=thumb] img")).toBeNull();
+    expect((await tableRoot(el)).querySelector("[data-test=thumb-placeholder]")).not.toBeNull();
   });
 
   it("emits edit-product with the product id when a row's Edit control is clicked", async () => {
@@ -193,7 +195,7 @@ describe("product-list", () => {
     const detail = new Promise<{ productId: string }>((resolve) =>
       el.addEventListener("edit-product", (e) => resolve((e as CustomEvent).detail)),
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-prod-42]")!.click();
+    (await tableRoot(el)).querySelector<HTMLElement>("[data-test=edit-prod-42]")!.click();
     expect((await detail).productId).toBe("prod-42");
   });
 
@@ -204,7 +206,7 @@ describe("product-list", () => {
       products: [product({ id: "prod-9" })],
     });
     const seen = new Promise<Event>((resolve) => el.addEventListener("edit-product", resolve));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-prod-9]")!.click();
+    (await tableRoot(el)).querySelector<HTMLElement>("[data-test=edit-prod-9]")!.click();
     const event = await seen;
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
@@ -212,6 +214,6 @@ describe("product-list", () => {
 
   it("renders no rows for an empty products list", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products: [] });
-    expect(el.shadowRoot!.querySelectorAll("[data-test=row]").length).toBe(0);
+    expect((await tableRoot(el)).querySelectorAll("tbody tr").length).toBe(0);
   });
 });

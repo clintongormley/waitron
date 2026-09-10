@@ -61,6 +61,8 @@ export interface SeedParentsOptions {
    * {@link insertFiscalSale} plants the sale (Task 8).
    */
   skipSale?: boolean;
+  /** The supplied ids already name a tenant, venue, till, node and series in this database. */
+  reuseExistingParents?: boolean;
 }
 
 /**
@@ -97,21 +99,23 @@ export async function seedFiscalParents(
   const taxId = `899${String(n).padStart(6, "0")}K`;
   const numeroInstalacion = opts.numeroInstalacion ?? n + 1;
 
-  await db.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (${ids.tenantId}, 'ES', ${taxId}, 'Waitron SL')`);
-  await db.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${ids.locationId}, ${ids.tenantId}, 'Local principal', array['es'], 'Venta en establecimiento')`);
-  await db.execute(sql`
-    insert into tills (id, tenant_id, location_id, name)
-    values (${ids.tillId}, ${ids.tenantId}, ${ids.locationId}, 'Caja 1')`);
-  await db.execute(sql`
-    insert into nodes (id, tenant_id, location_id, name)
-    values (${ids.nodeId}, ${ids.tenantId}, ${ids.locationId}, 'Node 1')`);
-  await db.execute(sql`
-    insert into invoice_series (id, tenant_id, node_id, code)
-    values (${ids.seriesId}, ${ids.tenantId}, ${ids.nodeId}, 'A')`);
+  if (opts.reuseExistingParents !== true) {
+    await db.execute(sql`
+      insert into tenants (id, country, tax_id, legal_name)
+      values (${ids.tenantId}, 'ES', ${taxId}, 'Waitron SL')`);
+    await db.execute(sql`
+      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
+      values (${ids.locationId}, ${ids.tenantId}, 'Local principal', array['es'], 'Venta en establecimiento')`);
+    await db.execute(sql`
+      insert into tills (id, tenant_id, location_id, name)
+      values (${ids.tillId}, ${ids.tenantId}, ${ids.locationId}, 'Caja 1')`);
+    await db.execute(sql`
+      insert into nodes (id, tenant_id, location_id, name)
+      values (${ids.nodeId}, ${ids.tenantId}, ${ids.locationId}, 'Node 1')`);
+    await db.execute(sql`
+      insert into invoice_series (id, tenant_id, node_id, code)
+      values (${ids.seriesId}, ${ids.tenantId}, ${ids.nodeId}, 'A')`);
+  }
   if (!opts.skipSale) await insertFiscalSale(db, ids);
   await db.execute(sql`
     insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)

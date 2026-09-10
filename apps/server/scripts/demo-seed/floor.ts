@@ -2,7 +2,7 @@
 // data, plausibility rather than accuracy is the bar, the same posture `menu.ts` states for the
 // catalogue content it authors.
 //
-// Three zones (Comedor/Terraza/Barra) and ~16 tables, spatially placed on a shared 0..1000 canvas so
+// Three table-bearing zones and ~16 tables, spatially placed on a shared 0..1000 canvas so
 // the live floor and the FP-2 spatial editor both look real: Comedor (the indoor dining room) fills
 // the top-left, Terraza (the outdoor terrace) the top-right, and Barra (the bar) a strip along the
 // bottom — the three zones occupy visually distinct regions rather than overlapping. Zone names are
@@ -50,9 +50,9 @@ export interface SeedStatus {
 }
 
 export const DEMO_ZONES: SeedZone[] = [
-  { key: "dining", name: { en: "Comedor", es: "Comedor" }, displayOrder: 0 },
-  { key: "terrace", name: { en: "Terraza", es: "Terraza" }, displayOrder: 1 },
-  { key: "bar", name: { en: "Barra", es: "Barra" }, displayOrder: 2 },
+  { key: "dining", name: { en: "Dining room", es: "Comedor" }, displayOrder: 0 },
+  { key: "terrace", name: { en: "Terrace", es: "Terraza" }, displayOrder: 1 },
+  { key: "bar", name: { en: "Downstairs bar", es: "Bar de abajo" }, displayOrder: 2 },
 ];
 
 export const DEMO_TABLES: SeedTable[] = [

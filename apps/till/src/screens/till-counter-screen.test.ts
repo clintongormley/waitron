@@ -4,7 +4,7 @@ import { TillCounterScreen } from "./till-counter-screen.js";
 import type { TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { TillProduct } from "../api/client.js";
+import type { ServiceZoneSummary, TillProduct } from "../api/client.js";
 import type { TillAllergenScreen } from "./till-allergen-screen.js";
 
 const cafe: TillProduct = {
@@ -66,6 +66,70 @@ afterEach(cleanupWidgets);
 describe("till-counter-screen", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-counter-screen")).toBe(TillCounterScreen);
+  });
+
+  it("shows the effective service zone and emits zone changes and manual refreshes", async () => {
+    const serviceZones: ServiceZoneSummary[] = [
+      {
+        id: "upstairs",
+        name: "Upstairs bar",
+        departmentId: "bar",
+        departmentName: "Bar",
+        serviceMode: "prepay",
+      },
+      {
+        id: "downstairs",
+        name: "Downstairs bar",
+        departmentId: "bar",
+        departmentName: "Bar",
+        serviceMode: "prepay",
+      },
+    ];
+    const { el } = await mount({ serviceZones, selectedServiceZoneId: "upstairs" });
+    const seen: string[] = [];
+    el.addEventListener("counter-zone-selected", (event) =>
+      seen.push((event as CustomEvent<{ zoneId: string }>).detail.zoneId),
+    );
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="service-zone"]')!;
+    expect(select.value).toBe("upstairs");
+    expect(select.labels![0]!.textContent).toContain(t("service_zone.label"));
+
+    select.value = "downstairs";
+    select.dispatchEvent(new Event("change"));
+    el.shadowRoot!.querySelector<HTMLElement>(".service-zone-refresh")!.click();
+    expect(seen).toEqual(["downstairs", "upstairs"]);
+  });
+
+  it("keeps the service zone fixed while the basket has lines", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const serviceZones: ServiceZoneSummary[] = [
+      {
+        id: "upstairs",
+        name: "Upstairs bar",
+        departmentId: "bar",
+        departmentName: "Bar",
+        serviceMode: "prepay",
+      },
+      {
+        id: "downstairs",
+        name: "Downstairs bar",
+        departmentId: "bar",
+        departmentName: "Bar",
+        serviceMode: "prepay",
+      },
+    ];
+    const { el } = await mount({ store, serviceZones, selectedServiceZoneId: "upstairs" });
+    const spy = vi.fn();
+    el.addEventListener("counter-zone-selected", spy);
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="service-zone"]')!;
+    select.value = "downstairs";
+    select.dispatchEvent(new Event("change"));
+    el.shadowRoot!.querySelector<HTMLElement>(".service-zone-refresh")!.click();
+
+    expect(select.value).toBe("upstairs");
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy.mock.calls[0]![0].detail).toEqual({ zoneId: "downstairs" });
   });
 
   // SALE-PATH GUARD (SP-B4): a counter tab must ALWAYS yield the four sale-critical cards. The screen

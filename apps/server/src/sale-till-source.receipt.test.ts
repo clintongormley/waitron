@@ -8,6 +8,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
   listAvailableProducts,
 } from "@waitron/catalogue";
@@ -99,7 +101,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 async function setupVenue(): Promise<{
   cfg: TillConfig;
   locationId: string;
-  product: AvailableProduct;
+  product: AvailableProduct & { menuItemId: string };
   operatorId: string;
 }> {
   const venue = await applyVenue(
@@ -141,7 +143,7 @@ async function setupVenue(): Promise<{
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
-    await createProduct(tx, cfg.tenantId, {
+    const created = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { es: "Agua mineral" },
@@ -150,12 +152,39 @@ async function setupVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    const section = await createMenuSection(tx, cfg.tenantId, {
+      menuId: cat.id,
+      name: { es: "Bebidas" },
+    });
+    const menuItem = await createMenuItem(tx, cfg.tenantId, {
+      menuId: cat.id,
+      productId: created.id,
+      sectionId: section.id,
+      grossPrice: "1.50",
+    });
+    await tx.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+      select ${cfg.tenantId}, zone_id, ${cat.id}, 0
+      from zone_service_policies
+      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        and is_counter_default`);
+    await tx.execute(sql`
+      update zone_service_policies set default_menu_id = ${cat.id}
+      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        and is_counter_default`);
+    await tx.execute(sql`
+      insert into preparation_routes
+        (tenant_id, location_id, category_id, station_id, no_preparation)
+      values (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id}, null, true)`);
     const person = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
     const available = (await listAvailableProducts(tx, cfg.locationId)).products;
     return {
-      product: available.find((p) => p.pricingUnit === "each")!,
+      product: {
+        ...available.find((p) => p.pricingUnit === "each")!,
+        menuItemId: menuItem.id,
+      },
       operatorId: person.rows[0]!.id,
     };
   });
@@ -239,19 +268,19 @@ async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<st
   return res.headers.get("set-cookie")!;
 }
 
-/** Ring one cash sale of two units of `productId`, carrying the session + device cookies, and assert
+/** Ring one cash sale of two units of `menuItemId`, carrying the session + device cookies, and assert
  *  the route returned a ticket (200). The device cookie is what `requireSaleTillId` reads. */
 async function ringSale(
   app: Hono,
   sessionCookie: string,
   deviceCookie: string,
-  productId: string,
+  menuItemId: string,
 ): Promise<void> {
   const res = await app.request("/api/sales", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: `${sessionCookie}; ${deviceCookie}` },
     body: JSON.stringify({
-      lines: [{ productId, quantity: "2" }],
+      lines: [{ menuItemId, quantity: "2" }],
       tender: { method: "cash", amount: "5.00" },
     }),
   });
@@ -337,11 +366,11 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
 
     // Sale 1 via a device bound to till X (the venue's own till).
     const deviceX = await enrolTillCookie(cfg, tillX);
-    await ringSale(app, sessionCookie, deviceX, product.id);
+    await ringSale(app, sessionCookie, deviceX, product.menuItemId);
 
     // Sale 2 via a device bound to till Y — same tenant, same node, same operator, same basket.
     const deviceY = await enrolTillCookie(cfg, tillY);
-    await ringSale(app, sessionCookie, deviceY, product.id);
+    await ringSale(app, sessionCookie, deviceY, product.menuItemId);
 
     const registros = await registrosFor(cfg);
     expect(registros).toHaveLength(2);
@@ -407,7 +436,7 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
         [DEV_DEVICE_HEADER]: deviceY,
       },
       body: JSON.stringify({
-        lines: [{ productId: product.id, quantity: "2" }],
+        lines: [{ menuItemId: product.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     });

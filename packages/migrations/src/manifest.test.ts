@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { captureError, CORE_MIGRATIONS } from "@waitron/db";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
@@ -12,6 +13,7 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
 import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { isAppError } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
@@ -25,6 +27,8 @@ describe("the migration manifest", () => {
     const byName = Object.fromEntries(manifestSets().map((set) => [set.name, set.table]));
     expect(byName).toEqual({
       core: CORE_MIGRATIONS.migrationsTable,
+      catalogue: CATALOGUE_MIGRATIONS.migrationsTable,
+      "venue-service": VENUE_SERVICE_MIGRATIONS.migrationsTable,
       identity: IDENTITY_MIGRATIONS.migrationsTable,
       workforce: WORKFORCE_MIGRATIONS.migrationsTable,
       "workforce-es": WORKFORCE_ES_MIGRATIONS.migrationsTable,

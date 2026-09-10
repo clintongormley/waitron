@@ -8,7 +8,7 @@ import {
   sumDecimals,
   toScale,
 } from "@waitron/shared";
-import type { Doneness } from "../api/client.js";
+import type { Doneness, SaleLine } from "../api/client.js";
 import type { OrderLine, SelectedLineOption } from "./working-order.js";
 
 /**
@@ -130,4 +130,14 @@ export function toWireLineExtras(line: { note?: string; doneness?: Doneness }): 
     extras.doneness = line.doneness;
   }
   return extras;
+}
+
+/** Serialize the selected menu identity, retaining product-only support for stored legacy fixtures. */
+export function toWireProductIdentity(product: {
+  id: string;
+  menuItemId?: string;
+}): Pick<SaleLine, "menuItemId" | "productId"> {
+  return product.menuItemId === undefined
+    ? { productId: product.id }
+    : { menuItemId: product.menuItemId };
 }

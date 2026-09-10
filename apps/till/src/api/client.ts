@@ -295,6 +295,10 @@ export interface TillOptionGroup {
 /** One sellable product from `GET /api/products` (mirrors catalogue's `AvailableProduct`). */
 export interface TillProduct {
   id: string;
+  /** The shared product identity used by recipes, stock and preparation routing. */
+  productId?: string;
+  /** The selling identity whose menu, price and offered modifiers were selected. */
+  menuItemId?: string;
   descriptions: Record<string, string>;
   pricingUnit: "each" | "weight";
   unitPrice: string;
@@ -376,6 +380,98 @@ export interface ProductCatalogue {
   products: TillProduct[];
 }
 
+/** A product's distinct selling identity on one menu. Its id selects this price and option set. */
+export interface TillMenuOffer {
+  id: string;
+  menuId: string;
+  productId: string;
+  sectionId: string;
+  grossPrice: string;
+  displayOrder: number;
+  active: boolean;
+  menuName: string;
+  sectionName: Record<string, string>;
+  descriptions: Record<string, string>;
+  pricingUnit: "each" | "weight";
+  vatClass: "general" | "reduced" | "super_reduced" | "zero";
+  category: string | null;
+  allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+  diet: DietProfile | null;
+  dietDerivation: DietDerivation | null;
+  dietOverride: DietOverride | null;
+  courseId: string | null;
+  optionGroups: {
+    id: string;
+    name: Record<string, string>;
+    minSelect: number;
+    maxSelect: number;
+    required: boolean;
+    options: {
+      id: string;
+      name: Record<string, string>;
+      priceDelta: string;
+      maxQuantity: number;
+      vatClass: "general" | "reduced" | "super_reduced" | "zero" | null;
+      addAllergens: Record<
+        string,
+        { presence: "contains" | "may_contain"; source?: string }
+      > | null;
+      removeAllergens: string[] | null;
+      addOrigins: string[] | null;
+      removeOrigins: string[] | null;
+    }[];
+  }[];
+}
+
+export interface ZoneOfferCatalogue {
+  context: {
+    zoneId: string;
+    departmentId: string;
+    serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+  };
+  defaultMenuId: string | null;
+  menus: TillMenu[];
+  offers: TillMenuOffer[];
+  zones?: ServiceZoneSummary[];
+}
+
+export interface ServiceZoneSummary {
+  id: string;
+  name: string;
+  departmentId: string;
+  departmentName: string;
+  serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+}
+
+/** Adapt a menu offer to the till's display model while keeping product and selling ids distinct. */
+export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
+  return {
+    id: offer.productId,
+    productId: offer.productId,
+    menuItemId: offer.id,
+    descriptions: offer.descriptions,
+    pricingUnit: offer.pricingUnit,
+    unitPrice: offer.grossPrice,
+    vatClass: offer.vatClass,
+    category: offer.category,
+    allergens: offer.allergens,
+    courseId: offer.courseId,
+    catalogueId: offer.menuId,
+    catalogueName: offer.menuName,
+    optionGroups: offer.optionGroups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      minSelect: group.minSelect,
+      maxSelect: group.maxSelect,
+      required: group.required,
+      items: group.options,
+    })),
+    diet: offer.diet,
+    dietDerivation: offer.dietDerivation,
+    dietOverride: offer.dietOverride,
+  };
+}
+
 /**
  * The meat-doneness enum (order-line customisation) — a LOCAL redefinition of the server's
  * `packages/db` `Doneness`, the same bundle-decoupling rationale as every other type in this file (see
@@ -411,7 +507,10 @@ export type Doneness = (typeof DONENESS)[number];
  * no-doneness sale stays byte-identical to before.
  */
 export interface SaleLine {
-  productId: string;
+  /** Stable server line identity on a retrieved order; omitted for a newly selected line. */
+  workingOrderLineId?: string;
+  productId?: string;
+  menuItemId?: string;
   quantity: string;
   options?: { optionGroupItemId: string; quantity?: number }[];
   note?: string;
@@ -504,15 +603,23 @@ export interface HeldOrderSummary {
 
 /**
  * `GET /api/working-orders/:id` — a retrieved parked order: enough to name it in the UI plus the
- * pricing INPUTS to rebuild its basket. Mirrors the server's `HeldOrder`. `lines` are `product_id` +
- * `quantity` only (never a stored price — the till re-prices on retrieve); the server sends
- * `quantity` at numeric(_,3) scale ("2.000"), passed through here as sent.
+ * stored inputs and commercial snapshots needed to rebuild its basket. Mirrors the server's
+ * `HeldOrder`; contextual lines can be restored even when their live offer is no longer available.
+ * The server sends `quantity` at numeric(_,3) scale ("2.000"), passed through here as sent.
  */
 export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
-  lines: SaleLine[];
+  lines: (Omit<SaleLine, "options"> & {
+    options?: {
+      optionGroupItemId: string;
+      name: Record<string, string>;
+      priceDelta: string;
+      quantity?: number;
+    }[];
+    product?: TillProduct;
+  })[];
 }
 
 /**
@@ -1151,6 +1258,7 @@ export interface TabTransfer {
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
+  #serviceZoneId?: string;
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
@@ -1222,6 +1330,22 @@ export class TillApi {
     return this.#request<ProductCatalogue>("/api/products", "GET");
   }
 
+  async listZoneOffers(zoneId: string): Promise<ZoneOfferCatalogue> {
+    return this.#request<ZoneOfferCatalogue>(
+      `/api/service-zones/${encodeURIComponent(zoneId)}/offers`,
+      "GET",
+    );
+  }
+
+  async listDefaultZoneOffers(): Promise<ZoneOfferCatalogue> {
+    return this.#request<ZoneOfferCatalogue>("/api/default-service-zone/offers", "GET");
+  }
+
+  /** Set the service zone used for newly created counter orders after the app accepts an offer load. */
+  setServiceZone(zoneId: string): void {
+    this.#serviceZoneId = zoneId;
+  }
+
   /**
    * Ring one sale over a persisted working order. `workingOrderId` is the pay-idempotency key: the
    * till holds it stable across a lost-response retry, so a re-sent pay REPLAYS against the same
@@ -1229,8 +1353,18 @@ export class TillApi {
    * invoice number is never reused). For a walk-up it is a fresh client-minted id; to pay a PARKED
    * order the till sends that order's own id, so the settle lands on the retrieved order.
    */
-  recordSale(lines: SaleLine[], tender: Tender, workingOrderId: string): Promise<TillSaleResult> {
-    return this.#request<TillSaleResult>("/api/sales", "POST", { lines, tender, workingOrderId });
+  recordSale(
+    lines: SaleLine[],
+    tender: Tender,
+    workingOrderId: string,
+    zoneId?: string,
+  ): Promise<TillSaleResult> {
+    return this.#request<TillSaleResult>("/api/sales", "POST", {
+      lines,
+      tender,
+      workingOrderId,
+      zoneId: zoneId ?? this.#serviceZoneId,
+    });
   }
 
   /**
@@ -1246,11 +1380,15 @@ export class TillApi {
   pay(req: {
     id: string;
     lines: SaleLine[];
+    zoneId?: string;
     tip?: string;
     allowOffline?: boolean;
     simulationOutcome?: "captured" | "declined";
   }): Promise<PayOutcome> {
-    return this.#request<PayOutcome>("/api/pay", "POST", req);
+    return this.#request<PayOutcome>("/api/pay", "POST", {
+      ...req,
+      zoneId: req.zoneId ?? this.#serviceZoneId,
+    });
   }
 
   /**
@@ -1306,11 +1444,14 @@ export class TillApi {
    * idempotent against the primary key; `lines` carry no price — the server re-prices. Returns the
    * persisted `{ id, orderNumber }` (the human order number the counter types back in to retrieve).
    */
-  parkOrder(req: { id: string; lines: SaleLine[]; label?: string }): Promise<{
+  parkOrder(req: { id: string; lines: SaleLine[]; zoneId?: string; label?: string }): Promise<{
     id: string;
     orderNumber: number;
   }> {
-    return this.#request<{ id: string; orderNumber: number }>("/api/working-orders", "POST", req);
+    return this.#request<{ id: string; orderNumber: number }>("/api/working-orders", "POST", {
+      ...req,
+      zoneId: req.zoneId ?? this.#serviceZoneId,
+    });
   }
 
   /** The cross-till held list for this node → `GET /api/working-orders`. Every OPEN parked order. */
@@ -1482,9 +1623,9 @@ export class TillApi {
    * `to` — the Mode-P pickup for an order that pays at order and so never places (Modes I/T fire
    * automatically when `placeOrder` runs). The server's reworked route no longer enqueues one order row;
    * it fires the order's lines through `fireLines`, inserting one `ticket_items` row per line, each routed
-   * to a station (product ?? category ?? default) SNAPSHOTTED at fire time. A non-settled/absent/foreign
+   * from its frozen service zone and snapshotted at fire time. A non-settled/absent/foreign
    * id rejects `{ code: "working_order.not_settled" }`; a re-fire of an already-sent order
-   * `{ code: "ticket.already_fired" }`; a venue with no default station `{ code: "station.no_default" }`.
+   * `{ code: "ticket.already_fired" }`; incomplete routing `{ code: "route.missing" }`.
    */
   async sendToPrep(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", {});

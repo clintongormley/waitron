@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { assertNoForeignTenant, type TenantIdentity } from "./tenant-guard.js";
+import {
+  assertNoForeignTenant,
+  assertNoOperationalVenue,
+  assertSingleOperationalVenue,
+  type TenantIdentity,
+} from "./tenant-guard.js";
 
 const ES_A: TenantIdentity = { country: "ES", taxId: "B12345678" };
 const ES_B: TenantIdentity = { country: "ES", taxId: "B99999999" };
@@ -31,5 +36,27 @@ describe("assertNoForeignTenant", () => {
 
   it("refuses a foreign identity even when the applied one is ALSO present", () => {
     expect(() => assertNoForeignTenant([ES_A, ES_B], ES_A, "waitron")).toThrow();
+  });
+});
+
+describe("operational venue guards", () => {
+  it("accepts exactly the configured venue at trading boot", () => {
+    expect(() => assertSingleOperationalVenue(["venue-a"], "venue-a")).not.toThrow();
+  });
+
+  it.each([[[]], [["venue-b"]], [["venue-a", "venue-b"]]] as const)(
+    "refuses a trading boot whose venue rows are %j",
+    (present) => {
+      expect(() => assertSingleOperationalVenue(present, "venue-a")).toThrowError(
+        expect.objectContaining({ code: "provisioning.second_venue" }),
+      );
+    },
+  );
+
+  it("requires a mirror target to contain no venue before native copy", () => {
+    expect(() => assertNoOperationalVenue([])).not.toThrow();
+    expect(() => assertNoOperationalVenue(["venue-a"])).toThrowError(
+      expect.objectContaining({ code: "provisioning.second_venue" }),
+    );
   });
 });

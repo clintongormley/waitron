@@ -8,6 +8,7 @@ import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -35,7 +36,7 @@ let staffCookie: string;
 let mediaDir: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     tenantId = await seedTenant(db);
@@ -385,6 +386,79 @@ describe("mountCatalogueApi — products", () => {
     const res = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
     expect(res.status).toBe(200);
     expect((await res.json()) as unknown[]).toEqual([]);
+  });
+
+  it("offers one product on two menus with independent section and price", async () => {
+    const app = mountApp();
+    const productsMenuId = await createCatalogueVia(app, "Products");
+    const upstairsMenuId = await createCatalogueVia(app, "Upstairs drinks");
+    const downstairsMenuId = await createCatalogueVia(app, "Downstairs drinks");
+    const createdProduct = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId: productsMenuId,
+        categoryId: null,
+        descriptions: { en: "Negroni" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      },
+    });
+    const productId = ((await createdProduct.json()) as { id: string }).id;
+
+    const createOffer = async (menuId: string, grossPrice: string): Promise<string> => {
+      const sectionResponse = await send(
+        app,
+        "POST",
+        `/management-api/catalogues/${menuId}/sections`,
+        { body: { name: { en: "Cocktails" }, displayOrder: 0 } },
+      );
+      expect(sectionResponse.status).toBe(201);
+      const sectionId = ((await sectionResponse.json()) as { id: string }).id;
+      const response = await send(app, "POST", `/management-api/catalogues/${menuId}/items`, {
+        body: { productId, sectionId, grossPrice, displayOrder: 0 },
+      });
+      expect(response.status).toBe(201);
+      return ((await response.json()) as { id: string }).id;
+    };
+    const upstairsItemId = await createOffer(upstairsMenuId, "11.00");
+    const downstairsItemId = await createOffer(downstairsMenuId, "9.00");
+
+    const upstairs = await send(app, "GET", `/management-api/catalogues/${upstairsMenuId}/offers`);
+    const downstairs = await send(
+      app,
+      "GET",
+      `/management-api/catalogues/${downstairsMenuId}/offers`,
+    );
+    expect(
+      ((await upstairs.json()) as { productId: string; grossPrice: string }[])[0],
+    ).toMatchObject({ productId, grossPrice: "11.00" });
+    expect(
+      ((await downstairs.json()) as { productId: string; grossPrice: string }[])[0],
+    ).toMatchObject({ productId, grossPrice: "9.00" });
+
+    expect(
+      (
+        await send(
+          app,
+          "PATCH",
+          `/management-api/catalogues/${upstairsMenuId}/items/${upstairsItemId}`,
+          { body: { grossPrice: "12.50" } },
+        )
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(
+          app,
+          "DELETE",
+          `/management-api/catalogues/${downstairsMenuId}/items/${downstairsItemId}`,
+        )
+      ).status,
+    ).toBe(204);
+    const updated = await send(app, "GET", `/management-api/catalogues/${upstairsMenuId}/offers`);
+    const removed = await send(app, "GET", `/management-api/catalogues/${downstairsMenuId}/offers`);
+    expect(((await updated.json()) as { grossPrice: string }[])[0]!.grossPrice).toBe("12.50");
+    expect(await removed.json()).toEqual([]);
   });
 
   it("GET /management-api/catalogues/:id/products with a non-uuid id → shared.invalid_id 400", async () => {

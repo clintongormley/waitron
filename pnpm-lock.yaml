@@ -473,9 +473,18 @@ importers:
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
+      '@waitron/migrations':
+        specifier: workspace:*
+        version: link:../migrations
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
@@ -492,6 +501,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -504,6 +516,9 @@ importers:
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../bookings
+      '@waitron/catalogue':
+        specifier: workspace:*
+        version: link:../catalogue
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -531,6 +546,9 @@ importers:
       '@waitron/sync':
         specifier: workspace:*
         version: link:../sync
+      '@waitron/venue-service':
+        specifier: workspace:*
+        version: link:../venue-service
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../workforce
@@ -724,6 +742,9 @@ importers:
       '@waitron/dashboard-kit':
         specifier: workspace:*
         version: link:../dashboard-kit
+      '@waitron/venue-service':
+        specifier: workspace:*
+        version: link:../venue-service
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -1063,6 +1084,9 @@ importers:
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../bookings
+      '@waitron/catalogue':
+        specifier: workspace:*
+        version: link:../catalogue
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -1081,6 +1105,9 @@ importers:
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../scheduler
+      '@waitron/venue-service':
+        specifier: workspace:*
+        version: link:../venue-service
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../workforce
@@ -1607,6 +1634,73 @@ importers:
       vite:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@24.13.3)(tsx@4.23.1)(yaml@2.9.0)
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
+  packages/venue-service:
+    dependencies:
+      '@waitron/catalogue':
+        specifier: workspace:*
+        version: link:../catalogue
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../dashboard-kit
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@waitron/migrations':
+        specifier: workspace:*
+        version: link:../migrations
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
+      '@waitron/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
+      '@waitron/ui':
+        specifier: workspace:*
+        version: link:../ui
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.32
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.3
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.4
+        version: 0.5.4
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/browser':
+        specifier: ^3.0.0
+        version: 3.2.7(playwright@1.61.1)(vite@6.4.3(@types/node@24.13.3)(tsx@4.23.1)(yaml@2.9.0))(vitest@3.2.7)
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
       vitest:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)

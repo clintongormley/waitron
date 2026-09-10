@@ -1,5 +1,9 @@
 # KDS-1 — Stations, routing & the per-line ticket rework
 
+> **2026-09-10:** Newly contextualised orders now resolve preparation by service zone, product and
+> category. See `2026-09-09-venue-departments-and-menus-design.md`. The default-station chain below
+> remains for context-less legacy orders and for the station queue UI.
+
 **Date:** 2026-08-17. **Status:** design (approved section-by-section with the owner via the visual
 companion + terminal); plan alongside. **Track:** the first slice of the **KDS track** (sub-project 12).
 **Runs SUPERVISED** (owner in the loop), NOT in the unattended campaign. **Interacts with shipped #63**

@@ -411,6 +411,19 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
     expect(rep.calls).toEqual([]);
   });
 
+  it("refuses a same-tenant venue before native copy", async () => {
+    await mirrorAdmin.execute(sql`
+      insert into tenants (id, country, tax_id, legal_name)
+      values (${DESIGNATED.tenantId}, 'ES', '80000001K', 'Incumbent SL')`);
+    await mirrorAdmin.execute(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${DESIGNATED.tenantId}, 'Existing venue', array['en-GB'], 'Hospitality')`);
+    const rep = recordingReplication();
+    const error = await adoptFromPrimary(deps(rep.verbs), REQ).catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
+    expect(rep.calls).toEqual([]);
+  });
+
   it("refuses (fail-closed) a bundle naming an unknown module, before any subscription", async () => {
     const rep = recordingReplication();
     const error = await adoptFromPrimary(

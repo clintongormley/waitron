@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CORE_MIGRATIONS,
   asAppUser,
   optionGroupItems,
   optionGroups,
@@ -13,6 +12,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -40,7 +40,10 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 let db: Database;
 beforeAll(() => {
   db = suite.db;
@@ -137,6 +140,50 @@ async function statusIdOf(tableId: string): Promise<string | null> {
   return rows[0]!.status_id;
 }
 
+async function serviceContextOf(tabId: string): Promise<{
+  zoneId: string;
+  departmentId: string;
+  serviceMode: string;
+} | null> {
+  const { rows } = await db.execute<{
+    zone_id: string;
+    department_id: string;
+    service_mode: string;
+  }>(sql`
+    select zone_id, department_id, service_mode
+    from order_service_contexts
+    where working_order_id = ${tabId}`);
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : { zoneId: row.zone_id, departmentId: row.department_id, serviceMode: row.service_mode };
+}
+
+async function configureTableZone(
+  cfg: TillConfig,
+  tableId: string,
+  name: string,
+  serviceMode: "table_tab" | "prepay",
+): Promise<{ zoneId: string; departmentId: string }> {
+  const departmentId = randomUUID();
+  const zoneId = randomUUID();
+  await db.execute(sql`
+    insert into departments
+      (id, tenant_id, location_id, name, trading_name, default_service_mode)
+    values
+      (${departmentId}, ${cfg.tenantId}, ${cfg.locationId}, ${name}, ${name}, ${serviceMode})`);
+  await db.execute(sql`
+    insert into floor_zones (id, tenant_id, location_id, name)
+    values (${zoneId}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+  await db.execute(sql`
+    insert into zone_service_policies
+      (tenant_id, location_id, zone_id, department_id, service_mode)
+    values
+      (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${departmentId}, ${serviceMode})`);
+  await db.execute(sql`update dining_tables set zone_id = ${zoneId} where id = ${tableId}`);
+  return { zoneId, departmentId };
+}
+
 /** Seed one active table_service_statuses row (TS-2 schema) as the owner; returns its id. */
 async function seedStatus(cfg: TillConfig, label: string): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(sql`
@@ -148,9 +195,10 @@ async function seedStatus(cfg: TillConfig, label: string): Promise<string> {
 /** A tab's lines as { lineNo, productId, unitPriceGross }, in line_no order — owner read. */
 async function linesOf(
   tabId: string,
-): Promise<{ lineNo: number; productId: string | null; gross: string }[]> {
+): Promise<{ id: string; lineNo: number; productId: string | null; gross: string }[]> {
   const rows = await db
     .select({
+      id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       productId: workingOrderLines.productId,
       gross: workingOrderLines.unitPriceGross,
@@ -168,6 +216,7 @@ describe("moveTabLines", () => {
     const t2 = await seedTable(cfg, "M2");
     const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
     const to = await openTabOn(cfg, t2, [{ productId: aguaId, quantity: "1" }]);
+    const sourceLineId = (await linesOf(from))[0]!.id;
 
     await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
 
@@ -176,6 +225,7 @@ describe("moveTabLines", () => {
     expect(dest).toHaveLength(2);
     expect(dest.map((l) => l.lineNo)).toEqual([1, 2]);
     expect(dest.find((l) => l.productId === cafeId)?.gross).toBe("1.50");
+    expect(dest.find((l) => l.productId === cafeId)?.id).toBe(sourceLineId);
     expect(await linesOf(from)).toHaveLength(0);
   });
 
@@ -207,6 +257,40 @@ describe("moveTabLines", () => {
 
     await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
     expect(await linesOf(to)).toHaveLength(1); // unchanged
+  });
+
+  it("refuses to combine orders whose frozen service modes differ", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t1 = await seedTable(cfg, "FLOW-1");
+    const t2 = await seedTable(cfg, "FLOW-2");
+    const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
+    const to = await openTabOn(cfg, t2, []);
+    const department = await db.execute<{ id: string }>(sql`
+      insert into departments
+        (tenant_id, location_id, name, trading_name, default_service_mode)
+      values (${cfg.tenantId}, ${cfg.locationId}, 'Flow test', 'Flow test', 'prepay')
+      returning id`);
+    const zones = await db.execute<{ id: string; name: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values
+        (${cfg.tenantId}, ${cfg.locationId}, 'Flow prepay'),
+        (${cfg.tenantId}, ${cfg.locationId}, 'Flow tab')
+      returning id, name`);
+    const prepayZone = zones.rows.find((zone) => zone.name === "Flow prepay")!;
+    const tabZone = zones.rows.find((zone) => zone.name === "Flow tab")!;
+    await db.execute(sql`
+      insert into order_service_contexts
+        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+      values
+        (${cfg.tenantId}, ${from}, ${cfg.locationId}, ${prepayZone.id}, ${department.rows[0]!.id}, 'prepay'),
+        (${cfg.tenantId}, ${to}, ${cfg.locationId}, ${tabZone.id}, ${department.rows[0]!.id}, 'table_tab')`);
+
+    await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to))).rejects.toMatchObject({
+      code: "service_zone.mode_incompatible",
+      params: { expected: "prepay", actual: "table_tab" },
+    });
+    expect(await linesOf(from)).toHaveLength(1);
+    expect(await linesOf(to)).toHaveLength(0);
   });
 
   it("refuses a non-open source or destination (tab.not_open)", async () => {
@@ -245,6 +329,30 @@ describe("moveTabLines", () => {
 });
 
 describe("moveTab", () => {
+  it("adopts the destination table's zone policy while keeping the existing lines", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const src = await seedTable(cfg, "Zone-src");
+    const dst = await seedTable(cfg, "Zone-dst");
+    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
+    const source = await configureTableZone(cfg, src, "Downstairs", "table_tab");
+    const destination = await configureTableZone(cfg, dst, "Upstairs", "prepay");
+    await db.execute(sql`
+      insert into order_service_contexts
+        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+      values
+        (${cfg.tenantId}, ${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
+
+    const before = await linesOf(tabId);
+    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
+
+    expect(await serviceContextOf(tabId)).toEqual({
+      zoneId: destination.zoneId,
+      departmentId: destination.departmentId,
+      serviceMode: "prepay",
+    });
+    expect(await linesOf(tabId)).toEqual(before);
+  });
+
   it("relocates a tab to a free table: source freed + its status cleared, target points at the tab", async () => {
     const { cfg, cafeId } = await setupVenue();
     const src = await seedTable(cfg, "Src");
@@ -335,6 +443,25 @@ describe("moveTab", () => {
 });
 
 describe("joinTable", () => {
+  it("refuses to join a table from a different service zone", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t1 = await seedTable(cfg, "Join-downstairs");
+    const t2 = await seedTable(cfg, "Join-upstairs");
+    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
+    const source = await configureTableZone(cfg, t1, "Join downstairs", "table_tab");
+    const destination = await configureTableZone(cfg, t2, "Join upstairs", "table_tab");
+    await db.execute(sql`
+      insert into order_service_contexts
+        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+      values
+        (${cfg.tenantId}, ${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
+
+    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
+      code: "service_zone.join_mismatch",
+      params: { orderZoneId: source.zoneId, tableZoneId: destination.zoneId },
+    });
+  });
+
   it("extends a tab's coverage to a free table: BOTH tables point at the one tab, no line-move", async () => {
     const { cfg, cafeId } = await setupVenue();
     const t1 = await seedTable(cfg, "J1");
@@ -483,12 +610,16 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
         { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: baconId }] },
       ]),
     );
+    const ticketBefore = await db.execute<{
+      id: string;
+      working_order_line_id: string;
+    }>(sql`
+      select id, working_order_line_id from ticket_items
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${fromTab}`);
 
     await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
 
-    // The moved child modifier line must point at the MOVED parent's NEW id — not NULL. Without the
-    // parent_line_id remap in moveTabLines the child lands orphaned (parent_line_id NULL) and renders
-    // ungrouped.
+    // The moved child modifier line keeps pointing at the same stable parent id.
     const dest = await db
       .select({
         id: workingOrderLines.id,
@@ -509,6 +640,19 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     expect(parent!.productId).toBe(cafeId);
     expect(parent!.parentLineId).toBeNull();
     expect(parent!.optionGroupItemId).toBeNull();
+    const ticketAfter = await db.execute<{
+      id: string;
+      working_order_line_id: string;
+      working_order_id: string;
+    }>(sql`
+      select id, working_order_line_id, working_order_id from ticket_items
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${intoTab}`);
+    expect(ticketAfter.rows).toEqual([
+      {
+        ...ticketBefore.rows[0]!,
+        working_order_id: intoTab,
+      },
+    ]);
   });
 
   it("the join branch (freeSourceTable: false) re-points the source table at intoTab (covered for branch)", async () => {

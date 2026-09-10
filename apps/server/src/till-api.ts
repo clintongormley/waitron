@@ -26,6 +26,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import {
   collectOrder,
@@ -166,6 +167,19 @@ export interface TillApiDeps {
   pinThrottle?: PinThrottle;
 }
 
+async function resolveHttpOrderZone(
+  deps: TillApiDeps,
+  lineCount: number,
+  requestedZoneId: string | undefined,
+): Promise<string | undefined> {
+  if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
+  return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    if ((await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).length === 0) return undefined;
+    return (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId;
+  });
+}
+
 /**
  * Every AppError CODE the till API answers, and the HTTP status it maps to. CLIENT faults only: the
  * identity credential codes (`pin.invalid`/`person.*`/`session.*`), the `sale.*` request codes, the
@@ -267,6 +281,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "course.not_found": 404,
   "station.no_default": 409,
   "station.not_found": 404,
+  "service_zone.not_found": 404,
+  "service_zone.default_missing": 409,
+  "service_zone.offer_not_allowed": 400,
+  "service_zone.mode_incompatible": 409,
+  "service_zone.join_mismatch": 409,
+  "order.service_context_missing": 409,
+  "route.subject_not_found": 404,
+  "route.missing": 409,
+  "route.station_inactive": 409,
   // The generic request-shape 400 the sibling gated surfaces (`workforce-api.ts`,
   // `catalogue-api.ts`) use for a malformed body field — here, an out-of-range `capacity` on the
   // table create/patch routes (see `requireCapacity`). Listed explicitly though 400 is the table's
@@ -890,6 +913,43 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.get("/api/default-service-zone/offers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const device = await tryReadDevice(deps, c);
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
+          deviceId: device?.deviceId,
+        });
+        return {
+          context,
+          zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
+            (zone) => zone.serviceMode !== "table_tab",
+          ),
+          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId)),
+        };
+      });
+      return c.json(result);
+    }),
+  );
+
+  // The offers available in one service zone. The zone decides both the visible menus and the
+  // payment flow; the menu-item id in each offer is the selling identity and may price the same
+  // product differently from another zone's menu.
+  app.get("/api/service-zones/:zoneId/offers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
+        return { context, ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId)) };
+      });
+      return c.json(result);
+    }),
+  );
+
   // Ring one walk-up sale — the HTTP face of the fiscal sale path. SESSION-GUARDED, and the guard
   // supplies the attribution: the sale is filed as `operatorId = session.personId`, so who rang it is
   // the logged-in operator, never a browser-sent value. `recordTillSale` opens its OWN
@@ -913,6 +973,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
+      if (body.zoneId !== undefined) {
+        requireUuidParam(body.zoneId, "ServiceZoneId");
+      }
+      const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
       // SP-A.2 §16.4 cutover: the sale's `till_id` comes from the AUTHENTICATED enrolled device, not env.
       // Only `tillId` changes — `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`; a `DeviceBinding`
       // carries no node/series. `recordTillSale` reads `cfg.tillId` unchanged, now the device's via `saleCfg`.
@@ -920,7 +984,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
         saleCfg,
-        body,
+        { ...body, zoneId },
         personId,
       );
       return c.json(result);
@@ -968,6 +1032,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       ) {
         throw new AppError("management.request_invalid", { field: "simulationOutcome" });
       }
+      if (body.zoneId !== undefined) {
+        requireUuidParam(body.zoneId, "ServiceZoneId");
+      }
+      const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
       // `deps.cardProvider` is `undefined` on a till booted with `WAITRON_TILL_CARD_PROVIDER=none`
       // (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this route on EVERY till regardless of
       // `cardProvider` (`boot.ts` calls it unconditionally), so this branch stays reachable at the HTTP
@@ -989,7 +1057,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const outcome = await payWorkingOrderIntegrated(
         { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
         saleCfg,
-        body,
+        { ...body, zoneId },
         personId,
       );
       return c.json(outcome); // 200 with the discriminated outcome — even a decline.
@@ -1013,7 +1081,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         id: string;
         // A parked line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `parkOrder` →
         // `priceOrderLines`, which validates + persists them on the parent dish line.
-        lines: ({ productId: string; quantity: string } & LineExtras)[];
+        lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+        zoneId?: string;
         label?: string;
       }>();
       // The client MINTS `body.id` — it becomes the `working_orders.id` PK `createOpenOrder` INSERTs
@@ -1022,9 +1091,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // is a VALID id colliding with an existing open row, which REPLAYS; this is a malformed one refused
       // before any INSERT.)
       requireUuidParam(body.id, "WorkingOrderId");
+      if (body.zoneId !== undefined) {
+        requireUuidParam(body.zoneId, "ServiceZoneId");
+      }
+      const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
       const result = await parkOrder({ db: deps.db }, deps.cfg, {
         id: body.id,
         lines: body.lines,
+        zoneId,
         label: body.label,
         operatorId: personId,
       });
@@ -1079,7 +1153,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await c.req.json<{
         // A line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `updateHeldOrder` →
         // `priceOrderLines`, which validates + persists them on the parent dish line.
-        lines: ({ productId: string; quantity: string } & LineExtras)[];
+        lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
         label?: string;
       }>();
       await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
@@ -1144,8 +1218,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Send a SETTLED order to the kitchen — Mode P's pickup (design §5, reworked to KDS-1's ticket model).
   // SESSION-GUARDED. `sendToPrep` fires the order's lines through the shared `fireLines`, inserting one
-  // `ticket_items` row per line, each routed to a station (product ?? category ?? default) SNAPSHOTTED at
-  // fire time. It is the ONE fire path with a public route (place fires inside `placeOrder`; a tab round
+  // `ticket_items` row per line. A contextual order uses its frozen zone's preparation rules; a legacy
+  // order uses the product/category/default-station chain. The station is SNAPSHOTTED at fire time. It
+  // is the ONE fire path with a public route (place fires inside `placeOrder`; a tab round
   // fires inside `addTabRound`), so this route stays — but it no longer advances anything (the removed
   // `advancePrep` `{ to }` branch is gone; advancing is now per-line/whole-ticket, below). A non-settled,
   // absent or foreign order is refused `working_order.not_settled` (409) BEFORE any write; a re-fire of an
@@ -1653,7 +1728,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await c.req.json<{ lines?: { productId: string; quantity: string }[] }>();
+      const body = await c.req.json<{
+        lines?: { productId?: string; menuItemId?: string; quantity: string }[];
+      }>();
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
@@ -1682,7 +1759,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // `hold: true` — the tab screen's per-line hold toggle; `addTabRound` inserts it HELD (no fire, no
         // print) regardless of course, released later by `sendLines`.
         lines: ({
-          productId: string;
+          productId?: string;
+          menuItemId?: string;
           quantity: string;
           courseId?: string | null;
           options?: { optionGroupItemId: string; quantity?: number }[];

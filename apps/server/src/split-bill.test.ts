@@ -1,16 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  diningTables,
-  withTenant,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { asAppUser, diningTables, withTenant, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -33,7 +27,10 @@ import "./errors.js";
 // backend proves. The FISCAL filing (exactly-one-registro per check, desglose, contiguity) is the
 // real-Postgres job of the split-bill fiscal suite (CLAUDE.md §4).
 const LOCALE = "es-ES";
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 let db: Database;
 beforeAll(() => {
   db = suite.db;

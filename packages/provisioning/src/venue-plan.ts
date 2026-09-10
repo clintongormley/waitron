@@ -112,7 +112,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   // Keeping canonicalization at this generic boundary prevents a future caller from bypassing that
   // normalization. Deriving the id from a raw casing, OR storing a raw (country, tax_id) row, would let
   // `es`/`ES` (or a taxId that differs only in letter case or in leading/trailing whitespace) for the
-  // same business mint a second, permanent, unmergeable tenant — a re-run meant to add a shop would
+  // same business mint a second, permanent, unmergeable tenant — a same-venue retry would then
   // silently start a second SIF/hash chain. `.trim().toUpperCase()` collapses exactly those two
   // differences; INTERNAL whitespace is deliberately left alone (a taxId's inner content is not ours
   // to alter), so `"B123 45678"` stays a distinct identity. Canonicalizing makes the id AND the

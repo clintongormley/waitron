@@ -16,6 +16,7 @@ import {
   createCategory,
   createProduct,
 } from "../src/operations.js";
+import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 
 export interface SeededVenue {
   tenantId: TenantId;
@@ -83,11 +84,15 @@ export async function seedCatalogueFixture(
 
 /** Share the migrated database; clear authoring rows before each fixture is seeded. */
 export function useCatalogueDb(): { readonly db: Database } {
-  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
   beforeEach(async () => {
     // DELETE avoids TRUNCATE CASCADE following catalogue references into locations and immutable
     // sales tables. These tests write mutable authoring rows; venue identity rows can stay.
     await fx.db.transaction(async (tx) => {
+      await tx.execute(sql`delete from menu_item_options`);
+      await tx.execute(sql`delete from menu_item_option_groups`);
+      await tx.execute(sql`delete from menu_items`);
+      await tx.execute(sql`delete from menu_sections`);
       await tx.execute(sql`delete from product_option_groups`);
       await tx.execute(sql`delete from option_group_items`);
       await tx.execute(sql`delete from option_groups`);

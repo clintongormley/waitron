@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
   asAppUser,
   saleLines,
@@ -14,6 +14,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createOptionGroup,
   createOptionGroupItem,
   createProduct,
@@ -149,6 +151,10 @@ interface Shop {
   cfg: TillConfig;
   aguaId: string;
   cafeId: string;
+  aguaMenuItemId: string;
+  cafeMenuItemId: string;
+  menuId: string;
+  categoryId: string;
   tableId: string;
 }
 
@@ -207,8 +213,32 @@ async function seedShop(emisorNif: string): Promise<Shop> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, cfg.locationId, cat.id);
+    const section = await createMenuSection(tx, cfg.tenantId, {
+      menuId: cat.id,
+      name: { [LOCALE]: "Bebidas" },
+    });
+    const aguaMenuItem = await createMenuItem(tx, cfg.tenantId, {
+      menuId: cat.id,
+      productId: agua.id,
+      sectionId: section.id,
+      grossPrice: "1.50",
+    });
+    const cafeMenuItem = await createMenuItem(tx, cfg.tenantId, {
+      menuId: cat.id,
+      productId: cafe.id,
+      sectionId: section.id,
+      grossPrice: "2.00",
+    });
     const table = await createTable(tx, cfg, { label: "T1" });
-    return { aguaId: agua.id, cafeId: cafe.id, tableId: table.id };
+    return {
+      aguaId: agua.id,
+      cafeId: cafe.id,
+      aguaMenuItemId: aguaMenuItem.id,
+      cafeMenuItemId: cafeMenuItem.id,
+      menuId: cat.id,
+      categoryId: bebidas.id,
+      tableId: table.id,
+    };
   });
   return { cfg, ...seeded };
 }
@@ -224,15 +254,23 @@ async function openServeAndPay(
   shop: Shop,
   serveEveryLine: boolean,
 ): Promise<{ tabId: string; huella: string }> {
-  const { cfg, aguaId, cafeId, tableId } = shop;
+  const { cfg, aguaId, cafeId, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
+    const table = (await listTables(tx, cfg)).find((candidate) => candidate.id === tableId);
+    const lines =
+      table?.zoneId === null
+        ? [
+            { productId: aguaId, quantity: "1" },
+            { productId: cafeId, quantity: "1" },
+          ]
+        : [
+            { menuItemId: aguaMenuItemId, quantity: "1" },
+            { menuItemId: cafeMenuItemId, quantity: "1" },
+          ];
     return openTab(tx, cfg, {
       tableId,
-      lines: [
-        { productId: aguaId, quantity: "1" },
-        { productId: cafeId, quantity: "1" },
-      ],
+      lines,
     });
   });
 
@@ -329,6 +367,28 @@ async function placeTable(shop: Shop): Promise<void> {
   await withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const zone = await createZone(tx, shop.cfg, { name: "Terraza" });
+    const department = await tx.execute<{ department_id: string }>(sql`
+      select department_id
+      from zone_service_policies
+      where tenant_id = ${shop.cfg.tenantId}
+        and location_id = ${shop.cfg.locationId}
+      limit 1`);
+    await tx.execute(sql`
+      insert into zone_service_policies
+        (tenant_id, location_id, zone_id, department_id, service_mode, default_menu_id)
+      values (
+        ${shop.cfg.tenantId}, ${shop.cfg.locationId}, ${zone.id},
+        ${department.rows[0]!.department_id}, 'table_tab', ${shop.menuId}
+      )`);
+    await tx.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id)
+      values (${shop.cfg.tenantId}, ${zone.id}, ${shop.menuId})`);
+    await tx.execute(sql`
+      insert into preparation_routes
+        (tenant_id, location_id, category_id, station_id, no_preparation)
+      values (
+        ${shop.cfg.tenantId}, ${shop.cfg.locationId}, ${shop.categoryId}, null, true
+      )`);
     await setTablePlacement(tx, shop.cfg, shop.tableId, {
       zoneId: zone.id,
       posX: 500,

@@ -20,16 +20,21 @@ import {
   catalogueExists,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
+  setMenuItemOptionGroups,
   createOptionGroup,
   createOptionGroupItem,
   createProduct,
   deactivateCatalogue,
+  deactivateMenuItem,
   deactivateProduct,
   listAccessibleCatalogues,
   listAvailableProducts,
   listCatalogues,
   listCataloguesForLocation,
   listCategories,
+  listMenuOffers,
   listOptionGroupItems,
   listOptionGroups,
   listProductOptionGroupIds,
@@ -41,6 +46,7 @@ import {
   setProductOptionGroups,
   updateOptionGroup,
   updateOptionGroupItem,
+  updateMenuItem,
   updateProduct,
 } from "./operations.js";
 import { AppError } from "@waitron/shared";
@@ -51,6 +57,247 @@ import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixture
 const fx = useCatalogueDb();
 
 describe("catalogue operations", () => {
+  it("offers one product on two menus with distinct identities and prices", async () => {
+    await asTenant(async (tx) => {
+      const category = await createCategory(tx, tenantId, { name: "Cocktails" });
+      const upstairs = await createCatalogue(tx, tenantId, { name: "Upstairs" });
+      const downstairs = await createCatalogue(tx, tenantId, { name: "Downstairs" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: upstairs.id,
+        categoryId: category.id,
+        descriptions: { en: "Negroni" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      const garnish = await createOptionGroup(tx, tenantId, {
+        name: { en: "Garnish" },
+      });
+      const orange = await createOptionGroupItem(tx, tenantId, garnish.id, {
+        name: { en: "Orange" },
+        priceDelta: "0.25",
+      });
+      await setProductOptionGroups(tx, tenantId, product.id, [garnish.id]);
+      const upstairsSection = await createMenuSection(tx, tenantId, {
+        menuId: upstairs.id,
+        name: { en: "Cocktails" },
+      });
+      const downstairsSection = await createMenuSection(tx, tenantId, {
+        menuId: downstairs.id,
+        name: { en: "Drinks" },
+      });
+      const nine = await createMenuItem(tx, tenantId, {
+        menuId: upstairs.id,
+        productId: product.id,
+        sectionId: upstairsSection.id,
+        grossPrice: "9.00",
+      });
+      const eleven = await createMenuItem(tx, tenantId, {
+        menuId: downstairs.id,
+        productId: product.id,
+        sectionId: downstairsSection.id,
+        grossPrice: "11.00",
+      });
+      expect(
+        (await listMenuOffers(tx, tenantId, [upstairs.id]))[0]!.optionGroups[0]!.options[0]!,
+      ).toMatchObject({ id: orange.id, priceDelta: "0.25" });
+      await setMenuItemOptionGroups(tx, tenantId, nine.id, [
+        { groupId: garnish.id, options: [{ optionId: orange.id, priceDelta: "0.50" }] },
+      ]);
+      await setMenuItemOptionGroups(tx, tenantId, eleven.id, [
+        { groupId: garnish.id, options: [{ optionId: orange.id, priceDelta: "1.00" }] },
+      ]);
+
+      const offers = await listMenuOffers(tx, tenantId, [upstairs.id, downstairs.id]);
+      expect(
+        offers.map(({ id, productId, grossPrice, optionGroups }) => ({
+          id,
+          productId,
+          grossPrice,
+          optionGroups,
+        })),
+      ).toEqual([
+        {
+          id: eleven.id,
+          productId: product.id,
+          grossPrice: "11.00",
+          optionGroups: [
+            {
+              id: garnish.id,
+              name: { en: "Garnish" },
+              minSelect: 0,
+              maxSelect: 1,
+              required: false,
+              options: [
+                {
+                  id: orange.id,
+                  name: { en: "Orange" },
+                  priceDelta: "1.00",
+                  maxQuantity: 1,
+                  vatClass: null,
+                  addAllergens: null,
+                  removeAllergens: null,
+                  addOrigins: null,
+                  removeOrigins: null,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: nine.id,
+          productId: product.id,
+          grossPrice: "9.00",
+          optionGroups: [
+            {
+              id: garnish.id,
+              name: { en: "Garnish" },
+              minSelect: 0,
+              maxSelect: 1,
+              required: false,
+              options: [
+                {
+                  id: orange.id,
+                  name: { en: "Orange" },
+                  priceDelta: "0.50",
+                  maxQuantity: 1,
+                  vatClass: null,
+                  addAllergens: null,
+                  removeAllergens: null,
+                  addOrigins: null,
+                  removeOrigins: null,
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+
+      await updateMenuItem(tx, tenantId, downstairs.id, eleven.id, { grossPrice: "12.50" });
+      expect((await listMenuOffers(tx, tenantId, [downstairs.id]))[0]!.grossPrice).toBe("12.50");
+      await deactivateMenuItem(tx, tenantId, downstairs.id, eleven.id);
+      await expect(listMenuOffers(tx, tenantId, [downstairs.id])).resolves.toEqual([]);
+      const restored = await createMenuItem(tx, tenantId, {
+        menuId: downstairs.id,
+        productId: product.id,
+        sectionId: downstairsSection.id,
+        grossPrice: "13.00",
+      });
+      expect(restored).toMatchObject({ id: eleven.id, active: true, grossPrice: "13.00" });
+      await expect(
+        updateMenuItem(tx, tenantId, downstairs.id, crypto.randomUUID(), { grossPrice: "8.00" }),
+      ).rejects.toMatchObject({ code: "menu_item.not_found" });
+      await expect(
+        createMenuItem(tx, tenantId, {
+          menuId: downstairs.id,
+          productId: crypto.randomUUID(),
+          sectionId: downstairsSection.id,
+          grossPrice: "8.00",
+        }),
+      ).rejects.toMatchObject({ code: "product.not_found" });
+      await expect(
+        createMenuItem(tx, tenantId, {
+          menuId: downstairs.id,
+          productId: product.id,
+          sectionId: crypto.randomUUID(),
+          grossPrice: "8.00",
+        }),
+      ).rejects.toMatchObject({ code: "menu_section.not_found" });
+    });
+  });
+
+  it("keeps a category-less product visible with its null category", async () => {
+    await asTenant(async (tx) => {
+      const menu = await createCatalogue(tx, tenantId, { name: "Counter" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: null,
+        descriptions: { en: "Water" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      });
+      const section = await createMenuSection(tx, tenantId, {
+        menuId: menu.id,
+        name: { en: "Drinks" },
+      });
+      const item = await createMenuItem(tx, tenantId, {
+        menuId: menu.id,
+        productId: product.id,
+        sectionId: section.id,
+        grossPrice: "1.50",
+      });
+
+      await expect(listMenuOffers(tx, tenantId, [menu.id])).resolves.toEqual([
+        expect.objectContaining({ id: item.id, category: null }),
+      ]);
+    });
+  });
+
+  it("refuses menu modifiers outside the product's attached and satisfiable choices", async () => {
+    await asTenant(async (tx) => {
+      const menu = await createCatalogue(tx, tenantId, { name: "Dinner" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: null,
+        descriptions: { en: "Burger" },
+        pricingUnit: "each",
+        unitPrice: "10.00",
+        vatClass: "general",
+      });
+      const section = await createMenuSection(tx, tenantId, {
+        menuId: menu.id,
+        name: { en: "Mains" },
+      });
+      const item = await createMenuItem(tx, tenantId, {
+        menuId: menu.id,
+        productId: product.id,
+        sectionId: section.id,
+        grossPrice: "10.00",
+      });
+      const attached = await createOptionGroup(tx, tenantId, {
+        name: { en: "Sauce" },
+        required: true,
+        minSelect: 1,
+      });
+      const unattached = await createOptionGroup(tx, tenantId, { name: { en: "Size" } });
+      const sauce = await createOptionGroupItem(tx, tenantId, attached.id, {
+        name: { en: "Ketchup" },
+      });
+      const size = await createOptionGroupItem(tx, tenantId, unattached.id, {
+        name: { en: "Large" },
+      });
+      await setProductOptionGroups(tx, tenantId, product.id, [attached.id]);
+
+      await expect(setMenuItemOptionGroups(tx, tenantId, item.id, [])).rejects.toMatchObject({
+        code: "options.group_invalid",
+        params: { reason: "required_group_missing" },
+      });
+
+      await expect(
+        setMenuItemOptionGroups(tx, tenantId, item.id, [
+          { groupId: unattached.id, options: [{ optionId: size.id, priceDelta: "0.00" }] },
+        ]),
+      ).rejects.toMatchObject({ code: "options.group_invalid" });
+      await expect(
+        setMenuItemOptionGroups(tx, tenantId, item.id, [
+          { groupId: attached.id, options: [{ optionId: size.id, priceDelta: "0.00" }] },
+        ]),
+      ).rejects.toMatchObject({ code: "options.item_invalid" });
+      await expect(
+        setMenuItemOptionGroups(tx, tenantId, item.id, [{ groupId: attached.id, options: [] }]),
+      ).rejects.toMatchObject({ code: "options.group_invalid" });
+      await expect(
+        setMenuItemOptionGroups(tx, tenantId, item.id, [
+          { groupId: attached.id, options: [{ optionId: sauce.id, priceDelta: "0.00" }] },
+        ]),
+      ).resolves.toBeUndefined();
+      await expect(
+        setMenuItemOptionGroups(tx, tenantId, crypto.randomUUID(), []),
+      ).rejects.toMatchObject({ code: "menu_item.not_found" });
+    });
+  });
+
   let tenantId: TenantId;
   let locationId: string;
 

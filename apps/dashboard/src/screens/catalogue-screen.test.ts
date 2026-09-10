@@ -18,10 +18,7 @@ import type { CategoryManager } from "../widgets/category-manager.js";
 import type { OptionGroupManager } from "../widgets/option-group-manager.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
 
-const catalogues: CatalogueSummary[] = [
-  { id: "cat-a", name: "Comida", active: true, version: 1 },
-  { id: "cat-b", name: "Bebidas", active: true, version: 1 },
-];
+const catalogues: CatalogueSummary[] = [{ id: "cat-a", name: "Comida", active: true, version: 1 }];
 
 const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes" }];
 
@@ -155,28 +152,34 @@ function emit(source: Element, type: string, detail: unknown): void {
 afterEach(cleanupWidgets);
 
 describe("catalogue-screen", () => {
-  it("loads catalogues, categories and the first catalogue's products on connect", async () => {
-    const api = stubApi();
+  it("loads reusable products across every menu and removes duplicates", async () => {
+    const menus = [...catalogues, { id: "cat-b", name: "Bebidas", active: true, version: 1 }];
+    const second = { ...products[0]!, id: "p2", catalogueId: "cat-b" };
+    const api = stubApi({
+      listCatalogues: vi.fn().mockResolvedValue(menus),
+      listProducts: vi
+        .fn()
+        .mockResolvedValueOnce(products)
+        .mockResolvedValueOnce([products[0], second]),
+    });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
 
     expect(api.listCatalogues).toHaveBeenCalledTimes(1);
     expect(api.listCategories).toHaveBeenCalledTimes(1);
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
-    expect(list(el).products).toEqual(products);
+    expect(api.listProducts).toHaveBeenCalledWith("cat-b");
+    expect(list(el).products).toEqual([products[0], second]);
   });
 
-  it("switches the product list when a different catalogue is selected", async () => {
+  it("keeps menu selection and menu creation out of the product screen", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
 
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=catalogue-select]")!;
-    select.value = "cat-b";
-    select.dispatchEvent(new Event("change"));
-    await flush(el);
-
-    expect(api.listProducts).toHaveBeenLastCalledWith("cat-b");
+    expect(el.shadowRoot!.querySelector("[data-test=catalogue-select]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=new-catalogue-name]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=create-catalogue]")).toBeNull();
   });
 
   it("opens the product form for the selected catalogue on Añadir producto", async () => {
@@ -321,7 +324,7 @@ describe("catalogue-screen", () => {
 
   // ── No catalogue yet ──────────────────────────────────────────────────────────────────────────
 
-  it("prompts to create a catalogue and hides the add-product affordance when none exist", async () => {
+  it("prompts to create a menu elsewhere and hides add-product when no menu exists", async () => {
     const api = stubApi({ listCatalogues: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -331,35 +334,6 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=catalogue-select]")).toBeNull();
     // Products cannot be listed without a catalogue.
     expect(api.listProducts).not.toHaveBeenCalled();
-  });
-
-  it("creates a catalogue then reloads on the create-catalogue affordance", async () => {
-    const api = stubApi({ listCatalogues: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-
-    const input = el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-catalogue-name]")!;
-    input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Comida" } }));
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create-catalogue]")!.click();
-    await flush(el);
-
-    expect(api.createCatalogue).toHaveBeenCalledWith("Comida");
-    expect(api.listCatalogues).toHaveBeenCalledTimes(2); // reloaded after the create
-  });
-
-  it("does not create a catalogue for an empty/whitespace name", async () => {
-    const api = stubApi({ listCatalogues: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-
-    const input = el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-catalogue-name]")!;
-    input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "   " } }));
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create-catalogue]")!.click();
-    await flush(el);
-
-    expect(api.createCatalogue).not.toHaveBeenCalled();
   });
 
   // ── Error handling — every async path caught → errorKey banner ─────────────────────────────────
@@ -428,40 +402,6 @@ describe("catalogue-screen", () => {
     expect(api.listCategories).toHaveBeenCalledTimes(1); // reload not reached
   });
 
-  it("surfaces a rejected createCatalogue as the error banner", async () => {
-    const api = stubApi({
-      listCatalogues: vi.fn().mockResolvedValue([]),
-      createCatalogue: vi.fn().mockRejectedValue({ code: "catalogue.exists" }),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-
-    const input = el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-catalogue-name]")!;
-    input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Comida" } }));
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create-catalogue]")!.click();
-    await flush(el);
-
-    expect(errorKey(el)).toBe("catalogue.exists");
-  });
-
-  it("surfaces a rejected switch-catalogue as the error banner", async () => {
-    const listProducts = vi
-      .fn()
-      .mockResolvedValueOnce(products)
-      .mockRejectedValue({ code: "shared.invalid_id" });
-    const api = stubApi({ listProducts });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=catalogue-select]")!;
-    select.value = "cat-b";
-    select.dispatchEvent(new Event("change"));
-    await flush(el);
-
-    expect(errorKey(el)).toBe("shared.invalid_id");
-  });
-
   // Single-flight: a double-fired create-product files at most one product (createProduct is not
   // server-idempotent). Proven by deletion: drop the busy guard and createProduct is called twice.
   it("files at most one product when create-product fires twice", async () => {
@@ -495,17 +435,6 @@ describe("catalogue-screen", () => {
     expect(escaped).not.toHaveBeenCalled();
   });
 
-  // ── KDS-1 station routing ───────────────────────────────────────────────────────────────────────
-
-  it("loads the stations on connect and threads them to both editors", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    expect(api.listStations).toHaveBeenCalledTimes(1);
-    expect(categoryManager(el).stations).toEqual(stations);
-    expect(form(el).stations).toEqual(stations);
-  });
-
   it("loads the courses on connect and threads them to the product form (KDS-2)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
@@ -530,60 +459,6 @@ describe("catalogue-screen", () => {
     emit(form(el), "set-product-course", { productId: "p1", courseId: null });
     await flush(el);
     expect(api.setProductCourse).toHaveBeenCalledWith("p1", null);
-  });
-
-  it("routes a category to a station on the manager's set-category-station event", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(categoryManager(el), "set-category-station", { categoryId: "c1", stationId: "s1" });
-    await flush(el);
-    expect(api.setCategoryStation).toHaveBeenCalledWith("c1", "s1");
-  });
-
-  it("clears a category's route on a null set-category-station stationId", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(categoryManager(el), "set-category-station", { categoryId: "c1", stationId: null });
-    await flush(el);
-    expect(api.setCategoryStation).toHaveBeenCalledWith("c1", null);
-  });
-
-  it("overrides a product's route on the form's set-product-station event", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(form(el), "set-product-station", { productId: "p1", stationId: "s1" });
-    await flush(el);
-    expect(api.setProductStation).toHaveBeenCalledWith("p1", "s1");
-  });
-
-  it("surfaces a rejected routing write as the localised error banner, never the raw code", async () => {
-    const api = stubApi({
-      setCategoryStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(categoryManager(el), "set-category-station", { categoryId: "c1", stationId: "gone" });
-    await flush(el);
-    expect(errorKey(el)).toBe("station.not_found");
-    const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent).toContain(codeMessage("station.not_found", "es-ES"));
-    expect(alert.textContent).not.toContain("station.not_found");
-  });
-
-  // House pattern: the screen is the final consumer of the routing events, so it stops them at its
-  // shadow boundary rather than letting them leak to the app shell above.
-  it("contains set-category-station so it does not leak past the screen (stopPropagation)", async () => {
-    const api = stubApi();
-    const { el, host } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    const escaped = vi.fn();
-    host.addEventListener("set-category-station", escaped);
-    emit(categoryManager(el), "set-category-station", { categoryId: "c1", stationId: "s1" });
-    await flush(el);
-    expect(escaped).not.toHaveBeenCalled();
   });
 
   // ── Option groups (reusable modifiers) + their items (Task 11/12) ──────────────────────────────

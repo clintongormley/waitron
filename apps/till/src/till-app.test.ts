@@ -20,12 +20,14 @@ import type {
   FloorZone,
   HeldOrderSummary,
   PayOutcome,
+  ProductCatalogue,
   TabLine,
   TableServiceStatus,
   TableState,
   TillApi,
   TillProduct,
   TillSaleResult,
+  ZoneOfferCatalogue,
 } from "./api/client.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
@@ -270,13 +272,50 @@ const defaultStation = {
   active: true,
 };
 
+function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
+  const defaultMenuId = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null;
+  return {
+    context: { zoneId: "zone-counter", departmentId: "department-default", serviceMode: "prepay" },
+    defaultMenuId,
+    menus: catalogue.menus,
+    offers: catalogue.products.map((product, index) => ({
+      id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
+      menuId: product.catalogueId ?? defaultMenuId ?? "menu-fixture",
+      productId: product.productId ?? product.id,
+      sectionId: `section-${index}`,
+      grossPrice: product.unitPrice,
+      displayOrder: index,
+      active: true,
+      menuName: product.catalogueName ?? catalogue.menus[0]?.name ?? "Menu",
+      sectionName: { en: product.category ?? "Other" },
+      descriptions: product.descriptions,
+      pricingUnit: product.pricingUnit,
+      vatClass: product.vatClass,
+      category: product.category ?? "Other",
+      allergens: product.allergens,
+      diet: product.diet ?? null,
+      dietDerivation: product.dietDerivation ?? null,
+      dietOverride: product.dietOverride ?? null,
+      courseId: product.courseId ?? null,
+      optionGroups: (product.optionGroups ?? []).map((group) => ({
+        id: group.id,
+        name: group.name,
+        minSelect: group.minSelect,
+        maxSelect: group.maxSelect,
+        required: group.required,
+        options: group.items,
+      })),
+    })),
+  };
+}
+
 /**
  * A fake `TillApi` covering every method the app (and the lock screen it mounts) calls. Each defaults
  * to a resolved value; a test overrides any with its own `vi.fn()`. Cast through `unknown` because the
  * app touches only this method surface, never the rest of the class.
  */
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
-  return {
+  const api = {
     getTill: vi.fn().mockResolvedValue(till),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: "en-GB" }),
@@ -299,7 +338,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       id: "wo-1",
       orderNumber: 5,
       label: "Mesa 4",
-      lines: [{ productId: "cafe", quantity: "2.000" }],
+      lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
     }),
     abandonWorkingOrder: vi.fn().mockResolvedValue(undefined),
     updateWorkingOrder: vi.fn().mockResolvedValue(undefined),
@@ -349,6 +388,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     transferLines: vi.fn().mockResolvedValue(undefined),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
+    setServiceZone: vi.fn(),
     // Device front door (device-enrolment §3.1): the boot decision. `getDevDevices` is the dev-mode
     // signal — it DEFAULTS to a rejection (a 404 outside dev mode), so the default boot is NOT the dev
     // chooser; the chooser tests override it to resolve a list. `getDeviceIdentity` DEFAULTS to an
@@ -371,6 +411,13 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
+  if (!("listDefaultZoneOffers" in overrides)) {
+    api.listDefaultZoneOffers = vi.fn(async () => fixtureOffers(await api.listProducts()));
+  }
+  if (!("listZoneOffers" in overrides)) {
+    api.listZoneOffers = vi.fn(async () => fixtureOffers(await api.listProducts()));
+  }
+  return api;
 }
 
 /** Drains the microtask queue (settling awaited API promises + chained awaits) then Lit's render. */
@@ -549,8 +596,262 @@ describe("till-app", () => {
     expect(currentApi.listProducts).toHaveBeenCalledOnce();
     expect(lock(el)).toBeNull();
     expect(c).not.toBeNull();
-    expect(c.products).toEqual([cafe]);
+    expect(c.products).toEqual([
+      expect.objectContaining({
+        id: "cafe",
+        productId: "cafe",
+        menuItemId: "menu-item-cafe-0",
+        unitPrice: "1.50",
+      }),
+    ]);
     expect(c.operatorName).toBe("Ana");
+  });
+
+  it("loads the default zone's offers and orders two menu identities for one product", async () => {
+    const listDefaultZoneOffers = vi.fn().mockResolvedValue({
+      context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
+      zones: [
+        {
+          id: "zone-counter",
+          name: "Bar",
+          departmentId: "department-bar",
+          departmentName: "Bar",
+          serviceMode: "prepay",
+        },
+      ],
+      defaultMenuId: "menu-standard",
+      menus: [
+        { id: "menu-standard", name: "Standard", isDefault: true },
+        { id: "menu-happy-hour", name: "Happy hour", isDefault: false },
+      ],
+      offers: [
+        {
+          id: "offer-standard",
+          menuId: "menu-standard",
+          productId: "product-negroni",
+          sectionId: "section-cocktails",
+          grossPrice: "9.00",
+          displayOrder: 0,
+          active: true,
+          menuName: "Standard",
+          sectionName: { en: "Cocktails" },
+          descriptions: { en: "Negroni" },
+          pricingUnit: "each",
+          vatClass: "general",
+          category: "Cocktail",
+          allergens: null,
+          diet: null,
+          dietDerivation: null,
+          dietOverride: null,
+          courseId: null,
+          optionGroups: [],
+        },
+        {
+          id: "offer-happy-hour",
+          menuId: "menu-happy-hour",
+          productId: "product-negroni",
+          sectionId: "section-cocktails",
+          grossPrice: "7.00",
+          displayOrder: 0,
+          active: true,
+          menuName: "Happy hour",
+          sectionName: { en: "Cocktails" },
+          descriptions: { en: "Negroni" },
+          pricingUnit: "each",
+          vatClass: "general",
+          category: "Cocktail",
+          allergens: null,
+          diet: null,
+          dietDerivation: null,
+          dietOverride: null,
+          courseId: null,
+          optionGroups: [],
+        },
+      ],
+    });
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ listDefaultZoneOffers, recordSale });
+    const c = await toCounter(el);
+
+    expect(listDefaultZoneOffers).toHaveBeenCalledOnce();
+    expect(currentApi.listProducts).not.toHaveBeenCalled();
+    expect(c.selectedServiceZoneId).toBe("zone-counter");
+    expect(c.serviceZones.map((zone) => zone.name)).toEqual(["Bar"]);
+    expect(
+      c.products.map(({ id, productId, menuItemId, unitPrice }) => ({
+        id,
+        productId,
+        menuItemId,
+        unitPrice,
+      })),
+    ).toEqual([
+      {
+        id: "product-negroni",
+        productId: "product-negroni",
+        menuItemId: "offer-standard",
+        unitPrice: "9.00",
+      },
+      {
+        id: "product-negroni",
+        productId: "product-negroni",
+        menuItemId: "offer-happy-hour",
+        unitPrice: "7.00",
+      },
+    ]);
+
+    c.store.addProduct(c.products[0]!, "1");
+    c.store.addProduct(c.products[1]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "20.00" });
+    await flush(el);
+    expect(recordSale).toHaveBeenCalledWith(
+      [
+        { menuItemId: "offer-standard", quantity: "1" },
+        { menuItemId: "offer-happy-hour", quantity: "1" },
+      ],
+      { method: "cash", amount: "20.00" },
+      expect.any(String),
+    );
+  });
+
+  it("still opens the counter when its default zone offers cannot be loaded", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockRejectedValue(new Error("configuration incomplete")),
+    });
+
+    const c = await toCounter(el);
+    expect(c.products).toEqual([]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      t("service_zone.load_error"),
+    );
+  });
+
+  it("changes and manually refreshes the counter's service zone", async () => {
+    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    defaultCatalogue.zones = [
+      {
+        id: "zone-counter",
+        name: "Counter",
+        departmentId: "department-default",
+        departmentName: "Restaurant",
+        serviceMode: "prepay",
+      },
+      {
+        id: "zone-deli",
+        name: "Deli",
+        departmentId: "department-deli",
+        departmentName: "Deli",
+        serviceMode: "ticket_then_pay",
+      },
+    ];
+    const deliCatalogue = fixtureOffers({
+      menus: [{ id: "menu-deli", name: "Deli", isDefault: true }],
+      products: [{ ...jamon, catalogueId: "menu-deli", catalogueName: "Deli" }],
+    });
+    deliCatalogue.context = {
+      zoneId: "zone-deli",
+      departmentId: "department-deli",
+      serviceMode: "ticket_then_pay",
+    };
+    const listZoneOffers = vi.fn().mockResolvedValue(deliCatalogue);
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
+      listZoneOffers,
+    });
+    const c = await toCounter(el);
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+    expect(listZoneOffers).toHaveBeenLastCalledWith("zone-deli");
+    expect(c.selectedServiceZoneId).toBe("zone-deli");
+    expect(c.products.map((product) => product.id)).toEqual(["jamon"]);
+    expect(c.orderFlow).toBe("ticket_then_pay");
+    expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("zone-deli");
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+    expect(listZoneOffers).toHaveBeenCalledTimes(2);
+  });
+
+  it("visibly refuses a service-zone change while the basket has lines", async () => {
+    const catalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    catalogue.zones = [
+      {
+        id: "zone-counter",
+        name: "Counter",
+        departmentId: "department-default",
+        departmentName: "Restaurant",
+        serviceMode: "prepay",
+      },
+      {
+        id: "zone-deli",
+        name: "Deli",
+        departmentId: "department-deli",
+        departmentName: "Deli",
+        serviceMode: "prepay",
+      },
+    ];
+    const listZoneOffers = vi.fn();
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      listZoneOffers,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await c.updateComplete;
+    const select = c.shadowRoot!.querySelector<HTMLSelectElement>("#service-zone")!;
+    select.value = "zone-deli";
+    select.dispatchEvent(new Event("change"));
+    await flush(el);
+
+    expect(select.value).toBe("zone-counter");
+    expect(c.selectedServiceZoneId).toBe("zone-counter");
+    expect(listZoneOffers).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      t("service_zone.basket_active"),
+    );
+  });
+
+  it("ignores a late counter-zone response and keeps the accepted zone for new orders", async () => {
+    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    defaultCatalogue.zones = ["counter", "upstairs", "deli"].map((id) => ({
+      id,
+      name: id,
+      departmentId: id,
+      departmentName: id,
+      serviceMode: "prepay" as const,
+    }));
+    const upstairs = fixtureOffers({
+      menus: [{ id: "upstairs-menu", name: "Upstairs", isDefault: true }],
+      products: [{ ...cafe, id: "upstairs-product", catalogueId: "upstairs-menu" }],
+    });
+    upstairs.context.zoneId = "upstairs";
+    const deli = fixtureOffers({
+      menus: [{ id: "deli-menu", name: "Deli", isDefault: true }],
+      products: [{ ...jamon, id: "deli-product", catalogueId: "deli-menu" }],
+    });
+    deli.context.zoneId = "deli";
+    let resolveUpstairs!: (value: ZoneOfferCatalogue) => void;
+    let resolveDeli!: (value: ZoneOfferCatalogue) => void;
+    const requests = {
+      upstairs: new Promise<ZoneOfferCatalogue>((resolve) => (resolveUpstairs = resolve)),
+      deli: new Promise<ZoneOfferCatalogue>((resolve) => (resolveDeli = resolve)),
+    };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
+      listZoneOffers: vi.fn((zoneId: "upstairs" | "deli") => requests[zoneId]),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "counter-zone-selected", { zoneId: "upstairs" });
+    emit(c, "counter-zone-selected", { zoneId: "deli" });
+    resolveDeli(deli);
+    await flush(el);
+    resolveUpstairs(upstairs);
+    await flush(el);
+
+    expect(c.selectedServiceZoneId).toBe("deli");
+    expect(c.products.map((product) => product.id)).toEqual(["deli-product"]);
+    expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("deli");
   });
 
   it("a failing listStaff leaves the roster empty and never blocks the counter (no unhandled rejection)", async () => {
@@ -1479,7 +1780,7 @@ describe("till-app", () => {
 
     // the adopted id is the pay-idempotency key — this FAILS against the pre-fix random-uuid line.
     expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [{ productId: "cafe", quantity: "2" }],
+      [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
     );
@@ -1514,7 +1815,7 @@ describe("till-app", () => {
     // The edited composition was re-locked: café×2 (retrieved) + café×1 (the edit), under the order's id.
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
-        { productId: "cafe", quantity: "2" },
+        { menuItemId: "menu-item-cafe-0", quantity: "2" },
         { productId: "cafe", quantity: "1" },
       ],
       label: "Mesa 4",
@@ -1523,7 +1824,7 @@ describe("till-app", () => {
     // server needs the lock updated before it files from it.
     expect(recordSale).toHaveBeenCalledWith(
       [
-        { productId: "cafe", quantity: "2" },
+        { menuItemId: "menu-item-cafe-0", quantity: "2" },
         { productId: "cafe", quantity: "1" },
       ],
       { method: "cash", amount: "5" },
@@ -1532,6 +1833,87 @@ describe("till-app", () => {
     expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
       recordSale.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("sends a retrieved line's stable server id on a quantity edit", async () => {
+    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      updateWorkingOrder,
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-stable",
+        orderNumber: 8,
+        label: null,
+        lines: [
+          {
+            workingOrderLineId: "line-stable",
+            menuItemId: "menu-item-cafe-0",
+            productId: "cafe",
+            quantity: "1.000",
+          },
+        ],
+      }),
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-stable" });
+    await flush(el);
+
+    counter.store.setLineQuantity(0, "2");
+    emit(counter, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(updateWorkingOrder).toHaveBeenCalledWith("wo-stable", {
+      lines: [
+        {
+          workingOrderLineId: "line-stable",
+          menuItemId: "menu-item-cafe-0",
+          quantity: "2",
+        },
+      ],
+      label: undefined,
+    });
+  });
+
+  it("rebuilds a retrieved line with its stored modifiers and kitchen customisation", async () => {
+    const option = {
+      optionGroupItemId: "option-extra-milk",
+      name: { "es-ES": "Leche extra" },
+      priceDelta: "0.75",
+      quantity: 2,
+    };
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-customised",
+        orderNumber: 9,
+        label: "Takeaway",
+        lines: [
+          {
+            workingOrderLineId: "line-customised",
+            menuItemId: "menu-item-cafe-0",
+            productId: "cafe",
+            quantity: "2.000",
+            product: cafe,
+            options: [option],
+            note: "Sin espuma",
+            doneness: "medium",
+          },
+        ],
+      }),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+
+    expect(counter.store.lines).toEqual([
+      {
+        workingOrderLineId: "line-customised",
+        product: cafe,
+        quantity: "2",
+        options: [option],
+        note: "Sin espuma",
+        doneness: "medium",
+      },
+    ]);
   });
 
   it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
@@ -1559,7 +1941,7 @@ describe("till-app", () => {
     expect(updateWorkingOrder).toHaveBeenCalled();
     expect(recordSale).toHaveBeenCalledWith(
       [
-        { productId: "cafe", quantity: "2" },
+        { menuItemId: "menu-item-cafe-0", quantity: "2" },
         { productId: "cafe", quantity: "1" },
       ],
       { method: "cash", amount: "5" },
@@ -1821,7 +2203,7 @@ describe("till-app", () => {
     // id and label — NOT re-parked (a re-park would idempotently replay and discard the edit).
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
-        { productId: "cafe", quantity: "2" },
+        { menuItemId: "menu-item-cafe-0", quantity: "2" },
         { productId: "cafe", quantity: "1" },
       ],
       label: "Mesa 4",
@@ -1885,7 +2267,7 @@ describe("till-app", () => {
     // The stored "Mesa 4" is preserved, NOT wiped — updateWorkingOrder carries the name, not undefined.
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
-        { productId: "cafe", quantity: "2" },
+        { menuItemId: "menu-item-cafe-0", quantity: "2" },
         { productId: "cafe", quantity: "1" },
       ],
       label: "Mesa 4",
@@ -1933,10 +2315,122 @@ describe("till-app", () => {
     expect(store.id).toBe("wo-1");
     expect(store.label).toBe("Mesa 4");
     expect(store.lines).toHaveLength(1);
-    expect(store.lines[0]!.product).toBe(cafe);
+    expect(store.lines[0]!.product).toMatchObject({
+      id: "cafe",
+      productId: "cafe",
+      menuItemId: "menu-item-cafe-0",
+      unitPrice: "1.50",
+    });
     // still on the counter with the retrieved basket
     expect(counter(el)).not.toBeNull();
     expect(ticket(el)).toBeNull();
+  });
+
+  it("retrieve-order resolves the stored menu-item identity when one product has two offers", async () => {
+    const catalogue = {
+      context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
+      defaultMenuId: "menu-standard",
+      menus: [
+        { id: "menu-standard", name: "Standard", isDefault: true },
+        { id: "menu-happy", name: "Happy hour", isDefault: false },
+      ],
+      offers: [
+        {
+          ...fixtureOffers({
+            menus: [{ id: "menu-standard", name: "Standard", isDefault: true }],
+            products: [{ ...cafe, id: "negroni", unitPrice: "9.00" }],
+          }).offers[0]!,
+          id: "offer-standard",
+          productId: "negroni",
+          menuId: "menu-standard",
+          menuName: "Standard",
+          grossPrice: "9.00",
+        },
+        {
+          ...fixtureOffers({
+            menus: [{ id: "menu-happy", name: "Happy hour", isDefault: true }],
+            products: [{ ...cafe, id: "negroni", unitPrice: "7.00" }],
+          }).offers[0]!,
+          id: "offer-happy",
+          productId: "negroni",
+          menuId: "menu-happy",
+          menuName: "Happy hour",
+          grossPrice: "7.00",
+        },
+      ],
+    } satisfies ZoneOfferCatalogue;
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-happy",
+        orderNumber: 8,
+        label: null,
+        lines: [{ menuItemId: "offer-happy", productId: "negroni", quantity: "1.000" }],
+      }),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "retrieve-order", { id: "wo-happy" });
+    await flush(el);
+
+    expect(c.store.lines[0]!.product).toMatchObject({
+      id: "negroni",
+      menuItemId: "offer-happy",
+      unitPrice: "7.00",
+    });
+  });
+
+  it("retrieve-order keeps a snapshotted offer that is no longer in the live zone menu", async () => {
+    const storedProduct: TillProduct = {
+      id: "seasonal-soup",
+      productId: "seasonal-soup",
+      menuItemId: "offer-seasonal-soup",
+      descriptions: { en: "Seasonal soup" },
+      pricingUnit: "each",
+      unitPrice: "8.50",
+      vatClass: "reduced",
+      category: "Starter",
+      allergens: null,
+      catalogueId: "menu-winter",
+      catalogueName: "Winter menu",
+      optionGroups: [],
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      courseId: null,
+    };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({
+        context: {
+          zoneId: "zone-counter",
+          departmentId: "department-default",
+          serviceMode: "prepay",
+        },
+        defaultMenuId: null,
+        menus: [],
+        offers: [],
+      }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-seasonal",
+        orderNumber: 9,
+        label: null,
+        lines: [
+          {
+            menuItemId: "offer-seasonal-soup",
+            productId: "seasonal-soup",
+            quantity: "1.000",
+            product: storedProduct,
+          },
+        ],
+      }),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "retrieve-order", { id: "wo-seasonal" });
+    await flush(el);
+
+    expect(c.store.lines).toEqual([{ product: storedProduct, quantity: "1" }]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
   it("retrieve-order: an each quantity displays without trailing zeros; a weight keeps its decimals", async () => {
@@ -1985,7 +2479,12 @@ describe("till-app", () => {
 
     // the unresolved line is dropped; the rest of the order is loaded
     expect(store.lines).toHaveLength(1);
-    expect(store.lines[0]!.product).toBe(cafe);
+    expect(store.lines[0]!.product).toMatchObject({
+      id: "cafe",
+      productId: "cafe",
+      menuItemId: "menu-item-cafe-0",
+      unitPrice: "1.50",
+    });
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.product_gone"));
     // still on the counter with the partial basket
@@ -2556,7 +3055,93 @@ describe("till-app", () => {
 
         expect(getTabLines).toHaveBeenCalledWith("wo-7");
         expect(screen.lines).toEqual([tabLine]);
-        expect(screen.products).toEqual([cafe]);
+        expect(screen.products).toEqual([
+          expect.objectContaining({
+            id: "cafe",
+            productId: "cafe",
+            menuItemId: "menu-item-cafe-0",
+            unitPrice: "1.50",
+          }),
+        ]);
+      });
+
+      it("loads offers for the table's zone before showing its ordering screen", async () => {
+        const diningOffer = fixtureOffers({
+          menus: [{ id: "menu-dining", name: "Dining", isDefault: true }],
+          products: [
+            {
+              ...cafe,
+              id: "negroni",
+              descriptions: { en: "Negroni" },
+              unitPrice: "11.00",
+              catalogueId: "menu-dining",
+              catalogueName: "Dining",
+            },
+          ],
+        });
+        diningOffer.context.zoneId = floorZone.id;
+        const listZoneOffers = vi.fn().mockResolvedValue(diningOffer);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          listZoneOffers,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        expect(listZoneOffers).toHaveBeenCalledWith(floorZone.id);
+        expect(screen.products).toEqual([
+          expect.objectContaining({
+            id: "negroni",
+            menuItemId: "menu-item-negroni-0",
+            unitPrice: "11.00",
+          }),
+        ]);
+        expect(screen.menus).toEqual(diningOffer.menus);
+        expect(screen.selectedMenuId).toBe("menu-dining");
+      });
+
+      it("ignores a late offer response for a table the operator has already left", async () => {
+        const tableA = { ...openTable, id: "table-a", tabId: "order-a", zoneId: "zone-a" };
+        const tableB = { ...openTable, id: "table-b", tabId: "order-b", zoneId: "zone-b" };
+        const offersA = fixtureOffers({
+          menus: [{ id: "menu-a", name: "Menu A", isDefault: true }],
+          products: [{ ...cafe, id: "product-a", catalogueId: "menu-a", catalogueName: "Menu A" }],
+        });
+        offersA.context.zoneId = "zone-a";
+        const offersB = fixtureOffers({
+          menus: [{ id: "menu-b", name: "Menu B", isDefault: true }],
+          products: [{ ...cafe, id: "product-b", catalogueId: "menu-b", catalogueName: "Menu B" }],
+        });
+        offersB.context.zoneId = "zone-b";
+        let resolveA!: (value: ZoneOfferCatalogue) => void;
+        let resolveB!: (value: ZoneOfferCatalogue) => void;
+        const pending = {
+          "zone-a": new Promise<ZoneOfferCatalogue>((resolve) => (resolveA = resolve)),
+          "zone-b": new Promise<ZoneOfferCatalogue>((resolve) => (resolveB = resolve)),
+        };
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([tableA, tableB]),
+          listZones: vi.fn().mockResolvedValue([
+            { ...floorZone, id: "zone-a" },
+            { ...floorZone, id: "zone-b" },
+          ]),
+          listZoneOffers: vi.fn((zoneId: "zone-a" | "zone-b") => pending[zoneId]),
+          getTabLines: vi.fn().mockResolvedValue([]),
+        });
+        await toCounter(el);
+        selectTab(el, "floor");
+        await flush(el);
+
+        emit(floor(el)!, "open-table", { tableId: tableA.id, hasOpenTab: true });
+        emit(floor(el)!, "open-table", { tableId: tableB.id, hasOpenTab: true });
+        resolveB(offersB);
+        await flush(el);
+        expect(tableOrder(el)!.products[0]!.id).toBe("product-b");
+
+        resolveA(offersA);
+        await flush(el);
+        expect(tableOrder(el)!.products[0]!.id).toBe("product-b");
+        expect(tableOrder(el)!.orderId).toBe("order-b");
       });
 
       it("a counter till can settle the tab — canSettle true (default)", async () => {
@@ -3580,7 +4165,7 @@ describe("till-app", () => {
 
       expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
         lines: [
-          { productId: "cafe", quantity: "2" },
+          { menuItemId: "menu-item-cafe-0", quantity: "2" },
           { productId: "cafe", quantity: "1" },
         ],
         label: "Mesa 4",
@@ -3588,7 +4173,7 @@ describe("till-app", () => {
       expect(pay).toHaveBeenCalledWith({
         id: "wo-1",
         lines: [
-          { productId: "cafe", quantity: "2" },
+          { menuItemId: "menu-item-cafe-0", quantity: "2" },
           { productId: "cafe", quantity: "1" },
         ],
       });
@@ -3614,7 +4199,7 @@ describe("till-app", () => {
       expect(updateWorkingOrder).not.toHaveBeenCalled();
       expect(pay).toHaveBeenCalledWith({
         id: "wo-1",
-        lines: [{ productId: "cafe", quantity: "2" }],
+        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
       });
     });
   });
@@ -3676,7 +4261,14 @@ describe("till-app", () => {
       // Mode P never fetches the queue, so the counter tab's has-items-gated prep-queue card stays hidden.
       expect(stationQueueWidget(el)).toBeNull();
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      expect(c.products).toEqual([cafe]); // sanity: still a normal counter otherwise
+      expect(c.products).toEqual([
+        expect.objectContaining({
+          id: "cafe",
+          productId: "cafe",
+          menuItemId: "menu-item-cafe-0",
+          unitPrice: "1.50",
+        }),
+      ]); // sanity: still a normal counter otherwise
     });
 
     it("boots into Mode I (invoice_first): tender-pay starts on the order stage; the default station's queue is fetched and rendered", async () => {
@@ -3807,7 +4399,7 @@ describe("till-app", () => {
       expect(currentApi.parkOrder).not.toHaveBeenCalled();
       expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
         lines: [
-          { productId: "cafe", quantity: "2" }, // retrieved
+          { menuItemId: "menu-item-cafe-0", quantity: "2" }, // retrieved
           { productId: "cafe", quantity: "1" }, // the edit
         ],
         label: "Mesa 4",
@@ -4927,7 +5519,14 @@ describe("till-app", () => {
       expect(allergen!.getAttribute("slot")).toBe("drill");
       // The drill gets the FULL product set (allergen lookup spans every menu), exactly as the counter's
       // own local overlay feeds it — the shell just owns the button now.
-      expect(allergen!.products).toEqual([cafe]);
+      expect(allergen!.products).toEqual([
+        expect.objectContaining({
+          id: "cafe",
+          productId: "cafe",
+          menuItemId: "menu-item-cafe-0",
+          unitPrice: "1.50",
+        }),
+      ]);
     });
 
     it("pops the allergens drill-in on its own close-allergens", async () => {

@@ -29,6 +29,7 @@ import {
   type DietProfile,
 } from "./dietary.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
+import { menuItemOptionGroups, menuItemOptions, menuItems, menuSections } from "./schema/menu.js";
 
 /**
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
@@ -53,6 +54,61 @@ export interface Catalogue {
 export interface Category {
   id: string;
   name: string;
+}
+
+export interface MenuSection {
+  id: string;
+  menuId: string;
+  name: Record<string, string>;
+  displayOrder: number;
+  active: boolean;
+}
+
+export interface MenuItem {
+  id: string;
+  menuId: string;
+  productId: string;
+  sectionId: string;
+  grossPrice: string;
+  displayOrder: number;
+  active: boolean;
+}
+
+/** One sellable identity. The menu-item id, rather than the product id, selects its price. */
+export interface MenuOffer extends MenuItem {
+  menuName: string;
+  sectionName: Record<string, string>;
+  descriptions: Record<string, string>;
+  pricingUnit: PricingUnit;
+  vatClass: VatClass;
+  category: string | null;
+  allergens: ProductAllergens | null;
+  diet: DietProfile | null;
+  dietDerivation: DietDerivation | null;
+  dietOverride: DietOverride | null;
+  courseId: string | null;
+  optionGroups: MenuOfferOptionGroup[];
+}
+
+export interface MenuOfferOptionGroup {
+  id: string;
+  name: Record<string, string>;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  options: MenuOfferOption[];
+}
+
+export interface MenuOfferOption {
+  id: string;
+  name: Record<string, string>;
+  priceDelta: string;
+  maxQuantity: number;
+  vatClass: VatClass | null;
+  addAllergens: ProductAllergens | null;
+  removeAllergens: string[] | null;
+  addOrigins: string[] | null;
+  removeOrigins: string[] | null;
 }
 
 export interface Product {
@@ -289,6 +345,456 @@ export async function createCatalogue(
 
 export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
   return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
+}
+
+export async function createMenuSection(
+  tx: Transaction,
+  tenantId: TenantId,
+  input: { menuId: string; name: Record<string, string>; displayOrder?: number },
+): Promise<MenuSection> {
+  const [row] = await tx
+    .insert(menuSections)
+    .values({ tenantId, ...input })
+    .returning({
+      id: menuSections.id,
+      menuId: menuSections.menuId,
+      name: menuSections.name,
+      displayOrder: menuSections.displayOrder,
+      active: menuSections.active,
+    });
+  return row!;
+}
+
+export async function createMenuItem(
+  tx: Transaction,
+  tenantId: TenantId,
+  input: {
+    menuId: string;
+    productId: string;
+    sectionId: string;
+    grossPrice: string;
+    displayOrder?: number;
+  },
+): Promise<MenuItem> {
+  const [product] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(and(eq(products.tenantId, tenantId), eq(products.id, input.productId)));
+  if (product === undefined)
+    throw new AppError("product.not_found", { productId: input.productId });
+  const [section] = await tx
+    .select({ id: menuSections.id })
+    .from(menuSections)
+    .where(
+      and(
+        eq(menuSections.tenantId, tenantId),
+        eq(menuSections.menuId, input.menuId),
+        eq(menuSections.id, input.sectionId),
+      ),
+    );
+  if (section === undefined) {
+    throw new AppError("menu_section.not_found", {
+      menuId: input.menuId,
+      sectionId: input.sectionId,
+    });
+  }
+  const [existing] = await tx
+    .select({ id: menuItems.id })
+    .from(menuItems)
+    .where(
+      and(
+        eq(menuItems.tenantId, tenantId),
+        eq(menuItems.menuId, input.menuId),
+        eq(menuItems.productId, input.productId),
+      ),
+    );
+  const [row] = await tx
+    .insert(menuItems)
+    .values({ tenantId, ...input })
+    .onConflictDoUpdate({
+      target: [menuItems.tenantId, menuItems.menuId, menuItems.productId],
+      set: {
+        sectionId: input.sectionId,
+        grossPrice: input.grossPrice,
+        displayOrder: input.displayOrder ?? 0,
+        active: true,
+      },
+    })
+    .returning({
+      id: menuItems.id,
+      menuId: menuItems.menuId,
+      productId: menuItems.productId,
+      sectionId: menuItems.sectionId,
+      grossPrice: menuItems.grossPrice,
+      displayOrder: menuItems.displayOrder,
+      active: menuItems.active,
+    });
+  if (existing === undefined) {
+    const defaults = await tx
+      .select({
+        groupId: productOptionGroups.groupId,
+        optionId: optionGroupItems.id,
+        priceDelta: optionGroupItems.priceDelta,
+      })
+      .from(productOptionGroups)
+      .innerJoin(
+        optionGroups,
+        and(
+          eq(optionGroups.tenantId, productOptionGroups.tenantId),
+          eq(optionGroups.id, productOptionGroups.groupId),
+          eq(optionGroups.active, true),
+        ),
+      )
+      .innerJoin(
+        optionGroupItems,
+        and(
+          eq(optionGroupItems.tenantId, productOptionGroups.tenantId),
+          eq(optionGroupItems.groupId, productOptionGroups.groupId),
+          eq(optionGroupItems.active, true),
+        ),
+      )
+      .where(
+        and(
+          eq(productOptionGroups.tenantId, tenantId),
+          eq(productOptionGroups.productId, input.productId),
+        ),
+      )
+      .orderBy(productOptionGroups.sort, optionGroupItems.sort, optionGroupItems.id);
+    const byGroup = new Map<
+      string,
+      { groupId: string; options: { optionId: string; priceDelta: string }[] }
+    >();
+    for (const option of defaults) {
+      const group = byGroup.get(option.groupId) ?? { groupId: option.groupId, options: [] };
+      group.options.push({ optionId: option.optionId, priceDelta: option.priceDelta });
+      byGroup.set(option.groupId, group);
+    }
+    if (byGroup.size > 0) {
+      await setMenuItemOptionGroups(tx, tenantId, row!.id, [...byGroup.values()]);
+    }
+  }
+  return row!;
+}
+
+export async function updateMenuItem(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuId: string,
+  menuItemId: string,
+  patch: { sectionId?: string; grossPrice?: string; displayOrder?: number },
+): Promise<void> {
+  const [row] = await tx
+    .update(menuItems)
+    .set(patch)
+    .where(
+      and(
+        eq(menuItems.tenantId, tenantId),
+        eq(menuItems.menuId, menuId),
+        eq(menuItems.id, menuItemId),
+        eq(menuItems.active, true),
+      ),
+    )
+    .returning({ id: menuItems.id });
+  if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
+}
+
+export async function deactivateMenuItem(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuId: string,
+  menuItemId: string,
+): Promise<void> {
+  const [row] = await tx
+    .update(menuItems)
+    .set({ active: false })
+    .where(
+      and(
+        eq(menuItems.tenantId, tenantId),
+        eq(menuItems.menuId, menuId),
+        eq(menuItems.id, menuItemId),
+        eq(menuItems.active, true),
+      ),
+    )
+    .returning({ id: menuItems.id });
+  if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
+}
+
+/** Replace the groups and choices offered for one menu item, including their menu-specific prices. */
+export async function setMenuItemOptionGroups(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuItemId: string,
+  groups: {
+    groupId: string;
+    options: { optionId: string; priceDelta: string }[];
+  }[],
+): Promise<void> {
+  const [menuItem] = await tx
+    .select({ productId: menuItems.productId })
+    .from(menuItems)
+    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, menuItemId)));
+  if (menuItem === undefined) throw new AppError("menu_item.not_found", { menuItemId });
+
+  const groupIds = groups.map((group) => group.groupId);
+  if (new Set(groupIds).size !== groupIds.length) {
+    throw new AppError("options.group_invalid", { reason: "duplicate" });
+  }
+  const requiredGroups = await tx
+    .select({ id: productOptionGroups.groupId })
+    .from(productOptionGroups)
+    .innerJoin(
+      optionGroups,
+      and(
+        eq(optionGroups.tenantId, productOptionGroups.tenantId),
+        eq(optionGroups.id, productOptionGroups.groupId),
+      ),
+    )
+    .where(
+      and(
+        eq(productOptionGroups.tenantId, tenantId),
+        eq(productOptionGroups.productId, menuItem.productId),
+        eq(optionGroups.required, true),
+        eq(optionGroups.active, true),
+      ),
+    );
+  if (requiredGroups.some((group) => !groupIds.includes(group.id))) {
+    throw new AppError("options.group_invalid", { reason: "required_group_missing" });
+  }
+  if (groupIds.length > 0) {
+    const attached = await tx
+      .select({ groupId: productOptionGroups.groupId })
+      .from(productOptionGroups)
+      .where(
+        and(
+          eq(productOptionGroups.tenantId, tenantId),
+          eq(productOptionGroups.productId, menuItem.productId),
+          inArray(productOptionGroups.groupId, groupIds),
+        ),
+      );
+    if (attached.length !== groupIds.length) {
+      throw new AppError("options.group_invalid", { reason: "not_attached" });
+    }
+
+    const definitions = await tx
+      .select({ id: optionGroups.id, minSelect: optionGroups.minSelect })
+      .from(optionGroups)
+      .where(and(eq(optionGroups.tenantId, tenantId), inArray(optionGroups.id, groupIds)));
+    const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
+    for (const group of groups) {
+      const definition = definitionById.get(group.groupId);
+      if (definition === undefined) {
+        throw new AppError("options.group_invalid", { reason: "not_attached" });
+      }
+      const optionIds = group.options.map((option) => option.optionId);
+      if (new Set(optionIds).size !== optionIds.length) {
+        throw new AppError("options.item_invalid", { reason: "duplicate" });
+      }
+      if (optionIds.length < definition.minSelect) {
+        throw new AppError("options.group_invalid", { reason: "insufficient_options" });
+      }
+      if (optionIds.length > 0) {
+        const matchingOptions = await tx
+          .select({ id: optionGroupItems.id })
+          .from(optionGroupItems)
+          .where(
+            and(
+              eq(optionGroupItems.tenantId, tenantId),
+              eq(optionGroupItems.groupId, group.groupId),
+              eq(optionGroupItems.active, true),
+              inArray(optionGroupItems.id, optionIds),
+            ),
+          );
+        if (matchingOptions.length !== optionIds.length) {
+          throw new AppError("options.item_invalid", { reason: "wrong_group_or_inactive" });
+        }
+      }
+    }
+  }
+
+  await tx
+    .delete(menuItemOptionGroups)
+    .where(
+      and(
+        eq(menuItemOptionGroups.tenantId, tenantId),
+        eq(menuItemOptionGroups.menuItemId, menuItemId),
+      ),
+    );
+  if (groups.length === 0) return;
+  await tx.insert(menuItemOptionGroups).values(
+    groups.map((group, displayOrder) => ({
+      tenantId,
+      menuItemId,
+      groupId: group.groupId,
+      displayOrder,
+    })),
+  );
+  const options = groups.flatMap((group) =>
+    group.options.map((option) => ({
+      tenantId,
+      menuItemId,
+      groupId: group.groupId,
+      optionId: option.optionId,
+      priceDelta: option.priceDelta,
+    })),
+  );
+  if (options.length > 0) await tx.insert(menuItemOptions).values(options);
+}
+
+export async function listMenuOffers(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuIds: string[],
+): Promise<MenuOffer[]> {
+  if (menuIds.length === 0) return [];
+  const rows = await tx
+    .select({
+      id: menuItems.id,
+      menuId: menuItems.menuId,
+      productId: menuItems.productId,
+      sectionId: menuItems.sectionId,
+      grossPrice: menuItems.grossPrice,
+      displayOrder: menuItems.displayOrder,
+      active: menuItems.active,
+      menuName: catalogues.name,
+      sectionName: menuSections.name,
+      descriptions: products.descriptions,
+      pricingUnit: products.pricingUnit,
+      vatClass: products.vatClass,
+      category: categories.name,
+      allergens: products.allergens,
+      diet: products.diet,
+      dietDerivation: products.dietDerivation,
+      dietOverride: products.dietOverride,
+      courseId: products.courseId,
+    })
+    .from(menuItems)
+    .innerJoin(
+      catalogues,
+      and(eq(catalogues.tenantId, menuItems.tenantId), eq(catalogues.id, menuItems.menuId)),
+    )
+    .innerJoin(
+      menuSections,
+      and(eq(menuSections.tenantId, menuItems.tenantId), eq(menuSections.id, menuItems.sectionId)),
+    )
+    .innerJoin(
+      products,
+      and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
+    )
+    .leftJoin(
+      categories,
+      and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
+    )
+    .where(
+      and(
+        eq(menuItems.tenantId, tenantId),
+        inArray(menuItems.menuId, menuIds),
+        eq(menuItems.active, true),
+        eq(menuSections.active, true),
+        eq(catalogues.active, true),
+        eq(products.active, true),
+      ),
+    )
+    .orderBy(catalogues.name, menuSections.displayOrder, menuItems.displayOrder, menuItems.id);
+  if (rows.length === 0) return [];
+  const optionRows = await tx
+    .select({
+      menuItemId: menuItemOptionGroups.menuItemId,
+      groupId: optionGroups.id,
+      groupName: optionGroups.name,
+      minSelect: optionGroups.minSelect,
+      maxSelect: optionGroups.maxSelect,
+      required: optionGroups.required,
+      optionId: optionGroupItems.id,
+      optionName: optionGroupItems.name,
+      priceDelta: menuItemOptions.priceDelta,
+      maxQuantity: optionGroupItems.maxQuantity,
+      vatClass: optionGroupItems.vatClass,
+      addAllergens: optionGroupItems.addAllergens,
+      removeAllergens: optionGroupItems.removeAllergens,
+      addOrigins: optionGroupItems.addOrigins,
+      removeOrigins: optionGroupItems.removeOrigins,
+    })
+    .from(menuItemOptionGroups)
+    .innerJoin(
+      optionGroups,
+      and(
+        eq(optionGroups.tenantId, menuItemOptionGroups.tenantId),
+        eq(optionGroups.id, menuItemOptionGroups.groupId),
+      ),
+    )
+    .innerJoin(
+      menuItemOptions,
+      and(
+        eq(menuItemOptions.tenantId, menuItemOptionGroups.tenantId),
+        eq(menuItemOptions.menuItemId, menuItemOptionGroups.menuItemId),
+        eq(menuItemOptions.groupId, menuItemOptionGroups.groupId),
+      ),
+    )
+    .innerJoin(
+      optionGroupItems,
+      and(
+        eq(optionGroupItems.tenantId, menuItemOptions.tenantId),
+        eq(optionGroupItems.id, menuItemOptions.optionId),
+        eq(optionGroupItems.groupId, menuItemOptions.groupId),
+      ),
+    )
+    .where(
+      and(
+        eq(menuItemOptionGroups.tenantId, tenantId),
+        inArray(
+          menuItemOptionGroups.menuItemId,
+          rows.map((row) => row.id),
+        ),
+        eq(optionGroups.active, true),
+        eq(optionGroupItems.active, true),
+      ),
+    )
+    .orderBy(
+      menuItemOptionGroups.displayOrder,
+      optionGroups.id,
+      optionGroupItems.sort,
+      optionGroupItems.id,
+    );
+  const groupsByItem = new Map<string, MenuOfferOptionGroup[]>();
+  for (const option of optionRows) {
+    let groups = groupsByItem.get(option.menuItemId);
+    if (groups === undefined) {
+      groups = [];
+      groupsByItem.set(option.menuItemId, groups);
+    }
+    let group = groups.find((candidate) => candidate.id === option.groupId);
+    if (group === undefined) {
+      group = {
+        id: option.groupId,
+        name: option.groupName,
+        minSelect: option.minSelect,
+        maxSelect: option.maxSelect,
+        required: option.required,
+        options: [],
+      };
+      groups.push(group);
+    }
+    group.options.push({
+      id: option.optionId,
+      name: option.optionName,
+      priceDelta: option.priceDelta,
+      maxQuantity: option.maxQuantity,
+      vatClass: option.vatClass as VatClass | null,
+      addAllergens: option.addAllergens as ProductAllergens | null,
+      removeAllergens: option.removeAllergens as string[] | null,
+      addOrigins: option.addOrigins as string[] | null,
+      removeOrigins: option.removeOrigins as string[] | null,
+    });
+  }
+  return rows.map((row) => ({
+    ...row,
+    pricingUnit: row.pricingUnit as PricingUnit,
+    vatClass: row.vatClass as VatClass,
+    diet: row.diet as DietProfile | null,
+    dietDerivation: row.dietDerivation as DietDerivation | null,
+    dietOverride: row.dietOverride as DietOverride | null,
+    optionGroups: groupsByItem.get(row.id) ?? [],
+  }));
 }
 
 /**

@@ -11,6 +11,12 @@ export type {
   CoreServices,
   ConfigurationTransferTable,
   ModuleConfigurationTransfer,
+  OrderServiceContext,
+  ServiceZoneSummary,
+  ZoneMenuOffer,
+  PreparationRoute,
+  ServiceMode,
+  VenueServiceContribution,
 } from "./module.js";
 export { orderedMigrationSets, packageDirOf } from "./module.js";
 export type { VocabularyOwner } from "./vocabulary.js";
@@ -33,6 +39,7 @@ export type {
   StandbyReservation,
 } from "./provisioning.js";
 export { fiscalSlot, selectFiscalModule } from "./fiscal-slot.js";
+export { selectVenueService } from "./venue-service-slot.js";
 export type { RestoreHook, RestoreOutcome } from "./restore.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";

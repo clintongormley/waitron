@@ -16,6 +16,8 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createProduct,
   listAvailableProducts,
 } from "@waitron/catalogue";
@@ -108,7 +110,12 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  * `weight` product (24.90 €/kg, reduced/10%). Each test gets its OWN tenant so the
  * `registros_facturacion` count is that test's alone, order-independent (CLAUDE.md §4).
  */
-async function setupVenue(): Promise<{ cfg: TillConfig; available: AvailableProduct[] }> {
+async function setupVenue(): Promise<{
+  cfg: TillConfig;
+  available: AvailableProduct[];
+  zoneId: string;
+  waterOfferId: string;
+}> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -144,7 +151,7 @@ async function setupVenue(): Promise<{ cfg: TillConfig; available: AvailableProd
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const catalogue = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
@@ -157,7 +164,7 @@ async function setupVenue(): Promise<{ cfg: TillConfig; available: AvailableProd
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    await createProduct(tx, cfg.tenantId, {
+    const water = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Agua mineral" },
@@ -166,9 +173,38 @@ async function setupVenue(): Promise<{ cfg: TillConfig; available: AvailableProd
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    return (await listAvailableProducts(tx, cfg.locationId)).products;
+    const zone = await tx.execute<{ id: string }>(sql`
+      select zone_id as id from zone_service_policies
+      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        and is_counter_default`);
+    const section = await createMenuSection(tx, cfg.tenantId, {
+      menuId: cat.id,
+      name: { [LOCALE]: "Bebidas" },
+    });
+    const offer = await createMenuItem(tx, cfg.tenantId, {
+      menuId: cat.id,
+      productId: water.id,
+      sectionId: section.id,
+      grossPrice: "2.25",
+    });
+    await tx.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id)
+      values (${cfg.tenantId}, ${zone.rows[0]!.id}, ${cat.id})`);
+    await tx.execute(sql`
+      update zone_service_policies set default_menu_id = ${cat.id}
+      where tenant_id = ${cfg.tenantId} and zone_id = ${zone.rows[0]!.id}`);
+    await tx.execute(sql`
+      insert into preparation_routes (tenant_id, location_id, category_id, station_id)
+      values (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id},
+        (select id from kitchen_stations
+         where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default))`);
+    return {
+      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      zoneId: zone.rows[0]!.id,
+      waterOfferId: offer.id,
+    };
   });
-  return { cfg, available };
+  return { cfg, ...catalogue };
 }
 
 beforeAll(() => {
@@ -184,6 +220,41 @@ beforeAll(() => {
 });
 
 describe("recordTillSale", () => {
+  it("files a walk-up from the selected zone's menu price and stores its attribution", async () => {
+    const { cfg, zoneId, waterOfferId } = await setupVenue();
+
+    const result = await recordTillSale({ db: suite.admin, backend, clock }, cfg, {
+      zoneId,
+      lines: [{ menuItemId: waterOfferId, quantity: "2" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(result.total).toBe("4.50");
+    const snapshots = await suite.admin.execute<{
+      zone_id: string;
+      menu_item_id: string;
+      menu_name: string;
+      department_name: string;
+    }>(sql`
+      select o.zone_id, l.menu_item_id, l.menu_name, l.department_name
+      from order_service_contexts o
+      join working_order_lines w on w.working_order_id = o.working_order_id
+      join working_line_contexts l on l.working_order_line_id = w.id
+      where o.tenant_id = ${cfg.tenantId}`);
+    expect(snapshots.rows).toEqual([
+      {
+        zone_id: zoneId,
+        menu_item_id: waterOfferId,
+        menu_name: "Delicatessen",
+        department_name: "Venue",
+      },
+    ]);
+    const prep = await suite.admin.execute<{ count: number }>(sql`
+      select count(*)::int as count from ticket_items
+      where tenant_id = ${cfg.tenantId}`);
+    expect(prep.rows).toEqual([{ count: 1 }]);
+  });
+
   it("walk-up: prices the sent basket authoritatively and files a chained immediate cash sale", async () => {
     const { cfg, available } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
@@ -199,12 +270,18 @@ describe("recordTillSale", () => {
     expect(result.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
     expect(result.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     expect(typeof result.qr).toBe("string"); // regime verification URL (may be empty)
+    const prep = await suite.admin.execute<{ count: number }>(sql`
+      select count(*)::int as count from ticket_items
+      where tenant_id = ${cfg.tenantId}`);
+    expect(prep.rows).toEqual([{ count: 1 }]);
 
-    // A genuine chained fiscal record exists — one, for this tenant's single sale (its own tenant,
-    // so the count is order-independent).
+    // A genuine chained fiscal record exists — one for this tenant's single sale.
     const rows = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     });
     expect(rows.length).toBe(1);
   });

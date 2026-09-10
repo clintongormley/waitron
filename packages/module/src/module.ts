@@ -83,6 +83,166 @@ export interface FloorAnnotator {
   ): Promise<Map<string, { reservedTime: string | null }>>;
 }
 
+export type ServiceMode = "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+
+export interface OrderServiceContext {
+  readonly zoneId: string;
+  readonly departmentId: string;
+  readonly serviceMode: ServiceMode;
+}
+
+export interface ServiceZoneSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly departmentId: string;
+  readonly departmentName: string;
+  readonly serviceMode: ServiceMode;
+}
+
+export interface ZoneMenuOffer {
+  readonly id: string;
+  readonly menuId: string;
+  readonly productId: string;
+  readonly sectionId: string;
+  readonly grossPrice: string;
+  readonly displayOrder: number;
+  readonly active: boolean;
+  readonly menuName: string;
+  readonly sectionName: Readonly<Record<string, string>>;
+  readonly descriptions: Readonly<Record<string, string>>;
+  readonly pricingUnit: "each" | "weight";
+  readonly vatClass: string;
+  readonly category: string | null;
+  readonly allergens: Readonly<
+    Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
+  > | null;
+  readonly diet: unknown;
+  readonly dietDerivation: unknown;
+  readonly dietOverride: unknown;
+  readonly courseId: string | null;
+  readonly optionGroups: readonly {
+    readonly id: string;
+    readonly name: Readonly<Record<string, string>>;
+    readonly minSelect: number;
+    readonly maxSelect: number;
+    readonly required: boolean;
+    readonly options: readonly {
+      readonly id: string;
+      readonly name: Readonly<Record<string, string>>;
+      readonly priceDelta: string;
+      readonly maxQuantity: number;
+      readonly vatClass: string | null;
+      readonly addAllergens: Readonly<
+        Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
+      > | null;
+      readonly removeAllergens: readonly string[] | null;
+      readonly addOrigins: readonly string[] | null;
+      readonly removeOrigins: readonly string[] | null;
+    }[];
+  }[];
+}
+
+export type PreparationRoute =
+  { readonly kind: "station"; readonly stationId: string } | { readonly kind: "no_preparation" };
+
+/** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
+export interface VenueServiceContribution {
+  listServiceZones(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+  ): Promise<readonly ServiceZoneSummary[]>;
+  resolveZoneContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    zoneId: string,
+  ): Promise<OrderServiceContext>;
+  resolvePreparationRoute(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    zoneId: string,
+    productId: string,
+  ): Promise<PreparationRoute>;
+  listZoneOffers(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    zoneId: string,
+  ): Promise<{
+    defaultMenuId: string | null;
+    menus: readonly { id: string; name: string; isDefault: boolean }[];
+    offers: readonly ZoneMenuOffer[];
+  }>;
+  resolveNewOrderZone(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    input: { zoneId?: string | null; deviceId?: string | null },
+  ): Promise<OrderServiceContext>;
+  resolveZoneOffer(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    zoneId: string,
+    menuItemId: string,
+  ): Promise<ZoneMenuOffer>;
+  recordOrderContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+    zoneId: string,
+  ): Promise<void>;
+  retargetOrderContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+    zoneId: string,
+  ): Promise<void>;
+  getOrderContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+  ): Promise<OrderServiceContext>;
+  findOrderContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+  ): Promise<OrderServiceContext | null>;
+  listLineContexts(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+  ): Promise<
+    readonly {
+      workingOrderLineId: string;
+      menuItemId: string;
+      menuId: string;
+      menuName: string;
+      categoryName: string;
+      pricingUnit: "each" | "weight";
+      vatClass: string;
+      allergens: ZoneMenuOffer["allergens"];
+      diet: unknown;
+      dietDerivation: unknown;
+      dietOverride: unknown;
+    }[]
+  >;
+  recordLineContexts(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+    lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+  ): Promise<void>;
+  copyOrderContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    fromWorkingOrderId: string,
+    toWorkingOrderId: string,
+  ): Promise<void>;
+  copyLineContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    fromWorkingOrderLineId: string,
+    toWorkingOrderLineId: string,
+  ): Promise<void>;
+}
+
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
 export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
 
@@ -163,6 +323,7 @@ export interface WaitronModule {
    * folds every ENABLED module's annotator onto its rows — bookings supplies the reserved-on-floor
    * badge, so its timezone/grace/query concern leaves core (spec §4.3). */
   readonly floorAnnotations?: FloorAnnotator;
+  readonly venueService?: VenueServiceContribution;
   readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
   readonly configurationTransfer?: ModuleConfigurationTransfer;
 }

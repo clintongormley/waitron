@@ -17,13 +17,13 @@ export function resolveLocationSelection(locations: LocationSummary[], current: 
 }
 
 /**
- * A presentational LOCATION PICKER shared by the roster, planned-vs-actual and location-menus screens,
+ * A presentational LOCATION PICKER shared by location-scoped management screens,
  * which each used to hand-roll the identical `<select data-test="location-select">`. It is
  * props-in/events-out and owns NO state: the parent screen keeps the selected `locationId` and the
  * loaded `locations`, passes them down, and reloads on the event.
  *
  * It renders NOTHING when there is one location or none — there is nothing to pick — so a single-venue
- * tenant sees no redundant one-option select (the rule the location-menus screen already applied; the
+ * tenant sees no redundant one-option select; the
  * roster and planned screens used to show a pointless one-option select and now match). Otherwise it
  * renders the labelled native `<select>` with an `<option>` per location, the current one marked via a
  * per-option `.selected` binding — NOT a select-level `.value`, which commits before the `<option>`
@@ -32,8 +32,7 @@ export function resolveLocationSelection(locations: LocationSummary[], current: 
  * `updated()` reconciliation is needed (none of the three screens carried one).
  *
  * The label text is passed in (`label`) rather than fetched, so i18n stays at the screen edge (each
- * screen passes its own `t("roster.location")` / `t("planned.location")` / `t("location_menus.location")`,
- * all of which resolve to the same copy) and this widget stays free of the i18n layer.
+ * screen passes its own localized label) and this widget stays free of the i18n layer.
  *
  * `:host { display: contents }` so the widget adds no box of its own: the projected `<label>`
  * participates directly in the parent's layout exactly as the inlined label did, and when the widget
@@ -56,8 +55,7 @@ export class LocationPicker extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
-        /* The gap below the picker (before the table/next control) — the margin the location-menus
-         * screen used to carry on its own picker label, and which the roster/planned screens match on
+        /* The gap below the picker (before the table/next control) — the margin the roster/planned screens use
          * their sibling week picker so the two align in their shared flex row. Rendered only when the
          * select is (nothing renders at one location or none), so a hidden picker leaves no phantom gap. */
         margin-bottom: var(--wt-space-4);

@@ -140,6 +140,11 @@ async function seedTillIdentity(admin: Database): Promise<void> {
     values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote node')
     on conflict do nothing`);
+  await admin.execute(sql`
+    insert into tills (id, tenant_id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_TILL_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote till')
+    on conflict do nothing`);
   await establishNodeIdentity(
     { ownerDb: admin, ring: PROMOTE_RING },
     TILL_ENV.WAITRON_TILL_TENANT_ID,
@@ -216,7 +221,15 @@ async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {
  * holds the singleton. Seeded against the SUPERUSER connection (as every setup here is).
  */
 async function seedFiscalWork(): Promise<{ registroIds: string[]; tenantId: string }> {
-  const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
+  const seeded = await seedPendingEnvios(suite.admin, {
+    count: 1,
+    identity: {
+      tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
+      tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      nif: "90111111H",
+    },
+  });
   const material = mintMtlsMaterial();
   await withTenant(suite.admin, seeded.tenantId, (tx) =>
     putCredential(tx, loadKeyRing(KEY_ENV), {

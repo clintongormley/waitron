@@ -257,6 +257,11 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
     values (${DEVICE_ID}, ${MIRROR_TENANT_ID}, ${MIRROR_LOCATION_ID}, ${DEVICE_PROFILE_ID},
             ${MIRROR_TILL_ID}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
     on conflict do nothing`);
+  await admin.execute(sql`
+    insert into kitchen_stations
+      (tenant_id, location_id, name, display_order, is_default, active)
+    values (${MIRROR_TENANT_ID}, ${MIRROR_LOCATION_ID}, 'Kitchen', 0, true, true)
+    on conflict do nothing`);
 
   const tenant = brandTenantId(MIRROR_TENANT_ID);
   await withTenant(admin, MIRROR_TENANT_ID, async (tx) => {

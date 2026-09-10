@@ -283,6 +283,10 @@ beforeAll(async () => {
     insert into nodes (id, tenant_id, location_id, name, filing_module)
     values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till', 'verifactu')`);
+  await suite.admin.execute(sql`
+    insert into tills (id, tenant_id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_TILL_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till')`);
 
   // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
   // test, not the bundle) that resolves to `apps/server/src/drizzle`, which does not exist; only
@@ -946,7 +950,7 @@ describe("startServer, against a real container as the deployment role", () => {
       // `0 === 0` pass without boot having migrated anything (CLAUDE.md §1) — except `fiscal-none`, which
       // ships NO migrations by design, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(10);
+      expect(sets).toHaveLength(12);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);
@@ -2228,6 +2232,18 @@ describe("startServer, against a real container as the deployment role", () => {
     }, 60_000);
   });
 
+  it("refuses trading boot when its configured venue is not the database's sole venue", async () => {
+    const error = await startServer({
+      ...KEY_ENV,
+      WAITRON_TILL_LOCATION_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+    }).catch((caught: unknown) => caught);
+    expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
+  });
+
   // I1 of the 2026-07-27 whole-branch review: nothing PINS which config field reaches which duty,
   // and nothing proves this branch's headline behaviour end to end. `boot.ts` passes
   // `skipRetryMs: config.skipRetryMs` to both `drain` and `runDue` — `tsc` only pins that the
@@ -2258,7 +2274,15 @@ describe("startServer, against a real container as the deployment role", () => {
     // deliberately not injectable — see its own doc comment), so this tenant is due the instant
     // the first pass runs. Seeded against `suite.admin` (the container's own superuser default),
     // matching `pass.pg.test.ts`'s identical convention for owner-side setup.
-    const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.admin, {
+      count: 1,
+      identity: {
+        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
+        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        nif: "90000000K",
+      },
+    });
 
     try {
       const [server, sleeping, skipped] = await withCapturedStdout(async (lines) => {
@@ -2336,7 +2360,15 @@ describe("startServer, against a real container as the deployment role", () => {
   // process has no business dialling the real one) while `Agent` itself stays real.
   it("closes the mTLS transport it built for a tenant with due fiscal work and a usable fiscal.aeat credential", async () => {
     const port = await freePort();
-    const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.admin, {
+      count: 1,
+      identity: {
+        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
+        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        nif: "90000000K",
+      },
+    });
     const material = mintMtlsMaterial();
     // Same shape as `aeat-transport.test.ts`'s own `provision(certKind)` helper, against the
     // TENANT `seedPendingEnvios` just seeded rather than a fresh one of its own — this test needs
