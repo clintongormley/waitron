@@ -26,7 +26,34 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @waitron/server build \
   && pnpm --filter @waitron/till build \
   && pnpm --filter @waitron/dashboard build \
-  && pnpm --filter @waitron/setup build
+  && pnpm --filter @waitron/setup build \
+  && pnpm --filter @waitron/print-agent-app build
+
+# ---------------------------------------------------------------------------
+# Print-agent stage — the box-local bridge to USB/network/Bluetooth printers.
+# A SEPARATE image from the app (its own compose service), built with
+# `--target print-agent`. bluez supplies bluetoothctl, which the Bluetooth
+# pair path spawns; node:24-alpine never carried it. Runs as the unprivileged
+# `node` user the base image already ships (uid 1000).
+# ---------------------------------------------------------------------------
+FROM node:26-slim AS print-agent
+RUN set -eux; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends bluez; \
+  rm -rf /var/lib/apt/lists/*
+# The state volume's mount path, pre-created and chowned so a fresh named volume comes up writable by
+# the non-root process (same rule as the app image's /var/lib/waitron paths).
+RUN install -d -o node -g node /var/lib/waitron-print-agent
+COPY --from=build --chown=node:node /src/apps/print-agent/dist/print-agent.js /app/print-agent.js
+ENV NODE_ENV=production \
+  WAITRON_STATE_DIR=/var/lib/waitron-print-agent \
+  WAITRON_SETUP_PORT=9110
+# Documentation only under network_mode: host (the port is not published via Docker) — kept from the
+# standalone image so the setup port is visible in `docker inspect`.
+EXPOSE 9110
+USER node
+WORKDIR /app
+CMD ["node", "/app/print-agent.js"]
 
 # ---------------------------------------------------------------------------
 # Runtime stage — the build outputs, a Postgres client and a non-root user.
