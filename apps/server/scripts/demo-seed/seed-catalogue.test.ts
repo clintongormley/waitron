@@ -71,7 +71,7 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
 }
 
 describe("seedCatalogues", () => {
-  it("creates both menus, routes categories to stations, and sets the default + accessible second", async () => {
+  it("creates restaurant, lunch and deli menus and routes each category to its preparation station", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
     const res = await withTenant(suite.admin, tenantId, async (tx) => {
@@ -95,15 +95,14 @@ describe("seedCatalogues", () => {
       return { out, menus, products, stations, drinksRoute, charcuterieRoute };
     });
 
-    // Casa Delgado is the default and sorts first; Menú del Día is the accessible second.
-    expect(res.menus.map((m) => m.name)).toEqual(["Casa Delgado", "Menú del Día"]);
+    expect(res.menus.map((m) => m.name)).toEqual(["Casa Delgado", "Deli takeaway", "Menú del Día"]);
     expect(res.menus.find((m) => m.name === "Casa Delgado")!.isDefault).toBe(true);
     expect(res.menus.find((m) => m.name === "Menú del Día")!.isDefault).toBe(false);
 
     // Products span BOTH menus and clear the demo floor.
     expect(res.products.length).toBeGreaterThan(35);
     const menuNames = new Set(res.products.map((p) => p.catalogueName));
-    expect(menuNames).toEqual(new Set(["Casa Delgado", "Menú del Día"]));
+    expect(menuNames).toEqual(new Set(["Casa Delgado", "Menú del Día", "Deli takeaway"]));
 
     // A known dish from each menu is present.
     expect(res.products.some((p) => p.descriptions[LOCALE] === "Sliced Iberian ham (per kg)")).toBe(
@@ -111,16 +110,17 @@ describe("seedCatalogues", () => {
     );
     expect(res.products.some((p) => p.descriptions[LOCALE] === "Mixed salad")).toBe(true);
 
-    // The seed created "Barra" beside the provisioning-seeded "Cocina" (the default).
-    const cocina = res.stations.find((s) => s.name === "Cocina");
-    const barra = res.stations.find((s) => s.name === "Barra");
+    const cocina = res.stations.find((s) => s.name === "Kitchen");
+    const barra = res.stations.find((s) => s.name === "Bar");
+    const deli = res.stations.find((s) => s.name === "Deli counter");
     expect(cocina?.is_default).toBe(true);
     expect(barra).toBeDefined();
     expect(barra?.is_default).toBe(false);
+    expect(deli?.is_default).toBe(false);
 
     // Routing: a drinks category → the bar (Barra); a food category → the kitchen (Cocina).
-    expect(res.drinksRoute[0]?.station_name).toBe("Barra");
-    expect(res.charcuterieRoute[0]?.station_name).toBe("Cocina");
+    expect(res.drinksRoute[0]?.station_name).toBe("Bar");
+    expect(res.charcuterieRoute[0]?.station_name).toBe("Deli counter");
 
     // The returned map covers every seeded product and points at a real created id.
     expect(res.out.productsByImage.size).toBe(res.products.length);

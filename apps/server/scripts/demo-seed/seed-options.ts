@@ -24,7 +24,13 @@ import {
 } from "@waitron/catalogue";
 import type { TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { CASA_DELGADO, MENU_DEL_DIA, PRODUCT_OPTION_GROUPS, type SeedLocale } from "./menu.js";
+import {
+  CASA_DELGADO,
+  DELI_TAKEAWAY,
+  MENU_DEL_DIA,
+  PRODUCT_OPTION_GROUPS,
+  type SeedLocale,
+} from "./menu.js";
 
 export interface SeedOptionsInput {
   /** image basename -> product id, from `seedCatalogues`. */
@@ -40,7 +46,7 @@ export interface SeedOptionsInput {
  *  in either demo catalogue uses that basename. Scans both catalogues once per lookup — a handful of
  *  calls at seed time, not a hot path. */
 function pricingUnitFor(image: string): "each" | "weight" | undefined {
-  for (const catalogue of [CASA_DELGADO, MENU_DEL_DIA]) {
+  for (const catalogue of [CASA_DELGADO, DELI_TAKEAWAY, MENU_DEL_DIA]) {
     for (const category of catalogue.categories) {
       for (const product of category.products) {
         if (product.image === image) return product.pricingUnit;

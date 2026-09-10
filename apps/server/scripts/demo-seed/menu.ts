@@ -54,7 +54,7 @@ export interface SeedProduct {
  * `null` → no route (falls back to the location default at fire time). */
 export interface SeedCategory {
   name: Record<SeedLocale, string>;
-  station: "kitchen" | "bar" | null;
+  station: "kitchen" | "bar" | "deli" | null;
   products: SeedProduct[];
 }
 
@@ -165,7 +165,7 @@ export const PRODUCT_OPTION_GROUPS: SeedProductOptions[] = [
   },
 ];
 
-export const CASA_DELGADO: SeedCatalogue = {
+const COMBINED_CASA_DELGADO: SeedCatalogue = {
   name: { en: "Casa Delgado", es: "Casa Delgado" },
   categories: [
     // ── Deli counter (weight-priced, routed to the kitchen) ──────────────────────────────────────
@@ -520,6 +520,21 @@ export const CASA_DELGADO: SeedCatalogue = {
       ],
     },
   ],
+};
+
+/** The restaurant/bar menu and deli menu share one product catalogue in the demo source, then become
+ * separate sellable menus. This makes the department split visible without duplicating product copy. */
+export const CASA_DELGADO: SeedCatalogue = {
+  name: { en: "Casa Delgado", es: "Casa Delgado" },
+  categories: COMBINED_CASA_DELGADO.categories.slice(3),
+};
+
+export const DELI_TAKEAWAY: SeedCatalogue = {
+  name: { en: "Deli takeaway", es: "Charcutería para llevar" },
+  categories: COMBINED_CASA_DELGADO.categories.slice(0, 3).map((category) => ({
+    ...category,
+    station: "deli",
+  })),
 };
 
 export const MENU_DEL_DIA: SeedCatalogue = {

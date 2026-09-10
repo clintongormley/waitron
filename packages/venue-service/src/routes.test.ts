@@ -146,6 +146,24 @@ describe("venue service management routes", () => {
         await send(
           fx.app,
           "PUT",
+          `/management-api/venue-service/departments/${department.id}/hours`,
+          fx.managerCookie,
+          {
+            hours: [
+              { weekday: 1, opensAt: "09:00", closesAt: "14:00" },
+              { weekday: 1, opensAt: "17:00", closesAt: "23:00" },
+              { weekday: 6, opensAt: "18:00", closesAt: "01:00" },
+            ],
+          },
+        )
+      ).status,
+    ).toBe(204);
+
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
           `/management-api/venue-service/zones/${fx.zoneId}`,
           fx.managerCookie,
           { departmentId: department.id, serviceMode: "prepay" },
@@ -212,6 +230,12 @@ describe("venue service management routes", () => {
           noPreparation: false,
         },
       ],
+      hours: [
+        { departmentId: department.id, weekday: 1, opensAt: "09:00:00", closesAt: "14:00:00" },
+        { departmentId: department.id, weekday: 1, opensAt: "17:00:00", closesAt: "23:00:00" },
+        { departmentId: department.id, weekday: 6, opensAt: "18:00:00", closesAt: "01:00:00" },
+      ],
+      zoneMenus: [{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 0, isDefault: true }],
     });
   });
 

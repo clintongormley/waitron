@@ -21,7 +21,7 @@ export interface SeedFloorInput {
   tenantId: string;
   locationId: string;
   locale: SeedLocale;
-  menuIds?: string[];
+  menuIds?: { restaurant: string; lunch: string; deli: string };
 }
 
 /**
@@ -60,7 +60,7 @@ function toTableCfg(tenantId: string, locationId: string, locale: SeedLocale): T
  */
 export async function seedFloor(
   tx: Transaction,
-  { tenantId, locationId, locale, menuIds = [] }: SeedFloorInput,
+  { tenantId, locationId, locale, menuIds }: SeedFloorInput,
 ): Promise<void> {
   const cfg = toTableCfg(tenantId, locationId, locale);
 
@@ -72,6 +72,24 @@ export async function seedFloor(
   if (defaultPolicy === undefined) {
     throw new Error(`seedFloor: no default service zone for location ${locationId}`);
   }
+
+  const restaurantName = locale === "en" ? "Restaurant and bar" : "Restaurante y bar";
+  const restaurantTradingName = "Casa Delgado";
+  await tx.execute(sql`
+    update departments
+    set name = ${restaurantName}, trading_name = ${restaurantTradingName},
+        default_service_mode = 'table_tab'
+    where tenant_id = ${tenantId} and id = ${defaultPolicy.department_id}`);
+  const { rows: deliRows } = await tx.execute<{ id: string }>(sql`
+    insert into departments
+      (tenant_id, location_id, name, trading_name, default_service_mode, active)
+    values (
+      ${tenantId}, ${locationId}, ${locale === "en" ? "Deli" : "Charcutería"},
+      ${locale === "en" ? "Casa Delgado Deli" : "Charcutería Casa Delgado"}, 'prepay', true
+    ) returning id`);
+  const deliDepartmentId = deliRows[0]?.id;
+  if (deliDepartmentId === undefined)
+    throw new Error("seedFloor: failed to create deli department");
 
   const zoneIds = new Map<string, string>();
   for (const zone of DEMO_ZONES) {
@@ -96,7 +114,8 @@ export async function seedFloor(
           ${tenantId}, ${locationId}, ${zoneId}, ${defaultPolicy.department_id}, null, false
         )`);
     }
-    for (const [index, menuId] of menuIds.entries()) {
+    const restaurantMenus = menuIds === undefined ? [] : [menuIds.restaurant, menuIds.lunch];
+    for (const [index, menuId] of restaurantMenus.entries()) {
       await tx.execute(sql`
         insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
         values (${tenantId}, ${zoneId}, ${menuId}, ${index})
@@ -109,6 +128,38 @@ export async function seedFloor(
       }
     }
     zoneIds.set(zone.key, zoneId);
+  }
+
+  const { rows: deliZoneRows } = await tx.execute<{ id: string }>(sql`
+    insert into floor_zones (tenant_id, location_id, name, display_order, active)
+    values (
+      ${tenantId}, ${locationId},
+      ${locale === "en" ? "Deli counter" : "Mostrador de charcutería"}, 3, true
+    ) returning id`);
+  const deliZoneId = deliZoneRows[0]?.id;
+  if (deliZoneId === undefined) throw new Error("seedFloor: failed to create deli service zone");
+  await tx.execute(sql`
+    insert into zone_service_policies
+      (tenant_id, location_id, zone_id, department_id, service_mode, is_counter_default)
+    values (${tenantId}, ${locationId}, ${deliZoneId}, ${deliDepartmentId}, null, false)`);
+  if (menuIds !== undefined) {
+    await tx.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+      values (${tenantId}, ${deliZoneId}, ${menuIds.deli}, 0)`);
+    await tx.execute(sql`
+      update zone_service_policies set default_menu_id = ${menuIds.deli}
+      where tenant_id = ${tenantId} and zone_id = ${deliZoneId}`);
+  }
+
+  for (let weekday = 0; weekday < 7; weekday += 1) {
+    await tx.execute(sql`
+      insert into department_hours (tenant_id, department_id, weekday, opens_at, closes_at)
+      values (${tenantId}, ${defaultPolicy.department_id}, ${weekday}, '12:00', '01:00')`);
+  }
+  for (let weekday = 1; weekday <= 6; weekday += 1) {
+    await tx.execute(sql`
+      insert into department_hours (tenant_id, department_id, weekday, opens_at, closes_at)
+      values (${tenantId}, ${deliDepartmentId}, ${weekday}, '09:00', '18:00')`);
   }
 
   for (const table of DEMO_TABLES) {

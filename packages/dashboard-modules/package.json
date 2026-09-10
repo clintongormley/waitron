@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@waitron/bookings": "workspace:*",
-    "@waitron/dashboard-kit": "workspace:*"
+    "@waitron/dashboard-kit": "workspace:*",
+    "@waitron/venue-service": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

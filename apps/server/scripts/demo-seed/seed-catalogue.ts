@@ -13,7 +13,13 @@ import {
   createMenuSection,
   createProduct,
 } from "@waitron/catalogue";
-import { CASA_DELGADO, MENU_DEL_DIA, type SeedCatalogue, type SeedLocale } from "./menu.js";
+import {
+  CASA_DELGADO,
+  DELI_TAKEAWAY,
+  MENU_DEL_DIA,
+  type SeedCatalogue,
+  type SeedLocale,
+} from "./menu.js";
 
 export interface SeedCataloguesInput {
   /** The provisioned venue's location — the default/accessible catalogue assignment target, and the
@@ -28,11 +34,11 @@ export interface SeedCataloguesResult {
    * seeded product appears exactly once (the menu's image basenames are unique across both menus). */
   productsByImage: Map<string, string>;
   menuItemsByProduct: Map<string, string>;
-  menuIds: string[];
+  menuIds: { restaurant: string; lunch: string; deli: string };
 }
 
 /** The logical routing targets a seed category names, mapped to their concrete `kitchen_stations.id`. */
-type StationIds = Record<"kitchen" | "bar", string>;
+type StationIds = Record<"kitchen" | "bar" | "deli", string>;
 
 /** Resolve the location's provisioned Cocina station and create its non-default Barra station. */
 async function resolveStationIds(
@@ -48,16 +54,29 @@ async function resolveStationIds(
   if (kitchen === undefined) {
     throw new Error(`seedCatalogues: no "Cocina" station found for location ${locationId}`);
   }
+  await tx.execute(sql`
+    update kitchen_stations set name = 'Kitchen'
+    where tenant_id = ${tenantId} and id = ${kitchen}`);
   // Seed scripts have no management session, so insert the non-default station directly.
   const { rows: barra } = await tx.execute<{ id: string }>(sql`
     insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
-    values (${tenantId}, ${locationId}, 'Barra', 1, false, true)
+    values (${tenantId}, ${locationId}, 'Bar', 1, false, true)
     returning id`);
   const bar = barra[0]?.id;
   if (bar === undefined) {
     throw new Error(`seedCatalogues: failed to create "Barra" station for location ${locationId}`);
   }
-  return { kitchen, bar };
+  const { rows: deliRows } = await tx.execute<{ id: string }>(sql`
+    insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
+    values (${tenantId}, ${locationId}, 'Deli counter', 2, false, true)
+    returning id`);
+  const deli = deliRows[0]?.id;
+  if (deli === undefined) {
+    throw new Error(
+      `seedCatalogues: failed to create "Deli counter" station for location ${locationId}`,
+    );
+  }
+  return { kitchen, bar, deli };
 }
 
 /**
@@ -144,9 +163,15 @@ export async function seedCatalogues(
 
   const casaId = await seedOne(CASA_DELGADO, provisionedMenus[0]?.id);
   const diaId = await seedOne(MENU_DEL_DIA);
+  const deliId = await seedOne(DELI_TAKEAWAY);
 
   await assignCatalogueToLocation(tx, locationId, casaId);
   await addCatalogueToLocation(tx, tenantId, locationId, diaId);
+  await addCatalogueToLocation(tx, tenantId, locationId, deliId);
 
-  return { productsByImage, menuItemsByProduct, menuIds: [casaId, diaId] };
+  return {
+    productsByImage,
+    menuItemsByProduct,
+    menuIds: { restaurant: casaId, lunch: diaId, deli: deliId },
+  };
 }

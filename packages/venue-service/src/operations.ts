@@ -15,6 +15,7 @@ import type { PreparationRoute, ServiceMode } from "@waitron/module";
 import { AppError, type LocationId, type TenantId } from "@waitron/shared";
 import {
   departments,
+  departmentHours,
   deviceZoneDefaults,
   orderServiceContexts,
   preparationRoutes,
@@ -50,6 +51,106 @@ export async function listDepartments(tx: Transaction, cfg: VenueScope): Promise
     .where(and(eq(departments.tenantId, cfg.tenantId), eq(departments.locationId, cfg.locationId)))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   return rows.map((row) => ({ ...row, defaultServiceMode: row.defaultServiceMode as ServiceMode }));
+}
+
+export interface DepartmentHoursInterval {
+  departmentId: string;
+  weekday: number;
+  opensAt: string;
+  closesAt: string;
+}
+
+export async function listDepartmentHours(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<DepartmentHoursInterval[]> {
+  return tx
+    .select({
+      departmentId: departmentHours.departmentId,
+      weekday: departmentHours.weekday,
+      opensAt: departmentHours.opensAt,
+      closesAt: departmentHours.closesAt,
+    })
+    .from(departmentHours)
+    .innerJoin(
+      departments,
+      and(
+        eq(departments.tenantId, departmentHours.tenantId),
+        eq(departments.id, departmentHours.departmentId),
+      ),
+    )
+    .where(and(eq(departments.tenantId, cfg.tenantId), eq(departments.locationId, cfg.locationId)))
+    .orderBy(departmentHours.weekday, departmentHours.opensAt, departmentHours.id);
+}
+
+export async function replaceDepartmentHours(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  hours: Omit<DepartmentHoursInterval, "departmentId">[],
+): Promise<void> {
+  const [department] = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(
+      and(
+        eq(departments.id, departmentId),
+        eq(departments.tenantId, cfg.tenantId),
+        eq(departments.locationId, cfg.locationId),
+      ),
+    )
+    .for("update");
+  if (department === undefined) throw new AppError("department.not_found", { departmentId });
+  await tx
+    .delete(departmentHours)
+    .where(
+      and(
+        eq(departmentHours.tenantId, cfg.tenantId),
+        eq(departmentHours.departmentId, departmentId),
+      ),
+    );
+  if (hours.length > 0) {
+    await tx.insert(departmentHours).values(
+      hours.map((interval) => ({
+        tenantId: cfg.tenantId,
+        departmentId,
+        weekday: interval.weekday,
+        opensAt: interval.opensAt,
+        closesAt: interval.closesAt,
+      })),
+    );
+  }
+}
+
+export async function listZoneMenuAssignments(tx: Transaction, cfg: VenueScope) {
+  return tx
+    .select({
+      zoneId: zoneMenus.zoneId,
+      menuId: zoneMenus.menuId,
+      displayOrder: zoneMenus.displayOrder,
+      defaultMenuId: zoneServicePolicies.defaultMenuId,
+    })
+    .from(zoneMenus)
+    .innerJoin(
+      zoneServicePolicies,
+      and(
+        eq(zoneServicePolicies.tenantId, zoneMenus.tenantId),
+        eq(zoneServicePolicies.zoneId, zoneMenus.zoneId),
+      ),
+    )
+    .where(
+      and(
+        eq(zoneServicePolicies.tenantId, cfg.tenantId),
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+      ),
+    )
+    .orderBy(zoneMenus.zoneId, zoneMenus.displayOrder, zoneMenus.menuId)
+    .then((rows) =>
+      rows.map(({ defaultMenuId, ...row }) => ({
+        ...row,
+        isDefault: row.menuId === defaultMenuId,
+      })),
+    );
 }
 
 /** List the active, configured zones that can start a new order at this venue. */

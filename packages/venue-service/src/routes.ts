@@ -18,8 +18,11 @@ import {
   createDepartment,
   createPreparationRoute,
   listDepartments,
+  listDepartmentHours,
   listPreparationRoutes,
   listServiceZones,
+  listZoneMenuAssignments,
+  replaceDepartmentHours,
   setDeviceDefaultZone,
 } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -43,6 +46,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "invoice_first", "ticket_then_pay"]);
+const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 function requireMode(value: unknown, field: string): ServiceMode {
   if (typeof value !== "string" || !MODES.has(value as ServiceMode)) {
@@ -77,8 +81,46 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           departments: await listDepartments(tx, ctx.cfg),
           zones: await listServiceZones(tx, ctx.cfg),
           routes: await listPreparationRoutes(tx, ctx.cfg),
+          hours: await listDepartmentHours(tx, ctx.cfg),
+          zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
         }));
         return c.json(result);
+      }),
+    );
+
+    app.put("/management-api/venue-service/departments/:departmentId/hours", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        if (!Array.isArray(body.hours)) {
+          throw new AppError("management.request_invalid", { field: "hours" });
+        }
+        const hours = body.hours.map((value, index) => {
+          if (typeof value !== "object" || value === null) {
+            throw new AppError("management.request_invalid", { field: `hours.${index}` });
+          }
+          const interval = value as Record<string, unknown>;
+          const weekday = interval.weekday;
+          const opensAt = interval.opensAt;
+          const closesAt = interval.closesAt;
+          if (
+            typeof weekday !== "number" ||
+            !Number.isInteger(weekday) ||
+            weekday < 0 ||
+            weekday > 6 ||
+            typeof opensAt !== "string" ||
+            !CLOCK_TIME.test(opensAt) ||
+            typeof closesAt !== "string" ||
+            !CLOCK_TIME.test(closesAt) ||
+            opensAt === closesAt
+          ) {
+            throw new AppError("management.request_invalid", { field: `hours.${index}` });
+          }
+          return { weekday, opensAt, closesAt };
+        });
+        await gated(sessionId, (tx) => replaceDepartmentHours(tx, ctx.cfg, departmentId, hours));
+        return c.body(null, 204);
       }),
     );
 
