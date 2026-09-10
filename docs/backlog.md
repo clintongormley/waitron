@@ -262,7 +262,7 @@ design-review section apply.
   `print_jobs` retention sweep (spec §7); **3.** **central printer provisioning redesign** — **spec
   written 2026-09-09**,
   [2026-09-09-central-printer-provisioning-design.md](superpowers/specs/2026-09-09-central-printer-provisioning-design.md);
-  **plan written and BUILT this branch (feat/central-printer-provisioning, finishing).** Subsumes the
+  **LANDED #304 (2026-09-10).** Subsumes the
   bare "un-pin IP printers" (failover-printing §4a). The brainstorm
   extended the recorded owner decisions: **the serving agent is DERIVED from live capability, never
   stored** (`printers.agent_id` removed for EVERY transport, not just IP) — IP served by any box in
@@ -275,10 +275,20 @@ design-review section apply.
   IN-MEMORY on the server (no new tables). **Bluetooth is IN SCOPE now** (was parked) as a third live
   transport with box-local pairing on the agent setup page. No printer drivers (raw ESC/POS; page
   printers out of scope → the PDF path). At-least-once reclaim accepted for MVP (per-claim token
-  later). Security-review item (the authz boundary moves to venue/visible-keys). Real-hardware receipts
-  (USB + BT) booked for 2026-09-10 on the arriving printer; they settle the §7 container-access /
-  enumeration unknowns. Replaces the manual create form (agent dropdown) with a transport-aware flow +
-  a discovered-printers list.
+  later). Security-review item (the authz boundary moves to venue/visible-keys). Replaces the manual
+  create form (agent dropdown) with a transport-aware flow + a discovered-printers list.
+  *Hardware receipt (2026-09-10, real ESC/POS printer on the box):* USB confirmed end-to-end — the agent
+  container discovers the printer off `/sys` (serial-keyed) and a physical slip printed via `--device
+  /dev/usb/lp0` + `group_add 7` as the unprivileged `node` user (spec §7). The run-it review caught a
+  production device-path bug (`/sys/dev/...` → `/dev/...`) the direct-write receipt had missed — fixed
+  with a regression test. Bluetooth + live mDNS receipts DEFERRED (the box has no BT adapter and no
+  network printer on the LAN); the seams + parsers ship fixture-tested, gated for a later receipt.
+  *Deferred follow-ups (surfaced at finish-branch, not taken):* extract an in-memory `createDiscoveredStore`
+  from `mountPrintApi` (altitude); dedupe the `VisibleDeviceWire`/`DiscoveredDeviceWire` types against
+  `@waitron/print-agent` via a type-only import IF `module-seams` permits; fold `#registerDiscovered` into
+  the dashboard's shared `#submit`. *Live dashboard→register→print e2e still owed* — the test box is
+  un-onboarded (no tenant/deployment yet); onboard it, then approve the agent, register the USB printer,
+  and print a real job.
   **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
 - **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
