@@ -611,7 +611,15 @@ export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
-  lines: (SaleLine & { product?: TillProduct })[];
+  lines: (Omit<SaleLine, "options"> & {
+    options?: {
+      optionGroupItemId: string;
+      name: Record<string, string>;
+      priceDelta: string;
+      quantity?: number;
+    }[];
+    product?: TillProduct;
+  })[];
 }
 
 /**

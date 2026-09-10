@@ -690,7 +690,12 @@ export interface ParkOrderRequest {
   id: string;
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines` via
   // `createOpenOrder`.
-  lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+  lines: ({
+    productId?: string;
+    menuItemId?: string;
+    quantity: string;
+    options?: { optionGroupItemId: string; quantity?: number }[];
+  } & LineExtras)[];
   zoneId?: string;
   label?: string;
   operatorId?: string;
@@ -2655,6 +2660,14 @@ export interface HeldOrder {
     menuItemId?: string;
     productId: string | null;
     quantity: string;
+    options?: {
+      optionGroupItemId: string;
+      name: Record<string, string>;
+      priceDelta: string;
+      quantity?: number;
+    }[];
+    note?: string;
+    doneness?: Doneness;
     product?: {
       id: string;
       productId: string;
@@ -2767,6 +2780,10 @@ export async function getHeldOrder(
         descriptions: workingOrderLines.descriptions,
         unitPriceGross: workingOrderLines.unitPriceGross,
         courseId: workingOrderLines.courseId,
+        parentLineId: workingOrderLines.parentLineId,
+        optionGroupItemId: workingOrderLines.optionGroupItemId,
+        note: workingOrderLines.note,
+        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(
@@ -2780,36 +2797,60 @@ export async function getHeldOrder(
         line,
       ]),
     );
-    const lines = lineRows.map((line) => {
-      const context = contextByLine.get(line.id);
-      if (context === undefined || line.productId === null) {
-        return { productId: line.productId, quantity: line.quantity };
-      }
-      return {
-        workingOrderLineId: line.id,
-        menuItemId: context.menuItemId,
-        productId: line.productId,
-        quantity: line.quantity,
-        product: {
-          id: line.productId,
-          productId: line.productId,
+    const childrenByParent = new Map<string, typeof lineRows>();
+    for (const line of lineRows) {
+      if (line.parentLineId === null) continue;
+      const children = childrenByParent.get(line.parentLineId) ?? [];
+      children.push(line);
+      childrenByParent.set(line.parentLineId, children);
+    }
+    const lines = lineRows
+      .filter((line) => line.parentLineId === null)
+      .map((line) => {
+        const context = contextByLine.get(line.id);
+        if (context === undefined || line.productId === null) {
+          return { productId: line.productId, quantity: line.quantity };
+        }
+        const options = (childrenByParent.get(line.id) ?? []).flatMap((child) => {
+          if (child.optionGroupItemId === null) return [];
+          const optionQuantity = Number(child.quantity) / Number(line.quantity);
+          return [
+            {
+              optionGroupItemId: child.optionGroupItemId,
+              name: child.descriptions,
+              priceDelta: child.unitPriceGross,
+              ...(optionQuantity === 1 ? {} : { quantity: optionQuantity }),
+            },
+          ];
+        });
+        return {
+          workingOrderLineId: line.id,
           menuItemId: context.menuItemId,
-          descriptions: line.descriptions,
-          pricingUnit: context.pricingUnit,
-          unitPrice: line.unitPriceGross,
-          vatClass: context.vatClass as "general" | "reduced" | "super_reduced" | "zero",
-          category: context.categoryName,
-          allergens: context.allergens,
-          courseId: line.courseId,
-          catalogueId: context.menuId,
-          catalogueName: context.menuName,
-          optionGroups: [] as const,
-          diet: context.diet,
-          dietDerivation: context.dietDerivation,
-          dietOverride: context.dietOverride,
-        },
-      };
-    });
+          productId: line.productId,
+          quantity: line.quantity,
+          ...(options.length === 0 ? {} : { options }),
+          ...(line.note === null ? {} : { note: line.note }),
+          ...(line.doneness === null ? {} : { doneness: line.doneness }),
+          product: {
+            id: line.productId,
+            productId: line.productId,
+            menuItemId: context.menuItemId,
+            descriptions: line.descriptions,
+            pricingUnit: context.pricingUnit,
+            unitPrice: line.unitPriceGross,
+            vatClass: context.vatClass as "general" | "reduced" | "super_reduced" | "zero",
+            category: context.categoryName,
+            allergens: context.allergens,
+            courseId: line.courseId,
+            catalogueId: context.menuId,
+            catalogueName: context.menuName,
+            optionGroups: [] as const,
+            diet: context.diet,
+            dietDerivation: context.dietDerivation,
+            dietOverride: context.dietOverride,
+          },
+        };
+      });
 
     return { id: order.id, orderNumber: order.orderNumber, label: order.label, lines };
   });
@@ -2829,6 +2870,7 @@ export interface UpdateHeldOrderRequest {
     productId?: string;
     menuItemId?: string;
     quantity: string;
+    options?: { optionGroupItemId: string; quantity?: number }[];
   } & LineExtras)[];
   label?: string;
 }
@@ -2880,6 +2922,10 @@ export async function updateHeldOrder(
         parentLineId: workingOrderLines.parentLineId,
         productId: workingOrderLines.productId,
         unitPriceGross: workingOrderLines.unitPriceGross,
+        quantity: workingOrderLines.quantity,
+        optionGroupItemId: workingOrderLines.optionGroupItemId,
+        note: workingOrderLines.note,
+        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(
@@ -2887,6 +2933,13 @@ export async function updateHeldOrder(
       )
       .orderBy(workingOrderLines.lineNo);
     const storedParents = storedRows.filter((line) => line.parentLineId === null);
+    const childrenByParent = new Map<string, typeof storedRows>();
+    for (const row of storedRows) {
+      if (row.parentLineId === null) continue;
+      const children = childrenByParent.get(row.parentLineId) ?? [];
+      children.push(row);
+      childrenByParent.set(row.parentLineId, children);
+    }
     const contextByLine = new Map(
       (await VENUE_SERVICE.listLineContexts(tx, cfg, id)).map((line) => [
         line.workingOrderLineId,
@@ -2894,22 +2947,44 @@ export async function updateHeldOrder(
       ]),
     );
     const preservesEveryLine =
-      storedRows.length === storedParents.length &&
       req.lines.length === storedParents.length &&
       req.lines.every((line, index) => {
         const stored = storedParents[index];
         if (
           stored === undefined ||
           line.workingOrderLineId !== stored.id ||
-          line.note !== undefined ||
-          line.doneness !== undefined
+          (line.note?.trim() ?? null) !== stored.note ||
+          (line.doneness ?? null) !== stored.doneness
         ) {
           return false;
         }
-        return line.menuItemId !== undefined
+        const sameIdentity = line.menuItemId !== undefined
           ? contextByLine.get(stored.id)?.menuItemId === line.menuItemId &&
               line.productId === undefined
           : line.productId === stored.productId && line.menuItemId === undefined;
+        if (!sameIdentity) return false;
+        const requestedOptions = new Map<string, number>();
+        for (const option of line.options ?? []) {
+          const quantity = option.quantity ?? 1;
+          if (!Number.isInteger(quantity) || quantity < 1) return false;
+          requestedOptions.set(
+            option.optionGroupItemId,
+            (requestedOptions.get(option.optionGroupItemId) ?? 0) + quantity,
+          );
+        }
+        const children = childrenByParent.get(stored.id) ?? [];
+        if (children.length !== requestedOptions.size) return false;
+        return children.every((child) => {
+          if (child.optionGroupItemId === null) return false;
+          const optionQuantity = requestedOptions.get(child.optionGroupItemId);
+          return (
+            optionQuantity !== undefined &&
+            compareDecimal(
+              multiplyDecimal(decimal(stored.quantity), decimal(String(optionQuantity))),
+              decimal(child.quantity),
+            ) === 0
+          );
+        });
       });
     if (preservesEveryLine) {
       for (let index = 0; index < req.lines.length; index++) {
@@ -2928,6 +3003,32 @@ export async function updateHeldOrder(
               eq(workingOrderLines.id, stored.id),
             ),
           );
+        const optionQuantityById = new Map<string, number>();
+        for (const option of requested.options ?? []) {
+          optionQuantityById.set(
+            option.optionGroupItemId,
+            (optionQuantityById.get(option.optionGroupItemId) ?? 0) + (option.quantity ?? 1),
+          );
+        }
+        for (const child of childrenByParent.get(stored.id) ?? []) {
+          const childQuantity = multiplyDecimal(
+            decimal(requested.quantity),
+            decimal(String(optionQuantityById.get(child.optionGroupItemId!)!)),
+          );
+          await tx
+            .update(workingOrderLines)
+            .set({
+              quantity: childQuantity,
+              lineTotal: grossLineTotal(child.unitPriceGross, childQuantity),
+            })
+            .where(
+              and(
+                eq(workingOrderLines.tenantId, cfg.tenantId),
+                eq(workingOrderLines.workingOrderId, id),
+                eq(workingOrderLines.id, child.id),
+              ),
+            );
+        }
       }
       await tx
         .update(workingOrders)

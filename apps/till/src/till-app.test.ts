@@ -1822,6 +1822,49 @@ describe("till-app", () => {
     });
   });
 
+  it("rebuilds a retrieved line with its stored modifiers and kitchen customisation", async () => {
+    const option = {
+      optionGroupItemId: "option-extra-milk",
+      name: { "es-ES": "Leche extra" },
+      priceDelta: "0.75",
+      quantity: 2,
+    };
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-customised",
+        orderNumber: 9,
+        label: "Takeaway",
+        lines: [
+          {
+            workingOrderLineId: "line-customised",
+            menuItemId: "menu-item-cafe-0",
+            productId: "cafe",
+            quantity: "2.000",
+            product: cafe,
+            options: [option],
+            note: "Sin espuma",
+            doneness: "medium",
+          },
+        ],
+      }),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+
+    expect(counter.store.lines).toEqual([
+      {
+        workingOrderLineId: "line-customised",
+        product: cafe,
+        quantity: "2",
+        options: [option],
+        note: "Sin espuma",
+        doneness: "medium",
+      },
+    ]);
+  });
+
   it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
     // Behaviours 3 & 4 of the re-review: a lost-response retry, or the LOSER of a two-till concurrent
     // pay on the same parked order (a normal 7b flow), finds the order ALREADY settled. The edit-gated

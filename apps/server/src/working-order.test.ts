@@ -25,9 +25,12 @@ import {
   createCategory,
   createMenuItem,
   createMenuSection,
+  createOptionGroup,
+  createOptionGroupItem,
   createProduct,
   listAvailableProducts,
   priceBasket,
+  setMenuItemOptionGroups,
 } from "@waitron/catalogue";
 import * as catalogue from "@waitron/catalogue";
 import {
@@ -757,6 +760,66 @@ describe("listHeldOrders", () => {
 });
 
 describe("getHeldOrder", () => {
+  it("reconstructs a parked offer with its modifiers, customisation and locked display prices", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const optionId = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const group = await createOptionGroup(tx, cfg.tenantId, {
+        name: { [LOCALE]: "Extras" },
+        maxSelect: 2,
+      });
+      const option = await createOptionGroupItem(tx, cfg.tenantId, group.id, {
+        name: { [LOCALE]: "Leche extra" },
+        priceDelta: "0.10",
+        maxQuantity: 2,
+      });
+      await tx.insert(productOptionGroups).values({
+        tenantId: cfg.tenantId,
+        productId: cafeId,
+        groupId: group.id,
+      });
+      await setMenuItemOptionGroups(tx, cfg.tenantId, premiumCafeOfferId, [
+        { groupId: group.id, options: [{ optionId: option.id, priceDelta: "0.75" }] },
+      ]);
+      return option.id;
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "2",
+          options: [{ optionGroupItemId: optionId, quantity: 2 }],
+          note: "Sin espuma",
+          doneness: "medium",
+        },
+      ],
+    });
+
+    const order = await getHeldOrder({ db }, cfg, id);
+
+    expect(order.lines).toEqual([
+      expect.objectContaining({
+        workingOrderLineId: expect.any(String),
+        menuItemId: premiumCafeOfferId,
+        productId: cafeId,
+        quantity: "2.000",
+        note: "Sin espuma",
+        doneness: "medium",
+        options: [
+          {
+            optionGroupItemId: optionId,
+            name: { [LOCALE]: "Leche extra" },
+            priceDelta: "0.75",
+            quantity: 2,
+          },
+        ],
+      }),
+    ]);
+  });
+
   it("returns the parked offer's identity and snapshots after its live product changes", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();
@@ -857,6 +920,97 @@ describe("getHeldOrder", () => {
 });
 
 describe("updateHeldOrder", () => {
+  it("keeps modifier rows and customisation on a quantity-only edit", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const optionId = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const group = await createOptionGroup(tx, cfg.tenantId, {
+        name: { [LOCALE]: "Extras" },
+        maxSelect: 2,
+      });
+      const option = await createOptionGroupItem(tx, cfg.tenantId, group.id, {
+        name: { [LOCALE]: "Leche extra" },
+        maxQuantity: 2,
+      });
+      await tx.insert(productOptionGroups).values({
+        tenantId: cfg.tenantId,
+        productId: cafeId,
+        groupId: group.id,
+      });
+      await setMenuItemOptionGroups(tx, cfg.tenantId, premiumCafeOfferId, [
+        { groupId: group.id, options: [{ optionId: option.id, priceDelta: "0.75" }] },
+      ]);
+      return option.id;
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          options: [{ optionGroupItemId: optionId, quantity: 2 }],
+          note: "Sin espuma",
+          doneness: "medium",
+        },
+      ],
+    });
+    const before = await db.execute<{
+      id: string;
+      parent_line_id: string | null;
+      unit_price_gross: string;
+    }>(sql`
+      select id, parent_line_id, unit_price_gross from working_order_lines
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${id} order by line_no`);
+
+    await db.execute(sql`
+      update menu_items set gross_price = 9.00
+      where tenant_id = ${cfg.tenantId} and id = ${premiumCafeOfferId}`);
+    await db.execute(sql`
+      update menu_item_options set price_delta = 4.00
+      where tenant_id = ${cfg.tenantId} and menu_item_id = ${premiumCafeOfferId}`);
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before.rows[0]!.id,
+          menuItemId: premiumCafeOfferId,
+          quantity: "3",
+          options: [{ optionGroupItemId: optionId, quantity: 2 }],
+          note: "Sin espuma",
+          doneness: "medium",
+        },
+      ],
+    });
+
+    const after = await db.execute<{
+      id: string;
+      parent_line_id: string | null;
+      quantity: string;
+      unit_price_gross: string;
+      line_total: string;
+    }>(sql`
+      select id, parent_line_id, quantity, unit_price_gross, line_total
+      from working_order_lines
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${id} order by line_no`);
+    expect(after.rows).toEqual([
+      {
+        id: before.rows[0]!.id,
+        parent_line_id: null,
+        quantity: "3.000",
+        unit_price_gross: "3.25",
+        line_total: "9.75",
+      },
+      {
+        id: before.rows[1]!.id,
+        parent_line_id: before.rows[0]!.id,
+        quantity: "6.000",
+        unit_price_gross: "0.75",
+        line_total: "4.50",
+      },
+    ]);
+  });
+
   it("keeps a quantity-only offer edit on the original line id and locked price", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();
