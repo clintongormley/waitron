@@ -114,6 +114,7 @@ function baseDeps() {
     boxHostname: "waitron.local",
     replication: REPLICATION,
     database: PRIMARY_DATABASE,
+    accountKey: Buffer.alloc(32, 9).toString("base64"),
   };
 }
 

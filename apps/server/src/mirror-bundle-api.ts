@@ -64,6 +64,7 @@ export interface MirrorBundleApiDeps {
   designated: AdoptResult;
   replication: ReplicationConfig | undefined;
   database: string;
+  accountKey: string;
 }
 
 /**
@@ -210,6 +211,7 @@ export function mountMirrorBundleApi(
         standby,
         replication: deps.replication,
         database: deps.database,
+        accountKey: deps.accountKey,
       });
       // The standby joins the org chart AT ADOPT and BEFORE the response, so a bundle is never handed
       // out for a node the chart omits (till-reroute design §3.3) — a till reroutes by `contactUrl`,

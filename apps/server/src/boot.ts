@@ -135,6 +135,7 @@ import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
+import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { ensureReplicationShape } from "./replication.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
@@ -891,6 +892,7 @@ export async function startServer(
       const ring = loadKeyRing(
         parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
       );
+      const accountKey = resolveAccountKey({}, ring);
       // The OWNER connection every setup-mode owner write opens over — `applyVenue`'s INSERT into
       // `tenants` (which `app_user` deliberately cannot — CLAUDE.md §3), `stampDeployment`'s
       // `deployment` singleton, and the break-glass secret mint the adopt path rides through this same
@@ -909,7 +911,10 @@ export async function startServer(
         // discard it explicitly rather than widen the dep's type. Extracted to a const so `provision`
         // and `adopt` (C2b) persist `trading.env` through the SAME writer.
         const persistTrading = async (cfg: TradingConfig): Promise<void> => {
-          await writeTradingEnv(config.stateDir, cfg);
+          await writeTradingEnv(config.stateDir, {
+            ...cfg,
+            accountKey: cfg.accountKey ?? accountKey.toString("base64"),
+          });
         };
         // The NAME of the database `ownerDb` writes — echoed by `provisioning.foreign_tenant` if a
         // fresh venue or a mirror adopt is pointed at a database already holding a different tenant.
@@ -1241,6 +1246,10 @@ export async function startServer(
     await db.close();
     throw error;
   }
+  const accountKey = resolveAccountKey(env, ring);
+  const totpKeyRing = {
+    current: { version: 1, key: accountPurposeKey(accountKey, "totp") },
+  };
 
   // Adoption-pending boot (C6 / derived fact 1): an adopted mirror restarts into a database whose
   // native initial copy is still running (spec §2.2, "minutes over a WAN"), so its tenant-scoped rows
@@ -1830,7 +1839,11 @@ export async function startServer(
       secureCookies,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
+      googleOidc: config.googleOidc,
       venueLocale,
+      privacyNoticeUrl: config.privacyNoticeUrl,
+      accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
+      credentialKeyRing: totpKeyRing,
       // Resolve on every send so a newly configured or rotated SMTP gateway takes effect immediately.
       // Configured SMTP wins; practice/dev falls back to the loopback-only Mailpit service.
       sendAccountEmail: async (message) => {
@@ -1965,6 +1978,15 @@ export async function startServer(
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       modules: setsToMigrate.map((m) => m.name),
+      credentialKeyRing: totpKeyRing,
+      accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
+      accountActionBaseUrl: `${config.managementOrigin}/`,
+      privacyNoticeUrl: config.privacyNoticeUrl,
+      sendAccountEmail: async (message) => {
+        const delivery = await resolveAccountEmail();
+        if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+        await createAccountEmailSender(delivery.smtp)(message);
+      },
     },
     log,
   );
@@ -2205,6 +2227,7 @@ export async function startServer(
         // unconfigured (the route then refuses `server.config_missing`).
         replication: replicationConfig,
         database: primaryDatabaseName,
+        accountKey: accountKey.toString("base64"),
       },
       log,
     );
@@ -2260,6 +2283,7 @@ export async function startServer(
               databaseUrl: config.databaseUrl,
               migrationsDatabaseUrl: config.migrationsDatabaseUrl,
               environment: config.environment,
+              accountKey: accountKey.toString("base64"),
             };
             await writeTradingEnv(config.stateDir, next);
           },

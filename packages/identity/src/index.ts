@@ -11,6 +11,8 @@ export {
   endManagementSession,
 } from "./management-session.js";
 export type { ManagementSession } from "./management-session.js";
+export { encryptTotpSecret } from "./mfa.js";
+export type { TotpKeyEntry, TotpKeyRing } from "./mfa.js";
 export { loginManager, loginManagerById, authorizeManager } from "./manager-login.js";
 export {
   CHALLENGE_TTL_MS,
@@ -27,34 +29,53 @@ export {
 } from "./permissions.js";
 export type { Permission, PersonRoleValue } from "./permissions.js";
 export { persons, personStatus, personRole } from "./schema/persons.js";
+export {
+  readOwnProfile,
+  saveOwnProfile,
+  confirmOwnEmailChange,
+  changeOwnPassword,
+  changeOwnPin,
+  beginOwnTotpEnrollment,
+  finishOwnTotpEnrollment,
+  regenerateOwnRecoveryCodes,
+  disableOwnTotp,
+  unlinkOwnGoogle,
+  verifyOwnCredentials,
+  removeOwnPasskey,
+} from "./profile.js";
 export { sessions } from "./schema/sessions.js";
 export { managementSessions } from "./schema/management-sessions.js";
 export { managementAccountActions } from "./schema/management-account-actions.js";
 export { webauthnCredentials, webauthnChallenges } from "./schema/webauthn.js";
+export { MIN_PIN_LENGTH, assertPinLength } from "./verify-pin.js";
 export {
-  MIN_PIN_LENGTH,
-  assertPinLength,
-  createPerson,
+  clearPersonPin,
+  deactivatePerson,
+  invitePerson,
   listActivePersonsWithPermission,
   listActiveStaff,
   listPersons,
   normalizeAndValidateEmail,
-  reactivatePerson,
-  resetPin,
-  setEmail,
-  setPassword,
+  reactivatePersonForInvitation,
+  resetPersonLogin,
   setPersonLocale,
-  setRole,
-  suspendPerson,
+  updatePersonDetails,
 } from "./staff.js";
 export type { PersonSummary, StaffListEntry } from "./staff.js";
 export {
   ACCOUNT_ACTION_TTL_MS,
+  ACCOUNT_ACTION_CODE_ATTEMPTS,
+  ACCOUNT_ACTION_CODE_TTL_MS,
   completeAccountAction,
+  completeAccountActionByCode,
   issueAccountAction,
   requestPasswordResetAction,
 } from "./account-action.js";
-export type { AccountActionPurpose, IssuedAccountAction } from "./account-action.js";
+export type {
+  AccountActionCompletion,
+  AccountActionPurpose,
+  IssuedAccountAction,
+} from "./account-action.js";
 export { hashSecret, verifySecret } from "./secret-hash.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
@@ -71,6 +92,14 @@ export {
   verifyPassword,
 } from "./verify-password.js";
 export { generateTotpSecret, totpAuthUri, verifyTotp } from "./totp.js";
+export {
+  beginGoogleLink,
+  beginGoogleLogin,
+  claimGoogleState,
+  completeGoogleLink,
+  loginWithGoogle,
+} from "./google-oidc.js";
+export type { GoogleOidcClaim } from "./google-oidc.js";
 
 export { IDENTITY_CLASSIFICATION } from "./classification.js";
 export { IDENTITY_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";

@@ -6,7 +6,8 @@ import { persons } from "./schema/persons.js";
 import { normalizeEmail } from "./email.js";
 import { hashPassword, verifyPassword } from "./verify-password.js";
 import { verifyTotp } from "./totp.js";
-import { roleHasPermission, type Permission } from "./permissions.js";
+import { consumeRecoveryCode, decryptTotpSecret, type TotpKeyRing } from "./mfa.js";
+import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
 import {
   resolveManagementSession,
   startManagementSession,
@@ -32,7 +33,7 @@ const PERSON_LOGIN_COLUMNS = {
 };
 // The base SELECT both entry points run (each appends its own WHERE). Extracted so `PersonLoginRow` is
 // INFERRED from the query rather than hand-declared: that keeps `status` as its pgEnum literal union
-// (`"active" | "suspended"`), so `completeManagerLogin`'s `status === "suspended"` gate is checked
+// (`"pending" | "active" | "suspended"`), so `completeManagerLogin`'s active-status gate is checked
 // against the real values — a typo would not compile — rather than a widened `string`. This is the
 // infer-the-row-shape-from-the-query idiom the codebase already uses for such column sets.
 function selectPersonLogin(tx: Transaction) {
@@ -46,11 +47,21 @@ type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 // callers differ only in how a NOT-found person is handled, which is why that branch stays in each).
 async function completeManagerLogin(
   tx: Transaction,
-  input: { tenantId: string; password: string; totp?: string },
+  input: {
+    tenantId: string;
+    password: string;
+    totp?: string;
+    recoveryCode?: string;
+    totpKeyRing?: TotpKeyRing;
+  },
   person: PersonLoginRow,
 ): Promise<ManagementSession> {
   if (person.status === "suspended")
     throw new AppError("person.suspended", { personId: person.id });
+  if (person.status !== "active") {
+    verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+    throw new AppError("password.invalid", {});
+  }
   let passwordOk = false;
   if (person.passwordHash === null) {
     // A found person with NO dashboard password (for example, before activation) still runs one KDF
@@ -65,7 +76,14 @@ async function completeManagerLogin(
   }
   if (!passwordOk) throw new AppError("password.invalid", {});
   if (person.totpSecret !== null) {
-    if (input.totp === undefined || !verifyTotp(input.totp, person.totpSecret)) {
+    const secret = decryptTotpSecret(person.totpSecret, input.totpKeyRing);
+    const totpOk =
+      input.totp !== undefined && secret !== null && verifyTotp(input.totp, secret.secret);
+    const recoveryOk =
+      !totpOk &&
+      input.recoveryCode !== undefined &&
+      (await consumeRecoveryCode(tx, input.tenantId, person.id, input.recoveryCode));
+    if (!totpOk && !recoveryOk) {
       throw new AppError("totp.invalid", {});
     }
   }
@@ -76,7 +94,14 @@ async function completeManagerLogin(
 
 export async function loginManager(
   tx: Transaction,
-  input: { tenantId: string; email: string; password: string; totp?: string },
+  input: {
+    tenantId: string;
+    email: string;
+    password: string;
+    totp?: string;
+    recoveryCode?: string;
+    totpKeyRing?: TotpKeyRing;
+  },
 ): Promise<ManagementSession> {
   // Dashboard sign-in resolves the person by EMAIL, not by a client-supplied id. The lookup matches
   // the same normalised (trim + lowercase) form the write boundary stores under the per-tenant
@@ -102,7 +127,14 @@ export async function loginManager(
 
 export async function loginManagerById(
   tx: Transaction,
-  input: { tenantId: string; personId: string; password: string; totp?: string },
+  input: {
+    tenantId: string;
+    personId: string;
+    password: string;
+    totp?: string;
+    recoveryCode?: string;
+    totpKeyRing?: TotpKeyRing;
+  },
 ): Promise<ManagementSession> {
   // The C2b mirror-bundle route (`apps/server/src/mirror-bundle-api.ts`) authenticates the primary's
   // ADMIN by id, NOT by email — the mirror is a trusted server-to-server flow over the primary's
@@ -124,10 +156,10 @@ export async function authorizeManager(
   // (registerModulePermissions, e.g. bookings' booking.manage) type-checks here; `Permission` stays
   // the closed core union everywhere else. `roleHasPermission` resolves either kind.
   args: { managementSessionId: string; permission: Permission | (string & {}) },
-): Promise<{ authorizedBy: string }> {
-  const { personId, role } = await resolveManagementSession(tx, args.managementSessionId);
+): Promise<{ authorizedBy: string; tenantId: string; role: PersonRoleValue }> {
+  const { personId, role, tenantId } = await resolveManagementSession(tx, args.managementSessionId);
   if (!roleHasPermission(role, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
-  return { authorizedBy: personId };
+  return { authorizedBy: personId, tenantId, role };
 }

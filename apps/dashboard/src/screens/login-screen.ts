@@ -46,7 +46,7 @@ export class LoginScreen extends LitElement {
       }
 
       .screen {
-        max-width: 24rem;
+        max-width: 30rem;
         margin-inline: auto;
       }
 
@@ -62,6 +62,10 @@ export class LoginScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
+      .notice {
+        color: var(--wt-color-text);
+      }
+
       .password-toggle svg {
         display: block;
         width: var(--wt-font-size-lg);
@@ -70,7 +74,10 @@ export class LoginScreen extends LitElement {
         stroke: currentColor;
       }
 
-      .other-way,
+      .other-way {
+        margin-top: var(--wt-space-4);
+      }
+
       .alternative-list {
         margin-bottom: var(--wt-space-4);
       }
@@ -111,19 +118,57 @@ export class LoginScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) navigate: (url: string) => void = (url) =>
+    window.location.assign(url);
+  @property({ attribute: false }) noticeCode: string | null = null;
   @state() private busy = false;
   @state() private email = actionEmailFromUrl();
   @state() private password = "";
   @state() private confirmPassword = "";
-  @state() private step: "email" | "passkey" | "password" | "other-ways" = "email";
+  @state() private secondFactor = "";
+  @state() private pin = "";
+  @state() private confirmPin = "";
+  @state() private invitationCode = "";
+  @state() private step: "email" | "passkey" | "password" | "other-ways" | "reset-sent" | "code" =
+    "email";
   @state() private passwordVisible = false;
   @state() private token: string | null = new URLSearchParams(window.location.search).get("token");
   @state() private actionPurpose: AccountActionPurpose | null = actionPurposeFromUrl();
-  @state() private resetSent = false;
+  @state() private resetSeconds = 0;
+  private readonly resetDeadlines = new Map<string, number>();
+  private resetTimer?: ReturnType<typeof setInterval>;
   @state() private errorKey: string | null = null;
   @state() private emailError = "";
   @state() private passwordError = "";
   @state() private confirmPasswordError = "";
+  @state() private pinError = "";
+  @state() private confirmPinError = "";
+  @state() private invitationCodeError = "";
+  @state() private googleConfigured = false;
+  @state() private privacyNoticeUrl = "";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    void this.api
+      .getGoogleConfig()
+      .then(({ configured, privacyNoticeUrl }) => {
+        if (this.isConnected) {
+          this.googleConfigured = configured;
+          this.privacyNoticeUrl = privacyNoticeUrl ?? "";
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    clearInterval(this.resetTimer);
+  }
+
+  #updateResetCountdown(): void {
+    const deadline = this.resetDeadlines.get(this.email.trim().toLowerCase()) ?? 0;
+    this.resetSeconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+  }
 
   private get formErrors(): string[] {
     return [
@@ -132,6 +177,9 @@ export class LoginScreen extends LitElement {
           this.emailError,
           this.passwordError,
           this.confirmPasswordError,
+          this.pinError,
+          this.confirmPinError,
+          this.invitationCodeError,
           this.errorKey === null ? "" : codeMessage(this.errorKey),
         ].filter(Boolean),
       ),
@@ -146,7 +194,6 @@ export class LoginScreen extends LitElement {
     event.stopPropagation();
     this.email = event.detail.value;
     this.emailError = "";
-    this.resetSent = false;
   }
 
   /**
@@ -164,6 +211,36 @@ export class LoginScreen extends LitElement {
     event.stopPropagation();
     this.confirmPassword = event.detail.value;
     this.confirmPasswordError = "";
+  }
+
+  #onSecondFactorChange(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.secondFactor = event.detail.value.trim();
+    this.errorKey = null;
+  }
+
+  #onPinChange(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.pin = event.detail.value;
+    this.pinError = "";
+  }
+
+  #onConfirmPinChange(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.confirmPin = event.detail.value;
+    this.confirmPinError = "";
+  }
+
+  #onInvitationCodeChange(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.invitationCode = event.detail.value.replace(/\D/g, "").slice(0, 6);
+    this.invitationCodeError = "";
+  }
+
+  #showInvitationCode(): void {
+    this.actionPurpose = "invitation";
+    this.errorKey = null;
+    this.step = "code";
   }
 
   #continue(): void {
@@ -184,6 +261,7 @@ export class LoginScreen extends LitElement {
   #showOtherWays(): void {
     this.passwordVisible = false;
     this.errorKey = null;
+    this.passwordError = "";
     this.step = "other-ways";
   }
 
@@ -193,17 +271,32 @@ export class LoginScreen extends LitElement {
     this.step = "password";
   }
 
-  #showPasskeyStep(): void {
+  #cancelLogin(): void {
+    this.email = "";
+    this.password = "";
+    this.confirmPassword = "";
+    this.secondFactor = "";
+    this.pin = "";
+    this.confirmPin = "";
+    this.invitationCode = "";
     this.passwordVisible = false;
     this.errorKey = null;
-    this.step = "passkey";
+    this.emailError = "";
+    this.passwordError = "";
+    this.confirmPasswordError = "";
+    this.pinError = "";
+    this.confirmPinError = "";
+    this.invitationCodeError = "";
+    this.step = "email";
   }
 
-  #showEmailStep(): void {
-    this.passwordVisible = false;
-    this.resetSent = false;
-    this.errorKey = null;
-    this.step = "email";
+  #cancelAccountAction(): void {
+    this.token = null;
+    this.actionPurpose = null;
+    if (new URLSearchParams(window.location.search).has("token")) {
+      history.replaceState(null, "", "/manage/");
+    }
+    this.#cancelLogin();
   }
 
   async #submit(): Promise<void> {
@@ -218,9 +311,18 @@ export class LoginScreen extends LitElement {
       const out = await this.api.login({
         email: this.email,
         password: this.password,
+        ...(this.secondFactor === ""
+          ? {}
+          : /^\d{6}$/.test(this.secondFactor)
+            ? { totp: this.secondFactor }
+            : { recoveryCode: this.secondFactor }),
       });
       this.dispatchEvent(
-        new CustomEvent("logged-in", { detail: out, bubbles: true, composed: true }),
+        new CustomEvent("logged-in", {
+          detail: { ...out, accountSetup: this.actionPurpose === "invitation" },
+          bubbles: true,
+          composed: true,
+        }),
       );
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -232,11 +334,20 @@ export class LoginScreen extends LitElement {
 
   async #requestPasswordReset(): Promise<void> {
     if (this.busy) return;
+    this.#updateResetCountdown();
+    if (this.resetSeconds > 0) {
+      this.step = "reset-sent";
+      return;
+    }
     this.busy = true;
     this.errorKey = null;
     try {
       await this.api.requestPasswordReset(this.email);
-      this.resetSent = true;
+      this.resetDeadlines.set(this.email.trim().toLowerCase(), Date.now() + 60_000);
+      this.#updateResetCountdown();
+      clearInterval(this.resetTimer);
+      if (this.isConnected) this.resetTimer = setInterval(() => this.#updateResetCountdown(), 1000);
+      this.step = "reset-sent";
     } catch (error) {
       this.errorKey = codeOf(error);
     } finally {
@@ -245,7 +356,7 @@ export class LoginScreen extends LitElement {
   }
 
   async #completeAccount(): Promise<void> {
-    if (this.busy || this.token === null) return;
+    if (this.busy || (this.token === null && this.step !== "code")) return;
     if (this.actionPurpose === null) {
       this.errorKey = "account_action.invalid";
       return;
@@ -262,21 +373,64 @@ export class LoginScreen extends LitElement {
         : this.password !== this.confirmPassword
           ? t("account.password_mismatch")
           : "";
-    if (this.passwordError !== "" || this.confirmPasswordError !== "") return;
+    if (this.actionPurpose === "invitation") {
+      if (this.token === null && this.invitationCode.length !== 6) {
+        this.invitationCodeError = t("account.code_required");
+      }
+      this.pinError =
+        this.pin === ""
+          ? t("form.pin_required")
+          : this.pin.length < 4
+            ? codeMessage("pin.too_short")
+            : "";
+      this.confirmPinError =
+        this.confirmPin === ""
+          ? t("form.pin_required")
+          : this.pin !== this.confirmPin
+            ? t("account.pin_mismatch")
+            : "";
+    }
+    if (
+      this.passwordError !== "" ||
+      this.confirmPasswordError !== "" ||
+      this.pinError !== "" ||
+      this.confirmPinError !== "" ||
+      this.invitationCodeError !== ""
+    )
+      return;
     this.busy = true;
     this.errorKey = null;
     try {
-      const out = await this.api.completeAccountAction(
-        this.token,
-        this.actionPurpose,
-        this.password,
-      );
-      if (new URLSearchParams(window.location.search).has("token")) {
-        history.replaceState(null, "", "/manage/");
+      const out =
+        this.token === null
+          ? await this.api.completeAccountActionByCode(
+              this.email,
+              this.invitationCode,
+              this.actionPurpose,
+              this.password,
+              this.pin,
+            )
+          : this.actionPurpose === "invitation"
+            ? await this.api.completeAccountAction(
+                this.token,
+                this.actionPurpose,
+                this.password,
+                this.pin,
+              )
+            : await this.api.completeAccountAction(this.token, this.actionPurpose, this.password);
+      const accountSetup = this.actionPurpose === "invitation";
+      this.#cancelAccountAction();
+      if (out.authenticated) {
+        this.dispatchEvent(
+          new CustomEvent("logged-in", {
+            detail: { personId: out.personId, accountSetup },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      } else {
+        this.noticeCode = "password.reset_complete";
       }
-      this.dispatchEvent(
-        new CustomEvent("logged-in", { detail: out, bubbles: true, composed: true }),
-      );
     } catch (error) {
       this.errorKey = codeOf(error);
       if (this.errorKey === "password.too_short") this.passwordError = codeMessage(this.errorKey);
@@ -327,10 +481,34 @@ export class LoginScreen extends LitElement {
     }
   }
 
+  async #googleLogin(): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.errorKey = null;
+    try {
+      const { authorizationUrl } = await this.api.beginGoogleLogin();
+      this.navigate(authorizationUrl);
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   #renderLoginContext() {
     return html`<p class="login-context" data-test="login-context">
       ${t("login.logging_in_as")} <strong>${this.email}</strong>
     </p>`;
+  }
+
+  #privacyLink() {
+    return this.privacyNoticeUrl === ""
+      ? nothing
+      : html`<p>
+          <a href=${this.privacyNoticeUrl} target="_blank" rel="noopener noreferrer"
+            >${t("account.privacy_notice")}</a
+          >
+        </p>`;
   }
 
   #renderPasswordIcon() {
@@ -344,7 +522,7 @@ export class LoginScreen extends LitElement {
   }
 
   override render() {
-    if (this.token !== null) {
+    if (this.token !== null || this.step === "code") {
       return html`
         <div class="screen">
           <h1>${t("account.setup_title")}</h1>
@@ -363,6 +541,20 @@ export class LoginScreen extends LitElement {
             heading=${t("form.error_heading")}
             .errors=${this.formErrors}
           ></wt-form-error-summary>
+          ${
+            this.token === null
+              ? html`<wt-input
+                  class="field"
+                  name="invitation-code"
+                  autocomplete="one-time-code"
+                  required
+                  label=${t("account.invitation_code")}
+                  error=${this.invitationCodeError}
+                  .value=${this.invitationCode}
+                  @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInvitationCodeChange(e)}
+                ></wt-input>`
+              : nothing
+          }
           <wt-input
             class="field"
             name="new-password"
@@ -374,6 +566,35 @@ export class LoginScreen extends LitElement {
             .value=${this.password}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
           ></wt-input>
+          ${
+            this.actionPurpose === "invitation"
+              ? html`
+                  <wt-input
+                    class="field"
+                    name="new-pin"
+                    autocomplete="off"
+                    required
+                    label=${t("account.new_pin")}
+                    type="password"
+                    error=${this.pinError}
+                    .value=${this.pin}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
+                  ></wt-input>
+                  <wt-input
+                    class="field"
+                    name="confirm-pin"
+                    autocomplete="off"
+                    required
+                    label=${t("account.confirm_pin")}
+                    type="password"
+                    error=${this.confirmPinError}
+                    .value=${this.confirmPin}
+                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]"))}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onConfirmPinChange(e)}
+                  ></wt-input>
+                `
+              : nothing
+          }
           <wt-input
             class="field"
             name="confirm-password"
@@ -388,6 +609,14 @@ export class LoginScreen extends LitElement {
           ></wt-input>
           <wt-form-actions>
             <wt-button
+              slot="cancel"
+              variant="secondary"
+              data-test="cancel-account-action"
+              ?disabled=${this.busy}
+              @click=${() => this.#cancelAccountAction()}
+              >${t("action.cancel")}</wt-button
+            >
+            <wt-button
               variant="primary"
               data-test="complete-account"
               ?disabled=${this.busy}
@@ -395,6 +624,7 @@ export class LoginScreen extends LitElement {
               >${t("action.set_password")}</wt-button
             >
           </wt-form-actions>
+          ${this.#privacyLink()}
         </div>
       `;
     }
@@ -404,6 +634,7 @@ export class LoginScreen extends LitElement {
         <dashboard-language-chooser
           .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
         ></dashboard-language-chooser>
+        ${this.noticeCode ? html`<p class="notice" role="status">${codeMessage(this.noticeCode)}</p>` : nothing}
         <wt-form-error-summary
           heading=${t("form.error_heading")}
           .errors=${this.formErrors}
@@ -434,22 +665,14 @@ export class LoginScreen extends LitElement {
                   ${this.#renderLoginContext()}
                   <h1>${t("login.use_passkey_heading")}</h1>
                   <p class="alternative-hint">${t("login.passkey_hint")}</p>
-                  <wt-button
-                    class="other-way"
-                    variant="ghost"
-                    data-test="try-another-way"
-                    ?disabled=${this.busy}
-                    @click=${() => this.#showOtherWays()}
-                    >${t("login.try_another_way")}</wt-button
-                  >
                   <wt-form-actions>
                     <wt-button
                       slot="cancel"
                       variant="secondary"
                       data-test="back"
                       ?disabled=${this.busy}
-                      @click=${() => this.#showEmailStep()}
-                      >${t("action.back")}</wt-button
+                      @click=${() => this.#cancelLogin()}
+                      >${t("action.cancel")}</wt-button
                     >
                     <wt-button
                       variant="primary"
@@ -459,6 +682,14 @@ export class LoginScreen extends LitElement {
                       >${t("login.with_passkey")}</wt-button
                     >
                   </wt-form-actions>
+                  <wt-button
+                    class="other-way"
+                    variant="ghost"
+                    data-test="try-another-way"
+                    ?disabled=${this.busy}
+                    @click=${() => this.#showOtherWays()}
+                    >${t("login.try_another_way")}</wt-button
+                  >
                 `
               : this.step === "password"
                 ? html`
@@ -499,22 +730,22 @@ export class LoginScreen extends LitElement {
                         >${this.#renderPasswordIcon()}</wt-button
                       >
                     </wt-input>
-                    <wt-button
-                      class="other-way"
-                      variant="ghost"
-                      data-test="try-another-way"
-                      ?disabled=${this.busy}
-                      @click=${() => this.#showOtherWays()}
-                      >${t("login.try_another_way")}</wt-button
-                    >
+                    <wt-input
+                      class="field"
+                      name="one-time-code"
+                      autocomplete="one-time-code"
+                      label=${t("login.second_factor")}
+                      .value=${this.secondFactor}
+                      @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(e)}
+                    ></wt-input>
                     <wt-form-actions>
                       <wt-button
                         slot="cancel"
                         variant="secondary"
                         data-test="back"
                         ?disabled=${this.busy}
-                        @click=${() => this.#showOtherWays()}
-                        >${t("action.back")}</wt-button
+                        @click=${() => this.#cancelLogin()}
+                        >${t("action.cancel")}</wt-button
                       >
                       <wt-button
                         variant="primary"
@@ -524,48 +755,101 @@ export class LoginScreen extends LitElement {
                         >${t("action.login")}</wt-button
                       >
                     </wt-form-actions>
+                    <wt-button
+                      class="other-way"
+                      variant="ghost"
+                      data-test="try-another-way"
+                      ?disabled=${this.busy}
+                      @click=${() => this.#showOtherWays()}
+                      >${t("login.try_another_way")}</wt-button
+                    >
                   `
-                : html`
-                    ${this.#renderLoginContext()}
-                    <h1>${t("login.other_ways_heading")}</h1>
-                    <div class="alternative-list">
-                      <div class="alternative-choice">
+                : this.step === "reset-sent"
+                  ? html`
+                      <h1>${t("login.check_email")}</h1>
+                      <p data-test="reset-sent" role="status">
+                        ${t("login.reset_sent").replace("{email}", this.email)}
+                      </p>
+                      <p class="alternative-hint">${t("login.reset_delivery_hint")}</p>
+                      <wt-form-actions>
                         <wt-button
+                          slot="cancel"
                           variant="secondary"
-                          data-test="use-password"
+                          data-test="cancel-reset"
                           ?disabled=${this.busy}
-                          @click=${() => this.#showPasswordStep()}
-                          >${t("login.use_password")}</wt-button
+                          @click=${() => this.#cancelLogin()}
+                          >${t("action.cancel")}</wt-button
                         >
-                      </div>
-                      <div class="alternative-choice">
                         <wt-button
-                          variant="secondary"
-                          data-test="reset-by-email"
-                          ?disabled=${this.busy || this.resetSent}
+                          variant="primary"
+                          data-test="resend-reset"
+                          ?disabled=${this.busy || this.resetSeconds > 0}
                           @click=${() => void this.#requestPasswordReset()}
-                          >${t("login.reset_by_email")}</wt-button
+                          >${this.resetSeconds > 0 ? t("login.resend_countdown").replace("{seconds}", String(this.resetSeconds)) : t("login.resend_link")}</wt-button
                         >
-                        <p class="alternative-hint">${t("login.reset_by_email_hint")}</p>
+                      </wt-form-actions>
+                    `
+                  : html`
+                      ${this.#renderLoginContext()}
+                      <h1>${t("login.other_ways_heading")}</h1>
+                      <div class="alternative-list">
+                        <div class="alternative-choice">
+                          <wt-button
+                            variant="secondary"
+                            data-test="use-password"
+                            ?disabled=${this.busy}
+                            @click=${() => this.#showPasswordStep()}
+                            >${t("login.use_password")}</wt-button
+                          >
+                        </div>
+                        <div class="alternative-choice">
+                          <wt-button
+                            variant="secondary"
+                            data-test="reset-by-email"
+                            ?disabled=${this.busy}
+                            @click=${() => void this.#requestPasswordReset()}
+                            >${t("login.reset_by_email")}</wt-button
+                          >
+                          <p class="alternative-hint">${t("login.reset_by_email_hint")}</p>
+                        </div>
+                        <div class="alternative-choice">
+                          <wt-button
+                            variant="secondary"
+                            data-test="use-invitation-code"
+                            ?disabled=${this.busy}
+                            @click=${() => this.#showInvitationCode()}
+                            >${t("login.use_invitation_code")}</wt-button
+                          >
+                          <p class="alternative-hint">${t("login.invitation_code_hint")}</p>
+                        </div>
                         ${
-                          this.resetSent
-                            ? html`<p data-test="reset-sent">${t("login.reset_sent")}</p>`
+                          this.googleConfigured
+                            ? html`<div class="alternative-choice">
+                                <wt-button
+                                  variant="secondary"
+                                  data-test="google-login"
+                                  ?disabled=${this.busy}
+                                  @click=${() => void this.#googleLogin()}
+                                  >${t("login.with_google")}</wt-button
+                                >
+                                <p class="alternative-hint">${t("login.google_hint")}</p>
+                              </div>`
                             : nothing
                         }
                       </div>
-                    </div>
-                    <wt-form-actions>
-                      <wt-button
-                        slot="cancel"
-                        variant="secondary"
-                        data-test="back-to-passkey"
-                        ?disabled=${this.busy}
-                        @click=${() => this.#showPasskeyStep()}
-                        >${t("action.back")}</wt-button
-                      >
-                    </wt-form-actions>
-                  `
+                      <wt-form-actions>
+                        <wt-button
+                          slot="cancel"
+                          variant="secondary"
+                          data-test="back-to-passkey"
+                          ?disabled=${this.busy}
+                          @click=${() => this.#cancelLogin()}
+                          >${t("action.cancel")}</wt-button
+                        >
+                      </wt-form-actions>
+                    `
         }
+        ${this.#privacyLink()}
       </div>
     `;
   }

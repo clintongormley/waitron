@@ -493,6 +493,8 @@ export async function importConfigurationTables(
         row.password_hash = null;
         row.totp_secret = null;
         row.email_verified_at = null;
+        row.google_subject = null;
+        row.pending_email = null;
         row.status = "suspended";
       }
       if (declaration.name === "print_agents") {

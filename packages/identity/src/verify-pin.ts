@@ -1,4 +1,11 @@
 import { hashSecret, verifySecret } from "./secret-hash.js";
+import { AppError } from "@waitron/shared";
+
+export const MIN_PIN_LENGTH = 4;
+
+export function assertPinLength(pin: string): void {
+  if (pin.length < MIN_PIN_LENGTH) throw new AppError("pin.too_short", { min: MIN_PIN_LENGTH });
+}
 
 // PIN hashing delegates to the generic scrypt helper in `./secret-hash.ts`, so the KDF lives in one
 // place and PIN and (later) password hashing cannot drift apart. The stored format is unchanged —

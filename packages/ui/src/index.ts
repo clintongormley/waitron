@@ -15,6 +15,8 @@ export { WtDialog } from "./components/wt-dialog.js";
 export { WtSwitch } from "./components/wt-switch.js";
 export { WtTableToken } from "./components/wt-table-token.js";
 export type { TableTokenLabels } from "./components/wt-table-token.js";
+export { WtDataTable } from "./components/wt-data-table.js";
+export type { DataTableColumn } from "./components/wt-data-table.js";
 export { WtFloorCanvas } from "./components/wt-floor-canvas.js";
 export type { FloorCanvasCopy } from "./components/wt-floor-canvas.js";
 export {

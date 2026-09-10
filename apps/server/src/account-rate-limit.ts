@@ -10,6 +10,23 @@ export interface AccountActionRateLimiter {
   check(subject: string): void;
 }
 
+/** Process-local resend spacing, independent of account existence. Call after the flood guard. */
+export function createPasswordResetCooldown(
+  now: () => number = Date.now,
+): (email: string) => boolean {
+  const deadlines = new Map<string, number>();
+  return (email) => {
+    const current = now();
+    for (const [key, deadline] of deadlines) {
+      if (deadline <= current) deadlines.delete(key);
+    }
+    const key = createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+    if (deadlines.has(key)) return false;
+    deadlines.set(key, current + 60_000);
+    return true;
+  };
+}
+
 /** A process-local flood guard with per-subject isolation and a bounded global ceiling. */
 export function createAccountActionRateLimiter(
   now: () => number = Date.now,

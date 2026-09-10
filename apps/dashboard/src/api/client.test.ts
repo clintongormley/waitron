@@ -8,7 +8,7 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
 
 /**
  * An empty 204 — `text()` → "" — the shape the void-returning management routes answer with
- * (`logout`, `updatePerson`, `resetPin`, `setPassword`; `c.body(null, 204)` in
+ * (`logout`, `savePerson`, `resetPin`; `c.body(null, 204)` in
  * `apps/server/src/management-api.ts`). Exercises `#request`'s empty-body branch, which resolves
  * `undefined` instead of `JSON.parse`-ing nothing. `#request` keys off the empty body (`res.ok` +
  * `text() === ""`), not the exact status, so 204 stands in for the real routes.
@@ -32,6 +32,68 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("uses session-scoped profile endpoints without a person id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.getProfile();
+    const details = {
+      displayName: "Alex",
+      firstNames: "Alex",
+      lastNames: "Rivera",
+      telephone: null,
+      email: "alex@example.com",
+      locale: "en-GB",
+    };
+    await api.saveProfile(details);
+    await api.changePassword({ currentPassword: "current", password: "replacement" });
+    await api.changePin({ currentPassword: "current", pin: "4321" });
+    await api.removePasskey("credential-id", { currentPassword: "current" });
+    expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+      ["/management-api/session/me/profile", "GET", undefined],
+      ["/management-api/session/me/profile", "PUT", JSON.stringify(details)],
+      [
+        "/management-api/session/me/password",
+        "PUT",
+        JSON.stringify({ currentPassword: "current", password: "replacement" }),
+      ],
+      [
+        "/management-api/session/me/pin",
+        "PUT",
+        JSON.stringify({ currentPassword: "current", pin: "4321" }),
+      ],
+      [
+        "/management-api/session/me/passkeys/credential-id",
+        "DELETE",
+        JSON.stringify({ currentPassword: "current" }),
+      ],
+    ]);
+  });
+
+  it("starts public Google login and session-scoped Google linking", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ configured: true }))
+      .mockResolvedValueOnce(
+        jsonResponse({ authorizationUrl: "https://accounts.google.test/login" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ authorizationUrl: "https://accounts.google.test/link" }),
+      );
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getGoogleConfig()).resolves.toEqual({ configured: true });
+    await expect(api.beginGoogleLogin()).resolves.toEqual({
+      authorizationUrl: "https://accounts.google.test/login",
+    });
+    await expect(api.beginGoogleLink({ currentPassword: "correct horse" })).resolves.toEqual({
+      authorizationUrl: "https://accounts.google.test/link",
+    });
+    expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
+      ["/management-api/google/config", "GET"],
+      ["/management-api/google/login", "POST"],
+      ["/management-api/session/me/google", "POST"],
+    ]);
+  });
   it("posts login credentials with cookies included", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1" }));
     const api = new DashboardApi("", fetchImpl);
@@ -114,8 +176,10 @@ describe("DashboardApi", () => {
     const api = new DashboardApi("", fetchImpl);
     const out = await api.createPerson({
       displayName: "Bea",
+      firstNames: "Beatrice",
+      lastNames: "Jones",
+      telephone: null,
       role: "staff",
-      pin: "4321",
       email: "bea@x.com",
     });
     expect(out).toEqual({ id: "p2", invitationSent: true });
@@ -125,8 +189,10 @@ describe("DashboardApi", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         displayName: "Bea",
+        firstNames: "Beatrice",
+        lastNames: "Jones",
+        telephone: null,
         role: "staff",
-        pin: "4321",
         email: "bea@x.com",
       }),
     });
@@ -178,68 +244,60 @@ describe("DashboardApi", () => {
       credentials: "include",
     });
   });
-
-  it("updatePerson PATCHes the addressed person (empty 204 body)", async () => {
+  it("savePerson PUTs the complete administrative edit", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(
-      api.updatePerson("p1", { role: "supervisor", status: "suspended" }),
-    ).resolves.toBeUndefined();
+    const details = {
+      displayName: "Ada",
+      firstNames: "Ada Augusta",
+      lastNames: "Lovelace",
+      telephone: "+44 20",
+      email: "ada@example.com",
+      role: "admin" as const,
+      status: "active" as const,
+    };
+    await api.savePerson("p1", details);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1", {
-      method: "PATCH",
+      method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ role: "supervisor", status: "suspended" }),
+      body: JSON.stringify(details),
     });
   });
 
-  it("updatePerson carries an email in the PATCH body when supplied", async () => {
+  it("resetPin POSTs without exposing a replacement PIN to the administrator", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.updatePerson("p1", { email: "new@x.com" })).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "new@x.com" }),
-    });
-  });
-
-  it("resetPin POSTs the new pin to the addressed person's reset-pin route (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.resetPin("p1", "9999")).resolves.toBeUndefined();
+    await expect(api.resetPin("p1")).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1/reset-pin", {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pin: "9999" }),
     });
   });
 
-  it("setPassword POSTs the new password to the addressed person's password route (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+  it("resetLogin removes credentials and returns invitation delivery status", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ invitationSent: true }));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.setPassword("p1", "hunter2 correct horse")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1/password", {
+    await expect(api.resetLogin("p1")).resolves.toEqual({ invitationSent: true });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1/reset-login", {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password: "hunter2 correct horse" }),
     });
   });
 
-  it("passkeyRegisterOptions POSTs the register/options route with credentials and no body", async () => {
+  it("passkeyRegisterOptions POSTs the register/options route with current credentials", async () => {
     const payload = {
       challengeHandle: "ch-1",
       options: { challenge: "abc", rp: { id: "localhost" } },
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.passkeyRegisterOptions()).toEqual(payload);
+    expect(await api.passkeyRegisterOptions({ currentPassword: "correct horse" })).toEqual(payload);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/register/options", {
       method: "POST",
       credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: "correct horse" }),
     });
   });
 

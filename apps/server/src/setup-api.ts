@@ -366,8 +366,8 @@ function parseVenue(venueRaw: unknown): VenueRequest {
       passwordHash: hashPassword(asString(admin.password, "admin.password")),
       // The admin's REQUIRED dashboard-login email. Presence/shape screened by `asString`
       // (`setup.request_invalid`, like every sibling field), then NORMALIZED (trim + lowercase) and
-      // format-validated by identity's own write-boundary rule `normalizeAndValidateEmail` — the SAME
-      // helper `createPerson`/`setEmail` use, so the onboarding path cannot drift from the dashboard's
+      // format-validated by identity's own write-boundary rule `normalizeAndValidateEmail` — the same
+      // helper the invitation and administrative edit paths use, so onboarding cannot drift
       // (a present-but-malformed value is `person.email_invalid`). NOT hashed: the email is not a
       // secret, so the normalized value reaches `provision` verbatim for the seeded `persons` row
       // (venue-apply.ts writes it) so the email-based dashboard login can resolve it.

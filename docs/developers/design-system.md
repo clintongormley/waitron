@@ -132,8 +132,15 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-form-error-summary` | `heading`, `errors` | — |
 | `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
+| `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label` | native events from consumer-provided cells |
 
 `wt-button` has no `type` property — see "Forms" below.
+
+Use `wt-data-table` for sortable administrative collections such as people, devices, printers and
+canvases. Define columns and cell content in the consuming screen so domain actions stay outside the
+primitive. Always supply `aria-label`; use its loading, empty and error properties instead of
+replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
+header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
 
 Variant- and state-like properties (`variant`, `size`, `name`, `raised`, `disabled`, `checked`,
 `invalid`, `open`) all reflect to attributes, which is what makes `:host([variant="..."])`-style
@@ -302,6 +309,14 @@ login and enumeration-safe account recovery behind **Try another way**. Render t
 step for every valid address: choosing the next screen from server-side passkey enrolment would
 reveal whether an account has a passkey. The WebAuthn ceremony itself determines whether the user can
 provide an enrolled passkey.
+
+On login, put **Try another way** below the Cancel and primary action buttons. **Cancel** ends the
+whole sign-in attempt and returns to an empty email form, clearing credentials and errors. Password
+recovery opens a separate **Check your email** screen with the address, delivery guidance, and a
+one-minute resend countdown. Keep the same confirmation for known and unknown addresses.
+
+Every authenticated dashboard banner includes **Your profile**, including for staff without a
+sidebar. Profile edits cannot expose role or suspension controls.
 
 ### Empty slots don't reserve space
 

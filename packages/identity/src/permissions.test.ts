@@ -26,7 +26,11 @@ describe("roleHasPermission", () => {
     // ...SUPERVISOR spread would otherwise pass on the two specific assertions above while silently
     // losing sale.refund/discount/rectify. mirror.create is admin-only (hands out a data-access sync
     // token) and is asserted false for manager in its own test below.
-    const ADMIN_ONLY: ReadonlySet<Permission> = new Set(["mirror.create", "node.promote"]);
+    const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
+      "mirror.create",
+      "node.promote",
+      "person.admin",
+    ]);
     for (const p of PERMISSIONS) {
       expect(roleHasPermission("manager", p)).toBe(!ADMIN_ONLY.has(p));
     }

@@ -1,0 +1,2 @@
+ALTER TABLE "persons" ADD COLUMN "pending_email" text;--> statement-breakpoint
+ALTER TABLE "persons" ADD CONSTRAINT "persons_pending_email_ck" CHECK ("persons"."pending_email" is null or length("persons"."pending_email") > 0);

@@ -23,6 +23,95 @@ const LOCALE = "es-ES";
 const suite = useTemplateDb({ template: "manifest" });
 const noopLog: Logger = () => {};
 
+describe("your profile as app_user", () => {
+  it("lets a staff session edit only itself and refuses foreign-tenant sessions", async () => {
+    const venue = await setupVenue();
+    const personId = await seedPerson(venue.tenantId, "Profile owner");
+    const colleagueId = await seedPerson(venue.tenantId, "Colleague");
+    await suite.admin.execute(
+      sql`update persons set email='profile@example.com', password_hash=${hashPassword("current password")} where id=${personId}`,
+    );
+    const cookie = await cookieFor(venue.tenantId, personId);
+    const app = mountApp(venue.tenantId);
+    const get = await app.request("/management-api/session/me/profile", { headers: { cookie } });
+    expect(get.status).toBe(200);
+    expect(await get.json()).toEqual({
+      displayName: "Profile owner",
+      firstNames: null,
+      lastNames: null,
+      telephone: null,
+      email: "profile@example.com",
+      pendingEmail: null,
+      locale: null,
+      hasPassword: true,
+      hasTotp: false,
+      hasGoogle: false,
+      passkeys: [],
+    });
+    const saved = await app.request("/management-api/session/me/profile", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        personId: colleagueId,
+        role: "admin",
+        displayName: "Updated name",
+        firstNames: "Updated",
+        lastNames: "Owner",
+        telephone: "+34 600",
+        email: "profile@example.com",
+        locale: "en-GB",
+      }),
+    });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ emailVerificationSent: false });
+    const people = await suite.admin.execute<{ id: string; display_name: string; role: string }>(
+      sql`select id,display_name,role from persons where id in (${personId},${colleagueId})`,
+    );
+    expect(people.rows).toEqual(
+      expect.arrayContaining([
+        { id: personId, display_name: "Updated name", role: "staff" },
+        { id: colleagueId, display_name: "Colleague", role: "staff" },
+      ]),
+    );
+    expect((await app.request("/management-api/session/me/profile")).status).toBe(401);
+    const otherVenue = await setupVenue();
+    expect(
+      (
+        await mountApp(otherVenue.tenantId).request("/management-api/session/me/profile", {
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(401);
+    const changed = await app.request("/management-api/session/me/password", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        currentPassword: "current password",
+        password: "replacement password",
+      }),
+    });
+    expect(changed.status).toBe(204);
+    const keys = await suite.admin.execute<{ id: string; person_id: string }>(sql`
+      insert into webauthn_credentials (tenant_id,person_id,credential_id,public_key)
+      values (${venue.tenantId},${personId},'profile-own','public'),(${venue.tenantId},${colleagueId},'profile-other','public')
+      returning id,person_id`);
+    const ownKey = keys.rows.find((key) => key.person_id === personId)!.id;
+    const otherKey = keys.rows.find((key) => key.person_id === colleagueId)!.id;
+    const remove = (id: string) =>
+      app.request(`/management-api/session/me/passkeys/${id}`, {
+        method: "DELETE",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ currentPassword: "replacement password" }),
+      });
+    expect((await remove(otherKey)).status).toBe(404);
+    expect((await remove(ownKey)).status).toBe(204);
+    const remaining = await suite.admin.execute<{ id: string }>(
+      sql`select id from webauthn_credentials where tenant_id=${venue.tenantId}`,
+    );
+    expect(remaining.rows).toEqual([{ id: otherKey }]);
+  });
+});
+
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -204,12 +293,16 @@ describe("Me API over real Postgres (the identity property: the session's person
         locale: string | null;
         venueLocale: string;
         venueName: string;
+        sessionExpiresInSeconds: number;
+        sessionIdleTimeoutSeconds: number;
         permissions: string[];
         modules: string[];
       },
     ).toEqual({
       personId: p,
       role: "staff",
+      sessionExpiresInSeconds: 1800,
+      sessionIdleTimeoutSeconds: 1800,
       locale: null,
       venueLocale: "es-ES",
       venueName: "Deli Test SL",

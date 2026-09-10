@@ -1,10 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { startRegistration } from "@simplewebauthn/browser";
-import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
+import { roleName, statusName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 // Value imports (not `import type`): pull in the widget modules for their `@customElement` side
 // effects, so `<dashboard-staff-list>` and `<dashboard-person-form>` are registered before this
@@ -12,7 +11,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/staff-list.js";
 import "../widgets/person-form.js";
 import "../widgets/person-edit.js";
-import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
+import type { DashboardApi, PersonEditDetails, PersonRole, PersonSummary } from "../api/client.js";
 
 /**
  * The management dashboard's STAFF SCREEN: the composition point that wires the pure-display
@@ -23,7 +22,9 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
  * On connect it loads `api.listStaff()` into `people` and hands them down to the list. An "Añadir
  * usuario" button opens the create form (`formOpen = true`); on the form's `create-person` event it
  * calls `api.createPerson(detail)`, and on success reloads the list and closes the form — so the list
- * reflects the new person and the operator returns to it. A dismissal (Escape — `wt-dialog` has no
+ * reflects the new person and the operator returns to it. When the address belongs to an inactive
+ * person, it opens that person's edit dialog so the manager can inspect or reactivate the existing
+ * record. A dismissal (Escape — `wt-dialog` has no
  * backdrop light-dismiss) reaches the
  * screen as the form's composed `wt-close`, which the render's `@wt-close` turns back into
  * `formOpen = false`, so the state the screen owns tracks the dialog the operator actually closed —
@@ -31,12 +32,10 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
  * the next "open" was a no-op that re-committed nothing to the child's `.open`).
  *
  * The staff list's per-row "Editar" emits `edit-person { personId }`, which `#onEditPerson` resolves
- * against the list already held and opens the edit dialog for. That dialog commits FOUR independent
- * mutations — role (`updatePerson`), status (`updatePerson`), PIN (`resetPin`), password
- * (`setPassword`) — each as its own event; `#runEditAction` is their shared body: single-flight,
- * reload, and re-resolve the open dialog's `editingPerson` from the reloaded list so its derived
- * controls track the new state. The two dialogs are mutually exclusive (both modal): opening either
- * closes the other.
+ * against the list already held and opens the edit dialog for. The dialog saves its editable fields
+ * atomically; reset login, reset PIN, invitation and lifecycle actions remain explicit operations.
+ * `#runEditAction` supplies single-flight execution, reload and re-resolution of the open person.
+ * The two dialogs are mutually exclusive (both modal): opening either closes the other.
  *
  * ERROR HANDLING, every async path, mirroring `login-screen.ts`'s `#loadRoster`/`#submit`:
  * - `#load()` is called via `void this.#load()` on connect, so a rejected `listStaff()` MUST be
@@ -59,6 +58,7 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
 export class StaffScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
@@ -88,10 +88,39 @@ export class StaffScreen extends LitElement {
         color: var(--wt-color-text);
         margin-top: var(--wt-space-3);
       }
+      .filters {
+        display: grid;
+        grid-template-columns: minmax(14rem, 1fr) repeat(2, minmax(10rem, auto));
+        gap: var(--wt-space-3);
+        align-items: end;
+        margin-bottom: var(--wt-space-4);
+      }
+      .filter {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        color: var(--wt-color-text);
+      }
+      .filter input {
+        box-sizing: border-box;
+        min-height: var(--wt-tap-min);
+        padding: 0 var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
+      @media (max-width: 42rem) {
+        .filters {
+          grid-template-columns: 1fr;
+        }
+      }
     `,
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) currentPersonId: string | null = null;
   @state() private people: PersonSummary[] = [];
   @state() private formOpen = false;
   // The person the edit dialog is open for (null when closed), and its open flag. The screen is the
@@ -99,22 +128,43 @@ export class StaffScreen extends LitElement {
   @state() private editingPerson: PersonSummary | null = null;
   @state() private editOpen = false;
   @state() private errorKey: string | null = null;
-  // A minimal success confirmation for #addPasskey: the raw status code is kept here and mapped to
-  // localised copy by `codeMessage` at the render edge (`passkey.registered` → "Passkey añadida").
-  // The WebAuthn ceremony has no visible surface of its own once the browser dialog closes, so
-  // without this the operator gets no feedback.
-  @state() private passkeyStatus: string | null = null;
   @state() private invitationStatus: "sent" | "not_sent" | null = null;
+  @state() private search = "";
+  @state() private roleFilter: PersonRole | "all" = "all";
+  @state() private statusFilter: "current" | "pending" | "active" | "suspended" | "all" = "current";
 
   // A re-entrancy guard, NOT @state (nothing renders off it): set synchronously at `#onCreatePerson`
   // entry so a double-clicked "Crear" (two `create-person` events) files at most one person —
   // `createPerson` is not server-idempotent. Mirrors apps/till's walk-up-sale `submitting` guard.
   #creating = false;
 
-  // The same single-flight guard for the edit dialog's four actions: a double-fired action runs the
-  // mutation once (none of updatePerson/resetPin/setPassword is server-idempotent). Separate from
+  // The same single-flight guard for the edit dialog's actions: a double-fired action runs the
+  // mutation once. Separate from
   // `#creating` because create and edit are independent flows.
   #editing = false;
+
+  #filteredPeople(): PersonSummary[] {
+    const query = this.search.trim().toLocaleLowerCase();
+    return this.people.filter((person) => {
+      if (this.roleFilter !== "all" && person.role !== this.roleFilter) return false;
+      if (this.statusFilter === "current" && person.status === "suspended") return false;
+      if (
+        this.statusFilter !== "current" &&
+        this.statusFilter !== "all" &&
+        person.status !== this.statusFilter
+      ) {
+        return false;
+      }
+      if (query === "") return true;
+      return [
+        person.displayName,
+        person.firstNames,
+        person.lastNames,
+        person.email,
+        person.telephone,
+      ].some((value) => value?.toLocaleLowerCase().includes(query));
+    });
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -142,7 +192,6 @@ export class StaffScreen extends LitElement {
    */
   #openForm(): void {
     this.errorKey = null;
-    this.passkeyStatus = null;
     this.invitationStatus = null;
     this.#closeEdit(); // the two dialogs are mutually exclusive (both are modal)
     this.formOpen = true;
@@ -171,7 +220,6 @@ export class StaffScreen extends LitElement {
     const person = this.people.find((p) => p.personId === event.detail.personId);
     if (person === undefined) return;
     this.errorKey = null;
-    this.passkeyStatus = null;
     this.invitationStatus = null;
     this.formOpen = false;
     this.editingPerson = person;
@@ -179,7 +227,7 @@ export class StaffScreen extends LitElement {
   }
 
   /**
-   * Run one edit-dialog action, then reload. The shared body of all four handlers: single-flight (drop
+   * Run one edit-dialog action, then reload. The shared body of the handlers: single-flight (drop
    * a re-fire while one is in flight, since the mutations are not server-idempotent), clear any prior
    * error, await the mutation, reload the list, and RE-RESOLVE `editingPerson` from the reloaded list so
    * the still-open dialog's derived controls (the Suspender/Reactivar toggle, the role preset) reflect
@@ -204,32 +252,65 @@ export class StaffScreen extends LitElement {
     }
   }
 
-  #onUpdateRole(event: CustomEvent<{ role: PersonRole }>): void {
+  #onSavePerson(event: CustomEvent<PersonEditDetails>): void {
     event.stopPropagation();
-    this.#editWith((id) => this.api.updatePerson(id, { role: event.detail.role }));
+    this.#editWith((id) => this.api.savePerson(id, event.detail));
   }
 
-  #onSetStatus(event: CustomEvent<{ status: "active" | "suspended" }>): void {
+  #onDeactivatePerson(event: Event): void {
     event.stopPropagation();
-    this.#editWith((id) => this.api.updatePerson(id, { status: event.detail.status }));
+    const person = this.editingPerson;
+    if (person === null || person.personId === this.currentPersonId) return;
+    this.#editWith((id) => this.api.deactivatePerson(id));
   }
 
-  #onResetPin(event: CustomEvent<{ pin: string }>): void {
+  #onResetPin(event: Event): void {
     event.stopPropagation();
-    this.#editWith((id) => this.api.resetPin(id, event.detail.pin));
+    this.#editWith((id) => this.api.resetPin(id));
   }
 
-  #onSetPassword(event: CustomEvent<{ password: string }>): void {
+  #onResetLogin(event: Event): void {
     event.stopPropagation();
-    this.#editWith((id) => this.api.setPassword(id, event.detail.password));
+    const id = this.editingPerson?.personId;
+    if (id === undefined || this.#editing) return;
+    this.#editing = true;
+    this.errorKey = null;
+    this.invitationStatus = null;
+    void this.api
+      .resetLogin(id)
+      .then(async (result) => {
+        this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+        this.#closeEdit();
+        await this.#load();
+      })
+      .catch((error: unknown) => {
+        this.errorKey = codeOf(error);
+      })
+      .finally(() => {
+        this.#editing = false;
+      });
   }
 
-  // The dashboard sign-in email rides the same PATCH as role/status — `updatePerson({ email })`, which
-  // the server turns into a `setEmail` — so it routes through the shared single-flight edit runner
-  // exactly like the other edits, no dedicated subroute.
-  #onSetEmail(event: CustomEvent<{ email: string }>): void {
+  #onReactivatePerson(event: Event): void {
     event.stopPropagation();
-    this.#editWith((id) => this.api.updatePerson(id, { email: event.detail.email }));
+    const id = this.editingPerson?.personId;
+    if (id === undefined || this.#editing) return;
+    this.#editing = true;
+    this.errorKey = null;
+    this.invitationStatus = null;
+    void this.api
+      .reactivatePerson(id)
+      .then(async (result) => {
+        this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+        this.#closeEdit();
+        await this.#load();
+      })
+      .catch((error: unknown) => {
+        this.errorKey = codeOf(error);
+      })
+      .finally(() => {
+        this.#editing = false;
+      });
   }
 
   async #onResendInvitation(event: Event): Promise<void> {
@@ -252,7 +333,7 @@ export class StaffScreen extends LitElement {
 
   /**
    * Resolve the open dialog's person id and run `action(id)` through the single-flight edit runner.
-   * The shared head of the four edit handlers, so the `editingPerson` null-narrowing lives in ONE
+   * The shared head of the edit handlers, so the `editingPerson` null-narrowing lives in ONE
    * place. A no-op when no person is open — a type guard rather than a reachable UI path, since the
    * edit dialog only emits its action events while it is open for a person.
    */
@@ -263,48 +344,21 @@ export class StaffScreen extends LitElement {
   }
 
   /**
-   * Enroll a passkey for the signed-in operator — the symmetric parallel of the login screen's
-   * `#passkeyLogin`, run from where the logged-in manager already is. `passkeyRegisterOptions()` is
-   * GATED (the route resolves the person from the session) and returns the creation options plus a
-   * challenge handle; `startRegistration` runs the browser attestation ceremony; `passkeyRegisterVerify`
-   * echoes the handle with the signed response to finish enrollment. Success sets a brief
-   * `passkeyStatus` banner (the ceremony leaves no visible trace once the browser dialog closes).
-   *
-   * `startRegistration` takes `{ optionsJSON }` in `@simplewebauthn/browser` v13 — the options blob is
-   * nested under that key, not passed bare. The blob is the server's
-   * `PublicKeyCredentialCreationOptionsJSON`; the client types it as an opaque `PasskeyOptions`
-   * (`Record<string, unknown>`), which has no structural overlap with the concrete interface, so the
-   * cast re-narrows it via `unknown` at this one call site — validated there, exactly as the
-   * `PasskeyOptions` note in `api/client.ts` intends.
-   *
-   * Any failure becomes the same `errorKey`-in-a-`role="alert"` banner the other async paths use,
-   * falling back to `passkey.verification_failed` (the code the server itself throws on a failed
-   * verify) when the rejection names none. Caught here because the click handler calls this via
-   * `void`, so an uncaught rejection would strand the operator with no feedback.
-   */
-  async #addPasskey(): Promise<void> {
-    this.errorKey = null;
-    this.passkeyStatus = null;
-    try {
-      const { challengeHandle, options } = await this.api.passkeyRegisterOptions();
-      const response = await startRegistration({
-        optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
-      });
-      await this.api.passkeyRegisterVerify({ challengeHandle, response });
-      this.passkeyStatus = "passkey.registered";
-    } catch (error) {
-      this.errorKey = codeOf(error, "passkey.verification_failed");
-    }
-  }
-
-  /**
    * The form asked to create a person. `stopPropagation` keeps its composed `create-person` inside
    * this screen (the house pattern — the form's own field handlers stop their composed events the
    * same way), so it is not seen a second time by the app shell above. On success reload the list
-   * and close the form; on rejection set `errorKey` and leave the form open with its values intact.
+   * and close the form. A duplicate inactive address opens that existing record; other rejections set
+   * `errorKey` and leave the form open with its values intact.
    */
   async #onCreatePerson(
-    event: CustomEvent<{ displayName: string; role: PersonRole; pin: string; email: string }>,
+    event: CustomEvent<{
+      displayName: string;
+      firstNames: string;
+      lastNames: string;
+      telephone: string | null;
+      role: PersonRole;
+      email: string;
+    }>,
   ): Promise<void> {
     event.stopPropagation();
     if (this.#creating) return; // single-flight: drop a double-click's second create-person
@@ -316,7 +370,22 @@ export class StaffScreen extends LitElement {
       this.formOpen = false;
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      const code = codeOf(error);
+      const email = event.detail.email.trim().toLocaleLowerCase();
+      const inactive =
+        code === "person.email_taken"
+          ? this.people.find(
+              (person) =>
+                person.status === "suspended" && person.email?.toLocaleLowerCase() === email,
+            )
+          : undefined;
+      if (inactive) {
+        this.formOpen = false;
+        this.editingPerson = inactive;
+        this.editOpen = true;
+      } else {
+        this.errorKey = code;
+      }
     } finally {
       this.#creating = false;
     }
@@ -327,29 +396,62 @@ export class StaffScreen extends LitElement {
       <div class="header">
         <h1 class="title">${t("staff.title")}</h1>
         <div class="actions">
-          <wt-button
-            variant="secondary"
-            data-test="add-passkey"
-            @click=${() => void this.#addPasskey()}
-            >${t("staff.add_passkey")}</wt-button
-          >
           <wt-button variant="primary" data-test="add" @click=${() => this.#openForm()}
             >${t("staff.add_user")}</wt-button
           >
         </div>
       </div>
+      <div class="filters" aria-label=${t("staff.filters")}>
+        <label class="filter">
+          ${t("staff.search")}
+          <input
+            data-test="search"
+            name="search"
+            type="search"
+            autocomplete="off"
+            .value=${this.search}
+            @input=${(event: InputEvent) =>
+              (this.search = (event.target as HTMLInputElement).value)}
+          />
+        </label>
+        <label class="filter">
+          ${t("staff.filter_role")}
+          <select
+            data-test="role-filter"
+            name="role-filter"
+            @change=${(event: Event) =>
+              (this.roleFilter = (event.target as HTMLSelectElement).value as PersonRole | "all")}
+          >
+            <option value="all">${t("staff.filter_all_roles")}</option>
+            ${(["staff", "supervisor", "manager", "admin"] as const).map(
+              (role) => html`<option value=${role}>${roleName(role)}</option>`,
+            )}
+          </select>
+        </label>
+        <label class="filter">
+          ${t("staff.filter_status")}
+          <select
+            data-test="status-filter"
+            name="status-filter"
+            @change=${(event: Event) =>
+              (this.statusFilter = (event.target as HTMLSelectElement)
+                .value as typeof this.statusFilter)}
+          >
+            <option value="current">${t("staff.filter_current")}</option>
+            <option value="active">${statusName("active")}</option>
+            <option value="pending">${statusName("pending")}</option>
+            <option value="suspended">${statusName("suspended")}</option>
+            <option value="all">${t("staff.filter_all_statuses")}</option>
+          </select>
+        </label>
+      </div>
       <dashboard-staff-list
-        .people=${this.people}
+        .people=${this.#filteredPeople()}
         @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
       ></dashboard-staff-list>
       ${
         this.errorKey && !this.editOpen && !this.formOpen
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
-      ${
-        this.passkeyStatus
-          ? html`<p class="status" role="status">${codeMessage(this.passkeyStatus)}</p>`
           : nothing
       }
       ${
@@ -363,19 +465,27 @@ export class StaffScreen extends LitElement {
         .open=${this.formOpen}
         .error=${this.formOpen ? this.errorKey : null}
         @create-person=${(
-          e: CustomEvent<{ displayName: string; role: PersonRole; pin: string; email: string }>,
+          e: CustomEvent<{
+            displayName: string;
+            firstNames: string;
+            lastNames: string;
+            telephone: string | null;
+            role: PersonRole;
+            email: string;
+          }>,
         ) => void this.#onCreatePerson(e)}
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
       <dashboard-person-edit
         .person=${this.editingPerson}
+        .currentPersonId=${this.currentPersonId}
         .open=${this.editOpen}
         .error=${this.editOpen ? this.errorKey : null}
-        @update-role=${(e: CustomEvent<{ role: PersonRole }>) => this.#onUpdateRole(e)}
-        @set-status=${(e: CustomEvent<{ status: "active" | "suspended" }>) => this.#onSetStatus(e)}
-        @reset-pin=${(e: CustomEvent<{ pin: string }>) => this.#onResetPin(e)}
-        @set-password=${(e: CustomEvent<{ password: string }>) => this.#onSetPassword(e)}
-        @set-email=${(e: CustomEvent<{ email: string }>) => this.#onSetEmail(e)}
+        @save-person=${(e: CustomEvent<PersonEditDetails>) => this.#onSavePerson(e)}
+        @deactivate-person=${(e: Event) => this.#onDeactivatePerson(e)}
+        @reset-pin=${(e: Event) => this.#onResetPin(e)}
+        @reset-login=${(e: Event) => this.#onResetLogin(e)}
+        @reactivate-person=${(e: Event) => this.#onReactivatePerson(e)}
         @resend-invitation=${(e: Event) => void this.#onResendInvitation(e)}
         @wt-close=${() => this.#closeEdit()}
       ></dashboard-person-edit>

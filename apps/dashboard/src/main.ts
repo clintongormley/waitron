@@ -22,10 +22,26 @@ const app = document.querySelector<HTMLElement>("#app")!;
 // Build the api and the module-request primitive from the SAME instrumented fetch, so a module screen's
 // round trips land in the one per-session diagnostics trail exactly as the app client's do.
 const instrumentedFetch = createInstrumentedFetch(fetch, diag);
+const reportSessionError = (code: string): void => {
+  if (
+    code === "management_session.expired" ||
+    code === "management_session.required" ||
+    code === "person.suspended"
+  ) {
+    window.dispatchEvent(new CustomEvent("waitron-session-invalid", { detail: { code } }));
+  }
+};
+const reportSessionActivity = (): void => {
+  window.dispatchEvent(new Event("waitron-session-active"));
+};
 render(
   html`<dashboard-app
-    .api=${new DashboardApi("", instrumentedFetch)}
-    .request=${createRequest({ fetchImpl: instrumentedFetch })}
+    .api=${new DashboardApi("", instrumentedFetch, reportSessionError, reportSessionActivity)}
+    .request=${createRequest({
+      fetchImpl: instrumentedFetch,
+      onError: reportSessionError,
+      onSuccess: reportSessionActivity,
+    })}
   ></dashboard-app>`,
   app,
 );

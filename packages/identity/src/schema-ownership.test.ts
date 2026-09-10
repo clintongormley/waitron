@@ -12,6 +12,9 @@ const OWNED = [
   "sessions",
   "management_sessions",
   "management_account_actions",
+  "recovery_codes",
+  "totp_enrollments",
+  "google_oidc_states",
   "webauthn_credentials",
   "webauthn_challenges",
 ];

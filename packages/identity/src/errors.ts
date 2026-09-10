@@ -9,6 +9,7 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "profile.invalid": { field: string };
     /** No open session for this id — unknown or already ended. */
     "session.not_open": { sessionId: string };
     /**
@@ -32,17 +33,28 @@ declare module "@waitron/shared" {
     "password.invalid": Record<string, never>;
     /** The TOTP token did not verify against the stored secret (or was malformed — fail-closed). */
     "totp.invalid": Record<string, never>;
+    /** A stored authenticator secret cannot be opened by the configured current/previous key ring. */
+    "totp.key_unavailable": { personId: string };
+    "google.invalid": Record<string, never>;
+    "google.already_linked": Record<string, never>;
+    "google.second_factor_required": Record<string, never>;
     /** No person matched the supplied id. */
     "person.not_found": { personId: string };
     /** The person exists but is suspended — cannot log in or authorize. */
     "person.suspended": { personId: string };
+    "person.self_deactivation": Record<string, never>;
     /** The supplied email address failed the screening check (see isValidEmail) at a write boundary
      * — malformed, no domain dot, or contained whitespace. The address itself is not a credential and
      * carries no param. */
     "person.email_invalid": Record<string, never>;
-    /** Another person in this tenant already holds this normalised email — the create/setEmail insert
-     * hit the unique index. The domain concept is "already taken", not the column that collided (§3). */
+    /** Another person in this tenant already holds this normalised email. */
     "person.email_taken": { email: string };
+    /** Another active or pending person already uses this display name. */
+    "person.display_name_taken": { displayName: string };
+    /** An account change would leave the tenant without an active administrator. */
+    "person.last_admin": Record<string, never>;
+    /** The requested direct status change is not part of the account lifecycle. */
+    "person.transition_invalid": Record<string, never>;
     /** The account invitation or password-reset token is unknown, expired, or already used. */
     "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */

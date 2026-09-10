@@ -166,6 +166,28 @@ function mountApp(tenantId: string): Hono {
   return app;
 }
 
+it("refuses another tenant's session on both passkey registration endpoints", async () => {
+  const first = await setupTenant();
+  const second = await setupTenant();
+  const cookie = await login(mountApp(first.tenantId), MANAGER_EMAIL);
+  const app = mountApp(second.tenantId);
+  for (const stage of ["options", "verify"]) {
+    const response = await app.request(`/management-api/passkey/register/${stage}`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        currentPassword: PASSWORD,
+        challengeHandle: "11111111-1111-4111-8111-111111111111",
+        response: {},
+      }),
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.required", params: {} },
+    });
+  }
+});
+
 /** Log in over HTTP by `email` with `password`, returning just the `waitron_management_session=…`
  * cookie pair (the part a browser echoes back). Asserts the 200 so a caller never carries a stale or
  * absent cookie forward silently. */
@@ -199,7 +221,8 @@ async function readCredentials(
 async function registerPasskey(app: Hono, cookie: string, credentialId: string): Promise<void> {
   const options = await app.request("/management-api/passkey/register/options", {
     method: "POST",
-    headers: { cookie },
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ currentPassword: PASSWORD }),
   });
   expect(options.status).toBe(200);
   const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -234,7 +257,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     const cookie = await login(app, MANAGER_EMAIL);
     const res = await app.request("/management-api/passkey/register/options", {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: PASSWORD }),
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { challengeHandle: string; options: { challenge: string } };
@@ -250,7 +274,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     // Begin, then finish with the ceremony mocked to verify.
     const options = await app.request("/management-api/passkey/register/options", {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: PASSWORD }),
     });
     expect(options.status).toBe(200);
     const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -286,7 +311,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     // restores.
     const options = await app.request("/management-api/passkey/register/options", {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: PASSWORD }),
     });
     expect(options.status).toBe(200);
     const { challengeHandle } = (await options.json()) as { challengeHandle: string };

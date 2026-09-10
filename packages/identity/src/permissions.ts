@@ -10,6 +10,8 @@ export const PERMISSIONS = [
   "sale.discount", // in the catalog for completeness; no call site until the till (#7) applies a discount
   "sale.rectify",
   "person.manage",
+  // Assigning or removing the admin role changes who can control every permission. Admin only.
+  "person.admin",
   // Authoring the till layout + receipt trim (dashboard config, @waitron/layouts). A domain-named
   // CONFIG permission, distinct from staff admin (person.manage); granted to manager + admin, the
   // same roles as person.manage (design D9).

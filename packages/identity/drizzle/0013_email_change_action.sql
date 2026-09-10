@@ -1,0 +1,4 @@
+ALTER TABLE "management_account_actions" DROP CONSTRAINT "management_account_actions_purpose_ck";--> statement-breakpoint
+ALTER TABLE "management_account_actions" ADD COLUMN "target_email" text;--> statement-breakpoint
+ALTER TABLE "management_account_actions" ADD CONSTRAINT "management_account_actions_target_email_ck" CHECK (("management_account_actions"."purpose" = 'email_change') = ("management_account_actions"."target_email" is not null));--> statement-breakpoint
+ALTER TABLE "management_account_actions" ADD CONSTRAINT "management_account_actions_purpose_ck" CHECK ("management_account_actions"."purpose" in ('invitation', 'password_reset', 'email_change'));

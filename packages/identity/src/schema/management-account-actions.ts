@@ -8,6 +8,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  integer,
 } from "drizzle-orm/pg-core";
 import { tenants } from "@waitron/db";
 import { persons } from "./persons.js";
@@ -24,7 +25,12 @@ export const managementAccountActions = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
     purpose: text("purpose").notNull(),
+    /** The replacement login address for an email-change proof. Null for invitations and resets. */
+    targetEmail: text("target_email"),
     tokenHash: text("token_hash").notNull(),
+    codeHash: text("code_hash"),
+    codeExpiresAt: timestamp("code_expires_at", { withTimezone: true, mode: "string" }),
+    codeAttempts: integer("code_attempts").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),
@@ -46,9 +52,18 @@ export const managementAccountActions = pgTable(
     index("management_account_actions_person_idx").on(t.tenantId, t.personId, t.purpose),
     check(
       "management_account_actions_purpose_ck",
-      sql`${t.purpose} in ('invitation', 'password_reset')`,
+      sql`${t.purpose} in ('invitation', 'password_reset', 'email_change')`,
+    ),
+    check(
+      "management_account_actions_target_email_ck",
+      sql`(${t.purpose} = 'email_change') = (${t.targetEmail} is not null)`,
     ),
     check("management_account_actions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
+    check(
+      "management_account_actions_code_hash_ck",
+      sql`${t.codeHash} is null or length(${t.codeHash}) = 64`,
+    ),
+    check("management_account_actions_code_attempts_ck", sql`${t.codeAttempts} >= 0`),
     check("management_account_actions_expiry_ck", sql`${t.expiresAt} > ${t.createdAt}`),
   ],
 );

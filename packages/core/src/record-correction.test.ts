@@ -71,12 +71,12 @@ beforeEach(async () => {
   staffSessionId = await openSession(staffId);
 });
 
-/** A person of `role` whose PIN is "1234", inserted as the superuser owner,
- * the same shape identity's own suites and the record-void suite seed. */
+/** A person of `role` whose PIN is "1234", inserted as the superuser owner. The role makes the
+ * display name distinct because this fixture creates several live people in one tenant. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(
     sql`insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'P', ${hashPin("1234")}, ${role}) returning id`,
+        values (${tenantId}, ${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
   );
   return rows[0]!.id;
 }

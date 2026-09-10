@@ -255,15 +255,15 @@ describe("setEmail", () => {
 // with crafted errors — no DB — so the re-throw branch is covered deterministically. asEmailTaken is
 // exported from staff.ts for exactly this, not from the package barrel.
 describe("asEmailTaken", () => {
-  it("translates a Drizzle-wrapped unique violation (23505) to person.email_taken", () => {
+  it("re-throws a wrapped unique violation when the driver omits the constraint name", () => {
+    const original = { cause: { code: "23505" } };
     let thrown: unknown;
     try {
-      asEmailTaken({ cause: { code: "23505" } }, "owner@x.com");
+      asEmailTaken(original, "owner@x.com");
     } catch (e) {
       thrown = e;
     }
-    expect(isAppError(thrown) && thrown.code).toBe("person.email_taken");
-    expect(isAppError(thrown) && thrown.params).toEqual({ email: "owner@x.com" });
+    expect(thrown).toBe(original);
   });
 
   it("translates a 23505 whose constraint is persons_tenant_email_uq", () => {
@@ -303,6 +303,18 @@ describe("asEmailTaken", () => {
 });
 
 describe("setRole", () => {
+  it("cannot update a person belonging to another tenant", async () => {
+    const otherTenantId = await seedTenant(suite.db);
+    const targetId = await seedPerson(suite.db, otherTenantId, "staff");
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+
+    await run((tx) =>
+      setRole(tx, { managementSessionId: sessionId, personId: targetId, role: "manager" }),
+    );
+
+    expect((await personRow(targetId)).role).toBe("staff");
+  });
+
   it("changes the role, seen by a later authorize on an already-open session", async () => {
     const tillId = await seedTill(suite.db, tenantId);
     const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
@@ -466,6 +478,31 @@ describe("setPassword", () => {
 });
 
 describe("suspendPerson / reactivatePerson", () => {
+  it.each(["manager", "admin"] as const)(
+    "prevents a %s from suspending themselves",
+    async (role) => {
+      const { sessionId, personId } = await openManagementSession(suite.db, tenantId, role);
+      expect(
+        await codeOf(() =>
+          run((tx) => suspendPerson(tx, { managementSessionId: sessionId, personId })),
+        ),
+      ).toBe("person.self_deactivation");
+      expect((await personRow(personId)).status).toBe("active");
+    },
+  );
+
+  it("rejects self-deactivation with an uppercase account ID", async () => {
+    const { sessionId, personId } = await openManagementSession(suite.db, tenantId, "admin");
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          suspendPerson(tx, { managementSessionId: sessionId, personId: personId.toUpperCase() }),
+        ),
+      ),
+    ).toBe("person.self_deactivation");
+    expect((await personRow(personId)).status).toBe("active");
+  });
+
   it("suspend blocks login; reactivate restores it", async () => {
     const tillId = await seedTill(suite.db, tenantId);
     const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
@@ -578,6 +615,16 @@ describe("listActiveStaff", () => {
 });
 
 describe("listPersons", () => {
+  it("does not return people belonging to another tenant", async () => {
+    const otherTenantId = await seedTenant(suite.db);
+    const outsider = await seedPerson(suite.db, otherTenantId, "staff");
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+
+    const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
+
+    expect(roster.some((person) => person.personId === outsider)).toBe(false);
+  });
+
   it("listPersons returns a roster with credential booleans, no secrets", async () => {
     const { sessionId, personId: manager } = await openManagementSession(
       suite.db,

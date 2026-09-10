@@ -105,10 +105,16 @@ function parseTransports(stored: string | null): AuthenticatorTransportFuture[] 
  * so the challenge survives to lapse by its TTL rather than being eagerly swept — the semantics both
  * finish functions and `passkey.challenge_expired`'s own doc describe.
  */
-async function consumeChallenge(tx: Transaction, challengeHandle: string): Promise<string> {
+async function consumeChallenge(
+  tx: Transaction,
+  tenantId: string,
+  challengeHandle: string,
+): Promise<string> {
   const [challenge] = await tx
     .delete(webauthnChallenges)
-    .where(eq(webauthnChallenges.id, challengeHandle))
+    .where(
+      and(eq(webauthnChallenges.tenantId, tenantId), eq(webauthnChallenges.id, challengeHandle)),
+    )
     .returning({
       challenge: webauthnChallenges.challenge,
       createdAt: webauthnChallenges.createdAt,
@@ -130,11 +136,11 @@ export async function beginPasskeyRegistration(
   tx: Transaction,
   input: { managementSessionId: string; tenantId: string; rpId: string; rpName: string },
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialCreationOptionsJSON }> {
-  const { personId } = await resolveManagementSession(tx, input.managementSessionId);
+  const { personId, tenantId } = await resolveManagementSession(tx, input.managementSessionId);
   const [person] = await tx
     .select({ displayName: persons.displayName })
     .from(persons)
-    .where(eq(persons.id, personId));
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, personId)));
   // Exclude the person's existing passkeys so the authenticator refuses to enroll a duplicate, each
   // carrying its stored transports (see `serializeTransports`) so the match holds across any transport.
   const existing = await tx
@@ -143,7 +149,9 @@ export async function beginPasskeyRegistration(
       transports: webauthnCredentials.transports,
     })
     .from(webauthnCredentials)
-    .where(eq(webauthnCredentials.personId, personId));
+    .where(
+      and(eq(webauthnCredentials.tenantId, tenantId), eq(webauthnCredentials.personId, personId)),
+    );
   const options = await generateRegistrationOptions({
     rpID: input.rpId,
     rpName: input.rpName,
@@ -164,7 +172,7 @@ export async function beginPasskeyRegistration(
   });
   const [row] = await tx
     .insert(webauthnChallenges)
-    .values({ tenantId: input.tenantId, personId, challenge: options.challenge })
+    .values({ tenantId, personId, challenge: options.challenge })
     .returning({ id: webauthnChallenges.id });
   return { challengeHandle: row!.id, options };
 }
@@ -195,10 +203,10 @@ export async function finishPasskeyRegistration(
     origin: string;
   },
 ): Promise<{ credentialId: string }> {
-  const { personId } = await resolveManagementSession(tx, input.managementSessionId);
+  const { personId, tenantId } = await resolveManagementSession(tx, input.managementSessionId);
   // Consume the challenge up front: a locking DELETE that also enforces single-use (see
   // `consumeChallenge`). A verify failure below rolls the whole transaction back, undoing this delete.
-  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle);
+  const expectedChallenge = await consumeChallenge(tx, tenantId, input.challengeHandle);
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched response (a
   // missing/non-base64url credential id, wrong origin/RPID, a bad attestation) — never a mapped
   // `passkey.*` code — so a bare call would reach `run` as a non-AppError and become an opaque
@@ -225,7 +233,7 @@ export async function finishPasskeyRegistration(
   // authenticator's transports are stored here (see `serializeTransports`) for a later ceremony.
   try {
     await tx.insert(webauthnCredentials).values({
-      tenantId: input.tenantId,
+      tenantId,
       personId,
       credentialId: cred.id,
       publicKey: b64url(cred.publicKey),
@@ -306,7 +314,7 @@ export async function finishPasskeyAuthentication(
 ): Promise<ManagementSession> {
   // Consume the challenge up front: a locking DELETE that also enforces single-use (see
   // `consumeChallenge`). Any throw below rolls the whole transaction back, undoing this delete.
-  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle);
+  const expectedChallenge = await consumeChallenge(tx, input.tenantId, input.challengeHandle);
   // The credential id the authenticator returned is untrusted request input: typed `string`, but the
   // route hands `response` through as `never`, so at runtime it may be missing or non-string — a value
   // that would reach the `credential_id` text column and could 500 in the driver. Screen it first; a
@@ -328,7 +336,13 @@ export async function finishPasskeyAuthentication(
     })
     .from(webauthnCredentials)
     .innerJoin(persons, eq(persons.id, webauthnCredentials.personId))
-    .where(eq(webauthnCredentials.credentialId, input.response.id));
+    .where(
+      and(
+        eq(webauthnCredentials.tenantId, input.tenantId),
+        eq(persons.tenantId, input.tenantId),
+        eq(webauthnCredentials.credentialId, input.response.id),
+      ),
+    );
   if (cred === undefined) throw new AppError("passkey.not_registered", {});
   // Refuse a person suspended AFTER enrolling this passkey, BEFORE minting a session — the same gate
   // `loginManager` applies to a password login, and the same `persons.status` re-read
@@ -337,6 +351,7 @@ export async function finishPasskeyAuthentication(
   if (cred.status === "suspended") {
     throw new AppError("person.suspended", { personId: cred.personId });
   }
+  if (cred.status !== "active") throw new AppError("passkey.verification_failed", {});
 
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched assertion (a bad
   // signature, wrong origin/RPID, UV not performed) — never a mapped `passkey.*` code — so a bare call
@@ -375,7 +390,13 @@ export async function finishPasskeyAuthentication(
   await tx
     .update(webauthnCredentials)
     .set({ counter: newCounter })
-    .where(and(eq(webauthnCredentials.id, cred.id), lt(webauthnCredentials.counter, newCounter)));
+    .where(
+      and(
+        eq(webauthnCredentials.tenantId, input.tenantId),
+        eq(webauthnCredentials.id, cred.id),
+        lt(webauthnCredentials.counter, newCounter),
+      ),
+    );
   // Verifier seam: like loginManager, a successful passkey ends in a management session.
   return startManagementSession(tx, { tenantId: input.tenantId, personId: cred.personId });
 }

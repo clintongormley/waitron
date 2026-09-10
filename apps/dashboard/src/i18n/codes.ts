@@ -24,6 +24,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Incorrect password, try again",
     es: "Contraseña incorrecta, inténtalo de nuevo",
   },
+  "password.throttled": {
+    en: "Too many incorrect attempts. Wait a moment before trying again.",
+    es: "Demasiados intentos incorrectos. Espera un momento antes de volver a intentarlo.",
+  },
+  "password.reset_complete": {
+    en: "Your password has been changed. Log in with it to continue.",
+    es: "Tu contraseña se ha cambiado. Inicia sesión con ella para continuar.",
+  },
+  "profile.invalid": {
+    en: "Check your profile details and try again.",
+    es: "Revisa los datos de tu perfil y vuelve a intentarlo.",
+  },
   "totp.invalid": {
     en: "Incorrect code, try again",
     es: "Código incorrecto, inténtalo de nuevo",
@@ -44,9 +56,25 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Passkey added",
     es: "Passkey añadida",
   },
+  "google.invalid": {
+    en: "Google could not complete the login. Try again or use another login method.",
+    es: "Google no pudo completar el inicio de sesión. Inténtalo de nuevo o usa otro método.",
+  },
+  "google.already_linked": {
+    en: "That Google account is already linked to another user.",
+    es: "Esa cuenta de Google ya está vinculada a otro usuario.",
+  },
+  "google.second_factor_required": {
+    en: "This account also requires an authenticator code. Log in with your password instead.",
+    es: "Esta cuenta también requiere un código de autenticación. Inicia sesión con tu contraseña.",
+  },
+  "person.self_deactivation": {
+    en: "You cannot mark your own account inactive. Ask another administrator.",
+    es: "No puedes desactivar tu propia cuenta. Pídeselo a otro administrador.",
+  },
   "person.suspended": {
-    en: "This account is suspended — ask a manager",
-    es: "Esta cuenta está suspendida. Avisa a un responsable",
+    en: "This account is inactive — ask a manager",
+    es: "Esta cuenta está inactiva. Avisa a un responsable",
   },
   "person.not_found": {
     en: "That person could not be found",
@@ -64,7 +92,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The PIN is too short",
     es: "El PIN es demasiado corto",
   },
-  // Login-email management (apps/server/src/management-api staff routes → identity's setEmail). The
+  // Login-email management (apps/server/src/management-api staff routes). The
   // Users form's create/edit rejects with these when the address is malformed or already belongs to
   // another person in the tenant (a case-insensitive unique index on the email).
   "person.email_invalid": {
@@ -74,6 +102,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "person.email_taken": {
     en: "That email is already in use",
     es: "Ese correo ya está en uso",
+  },
+  "person.display_name_taken": {
+    en: "That display name is already in use. Add a surname or nickname.",
+    es: "Ese nombre visible ya está en uso. Añade un apellido o apodo.",
+  },
+  "person.last_admin": {
+    en: "Keep at least one active administrator.",
+    es: "Debe quedar al menos un administrador activo.",
+  },
+  "person.transition_invalid": {
+    en: "Use the account action provided for that status change.",
+    es: "Usa la acción de cuenta indicada para ese cambio de estado.",
   },
   "password.too_short": {
     en: "The password is too short",

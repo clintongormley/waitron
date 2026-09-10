@@ -36,6 +36,76 @@
       "when": 1788887872266,
       "tag": "0004_person_email_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788983662726,
+      "tag": "0005_user_account_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788983676356,
+      "tag": "0006_active_display_name_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788986705072,
+      "tag": "0007_account_action_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788987539226,
+      "tag": "0008_authenticator_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788987546805,
+      "tag": "0009_authenticator_recovery_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788989266381,
+      "tag": "0010_google_login",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788989271160,
+      "tag": "0011_google_login_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789000366789,
+      "tag": "0012_pending_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789000408352,
+      "tag": "0013_email_change_action",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789000862596,
+      "tag": "0014_pending_email_unique",
+      "breakpoints": true
     }
   ]
 }

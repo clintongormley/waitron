@@ -31,6 +31,7 @@ const SAMPLE_BUNDLE: MirrorBundle = {
     database: "waitron_pp",
     password: "repl-pw",
   },
+  accountKey: Buffer.alloc(32, 9).toString("base64"),
   reservedIdentity: {
     modules: {
       "fiscal-verifactu": { nif: "B00000000", idSistemaInformatico: "W1", numeroInstalacion: 7 },

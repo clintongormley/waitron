@@ -360,6 +360,7 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
           standby,
           replication,
           database: NODE_DB,
+          accountKey: Buffer.alloc(32, 9).toString("base64"),
         }),
       advertisedOrigin: "https://b.local",
       environment: ENV,

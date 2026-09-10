@@ -49,6 +49,7 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
   };
 }
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
 
@@ -106,6 +107,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       venueName: "Deli Test SL",
       onboardingIntent: "prepare",
     }),
+    getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     putLocale: vi.fn().mockResolvedValue(undefined),
     listStaff: vi.fn().mockResolvedValue(people),
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
@@ -192,6 +194,41 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     ...overrides,
   } as unknown as DashboardApi;
 }
+
+it.each(["staff", "supervisor", "manager", "admin"])(
+  "makes Your profile reachable for %s, including by URL",
+  async (role) => {
+    history.replaceState(null, "", "/manage/profile");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p1",
+        role,
+        locale: null,
+        venueLocale: "en-GB",
+        permissions: [],
+        modules: [],
+        venueName: "Venue",
+      }),
+      getProfile: vi.fn().mockResolvedValue({
+        displayName: "Alex",
+        email: "alex@example.com",
+        locale: "en-GB",
+        hasPassword: true,
+        hasTotp: false,
+        passkeys: [],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=profile]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
+    if (role === "staff") expect(el.shadowRoot!.querySelector("nav")).toBeNull();
+    const profile = el.shadowRoot!.querySelector("dashboard-profile-screen")!;
+    await profile.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(profile.shadowRoot!.querySelector("[data-test=close-profile]")).toBeNull();
+  },
+);
 
 /** Drains the microtask queue (settling the awaited probe/logout promises) then Lit's render. */
 async function flush(el: DashboardApp): Promise<void> {
@@ -371,6 +408,142 @@ beforeEach(() => setLocale("es-ES"));
 afterEach(() => setLocale("es-ES"));
 
 describe("dashboard-app", () => {
+  it("returns to login when the known session deadline passes without another request", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: null,
+          venueLocale: "es-ES",
+          venueName: "Deli Test SL",
+          permissions: [],
+          modules: [],
+          sessionExpiresInSeconds: 1,
+          sessionIdleTimeoutSeconds: 2,
+        }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(overview(el)).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(999);
+      await el.updateComplete;
+      expect(overview(el)).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      expect(login(el)).not.toBeNull();
+      expect(login(el)!.shadowRoot!.textContent).toContain(
+        codeMessage("management_session.expired"),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns to login when a protected request reports an expired session", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+
+    window.dispatchEvent(
+      new CustomEvent("waitron-session-invalid", {
+        detail: { code: "management_session.expired" },
+      }),
+    );
+    await el.updateComplete;
+    expect(login(el)).not.toBeNull();
+    expect(login(el)!.shadowRoot!.textContent).toContain(codeMessage("management_session.expired"));
+  });
+
+  it("moves the browser deadline after a successful authenticated request", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: null,
+          venueLocale: "es-ES",
+          venueName: "Deli Test SL",
+          permissions: [],
+          modules: [],
+          sessionExpiresInSeconds: 1,
+          sessionIdleTimeoutSeconds: 2,
+        }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      await vi.advanceTimersByTimeAsync(750);
+      window.dispatchEvent(new Event("waitron-session-active"));
+      await vi.advanceTimersByTimeAsync(1_249);
+      await el.updateComplete;
+      expect(overview(el)).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(752);
+      await el.updateComplete;
+      expect(login(el)).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rechecks the session when a hidden tab becomes visible", async () => {
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce({
+        personId: "p1",
+        role: "manager",
+        locale: null,
+        venueLocale: "es-ES",
+        venueName: "Deli Test SL",
+        permissions: [],
+        modules: [],
+      })
+      .mockRejectedValueOnce({ code: "management_session.expired" });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe }),
+    });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flush(el);
+    expect(getMe).toHaveBeenCalledTimes(2);
+    expect(login(el)).not.toBeNull();
+  });
+
+  it("does not restore protected content from a session probe that resolves after logout", async () => {
+    let resolveLate!: (value: unknown) => void;
+    const late = new Promise((resolve) => (resolveLate = resolve));
+    const initial = {
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+      venueName: "Deli Test SL",
+      permissions: [],
+      modules: [],
+    };
+    const getMe = vi.fn().mockResolvedValueOnce(initial).mockReturnValueOnce(late);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi({ getMe }) });
+    await flush(el);
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(
+      new CustomEvent("waitron-session-invalid", {
+        detail: { code: "management_session.expired" },
+      }),
+    );
+    resolveLate(initial);
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("dashboard-app")).toBe(DashboardApp);
   });
@@ -575,6 +748,33 @@ describe("dashboard-app", () => {
     expect(login(el)).toBeNull();
   });
 
+  it("opens Your profile after an invited person completes account setup", async () => {
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "p9",
+          role: "staff",
+          locale: null,
+          venueLocale: "es-ES",
+          permissions: [],
+          modules: [],
+        }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    login(el)!.dispatchEvent(
+      new CustomEvent("logged-in", {
+        detail: { personId: "p9", accountSetup: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
+  });
+
   it("treats ANY probe rejection as not-logged-in, never an unhandled rejection", async () => {
     // The common case is the `management_session.required`/401 reject, but the probe catches
     // EVERYTHING so a stray/network rejection still lands on login rather than escaping unhandled
@@ -658,6 +858,7 @@ describe("dashboard-app", () => {
     navStaff(el)!.click();
     await flush(el);
     expect(staff(el)).toBeTruthy();
+    expect((staff(el) as unknown as { currentPersonId: string }).currentPersonId).toBe("p1");
     expect(overview(el)).toBeNull();
 
     // To catalogue.

@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { tenants } from "@waitron/db";
@@ -21,7 +22,7 @@ export const personRole = pgEnum("person_role", ["staff", "supervisor", "manager
 
 /** A person's account status. `suspended` keeps the row (and any history that references it) while
  * refusing login — the reason a status enum exists rather than a hard delete. */
-export const personStatus = pgEnum("person_status", ["active", "suspended"]);
+export const personStatus = pgEnum("person_status", ["pending", "active", "suspended"]);
 
 /**
  * A member of staff who can log in, ring sales, and (by role) authorize privileged actions.
@@ -35,18 +36,15 @@ export const persons = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
     displayName: text("display_name").notNull(),
+    firstNames: text("first_names"),
+    lastNames: text("last_names"),
+    telephone: text("telephone"),
     /** Hashed by ./verify-pin.ts (scrypt, salted) — never plaintext. The check below refuses an
      * empty value; the hash format is the caller's responsibility. */
-    pinHash: text("pin_hash").notNull(),
+    pinHash: text("pin_hash"),
     passwordHash: text("password_hash"),
-    /** Stored plaintext base32 — a TOTP secret must be RECOVERABLE to verify a rolling code, so it
-     * cannot be hashed the way `pinHash`/`passwordHash` are. `app_user` holds SELECT on persons
-     * (drizzle/0001_identity_baseline_sql.sql), so a table or app-role leak exposes every enrolled second
-     * factor. Latent in this slice: nothing writes it yet (TOTP enrollment is a later slice; only
-     * tests set it via raw SQL). DEFERRED — the enrollment slice MUST encrypt `totp_secret` at rest
-     * via the credentials vault (AES-256-GCM, the house pattern also cited in ./secret-hash.ts),
-     * decrypting on the box before `verifyTotp` — which keeps the "lives on the box /
-     * offline-verifiable" property. */
+    /** AES-256-GCM ciphertext containing the recoverable TOTP secret. The server decrypts it with
+     * the venue account key shared with mirrors so authenticator verification works after failover. */
     totpSecret: text("totp_secret"),
     /** The person's preferred UI language (a SUPPORTED_LOCALES code). Null = no
      * preference; the app falls back to the venue default. Validated at the
@@ -58,9 +56,15 @@ export const persons = pgTable(
      * low-level fixtures. Unique per tenant, case-insensitively, through the custom migration's
      * functional partial index. */
     email: text("email"),
+    /** A requested replacement address. It does not become a login identifier until the person
+     * proves they control it. */
+    pendingEmail: text("pending_email"),
     /** Records when the person completed a bearer link delivered to this address. Changing the
      * address clears the record. */
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true, mode: "string" }),
+    /** Google's stable OpenID Connect subject identifier. Email is deliberately not used as the
+     * provider identity because a Google account can change addresses. */
+    googleSubject: text("google_subject"),
     role: personRole("role").notNull().default("staff"),
     status: personStatus("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
@@ -77,13 +81,26 @@ export const persons = pgTable(
       name: "persons_tenant_fk",
     }).onDelete("restrict"),
     index("persons_tenant_id_idx").on(t.tenantId),
+    uniqueIndex("persons_tenant_google_subject_uq")
+      .on(t.tenantId, t.googleSubject)
+      .where(sql`${t.googleSubject} is not null`),
+    uniqueIndex("persons_tenant_pending_email_uq")
+      .on(t.tenantId, sql`lower(${t.pendingEmail})`)
+      .where(sql`${t.pendingEmail} is not null`),
     check("persons_display_name_ck", sql`length(${t.displayName}) > 0`),
-    check("persons_pin_hash_ck", sql`length(${t.pinHash}) > 0`),
+    check("persons_first_names_ck", sql`${t.firstNames} is null or length(${t.firstNames}) > 0`),
+    check("persons_last_names_ck", sql`${t.lastNames} is null or length(${t.lastNames}) > 0`),
+    check("persons_telephone_ck", sql`${t.telephone} is null or length(${t.telephone}) > 0`),
+    check("persons_pin_hash_ck", sql`${t.pinHash} is null or length(${t.pinHash}) > 0`),
     check(
       "persons_password_hash_ck",
       sql`${t.passwordHash} is null or length(${t.passwordHash}) > 0`,
     ),
     check("persons_totp_secret_ck", sql`${t.totpSecret} is null or length(${t.totpSecret}) > 0`),
     check("persons_locale_ck", sql`${t.locale} is null or length(${t.locale}) > 0`),
+    check(
+      "persons_pending_email_ck",
+      sql`${t.pendingEmail} is null or length(${t.pendingEmail}) > 0`,
+    ),
   ],
 );

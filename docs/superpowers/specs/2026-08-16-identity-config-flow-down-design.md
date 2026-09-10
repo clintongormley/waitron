@@ -288,6 +288,10 @@ This is an **H1** change (no fiscal surface). The fiscal lane remains owner-revi
 
 ## 8. Security note — replicating credential material
 
+> **2026-09-10 update:** User-management enrollment now writes `totp_secret` as versioned
+> AES-256-GCM ciphertext and rotates it through the credential key ring at boot. The plaintext and
+> always-NULL statements below describe the system when this historical design was approved.
+
 Flowing credential material to a second box is a real exposure surface and is reasoned about
 explicitly here rather than waved through.
 
@@ -401,7 +405,8 @@ Re-checkable facts this design rests on:
 - **`persons`/`webauthn_credentials` carry FORCE RLS + tenant policy + grants** —
   `0001_identity_rls.sql`, `0008_silent_mauler.sql`; **no BEFORE triggers** on either
   (`grep CREATE TRIGGER packages/identity/drizzle/*.sql` → none).
-- **`totp_secret` is plaintext and currently unwritten** — `packages/identity/src/schema/persons.ts:42-50`.
+- **Historical as of 2026-08-16:** `totp_secret` was plaintext and unwritten. See the 2026-09-10
+  update at §8 for the encrypted writer and rotation behavior that superseded this assumption.
 - **Identity config is authored mainly in `management-api.ts`; its `cfg` lacks `nodeId`** —
   `apps/server/src/management-api.ts:52`; the writer call sites are `management-api.ts:312/365/368/371/394/416/564/612`.
   (**Correction, 2026-09-02:** the original "`me-api.ts` writes only workforce tables" was FALSE —

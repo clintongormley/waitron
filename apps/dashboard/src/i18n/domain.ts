@@ -26,8 +26,9 @@ const ROLE_NAMES: NameTable = {
 };
 
 const STATUS_NAMES: NameTable = {
+  pending: { en: "Pending", es: "Pendiente" },
   active: { en: "Active", es: "Activo" },
-  suspended: { en: "Suspended", es: "Suspendido" },
+  suspended: { en: "Inactive", es: "Inactivo" },
 };
 
 const VAT_CLASS_NAMES: NameTable = {
@@ -224,7 +225,7 @@ export function swapDirectionName(direction: string, locale: string = currentLoc
   return resolveNameTable(SWAP_DIRECTION_NAMES, direction, locale);
 }
 
-/** A person's account status (active / suspended) → its display name. */
+/** A person's account status (pending / active / inactive) → its display name. */
 export function statusName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(STATUS_NAMES, value, locale);
 }

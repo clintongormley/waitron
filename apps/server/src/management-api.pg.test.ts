@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -10,6 +10,7 @@ import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
+import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 
 // Real Postgres, not PGlite: these routes are the dashboard's management surface, and everything they
 // do runs `withTenant` + `asAppUser`, so every read and write is subject to app_user's grants.
@@ -37,6 +38,22 @@ let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
+}
+
+function invitationBody(
+  displayName: string,
+  email: unknown,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    displayName,
+    firstNames: displayName,
+    lastNames: "Test",
+    telephone: null,
+    role: "staff",
+    email,
+    ...overrides,
+  };
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
@@ -90,7 +107,14 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
   return { tenantId: venue.tenantId, managerId, staffId };
 }
 
-function mountApp(tenantId: string, sendAccountEmail?: AccountEmailSender): Hono {
+function mountApp(
+  tenantId: string,
+  sendAccountEmail?: AccountEmailSender,
+  passwordThrottle?: PasswordThrottle,
+  google?: {
+    exchange: ReturnType<typeof vi.fn>;
+  },
+): Hono {
   const app = new Hono();
   // `secureCookies: false` so the session cookie rides the non-TLS `app.request` (mirrors
   // `till-api.pg.test.ts`'s `apiDeps`). `deps.db` is the owner connection; the routes drop to
@@ -107,6 +131,17 @@ function mountApp(tenantId: string, sendAccountEmail?: AccountEmailSender): Hono
       rpId: "localhost",
       origin: "http://localhost",
       sendAccountEmail,
+      passwordThrottle,
+      ...(google === undefined
+        ? {}
+        : {
+            googleOidc: {
+              clientId: "client.apps.googleusercontent.com",
+              clientSecret: "secret",
+              redirectUri: "http://localhost/management-api/google/callback",
+            },
+            googleCodeExchange: google.exchange,
+          }),
     },
     noopLog,
   );
@@ -140,6 +175,145 @@ async function countPersonsNamed(tenantId: string, displayName: string): Promise
 }
 
 describe("Management API staff + session routes over real Postgres", () => {
+  it("lets only one concurrent invitation claim a live display name", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+    const responses = await Promise.all([
+      app.request("/management-api/staff", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(invitationBody("Same till name", "first-same@example.test")),
+      }),
+      app.request("/management-api/staff", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(invitationBody(" same till name ", "second-same@example.test")),
+      }),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+    const matching = await suite.admin.execute<{ count: number }>(sql`
+      select count(*)::int as count from persons
+      where tenant_id=${tenantId} and lower(display_name)='same till name'`);
+    expect(matching.rows[0]!.count).toBe(1);
+  });
+
+  it("preserves one active admin when two admins concurrently demote themselves", async () => {
+    const { tenantId, managerId } = await setupTenant();
+    await suite.admin.execute(sql`update persons set role='admin' where id=${managerId}`);
+    const app = mountApp(tenantId);
+    const ownerCookie = await login(app, "owner@example.test", "dashPass123");
+    const managerCookie = await login(app, MANAGER_EMAIL);
+    const owner = await suite.admin.execute<{ id: string }>(
+      sql`select id from persons where tenant_id=${tenantId} and email='owner@example.test'`,
+    );
+    const edit = (id: string, cookie: string, displayName: string, email: string) =>
+      app.request(`/management-api/staff/${id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          displayName,
+          firstNames: displayName,
+          lastNames: "Admin",
+          telephone: null,
+          email,
+          role: "staff",
+          status: "active",
+        }),
+      });
+    const responses = await Promise.all([
+      edit(owner.rows[0]!.id, ownerCookie, "Administradora", "owner@example.test"),
+      edit(managerId, managerCookie, "The Manager", MANAGER_EMAIL),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
+    const remaining = await suite.admin.execute<{ count: number }>(sql`
+      select count(*)::int as count from persons
+      where tenant_id=${tenantId} and role='admin' and status='active'`);
+    expect(remaining.rows[0]!.count).toBe(1);
+  });
+  it("links and then signs in with a configured Google account", async () => {
+    const { tenantId } = await setupTenant();
+    const exchange = vi.fn().mockResolvedValue({ subject: "google-subject-1" });
+    const app = mountApp(tenantId, undefined, undefined, {
+      exchange,
+    });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const startLink = await app.request("/management-api/session/me/google", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: PASSWORD }),
+    });
+    expect(startLink.status).toBe(200);
+    const linkUrl = new URL(
+      ((await startLink.json()) as { authorizationUrl: string }).authorizationUrl,
+    );
+    const linked = await app.request(
+      `/management-api/google/callback?state=${encodeURIComponent(linkUrl.searchParams.get("state")!)}&code=link-code`,
+      { headers: { cookie: startLink.headers.get("set-cookie")!.split(";")[0]! } },
+    );
+    expect(linked.status).toBe(302);
+    expect(linked.headers.get("location")).toBe("http://localhost/manage/profile?google=linked");
+
+    const startLogin = await app.request("/management-api/google/login", { method: "POST" });
+    const loginUrl = new URL(
+      ((await startLogin.json()) as { authorizationUrl: string }).authorizationUrl,
+    );
+    const signedIn = await app.request(
+      `/management-api/google/callback?state=${encodeURIComponent(loginUrl.searchParams.get("state")!)}&code=login-code`,
+      { headers: { cookie: startLogin.headers.get("set-cookie")!.split(";")[0]! } },
+    );
+    expect(signedIn.status).toBe(302);
+    expect(signedIn.headers.get("set-cookie")).toContain("waitron_management_session=");
+    expect(exchange).toHaveBeenCalledTimes(2);
+    expect(exchange.mock.calls[0]![1]).toMatchObject({
+      code: "link-code",
+      nonce: expect.any(String),
+      verifier: expect.any(String),
+    });
+  });
+
+  it("refuses a Google callback that did not start in the same browser", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId, undefined, undefined, {
+      exchange: vi.fn().mockResolvedValue({ subject: "google-subject" }),
+    });
+    const started = await app.request("/management-api/google/login", { method: "POST" });
+    const url = new URL(((await started.json()) as { authorizationUrl: string }).authorizationUrl);
+    const callback = await app.request(
+      `/management-api/google/callback?state=${encodeURIComponent(url.searchParams.get("state")!)}&code=code`,
+    );
+    expect(callback.status).toBe(401);
+    expect(await callback.json()).toEqual({ error: { code: "google.invalid", params: {} } });
+  });
+
+  it("backs off identically for wrong passwords and unknown emails, then clears after success", async () => {
+    const { tenantId } = await setupTenant();
+    let now = 0;
+    const app = mountApp(
+      tenantId,
+      undefined,
+      createPasswordThrottle(() => now),
+    );
+    const attempt = (email: string, password = "wrong") =>
+      app.request("/management-api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+    for (const email of [MANAGER_EMAIL, "unknown@example.com"]) {
+      for (let i = 0; i < 4; i++) expect((await attempt(email)).status).toBe(401);
+      const blocked = await attempt(` ${email.toUpperCase()} `);
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get("set-cookie")).toBeNull();
+      expect(await blocked.json()).toEqual({
+        error: { code: "password.throttled", params: { retryAfterSeconds: 2 } },
+      });
+    }
+    now = 2000;
+    expect((await attempt(MANAGER_EMAIL, PASSWORD)).status).toBe(200);
+    for (let i = 0; i < 4; i++) expect((await attempt(MANAGER_EMAIL)).status).toBe(401);
+    expect((await attempt(MANAGER_EMAIL)).status).toBe(429);
+  });
   // ── The four required core assertions (task-6 brief) ───────────────────────────────────────────
 
   it("login → list → create → verify persistence", async () => {
@@ -166,12 +340,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     const created = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        displayName: "Ada",
-        role: "staff",
-        pin: "4321",
-        email: "ada@x.com",
-      }),
+      body: JSON.stringify(invitationBody("Ada", "ada@x.com")),
     });
     expect(created.status).toBe(201);
     expect((await created.json()) as { id: string }).toHaveProperty("id");
@@ -219,12 +388,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     const res = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        displayName: "Nope",
-        role: "staff",
-        pin: "4321",
-        email: "nope@x.com",
-      }),
+      body: JSON.stringify(invitationBody("Nope", "nope@x.com")),
     });
     expect(res.status).toBe(403);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -281,115 +445,6 @@ describe("Management API staff + session routes over real Postgres", () => {
     }
   });
 
-  it("updates a person's role and status via PATCH", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    // Promote the staff person to supervisor and suspend them.
-    const patched = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ role: "supervisor", status: "suspended" }),
-    });
-    expect(patched.status).toBe(204);
-
-    // Re-read as the app role: both fields changed as app_user.
-    const row = await withTenant(suite.admin, tenantId, async (tx) => {
-      await asAppUser(tx);
-      const r = await tx.execute<{ role: string; status: string }>(
-        sql`select role, status from persons where id = ${staffId}`,
-      );
-      return r.rows[0]!;
-    });
-    expect(row).toMatchObject({ role: "supervisor", status: "suspended" });
-
-    // Reactivate them again (the `status === "active"` branch).
-    const reactivated = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ status: "active" }),
-    });
-    expect(reactivated.status).toBe(204);
-
-    // A non-UUID id names no row: person.not_found (404), not a request-shape error.
-    const badId = await app.request("/management-api/staff/not-a-uuid", {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ role: "manager" }),
-    });
-    expect(badId.status).toBe(404);
-    expect((await badId.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "person.not_found" },
-    });
-  });
-
-  it("PATCH with a non-string role → 400 management.request_invalid, person unchanged", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const readRow = async () =>
-      withTenant(suite.admin, tenantId, async (tx) => {
-        await asAppUser(tx);
-        const r = await tx.execute<{ role: string; status: string }>(
-          sql`select role, status from persons where id = ${staffId}`,
-        );
-        return r.rows[0]!;
-      });
-
-    // The typeof screen refuses a PRESENT-but-non-string `role` before any DB work, so it never
-    // reaches `setRole` → the `person_role` pgEnum (a `22P02` → opaque 500). The staff person starts
-    // at the schema defaults; the row must be untouched.
-    const before = await readRow();
-    expect(before).toMatchObject({ role: "staff", status: "active" });
-
-    const res = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ role: 123 }),
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "role" } } });
-    // No write happened: the role is still 'staff'.
-    expect(await readRow()).toEqual(before);
-  });
-
-  it("PATCH with a non-string status → 400 management.request_invalid, person unchanged", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const readRow = async () =>
-      withTenant(suite.admin, tenantId, async (tx) => {
-        await asAppUser(tx);
-        const r = await tx.execute<{ role: string; status: string }>(
-          sql`select role, status from persons where id = ${staffId}`,
-        );
-        return r.rows[0]!;
-      });
-
-    // A non-string `status` would otherwise silently no-op (matching neither the suspend nor the
-    // reactivate branch); the typeof screen turns it into an explicit 400 naming the field.
-    const before = await readRow();
-    expect(before).toMatchObject({ role: "staff", status: "active" });
-
-    const res = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ status: 123 }),
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "status" } } });
-    expect(await readRow()).toEqual(before);
-  });
-
-  // ── Email (dashboard sign-in identifier) on create + edit + listing (Task 6) ────────────────────
-
   it("requires an email when creating a person", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
@@ -397,7 +452,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     const res = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ displayName: "No email", role: "staff", pin: "1234" }),
+      body: JSON.stringify(invitationBody("No email", undefined)),
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { params: { field: string } } }).toMatchObject({
@@ -416,12 +471,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     const res = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        displayName: "Invited",
-        role: "staff",
-        pin: "1234",
-        email: "invited@x.com",
-      }),
+      body: JSON.stringify(invitationBody("Invited", "invited@x.com")),
     });
     expect(res.status).toBe(201);
     expect(await res.json()).toMatchObject({ invitationSent: true });
@@ -461,6 +511,13 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(requested.status).toBe(202);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.purpose).toBe("password_reset");
+    const repeated = await app.request("/management-api/password-reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: `  ${STAFF_EMAIL.toUpperCase()}  ` }),
+    });
+    expect(repeated.status).toBe(202);
+    expect(sent).toHaveLength(1);
     const token = new URL(sent[0]!.actionUrl).searchParams.get("token")!;
     const purpose = new URL(sent[0]!.actionUrl).searchParams.get("purpose")!;
 
@@ -470,8 +527,8 @@ describe("Management API staff + session routes over real Postgres", () => {
       body: JSON.stringify({ token, purpose, password: "a replacement password" }),
     });
     expect(completed.status).toBe(200);
-    expect(await completed.json()).toEqual({ personId: staffId });
-    expect(completed.headers.get("set-cookie")).toMatch(/^waitron_management_session=/);
+    expect(await completed.json()).toEqual({ personId: staffId, authenticated: false });
+    expect(completed.headers.get("set-cookie")).toContain("waitron_management_session=; Max-Age=0");
     await expect(login(app, STAFF_EMAIL, "a replacement password")).resolves.toMatch(
       /^waitron_management_session=/,
     );
@@ -485,12 +542,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     const created = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        displayName: "Owner",
-        role: "manager",
-        pin: "1234",
-        email: "owner@x.com",
-      }),
+      body: JSON.stringify(invitationBody("Owner", "owner@x.com", { role: "manager" })),
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
@@ -501,21 +553,28 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(people.find((p) => p.personId === id)?.email).toBe("owner@x.com");
   });
 
-  it("PATCH sets a person's email", async () => {
+  it("PUT saves a complete administrative edit atomically", async () => {
     const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
     const cookie = await login(app, MANAGER_EMAIL);
-
-    const res = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
+    const details = {
+      displayName: "Grace",
+      firstNames: "Grace Brewster",
+      lastNames: "Hopper",
+      telephone: "+1 222",
+      email: "grace@example.com",
+      role: "supervisor",
+      status: "active",
+    };
+    const saved = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ email: "newclerk@x.com" }),
+      body: JSON.stringify(details),
     });
-    expect(res.status).toBe(204);
-
+    expect(saved.status).toBe(204);
     const listed = await app.request("/management-api/staff", { headers: { cookie } });
-    const people = (await listed.json()) as { personId: string; email: string | null }[];
-    expect(people.find((p) => p.personId === staffId)?.email).toBe("newclerk@x.com");
+    const people = (await listed.json()) as ({ personId: string } & typeof details)[];
+    expect(people.find((person) => person.personId === staffId)).toMatchObject(details);
   });
 
   it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
@@ -528,34 +587,13 @@ describe("Management API staff + session routes over real Postgres", () => {
     const res = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        displayName: "Dup",
-        role: "staff",
-        pin: "1234",
-        email: MANAGER_EMAIL,
-      }),
+      body: JSON.stringify(invitationBody("Dup", MANAGER_EMAIL)),
     });
     expect(res.status).toBe(409);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "person.email_taken" },
     });
     expect(await countPersonsNamed(tenantId, "Dup")).toBe(0);
-  });
-
-  it("PATCH to a duplicate email → 409 person.email_taken", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const res = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ email: MANAGER_EMAIL }),
-    });
-    expect(res.status).toBe(409);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "person.email_taken" },
-    });
   });
 
   it("create with a malformed email → 400 person.email_invalid, no row lands", async () => {
@@ -566,12 +604,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     const res = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        displayName: "Bad",
-        role: "staff",
-        pin: "1234",
-        email: "not-an-email",
-      }),
+      body: JSON.stringify(invitationBody("Bad", "not-an-email")),
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -580,78 +613,69 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(await countPersonsNamed(tenantId, "Bad")).toBe(0);
   });
 
-  it("PATCH with a malformed email → 400 person.email_invalid", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const res = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ email: "nope" }),
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "person.email_invalid" },
-    });
-  });
-
-  it("create/PATCH with a non-string email → 400 management.request_invalid (field email)", async () => {
+  it("create with a non-string email → 400 management.request_invalid (field email)", async () => {
     // A PRESENT-but-non-string email is refused by the route's typeof screen naming the FIELD (never
     // the value), the same shape as the sibling create/PATCH field screens — it never reaches identity.
-    const { tenantId, staffId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
     const cookie = await login(app, MANAGER_EMAIL);
 
     const badCreate = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ displayName: "Nope", role: "staff", pin: "1234", email: 123 }),
+      body: JSON.stringify(invitationBody("Nope", 123)),
     });
     expect(badCreate.status).toBe(400);
     expect(
       (await badCreate.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "email" } } });
     expect(await countPersonsNamed(tenantId, "Nope")).toBe(0);
-
-    const badPatch = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ email: 123 }),
-    });
-    expect(badPatch.status).toBe(400);
-    expect(
-      (await badPatch.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "email" } } });
   });
 
-  it("resets a PIN and sets a password, then the new password logs in", async () => {
+  it("resets a PIN without allowing the administrator to choose its replacement", async () => {
     const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
     const cookie = await login(app, MANAGER_EMAIL);
 
     const resetPin = await app.request(`/management-api/staff/${staffId}/reset-pin`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ pin: "9876" }),
+      headers: { cookie },
     });
     expect(resetPin.status).toBe(204);
+    const row = await suite.admin.execute<{ pin_hash: string | null }>(
+      sql`select pin_hash from persons where tenant_id = ${tenantId} and id = ${staffId}`,
+    );
+    expect(row.rows[0]!.pin_hash).toBeNull();
+  });
 
-    const NEW_PASSWORD = "a different password";
-    const setPw = await app.request(`/management-api/staff/${staffId}/password`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ password: NEW_PASSWORD }),
+  it("reset login clears credentials, moves the user to Pending, and sends a new invitation", async () => {
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId, async (message) => {
+      sent.push(message);
     });
-    expect(setPw.status).toBe(204);
-
-    // Prove the password actually landed: the staff person logs in with the NEW password.
-    const relogin = await app.request("/management-api/session", {
+    const cookie = await login(app, MANAGER_EMAIL);
+    const reset = await app.request(`/management-api/staff/${staffId}/reset-login`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: STAFF_EMAIL, password: NEW_PASSWORD }),
+      headers: { cookie },
     });
-    expect(relogin.status).toBe(200);
+    expect(reset.status).toBe(200);
+    expect(await reset.json()).toEqual({ invitationSent: true });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ purpose: "invitation", email: STAFF_EMAIL });
+    const row = await suite.admin.execute<{
+      status: string;
+      pin_hash: string | null;
+      password_hash: string | null;
+    }>(sql`select status, pin_hash, password_hash from persons
+           where tenant_id = ${tenantId} and id = ${staffId}`);
+    expect(row.rows[0]).toEqual({ status: "pending", pin_hash: null, password_hash: null });
+    const repeated = await app.request(`/management-api/staff/${staffId}/reset-login`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(await repeated.json()).toEqual({ invitationSent: false });
+    expect(sent).toHaveLength(1);
   });
 
   it("screens malformed bodies and ids on the gated write routes", async () => {
@@ -670,21 +694,13 @@ describe("Management API staff + session routes over real Postgres", () => {
       error: { code: "management.request_invalid" },
     });
 
-    // reset-pin with a non-string pin → management.request_invalid (400).
-    const badPin = await app.request(`/management-api/staff/${staffId}/reset-pin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ pin: 9876 }),
-    });
-    expect(badPin.status).toBe(400);
-
-    // password with a non-string password → management.request_invalid (400).
+    // The retired direct-password route remains unavailable.
     const badPw = await app.request(`/management-api/staff/${staffId}/password`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ password: null }),
     });
-    expect(badPw.status).toBe(400);
+    expect(badPw.status).toBe(404);
 
     // Non-UUID id on the credential routes → person.not_found (404), screened before any DB work.
     const resetBadId = await app.request("/management-api/staff/not-a-uuid/reset-pin", {
@@ -779,7 +795,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     });
   });
 
-  it("reset-pin and password with a null JSON body → 400 each", async () => {
+  it("reset-pin accepts no body while the retired password route remains unavailable", async () => {
     const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
     const cookie = await login(app, MANAGER_EMAIL);
@@ -789,49 +805,14 @@ describe("Management API staff + session routes over real Postgres", () => {
       headers: { "content-type": "application/json", cookie },
       body: "null",
     });
-    expect(resetPin.status).toBe(400);
-    expect((await resetPin.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "management.request_invalid" },
-    });
+    expect(resetPin.status).toBe(204);
 
     const setPw = await app.request(`/management-api/staff/${staffId}/password`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: "null",
     });
-    expect(setPw.status).toBe(400);
-    expect((await setPw.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "management.request_invalid" },
-    });
-  });
-
-  it("PATCH with a null JSON body → 204 no-op, person unchanged", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const readRow = async () =>
-      withTenant(suite.admin, tenantId, async (tx) => {
-        await asAppUser(tx);
-        const r = await tx.execute<{ role: string; status: string }>(
-          sql`select role, status from persons where id = ${staffId}`,
-        );
-        return r.rows[0]!;
-      });
-
-    // The seeded staff person starts at the schema defaults (role 'staff', status 'active').
-    const before = await readRow();
-    expect(before).toMatchObject({ role: "staff", status: "active" });
-
-    const res = await app.request(`/management-api/staff/${staffId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", cookie },
-      body: "null",
-    });
-    // A null body is coerced to `{}`, so both `role` and `status` are undefined: nothing is written
-    // and the route answers the empty-body 204 — never a 400 and never a 500.
-    expect(res.status).toBe(204);
-    expect(await readRow()).toEqual(before);
+    expect(setPw.status).toBe(404);
   });
 
   it("maps an unparseable request body to the route's own 4xx (guarded parse, never a 500)", async () => {
@@ -868,13 +849,13 @@ describe("Management API staff + session routes over real Postgres", () => {
       error: { code: "management.request_invalid" },
     });
 
-    // A PATCH carries no field to change from a `{}` body → the empty-body 204 no-op.
+    // The retired partial-edit route stays unavailable.
     const patch = await app.request(`/management-api/staff/${staffId}`, {
       method: "PATCH",
       headers: { ...malformedHeaders, cookie },
       body: "{ not json",
     });
-    expect(patch.status).toBe(204);
+    expect(patch.status).toBe(404);
   });
 });
 

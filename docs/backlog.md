@@ -23,6 +23,15 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 - **[superpowers/specs/2026-07-18-pos-architecture-design.md](superpowers/specs/2026-07-18-pos-architecture-design.md)
   §2** — the twenty numbered sub-projects (the strategy; changes rarely).
 
+**User management has its core operator slice** (owner walkthrough, 2026-09-09):
+the reusable table, searchable/filterable admin list, invitation setup, account lifecycle controls,
+self-service profile, verified email changes, authenticator/recovery codes, Google login, password
+backoff, login/recovery polish and automatic return to login at session expiry are implemented under
+the [account setup and user management plan](superpowers/plans/2026-09-09-user-management-and-account-setup.md).
+Still open: named passkeys and passkey-based reauthentication for an account with no password; an
+operator screen that stores Google provider credentials in the vault. Turnstile and SMS verification
+belong to the later optional cloud/remote offering.
+
 **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
 bypass, so a docs-only change is pushed straight to `main` — no PR, no CI wait. Branch, `commit -s`,
 fast-forward `main`, push. Feature/code still goes through a PR.
@@ -904,7 +913,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations (Debt); cert distribution to a promoted node (Track B item 3) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
-| 5 | Identity | persons/sessions, PIN (+ per-device throttle #269), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets (#294); `persons` + `webauthn_credentials` are `state` (replicate to a standby) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (a hard dep of the TOTP-enrollment slice — the column replicates) |
+| 5 | Identity | persons/sessions, PIN (+ per-device throttle #269), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets (#294), encrypted TOTP enrollment and recovery codes; identity state replicates to a standby | mid-shift-suspension enforce, discount gate, till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home (#167) | fiscal filing remainder parked |
@@ -1417,7 +1426,23 @@ genuinely-decision-bearing.
   password-reset email; the [account design](superpowers/specs/2026-09-08-dashboard-account-activation-design.md)
   defers automatic delivery retries and forbids storing raw bearer tokens in a plain queue. Track 1:
   scope routine passwordless email login and SMS before adding either; the shipped email flow is
-  activation/recovery. TOTP enrolment still requires the at-rest encryption listed below.
+  activation/recovery. Verify replacement email addresses before switching the login address; the
+  current profile flow marks a changed address unverified but applies it immediately. The
+  deployment-configured privacy-notice link now appears in invitations, account setup and Your
+  profile; the restaurant still owns the notice content and contact. Add passkey-backed
+  reauthentication and names/removal for passkeys on passwordless accounts before treating profile
+  login-method management as complete for passwordless-only users.
+- **Remote-access bot protection (owner, 2026-09-09).** Add Cloudflare Turnstile as part of the
+  optional remote-access offering. Protect internet-facing login and recovery, validate tokens on
+  the server, and preserve restaurant-local login during internet outages. Do not infer trusted
+  local access from caller-controlled headers. No Turnstile integration in the local-only product;
+  remote hostnames and credentials are deployment work for that offering.
+- **Permission-based dashboard navigation (owner, 2026-09-09).** Module navigation already filters
+  by `me.permissions`, but built-in `NAV_GROUPS` in `apps/dashboard/src/dashboard-app.ts` mostly
+  use role checks. The browser test "hides the diagnostics nav from a supervisor and shows it to a
+  manager" also asserts that the supervisor sees Devices. Map every built-in destination to its
+  server permission, hide unavailable items and empty groups, and use the same rule for direct URLs
+  and the initial landing screen. Keep Your profile available to every signed-in person.
 - **Dashboard-wide location context.** The dashboard can manage several locations, but location choice
   currently lives inside individual screens: menus, roster and planned-vs-actual each mount their own
   `dashboard-location-picker`. Add one persistent location dropdown to the authenticated dashboard
@@ -1472,10 +1497,6 @@ genuinely-decision-bearing.
   validation tracing before adopting the helper. The till **PIN-login** (`POST /api/session`) is the twin
   of the management login #145 hardened (a `null`/malformed body → opaque 500 instead of a clean 401).
   `setup-api` uses a different-contract defensive form and is correctly left as-is.
-- **Encrypt `totp_secret` at rest** (SP5). Stored plaintext today and `app_user` holds SELECT on
-  `persons`, so a `persons` leak exposes every enrolled second factor. Latent (nothing writes it yet).
-  The enrollment slice must encrypt via the credentials vault (AES-256-GCM), decrypting on the box before
-  `verifyTotp` (keeps the offline-verifiable property).
 - **Location-scope the by-id verb family together** (SP6). `getHeldOrder`/`updateHeldOrder`/
   `abandonHeldOrder` and `updateTable`/`deactivateTable`/`openTab` address by tenant + id; only
   *list* verbs scope by location. Unreachable today (single-location tenants); when multi-location lands,

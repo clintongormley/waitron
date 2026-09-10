@@ -15,6 +15,7 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
     /** The local capture inbox was requested while email uses SMTP or is not configured. */

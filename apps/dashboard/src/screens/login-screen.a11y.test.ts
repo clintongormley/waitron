@@ -6,8 +6,9 @@ import type { DashboardApi } from "../api/client.js";
 
 /**
  * Mounts the screen with an `api` STUB assigned as a property, never from bare markup. The screen
- * fetches nothing on connect (email login has no pre-login roster), but the language chooser reads
- * `getLocales` when opened and the passkey button would call `passkeyAuthOptions`, so the stub
+ * fetches only the public Google configuration on connect (email login has no pre-login roster).
+ * The language chooser reads `getLocales` when opened and the passkey button would call
+ * `passkeyAuthOptions`, so the stub
  * carries the whole surface the screen may touch. Mounted via `mountWidget`'s property assignment,
  * mirroring `till-lock-screen.a11y.test.ts`.
  */
@@ -17,6 +18,7 @@ function stubApi(): DashboardApi {
     getLocales: vi
       .fn()
       .mockResolvedValue({ locales: [{ code: "en-GB", label: "English" }], venueDefault: "es-ES" }),
+    getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
   } as unknown as DashboardApi;
 }
 

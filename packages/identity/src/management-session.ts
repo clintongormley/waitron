@@ -37,16 +37,25 @@ export async function startManagementSession(
 
 /**
  * Resolve a live session to its person + role, or throw. Missing/ended → `management_session.required`;
- * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`.
+ * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`;
+ * a pending person → `management_session.required`.
  * On success it bumps `last_seen_at` (the sliding window) and returns the person's current role plus
  * their stored UI `locale` (`persons.locale`, `null` when they have set no preference).
  */
 export async function resolveManagementSession(
   tx: Transaction,
   sessionId: string,
-): Promise<{ personId: string; role: PersonRoleValue; locale: string | null }> {
+  options: { touch?: boolean } = {},
+): Promise<{
+  tenantId: string;
+  personId: string;
+  role: PersonRoleValue;
+  locale: string | null;
+  expiresAt: string;
+}> {
   const [row] = await tx
     .select({
+      tenantId: managementSessions.tenantId,
       personId: managementSessions.personId,
       lastSeenAt: managementSessions.lastSeenAt,
       role: persons.role,
@@ -63,11 +72,22 @@ export async function resolveManagementSession(
   if (row.status === "suspended") {
     throw new AppError("person.suspended", { personId: row.personId });
   }
-  await tx
-    .update(managementSessions)
-    .set({ lastSeenAt: sql`now()` })
-    .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
-  return { personId: row.personId, role: row.role as PersonRoleValue, locale: row.locale };
+  if (row.status !== "active") throw new AppError("management_session.required", {});
+  if (options.touch !== false) {
+    await tx
+      .update(managementSessions)
+      .set({ lastSeenAt: sql`now()` })
+      .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
+  }
+  return {
+    tenantId: row.tenantId,
+    personId: row.personId,
+    role: row.role as PersonRoleValue,
+    locale: row.locale,
+    expiresAt: new Date(
+      (options.touch === false ? Date.parse(row.lastSeenAt) : Date.now()) + IDLE_TIMEOUT_MS,
+    ).toISOString(),
+  };
 }
 
 /** Stamp `ended_at` on a live session. Returns true if one was ended, false if none was live. */
