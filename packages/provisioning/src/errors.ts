@@ -360,6 +360,32 @@ declare module "@waitron/shared" {
      * operator-typed configuration and `owner` is a role NAME read from the catalog — neither is a
      * secret. */
     "provisioning.database_not_owned": { database: string; owner: string | null };
+    /**
+     * This deployment's database carries a migration the installed image has no file for — it was
+     * migrated by a NEWER or DIFFERENT image. Detected explicitly, because drizzle cannot: it
+     * compares only `max(created_at)` against each shipped migration's `when`
+     * (`drizzle-orm@0.45.2/pg-core/dialect.js:56-62`) and never a hash, so it applies nothing,
+     * throws nothing, and the mismatch surfaces later as an unclassified driver error in whatever
+     * query first touches the changed schema. Measured with a control, 2026-09-10.
+     *
+     * `unknownMigrations` carries drizzle's own sha256 digests of migration FILES — public build
+     * artefacts of this repository, not secrets — and they are what an installer greps for to find
+     * which image did it. The operator never sees them: the recovery page renders fixed text keyed
+     * on the code alone.
+     *
+     * There is no backward migration by decision (CLAUDE.md §3), so the action is restore or
+     * reinstall, never an automatic repair.
+     */
+    "provisioning.database_ahead": { set: string; unknownMigrations: string[] };
+    /**
+     * A driver failure whose SQLSTATE says the database does not carry the schema this image
+     * expects — an undefined table, column or object, or an enum label the image does not have.
+     * Produced by `classifyBootFailure` (`apps/server/src/boot-failure.ts`) as a CLASSIFICATION of
+     * an already-thrown driver error, so nothing constructs it with params today; `sqlState` is
+     * declared because it is the one fact a future thrower would carry, and the params of a shipped
+     * code cannot be widened later without changing a contract.
+     */
+    "provisioning.schema_mismatch": { sqlState: string };
     /** The instance is not set up for native logical replication. `missing` lists each unmet
      * precondition in words (`wal_level is not logical`, `replication role missing`,
      * `migrator lacks pg_create_subscription`, …) — the box image / operator runs the bootstrap

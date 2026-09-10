@@ -41,4 +41,6 @@ export {
   readTenantIdentities,
 } from "./tenant-guard.js";
 export type { TenantIdentity } from "./tenant-guard.js";
+export { assertNotAhead, findAheadSets, unknownHashes } from "./schema-ahead.js";
+export type { AheadSet } from "./schema-ahead.js";
 import "./errors.js";
