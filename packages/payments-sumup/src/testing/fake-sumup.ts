@@ -15,6 +15,10 @@ interface Held {
   foreignTransactionId: string;
   status: SumUpTransaction["status"];
   amount: Decimal;
+  /** When set, the FIRST `findTransaction` that locates this checkout rewrites its status to this
+   * value, then clears the field — models a checkout that resolves the moment the adapter first
+   * polls it (`resolveOnFirstFind`). */
+  onFirstFind?: SumUpTransaction["status"];
 }
 
 /** A deterministic in-memory `SumUpClient`. NOT barrel-exported. Test controls shape the NEXT
@@ -23,8 +27,9 @@ interface Held {
  * rejects the create with a 4xx), `throwOnCreateNext` (network error on create),
  * `throwOnFindNext` (network error mid-poll), `invisibleUntilSettled` (the transaction is not
  * findable — 404 — until it resolves; models a reader that has not started the checkout),
- * `refundRefusesNext`; `setStatus(clientTransactionId, status)` writes any status, including
- * `REFUNDED` or an unknown one, for the sweep tests. */
+ * `refundRefusesNext`; `resolveOnFirstFind(status)` gives the next checkout `status` the first time
+ * it is polled (a resolution that lands mid-collect); `setStatus(clientTransactionId, status)`
+ * writes any status, including `REFUNDED` or an unknown one, for the sweep tests. */
 export class FakeSumUp implements SumUpClient {
   lastCreate: Parameters<SumUpClient["createCheckout"]>[0] | undefined;
   lastRefund: { transactionId: string; amount?: Decimal } | undefined;
@@ -34,6 +39,7 @@ export class FakeSumUp implements SumUpClient {
   private nextFindThrows = false;
   private nextRefundRefuses = false;
   private hideUntilSettled = false;
+  private nextResolveOnFirstFind: SumUpTransaction["status"] | undefined;
   private readonly held: Held[] = [];
 
   declineNext(): void {
@@ -59,6 +65,11 @@ export class FakeSumUp implements SumUpClient {
   }
   refundRefusesNext(): void {
     this.nextRefundRefuses = true;
+  }
+  /** The next checkout created is given `status` the first time it is looked up — the sweep tests'
+   * "resolved mid-collect" control (e.g. a `REFUNDED` the adapter must not treat as a T2 basis). */
+  resolveOnFirstFind(status: SumUpTransaction["status"]): void {
+    this.nextResolveOnFirstFind = status;
   }
 
   /** Resolve a stalled checkout by its client transaction id. */
@@ -104,8 +115,12 @@ export class FakeSumUp implements SumUpClient {
       foreignTransactionId: params.foreignTransactionId,
       status: this.next,
       amount: params.amount,
+      ...(this.nextResolveOnFirstFind === undefined
+        ? {}
+        : { onFirstFind: this.nextResolveOnFirstFind }),
     });
     this.next = "SUCCESSFUL";
+    this.nextResolveOnFirstFind = undefined;
     return Promise.resolve({ accepted: true, checkoutId: nextId("chk"), clientTransactionId });
   }
 
@@ -122,6 +137,10 @@ export class FakeSumUp implements SumUpClient {
           : x.id === query.id,
     );
     if (h === undefined) return Promise.resolve(null);
+    if (h.onFirstFind !== undefined) {
+      h.status = h.onFirstFind;
+      h.onFirstFind = undefined;
+    }
     if (this.hideUntilSettled && h.status === "PENDING") return Promise.resolve(null);
     return Promise.resolve({ id: h.id, status: h.status, amount: h.amount });
   }

@@ -158,6 +158,26 @@ describe("FakeSumUp", () => {
     ).toBe("SOME_FUTURE_STATUS");
   });
 
+  it("resolveOnFirstFind gives the next checkout its status the first time it is looked up", async () => {
+    const fake = new FakeSumUp();
+    fake.resolveOnFirstFind("REFUNDED");
+    const outcome = await fake.createCheckout(createParams);
+    if (!outcome.accepted) throw new Error("expected accepted");
+    // First look-up rewrites the status; it stays rewritten on subsequent look-ups.
+    expect(
+      (await fake.findTransaction({ clientTransactionId: outcome.clientTransactionId }))?.status,
+    ).toBe("REFUNDED");
+    expect(
+      (await fake.findTransaction({ clientTransactionId: outcome.clientTransactionId }))?.status,
+    ).toBe("REFUNDED");
+    // One-shot: the following checkout is unaffected and resolves SUCCESSFUL as usual.
+    const next = await fake.createCheckout(createParams);
+    if (!next.accepted) throw new Error("expected accepted");
+    expect(
+      (await fake.findTransaction({ clientTransactionId: next.clientTransactionId }))?.status,
+    ).toBe("SUCCESSFUL");
+  });
+
   it("setStatus throws for an unknown clientTransactionId", () => {
     const fake = new FakeSumUp();
     expect(() => fake.setStatus("ctx_missing", "SUCCESSFUL")).toThrow(
