@@ -24,4 +24,12 @@ describe("SumUp amount conversions (the only place money becomes a number)", () 
   it("fromMajorUnits: a negative major-units number keeps its sign", () => {
     expect(fromMajorUnits(-10.5)).toBe(decimal("-10.50"));
   });
+  // toMajorUnits is the outbound refund amount; fromMajorUnits parses what SumUp reports back. For a
+  // scale-2 value the pair must round-trip exactly, or a refund we send and a refund SumUp echoes
+  // would disagree on cents.
+  it("toMajorUnits ∘ fromMajorUnits round-trips a scale-2 value exactly", () => {
+    for (const s of ["0.01", "0.40", "5.00", "10.50", "1234.99"]) {
+      expect(fromMajorUnits(toMajorUnits(decimal(s)))).toBe(decimal(s));
+    }
+  });
 });

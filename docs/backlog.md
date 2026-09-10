@@ -325,9 +325,9 @@ design-review section apply.
   un-onboarded (no tenant/deployment yet); onboard it, then approve the agent, register the USB printer,
   and print a real job.
   **4.** SumUp — **IN BUILD** (`feat/payments-sumup`, plan `2026-09-10-payments-sumup.md`); the
-  runbook's
+  runbook's experiments
   ([research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md))
-  experiments run through it on 2026-09-11. The manual receipt for 1 is the owner's HP
+  run through the build on 2026-09-11. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
 - **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
   `packages/sync`, `packages/membership`, `packages/db`'s harness, `apps/server`'s promote / rejoin /

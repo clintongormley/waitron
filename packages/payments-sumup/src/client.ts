@@ -59,9 +59,10 @@ export function toMinorUnits(amount: Decimal): number {
   return Number(toScale(amount, 2).replace(".", ""));
 }
 
-/** Major units as a number — the refund body's `amount` (SumUp's documented example is `5`, major
- * units). A float, unavoidably; built from the scale-2 string so it is the nearest double to the
- * exact value, and used only in an outbound request body. */
+/** Major units as a number — the refund body's `amount` (the documented example is `{"amount": 5}`,
+ * major units — docs/research/2026-09-10-sumup-solo-experiments.md, Provenance / experiment 4). A
+ * float, unavoidably; built from the scale-2 string so it is the nearest double to the exact value,
+ * and used only in an outbound request body. */
 export function toMajorUnits(amount: Decimal): number {
   return Number(toScale(amount, 2));
 }

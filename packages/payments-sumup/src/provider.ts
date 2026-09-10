@@ -209,12 +209,20 @@ export class SumUpCloudProvider implements PaymentProvider {
    * One pass over this tenant's `attempting` rows (spec §3). T1 lists them (unlocked); each is
    * looked up at SumUp OUTSIDE any transaction — by the stamped poll key, else by OUR
    * `payment_ref` (`foreign_transaction_id`) for a row that crashed before T1.5 — and resolved in
-   * its own short T2:
-   *   SUCCESSFUL → captured;  FAILED / CANCELLED → failed;
-   *   PENDING, or not found inside the grace period, or a network error → left, `nextDueAt` set;
-   *   not found past the grace period → failed (SumUp holds nothing: no money moved), no incident;
-   *   REFUNDED / unknown → failed + `payment.pending_outcome_unactionable` (money may have moved
-   *   through a payment that never carried a sale — a human must look).
+   * its own short T2. The non-null case runs through `classify` (the one status→outcome mapping,
+   * shared with `collect`'s poll), so a future SumUp status is taught in one place:
+   *   captured → captured;  failed → failed, no incident;
+   *   pending → left, `nextDueAt` set;  deferred (REFUNDED / unknown) → failed +
+   *   `payment.pending_outcome_unactionable` (money may have moved through a payment that never
+   *   carried a sale — a human must look).
+   * A null (SumUp holds no transaction) inside the grace period is left; PAST the grace period it is
+   * failed AND raises the same unactionable incident with `status: "not_found"`. The old code failed
+   * it silently on "SumUp holds nothing → no money moved"; that confidence only held when a
+   * correlation key SumUp had recorded was in play. With no affiliate key, the sweep queries by a
+   * `foreign_transaction_id` SumUp never received, so a create SumUp accepted but whose response was
+   * lost is a not-found we cannot correlate — an uncertain charge, not a proven non-event. A fiscal
+   * system errs toward a rare benign alert over a silently concealed charge; the full self-heal (the
+   * deferred reconciler) lands later.
    * This is the one place a terminal state is written on incomplete information, safe only because
    * the outcome has stopped moving by the time the sweep sees it. The sweep MUST terminate every
    * row it can, or a deferred status would be swept forever (spec §3).
@@ -223,7 +231,10 @@ export class SumUpCloudProvider implements PaymentProvider {
    * per open `(tenant, till, code, sale_id=null)`: two unactionable rows on the SAME till in one
    * sweep collapse to ONE incident and `incidentsRaised` undercounts. Accepted — spec §3 only needs
    * a human alerted, and one incident per till satisfies that; the count is a log field, not a
-   * per-row guarantee.
+   * per-row guarantee. The till of each row is resolved in ONE batched read at the head of the sweep
+   * (`tillsForWorkingOrders` warns against the per-row call); each row's write transaction still does
+   * `failAttempting` + the incident together, so that atomicity is unchanged — only the till READ is
+   * lifted out and batched.
    */
   async resolvePending(now: Date): Promise<ForwardResult> {
     const rows = await this.inTenant((tx) =>
@@ -232,11 +243,43 @@ export class SumUpCloudProvider implements PaymentProvider {
     if (rows.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
+    const tenantId = this.opts.tenantId;
+    const tills = await this.inTenant((tx) =>
+      tillsForWorkingOrders(
+        tx,
+        tenantId,
+        rows.map((r) => r.workingOrderId),
+      ),
+    );
 
     let forwarded = 0;
     let declined = 0;
     let incidentsRaised = 0;
     let deferred = false;
+    /** `failAttempting` + (for an unactionable outcome) the incident, in ONE transaction. The till
+     * comes from the pre-fetched map; an absent till (order gone) means no incident but the row
+     * still fails. Returns whether an incident was raised. */
+    const failWith = (
+      key: { tenantId: string; provider: string; paymentRef: string },
+      workingOrderId: string,
+      status: string | null,
+    ): Promise<boolean> =>
+      this.inTenant(async (tx) => {
+        await failAttempting(tx, key);
+        if (status === null) return false;
+        const tillId = tills.get(workingOrderId);
+        if (tillId === undefined) return false;
+        return this.opts.incidents(tx, {
+          tenantId: brandTenantId(key.tenantId),
+          tillId: brandTillId(tillId),
+          error: new AppError("payment.pending_outcome_unactionable", {
+            paymentRef: key.paymentRef,
+            status,
+          }),
+          severity: "error",
+          detectedAt: now,
+        });
+      });
     for (const row of rows) {
       const key = { tenantId: row.tenantId, provider: SUMUP_PROVIDER, paymentRef: row.paymentRef };
       let t: SumUpTransaction | null;
@@ -255,41 +298,31 @@ export class SumUpCloudProvider implements PaymentProvider {
           deferred = true;
           continue;
         }
-        await this.inTenant((tx) => failAttempting(tx, key));
+        // A not-found we cannot correlate to a key SumUp recorded is an uncertain charge — surface it.
+        if (await failWith(key, row.workingOrderId, "not_found")) incidentsRaised++;
         declined++;
         continue;
       }
-      if (t.status === "PENDING") {
+      const outcome = SumUpCloudProvider.classify(t, now);
+      if (outcome.kind === "pending") {
         deferred = true;
         continue;
       }
-      if (t.status === "SUCCESSFUL") {
+      if (outcome.kind === "captured") {
         await this.inTenant((tx) =>
-          captureAttempting(tx, { ...key, settledAt: now, externalRef: t.id }),
+          captureAttempting(tx, {
+            ...key,
+            settledAt: outcome.settledAt,
+            externalRef: outcome.transactionId,
+          }),
         );
         forwarded++;
         continue;
       }
-      const unactionable = t.status !== "FAILED" && t.status !== "CANCELLED";
-      const raised = await this.inTenant(async (tx) => {
-        await failAttempting(tx, key);
-        if (!unactionable) return false;
-        const tills = await tillsForWorkingOrders(tx, row.tenantId, [row.workingOrderId]);
-        const tillId = tills.get(row.workingOrderId);
-        if (tillId === undefined) return false;
-        return this.opts.incidents(tx, {
-          tenantId: brandTenantId(row.tenantId),
-          tillId: brandTillId(tillId),
-          error: new AppError("payment.pending_outcome_unactionable", {
-            paymentRef: row.paymentRef,
-            status: t.status,
-          }),
-          severity: "error",
-          detectedAt: now,
-        });
-      });
+      // failed → no incident; deferred (REFUNDED / unknown) → incident naming the status.
+      const status = outcome.kind === "deferred" ? t.status : null;
+      if (await failWith(key, row.workingOrderId, status)) incidentsRaised++;
       declined++;
-      if (raised) incidentsRaised++;
     }
     return {
       nextDueAt: deferred ? new Date(now.getTime() + RESOLVE_RETRY_MS) : null,

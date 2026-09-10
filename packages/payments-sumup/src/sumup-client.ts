@@ -16,6 +16,10 @@ export interface SumUpClientOptions {
   affiliate?: { appId: string; key: string };
   baseUrl?: string;
   fetch?: typeof fetch;
+  /** Per-request deadline. A hung SumUp call is aborted after this and rejects — the caller reads
+   * that as pending/defer. Bounds the sale path and the fiscal pass loop against a SumUp outage
+   * (CLAUDE.md §5: nothing external may freeze a sale). Default 20 s. */
+  timeoutMs?: number;
 }
 
 /**
@@ -28,21 +32,30 @@ export interface SumUpClientOptions {
 export function sumupClient(opts: SumUpClientOptions): SumUpClient {
   const base = (opts.baseUrl ?? "https://api.sumup.com").replace(/\/$/, "");
   const doFetch = opts.fetch ?? fetch;
+  const timeoutMs = opts.timeoutMs ?? 20_000;
   const mc = encodeURIComponent(opts.merchantCode);
   const call = async (
     method: "GET" | "POST",
     path: string,
     body?: unknown,
   ): Promise<{ status: number; json: unknown }> => {
-    const res = await doFetch(`${base}${path}`, {
-      method,
-      headers: {
-        authorization: `Bearer ${opts.apiKey}`,
-        "content-type": "application/json",
-        accept: "application/json",
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await doFetch(`${base}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${opts.apiKey}`,
+          "content-type": "application/json",
+          accept: "application/json",
+        },
+        signal: controller.signal,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (res.status >= 500) throw new Error(`sumup ${method} ${path}: HTTP ${res.status}`);
     const text = await res.text();
     return { status: res.status, json: text === "" ? null : (JSON.parse(text) as unknown) };

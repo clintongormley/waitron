@@ -2,8 +2,9 @@
 
 The host process. It boots from environment config, loads the credential vault's key ring, applies
 every migration set behind an advisory lock, resolves per-tenant AEAT transports and Stripe
-accounts, then runs a loop: `drain` (the fiscal submission duty), the Stripe payments reconcile,
-fold the result into a sleep duration, repeat. It also serves several HTTP routes on one Hono app:
+accounts, then runs a loop: `drain` (the fiscal submission duty), the Stripe payments reconcile, the
+per-tick card `resolvePending` sweep (this node's own `attempting` card rows), fold the result into
+a sleep duration, repeat. It also serves several HTTP routes on one Hono app:
 `GET /health` (unauthenticated), the till API under `/api/*`, the management-dashboard API under
 `/management-api/*`, and the inbound Stripe payments webhook at `POST /webhooks/stripe/:tenantId`.
 
@@ -342,7 +343,8 @@ it:
   still decrypt while `rotate` re-seals them under the current one. Setting one without the other is
   a boot-time `credentials.key_ring_incomplete` failure, not a runtime surprise later.
 
-Provisioning and rotating credentials themselves (`fiscal.aeat`, `payments.stripe`, `email.smtp`) is
+Provisioning and rotating credentials themselves (`fiscal.aeat`, `payments.stripe`, `payments.sumup`,
+`email.smtp`) is
 `packages/credentials`'s own CLI, not this process — e.g.
 `waitron-credentials set --tenant <uuid> --purpose fiscal.aeat` with the JSON payload on stdin. Run
 `waitron-credentials` with no arguments for its own usage text (`set` / `list` / `delete` /
@@ -534,6 +536,13 @@ The ones worth grepping for:
 - **`reconcile.complete`** (`info`) — the reconcile equivalent. `ran` is broken down by outcome —
   `{ succeeded, failed, parked }` — rather than a bare total, plus `deferred`, `beyondHorizon`,
   `skipped` (matching the body above) and the duty's own `nextDueAt`.
+- **`resolve_pending.failed`** (`warn`) — `{ error }`. This node's per-tick card `resolvePending`
+  sweep threw. The sweep is deliberately NOT health-tracked (`withPendingSweep`, `src/boot.ts`), so
+  this line is the SOLE operator signal of a stuck card sweep — grep it. A card-settlement backstop,
+  not a fiscal-legal or process-liveness signal; it does not flip `/health`.
+- **`resolve_pending.complete`** (`info`) — `{ captured, failed, incidentsRaised, nextDueAt }`. The
+  per-tick summary of this node's card sweep: rows it captured, rows it resolved `failed`, and any
+  `payment.pending_outcome_unactionable` incidents raised for a human.
 - **`transport.close_failed`** (`warn`) — `{ tenantId, errorCode, message }`. One tenant's mTLS
   `Agent` failed to close gracefully at the end of a pass (`aeatClientResolver`'s `closeAll`,
   `src/aeat-transport.ts`). `message` is the raw `Error#message` — safe to log here, unlike

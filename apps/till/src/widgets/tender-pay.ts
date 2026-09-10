@@ -733,9 +733,10 @@ export class TillTenderPay extends LitElement {
   /**
    * The `"card_outcome"` view (Task 9) — a decline/timeout/network-unavailable, ENTERED reactively
    * by `willUpdate` off {@link cardOutcome}, never by a click. One message regardless of WHICH of
-   * the three it was (only `card.declined` is specced; `PayOutcome`'s own doc notes `"timeout"`
-   * never fires today — a poll-window stall already collapses into `"declined"` server-side), and
-   * three actions: Retry (`#retryCard`), Switch tender (`#cancel` — see its doc), Wait (`#wait`).
+   * the three it was (only `card.declined` is specced; `"timeout"` now fires on a SumUp poll-window
+   * stall, but the till renders it and `"declined"` identically today — a deliberate single
+   * treatment), and three actions: Retry (`#retryCard`), Switch tender (`#cancel` — see its doc),
+   * Wait (`#wait`).
    */
   #renderCardOutcome() {
     return html`

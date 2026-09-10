@@ -371,8 +371,8 @@ export async function buildCardProvider(
  * own `attempting` card rows — a sell-only local secondary that takes card sales must sweep them
  * even though it never drains/reconciles (`singletonPass` returns an empty pass there). Log-only:
  * NOT a health-tracked `Duty`, because `createHealthState` seeds every `ALL_DUTIES` member on every
- * node and a conditional duty that never runs on a no-card node would read stale → `/health` 503
- * (health.ts:74,220). A stuck sweep surfaces as `resolve_pending.failed`, the channel a mirror's
+ * node and a conditional duty that never runs on a no-card node would read stale on the staleness
+ * check → `/health` 503. A stuck sweep surfaces as `resolve_pending.failed`, the channel a mirror's
  * stalled pull uses; it is a card-settlement backstop, not a fiscal-legal or process-liveness
  * signal, so it does not gate `/health` (the deferred SumUp reconciler is the same tier, likewise
  * off it). The returned `nextDueAt` is logged, not yet used to pace the loop.

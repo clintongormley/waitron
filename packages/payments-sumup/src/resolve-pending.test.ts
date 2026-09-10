@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { decimal, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError, decimal, tenantId as brandTenantId } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
   getPaymentByRef,
@@ -118,8 +118,8 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect((await state("u")).state).toBe("captured");
   });
 
-  it("a row SumUp holds nothing for is pending inside the grace period and failed after it", async () => {
-    const { t, provider, state } = await setup();
+  it("a row SumUp holds nothing for is pending inside the grace period, then failed WITH an incident after it", async () => {
+    const { t, provider, state, raised } = await setup();
     await withTenant(suite.db, t.tenantId, (tx) =>
       insertAttempting(tx, {
         tenantId: t.tenantId,
@@ -134,10 +134,17 @@ describe("SumUpCloudProvider.resolvePending", () => {
     // past created_at+grace whenever the suite ran before it — so the sweep time is taken live.)
     expect((await provider.resolvePending(new Date())).nextDueAt).not.toBeNull();
     expect((await state("ghost")).state).toBe("attempting");
-    // …and old once `now` is past created_at + grace.
+    expect(raised).toHaveLength(0);
+    // …and past created_at + grace the row is failed AND surfaced: a not-found we could not correlate
+    // is an uncertain charge, not a proven non-event, so the sweep raises the same unactionable
+    // incident (status "not_found") rather than concealing a possible charge.
     const later = new Date(Date.now() + NOT_FOUND_GRACE_MS + 1000);
-    expect(await provider.resolvePending(later)).toMatchObject({ declined: 1, incidentsRaised: 0 });
+    expect(await provider.resolvePending(later)).toMatchObject({ declined: 1, incidentsRaised: 1 });
     expect((await state("ghost")).state).toBe("failed");
+    expect(raised).toHaveLength(1);
+    expect(raised[0]).toMatchObject({ tenantId: t.tenantId, tillId: t.tillId, severity: "error" });
+    expect(raised[0]!.error.code).toBe("payment.pending_outcome_unactionable");
+    expect(raised[0]!.error.params).toEqual({ paymentRef: "ghost", status: "not_found" });
   });
 
   it("REFUNDED resolves failed WITH a payment.pending_outcome_unactionable incident naming the till", async () => {
@@ -146,9 +153,12 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(await provider.resolvePending(T0)).toMatchObject({ declined: 1, incidentsRaised: 1 });
     expect((await state("r")).state).toBe("failed");
     expect(raised).toHaveLength(1);
-    expect(raised[0]).toMatchObject({
+    // toEqual (not toMatchObject) so the incident input's FULL key set is pinned — in particular that
+    // no `saleId` is passed (an attempting row has no sale; §4: toMatchObject checks only listed keys).
+    expect(raised[0]).toEqual({
       tenantId: t.tenantId,
       tillId: t.tillId,
+      error: expect.any(AppError),
       severity: "error",
       detectedAt: T0,
     });

@@ -1286,12 +1286,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
-      '@waitron/core':
-        specifier: workspace:*
-        version: link:../core
-      '@waitron/fiscal':
-        specifier: workspace:*
-        version: link:../fiscal
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

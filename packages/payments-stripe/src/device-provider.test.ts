@@ -181,7 +181,7 @@ describe("StripeOnDeviceProvider tenant mis-wiring", () => {
   });
 });
 
-describe("StripeOnDeviceProvider.forward", () => {
+describe("StripeOnDeviceProvider.resolvePending", () => {
   it("resolvePending is all-zeros (the device SDK returns a terminal outcome before collect writes its row)", async () => {
     const provider = providerFor(new FakeStripeDevice(), await seedWorkingOrder(pg.db, freshNif()));
     expect(await provider.resolvePending(AT)).toEqual({
@@ -191,7 +191,9 @@ describe("StripeOnDeviceProvider.forward", () => {
       incidentsRaised: 0,
     });
   });
+});
 
+describe("StripeOnDeviceProvider.forward", () => {
   it("does not forward another tenant's accepted_offline payment", async () => {
     // forwardableWhere's tenant predicate keeps the other tenant's payment out of this forward pass.
     const mine = await seedWorkingOrder(pg.db, freshNif());

@@ -384,7 +384,9 @@ describe("StripeTerminalProvider.forward", () => {
       incidentsRaised: 0,
     });
   });
+});
 
+describe("StripeTerminalProvider.resolvePending", () => {
   it("resolvePending is all-zeros (drive resolves stalls to failed inside collect)", async () => {
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
