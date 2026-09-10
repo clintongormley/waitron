@@ -42,6 +42,7 @@ jobs:
           {
             echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)"
             echo "WAITRON_IMAGE=waitron:ci"
+            echo "WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:ci"
           } > deploy/.env
 
       # A measurement taken where both answers look alike measures nothing (CLAUDE.md §1). The app
@@ -51,7 +52,7 @@ jobs:
       - name: Refuse to smoke against something already listening
         run: |
           set -euo pipefail
-          for port in 443 5432; do
+          for port in 443 5432 9110; do
             if ss -ltn "( sport = :$port )" | grep -q LISTEN; then
               ss -ltn
               echo "port $port is already in use — the smoke below would measure the wrong thing" >&2
@@ -78,6 +79,19 @@ jobs:
           cache-from: type=gha
           # ignore-error, because a cache EXPORT failure is a slow build, not a broken image, and
           # this job gates the pull request.
+          cache-to: type=gha,mode=max,ignore-error=true
+
+      - name: Build the print-agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: print-agent
+          platforms: linux/amd64
+          load: true
+          tags: waitron-print-agent:ci
+          build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
 
       # `--wait` blocks on the compose healthcheck, which passes on EITHER /health or
@@ -123,6 +137,21 @@ jobs:
           [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$app")" = "host" ]
           [ "$(docker exec "$app" id -u)" = "10001" ]
           docker exec "$app" getcap /usr/local/bin/node | grep -q cap_net_bind_service
+
+      - name: The print agent came up and picked up its server URL
+        run: |
+          set -euo pipefail
+          # The whole point of the compose wiring: the agent process is running (the read-only /dev
+          # mount, not a hard `devices:` line, is what lets it start on this printer-less runner), its
+          # setup page answers on 9110, and it received WAITRON_SERVER_URL=https://127.0.0.1 from
+          # compose. A failed CA fetch would still leave the page answering, so this asserts the
+          # wiring, and the live box check (plan Task 9) asserts the join.
+          agent=$(docker compose ps -q print-agent)
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$agent")" = "healthy" ]
+          code=$(curl -s -o status.json -w '%{http_code}' http://127.0.0.1:9110/status.json)
+          cat status.json; echo
+          [ "$code" = "200" ]
+          [ "$(jq -r .serverUrl status.json)" = "https://127.0.0.1" ]
 
       - name: Tear the stack down, volumes and all
         if: always()
