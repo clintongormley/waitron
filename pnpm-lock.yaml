@@ -68,7 +68,13 @@ importers:
       lit:
         specifier: ^3.2.0
         version: 3.3.3
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
     devDependencies:
+      '@types/qrcode':
+        specifier: ^1.5.5
+        version: 1.5.6
       '@vitest/browser':
         specifier: ^3.0.0
         version: 3.2.7(playwright@1.61.1)(vite@6.4.3(@types/node@24.13.3)(tsx@4.23.1)(yaml@2.9.0))(vitest@3.2.7)

@@ -40,6 +40,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Incorrect code, try again",
     es: "Código incorrecto, inténtalo de nuevo",
   },
+  "totp.required": {
+    en: "Enter your authenticator or recovery code",
+    es: "Introduce el código del autenticador o un código de recuperación",
+  },
   "passkey.not_registered": {
     en: "No passkey is registered for this account",
     es: "No hay ninguna passkey registrada para esta cuenta",

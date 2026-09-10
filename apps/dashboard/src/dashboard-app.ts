@@ -51,6 +51,7 @@ import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
 import "./screens/email-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
+import { rememberSuccessfulLogin, type LoginMethod } from "./login-preference.js";
 
 /**
  * The faces of the management dashboard: sign in, view your own self-service schedule, manage staff,
@@ -413,6 +414,7 @@ export class DashboardApp extends LitElement {
   /** The logged-in person's id, threaded to the staff self-service screen (its colleague picker filters
    * this out, and it names a swap's counterparty). Empty until a probe/login resolves. */
   @state() private myPersonId = "";
+  private pendingLoginPreference?: { method: LoginMethod; persistent: boolean };
 
   @state() private sessionNoticeCode: string | null = null;
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
@@ -589,6 +591,7 @@ export class DashboardApp extends LitElement {
   #applyMe(me: {
     personId: string;
     role: PersonRole;
+    email: string | null;
     locale: string | null;
     venueLocale: string;
     permissions: string[];
@@ -601,6 +604,14 @@ export class DashboardApp extends LitElement {
     if (!this.isConnected) return;
     this.sessionNoticeCode = null;
     this.myPersonId = me.personId;
+    if (this.pendingLoginPreference !== undefined && typeof me.email === "string") {
+      rememberSuccessfulLogin(
+        me.email,
+        this.pendingLoginPreference.method,
+        this.pendingLoginPreference.persistent,
+      );
+    }
+    this.pendingLoginPreference = undefined;
     this.sessionRole = me.role;
     this.#sessionPermissions = me.permissions;
     // Activate ONLY the enabled modules (`me.modules`) before resolving the permitted screen, so a URL
@@ -699,9 +710,20 @@ export class DashboardApp extends LitElement {
    */
   async #onLoggedIn(event: Event): Promise<void> {
     event.stopPropagation();
-    const accountSetup =
-      (event as CustomEvent<{ accountSetup?: boolean }>).detail?.accountSetup === true;
+    const detail = (
+      event as CustomEvent<{
+        accountSetup?: boolean;
+        loginMethod?: LoginMethod;
+        rememberEmail?: boolean;
+      }>
+    ).detail;
+    const accountSetup = detail?.accountSetup === true;
+    this.pendingLoginPreference = {
+      method: detail?.loginMethod ?? "password",
+      persistent: detail?.rememberEmail === true,
+    };
     await this.#probeSession();
+    this.pendingLoginPreference = undefined;
     if (accountSetup && this.sessionRole !== undefined && this.isConnected) {
       this.#selectScreen("profile");
     }

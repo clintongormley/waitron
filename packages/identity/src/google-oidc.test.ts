@@ -105,4 +105,16 @@ describe("Google OpenID Connect state", () => {
       await codeOf(() => run((tx) => loginWithGoogle(tx, { tenantId, subject: "google-mfa" }))),
     ).toBe("google.second_factor_required");
   });
+
+  it("makes a suspended Google login indistinguishable from an unknown subject", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "staff");
+    await suite.db.execute(
+      sql`update persons set google_subject = 'google-suspended', status = 'suspended' where id = ${personId}`,
+    );
+    expect(
+      await codeOf(() =>
+        run((tx) => loginWithGoogle(tx, { tenantId, subject: "google-suspended" })),
+      ),
+    ).toBe("google.invalid");
+  });
 });

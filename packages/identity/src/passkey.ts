@@ -39,13 +39,10 @@ import {
  * The authentication half — `beginPasskeyAuthentication` / `finishPasskeyAuthentication` — is the
  * passkey branch of the verifier seam: a discoverable (usernameless) login whose signed assertion,
  * once verified, resolves the person from the returned credential and ends in a management session,
- * as `loginManager` does for password (+ TOTP). Like `loginManager` it ALSO gates on suspension:
- * `finishPasskeyAuthentication` reads `persons.status` alongside the credential and throws
- * `person.suspended` BEFORE minting the session, so a person suspended AFTER enrolling a passkey
- * cannot sign back in. Unlike `loginManager` it never throws `person.not_found` — the person is
- * resolved FROM the credential, so a returned id matching no credential is `passkey.not_registered`,
- * not a missing person. All three `passkey.*` codes are thrown across the two halves;
- * `passkey.not_registered` is the one the authentication half adds.
+ * as `loginManager` does for password (+ TOTP). Authentication reads `persons.status` alongside the
+ * credential and refuses every non-active owner before minting a session. Missing credentials and
+ * non-active owners both return `passkey.verification_failed`, so this public endpoint does not expose
+ * whether the credential exists or its owner's account state.
  */
 
 /** How long a challenge issued by `beginPasskeyRegistration` stays valid. WebAuthn ceremonies are
@@ -343,14 +340,9 @@ export async function finishPasskeyAuthentication(
         eq(webauthnCredentials.credentialId, input.response.id),
       ),
     );
-  if (cred === undefined) throw new AppError("passkey.not_registered", {});
-  // Refuse a person suspended AFTER enrolling this passkey, BEFORE minting a session — the same gate
-  // `loginManager` applies to a password login, and the same `persons.status` re-read
-  // `resolveManagementSession` runs on every authenticated request. Placed before the verifier,
-  // mirroring `loginManager`, which checks suspension before verifying the password.
-  if (cred.status === "suspended") {
-    throw new AppError("person.suspended", { personId: cred.personId });
-  }
+  if (cred === undefined) throw new AppError("passkey.verification_failed", {});
+  // This public endpoint must not reveal that the returned credential belongs to a suspended or
+  // pending account. No session is minted for any non-active owner.
   if (cred.status !== "active") throw new AppError("passkey.verification_failed", {});
 
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched assertion (a bad

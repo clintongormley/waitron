@@ -37,6 +37,7 @@ describe("management session lifecycle", () => {
     expect(resolved).toEqual({
       personId,
       role: "manager",
+      email: null,
       locale: null,
       tenantId,
       expiresAt: expect.any(String),

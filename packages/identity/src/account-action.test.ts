@@ -8,7 +8,10 @@ import {
   ACCOUNT_ACTION_TTL_MS,
   completeAccountAction,
   completeAccountActionByCode,
+  inspectAccountAction,
+  inspectAccountActionByCode,
   issueAccountAction,
+  requestInvitationAction,
   requestPasswordResetAction,
 } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
@@ -36,6 +39,59 @@ async function makePending(personId: string): Promise<void> {
 }
 
 describe("management account actions", () => {
+  it("inspects an invitation proof without consuming it, then completes the same action", async () => {
+    const codeKey = Buffer.alloc(32, 18);
+    const personId = await seedManager(suite.db, tenantId, { email: "inspect@x.com" });
+    await makePending(personId);
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { tenantId, personId, purpose: "invitation", codeKey }),
+    );
+    await expect(
+      run((tx) =>
+        inspectAccountAction(tx, { tenantId, token: issued.token, purpose: "invitation" }),
+      ),
+    ).resolves.toEqual({ email: "inspect@x.com", purpose: "invitation" });
+    await expect(
+      run((tx) =>
+        inspectAccountActionByCode(tx, {
+          tenantId,
+          email: "inspect@x.com",
+          code: issued.code!,
+          purpose: "invitation",
+          codeKey,
+        }),
+      ),
+    ).resolves.toEqual({ email: "inspect@x.com", purpose: "invitation" });
+    await expect(
+      run((tx) =>
+        completeAccountAction(tx, {
+          tenantId,
+          token: issued.token,
+          purpose: "invitation",
+          password: "a new secure password",
+          pin: "4321",
+        }),
+      ),
+    ).resolves.toMatchObject({ personId });
+  });
+
+  it("requests a replacement invitation only for a pending account", async () => {
+    const codeKey = Buffer.alloc(32, 19);
+    const pending = await seedManager(suite.db, tenantId, { email: "replacement-invite@x.com" });
+    await makePending(pending);
+    await expect(
+      run((tx) =>
+        requestInvitationAction(tx, { tenantId, email: " REPLACEMENT-INVITE@X.COM ", codeKey }),
+      ),
+    ).resolves.toMatchObject({ personId: pending, purpose: "invitation" });
+    await seedManager(suite.db, tenantId, { email: "active-resend@x.com" });
+    await expect(
+      run((tx) => requestInvitationAction(tx, { tenantId, email: "active-resend@x.com", codeKey })),
+    ).resolves.toBeNull();
+    await expect(
+      run((tx) => requestInvitationAction(tx, { tenantId, email: "unknown@x.com", codeKey })),
+    ).resolves.toBeNull();
+  });
   it("accepts the invitation's short-lived email code once and counts wrong guesses", async () => {
     const codeKey = Buffer.alloc(32, 7);
     const personId = await seedManager(suite.db, tenantId, { email: "code@x.com" });
@@ -255,9 +311,10 @@ describe("management account actions", () => {
 
   it("finds password-reset accounts by normalized email without revealing unknown addresses", async () => {
     const personId = await seedManager(suite.db, tenantId, { email: "known@x.com" });
+    await suite.db.execute(sql`update persons set email = 'Known@X.com' where id = ${personId}`);
     await expect(
       run((tx) => requestPasswordResetAction(tx, { tenantId, email: "  KNOWN@X.COM  " })),
-    ).resolves.toMatchObject({ personId, email: "known@x.com" });
+    ).resolves.toMatchObject({ personId, email: "Known@X.com" });
     await expect(
       run((tx) => requestPasswordResetAction(tx, { tenantId, email: "unknown@x.com" })),
     ).resolves.toBeNull();
@@ -281,6 +338,10 @@ describe("management account actions", () => {
         }),
       ),
     ).resolves.toEqual({ personId, session: null });
+    const person = await suite.db.execute<{ totp_secret: string | null }>(
+      sql`select totp_secret from persons where id = ${personId}`,
+    );
+    expect(person.rows[0]!.totp_secret).toBe("sealed-placeholder");
   });
 
   it("refuses an expired token", async () => {

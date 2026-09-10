@@ -1378,6 +1378,29 @@ export class DashboardApi {
     return this.#request<void>("/management-api/password-reset", "POST", { email });
   }
 
+  requestInvitation(email: string): Promise<void> {
+    return this.#request<void>("/management-api/invitation-resend", "POST", { email });
+  }
+
+  inspectAccountAction(
+    token: string,
+    purpose: "invitation" | "password_reset",
+  ): Promise<{ email: string; purpose: "invitation" | "password_reset" }> {
+    return this.#request("/management-api/account-actions/inspect", "POST", { token, purpose });
+  }
+
+  inspectAccountActionByCode(
+    email: string,
+    code: string,
+    purpose: "invitation" | "password_reset",
+  ): Promise<{ email: string; purpose: "invitation" | "password_reset" }> {
+    return this.#request("/management-api/account-actions/inspect", "POST", {
+      email,
+      code,
+      purpose,
+    });
+  }
+
   getProfile(): Promise<OwnProfile> {
     return this.#request<OwnProfile>("/management-api/session/me/profile", "GET");
   }
@@ -2539,6 +2562,7 @@ export class DashboardApi {
   getMe(): Promise<{
     personId: string;
     role: PersonRole;
+    email: string | null;
     locale: string | null;
     venueLocale: string;
     permissions: string[];
@@ -2551,6 +2575,7 @@ export class DashboardApi {
     return this.#request<{
       personId: string;
       role: PersonRole;
+      email: string | null;
       locale: string | null;
       venueLocale: string;
       permissions: string[];

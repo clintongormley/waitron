@@ -42,9 +42,8 @@ function selectPersonLogin(tx: Transaction) {
 type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 
 // The credential check + session mint for a person that has ALREADY been found, shared by both entry
-// points. Suspension is checked BEFORE the password so a suspended account is refused without a
-// password probe (deliberate — a suspended account is revealed to the caller by design; the two
-// callers differ only in how a NOT-found person is handled, which is why that branch stays in each).
+// points. The public email entry point screens suspended accounts before reaching this helper; the
+// trusted by-id entry point keeps the distinct suspension result used by its operator flow.
 async function completeManagerLogin(
   tx: Transaction,
   input: {
@@ -55,6 +54,7 @@ async function completeManagerLogin(
     totpKeyRing?: TotpKeyRing;
   },
   person: PersonLoginRow,
+  missingFactorCode: "totp.required" | "totp.invalid",
 ): Promise<ManagementSession> {
   if (person.status === "suspended")
     throw new AppError("person.suspended", { personId: person.id });
@@ -76,6 +76,9 @@ async function completeManagerLogin(
   }
   if (!passwordOk) throw new AppError("password.invalid", {});
   if (person.totpSecret !== null) {
+    if (input.totp === undefined && input.recoveryCode === undefined) {
+      throw new AppError(missingFactorCode, {});
+    }
     const secret = decryptTotpSecret(person.totpSecret, input.totpKeyRing);
     const totpOk =
       input.totp !== undefined && secret !== null && verifyTotp(input.totp, secret.secret);
@@ -114,15 +117,19 @@ export async function loginManager(
   // Enumeration hardening: an unknown email is indistinguishable from a wrong password on the public
   // login form — both throw `password.invalid`, so the response never reveals which addresses have
   // accounts. We run one `verifyPassword` against a dummy hash first so the not-found path costs the
-  // same KDF work as a wrong-password path (see DUMMY_PASSWORD_HASH). (TOTP is past this point: the
-  // caller has already proved the account exists. Suspension is NOT — `person.suspended` in
-  // `completeManagerLogin` is thrown pre-password, so a suspended account IS revealed to an
-  // unauthenticated caller by design.)
+  // same KDF work as a wrong-password path (see DUMMY_PASSWORD_HASH).
   if (person === undefined) {
     verifyPassword(input.password, DUMMY_PASSWORD_HASH);
     throw new AppError("password.invalid", {});
   }
-  return completeManagerLogin(tx, input, person);
+  // The email login is public. Spend the same KDF work and return the same result as an unknown
+  // account, so suspension cannot be discovered by entering somebody else's address. The trusted
+  // by-id entry point below retains `person.suspended` for its operator-facing server flow.
+  if (person.status === "suspended") {
+    verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+    throw new AppError("password.invalid", {});
+  }
+  return completeManagerLogin(tx, input, person, "totp.required");
 }
 
 export async function loginManagerById(
@@ -147,7 +154,7 @@ export async function loginManagerById(
     and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)),
   );
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
-  return completeManagerLogin(tx, input, person);
+  return completeManagerLogin(tx, input, person, "totp.invalid");
 }
 
 export async function authorizeManager(

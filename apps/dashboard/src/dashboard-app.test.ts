@@ -91,6 +91,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getMe: vi.fn().mockResolvedValue({
       personId: "p1",
       role: "manager",
+      email: "manager@example.com",
       locale: null,
       venueLocale: "es-ES",
       venueName: "Deli Test SL",
@@ -112,6 +113,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listStaff: vi.fn().mockResolvedValue(people),
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
+    inspectAccountAction: vi
+      .fn()
+      .mockResolvedValue({ email: "new@example.test", purpose: "invitation" }),
     createPerson: vi.fn().mockResolvedValue({ id: "p2" }),
     logout: vi.fn().mockResolvedValue(undefined),
     // The staff self-service (my-schedule) screen loads these on connect; resolve them so a staff-role
@@ -400,6 +404,8 @@ const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
   history.replaceState(null, "", initialUrl);
+  sessionStorage.clear();
+  localStorage.clear();
 });
 // `setLocale` mutates module-global state that outlives a test, so pin it back to the shipped default
 // around every case — otherwise one test's switch leaks into the next.
@@ -812,6 +818,41 @@ describe("dashboard-app", () => {
 
     expect(overview(el)).toBeTruthy();
     expect(escaped).not.toHaveBeenCalled();
+  });
+
+  it("remembers the authenticated email and method only after login succeeds", async () => {
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "actual-person",
+          role: "manager",
+          email: "actual@example.com",
+          locale: null,
+          venueLocale: "es-ES",
+          venueName: "Deli Test SL",
+          permissions: [],
+          modules: [],
+        }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    login(el)!.dispatchEvent(
+      new CustomEvent("logged-in", {
+        detail: { personId: "untrusted", loginMethod: "passkey", rememberEmail: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(JSON.parse(sessionStorage.getItem("waitron-login-preference")!)).toEqual({
+      email: "actual@example.com",
+      method: "passkey",
+    });
+    expect(localStorage.getItem("waitron-login-preference")).toBe(
+      sessionStorage.getItem("waitron-login-preference"),
+    );
   });
 
   it("does not show the logout control on the login screen", async () => {

@@ -411,7 +411,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, role, locale, venueName, expiresAt } = await asStaff(async (tx) => ({
+      const { personId, role, email, locale, venueName, expiresAt } = await asStaff(async (tx) => ({
         ...(await resolveManagementSession(tx, sessionId, { touch: false })),
         venueName: await readVenueName(tx),
       }));
@@ -422,6 +422,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.json({
         personId,
         role,
+        email,
         locale,
         venueLocale: deps.venueLocale,
         venueName,

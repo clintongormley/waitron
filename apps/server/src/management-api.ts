@@ -36,6 +36,8 @@ import {
   endManagementSession,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
+  inspectAccountAction,
+  inspectAccountActionByCode,
   listActiveStaff,
   listPersons,
   loginManager,
@@ -47,6 +49,7 @@ import {
   resolveManagementSession,
   resetPersonLogin,
   requestPasswordResetAction,
+  requestInvitationAction,
   readOwnProfile,
   updatePersonDetails,
   verifyOwnCredentials,
@@ -170,6 +173,7 @@ export interface ManagementApiDeps {
   passwordThrottle?: PasswordThrottle;
   accountActionRateLimiters?: {
     passwordReset: AccountActionRateLimiter;
+    invitation: AccountActionRateLimiter;
     completion: AccountActionRateLimiter;
   };
   accountActionCodeKey?: Buffer;
@@ -236,6 +240,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "password.throttled": 429,
   "totp.invalid": 401,
+  "totp.required": 401,
   "google.invalid": 401,
   "google.already_linked": 409,
   "google.second_factor_required": 401,
@@ -248,9 +253,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // verify (`passkey.verification_failed`, also thrown on registration verify) is a failed credential
   // check, the same family as `password.invalid`. `passkey.challenge_expired` is a 400: the request was
   // well-formed but its challenge lapsed past `CHALLENGE_TTL_MS`, a client-retryable request-timing
-  // fault rather than a rejected credential. The auth-verify route ALSO surfaces `person.suspended`
-  // (403, below): `finishPasskeyAuthentication` gates on the credential owner's status the way
-  // `loginManager` gates a password login, so a person suspended after enrolling a passkey is refused.
+  // fault rather than a rejected credential. Non-active credential owners get the same verification
+  // failure as an unknown credential, so the public response does not disclose account status.
   "passkey.not_registered": 401,
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
@@ -260,24 +264,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `purchase.duplicate` all → 409) — not the `?? 400` default, which would still be a 4xx but the
   // wrong one.
   "passkey.already_registered": 409,
-  // Login-enumeration posture, recorded here. This map is SHARED with the authenticated staff routes,
-  // where 404/403 are the CORRECT semantics: the write routes
-  // (`PUT` and lifecycle `/management-api/staff/:id` routes) screen `:id` with `isUuid` and refuse a
-  // malformed one as `person.not_found` (404), and `resolveManagementSession` re-reads `persons.status`
-  // on every gated request and throws `person.suspended` (403) when the logged-in manager was
-  // suspended mid-session (`packages/identity/src/management-session.ts`). The LOGIN route
-  // (`POST /management-api/session`) resolves the person by EMAIL and `loginManager` hardens it against
-  // enumeration itself: an unknown email is INDISTINGUISHABLE from a wrong password — both
-  // `password.invalid` (401) — so `person.not_found` is NOT reachable on login, and its only sources on
-  // this surface are the write routes' malformed-`:id` screens above. `person.suspended` (403) IS still
-  // surfaced by login: `loginManager` throws it pre-password, so a suspended account is revealed to an
-  // unauthenticated caller BY DESIGN — the accepted trade-off (see `loginManager`'s own note on the
-  // suspension-before-password ordering). The residual enumeration value is negligible: a suspended
-  // person is excluded from the unauthenticated `GET /management-api/staff-roster`
-  // (`listActiveStaff` returns only ACTIVE persons), so provoking the 403 needs the account's email,
-  // which is published nowhere. The passkey auth-verify route surfaces the same 403 (a suspended
-  // credential owner), and provoking it there is HARDER still: it needs the owner's random
-  // `credential_id`, not merely their email.
+  // This map is shared with authenticated staff routes, where 404/403 remain the correct semantics.
+  // Public password login folds unknown and suspended accounts into `password.invalid`; public
+  // passkey verification folds missing credentials and non-active owners into
+  // `passkey.verification_failed`. Authenticated session resolution still surfaces suspension.
   "person.suspended": 403,
   "person.self_deactivation": 403,
   "person.not_found": 404,
@@ -642,9 +632,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();
+  const acceptPublicInvitation = createPasswordResetCooldown();
   const acceptInvitation = createPasswordResetCooldown();
   const passwordResetRateLimiter =
     deps.accountActionRateLimiters?.passwordReset ?? createAccountActionRateLimiter();
+  const invitationRateLimiter =
+    deps.accountActionRateLimiters?.invitation ?? createAccountActionRateLimiter();
   const completionRateLimiter =
     deps.accountActionRateLimiters?.completion ?? createAccountActionRateLimiter();
   const googleCodeExchange = deps.googleCodeExchange ?? exchangeGoogleCode;
@@ -796,8 +789,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // (`withTenant` + `asAppUser`), in this database. `loginManager` resolves the person by EMAIL
   // (not a client-supplied id) and hardens against enumeration: an unknown email and a wrong
   // password BOTH surface as `password.invalid` (401), so the response never reveals which
-  // addresses have accounts; a suspended person surfaces as `person.suspended` (403), a
-  // missing/wrong TOTP as `totp.invalid` (401) — the identity credential codes `STATUS` maps. The
+  // addresses have accounts. A suspended person gets that same result. Once the password succeeds,
+  // a missing enrolled factor surfaces as `totp.required`; a wrong factor uses `totp.invalid`. The
   // body is read via `readJsonBody` (`read-json-body.ts`), which coerces an
   // empty/malformed/`null` body to `{}` so it never reaches `run` as an opaque 500 — see its doc
   // for the two degenerate-body cases it handles. This is the representative site the other
@@ -892,6 +885,76 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         if (issued !== null) void deliverAccountAction(deps, log, issued);
       }
       return c.body(null, 202);
+    }),
+  );
+
+  // Public invitation replacement is deliberately indistinguishable for pending, active, unknown,
+  // malformed, and mail-unavailable addresses. Only a pending account can receive a new action.
+  app.post("/management-api/invitation-resend", (c) =>
+    run(c, log, async () => {
+      const body = await readJsonBody<{ email?: unknown }>(c);
+      const key =
+        typeof body.email === "string" ? body.email.trim().toLowerCase() : "invalid-email";
+      invitationRateLimiter.check(key);
+      if (typeof body.email === "string" && acceptPublicInvitation(body.email)) {
+        const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          return requestInvitationAction(tx, {
+            tenantId: deps.cfg.tenantId,
+            email: body.email as string,
+            codeKey: accountActionCodeKey,
+          });
+        });
+        if (issued !== null) void deliverAccountAction(deps, log, issued);
+      }
+      return c.body(null, 202);
+    }),
+  );
+
+  // Inspection validates the emailed bearer token or short code without consuming it. Completion
+  // repeats the check and performs the credential change atomically.
+  app.post("/management-api/account-actions/inspect", (c) =>
+    run(c, log, async () => {
+      const body = await readJsonBody<{
+        token?: unknown;
+        email?: unknown;
+        code?: unknown;
+        purpose?: unknown;
+      }>(c);
+      completionRateLimiter.check(
+        typeof body.token === "string"
+          ? body.token
+          : typeof body.email === "string"
+            ? body.email
+            : "invalid-token",
+      );
+      if (
+        (typeof body.token !== "string" &&
+          (typeof body.email !== "string" || typeof body.code !== "string")) ||
+        (body.purpose !== "invitation" && body.purpose !== "password_reset")
+      ) {
+        throw new AppError("account_action.invalid", {});
+      }
+      const purpose = body.purpose;
+      const inspection = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        if (typeof body.token === "string") {
+          return inspectAccountAction(tx, {
+            tenantId: deps.cfg.tenantId,
+            token: body.token,
+            purpose,
+          });
+        }
+        return inspectAccountActionByCode(tx, {
+          tenantId: deps.cfg.tenantId,
+          email: body.email as string,
+          code: body.code as string,
+          purpose,
+          codeKey: accountActionCodeKey,
+        });
+      });
+      if (inspection === null) throw new AppError("account_action.invalid", {});
+      return c.json(inspection);
     }),
   );
 
@@ -2575,14 +2638,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // is UNAUTHENTICATED and `finishPasskeyAuthentication` reads `response.id` to resolve the credential,
   // so a missing/non-object `response` must be a clean 400 here rather than an unauthenticated fault.
   //
-  // `finishPasskeyAuthentication`'s `@simplewebauthn/server` verify call throws a GENERIC `Error` on a
-  // bad/mismatched assertion (a bad signature, wrong origin/RPID, UV not performed) — NOT a mapped
-  // code — which that function wraps into `passkey.verification_failed`. Its other faults:
-  // `passkey.not_registered` (no credential matched the returned id, or the returned id was non-string),
-  // `person.suspended` (the credential's owner was suspended after enrolling — the same gate
-  // `loginManager` applies), and `passkey.challenge_expired` (OUR TTL check, not the library's). These
-  // map to 401 / 401 / 403 / 400 via `STATUS`. `setManagementCookie` uses `deps.secureCookies`,
-  // mirroring `POST /management-api/session`.
+  // `finishPasskeyAuthentication` wraps a bad assertion, an unknown credential and a non-active
+  // owner as `passkey.verification_failed`; malformed response ids remain
+  // `passkey.not_registered`. The route therefore reveals neither credential ownership nor account
+  // status. `passkey.challenge_expired` remains a retryable request-timing failure.
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
