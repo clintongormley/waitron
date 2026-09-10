@@ -1,5 +1,5 @@
-# A Waitron node: the app, its Postgres and its practice email inbox. Everything the node keeps lives
-# in the six named volumes below, so `docker volume` is the whole of a box's life.
+# A Waitron node: the app, its Postgres, its practice email inbox, and the print agent. Everything the
+# node keeps lives in the named volumes below, so `docker volume` is the whole of a box's life.
 #
 # Operating this file — including which CLI invocation bypasses the entrypoint and which does not —
 # is deploy/README.md. `deploy/prepare.sh` installs this once per box; the restaurant never runs it.

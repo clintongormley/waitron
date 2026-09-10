@@ -58,11 +58,11 @@ collision cannot arise.
 ```bash
 cd /opt/waitron
 docker compose pull && docker compose up -d   # update to the current :main image
-docker compose ps                             # both services, with health
+docker compose ps                             # all the services, with health
 docker compose logs -f app                    # the server's JSON lines
 ```
 
-Both services are `restart: unless-stopped`, so the box comes back on its own after a power cut and
+The services are all `restart: unless-stopped`, so the box comes back on its own after a power cut and
 after the app's own requested restart at the end of the setup wizard.
 
 ### Trying a branch before it merges
