@@ -194,8 +194,10 @@ design-review section apply.
 - **Track P — platform & packaging** (push step 1). Owns the Dockerfiles/compose, `packages/provisioning`,
   `apps/server`'s config/boot wiring/backup-*/media/tls + certificate code, `packages/credentials`.
   Work: the two containers + volumes **LANDED #285** (see Priorities item 1);
-  the named next Track P specs are **boot-failure diagnosability — spec WRITTEN 2026-09-10,
-  implementation in flight** ([design](superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md):
+  the named next Track P specs are **boot-failure diagnosability — spec + plan WRITTEN 2026-09-10,
+  implemented on `feat/boot-failure-diagnosability`, not yet merged**
+  ([design](superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md),
+  [plan](superpowers/plans/2026-09-10-boot-failure-diagnosability.md):
   the recovery page renders curated operator text keyed by error code instead of `unknown` — the
   operator's only window is that page; an explicit `provisioning.database_ahead` check for a
   database migrated by a different image (the 2026-09-10 `try-branch` → `install.sh` bricking, whose
@@ -217,7 +219,12 @@ design-review section apply.
   created since #304) will be refused by that branch's `provisioning.database_ahead` check once it
   merges — the remedy is `wa-wt reset demo`); the scrubbed real
   error to `docker logs` for the installer; and a
-  one-way-migration warning in `try-branch.sh`), **the recovery spec** (a degraded-but-trading mode + the
+  one-way-migration warning in `try-branch.sh`). All of that is written on the branch — the
+  classifier, the ahead check with its real-Postgres proof, `migrations.incomplete`, the curated
+  page, the scrubbed stdout and the `try-branch` warning — and design §9 records what the §6
+  experiment settled, including that §6's own sketch of the proof-by-deletion was wrong: an
+  unguarded ahead database boots CLEANLY rather than erroring, so the check is the only thing that
+  names the case. Then **the recovery spec** (a degraded-but-trading mode + the
   module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
   installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick
   carries the images so install needs no internet, unattended updates for a box we did not sell,

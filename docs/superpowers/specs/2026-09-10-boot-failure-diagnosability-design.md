@@ -80,9 +80,11 @@ A pure `classifyBootFailure(error): string` sits between the catch and `afterFai
   (`packages/shared/src/sql-state.ts:30-41`) returns `null` for those socket codes — they are not
   five `[0-9A-Z]` characters — so the socket branch tests the Node `code` itself; its own doc names
   the one shape-collision to expect (`EPIPE` is five upper-case characters and passes its filter).
-  Second, `sqlStateOf`'s result is looked up in a pinned table: `42P01` undefined table, `42703`
-  undefined column, `42704` undefined object, `22P02` invalid text for an enum →
-  `provisioning.schema_mismatch { sqlState }`. Both tables are exhaustive by construction (pinned
+  Second, `sqlStateOf`'s result is looked up in a pinned table — `42P01` undefined table, `42703`
+  undefined column, `42704` undefined object, `22P02` invalid text for an enum, and `55P04` unsafe
+  use of a new enum value — each mapping to `provisioning.schema_mismatch { sqlState }`. `55P04` is
+  written from §6's experiment rather than before it, as this section requires: it is the SQLSTATE
+  the first real box actually produced (§9). Both tables are exhaustive by construction (pinned
   lists), not heuristics. `waitForPostgres` already retries a refused connection for up to sixty
   seconds (`node-entry.ts`, `WAIT_ATTEMPTS`), so `database_unreachable` names the case that
   outlasted that wait.
@@ -186,6 +188,8 @@ outcomes look alike measures nothing (CLAUDE.md §1); the control is what makes 
 - **Prove the guard by deletion:** with the §4.2 check removed, the same ahead database must fall
   through to a raw pg error classified as `schema_mismatch` or `unknown` — never boot successfully —
   which confirms the check is what names the case rather than something else masking it.
+  **Pointer, 2026-09-10:** run, and this prediction was wrong — drizzle applies nothing and throws
+  nothing, so an unguarded boot proceeds cleanly and the mismatch bites later. See §9.
 - **The container smoke** (`deploy/`, run by CI's `image / smoke`): unchanged in shape; the plan
   decides whether to add an ahead-database boot to it or leave that to the real-PG suite.
 
@@ -225,3 +229,41 @@ outcomes look alike measures nothing (CLAUDE.md §1); the control is what makes 
   (`codeOf`), `packages/shared/src/sql-state.ts` (`sqlStateOf`),
   `packages/provisioning/src/instance-plan.ts:136-138` and `instance-state.ts:41-43` (journal
   semantics), `packages/provisioning/src/errors.ts` (the `provisioning.*` family).
+
+## 9. Addendum — what the §6 experiment settled (2026-09-10)
+
+Run against PostgreSQL 18 (the box's own version, `deploy/compose.yml`) before the implementation
+plan was written. §8's open question is closed, and two of the findings changed the work.
+
+- **The bricking was not an ahead database.** It was the enum-in-one-transaction defect, repaired on
+  its own branch and landed as #307; §1 and §8 carry the dated pointers and the regression test's
+  name, and `docs/backlog.md` → Track P carries what #307 left open. Not repeated here.
+- **A second defect sits underneath it, silent.** `packages/db/drizzle/meta/_journal.json` is
+  non-monotonic — entries 2 to 6 carry `when` values below entry 1's — and drizzle applies a
+  migration only when `max(created_at)` is below that migration's own `when`, so those entries are
+  SKIPPED with no error. Measured with the enum defect fixed so it could be seen at all: a database
+  at core release point 1 upgrades to HEAD with 10 of 15 migrations applied and raises nothing. No
+  edit to the journal repairs it — a database at point 2 and one at point 3 carry the same watermark
+  yet need opposite values for entry 2 — so the only true repair is a squashed baseline, an owner
+  decision nobody has taken. This branch's mitigation is therefore to make the skip LOUD rather than
+  silent: `migrations.incomplete`, thrown by `applyMigrations` when fewer migrations applied than the
+  image ships. That is this spec's own subject — a wrong state that says nothing.
+- **§4.2's ahead check stands and its mechanism is confirmed — but §6's sketch of the
+  proof-by-deletion was wrong.** §6 predicted that, with the check removed, an ahead database would
+  "fall through to a raw pg error … never boot successfully". It was measured, and it does not: with
+  a journal watermark above every shipped migration's `when`, drizzle applies nothing, writes no
+  journal row and throws nothing, so a re-migrate resolves *cleanly* and the boot proceeds. The
+  mismatch only bites later, in whatever query first touches a schema that is not there. That makes
+  this check the only thing that names the case — a stronger claim than §6 made, not a weaker one.
+  It is pinned by the third test in `packages/provisioning/src/schema-ahead.pg.test.ts`, which
+  re-migrates the ahead database and asserts the journal row count is unchanged and the set is still
+  reported ahead. `created_at` is a `bigint` and reaches JavaScript as a STRING, which is the second
+  reason the check compares hashes rather than that column.
+- **§4.1's schema-mismatch table gained `55P04`**, written from the experiment as §6 requires.
+- **Consequence for existing dev and demo databases.** #307 edited
+  `packages/db/drizzle/0014_central_printer_provisioning_sql.sql`, which changed that file's drizzle
+  hash, so every database that applied the old `0014` (any dev or demo database created since #304
+  landed on 2026-09-09) carries a hash this image ships no file for — and §4.2's check refuses to
+  boot it with `provisioning.database_ahead`. That is the check working, not a fault: the database
+  really was migrated by a different image. The remedy for a disposable database is
+  `wa-wt reset demo`; for a real box it is the page's own action.
