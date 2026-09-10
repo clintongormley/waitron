@@ -165,8 +165,10 @@ services:
     # USB printer access, hot-plug safe. Measured on the real box 2026-09-10 (spec §5): a hard
     # `devices:` line refuses to start with no printer; a /dev/usb subdirectory mount goes stale on
     # re-plug. Mounting the whole /dev read-only plus the usblp char-device major (180) lets the node
-    # user reach /dev/usb/lpN after a hot-plug, while :ro refuses mknod and the cgroup rule denies any
-    # other device class.
+    # user reach /dev/usb/lpN after a hot-plug. The cgroup rule ADDS major 180 to Docker's default
+    # device whitelist (null, zero, full, random, tty, …); :ro still permits writing an existing
+    # device node but refuses mknod, and a class that is neither a Docker default nor 180 (e.g.
+    # hidraw) is denied.
     device_cgroup_rules:
       - "c 180:* rwm"
     group_add:

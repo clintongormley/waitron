@@ -162,10 +162,14 @@ the wizard, not a file on the box.
 ## Building and running the image locally
 
 ```bash
-pnpm build:image      # docker build -f deploy/Dockerfile -t waitron:dev .
+pnpm build:image              # docker build -f deploy/Dockerfile -t waitron:dev .
+pnpm build:image:print-agent  # docker build -f deploy/Dockerfile --target print-agent -t waitron-print-agent:dev .
 ```
 
-Then point the compose at it with `WAITRON_IMAGE=waitron:dev` in `.env`.
+Then point the compose at both in `.env`: `WAITRON_IMAGE=waitron:dev` and
+`WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:dev`. The print agent is an on-by-default service, so
+without the second one a local `docker compose up` still pulls the published
+`ghcr.io/clintongormley/waitron-print-agent:main`.
 
 On a Mac, Docker Desktop cannot put a container on the LAN, so the shipped host-networking profile
 does not give you a reachable box. Run the bridge shape instead with an override file — which is
