@@ -81,6 +81,7 @@ describe("configuration", () => {
       "shared",
       "payments",
       "payments-stripe",
+      "payments-sumup",
       "scheduler",
       "credentials",
       "workforce",

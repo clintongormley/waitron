@@ -268,6 +268,7 @@ export default tseslint.config(
               from: [
                 "./packages/payments/**",
                 "./packages/payments-stripe/**",
+                "./packages/payments-sumup/**",
                 "./packages/fiscal/**",
                 "./packages/fiscal-verifactu/**",
                 "./packages/verifactu/**",
