@@ -55,10 +55,13 @@ const KNOWN_NON_MONOTONIC = new Map<string, { entries: string[]; reason: string 
         "Entries 2 to 6 carry `when` values below entry 1's, so drizzle's `max(created_at)` " +
         "watermark SKIPS them for a database whose highest recorded value is entry 1's. Measured " +
         "2026-09-10: a database at entry 1 upgrading to HEAD applies 10 of 15 migrations and " +
-        "raises nothing. No assignment of `when` values repairs it, because a database recorded " +
-        "the old value rather than the file's: raising the out-of-order entries makes points 3 to " +
-        "7 RE-APPLY a migration they already ran and fail, and lowering the earlier ones makes " +
-        "point 1 fail outright with 42P01 rather than complete with skips. Both measured. The " +
+        "raises nothing. NO assignment of `when` values repairs it, and that needs no experiment: " +
+        "a database at release point 2 and one at release point 3 both carry entry 1's `when` " +
+        "(1788785861913) as their watermark, because entry 2's RECORDED value sits below it. " +
+        "Point 2 therefore needs entry 2's `when` ABOVE that watermark or `0002` is skipped, while " +
+        "point 3 needs it AT OR BELOW or `0002` re-applies — contradictory for any single value. " +
+        "(Two candidate repairs were also run, on 2026-09-10, and each failed in one of those two " +
+        "directions.) The " +
         "residual skip is UNMITIGATED here — a runtime check that counts applied migrations " +
         "against shipped ones (`migrations.incomplete`) is being added on " +
         "`feat/boot-failure-diagnosability`, and until that merges nothing names this case. " +
@@ -102,9 +105,11 @@ describe("every migration set's journal is strictly increasing", () => {
         true,
       );
     }
-    // Loose floors, well under today's numbers: a count is a receipt that goes stale (CLAUDE.md §7).
+    // Loose floors, every one of them strictly under today's number: a count is a receipt that goes
+    // stale (CLAUDE.md §7), and a floor sitting exactly on the tree fails the day the tree shrinks
+    // by one for a good reason. The core one was 15 — exactly the tree's count — until a re-read.
     expect(MANIFEST.length).toBeGreaterThanOrEqual(10);
-    expect(journalEntries(CORE.from).length).toBeGreaterThanOrEqual(15);
+    expect(journalEntries(CORE.from).length).toBeGreaterThanOrEqual(10);
     expect([...KNOWN_NON_MONOTONIC.keys()]).toEqual(["core"]);
   });
 

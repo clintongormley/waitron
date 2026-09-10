@@ -63,9 +63,15 @@ const HEAD_FOLDER = folderWithFirst(journal.entries.length);
  * finds exactly those, so this list cannot drift by eye from the journal it describes and empties
  * itself if the journal is ever repaired.
  *
- * That non-monotonicity is unfixable by editing the journal — measured: every candidate repair makes
- * some OTHER release point re-apply a migration it already ran (see
- * `docs/superpowers/plans/2026-09-10-core-migration-upgrade.md`).
+ * That non-monotonicity is unfixable by editing the journal, and the argument needs no experiment: a
+ * database at release point 2 and one at release point 3 both carry entry 1's `when` as their
+ * watermark, because entry 2's RECORDED value sits below it. Point 2 needs entry 2's `when` ABOVE
+ * that watermark or `0002` is skipped, while point 3 needs it AT OR BELOW or `0002` re-applies —
+ * contradictory for any single value. Two candidate repairs were also run and each failed in one of
+ * those two directions, one of them with `42P01: relation "deployment" does not exist` rather than
+ * the re-apply an earlier draft of this comment claimed for both
+ * (`docs/superpowers/plans/2026-09-10-core-migration-upgrade.md`;
+ * `scripts/journal-monotonic.test.ts` carries the same argument).
  *
  * THE RESIDUAL SKIP IS UNMITIGATED IN THIS BRANCH: a database at one of these points upgrades
  * silently and incompletely, with no error. Making it loud is a `migrations.incomplete` check in
