@@ -80,9 +80,12 @@ A pure `classifyBootFailure(error): string` sits between the catch and `afterFai
   (`packages/shared/src/sql-state.ts:30-41`) returns `null` for those socket codes — they are not
   five `[0-9A-Z]` characters — so the socket branch tests the Node `code` itself; its own doc names
   the one shape-collision to expect (`EPIPE` is five upper-case characters and passes its filter).
-  Second, `sqlStateOf`'s result is looked up in a pinned table: `42P01` undefined table, `42703`
-  undefined column, `42704` undefined object, `22P02` invalid text for an enum →
-  `provisioning.schema_mismatch { sqlState }`. Both tables are exhaustive by construction (pinned
+  Second, `sqlStateOf`'s result is looked up in a pinned table — `42P01` undefined table, `42703`
+  undefined column, `42704` undefined object, `22P02` invalid text for an enum (REMOVED during
+  implementation — see §9), and `55P04` unsafe
+  use of a new enum value — each mapping to `provisioning.schema_mismatch { sqlState }`. `55P04` is
+  written from §6's experiment rather than before it, as this section requires: it is the SQLSTATE
+  the first real box actually produced (§9). Both tables are exhaustive by construction (pinned
   lists), not heuristics. `waitForPostgres` already retries a refused connection for up to sixty
   seconds (`node-entry.ts`, `WAIT_ATTEMPTS`), so `database_unreachable` names the case that
   outlasted that wait.
@@ -113,7 +116,13 @@ been migrated forward; only the ahead direction is a failure.
 
 `renderPage` gains a table `code → { title, action }` of fixed strings, and renders that beside the
 existing level, failure count, log tail and retry button. Examples, wording to be settled in the
-plan:
+plan — **and settled differently, 2026-09-11:** the shipped strings are in `OPERATOR_TEXT`
+(`apps/server/src/recovery-surface.ts`), which is the authority. Two rows below were changed during
+implementation because they gave an operator advice that cannot help: a restart cannot fix the wrong
+password or missing database that `provisioning.database_unreachable` now also covers, and restoring
+a backup can re-raise `migrations.incomplete`, because a restore runs the same update. The generic
+row no longer promises the reason was written down anywhere, because a box whose state volume is
+unwritable fails before anything is written. See §9.
 
 | code | shown to the operator |
 | --- | --- |
@@ -163,6 +172,16 @@ rendered page contains the curated text and NOT `hunter2`, while the same test's
 installer's stdout DOES carry the message with `hunter2` replaced by `***`. A measurement where both
 outcomes look alike measures nothing (CLAUDE.md §1); the control is what makes this one a probe.
 
+**Wrong as stated, and fixed in code, 2026-09-11.** The caught error's text DID reach the page. The
+box has one logger tee'd to stdout and to the `waitron.log` the page tails (`boot.ts`), so any module
+logging a caught error's message — `mdns.ts`, `me-api.ts` — put it on the unauthenticated page;
+`redactSecrets` was applied to the entrypoint's stdout report only. The invariant now enforced is
+narrower and true: the file sink masks URL credentials on every line it writes
+(`log-file.ts` → `redactSecrets`), and stdout is deliberately left whole as the installer's channel.
+Three strings on the page come from outside the image, not two — the error code, the log tail and
+`lastFailureAt`. See `apps/server/src/recovery-surface.ts` (`OPERATOR_TEXT`), which is the authority,
+and `recovery-surface.test.ts` → "the caught error's own words on the page".
+
 ## 6. Testing
 
 - **Unit, `classifyBootFailure`:** an `AppError` keeps its code; an error carrying each listed
@@ -186,6 +205,8 @@ outcomes look alike measures nothing (CLAUDE.md §1); the control is what makes 
 - **Prove the guard by deletion:** with the §4.2 check removed, the same ahead database must fall
   through to a raw pg error classified as `schema_mismatch` or `unknown` — never boot successfully —
   which confirms the check is what names the case rather than something else masking it.
+  **Pointer, 2026-09-10:** run, and this prediction was wrong — drizzle applies nothing and throws
+  nothing, so an unguarded boot proceeds cleanly and the mismatch bites later. See §9.
 - **The container smoke** (`deploy/`, run by CI's `image / smoke`): unchanged in shape; the plan
   decides whether to add an ahead-database boot to it or leave that to the real-PG suite.
 
@@ -225,3 +246,63 @@ outcomes look alike measures nothing (CLAUDE.md §1); the control is what makes 
   (`codeOf`), `packages/shared/src/sql-state.ts` (`sqlStateOf`),
   `packages/provisioning/src/instance-plan.ts:136-138` and `instance-state.ts:41-43` (journal
   semantics), `packages/provisioning/src/errors.ts` (the `provisioning.*` family).
+
+## 9. Addendum — what the §6 experiment settled (2026-09-10)
+
+Run against PostgreSQL 18 (the box's own version, `deploy/compose.yml`) before the implementation
+plan was written. §8's open question is closed, and two of the findings changed the work.
+
+- **The bricking was not an ahead database.** It was the enum-in-one-transaction defect, repaired on
+  its own branch and landed as #307; §1 and §8 carry the dated pointers and the regression test's
+  name, and `docs/backlog.md` → Track P carries what #307 left open. Not repeated here.
+- **A second defect sits underneath it, silent.** `packages/db/drizzle/meta/_journal.json` is
+  non-monotonic — entries 2 to 6 carry `when` values below entry 1's — and drizzle applies a
+  migration only when `max(created_at)` is below that migration's own `when`, so those entries are
+  SKIPPED with no error. Measured with the enum defect fixed so it could be seen at all: a database
+  at core release point 1 upgrades to HEAD with 10 of 15 migrations applied and raises nothing. No
+  edit to the journal repairs it — a database at point 2 and one at point 3 carry the same watermark
+  yet need opposite values for entry 2 — so the only true repair is a squashed baseline, an owner
+  decision nobody has taken. This branch's mitigation is therefore to make the skip LOUD rather than
+  silent: `migrations.incomplete`, thrown by `applyMigrations` when fewer migrations applied than the
+  image ships. That is this spec's own subject — a wrong state that says nothing.
+- **§4.2's ahead check stands and its mechanism is confirmed — but §6's sketch of the
+  proof-by-deletion was wrong.** §6 predicted that, with the check removed, an ahead database would
+  "fall through to a raw pg error … never boot successfully". It was measured, and it does not: with
+  a journal watermark above every shipped migration's `when`, drizzle applies nothing, writes no
+  journal row and throws nothing, so a re-migrate resolves *cleanly* and the boot proceeds. The
+  mismatch only bites later, in whatever query first touches a schema that is not there. That makes
+  this check the only thing that names the case — a stronger claim than §6 made, not a weaker one.
+  It is pinned by the third test in `packages/provisioning/src/schema-ahead.pg.test.ts`, which
+  re-migrates the ahead database and asserts the journal row count is unchanged and the set is still
+  reported ahead. `created_at` is a `bigint` and reaches JavaScript as a STRING, which is the second
+  reason the check compares hashes rather than that column.
+- **§4.1's schema-mismatch table gained `55P04`**, written from the experiment as §6 requires.
+- **Consequence for existing dev and demo databases.** #307 edited
+  `packages/db/drizzle/0014_central_printer_provisioning_sql.sql`, which changed that file's drizzle
+  hash, so every database that applied the old `0014` (any dev or demo database created since #304
+  landed on 2026-09-09) carries a hash this image ships no file for — and §4.2's check refuses to
+  boot it with `provisioning.database_ahead`. That is the check working, not a fault: the database
+  really was migrated by a different image. The remedy for a disposable database is
+  `wa-wt reset demo`; for a real box it is the page's own action.
+- **§4.4's channel carries the CAUSE CHAIN and an `AppError`'s params, not just the outer error.**
+  Run against real PostgreSQL 18: drizzle wraps the driver error, so `select absent_column` gives an
+  outer `Failed query: select absent_column` and puts `column "absent_column" does not exist` in
+  `cause` alone — the first implementation reported only the outer error and the captured installer
+  output held drizzle's query wrapper and no reason. The reporter now walks `cause` to the same bound
+  `sqlStateOf` uses (five) and includes each level's name and message, plus an `AppError`'s params —
+  `migrations.incomplete`'s counts and `database_ahead`'s hashes are the diagnosis. All of it still
+  goes through `redactSecrets` and none of it reaches the page (§5 unchanged, pinned by test).
+- **`provisioning.schema_mismatch` is declared in `apps/server/src/errors.ts`, not the provisioning
+  registry §4.1 names.** §4.1's reasoning is about the `provisioning.` PREFIX, which is unchanged;
+  which FILE declares a code is a separate question, and this host is the code's only producer —
+  `classifyBootFailure` returns it two lines from `provisioning.database_unreachable`, which already
+  lives there with a paragraph arguing exactly this. `provisioning.database_ahead` stays in
+  `packages/provisioning/src/errors.ts`, because `schema-ahead.ts` really does throw it.
+- **§4.1's schema-mismatch table LOST `22P02`, a deliberate deviation from this spec.** Run on
+  PostgreSQL 18, `select 'not-a-uuid'::uuid` returns `22P02` — the same SQLSTATE as an enum label the
+  image does not have — so the state cannot tell a malformed VALUE from a missing schema, and this
+  repository is full of the former (a non-uuid path parameter reaching a `uuid` column is what dozens
+  of route guards screen). Classifying it as `provisioning.schema_mismatch` would have told an
+  operator to restore or reinstall over a bad boot-time value. The four that remain (`42P01`,
+  `42703`, `42704`, `55P04`) are unambiguous. `unknown` is the honest answer here and costs little
+  now that the installer's channel carries the driver's own message.

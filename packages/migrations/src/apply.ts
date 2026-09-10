@@ -1,5 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Client } from "pg";
-import { createPostgresDb, runMigrations, type MigrationOptions } from "@waitron/db";
+import { createPostgresDb, runMigrations, type Database, type MigrationOptions } from "@waitron/db";
+import { AppError } from "@waitron/shared";
+import { appliedSchemaVersion } from "./schema-version.js";
+import "./errors.js";
 
 /**
  * A fixed key, not `hashtext` of a string: an advisory lock is only a lock if every host computes
@@ -42,7 +47,10 @@ export async function applyMigrations(
       try {
         // Ordering is the runtime's responsibility and nothing enforces it — core carries `tenants`,
         // which every other set has a foreign key to. The manifest states that order out loud.
-        for (const set of options) await runMigrations(migrationDb, set);
+        for (const set of options) {
+          await runMigrations(migrationDb, set);
+          await assertSetApplied(migrationDb, set);
+        }
       } finally {
         await migrationDb.close();
       }
@@ -51,5 +59,58 @@ export async function applyMigrations(
     }
   } finally {
     await lock.end();
+  }
+}
+
+/**
+ * Refuses a set that reported success with fewer migrations applied than its folder ships.
+ *
+ * Drizzle decides what to apply from `max(created_at)` alone — never a journal index
+ * (`drizzle-orm@0.45.2/pg-core/dialect.js:56-62`) — so a migration whose `when` sits below a value
+ * the database already recorded is skipped, and nothing is raised. Counting the journal is the only
+ * way to notice; a host that boots on a half-migrated schema fails later, somewhere unrelated.
+ *
+ * `applied < expected`, not `!==`: a journal holding MORE rows than this image ships is a database
+ * migrated by a NEWER image, which is a different fault with its own name
+ * (`provisioning.database_ahead`) and its own remedy. Reporting it as "incomplete" would put a
+ * misleading count in front of the one reader who cannot debug it.
+ *
+ * `expected` is the journal's own `entries.length`, read from `set.migrationsFolder` exactly as
+ * drizzle's migrator reads it — `${migrationsFolder}/meta/_journal.json`, joined and never
+ * `path.resolve`d (`drizzle-orm@0.45.2/migrator.js:6`). So the count compared here is taken from the
+ * very file the migration it is checking was driven from, whatever that folder's shape.
+ *
+ * `expectedSchemaVersion` would be the reuse, and it is NOT wrong today: it routes the folder
+ * through `resolveMigrationsFolder(set, null)` → `resolve(<pkg>, "..", from)`, and `path.resolve`
+ * returns a final ABSOLUTE segment unchanged (measured), which is what `migrationOptionsFor` always
+ * builds. It is declined because the agreement is incidental to two functions rather than stated by
+ * either: a RELATIVE `migrationsFolder` — discouraged by `MigrationOptions`'s own doc comment, not
+ * refused by it — would send drizzle to the working directory and that call to `packages/migrations`,
+ * counting a DIFFERENT set's journal and reporting a confident wrong number. It would also need a
+ * fabricated `MigrationSet.name`, since `MigrationOptions` carries none.
+ */
+async function assertSetApplied(
+  db: Pick<Database, "execute">,
+  set: MigrationOptions,
+): Promise<void> {
+  // `MigrationOptions` carries no set NAME, only a folder and a table, so the table names the set
+  // here and in the thrown params. It is also what `appliedSchemaVersion` validates against the
+  // drizzle journal-table pattern before interpolating it as an identifier.
+  const migrationSet = {
+    name: set.migrationsTable,
+    table: set.migrationsTable,
+    from: set.migrationsFolder,
+  };
+  const applied = await appliedSchemaVersion(db, migrationSet);
+  const journal = JSON.parse(
+    readFileSync(join(set.migrationsFolder, "meta", "_journal.json"), "utf8"),
+  ) as { entries: unknown[] };
+  const expected = journal.entries.length;
+  if (applied < expected) {
+    throw new AppError("migrations.incomplete", {
+      set: set.migrationsTable,
+      applied,
+      expected,
+    });
   }
 }

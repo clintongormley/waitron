@@ -747,6 +747,15 @@ export async function startServer(
   // read per call. The two exit-path loggers (this file's `startListening` catch, `bin.ts`'s fatal
   // exit) stay 2-arg on purpose — they run at process death, want no file sink, and take the
   // `getThreshold` default (`info`).
+  //
+  // The two halves are deliberately NOT filtered alike. The FILE half masks URL credentials
+  // (`createRotatingFileSink` calls `redactSecrets` on every line), because the recovery page serves
+  // that file's tail to anyone on the venue's LAN with no login. The STDOUT half is left whole: it is
+  // the installer's channel (spec §4.4), reachable only with a shell on the box, and masking it would
+  // erase the difference between a wrong password and no password at all — both render `***` — which
+  // is exactly what an installer chasing `provisioning.database_unreachable` (SQLSTATE `28P01`) has
+  // to tell apart. Pinned by `recovery-surface.test.ts` → "the caught error's own words on the page",
+  // which asserts both directions on one logged line.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —
   // `health.ts` imports `DEFAULT_MAX_TICK_MS` FROM `config.ts` to build `DUTY_BUDGET_MS`, so

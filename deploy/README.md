@@ -65,6 +65,23 @@ docker compose logs -f app                    # the server's JSON lines
 The services are all `restart: unless-stopped`, so the box comes back on its own after a power cut and
 after the app's own requested restart at the end of the setup wizard.
 
+### When the app will not boot
+
+The box serves a recovery page instead of the app, and that page names a CODE and shows the tail of
+`waitron.log` — enough for the restaurant to act on, deliberately not enough to diagnose from. The
+real reason goes somewhere the restaurant never looks and only whoever prepared the box can read:
+
+```bash
+cd /opt/waitron
+docker compose logs app | tail -50    # the failed boot's error, its cause chain, and its stack
+```
+
+That output is the caught error's own words — a missing column, a refused connection, the counts
+behind `migrations.incomplete`, the migration hashes behind `provisioning.database_ahead` — with any
+credentials embedded in a URL masked before it is written. `docker compose logs` keeps it across the
+container's own restart loop, so read it before pulling a new image: `docker compose up -d` on a
+fresh image starts a new container and the previous boot's output goes with the old one.
+
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to
@@ -85,6 +102,13 @@ to a valid length) and sets `WAITRON_IMAGE` inline for that one `docker compose 
 `:main` unless you have set `WAITRON_IMAGE` there. `<ref>` is any ref on the public repo — a PR
 branch, or a commit SHA to pin exactly what you build. Add `sudo` if your user is not in the `docker`
 group; the first build takes several minutes (it builds the whole app).
+
+**It migrates the box's database one way.** If the branch carries a database migration, running it
+changes the box's database, and there is no backward migration — a plain `docker compose up -d` back
+to `:main` afterwards can fail to boot with `provisioning.database_ahead`, whose only fix is
+restoring from a backup or reinstalling. The script cannot tell whether a given ref carries one (the
+branch's files are not on the box until the build fetches them), so it warns every time. Safe on a
+demo box; take a backup first on a box holding a real venue's records.
 
 ### The health check accepts either endpoint
 

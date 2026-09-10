@@ -73,11 +73,13 @@ const HEAD_FOLDER = folderWithFirst(journal.entries.length);
  * (`docs/superpowers/plans/2026-09-10-core-migration-upgrade.md`;
  * `scripts/journal-monotonic.test.ts` carries the same argument).
  *
- * THE RESIDUAL SKIP IS UNMITIGATED IN THIS BRANCH: a database at one of these points upgrades
- * silently and incompletely, with no error. Making it loud is a `migrations.incomplete` check in
- * `applyMigrations` (counting applied migrations against shipped ones and throwing when fewer
- * applied), on branch `feat/boot-failure-diagnosability`. `scripts/journal-monotonic.test.ts` is what
- * stops a NEW set acquiring the same shape.
+ * The skip is LOUD but not REPAIRED. `applyMigrations` counts applied migrations against shipped
+ * ones and throws `migrations.incomplete` (`packages/migrations/src/apply.ts`), so a database at one
+ * of these points refuses to boot instead of running on a schema it does not have — but it still
+ * cannot upgrade, and repairing that means a squashed baseline, a separate decision. This suite
+ * drives drizzle through `runMigrations` rather than `applyMigrations`, so it sees the raw skip and
+ * these points stay excluded. `scripts/journal-monotonic.test.ts` is what stops a NEW set acquiring
+ * the same shape.
  */
 const NON_MONOTONIC_POINTS = journal.entries
   .map((_, at) => at)

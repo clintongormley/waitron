@@ -8,6 +8,7 @@ import {
   classifyBand,
   compareDecimal,
   decimal,
+  firstCodeInCauseChain,
   divideDecimal,
   FALLBACK_LOCALE,
   fiscalRecordId,
@@ -35,6 +36,7 @@ import {
   toScale,
   workingOrderId,
   workingOrderLineId,
+  sqlStateOf,
   worstBand,
 } from "./index.js";
 
@@ -97,6 +99,12 @@ describe("package public surface (./index.js)", () => {
     expect(SUPPORTED_LOCALES).toBeDefined();
     expect([...SUPPORTED_LOCALE_CODES]).toEqual(["es-ES", "en-GB"]);
     expect(FALLBACK_LOCALE).toBe("en-GB");
+  });
+
+  it("re-exports the cause-chain readers", () => {
+    const wrapped = new Error("w", { cause: Object.assign(new Error("d"), { code: "42704" }) });
+    expect(sqlStateOf(wrapped)).toBe("42704");
+    expect(firstCodeInCauseChain(wrapped, (code) => code === "42704")).toBe("42704");
   });
 
   it("re-exports the timing band classifier", () => {

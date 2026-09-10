@@ -4,8 +4,13 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
 import pg from "pg";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
+import { createPostgresDb } from "@waitron/db";
+import { manifestSets } from "@waitron/migrations";
+// Aliased: this module exports its own `assertNotAhead` — the wrapper that opens the connection —
+// and `EntryDeps` has a field of the same name.
+import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning";
 import {
   DEFAULT_MIGRATIONS_ROOT,
   DEFAULT_MEDIA_ROOT,
@@ -33,11 +38,13 @@ import {
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
-import { recoveryApp } from "./recovery-surface.js";
+import { BOOT_INCOMPLETE, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
 import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
+import { classifyBootFailure } from "./boot-failure.js";
+import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
 
 /** The one database a node owns, matching the URLs `ensureInstance` writes into `instance.env`. */
@@ -52,12 +59,6 @@ const STAYED_UP_MS = 120_000;
 
 const WAIT_ATTEMPTS = 60;
 const WAIT_DELAY_MS = 1000;
-
-/** The recovery-state marker for an attempt whose outcome is not known YET — written before the
- * server starts, so a boot that HANGS (and therefore never produces a real code) still leaves the
- * page something true to say. Not an `AppError` code: nothing throws it. A boot that does throw
- * overwrites it with `codeOf`'s classification. */
-const BOOT_INCOMPLETE = "server.boot_incomplete";
 
 export interface WaitDeps {
   /** One connect-and-query round trip, or a rejection. */
@@ -209,6 +210,27 @@ export interface EntryDeps {
   }) => Promise<InstanceUrls>;
   /** Executes a staged restore before loadBoxEnv/startServer opens application pools. */
   runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
+  /** Refuses a database migrated by a different image. Injected so `runEntry` stays unit-testable;
+   *  it defaults to the real `assertNotAhead` BELOW in this file, as `runStagedRestore` above
+   *  defaults to the real one — because it is a GUARD. A no-op default is lost by any caller that
+   *  forgets the dependency, and lost silently: nothing throws and nothing logs. (`reportFailure`
+   *  below does default to a no-op; its own doc says why that one is different.) */
+  assertNotAhead?: (migrationsDatabaseUrl: string, migrationsRoot: string) => Promise<void>;
+  /**
+   * The INSTALLER's channel — the container's stdout, which is `docker logs`, never the
+   * `waitron.log` the recovery page tails. It is the one place the caught error's own words may
+   * appear, and only after `redactSecrets`. Injected so the failure path is unit-covered; a test
+   * that omits it gets the no-op below and asserts nothing about it.
+   *
+   * It keeps that no-op default, unlike `assertNotAhead` above, because it is diagnostic OUTPUT and
+   * not a guard: omitting it loses detail from `docker logs` and changes no outcome — the boot still
+   * throws, `main` at the bottom of this file still writes the structured `server.boot_failed` line,
+   * and the recovery page still shows the classified code. `main` is `runEntry`'s only non-test
+   * caller and wires the real stdout write. A real-stdout default would instead print a stack for
+   * every unit test that exercises a failing boot without supplying it: replacing the no-op with a
+   * marker write printed it twelve times from `node-entry.test.ts` alone (measured 2026-09-11).
+   */
+  reportFailure?: (text: string) => void;
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
   readRecoveryState: (stateDir: string) => Promise<RecoveryState>;
   writeRecoveryState: (stateDir: string, state: RecoveryState) => Promise<void>;
@@ -226,9 +248,11 @@ export interface EntryDeps {
   /**
    * Where the migration sets live. Typed `string`, never `string | null`, although
    * `ensureInstance` accepts null: null means "resolve from the bundle's own directory", which is
-   * exactly the value that fails a real container's first boot with `migrations.set_missing`. The
-   * default is the same expression `startServer` passes, so the entrypoint and the server it starts
-   * can never migrate from two different folders.
+   * exactly the value that fails a real container's first boot with `migrations.set_missing`.
+   *
+   * ONE folder, stated once here: the default is the same expression `startServer` passes, and
+   * `runEntry` hands this same value to the ahead check — so the entrypoint, its ahead check and the
+   * server it starts can never read three different folders.
    */
   migrationsRoot?: string;
   exit?: (code: number) => void;
@@ -288,11 +312,84 @@ async function persistState(deps: EntryDeps, next: RecoveryState): Promise<void>
   }
 }
 
+/** An `AppError`'s params as one line, or a placeholder when they will not serialise. */
+function paramsLine(params: unknown): string {
+  try {
+    return `params: ${JSON.stringify(params)}`;
+  } catch {
+    return "params: (not serialisable)";
+  }
+}
+
+/**
+ * What the installer's channel gets for a failed boot: the outer error's name, message and stack,
+ * then every wrapped `cause` below it by name and message, and an `AppError`'s params at whichever
+ * level carries them — all through `redactSecrets`, because this is the one place the caught error's
+ * own words may appear (spec §4.4) and it is `docker logs`, never the page.
+ *
+ * The chain is walked because the outer error is usually not the reason. Drizzle wraps the driver's
+ * error rather than re-exposing it: measured against real PostgreSQL 18, `select absent_column`
+ * gives an outer `Failed query: select absent_column` and puts `column "absent_column" does not
+ * exist` in `cause` alone — so reporting the outer error is reporting the query wrapper and nothing
+ * else. Params travel for the same reason: `migrations.incomplete`'s counts and
+ * `provisioning.database_ahead`'s hashes ARE the diagnosis, and the code alone was already in the
+ * structured `server.boot_failed` line.
+ *
+ * Only the outer stack is included. A stack per level triples the output for the frames of a driver
+ * the installer cannot act on; the names and messages are what name the fault.
+ *
+ * Its own loop, but not its own bound: `MAX_CAUSE_DEPTH` is imported from `@waitron/shared`'s
+ * `cause-chain.ts`, which carries the self-reference and depth arguments for all three walks.
+ * `firstCodeInCauseChain` itself cannot serve here — it returns the FIRST accepted code and stops,
+ * while this keeps every level.
+ */
+function failureDetail(error: unknown): string {
+  const lines: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    const prefix = depth === 0 ? "" : "caused by: ";
+    if (current instanceof Error) {
+      lines.push(`${prefix}${current.name}: ${current.message}`);
+      if (depth === 0) lines.push(current.stack ?? "(no stack)");
+      if (isAppError(current)) lines.push(paramsLine(current.params));
+    } else {
+      lines.push(`${prefix}non-error thrown: ${String(current)}`);
+    }
+    if (typeof current !== "object" || current === null) break;
+    const cause: unknown = (current as { cause?: unknown }).cause;
+    if (cause === undefined || cause === current) break;
+    current = cause;
+  }
+  return redactSecrets(lines.join("\n"));
+}
+
+/**
+ * Refuse a database carrying migrations this image does not ship: connect as the migrator, compare
+ * the journals against the migration files under `migrationsRoot`, close. The default for
+ * `EntryDeps.assertNotAhead`, so it is the shape `runStagedRestore` already sets — the real
+ * implementation, never a no-op that a caller could lose the guard to by forgetting the dependency.
+ *
+ * `migrationsRoot` is a parameter rather than a closure over the entrypoint's own, so this can BE
+ * that default: the one folder both halves read is `EntryDeps.migrationsRoot`, which `runEntry`
+ * passes in.
+ */
+export async function assertNotAhead(
+  migrationsDatabaseUrl: string,
+  migrationsRoot: string,
+): Promise<void> {
+  const db = await createPostgresDb(migrationsDatabaseUrl);
+  try {
+    await assertDatabaseNotAhead(db, manifestSets(), migrationsRoot);
+  } finally {
+    await db.close();
+  }
+}
+
 /**
  * One container start: decide the level, bring the cluster into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
  *
- * THREE orderings carry the whole design, and each is invisible in production if it is wrong:
+ * FOUR orderings carry the whole design, and each is invisible in production if it is wrong:
  *
  * 1. The level is read FIRST, before anything touches Postgres. A database-side failure is exactly
  *    what puts a box in recovery, so deciding after the wait and the bootstrap would make the page
@@ -306,6 +403,11 @@ async function persistState(deps: EntryDeps, next: RecoveryState): Promise<void>
  * 3. It CLEARS only from the stayed-up callback — `startServer` resolved AND the process then
  *    survived `STAYED_UP_MS`. Clearing on "started" alone is a measurement where pass and fail look
  *    alike: a module throwing five seconds in would reset the counter on every attempt.
+ * 4. The ahead check runs AFTER `ensureInstance` and BEFORE `startServer`. Before `ensureInstance`
+ *    it would refuse a legitimately BEHIND database — an ordinary upgrade — which `ensureInstance`
+ *    is about to migrate forward; after `startServer` it would arrive behind the first query that
+ *    touches the changed schema, which is the unclassified driver error this branch exists to
+ *    remove. Pinned by "checks for an ahead database after ensureInstance, never before".
  *
  * `startServer` resolving is the signal rather than a healthy `/health` probe because `/health` is
  * 503 on a setup box by design, so a health-gated reset would drive every unprovisioned box into
@@ -376,6 +478,16 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       log: deps.log,
     });
 
+    // AFTER `ensureInstance` has migrated a legitimately BEHIND database forward, and BEFORE the
+    // server opens a pool: only the ahead direction is unrecoverable, and naming it here is the
+    // whole point — drizzle applies and reports nothing for an ahead journal, so the mismatch would
+    // otherwise surface as an unclassified driver error in whatever query first touched the changed
+    // schema (spec §4.2, proven in `schema-ahead.pg.test.ts`).
+    await (deps.assertNotAhead ?? assertNotAhead)(
+      urls.migrationsDatabaseUrl,
+      deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT,
+    );
+
     // AFTER `ensureInstance`, which has just written `instance.env` — that file is where the merged
     // environment's `DATABASE_URL` comes from.
     const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
@@ -392,9 +504,11 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     // unmerged base to tell a file-sourced value from an env-sourced one (spec §3.2 provenance).
     server = await deps.startServer(env, deps.baseEnv);
   } catch (error) {
+    // The installer's channel first, so the real reason survives even if the state write fails.
+    (deps.reportFailure ?? (() => {}))(failureDetail(error));
     // Same count as the pre-boot write — one attempt is one failure, not two — now carrying the
-    // real classification for the page. Rethrown so the process exits non-zero and Docker restarts.
-    await persistState(deps, afterFailure(state, codeOf(error), new Date()));
+    // classified code for the page. Rethrown so the process exits non-zero and Docker restarts.
+    await persistState(deps, afterFailure(state, classifyBootFailure(error), new Date()));
     throw error;
   }
 
@@ -424,6 +538,11 @@ function bootThisProcess(): Promise<void> {
   const env = { ...process.env };
   delete process.env[BOOTSTRAP_URL];
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  // `config.ts`'s own fallback, verbatim (it stores this one unresolved). The one-folder rule is
+  // stated on `EntryDeps.migrationsRoot`.
+  const migrationsRoot = isUnset(env.WAITRON_MIGRATIONS_DIR)
+    ? DEFAULT_MIGRATIONS_ROOT
+    : env.WAITRON_MIGRATIONS_DIR;
   const log = createLogger(
     (line) => void process.stdout.write(line),
     () => new Date(),
@@ -432,11 +551,7 @@ function bootThisProcess(): Promise<void> {
     baseEnv: env,
     stateDir,
     logDir: isUnset(env.WAITRON_LOG_DIR) ? join(stateDir, "logs") : env.WAITRON_LOG_DIR,
-    // `config.ts`'s own fallback, verbatim (it stores this one unresolved), so the entrypoint and
-    // the server it starts can never migrate from two different folders.
-    migrationsRoot: isUnset(env.WAITRON_MIGRATIONS_DIR)
-      ? DEFAULT_MIGRATIONS_ROOT
-      : env.WAITRON_MIGRATIONS_DIR,
+    migrationsRoot,
     waitForPostgres: (url) =>
       waitForPostgres(url, {
         connect: connectOnce,
@@ -445,6 +560,7 @@ function bootThisProcess(): Promise<void> {
       }),
     ensureInstance,
     runStagedRestore,
+    reportFailure: (text) => void process.stdout.write(`${text}\n`),
     loadBoxEnv,
     readRecoveryState,
     writeRecoveryState,
@@ -457,9 +573,10 @@ function bootThisProcess(): Promise<void> {
     log,
     exit: DEFAULT_EXIT,
   }).catch((error: unknown) => {
-    // `codeOf`, never the caught value: a `pg` failure's message can embed the connection string,
-    // and an unhandled rejection would print the whole stack.
-    log("error", "server.boot_failed", { errorCode: codeOf(error) });
+    // `classifyBootFailure`, never the caught value: a `pg` failure's message can embed the
+    // connection string, and an unhandled rejection would print the whole stack. The scrubbed text
+    // has already gone to stdout from `runEntry`'s catch; this line stays structured.
+    log("error", "server.boot_failed", { errorCode: classifyBootFailure(error) });
     process.exit(1);
   });
 }

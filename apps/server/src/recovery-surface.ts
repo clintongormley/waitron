@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ServerResponse } from "node:http";
 import { Hono } from "hono";
 import type { Context } from "hono";
+import type { ErrorCode } from "@waitron/shared";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 
 const MAX_LOG_LINES = 200;
@@ -18,9 +19,11 @@ export interface RecoveryDeps {
 }
 
 /** Escapes into HTML text/attribute content. This page is served before any authentication exists
- * and both the error code and the log tail are attacker-influenceable in principle, so every
- * interpolated value goes through this — never a raw template literal. */
-function escapeHtml(value: string): string {
+ * and every string on it that came from outside the image is attacker-influenceable — the log tail
+ * demonstrably so, see `OPERATOR_TEXT`, which enumerates all three — so every interpolated value
+ * goes through this, never a raw template literal. Exported so the suite asserts the page's exact
+ * rendered bytes against this rule rather than against a second copy of it. */
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -56,11 +59,181 @@ function outgoingOf(c: Context): ServerResponse | undefined {
   return (c.env as { outgoing?: ServerResponse } | undefined)?.outgoing;
 }
 
+export interface OperatorText {
+  /** What is wrong, in the operator's terms. */
+  title: string;
+  /** What they should do about it. */
+  action: string;
+}
+
+/**
+ * The recovery-state marker for an attempt whose outcome is not known YET — `node-entry.ts` writes it
+ * before the server starts, so a boot that HANGS (and therefore never produces a real code) still
+ * leaves the page something true to say. Not an `AppError` code: nothing throws it, and it is in no
+ * registry. A boot that does throw overwrites it with `classifyBootFailure`'s answer.
+ *
+ * It lives HERE, in the page's own module, and `node-entry.ts` imports it — not the other way round,
+ * though the entrypoint is what writes it. node-entry already imports this module for `recoveryApp`,
+ * so exporting it from there closes a cycle, and the cycle is not a crash but a silent wrong answer:
+ * esbuild bundles the container's entry (`dist/node-entry.js`) with recovery-surface's body ahead of
+ * node-entry's `var`, so the computed key below evaluated to `undefined`. Measured on that bundle —
+ * `Object.keys(OPERATOR_TEXT)` printed `"undefined"` in place of `server.boot_incomplete`, while
+ * every unit test passed, because vitest evaluates the two modules in the other order.
+ */
+export const BOOT_INCOMPLETE = "server.boot_incomplete";
+
+/**
+ * A code the recovery state can carry. `ErrorCode` is the shared registry's own union, so a typo in
+ * a thrown code below is a typecheck failure rather than a page that silently renders the generic
+ * line; `BOOT_INCOMPLETE` is added by hand because it is in no registry.
+ */
+type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE;
+
+/**
+ * What the page says, keyed by error code.
+ *
+ * EVERY string in this table is fixed and chosen by code. THREE strings on the page are not: the
+ * error CODE, the log TAIL and `lastFailureAt` — the last read from `recovery.json` behind nothing
+ * but a `typeof === "string"` check (`recovery-state.ts`), so it is a string from outside the image
+ * exactly as the other two are. All three are HTML-escaped and all three are treated as
+ * attacker-influenceable. (`failures` also comes from that file; it is the one value interpolated
+ * without escaping, and what makes that safe is that the same read coerces it to a number.)
+ *
+ * The TAIL is the widest of the three, and the caught error's own words DO reach it — the earlier
+ * claim that they never leave stdout was wrong twice. The box has ONE logger, tee'd to the
+ * container's stdout and to the `waitron.log` this page tails (`boot.ts`), so every module that logs
+ * a caught error's message writes it onto an unauthenticated LAN page: `mdns.ts` and `me-api.ts`
+ * already do, and email is configured as a URL, so a mailer failure is a plausible carrier of
+ * `smtp://user:pass@host`. Two things bound that, neither of them this page:
+ *
+ *  - the file sink masks URL credentials on every line it writes (`log-file.ts` → `redactSecrets`),
+ *    which covers the connection-string shape and NOTHING else — an error message carrying a secret
+ *    in any other shape still reaches this page;
+ *  - the repo's convention that an `AppError`'s params never carry a secret (the rule
+ *    `apps/server/src/errors.ts` states for `server.config_invalid` and its siblings), because the
+ *    shared error boundary writes those params into the same file
+ *    (`packages/server-kit/src/error-boundary.ts`).
+ *
+ * This page is why both matter beyond a log file. Pinned by `recovery-surface.test.ts` → "the log
+ * tail as a second channel out of the image" and "the caught error's own words on the page".
+ *
+ * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
+ * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
+ * 2026-09-10).
+ *
+ * Every restore-or-reinstall action also names whoever installed the box: the reader has no
+ * terminal, and often no backup and no installer either, so that person is their only real next
+ * step.
+ */
+export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>> = {
+  "provisioning.database_ahead": {
+    title:
+      "This box's database was set up by a different version of Waitron than the one installed.",
+    action:
+      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
+  },
+  "provisioning.schema_mismatch": {
+    title: "The box's database does not match the installed software.",
+    action:
+      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
+  },
+  "provisioning.database_unreachable": {
+    // Three causes wear this one code: the bounded connection wait timing out, and the SQLSTATEs
+    // `28P01` (wrong password) and `3D000` (no such database) — `boot-failure.ts`. Hence "could not
+    // connect" rather than "is not responding" (a refusal IS a response), and an escalation the
+    // operator can walk down: the retry fixes the first cause, and only a person can fix the other
+    // two, which is why the action says a restart cannot.
+    title: "Waitron could not connect to the box's database.",
+    action:
+      "Wait a minute and press Retry — the database may still be starting up. If that does not help, restart the box. If it still fails, ask whoever installed this box to check its database settings: a restart cannot fix a wrong password or a missing database.",
+  },
+  "provisioning.database_not_owned": {
+    title: "The box's database belongs to another program.",
+    action:
+      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
+  },
+  "provisioning.admin_uri_not_a_url": {
+    title: "The box's database address is not a valid address.",
+    action: "Ask whoever installed this box to check its settings.",
+  },
+  "migrations.incomplete": {
+    // The one entry that deliberately does NOT offer the restore. A cold restore runs the migrations
+    // itself (`restore.ts` → `applyMigrations`), so a restore is one of the things that raises this
+    // code — and an operator whose backup is from the failing release point would be sent round that
+    // loop with no exit and no other instruction.
+    title: "The box's database was only partly updated.",
+    action:
+      "Ask whoever installed this box to look at it. Restoring a backup may not help: a restore runs the same update, and it can stop in the same place.",
+  },
+  "deployment.environment_mismatch": {
+    // Configuration, not a broken database — so no restore and no reinstall: neither changes which
+    // database this box points at, and a restore onto the wrong one is the worse outcome. Named
+    // rather than left to the generic line because it is a CLAUDE.md §5 case: the environments do
+    // not share a series, and a sale filed from the wrong one leaves a permanent hole in the other.
+    title:
+      "This box and its database do not belong to the same system: one is set up for real sales, the other for testing.",
+    action: "Ask whoever installed this box to check its settings.",
+  },
+  "server.config_missing": {
+    title: "The box's configuration is incomplete.",
+    action: "Ask whoever installed this box to check its settings.",
+  },
+  "server.config_invalid": {
+    title: "The box's configuration is invalid.",
+    action: "Ask whoever installed this box to check its settings.",
+  },
+  [BOOT_INCOMPLETE]: {
+    title: "Waitron did not finish starting.",
+    action: "Press Retry. If it keeps failing, ask whoever installed this box to look at it.",
+  },
+  "migrations.set_missing": {
+    title: "The installed software is incomplete.",
+    action: "Reinstall Waitron on this box.",
+  },
+};
+
+/**
+ * The fallback, and what `unknown` renders: the classifier could not name this one. An unrecognised
+ * code renders this and never throws — a box that failed before it ever wrote a log still has to
+ * serve this page.
+ *
+ * The action names a person rather than promising the reason is written down somewhere. `runEntry`
+ * reports the scrubbed error for every failure of the BOOT SEQUENCE — but `readRecoveryState` and
+ * the pre-boot counter write both run before that try/catch, and the counter write is deliberately
+ * allowed to throw, so a failed state volume reaches the outer handler, which logs
+ * `server.boot_failed { errorCode }` and no detail at all. Naming the person is true in every case;
+ * naming the detail was not.
+ */
+export const GENERIC_TEXT: OperatorText = {
+  title: "Waitron could not start.",
+  action: "Ask whoever installed this box to look at it.",
+};
+
+/**
+ * The curated text for a recorded code, or the generic line.
+ *
+ * `Object.hasOwn`, not a plain lookup with `??`: the code is read from a file on the box and treated
+ * as attacker-influenceable, and an object literal inherits `Object.prototype`, so a code of
+ * `toString` or `constructor` would find a FUNCTION — which `??` does not replace and whose `title`
+ * is `undefined`, crashing the one page a failed box can still serve.
+ */
+function operatorText(lastErrorCode: string | null): OperatorText {
+  if (lastErrorCode === null) return GENERIC_TEXT;
+  if (!Object.hasOwn(OPERATOR_TEXT, lastErrorCode)) return GENERIC_TEXT;
+  const entries: Readonly<Record<string, OperatorText | undefined>> = OPERATOR_TEXT;
+  return entries[lastErrorCode] ?? GENERIC_TEXT;
+}
+
 function renderPage(state: RecoveryState, logLines: string[]): string {
   const errorCode = state.lastErrorCode === null ? "none" : escapeHtml(state.lastErrorCode);
   const failureAt = state.lastFailureAt === null ? "never" : escapeHtml(state.lastFailureAt);
+  const text = operatorText(state.lastErrorCode);
   const tail =
     logLines.length === 0 ? "(no log yet)" : logLines.map((line) => escapeHtml(line)).join("\n");
+  // The curated strings go through `escapeHtml` too. They are fixed and safe, but routing every
+  // interpolation through the one escape keeps "never a raw template literal" true without an
+  // exception a reader has to check. The retry form sits ABOVE the installer detail: the operator's
+  // action is the point of the page, and the block below it is for someone else.
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -70,13 +243,16 @@ function renderPage(state: RecoveryState, logLines: string[]): string {
 </head>
 <body>
 <h1>Waitron did not start</h1>
+<p>${escapeHtml(text.title)}</p>
+<p>${escapeHtml(text.action)}</p>
+<form method="post" action="/recovery-api/retry">
+<button type="submit">Retry a normal boot</button>
+</form>
+<h2>For whoever installed this box</h2>
 <p>Level: ${escapeHtml(state.level)}. Failed ${state.failures} times.</p>
 <p>Last error: ${errorCode} at ${failureAt}</p>
 <h2>Log tail</h2>
 <pre>${tail}</pre>
-<form method="post" action="/recovery-api/retry">
-<button type="submit">Retry a normal boot</button>
-</form>
 </body>
 </html>
 `;

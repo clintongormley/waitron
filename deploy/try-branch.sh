@@ -32,6 +32,23 @@ safe="${REF//[^A-Za-z0-9._-]/-}"
 TAG="waitron:${safe:0:100}"
 
 AGENT_TAG="waitron-print-agent:${safe:0:100}"
+
+# It cannot tell whether this ref carries a migration — the branch's files are not on the box until
+# the build fetches them — so it warns every time. A migration-carrying branch migrates the box's
+# live database ONE WAY: there is no backward migration, and a plain `docker compose up -d` back to
+# :main afterwards may then fail to boot with `provisioning.database_ahead`, whose only fix is a
+# restore from backup or a reinstall. A demo box's data is disposable; a real venue's is not.
+cat >&2 <<'WARNING'
+try-branch.sh: this migrates the box's live database ONE WAY.
+
+  If this branch carries a database migration, running it changes the box's database in a way
+  that going back to the published image cannot undo. The box may then refuse to boot, and the
+  only fix is restoring from a backup or reinstalling.
+
+  Safe on a demo box. On a box holding a real venue's records, take a backup first.
+
+WARNING
+
 docker build -t "$TAG" -f deploy/Dockerfile "$@" "https://github.com/clintongormley/waitron.git#${REF}"
 docker build -t "$AGENT_TAG" -f deploy/Dockerfile --target print-agent "$@" "https://github.com/clintongormley/waitron.git#${REF}"
 

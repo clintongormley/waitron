@@ -37,6 +37,10 @@ export default defineConfig({
       // independently, the one file in this package where @vitest/coverage-v8 has proven
       // non-deterministic — an in-source `v8 ignore file` comment was tried first and did not
       // reliably suppress it (see src/index.ts), which is why the exclusion lives here instead.
+      // The same misattribution leaks ONE statement out of the excluded barrel and into a file it
+      // imports: with index.test.ts in the run, sql-state.ts's `import` line reports 0 executions
+      // (deterministic across repeated runs; drop index.test.ts and it is 100%). The package gate
+      // reads the merged total, which is unaffected — do not chase that per-file row.
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },

@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { redactSecrets } from "./redact-secrets.js";
 
 export interface RotatingFileSinkOptions {
   dir: string;
@@ -13,6 +14,14 @@ export interface RotatingFileSinkOptions {
  * needs no cross-process locking. On ANY IO failure it reports once (via `onError`) and becomes a
  * no-op — the sale-safety invariant: logging never throws into a request path. The paired `tee`
  * still writes stdout, so a degraded file sink loses the file, not the line.
+ *
+ * Every line goes through `redactSecrets` FIRST. This file is what the unauthenticated recovery page
+ * serves the tail of (`recovery-surface.ts` → `tailLog`), and the box has one logger tee'd to stdout
+ * and to here (`boot.ts`), so any module logging a caught error's own words — `mdns.ts` logs
+ * `err.message`, `me-api.ts` logs `error.message` — can put a connection string on that page. The
+ * mask belongs to the FILE, not to those call sites: a module written next year is covered without
+ * knowing the page exists. `redactSecrets` names what it does and does not cover; a `"` terminates
+ * its scan, which is exactly a JSON line's own string delimiter.
  */
 export function createRotatingFileSink(
   opts: RotatingFileSinkOptions,
@@ -45,14 +54,17 @@ export function createRotatingFileSink(
     }
     renameSync(current, join(opts.dir, `${fileName}.1`));
   };
-  return (line) => {
+  return (rawLine) => {
     if (degraded) return;
+    const line = redactSecrets(rawLine);
     try {
       if (!dirEnsured) {
         mkdirSync(opts.dir, { recursive: true });
         dirEnsured = true;
       }
       if (currentSize < 0) currentSize = sizeOf(current);
+      // Measured on the REDACTED line, which is what is appended — the in-memory size must track
+      // the bytes on disk or rotation drifts from `maxBytes`.
       const bytes = Buffer.byteLength(line);
       if (currentSize > 0 && currentSize + bytes > opts.maxBytes) {
         rotate();

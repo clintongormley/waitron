@@ -4,7 +4,7 @@ import { basename, isAbsolute, join } from "node:path";
 import type { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { FRESH, levelFor } from "./recovery-state.js";
+import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { recoveryTlsFiles, runEntry, serveRecovery, waitForPostgres } from "./node-entry.js";
 
@@ -22,6 +22,10 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
         replicationPassword: "r",
       }),
     ),
+    // Stubbed here, unlike `runStagedRestore` below it: the real default opens a connection to
+    // whatever `ensureInstance` returned, and these suites hand it a URL nothing answers. One test
+    // (`defaults the ahead check to the real one`) overrides this back to `undefined` on purpose.
+    assertNotAhead: vi.fn(() => Promise.resolve()),
     loadBoxEnv: vi.fn((base: NodeJS.ProcessEnv) => Promise.resolve({ ...base })),
     readRecoveryState: vi.fn(() => Promise.resolve(FRESH)),
     writeRecoveryState: vi.fn(() => Promise.resolve()),
@@ -411,6 +415,304 @@ describe("runEntry", () => {
       expect(d.writeRecoveryState).toHaveBeenCalledWith("/state", FRESH);
       expect(exit).toHaveBeenCalledWith(0);
     });
+  });
+
+  it("persists the classified code, not `unknown`, for a raw driver failure", async () => {
+    // Typed, not a bare `vi.fn(() => …)`: an untyped mock's `mock.calls` entries are a zero-length
+    // tuple, so `[1]` is a typecheck error rather than the state we want to read.
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      runEntry(
+        deps({
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new Error("Failed query", {
+                cause: Object.assign(new Error("driver"), { code: "42703" }),
+              }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    // The second write is the failure path's; the first is the pre-boot counter.
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    expect(persisted.lastErrorCode).toBe("provisioning.schema_mismatch");
+  });
+
+  it("writes the scrubbed error to the installer's channel, with URL credentials masked", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(new Error("connect failed: postgres://waitron:hunter2@db:5432/waitron")),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    // The control and the probe in one assertion pair: the message must arrive, minus the secret.
+    expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
+    expect(reported).not.toContain("hunter2");
+  });
+
+  // Drizzle does not re-expose the driver's error: it wraps it, so the outer message is
+  // "Failed query: …" and the reason is only in `cause`. Measured against real PostgreSQL 18 with
+  // drizzle's own `db.execute(sql`select absent_column`)`:
+  //   outer message: Failed query: select absent_column\nparams:
+  //   cause message: column "absent_column" does not exist   (cause.code 42703)
+  // Reporting the outer error alone is what left the captured installer output with drizzle's query
+  // wrapper and no reason at all (spec §4.4 exists so the installer can read the real reason).
+  it("walks the cause chain so a wrapped driver error's real reason reaches the installer", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new Error("Failed query: select absent_column\nparams: ", {
+                cause: Object.assign(new Error('column "absent_column" does not exist'), {
+                  code: "42703",
+                }),
+              }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain('column "absent_column" does not exist');
+    // The outer wrapper still travels — the query text is diagnostic too, and dropping it would be
+    // the same defect in the other direction.
+    expect(reported).toContain("Failed query: select absent_column");
+  });
+
+  // An `AppError`'s params ARE the diagnosis for the two codes this branch added:
+  // `migrations.incomplete`'s counts say how far a partly-applied set got, and `database_ahead`'s
+  // hashes name the migrations the image has no file for. Dropping them left the installer with a
+  // code they already had from the structured line.
+  it("carries an AppError's params to the installer, scrubbed like everything else", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new AppError("migrations.incomplete", { set: "core", applied: 10, expected: 15 }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("core");
+    expect(reported).toContain("10");
+    expect(reported).toContain("15");
+  });
+
+  // Proven by construction rather than reasoned about: a boot error whose params will not serialise
+  // must still report the error. Without the fallback the JSON throw becomes the boot's outcome and
+  // replaces the very reason this channel exists to carry. `as never` because the registry's typed
+  // params cannot express a cycle — the guard is for a value that reaches here regardless.
+  it("still reports a failure whose params will not serialise", async () => {
+    const cyclic: Record<string, unknown> = { set: "core" };
+    cyclic.self = cyclic;
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(new AppError("migrations.incomplete", cyclic as never)),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("migrations.incomplete");
+    expect(reported).toContain("params: (not serialisable)");
+  });
+
+  // A boot can throw a non-Error — a bare string from a dependency, a rejected promise with no
+  // reason. There is no chain to walk and no stack to print; the installer still gets the value.
+  it("reports a non-Error throw rather than printing nothing", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() => Promise.reject("boot gave up")),
+        }),
+      ),
+    ).rejects.toBeTruthy();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("non-error thrown: boot gave up");
+  });
+
+  // `MAX_CAUSE_DEPTH` from `@waitron/shared`, the same bound `sqlStateOf` walks and for the same
+  // reason — a self-referential `cause` must not spin.
+  it("stops walking a self-referential cause rather than spinning", async () => {
+    const reportFailure = vi.fn();
+    const looped: Error & { cause?: unknown } = new Error("loops on itself");
+    looped.cause = looped;
+    await expect(
+      runEntry(
+        deps({ reportFailure, startServer: vi.fn<StartServer>(() => Promise.reject(looped)) }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("loops on itself");
+  });
+
+  // The page must stay exactly as it was: the cause chain and the params are the INSTALLER's
+  // channel, and spec §5 says neither may reach the unauthenticated page. Probe and control in one
+  // test, because a page that rendered nothing would pass the first half alone.
+  it("keeps the walked cause chain and the params off the page", async () => {
+    const reportFailure = vi.fn();
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new AppError("provisioning.database_ahead", {
+                set: "core",
+                unknownMigrations: ["deadbeefhash"],
+              }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    const body = await (
+      await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).not.toContain("deadbeefhash");
+    // The page says its curated line and the code, and nothing from the params.
+    expect(body).toContain("provisioning.database_ahead");
+
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("deadbeefhash");
+  });
+
+  // The spec §5 probe, and the only place it can honestly live: the poisoned message has to be
+  // INJECTED as a real boot failure and then followed to BOTH channels. A test that renders a page
+  // the message never reached would pass against an implementation that leaks everywhere.
+  it("keeps a leaked connection string off the page while the installer's channel carries it", async () => {
+    const message = "connect failed: postgres://waitron:hunter2@db:5432/waitron";
+    const reportFailure = vi.fn();
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() => Promise.reject(new Error(message))),
+        }),
+      ),
+    ).rejects.toThrow();
+
+    // The PROBE: the state the page will render, rendered.
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    const body = await (
+      await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).not.toContain("hunter2");
+    expect(body).not.toContain("postgres://");
+
+    // The CONTROL, in the other direction: the same failure DOES reach the installer, scrubbed.
+    // Without it, a page that rendered nothing at all would pass the assertions above.
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
+    expect(reported).not.toContain("hunter2");
+  });
+
+  it("refuses to start the server when the database is ahead of this image", async () => {
+    const startServer = vi.fn<StartServer>(() =>
+      Promise.resolve({ close: () => Promise.resolve() }),
+    );
+    const assertAhead = vi.fn(() =>
+      Promise.reject(
+        new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["ff"] }),
+      ),
+    );
+    await expect(
+      runEntry(deps({ assertNotAhead: assertAhead, startServer })),
+    ).rejects.toMatchObject({ code: "provisioning.database_ahead" });
+    expect(startServer).not.toHaveBeenCalled();
+  });
+
+  it("checks for an ahead database after ensureInstance, never before", async () => {
+    const order: string[] = [];
+    await runEntry(
+      deps({
+        ensureInstance: vi.fn(() => {
+          order.push("ensureInstance");
+          return Promise.resolve({
+            databaseUrl: "postgres://app",
+            migrationsDatabaseUrl: "postgres://migrator",
+            replicationPassword: "r",
+          });
+        }),
+        assertNotAhead: vi.fn(() => {
+          order.push("assertNotAhead");
+          return Promise.resolve();
+        }),
+        startServer: vi.fn<StartServer>(() => {
+          order.push("startServer");
+          return Promise.resolve({ close: () => Promise.resolve() });
+        }),
+      }),
+    );
+    // A legitimately BEHIND database must be migrated forward before it is judged.
+    expect(order).toEqual(["ensureInstance", "assertNotAhead", "startServer"]);
+  });
+
+  // `assertNotAhead` used to default to `() => Promise.resolve()`. Not alone in defaulting to a
+  // no-op — `reportFailure` still does, deliberately — but it is the only one of this interface's
+  // optional dependencies that is a GUARD, and the guard-shaped one next to it defaults to the real
+  // implementation (`deps.runStagedRestore ?? runStagedRestore`). A no-op default loses the guard for
+  // any caller that forgets the dependency, and silently: nothing throws, nothing logs, the server
+  // just starts against a database the image cannot read.
+  //
+  // The probe: omit the dependency and hand `ensureInstance` a URL whose port refuses instantly
+  // (127.0.0.1:1). The real default opens a connection there, so the boot fails and the server is
+  // never started. What the FAILING case would print — a no-op default — is a resolved `runEntry`
+  // with `startServer` called, which is what this asserted before the default was changed.
+  it("defaults the ahead check to the real one, not to a no-op", async () => {
+    const startServer = vi.fn<StartServer>(() =>
+      Promise.resolve({ close: () => Promise.resolve() }),
+    );
+    await expect(
+      runEntry(
+        deps({
+          assertNotAhead: undefined,
+          ensureInstance: vi.fn(() =>
+            Promise.resolve({
+              databaseUrl: "postgres://app",
+              migrationsDatabaseUrl: "postgres://waitron@127.0.0.1:1/waitron",
+              replicationPassword: "r",
+            }),
+          ),
+          startServer,
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(startServer).not.toHaveBeenCalled();
   });
 });
 

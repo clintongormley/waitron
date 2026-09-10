@@ -24,15 +24,6 @@ describe("sqlStateOf", () => {
     expect(sqlStateOf(error)).toBeNull();
   });
 
-  it("stops at the walk-depth bound rather than spinning down an unbounded chain", () => {
-    let chain = new Error("bottom");
-    for (let i = 0; i < 8; i += 1) chain = new Error(`level ${i}`, { cause: chain });
-    expect(sqlStateOf(chain)).toBeNull();
-  });
-
-  it("stops rather than spinning on a self-referential .cause", () => {
-    const error = new Error("cyclic") as Error & { cause?: unknown };
-    error.cause = error;
-    expect(sqlStateOf(error)).toBeNull();
-  });
+  // The depth bound and the self-reference exit belong to the shared walk and are pinned once, in
+  // `cause-chain.test.ts`. Nothing about them is specific to the SQLSTATE predicate.
 });

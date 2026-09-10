@@ -41,4 +41,8 @@ export {
   readTenantIdentities,
 } from "./tenant-guard.js";
 export type { TenantIdentity } from "./tenant-guard.js";
+// `findAheadSets` and `unknownHashes` stay internal: the host calls `assertNotAhead` alone, and
+// the suites reach the other two by relative path.
+export { assertNotAhead } from "./schema-ahead.js";
+export type { AheadSet } from "./schema-ahead.js";
 import "./errors.js";
