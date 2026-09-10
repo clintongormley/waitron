@@ -223,6 +223,18 @@ export interface VenueServiceContribution {
     workingOrderId: string,
     lines: readonly { workingOrderLineId: string; menuItemId: string }[],
   ): Promise<void>;
+  copyOrderContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    fromWorkingOrderId: string,
+    toWorkingOrderId: string,
+  ): Promise<void>;
+  copyLineContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    fromWorkingOrderLineId: string,
+    toWorkingOrderLineId: string,
+  ): Promise<void>;
 }
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */

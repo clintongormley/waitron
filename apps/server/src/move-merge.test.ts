@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CORE_MIGRATIONS,
   asAppUser,
   optionGroupItems,
   optionGroups,
@@ -13,6 +12,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -40,7 +40,10 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 let db: Database;
 beforeAll(() => {
   db = suite.db;
@@ -148,9 +151,10 @@ async function seedStatus(cfg: TillConfig, label: string): Promise<string> {
 /** A tab's lines as { lineNo, productId, unitPriceGross }, in line_no order — owner read. */
 async function linesOf(
   tabId: string,
-): Promise<{ lineNo: number; productId: string | null; gross: string }[]> {
+): Promise<{ id: string; lineNo: number; productId: string | null; gross: string }[]> {
   const rows = await db
     .select({
+      id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       productId: workingOrderLines.productId,
       gross: workingOrderLines.unitPriceGross,
@@ -168,6 +172,7 @@ describe("moveTabLines", () => {
     const t2 = await seedTable(cfg, "M2");
     const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
     const to = await openTabOn(cfg, t2, [{ productId: aguaId, quantity: "1" }]);
+    const sourceLineId = (await linesOf(from))[0]!.id;
 
     await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
 
@@ -176,6 +181,7 @@ describe("moveTabLines", () => {
     expect(dest).toHaveLength(2);
     expect(dest.map((l) => l.lineNo)).toEqual([1, 2]);
     expect(dest.find((l) => l.productId === cafeId)?.gross).toBe("1.50");
+    expect(dest.find((l) => l.productId === cafeId)?.id).toBe(sourceLineId);
     expect(await linesOf(from)).toHaveLength(0);
   });
 
@@ -207,6 +213,40 @@ describe("moveTabLines", () => {
 
     await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
     expect(await linesOf(to)).toHaveLength(1); // unchanged
+  });
+
+  it("refuses to combine orders whose frozen service modes differ", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t1 = await seedTable(cfg, "FLOW-1");
+    const t2 = await seedTable(cfg, "FLOW-2");
+    const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
+    const to = await openTabOn(cfg, t2, []);
+    const department = await db.execute<{ id: string }>(sql`
+      insert into departments
+        (tenant_id, location_id, name, trading_name, default_service_mode)
+      values (${cfg.tenantId}, ${cfg.locationId}, 'Flow test', 'Flow test', 'prepay')
+      returning id`);
+    const zones = await db.execute<{ id: string; name: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values
+        (${cfg.tenantId}, ${cfg.locationId}, 'Flow prepay'),
+        (${cfg.tenantId}, ${cfg.locationId}, 'Flow tab')
+      returning id, name`);
+    const prepayZone = zones.rows.find((zone) => zone.name === "Flow prepay")!;
+    const tabZone = zones.rows.find((zone) => zone.name === "Flow tab")!;
+    await db.execute(sql`
+      insert into order_service_contexts
+        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+      values
+        (${cfg.tenantId}, ${from}, ${cfg.locationId}, ${prepayZone.id}, ${department.rows[0]!.id}, 'prepay'),
+        (${cfg.tenantId}, ${to}, ${cfg.locationId}, ${tabZone.id}, ${department.rows[0]!.id}, 'table_tab')`);
+
+    await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to))).rejects.toMatchObject({
+      code: "service_zone.mode_incompatible",
+      params: { expected: "prepay", actual: "table_tab" },
+    });
+    expect(await linesOf(from)).toHaveLength(1);
+    expect(await linesOf(to)).toHaveLength(0);
   });
 
   it("refuses a non-open source or destination (tab.not_open)", async () => {
@@ -483,12 +523,16 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
         { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: baconId }] },
       ]),
     );
+    const ticketBefore = await db.execute<{
+      id: string;
+      working_order_line_id: string;
+    }>(sql`
+      select id, working_order_line_id from ticket_items
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${fromTab}`);
 
     await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
 
-    // The moved child modifier line must point at the MOVED parent's NEW id — not NULL. Without the
-    // parent_line_id remap in moveTabLines the child lands orphaned (parent_line_id NULL) and renders
-    // ungrouped.
+    // The moved child modifier line keeps pointing at the same stable parent id.
     const dest = await db
       .select({
         id: workingOrderLines.id,
@@ -509,6 +553,19 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     expect(parent!.productId).toBe(cafeId);
     expect(parent!.parentLineId).toBeNull();
     expect(parent!.optionGroupItemId).toBeNull();
+    const ticketAfter = await db.execute<{
+      id: string;
+      working_order_line_id: string;
+      working_order_id: string;
+    }>(sql`
+      select id, working_order_line_id, working_order_id from ticket_items
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${intoTab}`);
+    expect(ticketAfter.rows).toEqual([
+      {
+        ...ticketBefore.rows[0]!,
+        working_order_id: intoTab,
+      },
+    ]);
   });
 
   it("the join branch (freeSourceTable: false) re-points the source table at intoTab (covered for branch)", async () => {

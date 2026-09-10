@@ -442,6 +442,48 @@ export async function recordWorkingLineContexts(
   );
 }
 
+/** Copy an order's frozen service policy to a newly-created split/check order. */
+export async function copyOrderServiceContext(
+  tx: Transaction,
+  cfg: VenueScope,
+  fromWorkingOrderId: string,
+  toWorkingOrderId: string,
+): Promise<void> {
+  const context = await findOrderServiceContext(tx, cfg, fromWorkingOrderId);
+  if (context === null) return;
+  await tx.insert(orderServiceContexts).values({
+    tenantId: cfg.tenantId,
+    workingOrderId: toWorkingOrderId,
+    locationId: cfg.locationId,
+    zoneId: context.zoneId,
+    departmentId: context.departmentId,
+    serviceMode: context.serviceMode,
+  });
+}
+
+/** Copy a line's immutable selling snapshot when a quantity is split onto a new line id. */
+export async function copyWorkingLineContext(
+  tx: Transaction,
+  cfg: VenueScope,
+  fromWorkingOrderLineId: string,
+  toWorkingOrderLineId: string,
+): Promise<void> {
+  const [context] = await tx
+    .select()
+    .from(workingLineContexts)
+    .where(
+      and(
+        eq(workingLineContexts.tenantId, cfg.tenantId),
+        eq(workingLineContexts.workingOrderLineId, fromWorkingOrderLineId),
+      ),
+    );
+  if (context === undefined) return;
+  await tx.insert(workingLineContexts).values({
+    ...context,
+    workingOrderLineId: toWorkingOrderLineId,
+  });
+}
+
 export async function createPreparationRoute(
   tx: Transaction,
   cfg: VenueScope,

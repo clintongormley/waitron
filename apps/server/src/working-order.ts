@@ -1751,17 +1751,15 @@ export async function unmarkLineServed(
 /**
  * Move working-order lines from one OPEN tab to another (design §3) — the shared primitive `mergeTabs`
  * calls with ALL lines and TS-4 (transfer) will call with a subset, so it is written general now to
- * avoid a TS-4 refactor. Reads the named lines (default all), APPENDS them onto `toTab` at the next
- * `line_no`s with every locked price column carried across UNCHANGED (a move NEVER re-prices — the
+ * avoid a TS-4 refactor. Reads the named lines (default all), moves them onto `toTab` at the next
+ * `line_no`s while retaining every locked price column (a move NEVER re-prices — the
  * add-time `working_order_lines.unit_price_gross` column is what the filed sale is later rebuilt from),
- * then deletes them from `fromTab`.
+ * their stable IDs, modifier links, service attribution and any fired preparation tickets.
  *
  * Refuses a self-transfer (`fromTabId === toTabId`) with `tab.merge_self` BEFORE any read or write. In
- * the "move all" shape (no `lineNos`) a self-transfer would append every line as a duplicate and then
- * the trailing delete — keyed on `workingOrderId = fromTabId`, which is now ALSO `toTabId` — would match
- * BOTH the originals and the just-inserted duplicates, emptying the tab. `mergeTabs` already guards this
- * at its own top, but `moveTabLines` is the exported primitive TS-4 (transfer) calls directly, so the
- * guard lives here too, reusing the `tab.merge_self` code (one tab named as both ends — the same concept).
+ * the "move all" shape (no `lineNos`) a self-transfer has no useful meaning and would make line-number
+ * allocation collide with the rows being updated. `mergeTabs` already guards this at its own top, but
+ * `moveTabLines` is an exported primitive, so the guard lives here too, reusing `tab.merge_self`.
  *
  * Both tabs are locked `FOR UPDATE` in ASCENDING `id` order — a DEFENSIVE, plan-independent lock-order
  * discipline, NOT a deadlock-safety property any concurrent test at THIS level exercises: this primitive's
@@ -1784,9 +1782,8 @@ export async function moveTabLines(
   toTabId: string,
   lineNos?: number[],
 ): Promise<void> {
-  // Refuse a self-transfer before any read/write (see the docstring): the "move all" shape would append
-  // every line as a duplicate and then delete BOTH copies, emptying the tab. mergeTabs guards this too,
-  // but this primitive is called directly by TS-4. Reuses tab.merge_self — one tab named as both ends.
+  // Refuse a self-transfer before any read/write; mergeTabs guards this too, but callers can use this
+  // primitive directly. Reuses tab.merge_self — one tab named as both ends.
   if (fromTabId === toTabId) {
     throw new AppError("tab.merge_self", { tabId: fromTabId });
   }
@@ -1812,6 +1809,19 @@ export async function moveTabLines(
   if (to === undefined || to.status !== "open") {
     throw new AppError("tab.not_open", { tabId: toTabId });
   }
+  const fromContext = await VENUE_SERVICE.findOrderContext(tx, cfg, fromTabId);
+  const toContext = await VENUE_SERVICE.findOrderContext(tx, cfg, toTabId);
+  if (
+    fromContext !== null &&
+    toContext !== null &&
+    fromContext.serviceMode !== toContext.serviceMode
+  ) {
+    throw new AppError("service_zone.mode_incompatible", {
+      zoneId: toContext.zoneId,
+      expected: fromContext.serviceMode,
+      actual: toContext.serviceMode,
+    });
+  }
 
   const sourceWhere =
     lineNos === undefined
@@ -1821,25 +1831,11 @@ export async function moveTabLines(
           inArray(workingOrderLines.lineNo, lineNos),
         );
 
-  // Read the lines to move (locked price columns kept verbatim), in line_no order. `id`/`parentLineId`/
-  // `optionGroupItemId` come too so a moved CHILD modifier line's parent→child linkage is rebuilt onto
-  // the destination rather than dropped — without them the re-INSERT below lands every child with a NULL
-  // `parent_line_id` and renders it ungrouped (Task 6 modifiers).
+  // Stable ids keep modifier links and extension rows intact; only id and ordering are needed here.
   const source = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
-      parentLineId: workingOrderLines.parentLineId,
-      optionGroupItemId: workingOrderLines.optionGroupItemId,
-      tenantId: workingOrderLines.tenantId,
-      productId: workingOrderLines.productId,
-      descriptions: workingOrderLines.descriptions,
-      quantity: workingOrderLines.quantity,
-      unitPrice: workingOrderLines.unitPrice,
-      unitPriceGross: workingOrderLines.unitPriceGross,
-      vatRate: workingOrderLines.vatRate,
-      lineTotal: workingOrderLines.lineTotal,
-      category: workingOrderLines.category,
     })
     .from(workingOrderLines)
     .where(sourceWhere)
@@ -1852,40 +1848,37 @@ export async function moveTabLines(
     .where(eq(workingOrderLines.workingOrderId, toTabId));
   const base = agg!.next;
 
-  // Pre-generate the destination ids so a moved CHILD's `parent_line_id` can name its moved PARENT's NEW
-  // id in the SAME insert (the self-referential FK is checked at statement end — parent and children go
-  // in together), mirroring `priceOrderLines`/`recordSale`'s `byLineNo` remap. `newIdByOldId` maps each
-  // source line's OLD id to its new one; a child's remapped parent is another moved line. `?? null`
-  // covers a PARTIAL move (`transferLines` passing a `lineNos` subset) that carries a child WITHOUT its
-  // parent — the child lands top-level rather than pointing at a deleted source row; `mergeTabs` moves
-  // ALL of a tab's lines, so there every parent moves with its children and the map is total.
-  const newIds = source.map(() => randomUUID());
-  const newIdByOldId = new Map(source.map((line, i) => [line.id, newIds[i]!]));
-
-  // Append onto the destination, then delete from the source. Guarded: an EMPTY source (or empty subset)
-  // has nothing to insert and `tx.insert(...).values([])` errors — the same guard createOpenOrder uses.
-  if (source.length > 0) {
-    await tx.insert(workingOrderLines).values(
-      source.map((line, i) => ({
-        id: newIds[i]!,
-        tenantId: line.tenantId,
-        workingOrderId: toTabId,
-        lineNo: base + i + 1,
-        parentLineId:
-          line.parentLineId == null ? null : (newIdByOldId.get(line.parentLineId) ?? null),
-        optionGroupItemId: line.optionGroupItemId,
-        productId: line.productId,
-        descriptions: line.descriptions,
-        quantity: line.quantity,
-        unitPrice: line.unitPrice,
-        unitPriceGross: line.unitPriceGross,
-        vatRate: line.vatRate,
-        lineTotal: line.lineTotal,
-        category: line.category,
-      })),
-    );
+  // Move each row in place so its stable id, offer/department extension row, customisation, course and
+  // any fired ticket survive. Destination line numbers start beyond its current maximum, so each
+  // update is unique without a temporary renumbering pass. Parent-child links use stable ids and need
+  // no remap. A ticket item carries a denormalised order id for queue grouping, updated after its line.
+  for (let index = 0; index < source.length; index++) {
+    const line = source[index]!;
+    await tx
+      .update(workingOrderLines)
+      .set({ workingOrderId: toTabId, lineNo: base + index + 1 })
+      .where(
+        and(
+          eq(workingOrderLines.tenantId, cfg.tenantId),
+          eq(workingOrderLines.workingOrderId, fromTabId),
+          eq(workingOrderLines.id, line.id),
+        ),
+      );
   }
-  await tx.delete(workingOrderLines).where(sourceWhere);
+  if (source.length > 0) {
+    await tx
+      .update(ticketItems)
+      .set({ workingOrderId: toTabId })
+      .where(
+        and(
+          eq(ticketItems.tenantId, cfg.tenantId),
+          inArray(
+            ticketItems.workingOrderLineId,
+            source.map((line) => line.id),
+          ),
+        ),
+      );
+  }
 }
 
 /**
@@ -1928,8 +1921,7 @@ export interface TabLine {
    * `fire_control = 'waiter'`, §5b), and — since this is LEFT-joined — a line with no ticket item at all,
    * the same edge the adjacent `state` field documents. That no-item shape is reachable for a real PARENT
    * line, e.g. a line {@link openTab} inserted with the tab's initial round (its `lines` go through
-   * {@link createOpenOrder}, which never fires) or one moved between tabs ({@link moveTabLines}, used by
-   * both merge and transfer, re-inserts the line under a new id without re-firing). Course is independent:
+   * {@link createOpenOrder}, which never fires). Course is independent:
    * {@link setLineCourse} clears a HELD line's course to null (it refuses only a FIRED line), so a null
    * `firedAt` says nothing about whether `courseId` is null. */
   firedAt: string | null;
@@ -1937,9 +1929,7 @@ export interface TabLine {
    * ticket item — the same LEFT-join edge {@link firedAt} documents. A child modifier line ALWAYS lacks
    * one ({@link fireLines} filters children out of the fire). A parent line normally has one once
    * fired/held, but can also lack one — e.g. a line {@link openTab} inserted without firing (its
-   * initial `lines` go through {@link createOpenOrder}, which never calls {@link fireLines}), or one
-   * moved between tabs ({@link moveTabLines}, used by both merge and transfer, re-inserts the line
-   * under a brand-new id without re-firing, cascading the old id's item away). Treat null as "no LIVE
+   * initial `lines` go through {@link createOpenOrder}, which never calls {@link fireLines}). Treat null as "no LIVE
    * ticket item", not as impossible for a parent. Coursing corrections (C1): distinguishes a RECALLABLE
    * line (`firedAt` set, `state === "queued"`, not yet started) from a CANCEL-only one (`state`
    * "preparing"/"ready") — the till reads this, not implemented here. */
@@ -1963,8 +1953,7 @@ export async function readTabLines(
   // no ticket item still reports its course; `fired_at`/`state` have no home but the item, so both are
   // null when the join finds none. A child modifier line ALWAYS has no ticket item (`fireLines` filters
   // children out of the fire); a PARENT line normally has one once fired/held, but can also have none —
-  // e.g. `openTab`'s initial `lines` are inserted without firing, or `moveTabLines` (merge/transfer)
-  // re-inserts a moved line under a brand-new id without re-firing it. Treat null as "no LIVE ticket
+  // e.g. `openTab`'s initial `lines` are inserted without firing. Treat null as "no LIVE ticket
   // item", not as impossible for a parent. Both columns feed the tab's per-course waiter-fire (§5b) and
   // the till's recall-vs-cancel-only distinction (`firedAt` set + `state === "queued"` ⇒ recallable,
   // `state` "preparing"/"ready" ⇒ cancel-only); the existing pay/serve columns are unchanged.
@@ -2441,7 +2430,9 @@ async function carveOffLines(
         );
       // Destination: a NEW line inheriting every per-unit value, `quantity = transferred`, `line_total`
       // = round(transferred × locked gross). NEVER re-fetched from the catalogue.
+      const splitLineId = randomUUID();
       await tx.insert(workingOrderLines).values({
+        id: splitLineId,
         // Stamp the destination line with the configured tenant id.
         tenantId: cfg.tenantId,
         workingOrderId: toTabId,
@@ -2460,6 +2451,7 @@ async function carveOffLines(
         lineTotal: grossLineTotal(line.unitPriceGross, quantity),
         category: line.category,
       });
+      await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
     }
   }
 }
@@ -2525,6 +2517,7 @@ export async function splitOffCheck(
   // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
   const checkId = randomUUID();
   await createOpenOrder(tx, cfg, checkId, [], null);
+  await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
   // Move the selected items (whole lines + partial splits) onto the check — TS-4's shared move/split
   // core, which keeps the locked gross, conserves quantity, and raises the inherited
@@ -2623,6 +2616,7 @@ export async function unjoinTable(
   // above) and `newTabId` (fresh), in ascending-id order.
   const newTabId = randomUUID();
   await createOpenOrder(tx, cfg, newTabId, [], null);
+  await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
   await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
   await transferLines(tx, cfg, tabId, newTabId, transfers);
   return { tabId: newTabId };
@@ -2889,10 +2883,7 @@ export async function updateHeldOrder(
       })
       .from(workingOrderLines)
       .where(
-        and(
-          eq(workingOrderLines.tenantId, cfg.tenantId),
-          eq(workingOrderLines.workingOrderId, id),
-        ),
+        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
       )
       .orderBy(workingOrderLines.lineNo);
     const storedParents = storedRows.filter((line) => line.parentLineId === null);

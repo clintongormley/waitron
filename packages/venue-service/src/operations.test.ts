@@ -19,6 +19,8 @@ import {
 } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
+  copyOrderServiceContext,
+  copyWorkingLineContext,
   configureZone,
   createDepartment,
   createPreparationRoute,
@@ -340,6 +342,49 @@ describe("venue service routing", () => {
           department_name: "Deli",
           category_name: "Cold cuts",
         },
+      ]);
+
+      const copiedOrderId = "00000000-0000-4000-8000-000000000003";
+      const copiedLineId = "00000000-0000-4000-8000-000000000004";
+      await tx.execute(sql`
+        insert into working_orders (id, tenant_id, till_id, node_id, order_number)
+        values (${copiedOrderId}, ${tenantId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 2)`);
+      await tx.insert(workingOrderLines).values({
+        id: copiedLineId,
+        tenantId,
+        workingOrderId: copiedOrderId,
+        lineNo: 1,
+        productId: ham.id,
+        descriptions: { "en-GB": "Sliced ham" },
+        quantity: "0.100",
+        unitPrice: "22.64",
+        unitPriceGross: "24.90",
+        vatRate: "10.00",
+        lineTotal: "2.49",
+        category: "Cold cuts",
+      });
+      await copyOrderServiceContext(
+        tx,
+        { tenantId, locationId },
+        "00000000-0000-4000-8000-000000000001",
+        copiedOrderId,
+      );
+      await copyWorkingLineContext(tx, { tenantId, locationId }, workingLineId, copiedLineId);
+      await expect(
+        getOrderServiceContext(tx, { tenantId, locationId }, copiedOrderId),
+      ).resolves.toEqual({
+        zoneId: zone.rows[0]!.id,
+        departmentId: department.id,
+        serviceMode: "prepay",
+      });
+      await expect(
+        listWorkingLineContexts(tx, { tenantId, locationId }, copiedOrderId),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          workingOrderLineId: copiedLineId,
+          menuItemId: offer.id,
+          menuName: "Deli takeaway",
+        }),
       ]);
     });
   });
