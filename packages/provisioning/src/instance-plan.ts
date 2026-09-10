@@ -135,7 +135,10 @@ export function planInstance(
   // `:60` only then opens the transaction the set's migrations run in, so a rolled-back set leaves
   // the journal behind. Gating on it planned no `migrate` and let `instance` stamp and exit 0
   // against a deployment whose last set never ran. Re-running is idempotent in EFFECT
-  // (`dialect.js:62` applies only what the journal watermark is behind).
+  // (`dialect.js:62` applies only what the journal watermark is behind) — but that watermark is
+  // `max(created_at)` over the journal TABLE, not a position in the journal FILE, so a set whose
+  // `when` values are not strictly increasing can apply only SOME of its migrations and still exit 0;
+  // `scripts/journal-monotonic.test.ts` is what keeps a set out of that shape.
   actions.push({ kind: "migrate" });
 
   // The migrator's app_user membership, granted after migrate (as the migrator, which now owns

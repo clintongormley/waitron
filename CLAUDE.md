@@ -177,6 +177,15 @@ Traps, each of which cost a round trip:
   (`bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer: Permission denied (1100)`,
   measured 2026-09-06), so a run that reaches a browser package is driven from the host, never
   from a Codex seat.
+- **Only the `core` migration set has an upgrade test; every module set is still migrated from a
+  VIRGIN database only, so a green gate is no evidence that a module set can upgrade a box.** Drizzle
+  applies a set's PENDING migrations in one transaction, and PostgreSQL refuses to name a label added
+  by `ALTER TYPE … ADD VALUE` in that same transaction unless the type was created there too — a
+  virgin database, which creates the type in that batch, is the one shape where it is legal. Cost: a
+  bricked box, an hour of guesswork, and a wipe that destroyed the evidence. The static guard covers
+  every set (`scripts/enum-add-value-safety.test.ts`); the upgrade regression that migrates real
+  databases from each release point covers `core` alone
+  (`packages/db/src/migrate-upgrade.pg.test.ts`).
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
@@ -341,6 +350,17 @@ unfiltered `main` run, not a wrong hook.
   `rebase --continue`, and verify by RUNNING the package's grant assertions and `privileges.test.ts`
   plus `inmutabilidad`. Works because the snapshot chain deliberately lags the DB (custom migrations
   are snapshot-less). Paid for on #165.
+- **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal
+  file, so an entry whose `when` sits AT OR BELOW one the database already recorded never runs — no
+  error, a set that applied part of itself and exited 0 (`drizzle-orm@0.45.2/pg-core/dialect.js:57`
+  reads the watermark; `:62` applies only where `recorded < candidate`, so an EQUAL value is skipped
+  too). The core journal is already in that shape, and no edit repairs it: a database at release
+  point 2 and one at release point 3 both carry entry 1's `when` as their watermark, because entry
+  2's RECORDED value sits below it — so point 2 needs entry 2's `when` ABOVE that watermark or
+  `0002` is skipped, while point 3 needs it AT OR BELOW or `0002` re-applies. Contradictory for any
+  single value. Cost: core release points 1–6 upgrade incompletely and silently, found only while
+  investigating the 2026-09-10 bricked box, and this branch cannot repair them. Guard:
+  `scripts/journal-monotonic.test.ts`.
 - **A new product domain lands as a MODULE, not as new code in the core.** A domain is a package that
   fills the contract seats (schema, sync, provisioning, fiscal, vocabulary…) and is named only by
   `@waitron/composition`; generic code never learns it exists. Cost of the other shape: a whole regime

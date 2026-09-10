@@ -4,8 +4,8 @@ import { defineConfig } from "vitest/config";
 // belongs to no package, which since 2026-08-01 is three kinds:
 //
 //   the two CLASSIFIERS (`scripts/changed-*.mjs`) that decide what CI and the pre-push hook run;
-//   the repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole —
-//   guarded-teardowns scans every `*.test.ts` under both, english-only scans the generic
+//   the repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole — among
+//   them, guarded-teardowns scans every `*.test.ts` under both, english-only scans the generic
 //   packages' `src/`, errors-reachable walks each `packages/*` public barrel's import graph
 //   for an `errors.ts` that has gone unreachable, allergen-names-drift pins the 14 EU allergen
 //   display names equal across the till and dashboard i18n copies, module-graph-honesty
@@ -13,8 +13,14 @@ import { defineConfig } from "vitest/config";
 //   `packages/*/drizzle` SQL creates against other modules' tables, module-seams reads every
 //   non-test source file under `packages/provisioning/src` and `apps/server/src` for a `from
 //   "<regime package>"` prefix, coverage-thresholds pins
-//   which package holds which coverage bar, and brand-icons pins each app's `index.html` icon
-//   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`;
+//   which package holds which coverage bar, brand-icons pins each app's `index.html` icon
+//   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`,
+//   enum-add-value-safety reads every migration set named by
+//   `packages/migrations/migrations.manifest.json` for a migration that NAMES an enum label a
+//   migration in the same pending batch ADDED — drizzle applies a set's pending migrations in one
+//   transaction, so PostgreSQL rejects that on an existing database while a fresh one passes — and
+//   journal-monotonic reads the same sets' `meta/_journal.json` for a `when` value at or below one
+//   already recorded, which drizzle's `max(created_at)` watermark skips with no error;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
 //   runs licence.yml's `dco` step extracted from the workflow file.
 //

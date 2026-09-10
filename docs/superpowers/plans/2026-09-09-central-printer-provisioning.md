@@ -115,6 +115,15 @@ claimedBy: uuid("claimed_by"),
 
 - [ ] **Step 5: Regenerate the migration pair** (CLAUDE.md §3 recipe). `pnpm --filter @waitron/db db:generate --name central_printer_provisioning` for the enum value + column add/drop, then `db:generate:custom --name central_printer_provisioning_sql` for the hand-written DDL:
 
+> **2026-09-10 — do not copy the `printers_transport_fields_ck` block below verbatim.** As written it
+> compares `transport` to bare enum literals, including `'bluetooth'`, which the migration pair adds
+> with `ALTER TYPE … ADD VALUE` in the same drizzle batch. PostgreSQL refuses to use a label added in
+> the transaction that added it unless the type was created there too, so a virgin database migrates
+> (green CI) and every existing box aborts with `55P04`. The shipped statement casts the column to
+> text — see `packages/db/drizzle/0014_central_printer_provisioning_sql.sql`,
+> `docs/superpowers/plans/2026-09-10-core-migration-upgrade.md`, and the guard
+> `scripts/enum-add-value-safety.test.ts`. The block is left as it was for the record.
+
 ```sql
 -- The old (tenant_id, agent_id) → print_agents FK and the old printers_transport_fields_ck were
 -- hand-written (not generated), so db:generate will NOT emit a DROP for them. Drop them EXPLICITLY —
