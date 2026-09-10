@@ -1,10 +1,12 @@
 import type { DiscoveredDevice } from "@waitron/print-agent";
 
 /**
- * The mDNS service printers announce a raw-9100 (ESC/POS) queue under (verified against the design's §7
- * capture note; the real-LAN receipt confirms it). `parsePdlResponse` decodes one response packet into
- * the printers it advertises. The live multicast socket is a separate, gated seam ({@link openMdnsProbe});
- * this parser is pure and fully tested, because a wrong decode is the failure that reaches a real print.
+ * The mDNS service printers announce a raw-9100 (ESC/POS) queue under. The packets here are synthesised
+ * from the design's §7 shape; that a real printer announces exactly this is to be confirmed by the
+ * Step 6d real-LAN receipt (the controller runs it), not yet verified. `parsePdlResponse` decodes one
+ * response packet into the printers it advertises. The live multicast socket is a separate, gated seam
+ * (`liveMdnsScan` in linux-devices.ts); this parser is pure and fully tested, because a wrong decode is
+ * the failure that reaches a real print.
  */
 export const PDL_SERVICE = "_pdl-datastream._tcp.local";
 

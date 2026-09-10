@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { BluetoothHost } from "./bluetooth.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveredDevice, WireJob } from "@waitron/print-agent";
-import { createLinuxDevices } from "./linux-devices.js";
+import { buildPdlQuery, createLinuxDevices } from "./linux-devices.js";
 
 // A one-printer usblp sysfs tree (the real box's identity), so USB discovery is real in these
 // composition tests while Bluetooth/network are injected fakes.
@@ -65,6 +65,27 @@ function wireJob(over: Partial<WireJob>): WireJob {
     ...over,
   };
 }
+
+describe("buildPdlQuery", () => {
+  it("encodes the exact mDNS PTR query bytes for _pdl-datastream._tcp.local", () => {
+    const q = buildPdlQuery();
+    // Header: 12 bytes, one question, everything else zero.
+    expect(q.readUInt16BE(4)).toBe(1); // qdcount
+    expect([...q.subarray(0, 12)]).toEqual([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    // QNAME: length-prefixed labels then a zero root.
+    expect(q[12]).toBe(15);
+    expect(q.toString("ascii", 13, 28)).toBe("_pdl-datastream");
+    expect(q[28]).toBe(4);
+    expect(q.toString("ascii", 29, 33)).toBe("_tcp");
+    expect(q[33]).toBe(5);
+    expect(q.toString("ascii", 34, 39)).toBe("local");
+    expect(q[39]).toBe(0); // root label
+    // QTYPE=PTR(12), QCLASS=IN(1), and nothing after.
+    expect(q.readUInt16BE(40)).toBe(12);
+    expect(q.readUInt16BE(42)).toBe(1);
+    expect(q.length).toBe(44);
+  });
+});
 
 describe("createLinuxDevices — visibleDevices()", () => {
   it("reports USB printers plus paired Bluetooth, without device paths", async () => {

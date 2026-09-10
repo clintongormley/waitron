@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBluetoothctlHost, parseBluetoothctlDevices, parsePairResult } from "./bluetooth.js";
 
-// Captured `bluetoothctl` output shapes (ANSI colour codes and \r included, as the tool emits them),
-// so the parsers are proven against the real text, not a cleaned-up ideal.
+// `bluetoothctl` output shapes synthesised in the tool's documented format (ANSI colour codes and \r
+// included) — the box had no Bluetooth adapter at capture time (task-6-hardware-facts.md), so this is
+// NOT a real capture; the exact shape is to confirm at the Step 6c receipt. The parsers are proven
+// against this shape, not a cleaned-up ideal.
 const DEVICES_OUTPUT =
   "[0;94m[NEW][0m Device AA:BB:CC:DD:EE:FF Star TSP100\r\n" +
   "[NEW] Device 11:22:33:44:55:66 HP Printer\r\n" +

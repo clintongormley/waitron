@@ -131,7 +131,24 @@ export function createLinuxDevices(opts: LinuxDeviceOptions = {}): LinuxDevices 
   };
 }
 
-// --- Live I/O seams: real process/socket work, exercised only at the manual hardware receipt. ---
+/** A minimal mDNS query for the PDL service PTR — header (one question) then the QNAME labels, PTR/IN.
+ * A pure deterministic encoder with real branching (the label loop), so it is unit-tested by exact
+ * bytes and lives OUTSIDE the gated block; only the socket that sends it (`liveMdnsScan`) is gated. */
+export function buildPdlQuery(): Buffer {
+  const header = Buffer.alloc(12);
+  header.writeUInt16BE(1, 4); // one question
+  const labels = PDL_SERVICE.split(".");
+  const parts: Buffer[] = [];
+  for (const label of labels) {
+    const b = Buffer.from(label, "ascii");
+    parts.push(Buffer.from([b.length]), b);
+  }
+  parts.push(Buffer.from([0])); // root
+  const qtypeClass = Buffer.from([0, 12, 0, 1]); // PTR, IN
+  return Buffer.concat([header, ...parts, qtypeClass]);
+}
+
+// --- Live I/O seams: real process/socket work (no branching logic), exercised only at the receipt. ---
 
 /* v8 ignore start -- spawns bluetoothctl; covered by the receipt, not unit tests (no radio in CI). */
 function runBluetoothctl(args: string[]): Promise<string> {
@@ -146,12 +163,11 @@ function runBluetoothctl(args: string[]): Promise<string> {
 }
 
 /** The RFCOMM write node for a paired MAC. The box's Bluetooth adapter was unconfirmed at the
- * 2026-09-10 capture, so this binding is settled at the manual receipt (spec §7); until then a paired
- * BT job resolves to the conventional node the receipt will confirm or correct. */
+ * 2026-09-10 capture, so this binding is settled at the manual receipt (spec §7). SINGLE PAIRED PRINTER
+ * ONLY until then: every MAC maps to the same `/dev/rfcomm0`, so two paired BT printers would collide —
+ * the Step 6c receipt replaces this with a per-MAC bound node. */
 function liveBtDevicePath(mac: string): string {
-  // The MAC identifies which paired printer this node is for; the concrete rfcomm index is settled at
-  // the receipt, so the binding is logged against the MAC there.
-  void mac;
+  void mac; // named for the contract; the concrete per-MAC rfcomm index is settled at the receipt.
   return "/dev/rfcomm0";
 }
 
@@ -178,20 +194,5 @@ function liveMdnsScan(windowMs = 1500): Promise<DiscoveredDevice[]> {
       setTimeout(done, windowMs);
     });
   });
-}
-
-/** A minimal mDNS query for the PDL service PTR — header (one question) then the QNAME labels. */
-function buildPdlQuery(): Buffer {
-  const header = Buffer.alloc(12);
-  header.writeUInt16BE(1, 4); // one question
-  const labels = PDL_SERVICE.split(".");
-  const parts: Buffer[] = [];
-  for (const label of labels) {
-    const b = Buffer.from(label, "ascii");
-    parts.push(Buffer.from([b.length]), b);
-  }
-  parts.push(Buffer.from([0])); // root
-  const qtypeClass = Buffer.from([0, 12, 0, 1]); // PTR, IN
-  return Buffer.concat([header, ...parts, qtypeClass]);
 }
 /* v8 ignore stop */

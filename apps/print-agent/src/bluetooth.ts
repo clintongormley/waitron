@@ -2,17 +2,19 @@ import type { DiscoveredDevice, PairResult } from "@waitron/print-agent";
 
 /**
  * Bluetooth discovery/pairing over BlueZ, driven through `bluetoothctl`. The DECODING — turning the
- * tool's line output into devices and a pair result — is pure and tested against captured fixtures
- * ({@link parseBluetoothctlDevices}, {@link parsePairResult}); the process spawn is injected as `run`,
- * so the only untested part is the spawn itself (a thin gated seam in {@link createLinuxDevices}).
+ * tool's line output into devices and a pair result — is pure and tested against fixtures synthesised in
+ * the tool's documented output shape ({@link parseBluetoothctlDevices}, {@link parsePairResult}); the
+ * process spawn is injected as `run`, so the only untested part is the spawn itself (a thin gated seam
+ * in {@link createLinuxDevices}).
  *
- * The box's Bluetooth ADAPTER was not confirmed at the 2026-09-10 hardware capture, so the live radio
- * path is exercised only at the manual receipt; if a paired printer's RFCOMM node cannot be bound in a
- * container the finding is recorded (spec §7) and the seam here is unchanged.
+ * The box's Bluetooth ADAPTER was not confirmed at the 2026-09-10 hardware capture, so the exact live
+ * output shape and the RFCOMM binding are to confirm at the Step 6c receipt; the live radio path is
+ * exercised only there. If a paired printer's RFCOMM node cannot be bound in a container the finding is
+ * recorded (spec §7) and the seam here is unchanged.
  */
 
-/** One MAC/name pair off a `bluetoothctl devices`/scan listing. `name` is omitted when the tool has no
- * real name and prints the MAC-in-dashes placeholder instead. */
+/** One MAC/name pair off a `bluetoothctl devices`/scan listing. `name` is omitted when the tool is
+ * assumed to have no real name and print the MAC-in-dashes placeholder (confirmed at the Step 6c receipt). */
 export interface BluetoothDevice {
   mac: string;
   name?: string;
@@ -25,12 +27,13 @@ export interface BluetoothHost {
   paired(): Promise<BluetoothDevice[]>;
 }
 
-// A colon-separated 6-octet MAC, captured so the trailing name is the rest of the line.
+// Group 1 is a colon-separated 6-octet MAC; group 2 is the rest of the line (the device name).
 const DEVICE_LINE = /Device\s+([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})(?:\s+(.*))?$/;
 // eslint-disable-next-line no-control-regex -- bluetoothctl colours its output; strip CSI SGR codes.
 const ANSI = /\[[0-9;]*m/g;
 
-/** The MAC printed in dashes (`AA-BB-CC-DD-EE-FF`) is bluetoothctl's placeholder for "no name known". */
+/** Assumed: bluetoothctl prints the MAC in dashes (`AA-BB-CC-DD-EE-FF`) as its placeholder when no name
+ * is known, so we treat that as "no name". To confirm against real tool output at the Step 6c receipt. */
 function isMacPlaceholder(name: string, mac: string): boolean {
   return name.replaceAll("-", ":").toUpperCase() === mac.toUpperCase();
 }
