@@ -231,6 +231,8 @@ function cannedProvider(
     },
     forward: () =>
       Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }),
+    resolvePending: () =>
+      Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }),
     void: () => Promise.reject(new Error("cannedProvider: void unused")),
     refund: () => Promise.reject(new Error("cannedProvider: refund unused")),
     partialRefund: () => Promise.reject(new Error("cannedProvider: partialRefund unused")),

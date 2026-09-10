@@ -68,6 +68,16 @@ describe("SimulatorPaymentProvider", () => {
     });
   });
 
+  it("resolvePending is all-zeros (synchronous collect leaves nothing attempting)", async () => {
+    const { provider } = await setup();
+    await expect(provider.resolvePending(new Date())).resolves.toEqual({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    });
+  });
+
   it("refuses a collect for another tenant", async () => {
     const { provider, params } = await setup();
 

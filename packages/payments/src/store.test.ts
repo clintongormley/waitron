@@ -20,6 +20,7 @@ import {
   insertFailedPayment,
   insertInitiated,
   listAcceptedOffline,
+  listAttempting,
   listReconcilable,
   markReconcileRemediated,
   recordFailedRefund,
@@ -28,6 +29,7 @@ import {
   resolvePaymentTenant,
   settleForwarded,
   settleInitiated,
+  stampAttemptingRef,
   tillsForWorkingOrders,
 } from "./store.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
@@ -1218,5 +1220,76 @@ describe("resolvePaymentTenant", () => {
     // is what turns it into a JS null the webhook route can branch on rather than an undefined. Both
     // arms have to be exercised here: the test above is the non-null one.
     expect(await resolvePaymentTenant(pg.db, "fake", "nothing-ever-initiated-this")).toBeNull();
+  });
+});
+
+describe("listAttempting / stampAttemptingRef", () => {
+  it("lists only this tenant's and provider's attempting rows, oldest first, with their poll key", async () => {
+    const t = await seedWorkingOrder(pg.db, freshNif());
+    const other = await seedWorkingOrder(pg.db, freshNif());
+    await pg.db.transaction(async (tx) => {
+      await insertAttempting(tx, {
+        tenantId: t.tenantId,
+        workingOrderId: t.workingOrderId,
+        provider: "sumup",
+        paymentRef: "ref-a",
+        amount: decimal("10.00"),
+      });
+      await insertAttempting(tx, {
+        tenantId: t.tenantId,
+        workingOrderId: t.workingOrderId,
+        provider: "sumup",
+        paymentRef: "ref-b",
+        amount: decimal("11.00"),
+      });
+      await insertAttempting(tx, {
+        tenantId: t.tenantId,
+        workingOrderId: t.workingOrderId,
+        provider: "stripe",
+        paymentRef: "ref-c",
+        amount: decimal("12.00"),
+      });
+      await insertAttempting(tx, {
+        tenantId: other.tenantId,
+        workingOrderId: other.workingOrderId,
+        provider: "sumup",
+        paymentRef: "ref-d",
+        amount: decimal("13.00"),
+      });
+      await captureAttempting(tx, {
+        tenantId: t.tenantId,
+        provider: "sumup",
+        paymentRef: "ref-b",
+        settledAt: new Date(),
+        externalRef: "txn_b",
+      });
+      await stampAttemptingRef(
+        tx,
+        { tenantId: t.tenantId, provider: "sumup", paymentRef: "ref-a" },
+        "ctx_a",
+      );
+    });
+    const rows = await pg.db.transaction((tx) => listAttempting(tx, t.tenantId, "sumup"));
+    expect(rows.map((r) => [r.paymentRef, r.externalRef, r.amount])).toEqual([
+      ["ref-a", "ctx_a", "10.00"],
+    ]);
+    expect(rows[0]!.workingOrderId).toBe(t.workingOrderId);
+    expect(typeof rows[0]!.createdAt).toBe("string");
+  });
+
+  it("stampAttemptingRef touches only a row still attempting (a captured row keeps its refundable id)", async () => {
+    const t = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: t.tenantId, provider: "sumup", paymentRef: "ref-e" };
+    await pg.db.transaction(async (tx) => {
+      await insertAttempting(tx, {
+        ...key,
+        workingOrderId: t.workingOrderId,
+        amount: decimal("5.00"),
+      });
+      await captureAttempting(tx, { ...key, settledAt: new Date(), externalRef: "txn_e" });
+      await stampAttemptingRef(tx, key, "ctx_late");
+    });
+    const row = await pg.db.transaction((tx) => getPaymentByRef(tx, key));
+    expect(row!.externalRef).toBe("txn_e");
   });
 });

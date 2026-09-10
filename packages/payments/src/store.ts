@@ -435,6 +435,63 @@ export async function listAcceptedOffline(
     .orderBy(payments.createdAt);
 }
 
+/** One in-flight payment as `resolvePending` reads it. `externalRef` is the processor's POLL key
+ * (stamped by `stampAttemptingRef` after the create call), null when the adapter crashed before
+ * stamping it; `createdAt` bounds how long a not-found row is still considered pending. */
+export interface AttemptingPayment {
+  tenantId: string;
+  paymentRef: string;
+  workingOrderId: string;
+  amount: string;
+  externalRef: string | null;
+  createdAt: string;
+}
+
+/** This tenant's and provider's `attempting` rows, oldest first, unlocked — the T1 read of a
+ * `resolvePending` pass. Unlocked for the same reason `listAcceptedOffline` is: the processor
+ * lookup that follows is a network call, and the T2 advances (`captureAttempting` /
+ * `failAttempting`) each match only a row still `attempting`, so two concurrent passes are
+ * harmless. Tenant-scoped explicitly (CLAUDE.md §3). */
+export async function listAttempting(
+  tx: Transaction,
+  tenantId: string,
+  provider: string,
+): Promise<AttemptingPayment[]> {
+  return tx
+    .select({
+      tenantId: payments.tenantId,
+      paymentRef: payments.paymentRef,
+      workingOrderId: payments.workingOrderId,
+      amount: payments.amount,
+      externalRef: payments.externalRef,
+      createdAt: payments.createdAt,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.provider, provider),
+        eq(payments.state, "attempting"),
+      ),
+    )
+    .orderBy(payments.createdAt);
+}
+
+/** Stamp the processor's poll key onto an `attempting` row (T1.5 — after the create call returned,
+ * before the poll). Matches only a row still `attempting`: a row already resolved keeps the
+ * REFUNDABLE reference `captureAttempting` wrote, so a late stamp can never clobber it. A no-match
+ * is silent, not an error — the race it loses to is a concurrent resolution, which is correct. */
+export async function stampAttemptingRef(
+  tx: Transaction,
+  params: Key,
+  externalRef: string,
+): Promise<void> {
+  await tx
+    .update(payments)
+    .set({ externalRef, updatedAt: sql`now()` })
+    .where(and(keyWhere(params), eq(payments.state, "attempting")));
+}
+
 /** Advance a forwarded offline payment to `settled` (the network cleared it). Matches only a row
  * still `accepted_offline`, so re-running a completed forward is a no-op (idempotent). */
 export async function settleForwarded(tx: Transaction, params: Key): Promise<void> {

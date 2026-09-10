@@ -62,6 +62,13 @@ export class SimulatorPaymentProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
+  /** The simulator's `collect` is synchronous (it writes `captured`/`failed` in one transaction),
+   * so it never leaves a row `attempting`; nothing to resolve. */
+  resolvePending(now: Date): Promise<ForwardResult> {
+    void now;
+    return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+  }
+
   async void(ref: string): Promise<PaymentResult> {
     const row = await this.db.transaction(async (tx) => {
       const found = await this.require(tx, ref);

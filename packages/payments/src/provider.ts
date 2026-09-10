@@ -127,6 +127,14 @@ export interface PaymentProvider {
    * cadence (null = nothing pending). A provider with no device-local offline queue answers all-zeros. */
   forward(now: Date): Promise<ForwardResult>;
 
+  /** Resolve this provider's `attempting` rows whose outcome `collect` did not learn — a poll
+   * timeout, a crash between T1 and T2, a create call whose response was lost. One pass: each row
+   * is polled at the processor and resolved `captured` or `failed`; a row the processor still
+   * reports pending is left for the next pass (`nextDueAt`). Reuses `ForwardResult`: `forwarded`
+   * counts rows captured, `declined` rows failed. A synchronous adapter (its `collect` never leaves
+   * a row `attempting`) answers all-zeros — exactly how `forward` joined this interface. */
+  resolvePending(now: Date): Promise<ForwardResult>;
+
   /** Reverse a captured payment in full — a same-day void, distinct from a refund. Throws
    * `payment.not_voidable` if the payment is not `captured`. */
   void(ref: string): Promise<PaymentResult>;

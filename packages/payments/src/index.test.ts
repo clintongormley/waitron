@@ -11,6 +11,7 @@ import {
   getPaymentByRef,
   insertCapturedPayment,
   insertFailedPayment,
+  listAttempting,
   listReconcilable,
   MANUAL_PROVIDER,
   markReconcileRemediated,
@@ -20,10 +21,12 @@ import {
   recordManualRefund,
   recordRefund,
   recordVoid,
+  stampAttemptingRef,
   tillsForWorkingOrders,
 } from "./index.js";
 import type {
   AsyncPaymentProvider,
+  AttemptingPayment,
   InboundSettlement,
   InitiateParams,
   InitiateResult,
@@ -65,6 +68,19 @@ describe("package public surface (./index.js)", () => {
     expect(typeof recordRefund).toBe("function");
     expect(typeof associatePaymentWithSale).toBe("function");
     expect(typeof getPaymentByRef).toBe("function");
+    // resolvePending's two store reads (Task 1) — value exports, so a dropped re-export is caught
+    // only here, not by a type-only check.
+    expect(typeof listAttempting).toBe("function");
+    expect(typeof stampAttemptingRef).toBe("function");
+    const attempting: AttemptingPayment = {
+      tenantId: "t",
+      paymentRef: "ref-a",
+      workingOrderId: "w",
+      amount: "10.00",
+      externalRef: null,
+      createdAt: "2026-07-22T10:00:00Z",
+    };
+    expect(attempting.externalRef).toBeNull();
   });
 
   it("re-exports the manual-tender surface from the package root", () => {

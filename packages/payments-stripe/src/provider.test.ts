@@ -384,4 +384,20 @@ describe("StripeTerminalProvider.forward", () => {
       incidentsRaised: 0,
     });
   });
+
+  it("resolvePending is all-zeros (drive resolves stalls to failed inside collect)", async () => {
+    const provider = new StripeTerminalProvider({
+      client: new FakeStripe(),
+      db: pg.db,
+      tenantId: brandTenantId(randomUUID()),
+      nodeId: TEST_NODE_ID,
+      resolveReader: () => Promise.resolve("reader_1"),
+    });
+    expect(await provider.resolvePending(new Date("2026-07-24T10:00:00Z"))).toEqual({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    });
+  });
 });
