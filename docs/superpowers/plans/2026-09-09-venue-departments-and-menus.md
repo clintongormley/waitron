@@ -1,18 +1,19 @@
 # Venue departments and menus: implementation plan
 
-**Status:** foundation slice implemented on branch `menus`; the remaining authoring, activation,
-hours, staffing, reporting and operational validation work stays in this plan as follow-up scope.
+**Status:** ordering, management and operational-safety slice implemented on branch `menus`; legacy
+field removal, hours enforcement, staffing, reporting and replication smoke remain follow-up scope.
 **Driver:** Codex direct session.
 **Design:** [venue departments, menus and preparation routing](../specs/2026-09-09-venue-departments-and-menus-design.md).
 **Branch at preparation:** `menus`, baseline `67047fb3`. Continue in the registered
 `waitron-menus` worktree. Read the current `CLAUDE.md` and backlog before execution.
 
 The owner approved the domain direction. The design's section 3 records implementation defaults
-chosen during planning; expose any material change to those defaults before building it. The first
-slice replaces the live ordering path with menu-offer identity and zone service context, including
-preparation and transfer behaviour. Later slices can remove the legacy authoring fields and add the
-larger management, workforce and reporting surfaces without keeping two live ordering authorities.
-Do not merge without a later owner instruction.
+chosen during planning; expose any material change to those defaults before building it. This slice
+replaces the live ordering path with menu-offer identity and zone service context, including
+preparation and transfer behaviour. It also supplies the dashboard management surface, readiness
+checks, an exact Restaurant/Deli demo and operational one-venue checks. Later slices can remove the
+legacy authoring fields and add hours enforcement, workforce and reporting. Do not merge without a
+later owner instruction.
 
 ## Execution rules
 
@@ -314,20 +315,25 @@ The `menus` branch delivers this first reviewable slice:
 | Deployment | A same-venue provisioning retry is idempotent; a second distinct venue is refused, including competing real-PostgreSQL requests. | `packages/provisioning/src/venue-apply.test.ts`, `venue-apply.pg.test.ts`; commit `cb96c232` |
 | Fresh setup | Provisioning creates an initial menu, default department and counter zone, connects that menu to the zone, and exports both modules' configuration. | `apps/server/src/provision.test.ts`, `packages/catalogue/src/provisioning.ts`, `packages/{catalogue,venue-service}/src/configuration-transfer.ts` |
 | Till defaults | A configured device default selects the initial counter zone; an omitted HTTP zone resolves to the venue default before menu-offer pricing. | `apps/server/src/till-api.test.ts`, `packages/venue-service/src/operations.ts` |
-| Demo compatibility | The existing demo now authors menu sections/items, assigns its menus to service zones and creates preparation rules. | `apps/server/scripts/demo-seed/seed-options.test.ts`, `seed-catalogue.ts`, `seed-floor.ts` |
+| Dashboard products and menus | Products and categories have their own navigation entry. Menus list offers in the shared data table, create separately priced offers for existing products, edit offer prices and remove offers. | `apps/dashboard/src/screens/catalogue-screen.test.ts`, `widgets/product-list.test.ts`; commits `8c8f6bbe`, `7b4ff039`, `41a4e231` |
+| Dashboard venue operations | The contributed Venue operations screen shows departments, zones, hours and preparation routes in shared data tables. Managers can add and remove routes. | `packages/venue-service/src/dashboard/venue-operations-screen.test.ts`; commits `79301a65`, `41a4e231` |
+| Readiness and activation | Readiness reports missing department/menu/routing configuration, and an active zone prevents its department from being deactivated. | `packages/venue-service/src/operations.test.ts`, `routes.test.ts`; commit `23a42664` |
+| Operational venue boundary | Provisioning refuses any second venue, standby adoption checks before creating a subscription, and trading boot verifies the configured venue is the database's sole venue. | `packages/provisioning/src/tenant-guard.test.ts`, `apps/server/src/adopt.test.ts`, `boot.test.ts`; commit `406f052d` |
+| Restaurant/Deli demo | The demo has Restaurant and Deli departments, distinct flows and hours, five zones, shared kitchen preparation, upstairs/downstairs cocktail routing, and one Negroni product offered at two prices. | `apps/server/scripts/demo-seed/*.test.ts`; commits `79301a65`, `c1391fa0`, `f70c045b` |
 
 The following planned work is not part of this branch: removing the legacy product catalogue/price
-and fixed-station authoring fields; replacing the dashboard's Catalogue and Location menus screens;
-department/zone deactivation and readiness rules; enforcing department and zone hours; workforce
-assignments; immutable sold-line department attribution and department reporting; explicit
-single-venue validation at boot and standby adoption; converting the demo into the exact
-Restaurant/Deli departmental example; and replication smoke. The backlog keeps these as explicit
-follow-ups rather than describing the foundation branch as the whole plan.
+and fixed-station compatibility fields; enforcing department and zone hours and calendar exceptions;
+workforce assignments; immutable sold-line department attribution and department reporting; and
+primary/standby replication smoke for the new module rows. The backlog keeps these as explicit
+follow-ups rather than describing this slice as the whole plan.
 
-Focused validation recorded before final branch review:
+Focused validation recorded during implementation:
 
 - `pnpm --filter @waitron/venue-service test:coverage`: 12 tests passed; statements/lines 99.2%,
   branches 91.33%, functions 100%.
 - `pnpm --filter @waitron/composition test`: 15 tests passed.
+- `wa-wt reset demo waitron-menus`: rebuilt the database and seeded the exact Restaurant/Deli demo.
+  Live management API reads returned five department-bound zones, both Negroni offers, the two
+  zone-specific cocktail routes and no readiness findings.
 - The final workspace gate, frozen install, whole-branch review and CI belong to `finish-branch` and
   are recorded in the pull request.
