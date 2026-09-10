@@ -100,6 +100,10 @@ export interface MigratedPostgresOptions {
  * `client.test.ts` and `migrate.test.ts` still construct their own directly. They are testing
  * `createPostgresDb` and `runMigrations` against a bare server, so routing them through a helper
  * built on top of both would make each suite depend on the thing it exists to check.
+ *
+ * `migrate-upgrade.pg.test.ts` takes a container of its own from this constructor rather than the
+ * shared template: it needs MANY databases, each stopped at a DIFFERENT migration point, which a
+ * template of the finished schema cannot provide.
  */
 export async function startPostgresContainer(): Promise<StartedContainer> {
   // `com.waitron.reapable` is the marker the stale-container reaper (scripts/reap-testcontainers.mjs)

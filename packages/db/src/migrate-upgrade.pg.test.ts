@@ -9,10 +9,10 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import pg from "pg";
+import { createPostgresDb } from "./client.js";
+import { runMigrations } from "./migrate.js";
 import { databaseUrl, startPostgresContainer, type StartedContainer } from "./testing/postgres.js";
 
 const CORE_DRIZZLE = fileURLToPath(new URL("../drizzle", import.meta.url));
@@ -49,18 +49,39 @@ function folderWithFirst(n: number): string {
   return dir;
 }
 
+/** The full shipped set, built once: every case migrates to it and its contents never vary. */
+const HEAD_FOLDER = folderWithFirst(journal.entries.length);
+
 /**
- * The release points this suite requires to upgrade completely.
+ * The release points that cannot upgrade completely, DERIVED from the journal rather than listed.
  *
- * NOT every point, and the exclusion is the honest part: entries 1–6 sit above a non-monotonic
- * region of `meta/_journal.json` (entries 2–6 carry `when` values below entry 1's), so drizzle's
- * `max(created_at)` watermark skips them. That is unfixable by editing the journal — measured: every
- * candidate repair makes some OTHER release point re-apply a migration it already ran — and is
- * therefore a documented limit of this set, not something this test can assert away. The residual
- * skip is made LOUD at runtime by the boot-failure diagnosability branch. Shrink this list, never
- * grow it: a NEW set must never join it, which `scripts/journal-monotonic.test.ts` enforces.
+ * Drizzle's watermark is `max(created_at)` over the journal TABLE, fixed before the batch starts, and
+ * it applies a migration only when that watermark is below the migration's `when`. So a database
+ * stopped at release point `at` completes only if every entry from `at` onward carries a `when` above
+ * the highest `when` among entries 0…at-1. `meta/_journal.json` has a non-monotonic region (entries
+ * 2–6 sit below entry 1's), which makes some points incapable of completing; the derivation below
+ * finds exactly those, so this list cannot drift by eye from the journal it describes and empties
+ * itself if the journal is ever repaired.
+ *
+ * That non-monotonicity is unfixable by editing the journal — measured: every candidate repair makes
+ * some OTHER release point re-apply a migration it already ran (see
+ * `docs/superpowers/plans/2026-09-10-core-migration-upgrade.md`).
+ *
+ * THE RESIDUAL SKIP IS UNMITIGATED IN THIS BRANCH: a database at one of these points upgrades
+ * silently and incompletely, with no error. Making it loud is a `migrations.incomplete` check in
+ * `applyMigrations` (counting applied migrations against shipped ones and throwing when fewer
+ * applied), on branch `feat/boot-failure-diagnosability`. `scripts/journal-monotonic.test.ts` is what
+ * stops a NEW set acquiring the same shape.
  */
-const NON_MONOTONIC_POINTS = [1, 2, 3, 4, 5, 6];
+const NON_MONOTONIC_POINTS = journal.entries
+  .map((_, at) => at)
+  .filter((at) => {
+    const highestBefore = Math.max(
+      Number.NEGATIVE_INFINITY,
+      ...journal.entries.slice(0, at).map((entry) => entry.when),
+    );
+    return journal.entries.slice(at).some((entry) => entry.when <= highestBefore);
+  });
 
 describe("the core migration set upgrades an existing database", () => {
   let container: StartedContainer;
@@ -77,26 +98,32 @@ describe("the core migration set upgrades an existing database", () => {
 
   /** Migrate a new database to entry `at`, then to HEAD. Returns the journal row count, or throws. */
   async function upgradeFrom(at: number, databaseName: string): Promise<number> {
-    const admin = new pg.Client({ connectionString: container.uri });
-    await admin.connect();
+    const admin = await createPostgresDb(container.uri, { max: 1 });
     try {
-      await admin.query(`create database "${databaseName}"`);
+      // A utility statement PostgreSQL will not bind, so the name goes through `sql.identifier`
+      // rather than concatenation (CLAUDE.md §3).
+      await admin.execute(sql`create database ${sql.identifier(databaseName)}`);
     } finally {
-      await admin.end();
+      await admin.close();
     }
-    const client = new pg.Client({ connectionString: databaseUrl(container.uri, databaseName) });
-    await client.connect();
+    const db = await createPostgresDb(databaseUrl(container.uri, databaseName), { max: 1 });
     try {
-      const db = drizzle(client);
-      const options = { migrationsSchema: "public", migrationsTable: JOURNAL_TABLE };
-      if (at > 0) await migrate(db, { ...options, migrationsFolder: folderWithFirst(at) });
-      await migrate(db, { ...options, migrationsFolder: folderWithFirst(journal.entries.length) });
-      const counted = await client.query<{ n: number }>(
-        `select count(*)::int as n from "${JOURNAL_TABLE}"`,
+      if (at > 0) {
+        await runMigrations(db, {
+          migrationsFolder: folderWithFirst(at),
+          migrationsTable: JOURNAL_TABLE,
+        });
+      }
+      await runMigrations(db, { migrationsFolder: HEAD_FOLDER, migrationsTable: JOURNAL_TABLE });
+      // The row count is read directly rather than through `appliedSchemaVersion`: that helper lives
+      // in `@waitron/migrations`, which depends on `@waitron/db`, so importing it here would be a
+      // circular dependency.
+      const counted = await db.execute(
+        sql`select count(*)::int as n from ${sql.identifier(JOURNAL_TABLE)}`,
       );
-      return counted.rows[0]!.n;
+      return (counted.rows[0] as { n: number }).n;
     } finally {
-      await client.end();
+      await db.close();
     }
   }
 
