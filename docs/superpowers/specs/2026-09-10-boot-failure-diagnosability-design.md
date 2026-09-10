@@ -81,7 +81,8 @@ A pure `classifyBootFailure(error): string` sits between the catch and `afterFai
   five `[0-9A-Z]` characters — so the socket branch tests the Node `code` itself; its own doc names
   the one shape-collision to expect (`EPIPE` is five upper-case characters and passes its filter).
   Second, `sqlStateOf`'s result is looked up in a pinned table — `42P01` undefined table, `42703`
-  undefined column, `42704` undefined object, `22P02` invalid text for an enum, and `55P04` unsafe
+  undefined column, `42704` undefined object, `22P02` invalid text for an enum (REMOVED during
+  implementation — see §9), and `55P04` unsafe
   use of a new enum value — each mapping to `provisioning.schema_mismatch { sqlState }`. `55P04` is
   written from §6's experiment rather than before it, as this section requires: it is the SQLSTATE
   the first real box actually produced (§9). Both tables are exhaustive by construction (pinned
@@ -275,3 +276,11 @@ plan was written. §8's open question is closed, and two of the findings changed
   `sqlStateOf` uses (five) and includes each level's name and message, plus an `AppError`'s params —
   `migrations.incomplete`'s counts and `database_ahead`'s hashes are the diagnosis. All of it still
   goes through `redactSecrets` and none of it reaches the page (§5 unchanged, pinned by test).
+- **§4.1's schema-mismatch table LOST `22P02`, a deliberate deviation from this spec.** Run on
+  PostgreSQL 18, `select 'not-a-uuid'::uuid` returns `22P02` — the same SQLSTATE as an enum label the
+  image does not have — so the state cannot tell a malformed VALUE from a missing schema, and this
+  repository is full of the former (a non-uuid path parameter reaching a `uuid` column is what dozens
+  of route guards screen). Classifying it as `provisioning.schema_mismatch` would have told an
+  operator to restore or reinstall over a bad boot-time value. The four that remain (`42P01`,
+  `42703`, `42704`, `55P04`) are unambiguous. `unknown` is the honest answer here and costs little
+  now that the installer's channel carries the driver's own message.

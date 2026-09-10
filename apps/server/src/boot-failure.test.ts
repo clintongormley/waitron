@@ -60,6 +60,32 @@ describe("classifyBootFailure", () => {
     );
   });
 
+  /**
+   * `22P02` was in the schema-mismatch table (spec §4.1 lists it) and was removed after it was RUN.
+   * On real PostgreSQL 18 the same SQLSTATE comes from two unrelated causes:
+   *
+   *   select 'not-a-uuid'::uuid  →  22P02: invalid input syntax for type uuid: "not-a-uuid"
+   *   create type t as enum ('a'); select 'b'::t  →  22P02: invalid input value for enum t: "b"
+   *
+   * Only the second is a schema mismatch. The first is a malformed VALUE, and this repository is
+   * full of it — a non-uuid path parameter reaching a `uuid` column is the case dozens of route
+   * guards exist to screen. Classifying it as `provisioning.schema_mismatch` gives the operator
+   * "restore from a backup, or reinstall", which would destroy a perfectly good database over a bad
+   * boot-time value. `unknown` is honest, and no longer a shrug: the installer's channel now carries
+   * the driver's own message (finding 3), which distinguishes the two in one line.
+   */
+  it("leaves a malformed value's 22P02 unknown — it is not evidence of a schema mismatch", () => {
+    const malformed = Object.assign(new Error('invalid input syntax for type uuid: "not-a-uuid"'), {
+      code: "22P02",
+    });
+    expect(classifyBootFailure(malformed)).toBe("unknown");
+    expect(SCHEMA_MISMATCH_SQL_STATES).not.toContain("22P02");
+    // Control: the four that remain are unambiguously schema-shaped and still classify.
+    expect(classifyBootFailure(Object.assign(new Error("pg"), { code: "42P01" }))).toBe(
+      "provisioning.schema_mismatch",
+    );
+  });
+
   it("classifies a non-error value as unknown rather than throwing", () => {
     expect(classifyBootFailure("boom")).toBe("unknown");
     expect(classifyBootFailure(undefined)).toBe("unknown");

@@ -24,14 +24,20 @@ export const UNREACHABLE_SQL_STATES: readonly string[] = ["28P01", "3D000", "57P
  * The database does not carry the schema this image expects. Written from the run-it experiment, not
  * before it (spec §6): `55P04` is the one the first real box actually produced — drizzle applies a
  * set's pending migrations in one transaction and PostgreSQL refuses to use an enum value added
- * inside it, so an upgrade aborts there. `22P02` is the same enum mismatch seen from the query side
- * once the value never committed.
+ * inside it, so an upgrade aborts there.
+ *
+ * Each entry has to be UNAMBIGUOUSLY schema-shaped, because this code's operator action is "restore
+ * from a backup, or reinstall". `22P02` was listed here (spec §4.1 still names it) and was removed
+ * for failing that test: run on PostgreSQL 18, `select 'not-a-uuid'::uuid` and `select 'b'::t` for
+ * an enum without a `b` return the SAME SQLSTATE, and the first is a malformed VALUE, not a missing
+ * schema. Sending an operator to restore a healthy database over a bad boot-time value is worse than
+ * saying `unknown` — and `unknown` now costs little, because the installer's channel carries the
+ * driver's own message. Deviation recorded in the spec's §9 addendum.
  */
 export const SCHEMA_MISMATCH_SQL_STATES: readonly string[] = [
   "42P01", // undefined_table
   "42703", // undefined_column
   "42704", // undefined_object
-  "22P02", // invalid_text_representation — an enum label this image does not have
   "55P04", // object_not_in_prerequisite_state — unsafe use of a new enum value
 ];
 
