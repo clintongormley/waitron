@@ -366,28 +366,38 @@ unfiltered `main` run, not a wrong hook.
   (`drizzle-orm@0.45.2/pg-core/dialect.js:57` reads the watermark; `:62` applies only where
   `recorded < candidate`, so an EQUAL value is skipped too). **Waitron no longer exits 0 on that**:
   `applyMigrations` counts the journal afterwards and throws `migrations.incomplete` (next entry).
-  Every restatement of this mechanism points here rather than repeating the citation — a drizzle bump
-  would otherwise make several copies wrong at once. The core journal is already in that shape, and
-  no edit repairs it: a database at release point 2 and one at release point 3 both carry entry 1's
-  `when` as their watermark, because entry 2's RECORDED value sits below it — so point 2 needs entry
-  2's `when` ABOVE that watermark or `0002` is skipped, while point 3 needs it AT OR BELOW or `0002`
-  re-applies. Contradictory for any single value. Cost: core release points 1–6 upgrade incompletely
-  and silently, found only while investigating the 2026-09-10 bricked box. Guard:
-  `scripts/journal-monotonic.test.ts`.
+  The two error registries this branch touched — `packages/migrations/src/errors.ts` and
+  `packages/provisioning/src/errors.ts` — point here instead of repeating the `dialect.js` citation.
+  That is where the pointer stops: the citation is still restated under `packages/`, `scripts/`,
+  `docs/` and `packages/provisioning/README.md`, and nothing enforces the pointer, so a drizzle bump
+  starts with `grep -rn 'dialect.js'` and fixes every copy by hand. The core journal is already in
+  that shape, and no edit repairs it: a database at release point 2 and one at release point 3 both
+  carry entry 1's `when` as their watermark, because entry 2's RECORDED value sits below it — so
+  point 2 needs entry 2's `when` ABOVE that watermark or `0002` is skipped, while point 3 needs it
+  AT OR BELOW or `0002` re-applies. Contradictory for any single value. Cost: a database at core release points 1–6 cannot
+  reach HEAD at all — since `migrations.incomplete` the attempt fails LOUDLY rather than serving a
+  half-migrated schema, but it still fails; found only while investigating the 2026-09-10 bricked box.
+  Guard: `scripts/journal-monotonic.test.ts`.
 - **`applyMigrations` refuses to report success on a short set.** It compares the journal rows a set
   recorded against the entries the image ships and throws `migrations.incomplete` when fewer applied,
   so a boot against an old release point fails loudly instead of serving a half-migrated schema. Cost:
   a database at the core set's entry 1 reached HEAD with 10 of 15 applied and no error, and the wrong
   schema surfaced later as an unclassified driver failure. Pointer:
   `packages/migrations/src/apply-complete.pg.test.ts`.
-- **Every path that migrates a live database carries an ahead-of-image check, and `deploy/try-branch.sh`
-  is a one-way door.** `assertNotAhead` (`@waitron/provisioning`) compares the database's journal
-  hashes against the image's files after `ensureInstance` and refuses to boot on
-  `provisioning.database_ahead`; there is no backward migration, so the only remedy is restore or
-  reinstall, and `try-branch.sh` warns on every run because it cannot tell whether a ref carries a
-  migration. Cost: without the check, an ahead database re-migrates CLEANLY — drizzle applies nothing
-  and throws nothing (measured with a control, 2026-09-10) — so the mismatch showed up only as an
-  unclassified driver error in whatever query first touched the changed schema. Pointer:
+- **The box's BOOT path carries an ahead-of-image check; no other migrating path does, and
+  `deploy/try-branch.sh` is a one-way door.** `assertNotAhead` (`@waitron/provisioning`) compares the
+  database's journal hashes against the image's files and throws `provisioning.database_ahead`; there
+  is no backward migration, so the only remedy is restore or reinstall, and `try-branch.sh` warns on
+  every run because it cannot tell whether a ref carries a migration. Its only caller anywhere is
+  `apps/server/src/node-entry.ts`, which runs it after `ensureInstance` and before `startServer`
+  (`grep -rn assertNotAhead` before believing otherwise). The GAP, stated so nobody assumes coverage:
+  `waitron-provision instance` (`packages/provisioning/src/instance-apply.ts`), the cold restore
+  (`apps/server/src/restore.ts`), `apps/server/src/rejoin-command.ts` and
+  `apps/server/scripts/dev-setup.ts` each call `applyMigrations` against a live database with no
+  ahead check, so an ahead database reached through any of them is still undetected. Cost: without
+  the check, an ahead database re-migrates CLEANLY — drizzle applies nothing and throws nothing
+  (measured with a control, 2026-09-10) — so the mismatch showed up only as an unclassified driver
+  error in whatever query first touched the changed schema. Pointer:
   `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §4.2/§4.5/§9.
 - **The unauthenticated recovery page renders fixed strings chosen by code, never the caught error's
   words.** The error's own text goes to the container's stdout only, through `redactSecrets` — the
