@@ -4,7 +4,7 @@ import { basename, isAbsolute, join } from "node:path";
 import type { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { FRESH, levelFor } from "./recovery-state.js";
+import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { recoveryTlsFiles, runEntry, serveRecovery, waitForPostgres } from "./node-entry.js";
 
@@ -411,6 +411,124 @@ describe("runEntry", () => {
       expect(d.writeRecoveryState).toHaveBeenCalledWith("/state", FRESH);
       expect(exit).toHaveBeenCalledWith(0);
     });
+  });
+
+  it("persists the classified code, not `unknown`, for a raw driver failure", async () => {
+    // Typed, not a bare `vi.fn(() => …)`: an untyped mock's `mock.calls` entries are a zero-length
+    // tuple, so `[1]` is a typecheck error rather than the state we want to read.
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      runEntry(
+        deps({
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new Error("Failed query", {
+                cause: Object.assign(new Error("driver"), { code: "42703" }),
+              }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    // The second write is the failure path's; the first is the pre-boot counter.
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    expect(persisted.lastErrorCode).toBe("provisioning.schema_mismatch");
+  });
+
+  it("writes the scrubbed error to the installer's channel, with URL credentials masked", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(new Error("connect failed: postgres://waitron:hunter2@db:5432/waitron")),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    // The control and the probe in one assertion pair: the message must arrive, minus the secret.
+    expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
+    expect(reported).not.toContain("hunter2");
+  });
+
+  // The spec §5 probe, and the only place it can honestly live: the poisoned message has to be
+  // INJECTED as a real boot failure and then followed to BOTH channels. A test that renders a page
+  // the message never reached would pass against an implementation that leaks everywhere.
+  it("keeps a leaked connection string off the page while the installer's channel carries it", async () => {
+    const message = "connect failed: postgres://waitron:hunter2@db:5432/waitron";
+    const reportFailure = vi.fn();
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() => Promise.reject(new Error(message))),
+        }),
+      ),
+    ).rejects.toThrow();
+
+    // The PROBE: the state the page will render, rendered.
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    const body = await (
+      await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).not.toContain("hunter2");
+    expect(body).not.toContain("postgres://");
+
+    // The CONTROL, in the other direction: the same failure DOES reach the installer, scrubbed.
+    // Without it, a page that rendered nothing at all would pass the assertions above.
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
+    expect(reported).not.toContain("hunter2");
+  });
+
+  it("refuses to start the server when the database is ahead of this image", async () => {
+    const startServer = vi.fn<StartServer>(() =>
+      Promise.resolve({ close: () => Promise.resolve() }),
+    );
+    const assertAhead = vi.fn(() =>
+      Promise.reject(
+        new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["ff"] }),
+      ),
+    );
+    await expect(
+      runEntry(deps({ assertNotAhead: assertAhead, startServer })),
+    ).rejects.toMatchObject({ code: "provisioning.database_ahead" });
+    expect(startServer).not.toHaveBeenCalled();
+  });
+
+  it("checks for an ahead database after ensureInstance, never before", async () => {
+    const order: string[] = [];
+    await runEntry(
+      deps({
+        ensureInstance: vi.fn(() => {
+          order.push("ensureInstance");
+          return Promise.resolve({
+            databaseUrl: "postgres://app",
+            migrationsDatabaseUrl: "postgres://migrator",
+            replicationPassword: "r",
+          });
+        }),
+        assertNotAhead: vi.fn(() => {
+          order.push("assertNotAhead");
+          return Promise.resolve();
+        }),
+        startServer: vi.fn<StartServer>(() => {
+          order.push("startServer");
+          return Promise.resolve({ close: () => Promise.resolve() });
+        }),
+      }),
+    );
+    // A legitimately BEHIND database must be migrated forward before it is judged.
+    expect(order).toEqual(["ensureInstance", "assertNotAhead", "startServer"]);
   });
 });
 

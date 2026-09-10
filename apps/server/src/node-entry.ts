@@ -6,6 +6,11 @@ import type { Hono } from "hono";
 import pg from "pg";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
+import { createPostgresDb } from "@waitron/db";
+import { manifestSets } from "@waitron/migrations";
+// Aliased: `EntryDeps` has a field of the same name, and an unaliased import beside it reads as
+// though the object literal below were calling itself.
+import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning";
 import {
   DEFAULT_MIGRATIONS_ROOT,
   DEFAULT_MEDIA_ROOT,
@@ -38,6 +43,8 @@ import { installShutdownHandlers } from "./run-server.js";
 import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
+import { classifyBootFailure } from "./boot-failure.js";
+import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
 
 /** The one database a node owns, matching the URLs `ensureInstance` writes into `instance.env`. */
@@ -209,6 +216,16 @@ export interface EntryDeps {
   }) => Promise<InstanceUrls>;
   /** Executes a staged restore before loadBoxEnv/startServer opens application pools. */
   runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
+  /** Refuses a database migrated by a different image. Injected so `runEntry` stays unit-testable;
+   *  the real one opens its own connection (see the wiring at the bottom of this file). */
+  assertNotAhead?: (migrationsDatabaseUrl: string) => Promise<void>;
+  /**
+   * The INSTALLER's channel — the container's stdout, which is `docker logs`, never the
+   * `waitron.log` the recovery page tails. It is the one place the caught error's own words may
+   * appear, and only after `redactSecrets`. Injected so the failure path is unit-covered; a test
+   * that omits it gets the no-op below and asserts nothing about it.
+   */
+  reportFailure?: (text: string) => void;
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
   readRecoveryState: (stateDir: string) => Promise<RecoveryState>;
   writeRecoveryState: (stateDir: string, state: RecoveryState) => Promise<void>;
@@ -376,6 +393,13 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       log: deps.log,
     });
 
+    // AFTER `ensureInstance` has migrated a legitimately BEHIND database forward, and BEFORE the
+    // server opens a pool: only the ahead direction is unrecoverable, and naming it here is the
+    // whole point — drizzle applies and reports nothing for an ahead journal, so the mismatch would
+    // otherwise surface as an unclassified driver error in whatever query first touched the changed
+    // schema (spec §4.2, proven in `schema-ahead.pg.test.ts`).
+    await (deps.assertNotAhead ?? (() => Promise.resolve()))(urls.migrationsDatabaseUrl);
+
     // AFTER `ensureInstance`, which has just written `instance.env` — that file is where the merged
     // environment's `DATABASE_URL` comes from.
     const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
@@ -392,9 +416,17 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     // unmerged base to tell a file-sourced value from an env-sourced one (spec §3.2 provenance).
     server = await deps.startServer(env, deps.baseEnv);
   } catch (error) {
+    // The installer's channel first, so the real reason survives even if the state write fails.
+    // Name, message and stack — scrubbed — because `codeOf` alone is what left the first real box's
+    // operator and its developer with the single word "unknown" (spec §1).
+    const detail =
+      error instanceof Error
+        ? `${error.name}: ${error.message}\n${error.stack ?? "(no stack)"}`
+        : `non-error thrown: ${String(error)}`;
+    (deps.reportFailure ?? (() => {}))(redactSecrets(detail));
     // Same count as the pre-boot write — one attempt is one failure, not two — now carrying the
-    // real classification for the page. Rethrown so the process exits non-zero and Docker restarts.
-    await persistState(deps, afterFailure(state, codeOf(error), new Date()));
+    // classified code for the page. Rethrown so the process exits non-zero and Docker restarts.
+    await persistState(deps, afterFailure(state, classifyBootFailure(error), new Date()));
     throw error;
   }
 
@@ -424,6 +456,11 @@ function bootThisProcess(): Promise<void> {
   const env = { ...process.env };
   delete process.env[BOOTSTRAP_URL];
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  // `config.ts`'s own fallback, verbatim (it stores this one unresolved), so the entrypoint's own
+  // ahead check and the server it starts can never read two different folders.
+  const migrationsRoot = isUnset(env.WAITRON_MIGRATIONS_DIR)
+    ? DEFAULT_MIGRATIONS_ROOT
+    : env.WAITRON_MIGRATIONS_DIR;
   const log = createLogger(
     (line) => void process.stdout.write(line),
     () => new Date(),
@@ -432,11 +469,7 @@ function bootThisProcess(): Promise<void> {
     baseEnv: env,
     stateDir,
     logDir: isUnset(env.WAITRON_LOG_DIR) ? join(stateDir, "logs") : env.WAITRON_LOG_DIR,
-    // `config.ts`'s own fallback, verbatim (it stores this one unresolved), so the entrypoint and
-    // the server it starts can never migrate from two different folders.
-    migrationsRoot: isUnset(env.WAITRON_MIGRATIONS_DIR)
-      ? DEFAULT_MIGRATIONS_ROOT
-      : env.WAITRON_MIGRATIONS_DIR,
+    migrationsRoot,
     waitForPostgres: (url) =>
       waitForPostgres(url, {
         connect: connectOnce,
@@ -445,6 +478,15 @@ function bootThisProcess(): Promise<void> {
       }),
     ensureInstance,
     runStagedRestore,
+    assertNotAhead: async (migrationsDatabaseUrl) => {
+      const db = await createPostgresDb(migrationsDatabaseUrl);
+      try {
+        await assertDatabaseNotAhead(db, manifestSets(), migrationsRoot);
+      } finally {
+        await db.close();
+      }
+    },
+    reportFailure: (text) => void process.stdout.write(`${text}\n`),
     loadBoxEnv,
     readRecoveryState,
     writeRecoveryState,
@@ -457,9 +499,10 @@ function bootThisProcess(): Promise<void> {
     log,
     exit: DEFAULT_EXIT,
   }).catch((error: unknown) => {
-    // `codeOf`, never the caught value: a `pg` failure's message can embed the connection string,
-    // and an unhandled rejection would print the whole stack.
-    log("error", "server.boot_failed", { errorCode: codeOf(error) });
+    // `classifyBootFailure`, never the caught value: a `pg` failure's message can embed the
+    // connection string, and an unhandled rejection would print the whole stack. The scrubbed text
+    // has already gone to stdout from `runEntry`'s catch; this line stays structured.
+    log("error", "server.boot_failed", { errorCode: classifyBootFailure(error) });
     process.exit(1);
   });
 }
