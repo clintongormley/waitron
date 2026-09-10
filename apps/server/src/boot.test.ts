@@ -2228,6 +2228,18 @@ describe("startServer, against a real container as the deployment role", () => {
     }, 60_000);
   });
 
+  it("refuses trading boot when its configured venue is not the database's sole venue", async () => {
+    const error = await startServer({
+      ...KEY_ENV,
+      WAITRON_TILL_LOCATION_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+    }).catch((caught: unknown) => caught);
+    expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
+  });
+
   // I1 of the 2026-07-27 whole-branch review: nothing PINS which config field reaches which duty,
   // and nothing proves this branch's headline behaviour end to end. `boot.ts` passes
   // `skipRetryMs: config.skipRetryMs` to both `drain` and `runDue` — `tsc` only pins that the

@@ -1,7 +1,9 @@
 import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
 import {
   assertNoForeignTenant,
+  assertNoOperationalVenue,
   readTenantIdentities,
+  readOperationalVenueIds,
   REPLICATION_ROLE,
 } from "@waitron/provisioning";
 import { assertReplicationReady } from "@waitron/provisioning";
@@ -189,6 +191,7 @@ export async function adoptFromPrimary(
     { country: bundle.tenant.country, taxId: bundle.tenant.taxId },
     deps.database,
   );
+  assertNoOperationalVenue(await readOperationalVenueIds(deps.ownerDb));
 
   // The instance must be replication-ready before a subscription is created — the app provisioner only
   // VERIFIES the superuser/box-image bootstrap (`provisioning.replication_not_ready`), never performs it.

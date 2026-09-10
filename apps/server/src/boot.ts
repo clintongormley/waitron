@@ -28,6 +28,7 @@ import {
 } from "@waitron/payments-stripe";
 import { SimulatorPaymentProvider, type PaymentProvider } from "@waitron/payments";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
+import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import type { ModuleRouteContext } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -1328,6 +1329,13 @@ export async function startServer(
       // its own minted leaf, so a phone can still trust the CA from this page.
       startLandingListener(config, log),
     );
+  }
+
+  try {
+    assertSingleOperationalVenue(await readOperationalVenueIds(db), config.till.locationId);
+  } catch (error) {
+    await db.close();
+    throw error;
   }
 
   // Which role this database plays (C2a design §4). A mirror pulls + applies and serves read-only; a
