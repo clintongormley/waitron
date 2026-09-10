@@ -156,6 +156,45 @@ describe("the container image's environment", () => {
   });
 });
 
+describe("the print-agent image and its compose wiring", () => {
+  it("builds a print-agent target from deploy/Dockerfile", () => {
+    expect(DOCKERFILE).toContain("FROM node:26-slim AS print-agent");
+    // Emitted by the shared build stage — the source the COPY below pulls from.
+    expect(DOCKERFILE).toContain("pnpm --filter @waitron/print-agent-app build");
+    expect(DOCKERFILE).toContain(
+      "COPY --from=build --chown=node:node /src/apps/print-agent/dist/print-agent.js /app/print-agent.js",
+    );
+    // The app runtime stage stays LAST, so a bare `docker build` still yields the app image.
+    expect(DOCKERFILE.lastIndexOf("AS runtime")).toBeGreaterThan(
+      DOCKERFILE.indexOf("AS print-agent"),
+    );
+  });
+
+  it("runs the agent as an on-by-default compose service with the measured USB shape", () => {
+    expect(COMPOSE).toContain("print-agent:");
+    expect(COMPOSE).toContain(
+      "image: ${WAITRON_PRINT_AGENT_IMAGE:-ghcr.io/clintongormley/waitron-print-agent:main}",
+    );
+    // The hot-plug-safe device shape, pinned so a subdirectory mount or a hard `devices:` line
+    // (both of which the box receipts rejected, spec §5) fails here.
+    expect(COMPOSE).toContain("/dev:/dev:ro");
+    expect(COMPOSE).toContain('"c 180:* rwm"');
+    expect(COMPOSE).not.toMatch(/^\s*devices:/m);
+    // The state volume mount matches the agent stage's WAITRON_STATE_DIR ENV.
+    expect(COMPOSE).toContain("print_agent:/var/lib/waitron-print-agent");
+    expect(DOCKERFILE).toContain("WAITRON_STATE_DIR=/var/lib/waitron-print-agent");
+  });
+
+  it("has retired the standalone agent Dockerfile", () => {
+    // One image definition. A resurrected file would build a second, drifting image.
+    expect(() => read("apps/print-agent/Dockerfile")).toThrow();
+  });
+
+  it("smokes the print-agent target it ships", () => {
+    expect(IMAGE_SMOKE).toContain("target: print-agent");
+  });
+});
+
 describe("the run-from-web installer", () => {
   // Read tolerantly: before install.sh exists this is "" so the assertions below go red (the content
   // checks fail; the only()-based ones throw) rather than the file read throwing at import.
