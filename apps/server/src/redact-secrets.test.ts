@@ -66,6 +66,15 @@ describe("redactSecrets", () => {
     );
   });
 
+  // The blind spot the doc names, pinned so a future widening has to notice it: `"` terminates the
+  // authority scan, so a password carrying one is left whole when the `@` sits after that quote.
+  // The terminator is deliberate — a log line is JSON, where an unescaped `"` is structure and
+  // never password text, and letting the scan cross it would mangle the line for `createLogReader`.
+  it("does NOT mask a password whose double quote precedes the @ — a stated blind spot", () => {
+    const text = 'pw with "quote": postgres://u:pa"ss@host/db';
+    expect(redactSecrets(text)).toBe(text);
+  });
+
   // Control for the query-parameter branch: `pg` reads `password` case-sensitively, and a
   // non-password parameter must survive untouched, or the branch above would also pass with a rule
   // that eats every query string. Measured on `postgres://u@localhost/db?PASSWORD=UPPER_SECRET`:

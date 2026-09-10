@@ -23,8 +23,9 @@
  * or `&`, so it does not fire there), a `PGPASSWORD` in an environment dump, a `.pgpass` line — and
  * any other token, key or secret in any other shape. It is not a general secret scrubber and must
  * not be described as one. Two known blind spots inside its own scope: a password containing a
- * double quote is masked only up to that quote (`"` terminates both rules, because a log line is
- * JSON and an unescaped quote there is structure, never password text), and `password` is matched
+ * double quote is not masked at all when the `@` falls after that quote (`"` terminates both rules,
+ * because a log line is JSON and an unescaped quote there is structure, never password text — the
+ * scan therefore stops before it ever sees the `@` that would mark a user-info), and `password` is matched
  * case-sensitively because the parser reads it that way — `?PASSWORD=x` yields the empty string
  * from `parse()` and `null` from a `Client`, so it is not a credential position (measured; see
  * `redact-secrets.test.ts`).
