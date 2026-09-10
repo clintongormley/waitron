@@ -390,7 +390,7 @@ async function provisionVenue(
   await seedDemoRestaurant(db, { venue: ids, locale: seedLocale, salesDays });
 
   // Enrol the three demo devices through the SHIPPING enrol path — after the demo restaurant seeds
-  // its "Cocina" station and "Barra" (the kds binds one).
+  // its default preparation station and bars (the KDS binds the default).
   await seedDemoDevices(db, ids, seedLocale);
 
   return ids;
@@ -415,8 +415,8 @@ async function provisionVenue(
  *    `tills (tenant, location, name)` unique index → `device.register_name_taken`;
  *  - the HANDHELD binds to the counter till device's OWN register ("Mostrador") — the deli shape where
  *    the waiter's phone rings into the same drawer as the counter, adding no third register;
- *  - the KITCHEN display binds to the provisioned default "Cocina" station (looked up by name, the same
- *    key `seed-catalogue.ts` resolves it by; the name is not localized).
+ *  - the KITCHEN display binds to the venue's default preparation station. The demo may rename that
+ *    station, so the stable `isDefault` identity is used rather than presentation text.
  */
 async function seedDemoDevices(
   db: Database,
@@ -440,7 +440,7 @@ async function seedDemoDevices(
   };
 
   // The profiles + stations the devices bind to — provisioning seeds one profile per form factor
-  // (till/kds/phone-portrait) and the default "Cocina" station.
+  // (till/kds/phone-portrait) and one default preparation station.
   const { profiles, stations } = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     return {
@@ -455,9 +455,9 @@ async function seedDemoDevices(
     }
     return profile.id;
   };
-  const kitchen = stations.find((s) => s.name === "Cocina");
+  const kitchen = stations.find((station) => station.isDefault);
   if (kitchen === undefined) {
-    throw new Error('dev-setup: no "Cocina" kitchen station to bind the kitchen display to');
+    throw new Error("dev-setup: no default preparation station to bind the kitchen display to");
   }
 
   // 1. Till — auto-creates its register "Mostrador".
@@ -491,7 +491,7 @@ async function seedDemoDevices(
     registerId: counter.id,
   });
 
-  // 3. Kitchen display — bound to the "Cocina" station.
+  // 3. Kitchen display — bound to the venue's default preparation station.
   await enrolDeviceForTest(db, cfg, {
     name: "Pantalla Cocina",
     profileId: profileFor("kds"),

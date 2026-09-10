@@ -384,7 +384,8 @@ describe("devSetup against real Postgres", () => {
     // Each device came through join-and-accept (`enrolDeviceForTest`, seedDemoDevices), NOT a direct
     // insert, so this pins the bindings that path produces: the till auto-created its own "Mostrador"
     // register, the handheld rings into that SAME register (no third till), and the kds is bound to
-    // the provisioned "Cocina" station. toEqual, not toMatchObject (CLAUDE.md §4).
+    // the venue's default preparation station, after the demo has renamed it to "Kitchen".
+    // toEqual, not toMatchObject (CLAUDE.md §4).
     const { rows } = await suite.admin.execute<{
       label: string;
       form_factor: string;
@@ -411,7 +412,7 @@ describe("devSetup against real Postgres", () => {
         label: "Pantalla Cocina",
         form_factor: "kds",
         register_name: null,
-        station_name: "Cocina",
+        station_name: "Kitchen",
       },
     ]);
   });
