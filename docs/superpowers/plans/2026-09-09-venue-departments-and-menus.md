@@ -1,15 +1,18 @@
 # Venue departments and menus: implementation plan
 
-**Status:** ready for implementation planning handoff; no tasks below have been executed.
-**Driver:** the owner intends to switch the interactive session to Sol for implementation.
+**Status:** foundation slice implemented on branch `menus`; the remaining authoring, hours, staffing
+and reporting work stays in this plan as follow-up scope.
+**Driver:** Codex direct session.
 **Design:** [venue departments, menus and preparation routing](../specs/2026-09-09-venue-departments-and-menus-design.md).
 **Branch at preparation:** `menus`, baseline `67047fb3`. Continue in the registered
 `waitron-menus` worktree. Read the current `CLAUDE.md` and backlog before execution.
 
 The owner approved the domain direction. The design's section 3 records implementation defaults
-chosen during planning; expose any material change to those defaults before building it. This is
-one coordinated feature, split into reviewable tasks below. Do not stop after the schema or dashboard
-while the old product-ID ordering path still runs. Do not merge without a later owner instruction.
+chosen during planning; expose any material change to those defaults before building it. The first
+slice replaces the live ordering path with menu-offer identity and zone service context, including
+preparation and transfer behaviour. Later slices can remove the legacy authoring fields and add the
+larger management, workforce and reporting surfaces without keeping two live ordering authorities.
+Do not merge without a later owner instruction.
 
 ## Execution rules
 
@@ -299,7 +302,27 @@ pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 
 ## Handoff receipts
 
-During implementation, append a short task/result table here or link a committed validation note.
-Record meaningful failing/passing commands, real-PG role shape, browser smoke and the final gate.
-Do not turn planned checks into claims that they already passed. At plan creation, only document
-links, whitespace and the source paths cited by these documents were checked.
+The `menus` branch delivers this first reviewable slice:
+
+| Area | Result | Receipt |
+| --- | --- | --- |
+| Menu offers | A product can have separately priced menu offers and offer-specific modifier prices. | `packages/catalogue/src/operations.test.ts`; commits `67fbb417`, `8898d5ce` |
+| Venue service | Departments, zone policies, allowed/default menus, preparation rules and frozen order/line context are module-owned. Manager routes expose the configuration operations. | `packages/venue-service/src/operations.test.ts`, `routes.test.ts`; commits `67fbb417`, `9089f1cd`, `bf685c47` |
+| Till and server | New lines use `menuItemId`; a counter order selects a service zone; table orders use their table zone; stored service mode governs later actions. | `apps/server/src/working-order.test.ts`, `till-api.test.ts`; `apps/till/src/till-app.test.ts`; commits `8898d5ce` through `198c7f7e` |
+| Preparation | Routing resolves from the frozen zone and product/category specificity. Integrated prepay orders fire preparation in the sale transaction. | `apps/server/src/till-sale.test.ts`, `till-sale-integrated.pg.test.ts`; commits `c18df62c`, `7f171d98` |
+| Existing orders | Quantity edits keep price and line identity; parked orders restore modifiers and customisation; split, merge and transfer retain service and line context. | `apps/server/src/working-order.test.ts`, `move-merge.test.ts`, `split-bill.test.ts`; commits `44bc72f4`, `7dde626b`, `51fb9b47` |
+| Deployment | A same-venue provisioning retry is idempotent; a second distinct venue is refused, including competing real-PostgreSQL requests. | `packages/provisioning/src/venue-apply.test.ts`, `venue-apply.pg.test.ts`; commit `cb96c232` |
+
+The following planned work is not part of this branch: removing the legacy product catalogue/price
+and fixed-station authoring fields; replacing the dashboard's Catalogue and Location menus screens;
+department and zone hours; workforce assignments; immutable sold-line department attribution and
+department reporting; the full Restaurant/Deli demo and replication smoke. The backlog keeps these
+as explicit follow-ups rather than describing the foundation branch as the whole plan.
+
+Focused validation recorded before final branch review:
+
+- `pnpm --filter @waitron/venue-service test:coverage`: 12 tests passed; statements/lines 99.2%,
+  branches 91.33%, functions 100%.
+- `pnpm --filter @waitron/composition test`: 15 tests passed.
+- The final workspace gate, frozen install, whole-branch review and CI belong to `finish-branch` and
+  are recorded in the pull request.

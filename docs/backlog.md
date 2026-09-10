@@ -789,25 +789,19 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
 
 **Ordering / menu (SP18):**
 
-- **Venue departments and menu model — design agreed, implementation planned (owner, 2026-09-09;
-  branch `menus`).** One venue contains Restaurant/bar and Deli departments with their own zones,
-  menus, service defaults, hours and staffing, sharing products and preparation stations. One
+- **Venue departments and menu model — ordering foundation implemented (owner, 2026-09-09;
+  branch `menus`, PR pending).** One venue contains Restaurant/bar and Deli departments with their
+  own zones, menus, service defaults, hours and staffing, sharing products and preparation stations. One
   product can have different prices/modifiers on different menus; zone/category routing selects
   the preparation station. Same legal seller is the working assumption, to confirm before go-live.
   [Design](superpowers/specs/2026-09-09-venue-departments-and-menus-design.md) and
-  [implementation plan for Sol or Claude](superpowers/plans/2026-09-09-venue-departments-and-menus.md)
-  include order/payment consumers, department reporting and test-first acceptance. No implementation
-  is claimed yet. Includes the counter-fire follow-up below and the till's menu-refresh defect;
-  inventory, recipe depth and multi-venue cloud management remain separate work.
-- **Counter/walk-up kitchen fire (#193 follow-up) — the next actionable ordering slice.** The
-  counter/walk-up basket shows the note/doneness editor and the server persists both on
-  `working_order_lines`, but `/api/sales` (`recordTillSale` → `createOpenOrder`) never calls
-  `fireLines`, so a note/doneness typed on a counter sale reaches no kitchen surface. The owner
-  confirmed counter food DOES go to the kitchen (2026-09-01), so this is real work: make the walk-up
-  path fire kitchen tickets (mirror the table/tab round path, snapshotting note/doneness onto
-  `ticket_items`) and extend the KDS/expo/print reads to cover counter-fired tickets. Wire/state
-  already exist; only the counter fire path + its reads are missing. Keep the fiscal boundary intact
-  (note/doneness must NOT reach `sale_lines`/`computeHuella` — same guard as #193).
+  [implementation plan](superpowers/plans/2026-09-09-venue-departments-and-menus.md) record the
+  delivered slice and remaining work. The branch adds menu-item pricing, zone offer selection,
+  frozen service context, zone/category preparation routing, context-preserving order transfers,
+  counter preparation fire and a one-operational-venue guard. Follow-ups are the dashboard authoring
+  replacement, removal of legacy product/menu price and fixed-station fields, hours, workforce
+  assignments, department attribution/reporting, demo/replication smoke and the till menu-refresh
+  defect. Inventory, recipe depth and multi-venue cloud management remain separate work.
 - **Modifiers / quantity deferred follow-ons** (all landed — #184/#186/#187/#190/#193): on-screen
   expo/station-queue/tab modifier `×N`; extract the shared `#allergens` render across
   basket/station-queue/expo; fold the base-allergen `products` join into the KDS queue select; the
