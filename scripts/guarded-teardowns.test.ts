@@ -28,8 +28,9 @@ import { describe, expect, it } from "vitest";
  * hooks for the suites that use it, so they cannot write a teardown at all, guarded or otherwise.
  * What remains in scope here is the residue that legitimately builds its own resources —
  * `client.test.ts` and `migrate.test.ts` construct containers because they are the unit tests OF the
- * constructor and the migrator, and `testing/postgres.test.ts` tests the very surface the helper is
- * built on.
+ * constructor and the migrator, `testing/postgres.test.ts` tests the very surface the helper is
+ * built on, and `migrate-upgrade.pg.test.ts` needs many databases each at a DIFFERENT migration
+ * point, which a template of the finished schema cannot provide.
  *
  * ## Three limits, stated because none is obvious
  *

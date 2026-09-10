@@ -55,11 +55,14 @@ const KNOWN_NON_MONOTONIC = new Map<string, { entries: string[]; reason: string 
         "Entries 2 to 6 carry `when` values below entry 1's, so drizzle's `max(created_at)` " +
         "watermark SKIPS them for a database whose highest recorded value is entry 1's. Measured " +
         "2026-09-10: a database at entry 1 upgrading to HEAD applies 10 of 15 migrations and " +
-        "raises nothing. It cannot be fixed by editing the journal — raising the out-of-order " +
-        "entries makes points 3 to 7 RE-APPLY a migration they already ran and fail, and lowering " +
-        "the earlier ones changes nothing because the database stored the old value, not the " +
-        "file's. The residual skip is made loud at runtime instead, by the boot-failure " +
-        "diagnosability work; fixing it properly means a squashed baseline, a separate decision.",
+        "raises nothing. No assignment of `when` values repairs it, because a database recorded " +
+        "the old value rather than the file's: raising the out-of-order entries makes points 3 to " +
+        "7 RE-APPLY a migration they already ran and fail, and lowering the earlier ones makes " +
+        "point 1 fail outright with 42P01 rather than complete with skips. Both measured. The " +
+        "residual skip is UNMITIGATED here — a runtime check that counts applied migrations " +
+        "against shipped ones (`migrations.incomplete`) is being added on " +
+        "`feat/boot-failure-diagnosability`, and until that merges nothing names this case. " +
+        "Fixing the journal itself means a squashed baseline, a separate decision.",
     },
   ],
 ]);
