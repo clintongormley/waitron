@@ -279,7 +279,8 @@ hosted in Spain (owner decision 2026-09-05), so asesor Q16 does not arise.
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
-:8080. The till enrols itself on first load in dev mode — no code, no approval step. Till PIN **5555**;
+:8080 (HTTP for leaf-less shared state, HTTPS when a development box leaf is present; the Vite
+proxies select the matching protocol). The till enrols itself on first load in dev mode — no code, no approval step. Till PIN **5555**;
 dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a believable demo
 restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16 tables), staff
 on PIN 5555, and ~28 days of back-dated preproduction sales — English by default, Spanish via

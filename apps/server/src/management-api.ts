@@ -131,8 +131,8 @@ import {
  * Everything the dashboard's management HTTP routes need. The management surface reads and writes only
  * the tenant's own identity records, so — unlike `TillApiDeps` — it wires no fiscal backend, clock or
  * card provider. `cfg.tenantId` is the dashboard's own tenant (provisioning stamped it), scoping every
- * `withTenant` below. `secureCookies` decides the management cookie's `Secure` attribute (TRUE on a
- * production HTTPS host, FALSE on loopback dev with no TLS), mirroring `TillApiDeps.secureCookies`.
+ * `withTenant` below. `secureCookies` follows the resolved trading transport (operator TLS, persisted
+ * box leaf, or leaf-less HTTP development), mirroring `TillApiDeps.secureCookies`.
  */
 export interface ManagementApiDeps {
   db: Database;

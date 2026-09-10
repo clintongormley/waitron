@@ -79,13 +79,15 @@ pnpm dev
 
 starts all three processes in parallel:
 
-| Process   | URL                   |
-| --------- | --------------------- |
-| Till      | http://localhost:5190 |
-| Dashboard | http://localhost:5191 |
-| Server    | http://localhost:8080 |
+| Process   | URL                                             |
+| --------- | ----------------------------------------------- |
+| Till      | http://localhost:5190                           |
+| Dashboard | http://localhost:5191                           |
+| Server    | http://localhost:8080 or https://localhost:8080 |
 
-Each front-end proxies its API to the server (the till's `/api`, the dashboard's `/management-api`).
+A fresh demo server uses HTTP. If the shared development state already contains a box certificate,
+the server uses HTTPS instead. Each front-end inspects that same state and proxies all of its API and
+media routes with the matching protocol.
 The till enrols itself on first load in dev mode — no code, no approval step — then log
 in with the **cashier PIN 5555**; the dashboard owner login is **owner@demo.waitron.local /
 dashPass123** (`pnpm dev:setup` prints all three).
