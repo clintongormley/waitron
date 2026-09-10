@@ -20,69 +20,58 @@ first; every task below argues from it.
 
 ---
 
-## What the spec's §6 experiment actually found
+## What the spec's §6 experiment settled
 
 The spec left one question open (§8): *"the artefact that actually broke the boot … was **not
-confirmed**"*. It has now been confirmed, by running it against PostgreSQL 18 (the box's own
-version, `deploy/compose.yml:85`) on 2026-09-10, before this plan was written. **Three findings
-change the work below**, so they are stated here rather than left as background:
+confirmed**"*. It was run on 2026-09-10 against PostgreSQL 18 — the box's own version
+(`deploy/compose.yml`) — before this plan was written. Three findings, each with the control that
+makes it a measurement rather than a guess.
 
-**Finding 1 — the incident was not an "ahead" database at all. It was a migration pair that cannot
-be applied to any existing database.** `packages/db/drizzle/0013_central_printer_provisioning.sql`
-runs `ALTER TYPE "public"."print_transport" ADD VALUE 'bluetooth'`, and
-`0014_central_printer_provisioning_sql.sql` then names `'bluetooth'` in a `CHECK` constraint.
-Drizzle runs every *pending* migration of a set inside **one** transaction
-(`drizzle-orm@0.45.2/pg-core/dialect.js:60`), and PostgreSQL refuses to use a new enum value in the
-transaction that added it unless the enum *type* was also created there:
+**Finding 1 — the incident was not an "ahead" database.** It was a migration pair that cannot be
+applied to any existing database: `packages/db/drizzle/0013` adds an enum label and `0014` names it
+inside drizzle's single migrate transaction, which PostgreSQL refuses with `55P04`. A fresh database
+creates the type in that same batch and is allowed, which is why CI is green. **That defect and its
+guards are NOT in this plan** — they are a separate branch, `fix/core-migration-upgrade`
+(`docs/superpowers/plans/2026-09-10-core-migration-upgrade.md`), because they block every box upgrade
+today and should not wait behind a web surface and two barrel changes.
 
-```
-ERROR:  55P04: unsafe use of new value "bluetooth" of enum type print_transport
-HINT:  New enum values must be committed before they can be used.
-```
+**Finding 2 — a second, silent defect sits underneath it, and that half IS this plan's business.**
+`packages/db/drizzle/meta/_journal.json` is non-monotonic: entries 2–6 carry `when` values below
+entry 1's. Drizzle applies a migration only when `max(created_at) < migration.folderMillis`
+(`drizzle-orm@0.45.2/pg-core/dialect.js:56-62`), so those entries are skipped — with **no error**.
+Measured, with the enum defect fixed so it could be seen at all:
 
-On a **fresh** database every migration including `0000_db_baseline` (which creates the type) is in
-that one transaction, so it is allowed — which is why CI is green. On an **existing** box the type
-was committed long ago, so the upgrade transaction aborts and nothing is applied. That matches
-exactly what the owner verified on the box: `printers` still carried `:main`'s columns.
+| box at core entry | migrations applied |
+| --- | --- |
+| 0 (fresh) | 15 of 15 |
+| 1, 2 | 10 of 15 |
+| 3, 4, 5, 6 | 11, 12, 13, 14 of 15 |
+| 7 – 14 | 15 of 15 |
 
-The measured blast radius, one database per release point, all twelve manifest sets:
+It cannot be repaired by editing the journal, and that was measured rather than assumed: raising the
+out-of-order entries makes points 3–7 re-apply a migration they already ran and fail with "type
+already exists"; lowering the earlier ones changes nothing, because a database recorded the old
+value, not the file's. So the fix is to stop the skip being SILENT — Task 1 — which is squarely this
+spec's subject: a wrong state that says nothing is exactly the defect class §1 of the spec describes.
 
-| set | entries | broken upgrade points |
-| --- | --- | --- |
-| core | 15 | **13** (every point from 1 through 13) |
-| identity | 15 | 0 |
-| catalogue, venue-service, workforce, workforce-es, payments, scheduler, credentials, fiscal-verifactu, bookings | 2–5 each | 0 |
-
-So **no box on any released core schema before entry 14 can upgrade to HEAD**. This is a live defect
-in `main`, not only a diagnosability gap, and Task 1 fixes it. `identity`'s `0005` also adds an enum
-value but never names it later, which is why it is clean — that is the structural rule Task 2 pins.
-
-**Finding 2 — "upgrade from the previous release" is precisely the test that would NOT have caught
-it.** Entry 14 is the one point in core that upgrades cleanly. A guard that tests only the newest
-step passes while thirteen real upgrade paths are broken. Task 2's guard is therefore keyed on where
-the `ADD VALUE` statements are, not on the head of the journal.
-
-**Finding 3 — the spec's `database_ahead` case is real and silent, and still earns its check.** With
-a database migrated by a newer image, the older image's `migrate()` **throws nothing and applies
-nothing**: drizzle compares only `max(created_at)` against each file's `when`
-(`dialect.js:56-62`), never a hash. Measured, with a control:
+**Finding 3 — §4.2's ahead check stands, and its mechanism is confirmed.** With a journal watermark
+ahead of every shipped migration's `when`, drizzle's migrate **applies nothing and throws nothing**;
+the database's extra hash is the only evidence. The control, a database migrated by this image alone,
+reports none:
 
 ```
-STEP 2: back to :main image (1 migration) — what does migrate() do?
--> migrate() threw nothing and applied nothing; the branch row survives.
 STEP 3: DB hashes with no file in this image (AHEAD evidence): [ { id: 2, hash: "515d38af…" } ]
-STEP 4: negative control — a database migrated by the OLD image only
-control unknown-hash count: 0 (expected 0)
+STEP 4: negative control — control unknown-hash count: 0 (expected 0)
 ```
 
-Two mechanical facts fall out of that, and both are load-bearing below: the journal table stores
+Two mechanical facts fall out and are load-bearing below. The journal table is
 `(id serial, hash text not null, created_at bigint)`, and drizzle's `hash` is
-`sha256(<tag>.sql file text)` (`drizzle-orm/migrator.js`, `readMigrationFiles`). Comparing **hashes**
-therefore catches both a database with an extra migration and one whose migration file was edited,
-and it avoids `created_at` entirely — which matters, because `bigint` reaches JavaScript as a
-**string**, not a number (measured: `created_at JS type: string`).
+`sha256(<tag>.sql file text)` (`drizzle-orm/migrator.js`). Comparing **hashes** therefore catches both
+an extra migration and an edited one, and avoids `created_at` entirely — which matters, because
+`bigint` reaches JavaScript as a **string** (measured: `created_at JS type: string`).
 
----
+**Finding 4 — §4.1's schema-mismatch table gains `55P04`**, written from the experiment as §6
+requires: it is the SQLSTATE the first real box actually produced.
 
 ## Global Constraints
 
@@ -95,7 +84,7 @@ and it avoids `created_at` entirely — which matters, because `bigint` reaches 
 - **`classifyBootFailure(error: unknown): string` returns a bare code string**, per spec §4.1. It
   constructs no `AppError`, so the spec's `{ code }` / `{ sqlState }` notation describes the family,
   not a params object the classifier builds. The detail reaches the installer through the scrubbed
-  stdout of Task 8, never through the page.
+  stdout of Task 7, never through the page.
 - **The recovery page renders only: the level, the failure count, the escaped code, the escaped log
   tail, and fixed strings chosen by code.** No caught error's `message`, `stack`, `cause` or params
   may reach it. This is spec §5 and is pinned by a test with a control.
@@ -114,6 +103,15 @@ and it avoids `created_at` entirely — which matters, because `bigint` reaches 
 - **Coverage thresholds are unchanged**: `apps/server`, `packages/migrations` and
   `packages/provisioning` all sit at the floor `90/90/85/85`. Do not edit any `vitest.config.ts`
   thresholds; `scripts/coverage-thresholds.test.ts` pins them.
+- **This branch depends on `fix/core-migration-upgrade`.** Rebase onto it once it lands. That branch
+  edits `packages/db/drizzle/0014_central_printer_provisioning_sql.sql`, which changes the file's
+  drizzle hash — so **every database that already applied the old `0014`** (every dev and demo
+  database provisioned since #304 landed on 2026-09-09) carries a hash the image no longer ships, and
+  **Task 5's check will refuse to boot it** with `provisioning.database_ahead`. That is the check
+  working, not a bug: the database really was migrated by a different image. The remedy is
+  `wa-wt reset demo`. Say so in the PR description and in Task 10's spec addendum, because the first
+  developer to hit it will otherwise read the recovery page's "restore from a backup" and reach for
+  one that does not exist.
 - **Every commit is `git commit -s`.**
 
 ## File structure
@@ -122,7 +120,6 @@ and it avoids `created_at` entirely — which matters, because `bigint` reaches 
 
 | file | responsibility |
 | --- | --- |
-| `scripts/enum-add-value-safety.test.ts` | Root guard: no set names an enum value it added in a migration a later file in the same set can share a transaction with. |
 | `apps/server/src/redact-secrets.ts` | `redactSecrets(text)` — masks URL-embedded credentials. Nothing else. |
 | `apps/server/src/redact-secrets.test.ts` | Its suite, with two controls. |
 | `apps/server/src/boot-failure.ts` | `classifyBootFailure(error)` plus the three pinned tables. |
@@ -132,13 +129,14 @@ and it avoids `created_at` entirely — which matters, because `bigint` reaches 
 | `packages/provisioning/src/schema-ahead.ts` | `unknownHashes` (pure), `findAheadSets`, `assertNotAhead` (throws `provisioning.database_ahead`). |
 | `packages/provisioning/src/schema-ahead.test.ts` | Unit suite over injected reads. |
 | `packages/provisioning/src/schema-ahead.pg.test.ts` | The spec §6 run-it proof, with its negative control and prove-by-deletion. |
-| `packages/db/src/migrate-upgrade.pg.test.ts` | The upgrade proof for Task 1: an existing database at the entry before each `ADD VALUE` upgrades to HEAD. |
+| `packages/migrations/src/apply-complete.pg.test.ts` | Proof that a silently short migration now throws, with an idempotent-re-run control. |
 
 **Modified**
 
 | file | change |
 | --- | --- |
-| `packages/db/drizzle/0014_central_printer_provisioning_sql.sql` | The `CHECK` compares `transport::text`, so it does not name an uncommitted enum value. |
+| `packages/migrations/src/apply.ts` | Counts what applied against what shipped, and throws when they differ. |
+| `packages/migrations/src/errors.ts` | Declares `migrations.incomplete`. |
 | `packages/provisioning/src/errors.ts` | Declares `provisioning.database_ahead` and `provisioning.schema_mismatch`. |
 | `packages/provisioning/src/index.ts` | Exports the schema-ahead surface. |
 | `packages/migrations/src/index.ts` | Exports `journalHashes`, `imageMigrationHashes`. |
@@ -152,79 +150,61 @@ and it avoids `created_at` entirely — which matters, because `bigint` reaches 
 
 ---
 
-### Task 1: Fix the enum-upgrade defect in the core migration set
+### Task 1: Make an incomplete migration loud
 
-The root cause from Finding 1. Do this first: it is the live defect, and the rest of the plan is
-diagnosis for failures that should not happen.
+The measured residual from the migration branch: a database whose journal watermark sits above a
+later migration's `when` SKIPS that migration — no error, a wrong schema, and the next symptom is an
+unclassified driver failure somewhere else entirely. `applyMigrations` is the one place every host
+migrates through, so the check belongs there.
 
 **Files:**
-- Create: `packages/db/src/migrate-upgrade.pg.test.ts`
-- Modify: `packages/db/drizzle/0014_central_printer_provisioning_sql.sql`
+- Modify: `packages/migrations/src/apply.ts`, `packages/migrations/src/errors.ts`
+- Create: `packages/migrations/src/apply-complete.pg.test.ts`
 
 **Interfaces:**
-- Consumes: nothing from earlier tasks.
-- Produces: nothing later tasks import. It changes only migration SQL.
+- Consumes: `appliedSchemaVersion`, `expectedSchemaVersion` (`./schema-version.js`, both already
+  exported from the barrel).
+- Produces: the code `migrations.incomplete`, and the unchanged `applyMigrations` signature —
+  `applyMigrations(connectionString: string, options: readonly MigrationOptions[]): Promise<void>`.
+  It gains a throw, not a parameter.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/db/src/migrate-upgrade.pg.test.ts`:
+Create `packages/migrations/src/apply-complete.pg.test.ts`:
 
 ```ts
-// Real PostgreSQL, not PGlite: the defect is a property of PostgreSQL's enum-safety check inside
-// drizzle's single migrate transaction, and PGlite's superuser connections do not change it but its
-// migration semantics are not the ones a box runs. CLAUDE.md §4.
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
+// Real PostgreSQL: the behaviour under test is drizzle's watermark arithmetic against a real
+// journal table, and PGlite would be a false pass twice over (CLAUDE.md §4).
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
-import { databaseUrl, startPostgresContainer, type StartedContainer } from "./testing/postgres.js";
+import { databaseUrl, startPostgresContainer, type StartedContainer } from "@waitron/db/testing/postgres.js";
+import { applyMigrations } from "./apply.js";
 
-const CORE_DRIZZLE = resolve(fileURLToPath(new URL("../drizzle", import.meta.url)));
+const CORE_DRIZZLE = fileURLToPath(new URL("../../db/drizzle", import.meta.url));
+const TABLE = "__drizzle_migrations_db";
+const scratch: string[] = [];
 
-interface JournalEntry {
-  idx: number;
-  version: string;
-  when: number;
-  tag: string;
-  breakpoints: boolean;
-}
+const journal = JSON.parse(readFileSync(join(CORE_DRIZZLE, "meta", "_journal.json"), "utf8")) as {
+  entries: { when: number; tag: string }[];
+} & Record<string, unknown>;
 
-function journalOf(folder: string): { entries: JournalEntry[] } & Record<string, unknown> {
-  return JSON.parse(readFileSync(join(folder, "meta", "_journal.json"), "utf8")) as {
-    entries: JournalEntry[];
-  } & Record<string, unknown>;
-}
-
-/** A migrations folder carrying only the first `n` journal entries — the shape an older image ships. */
-function folderWithFirst(source: string, n: number): string {
-  const journal = journalOf(source);
-  const dir = mkdtempSync(join(tmpdir(), "wt-upgrade-"));
+/** A migrations folder carrying the given entries, with `when` values as supplied. */
+function folderOf(entries: { when: number; tag: string }[]): string {
+  const dir = mkdtempSync(join(tmpdir(), "wt-complete-"));
+  scratch.push(dir);
   mkdirSync(join(dir, "meta"));
-  const entries = journal.entries.slice(0, n);
   for (const entry of entries) {
-    copyFileSync(join(source, `${entry.tag}.sql`), join(dir, `${entry.tag}.sql`));
+    copyFileSync(join(CORE_DRIZZLE, `${entry.tag}.sql`), join(dir, `${entry.tag}.sql`));
   }
   writeFileSync(join(dir, "meta", "_journal.json"), JSON.stringify({ ...journal, entries }, null, 2));
   return dir;
 }
 
-/** Every journal index whose migration adds an enum value — the only shape that can break an upgrade. */
-function addValueIndexes(folder: string): number[] {
-  const journal = journalOf(folder);
-  return journal.entries
-    .map((entry, index) =>
-      /ALTER\s+TYPE\b[\s\S]*?\bADD\s+VALUE\b/i.test(readFileSync(join(folder, `${entry.tag}.sql`), "utf8"))
-        ? index
-        : -1,
-    )
-    .filter((index) => index >= 0);
-}
-
-describe("the core migration set upgrades an existing database", () => {
+describe("applyMigrations refuses to report success on an incomplete set", () => {
   let container: StartedContainer;
 
   beforeAll(async () => {
@@ -234,242 +214,178 @@ describe("the core migration set upgrades an existing database", () => {
   afterAll(async () => {
     // Guarded: `startPostgresContainer` may have thrown, leaving `container` unassigned.
     if (container !== undefined) await container.stop();
+    for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
   });
 
-  async function upgradeFrom(index: number, databaseName: string): Promise<Error | null> {
+  async function freshDatabase(name: string): Promise<string> {
     const admin = new pg.Client({ connectionString: container.uri });
     await admin.connect();
     try {
-      await admin.query(`create database "${databaseName}"`);
+      await admin.query(`create database "${name}"`);
     } finally {
       await admin.end();
     }
-    // `databaseUrl`, not `new URL(...)`: `postgres:` is a non-special scheme, and rebuilding one
-    // through the WHATWG parser is not a round trip worth relying on for a credentialed URL.
-    const client = new pg.Client({ connectionString: databaseUrl(container.uri, databaseName) });
-    await client.connect();
-    try {
-      const db = drizzle(client);
-      const options = { migrationsSchema: "public", migrationsTable: "__drizzle_migrations_db" };
-      const total = journalOf(CORE_DRIZZLE).entries.length;
-      // The box's current release, committed — then the upgrade, as its own pending batch.
-      await migrate(db, { ...options, migrationsFolder: folderWithFirst(CORE_DRIZZLE, index) });
-      await migrate(db, { ...options, migrationsFolder: folderWithFirst(CORE_DRIZZLE, total) });
-      return null;
-    } catch (error) {
-      return error as Error;
-    } finally {
-      await client.end();
-    }
+    return databaseUrl(container.uri, name);
   }
 
-  it("applies every pending migration to a database already at the release before an enum add", async () => {
-    // Keyed on where the `ALTER TYPE … ADD VALUE` statements are, not on the head of the journal:
-    // the head is the ONE point in this set that upgrades cleanly, so a "from the previous release"
-    // test passes while thirteen real upgrade paths are broken (plan, Finding 2).
-    const indexes = addValueIndexes(CORE_DRIZZLE);
-    expect(indexes.length).toBeGreaterThan(0);
-    for (const index of indexes) {
-      const failure = await upgradeFrom(index, `wt_upgrade_${index}`);
-      expect(failure?.message ?? "clean").toBe("clean");
-    }
+  it("throws migrations.incomplete when drizzle's watermark skipped a migration", async () => {
+    const uri = await freshDatabase("wt_incomplete");
+    const first = journal.entries[0]!;
+    const second = journal.entries[1]!;
+    // A database migrated by a folder whose ONE entry carries a HIGH `when` …
+    await applyMigrations(uri, [
+      { migrationsFolder: folderOf([{ ...first, when: 9_000_000_000_000 }]), migrationsTable: TABLE },
+    ]);
+    // … then handed a folder whose second entry sits BELOW that watermark. Drizzle applies nothing
+    // and raises nothing; this is exactly the shape that skipped five core migrations in silence.
+    await expect(
+      applyMigrations(uri, [
+        {
+          migrationsFolder: folderOf([{ ...first, when: 9_000_000_000_000 }, { ...second, when: 1 }]),
+          migrationsTable: TABLE,
+        },
+      ]),
+    ).rejects.toMatchObject({ code: "migrations.incomplete" });
   }, 180_000);
 
-  it("still migrates a virgin database — the control, and what CI already exercises", async () => {
-    const failure = await upgradeFrom(0, "wt_upgrade_virgin");
-    expect(failure?.message ?? "clean").toBe("clean");
+  it("resolves for a set that applied completely — the control", async () => {
+    const uri = await freshDatabase("wt_complete");
+    const folder = folderOf(journal.entries.slice(0, 2));
+    await expect(
+      applyMigrations(uri, [{ migrationsFolder: folder, migrationsTable: TABLE }]),
+    ).resolves.toBeUndefined();
+    // And again, idempotently: a re-run applies nothing and must still be complete, or every second
+    // boot of a healthy box would throw.
+    await expect(
+      applyMigrations(uri, [{ migrationsFolder: folder, migrationsTable: TABLE }]),
+    ).resolves.toBeUndefined();
   }, 180_000);
 });
 ```
 
-- [ ] **Step 2: Run it to watch it fail**
+- [ ] **Step 2: Run it to verify it fails**
 
 ```bash
 cd /Users/clintongormley/workspace/worktrees/waitron-feat-boot-failure-diagnosability
-TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db exec vitest run src/migrate-upgrade.pg.test.ts
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/migrations exec vitest run src/apply-complete.pg.test.ts
 ```
+Expected: the first test FAILS because `applyMigrations` resolves instead of throwing. The control
+PASSES. Both halves matter — a first test that failed because the fixture is broken would fail the
+control too.
 
-Expected: the first test FAILS. The failure message contains the `printers_transport_fields_ck`
-statement. The second test (the virgin control) PASSES — that contrast is the whole point: it shows
-the defect is in the upgrade path, not the migration.
+- [ ] **Step 3: Declare the code**
 
-- [ ] **Step 3: Fix the migration**
-
-Edit `packages/db/drizzle/0014_central_printer_provisioning_sql.sql`. Only the `CHECK` expression
-changes: each comparison casts the column to `text` so the statement never names an enum value that
-is uncommitted inside this transaction. Replace the constraint statement with:
-
-```sql
--- Which connection field a transport requires, keyed on the device now (no agent_id): usb/bluetooth
--- need local_key, network_tcp needs host, cloud_poll needs poll_id.
---
--- `transport::text`, not the bare enum literal: `0013` adds 'bluetooth' to `print_transport`, and
--- drizzle applies every pending migration of a set in ONE transaction
--- (drizzle-orm@0.45.2/pg-core/dialect.js:60). PostgreSQL refuses to USE a new enum value in the
--- transaction that added it unless the type was created there too, so naming the literal here
--- migrates a virgin database (where 0000 creates the type in the same transaction) and aborts every
--- upgrade of an existing one with 55P04. Proven both ways by
--- `packages/db/src/migrate-upgrade.pg.test.ts`. Comparing text is the same predicate: an enum's text
--- form is its label.
-ALTER TABLE "printers"
-  ADD CONSTRAINT "printers_transport_fields_ck" CHECK (
-    (transport::text = 'usb'         AND local_key IS NOT NULL)
-    OR (transport::text = 'bluetooth'   AND local_key IS NOT NULL)
-    OR (transport::text = 'network_tcp' AND host      IS NOT NULL)
-    OR (transport::text = 'cloud_poll'  AND poll_id   IS NOT NULL)
-  );
-```
-
-Keep every other statement in the file byte-identical. Do **not** touch `meta/_journal.json`, any
-snapshot, or `0013`. This file is a `_sql` custom migration and is snapshot-less, so no
-regeneration is needed (CLAUDE.md §3, the drizzle collision rule).
-
-- [ ] **Step 4: Run the tests to watch them pass**
-
-```bash
-TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db exec vitest run src/migrate-upgrade.pg.test.ts
-```
-Expected: both PASS.
-
-Then confirm the constraint still bites, which is the assertion the cast could have quietly broken:
-
-```bash
-TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db exec vitest run src/printers.pg.test.ts 2>/dev/null \
-  || TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage
-```
-Expected: PASS. If no `printers` suite exists, the full package run is the check; report which you ran.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/db/drizzle/0014_central_printer_provisioning_sql.sql packages/db/src/migrate-upgrade.pg.test.ts
-git commit -s -m "fix(db): let an existing database upgrade past the print_transport enum add
-
-Drizzle applies every pending migration of a set in one transaction, and PostgreSQL refuses to use
-an enum value added in that same transaction unless the type was created there too. A virgin
-database creates print_transport in the same batch, so CI passed; an existing box aborted with
-55P04 and applied nothing. Measured: every core release point from 1 to 13 could not upgrade."
-```
-
----
-
-### Task 2: A root guard so the shape cannot come back
-
-**Files:**
-- Create: `scripts/enum-add-value-safety.test.ts`
-
-**Interfaces:**
-- Consumes: nothing.
-- Produces: nothing importable. A guard suite in the root Vitest project, so it runs on the ungated
-  `lint` job and on every non-docs push (CLAUDE.md §4).
-
-- [ ] **Step 1: Write the guard, and prove it by deletion first**
-
-Create `scripts/enum-add-value-safety.test.ts`:
+Add to the `interface ErrorParams` block in `packages/migrations/src/errors.ts`:
 
 ```ts
-// A guard that reads the whole tree, so it lives in the ROOT Vitest project: a package-resident
-// copy only runs when its own package is in scope, and most pushes never reach packages/db.
-// It reads TEXT and says so — a migration that builds its predicate dynamically is not seen.
-import { readFileSync, existsSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+    /**
+     * A migration set reported success with fewer migrations applied than the image ships.
+     *
+     * Drizzle decides what to apply from `max(created_at)` alone — never a journal index or a hash
+     * (`drizzle-orm@0.45.2/pg-core/dialect.js:56-62`) — so a migration whose `when` sits below a
+     * value the database already recorded is never applied, and nothing is raised. Measured
+     * 2026-09-10: a database at the core set's entry 1 upgraded to HEAD with 10 of 15 migrations
+     * applied and no error. The wrong schema then surfaces as an unclassified driver failure in
+     * whatever query first touches it, which is the diagnosability defect this branch exists to
+     * remove.
+     *
+     * Both counts are journal lengths — public facts about a build artefact, never data.
+     */
+    "migrations.incomplete": { set: string; applied: number; expected: number };
+```
 
-const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
+- [ ] **Step 4: Write the implementation**
 
-interface JournalEntry { tag: string }
+In `packages/migrations/src/apply.ts`, extend the imports:
 
-const MANIFEST = JSON.parse(
-  readFileSync(join(ROOT, "packages/migrations/migrations.manifest.json"), "utf8"),
-) as { name: string; table: string; from: string }[];
+```ts
+import { AppError } from "@waitron/shared";
+import { appliedSchemaVersion, expectedSchemaVersion } from "./schema-version.js";
+import "./errors.js";
+```
 
-const ADD_VALUE = /ALTER\s+TYPE\s+("?public"?\.)?"?(\w+)"?\s+ADD\s+VALUE\s+'([^']+)'/gi;
+`MigrationOptions` carries no set NAME, only a folder and a table, so derive the two versions from
+what this function already has. Replace the migrate loop (currently
+`for (const set of options) await runMigrations(migrationDb, set);`) with:
 
-/** Every set's migration files, in journal order, as `{ tag, sql }`. */
-function migrationsOf(from: string): { tag: string; sql: string }[] {
-  const folder = resolve(join(ROOT, "packages/migrations"), from);
-  const journalPath = join(folder, "meta", "_journal.json");
-  if (!existsSync(journalPath)) return [];
-  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: JournalEntry[] };
-  return journal.entries.map((entry) => ({
-    tag: entry.tag,
-    sql: readFileSync(join(folder, `${entry.tag}.sql`), "utf8"),
-  }));
-}
-
-describe("no migration names an enum value added in the same pending batch", () => {
-  // Drizzle applies every PENDING migration of a set in one transaction
-  // (drizzle-orm@0.45.2/pg-core/dialect.js:60), and PostgreSQL refuses to use a new enum value in
-  // the transaction that added it unless the type was created there too. A virgin database creates
-  // the type in that same batch, so this class of defect passes CI and breaks only real upgrades —
-  // which is why it is caught statically here rather than left to a fresh-database test.
-  // Receipt: packages/db/drizzle/0013 + 0014, which broke every core upgrade point from 1 to 13.
-  for (const set of MANIFEST) {
-    it(`is safe in the ${set.name} set`, () => {
-      const migrations = migrationsOf(set.from);
-      const offences: string[] = [];
-      migrations.forEach((migration, index) => {
-        for (const match of migration.sql.matchAll(ADD_VALUE)) {
-          const value = match[3]!;
-          // Only LATER files can share the added value's transaction in a real upgrade; the adding
-          // file itself is checked too, because a use below the ADD VALUE in one file is the same
-          // transaction.
-          const quoted = `'${value}'`;
-          const usedIn = migrations
-            .slice(index)
-            .filter((candidate, offset) =>
-              (offset === 0
-                ? candidate.sql.slice(match.index! + match[0].length)
-                : candidate.sql
-              ).includes(quoted),
-            )
-            .map((candidate) => candidate.tag);
-          if (usedIn.length > 0) {
-            offences.push(
-              `${migration.tag} adds enum value ${quoted}, named again in ${usedIn.join(", ")} — ` +
-                `compare the column as ::text instead`,
-            );
+```ts
+        // Ordering is the runtime's responsibility and nothing enforces it — core carries `tenants`,
+        // which every other set has a foreign key to. The manifest states that order out loud.
+        for (const set of options) {
+          await runMigrations(migrationDb, set);
+          // Drizzle can apply NOTHING and raise nothing: it compares only `max(created_at)` against
+          // each shipped migration's `when`, so an entry whose `when` sits below a value the
+          // database already recorded is skipped in silence. Counting is the only way to notice,
+          // and a host that boots on a half-migrated schema fails later, somewhere unrelated.
+          const applied = await appliedSchemaVersion(migrationDb, {
+            name: set.migrationsTable,
+            table: set.migrationsTable,
+            from: set.migrationsFolder,
+          });
+          const expected = expectedSchemaVersion(
+            { name: set.migrationsTable, table: set.migrationsTable, from: set.migrationsFolder },
+            null,
+          );
+          if (applied !== expected) {
+            throw new AppError("migrations.incomplete", {
+              set: set.migrationsTable,
+              applied,
+              expected,
+            });
           }
         }
-      });
-      expect(offences).toEqual([]);
-    });
-  }
-});
 ```
 
-- [ ] **Step 2: Prove the guard by deletion**
+`expectedSchemaVersion` resolves `from` against `packages/migrations` when `root` is null, which is
+wrong for an absolute folder — check `resolveMigrationsFolder` in `manifest.ts` before writing this,
+and if it does not handle an absolute `from`, read the journal length directly here instead:
 
-Temporarily revert Task 1's cast (put the bare `'usb'`/`'bluetooth'` literals back in
-`0014_central_printer_provisioning_sql.sql`) and run:
-
-```bash
-pnpm vitest run scripts/enum-add-value-safety.test.ts
+```ts
+          const journalPath = join(set.migrationsFolder, "meta", "_journal.json");
+          const expected = (
+            JSON.parse(readFileSync(journalPath, "utf8")) as { entries: unknown[] }
+          ).entries.length;
 ```
 
-Expected: the `core` case FAILS, naming `0013_central_printer_provisioning` and
-`0014_central_printer_provisioning_sql`. Restore the cast (`git checkout -- packages/db/drizzle/`)
-and re-run — expected: every set PASSES. **Report both outcomes**; a guard that has only ever been
-seen to pass proves nothing.
+Use whichever is correct and say in your report which you used and why. Add
+`import { readFileSync } from "node:fs";` and `import { join } from "node:path";` if you take the
+second form.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Run the tests to verify they pass**
 
 ```bash
-git add scripts/enum-add-value-safety.test.ts
-git commit -s -m "test(root): guard against naming an enum value added in the same migration batch"
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/migrations exec vitest run src/apply-complete.pg.test.ts
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/migrations test:coverage
+```
+Expected: PASS.
+
+Then the blast check, because this adds a throw to the function every host migrates through:
+
+```bash
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/provisioning test:coverage
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test:coverage
+```
+Expected: PASS. If a suite migrates a partial set deliberately, it will now throw — report it rather
+than weakening the check.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/migrations/src/apply.ts packages/migrations/src/errors.ts packages/migrations/src/apply-complete.pg.test.ts
+git commit -s -m "feat(migrations): refuse to report success when a set applied incompletely"
 ```
 
 ---
 
-### Task 3: `redactSecrets`
+### Task 2: `redactSecrets`
 
 **Files:**
 - Create: `apps/server/src/redact-secrets.ts`, `apps/server/src/redact-secrets.test.ts`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `export function redactSecrets(text: string): string` — used by Task 8.
+- Produces: `export function redactSecrets(text: string): string` — used by Task 7.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -570,7 +486,7 @@ git commit -s -m "feat(server): mask URL-embedded credentials for the installer'
 
 ---
 
-### Task 4: `classifyBootFailure`
+### Task 3: `classifyBootFailure`
 
 **Files:**
 - Create: `apps/server/src/boot-failure.ts`, `apps/server/src/boot-failure.test.ts`
@@ -583,7 +499,7 @@ git commit -s -m "feat(server): mask URL-embedded credentials for the installer'
   - `export const UNREACHABLE_SQL_STATES: readonly string[]`
   - `export const SCHEMA_MISMATCH_SQL_STATES: readonly string[]`
 
-  Task 8 calls `classifyBootFailure`; Task 9 keys the page's table on the codes it can return.
+  Task 7 calls `classifyBootFailure`; Task 8 keys the page's table on the codes it can return.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -773,7 +689,7 @@ export function classifyBootFailure(error: unknown): string {
 
 Note: `import "./errors.js"` keeps this file's use of `provisioning.*` codes beside the registry the
 rest of `apps/server` imports, matching the rule in `apps/server/src/errors.ts`'s header. The two new
-codes themselves are declared in Task 6, in `packages/provisioning/src/errors.ts`; until that task
+codes themselves are declared in Task 5, in `packages/provisioning/src/errors.ts`; until that task
 lands, this file compiles because it returns bare strings, not `AppError`s.
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -792,7 +708,7 @@ git commit -s -m "feat(server): classify a boot failure instead of reporting unk
 
 ---
 
-### Task 5: Read journal hashes, both sides
+### Task 4: Read journal hashes, both sides
 
 **Files:**
 - Create: `packages/migrations/src/journal-hashes.ts`, `packages/migrations/src/journal-hashes.test.ts`
@@ -805,7 +721,7 @@ git commit -s -m "feat(server): classify a boot failure instead of reporting unk
   - `export function imageMigrationHashes(set: MigrationSet, root: string | null): string[]`
   - `export async function journalHashes(db: Pick<Database, "execute">, set: MigrationSet): Promise<string[] | null>`
 
-  Task 6 consumes both. `journalHashes` returns `null` — not `[]` — when the journal table is absent,
+  Task 5 consumes both. `journalHashes` returns `null` — not `[]` — when the journal table is absent,
   because "this set was never migrated" and "this set is migrated and empty" must not collapse.
 
 - [ ] **Step 1: Write the failing test**
@@ -982,7 +898,7 @@ git commit -s -m "feat(migrations): read a set's migration hashes from the image
 
 ---
 
-### Task 6: The ahead-of-image check and its two new codes
+### Task 5: The ahead-of-image check and its two new codes
 
 **Files:**
 - Create: `packages/provisioning/src/schema-ahead.ts`, `packages/provisioning/src/schema-ahead.test.ts`
@@ -996,7 +912,7 @@ git commit -s -m "feat(migrations): read a set's migration hashes from the image
   - `export async function findAheadSets(db: Pick<Database, "execute">, sets: readonly MigrationSet[], root: string | null): Promise<AheadSet[]>`
   - `export async function assertNotAhead(db: Pick<Database, "execute">, sets: readonly MigrationSet[], root: string | null): Promise<void>`
 
-  Task 8 calls `assertNotAhead`.
+  Task 7 calls `assertNotAhead`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1217,7 +1133,7 @@ git commit -s -m "feat(provisioning): refuse to boot against a database a differ
 
 ---
 
-### Task 7: The run-it proof for the ahead check
+### Task 6: The run-it proof for the ahead check
 
 The spec's §6 experiment, as a committed regression test. PGlite is a false pass here.
 
@@ -1225,7 +1141,7 @@ The spec's §6 experiment, as a committed regression test. PGlite is a false pas
 - Create: `packages/provisioning/src/schema-ahead.pg.test.ts`
 
 **Interfaces:**
-- Consumes: `assertNotAhead`, `findAheadSets` (Task 6); `startBarePostgres`, `roleUrl` (`./testing/postgres.js`).
+- Consumes: `assertNotAhead`, `findAheadSets` (Task 5); `startBarePostgres`, `roleUrl` (`./testing/postgres.js`).
 - Produces: nothing.
 
 - [ ] **Step 1: Write the failing test**
@@ -1279,10 +1195,12 @@ describe("an ahead database", () => {
     // Written directly rather than by running a synthetic migration, because the row IS the artefact
     // the check reads — and drizzle records nothing else about a migration.
     const unknown = "f".repeat(64);
+    // The table name reaches SQL as an identifier (Postgres binds no placeholder for one), but the
+    // VALUES are bound — CLAUDE.md §3 forbids concatenating them and explicitly rejects "the callers
+    // only pass safe values" as a defence.
     await target.execute(
-      sql.raw(
-        `insert into "${CORE.table}" ("hash", "created_at") values ('${unknown}', 9999999999999)`,
-      ),
+      sql`insert into ${sql.identifier(CORE.table)} ("hash", "created_at")
+          values (${unknown}, ${9_999_999_999_999})`,
     );
 
     expect(await findAheadSets(target, manifestSets(), null)).toEqual([
@@ -1312,7 +1230,7 @@ describe("an ahead database", () => {
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/provisioning exec vitest run src/schema-ahead.pg.test.ts
 ```
 
-If Task 6 is already committed this passes immediately. That is the wrong signal for a new test, so
+If Task 5 is already committed this passes immediately. That is the wrong signal for a new test, so
 **prove it by deletion before moving on**, which is also the spec §6 "prove the guard by deletion"
 step:
 
@@ -1322,12 +1240,17 @@ step:
 
 **Report both outcomes in your task summary.**
 
-- [ ] **Step 3: Confirm what an unguarded ahead database does instead**
+- [ ] **Step 3: Record what an unguarded ahead database actually does**
 
-Still part of the spec's proof-by-deletion: with the check removed from the boot path (it is not
-wired until Task 8, so this is simply the state today), an ahead database must never boot
-*successfully*. Task 8's step 4 covers this at the entrypoint; note here that the classification it
-falls through to is `provisioning.schema_mismatch` or `unknown`, never a clean boot.
+The spec's §6 sketch expected an unguarded ahead database to fall through to a raw pg error. **It
+does not, and saying so without running it would be the §1 defect this repo is worst at.** The third
+test above measures the truth: with a journal row ahead of every shipped `when`, drizzle applies
+nothing and raises nothing, so a boot with the check removed proceeds *cleanly* — the mismatch only
+bites later, in whatever query first touches a schema that is not there.
+
+That makes this check the ONLY thing that names the case, which is a stronger claim than the spec
+made, not a weaker one. Write that sentence into your task report; Task 10's spec addendum carries
+it into the spec.
 
 - [ ] **Step 4: Commit**
 
@@ -1338,24 +1261,29 @@ git commit -s -m "test(provisioning): prove the ahead-database check against rea
 
 ---
 
-### Task 8: Wire the entrypoint — classify, report, refuse
+### Task 7: Wire the entrypoint — classify, report, refuse
 
 **Files:**
 - Modify: `apps/server/src/node-entry.ts`, `apps/server/src/node-entry.test.ts`
 
 **Interfaces:**
-- Consumes: `classifyBootFailure` (Task 4), `redactSecrets` (Task 3), `assertNotAhead` (Task 6).
+- Consumes: `classifyBootFailure` (Task 3), `redactSecrets` (Task 2), `assertNotAhead` (Task 5).
 - Produces: two new `EntryDeps` fields, both optional so every existing test fixture still compiles:
   - `assertNotAhead?: (databaseUrl: string) => Promise<void>`
   - `reportFailure?: (text: string) => void` — the installer's stdout sink.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `apps/server/src/node-entry.test.ts`, inside the existing `describe("runEntry")` block:
+Add `RecoveryState` to the existing `./recovery-state.js` type import at the top of
+`apps/server/src/node-entry.test.ts`, then add these inside the existing `describe("runEntry")`
+block:
 
 ```ts
   it("persists the classified code, not `unknown`, for a raw driver failure", async () => {
-    const writeRecoveryState = vi.fn(() => Promise.resolve());
+    // Typed, not a bare `vi.fn(() => …)`: an untyped mock's `mock.calls` entries are a zero-length
+    // tuple, so `[1]` is a typecheck error rather than the state we want to read.
+    const writeRecoveryState =
+      vi.fn((_stateDir: string, _next: RecoveryState) => Promise.resolve());
     await expect(
       runEntry(
         deps({
@@ -1371,7 +1299,7 @@ Add to `apps/server/src/node-entry.test.ts`, inside the existing `describe("runE
       ),
     ).rejects.toThrow();
     // The second write is the failure path's; the first is the pre-boot counter.
-    const persisted = writeRecoveryState.mock.calls.at(-1)![1] as { lastErrorCode: string };
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
     expect(persisted.lastErrorCode).toBe("provisioning.schema_mismatch");
   });
 
@@ -1389,6 +1317,39 @@ Add to `apps/server/src/node-entry.test.ts`, inside the existing `describe("runE
     ).rejects.toThrow();
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
     // The control and the probe in one assertion pair: the message must arrive, minus the secret.
+    expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
+    expect(reported).not.toContain("hunter2");
+  });
+
+  // The spec §5 probe, and the only place it can honestly live: the poisoned message has to be
+  // INJECTED as a real boot failure and then followed to BOTH channels. A test that renders a page
+  // the message never reached would pass against an implementation that leaks everywhere.
+  it("keeps a leaked connection string off the page while the installer's channel carries it", async () => {
+    const message = "connect failed: postgres://waitron:hunter2@db:5432/waitron";
+    const reportFailure = vi.fn();
+    const writeRecoveryState =
+      vi.fn((_stateDir: string, _next: RecoveryState) => Promise.resolve());
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() => Promise.reject(new Error(message))),
+        }),
+      ),
+    ).rejects.toThrow();
+
+    // The PROBE: the state the page will render, rendered.
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    const body = await (
+      await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).not.toContain("hunter2");
+    expect(body).not.toContain("postgres://");
+
+    // The CONTROL, in the other direction: the same failure DOES reach the installer, scrubbed.
+    // Without it, a page that rendered nothing at all would pass the assertions above.
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
     expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
     expect(reported).not.toContain("hunter2");
   });
@@ -1561,13 +1522,13 @@ git commit -s -m "feat(server): classify, report and refuse an unbootable databa
 
 ---
 
-### Task 9: The recovery page renders curated operator text
+### Task 8: The recovery page renders curated operator text
 
 **Files:**
 - Modify: `apps/server/src/recovery-surface.ts`, `apps/server/src/recovery-surface.test.ts`
 
 **Interfaces:**
-- Consumes: nothing new at runtime; the codes Task 4 and Task 6 can produce.
+- Consumes: nothing new at runtime; the codes Task 3 and Task 5 can produce.
 - Produces: nothing importable beyond the unchanged `recoveryApp`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1575,11 +1536,11 @@ git commit -s -m "feat(server): classify, report and refuse an unbootable databa
 Add to `apps/server/src/recovery-surface.test.ts`:
 
 Extend the file's EXISTING `recovery-surface.js` import rather than adding a second one (eslint's
-`no-duplicate-imports` rejects two imports from one module), and add the `redact-secrets.js` import:
+`no-duplicate-imports` rejects two imports from one module). The §5 leak probe is NOT here — it lives
+in Task 7, where a boot failure can actually be injected:
 
 ```ts
 import { GENERIC_TEXT, OPERATOR_TEXT, recoveryApp } from "./recovery-surface.js";
-import { redactSecrets } from "./redact-secrets.js";
 
 function pageFor(lastErrorCode: string | null): Promise<string> {
   const app = recoveryApp({
@@ -1605,6 +1566,30 @@ describe("curated operator text", () => {
     expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
   });
 
+  // The CONVERSE of the test above, and the one that matters: every code the entrypoint can
+  // actually persist must have an entry. Without it the table can rot into uselessness one new code
+  // at a time, each falling silently to the generic line — which is what `unknown` did to the first
+  // real box's operator.
+  it("has an entry for every code the entrypoint can classify or throw", async () => {
+    const classified = [
+      "provisioning.database_unreachable",
+      "provisioning.schema_mismatch",
+      "unknown",
+    ];
+    const thrownByRunEntry = [
+      "server.config_missing",
+      "provisioning.admin_uri_not_a_url",
+      "provisioning.database_ahead",
+      "migrations.set_missing",
+      "migrations.incomplete",
+      "server.boot_incomplete",
+    ];
+    const missing = [...classified, ...thrownByRunEntry].filter(
+      (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
+    );
+    expect(missing).toEqual([]);
+  });
+
   it("renders the generic line for a code it does not know, without throwing", async () => {
     const body = await pageFor("some.code.invented.later");
     expect(body).toContain(GENERIC_TEXT.title);
@@ -1617,19 +1602,6 @@ describe("curated operator text", () => {
   });
 });
 
-describe("the security boundary (spec §5)", () => {
-  it("never renders the caught error's own words, while the installer's channel does", async () => {
-    // The PROBE: a boot failure whose message is a full connection string.
-    const message = "connect failed: postgres://waitron:hunter2@db:5432/waitron";
-    const body = await pageFor("provisioning.database_unreachable");
-    expect(body).not.toContain("hunter2");
-    expect(body).not.toContain(message);
-    // The CONTROL, in the other direction: the same text DOES reach the installer's channel,
-    // scrubbed. Without it this test would also pass against a page that renders nothing at all.
-    expect(redactSecrets(message)).toContain("postgres://waitron:***@db:5432/waitron");
-    expect(redactSecrets(message)).not.toContain("hunter2");
-  });
-});
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
@@ -1641,9 +1613,13 @@ Expected: FAIL — `OPERATOR_TEXT` and `GENERIC_TEXT` are not exported.
 
 - [ ] **Step 3: Write the implementation**
 
-In `apps/server/src/recovery-surface.ts`, add above `renderPage`:
+In `apps/server/src/recovery-surface.ts`, add `import type { ErrorCode } from "@waitron/shared";`
+to the imports, then add above `renderPage`:
 
 ```ts
+// `ErrorCode` is the registry's own union, so a typo here is a typecheck failure rather than a page
+// that silently renders the generic line. `Partial`, because most codes in the registry never reach
+// a boot failure.
 export interface OperatorText {
   /** What is wrong, in the operator's terms. */
   title: string;
@@ -1664,7 +1640,7 @@ export interface OperatorText {
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
  * 2026-09-10).
  */
-export const OPERATOR_TEXT: Readonly<Record<string, OperatorText>> = {
+export const OPERATOR_TEXT: Readonly<Partial<Record<ErrorCode, OperatorText>>> = {
   "provisioning.database_ahead": {
     title: "This box's database was set up by a different version of Waitron than the one installed.",
     action: "Restore it from a backup, or reinstall.",
@@ -1679,6 +1655,14 @@ export const OPERATOR_TEXT: Readonly<Record<string, OperatorText>> = {
   },
   "provisioning.database_not_owned": {
     title: "The box's database belongs to another program.",
+    action: "Restore it from a backup, or reinstall.",
+  },
+  "provisioning.admin_uri_not_a_url": {
+    title: "The box's database address is not a valid address.",
+    action: "Ask whoever installed this box to check its settings.",
+  },
+  "migrations.incomplete": {
+    title: "The box's database was only partly updated.",
     action: "Restore it from a backup, or reinstall.",
   },
   "server.config_missing": {
@@ -1774,7 +1758,7 @@ git commit -s -m "feat(server): render curated operator text on the recovery pag
 
 ---
 
-### Task 10: `try-branch.sh` warns where it can bite
+### Task 9: `try-branch.sh` warns where it can bite
 
 **Files:**
 - Modify: `deploy/try-branch.sh`, `deploy/README.md`
@@ -1839,7 +1823,7 @@ git commit -s -m "docs(deploy): warn that try-branch migrates the box's database
 
 ---
 
-### Task 11: Record what the experiment settled
+### Task 10: Record what the experiment settled
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md`, `docs/backlog.md`
@@ -1856,35 +1840,46 @@ would send the next reader looking for an open question that is closed.
 ## 9. Addendum — what the §6 experiment settled (2026-09-10)
 
 Run against PostgreSQL 18 (the box's own version, `deploy/compose.yml`) before the plan was written.
-§8's open question is closed, and one finding changed the work.
+§8's open question is closed. Two of the four findings changed the work.
 
-- **The bricking was NOT an ahead database.** `packages/db/drizzle/0013` adds the enum value
-  `'bluetooth'` to `print_transport` and `0014` names it in a `CHECK` constraint. Drizzle applies a
-  set's pending migrations in ONE transaction, and PostgreSQL refuses to use an enum value added in
-  that transaction unless the type was created there too: `55P04, unsafe use of new value`. A virgin
+- **The bricking was NOT an ahead database.** `packages/db/drizzle/0013` adds the enum label
+  `bluetooth` to `print_transport` and `0014` names it in a `CHECK` constraint. Drizzle applies a
+  set's pending migrations in ONE transaction, and PostgreSQL refuses to use a label added in that
+  transaction unless the type was created there too: `55P04, unsafe use of new value`. A virgin
   database creates the type in the same batch, so CI passed; an existing box aborted and applied
-  nothing — which is exactly why `printers` still carried `:main`'s columns. Measured across all
-  twelve sets, one database per release point: every core upgrade point from 1 to 13 was broken,
-  every other set clean. Fixed by casting the column to `text` in `0014`; guarded statically by
-  `scripts/enum-add-value-safety.test.ts` and by running it in
-  `packages/db/src/migrate-upgrade.pg.test.ts`.
-- **"Upgrade from the previous release" would not have caught it.** Entry 14 is the ONE core point
-  that upgrades cleanly, so the guard is keyed on where the `ADD VALUE` statements are, not on the
-  head of the journal.
-- **§4.2's ahead check stands, and its mechanism is confirmed.** With a journal watermark ahead of
-  every shipped migration's `when`, drizzle's migrate applies nothing and throws nothing; the
-  database's extra hash is the only evidence, and a control database migrated by this image alone
-  reports none. `created_at` is a `bigint` and reaches JavaScript as a STRING, which is a second
-  reason the check compares hashes.
+  nothing — which is exactly why `printers` still carried `:main`'s columns. Fixed on its own branch,
+  `fix/core-migration-upgrade`, because it blocked every box upgrade.
+- **A second defect sat underneath it, silent.** `packages/db/drizzle/meta/_journal.json` is
+  non-monotonic — entries 2–6 carry `when` values below entry 1's — and drizzle applies a migration
+  only when `max(created_at) < its when`, so those entries are SKIPPED with no error. Measured, with
+  the enum defect fixed so it could be seen: a database at entry 1 upgrades with 10 of 15 migrations
+  applied and raises nothing. It cannot be repaired by editing the journal, and that was measured,
+  not assumed: raising the out-of-order entries makes release points 3–7 re-apply a migration they
+  already ran and fail; lowering the earlier ones changes nothing, because a database recorded the
+  old value rather than the file's. The remedy is therefore to make the skip LOUD —
+  `migrations.incomplete`, thrown by `applyMigrations` — which is this spec's own subject: a wrong
+  state that says nothing.
+- **§4.2's ahead check stands, and its mechanism is confirmed — but §6's sketch of the
+  proof-by-deletion was wrong.** With a journal watermark ahead of every shipped migration's `when`,
+  drizzle applies nothing and throws nothing, so a boot with the check REMOVED proceeds *cleanly*
+  rather than falling through to a raw pg error. The mismatch bites later, in whatever query first
+  touches a schema that is not there. That makes this check the only thing that names the case — a
+  stronger claim than §6 made, and pinned by `schema-ahead.pg.test.ts`'s third test. `created_at` is
+  a `bigint` and reaches JavaScript as a STRING, which is a second reason the check compares hashes.
 - **§4.1's schema-mismatch table gained `55P04`**, written from the experiment as §6 requires.
-```
 
 - [ ] **Step 2: Update the backlog**
 
-In `docs/backlog.md`, in the Track P paragraph, replace `**boot-failure diagnosability — spec
-WRITTEN 2026-09-10, plan + implementation next**` with `**boot-failure diagnosability — LANDED
-(see the PR)**`, and add one sentence recording the migration fix, because a reader picking up Track
-P needs to know the upgrade path was broken and is not any more.
+In `docs/backlog.md`, Track P:
+
+1. Change `**boot-failure diagnosability — spec WRITTEN 2026-09-10, plan + implementation next**` to
+   `**boot-failure diagnosability — plan WRITTEN, in flight**`. Do NOT write "LANDED" — `/land-branch`
+   owns that transition, and a branch that claims to have landed itself is wrong until it merges.
+2. Retire the stale claim in the same paragraph. It currently reads that the 2026-09-10 bricking's
+   "exact schema artefact was never confirmed because the box was reset". The experiment confirmed
+   it, so that sentence is a receipt for behaviour that no longer holds (CLAUDE.md §1). Replace it
+   with one sentence naming the enum-in-one-transaction cause and pointing at
+   `fix/core-migration-upgrade`.
 
 - [ ] **Step 3: Verify formatting**
 
@@ -1940,6 +1935,12 @@ pnpm reap
 ```
 
 Then `/finish-branch`.
+
+**A note on shard load.** `@waitron/migrations` and `@waitron/provisioning` are both in
+`LIGHT_A_PACKAGES` (`scripts/changed-scope.mjs`), and this branch adds two container-booting suites
+to that bin. CLAUDE.md §4 records four `test-light-a` hangs that took about six hours each. Watch
+that shard's duration on the first CI run and say what it was; if it climbs, the fix is to give one
+of these suites its own shard, never a retry.
 
 **Risk triggers this diff touches** (so the FULL review ceremony applies, not the light path):
 a migration, a cross-package contract (`@waitron/migrations` and `@waitron/provisioning` barrels),
