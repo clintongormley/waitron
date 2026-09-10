@@ -142,6 +142,7 @@ import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
+import { resolveTradingTls } from "./trading-tls.js";
 import { buildLandingApp } from "./landing-app.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
@@ -451,8 +452,7 @@ function startTradingListener(
   now: () => Date,
   log: Logger,
 ): ReturnType<typeof serve> {
-  const tls = config.tls ?? mintedBoxLeaf(config.stateDir);
-  return startListening({ ...config, tls }, app, now, log);
+  return startListening({ ...config, tls: resolveTradingTls(config) }, app, now, log);
 }
 
 /**
@@ -1496,6 +1496,9 @@ export async function startServer(
     await db.close();
     throw error;
   }
+  // Resolve the trading transport once so the mirror's ambient session and every mounted login
+  // surface agree with the listener about whether cookies require HTTPS.
+  const secureCookies = resolveTradingTls(config) !== undefined;
   // On mirrors, apply the read-only gate and establish the ambient viewer session.
   if (fencedOrMirror) {
     app.use(
@@ -1525,7 +1528,7 @@ export async function startServer(
     }
     app.use(
       "*",
-      mirrorSession(db, config.till.tenantId, config.tls !== undefined, () => holders.mode.current),
+      mirrorSession(db, config.till.tenantId, secureCookies, () => holders.mode.current),
     );
   }
 
@@ -1641,9 +1644,9 @@ export async function startServer(
   // `mountWebhook` above follows. `backend`/`clock` are the till's fiscal pieces: the backend is built
   // by whichever ENABLED module fills the fiscal slot (`makeFiscalBackend` → `fiscalSlot`), and it
   // never contacts an authority on the sale path (that is the `drain` loop below's job).
-  // `secureCookies` tracks the transport: TRUE only when TLS is configured, so the session cookie is
-  // never marked `Secure` on a plain-HTTP loopback host where the browser would then never send it
-  // back. Mounting registers routes only — no database work happens here, so a till pointed at an
+  // `secureCookies` tracks the resolved trading transport: operator TLS or a persisted box leaf makes
+  // every session cookie `Secure`; a leaf-less loopback development host keeps an HTTP-usable cookie.
+  // Mounting registers routes only — no database work happens here, so a till pointed at an
   // unprovisioned tenant fails per-request (via `run`), never at boot.
   // The till's pay-timing mode is a per-LOCATION column, not an env var, so `config.till` (from
   // `tryLoadTillConfig`) carries every fiscal id but NOT `orderFlow`. Read it here, ONCE, now that the
@@ -1696,9 +1699,6 @@ export async function startServer(
     config.onboardingIntent,
     config.paymentTestProviders,
   );
-  // The session cookie is `Secure` only when TLS is configured. Hoisted to ONE binding so the till
-  // and management mounts below both read the same value — a shared local, not a duplicated literal.
-  const secureCookies = config.tls !== undefined;
   mountTillApi(
     app,
     {

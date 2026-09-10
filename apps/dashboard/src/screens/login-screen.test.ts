@@ -28,6 +28,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     requestPasswordReset: vi.fn().mockResolvedValue(undefined),
     completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1", authenticated: true }),
+    completeAccountActionByCode: vi.fn().mockResolvedValue({ personId: "p1", authenticated: true }),
     passkeyAuthOptions: vi
       .fn()
       .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "abc" } }),
@@ -283,33 +284,129 @@ describe("login-screen", () => {
       { name: "confirm-pin", autocomplete: "off", required: true },
     ]);
 
-    for (const field of fields) {
-      const toggle = field.querySelector<HTMLElement>("wt-button[slot=end]");
-      expect(toggle?.ariaLabel).toBe(t("login.show_password"));
+    const labels = [
+      ["account.show_new_password", "account.hide_new_password"],
+      ["account.show_confirm_password", "account.hide_confirm_password"],
+      ["account.show_new_pin", "account.hide_new_pin"],
+      ["account.show_confirm_pin", "account.hide_confirm_pin"],
+    ] as const;
+    for (const [index, field] of fields.entries()) {
+      const toggle = field.querySelector<HTMLElement>("wt-button[slot=end]")!;
+      expect(toggle.ariaLabel).toBe(t(labels[index]![0]));
+      field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: `secret-${index}` } }));
+      toggle.click();
+      await el.updateComplete;
+      expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.type).toBe("text");
+      expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe(
+        `secret-${index}`,
+      );
+      expect(toggle.ariaLabel).toBe(t(labels[index]![1]));
+      for (const [otherIndex, other] of fields.entries()) {
+        if (otherIndex !== index) {
+          expect(other.shadowRoot!.querySelector<HTMLInputElement>("input")!.type).toBe("password");
+        }
+      }
+      toggle.click();
+      await el.updateComplete;
     }
-
-    const passwordField = fields[0]!;
-    const confirmPasswordField = fields[1]!;
-    passwordField.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "secret words" } }),
-    );
-    passwordField.querySelector<HTMLElement>("wt-button[slot=end]")!.click();
-    await el.updateComplete;
-    expect(passwordField.shadowRoot!.querySelector<HTMLInputElement>("input")!.type).toBe("text");
-    expect(passwordField.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe(
-      "secret words",
-    );
-    expect(confirmPasswordField.shadowRoot!.querySelector<HTMLInputElement>("input")!.type).toBe(
-      "password",
-    );
-    expect(passwordField.querySelector<HTMLElement>("wt-button[slot=end]")!.ariaLabel).toBe(
-      t("login.hide_password"),
-    );
 
     const username = el.shadowRoot!.querySelector<HTMLInputElement>("[data-autofill-username]")!;
     expect(username.name).toBe("email");
     expect(username.autocomplete).toBe("username");
     expect(username.value).toBe("new@example.test");
+  });
+
+  it("submits account setup with Enter from every field", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openOtherWays(el, "new@example.test");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-invitation-code]")!.click();
+    await el.updateComplete;
+
+    const submit = el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!;
+    const click = vi.spyOn(submit, "click").mockImplementation(() => undefined);
+    const fields = [...el.shadowRoot!.querySelectorAll("wt-input")];
+    expect(fields).toHaveLength(5);
+    for (const field of fields) {
+      const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      input.focus();
+      await userEvent.keyboard("{Enter}");
+    }
+    expect(click).toHaveBeenCalledTimes(fields.length);
+  });
+
+  it("clears login secrets before opening invitation-code setup", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openPassword(el, "new@example.test");
+    Object.assign(el as unknown as Record<string, string>, {
+      password: "old login password",
+      confirmPassword: "old confirmation",
+      secondFactor: "old recovery code",
+      pin: "1234",
+      confirmPin: "1234",
+    });
+    await el.updateComplete;
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=try-another-way]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-invitation-code]")!.click();
+    await el.updateComplete;
+
+    expect([...el.shadowRoot!.querySelectorAll("wt-input")].map((field) => field.value)).toEqual([
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+  });
+
+  it("completes invitation setup from the emailed code", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await openOtherWays(el, "new@example.test");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-invitation-code]")!.click();
+    Object.assign(el as unknown as Record<string, string>, {
+      invitationCode: "123456",
+      password: "a replacement password",
+      confirmPassword: "a replacement password",
+      pin: "4321",
+      confirmPin: "4321",
+    });
+    await el.updateComplete;
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
+    await flush(el);
+    expect(api.completeAccountActionByCode).toHaveBeenCalledWith(
+      "new@example.test",
+      "123456",
+      "invitation",
+      "a replacement password",
+      "4321",
+    );
+  });
+
+  it("distinguishes a missing PIN confirmation in the fields and summary", async () => {
+    history.replaceState(
+      null,
+      "",
+      "/manage/account?token=token-1&purpose=invitation#email=new%40example.test",
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
+    await el.updateComplete;
+
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=new-pin]")!.error,
+    ).toBe(t("form.pin_required"));
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=confirm-pin]")!
+        .error,
+    ).toBe(t("form.confirm_pin_required"));
+    const summary = el
+      .shadowRoot!.querySelector("wt-form-error-summary")!
+      .shadowRoot!.querySelector<HTMLElement>("[role=alert]")!.textContent;
+    expect(summary).toContain(t("form.pin_required"));
+    expect(summary).toContain(t("form.confirm_pin_required"));
   });
 
   it("does not fetch the roster on connect", async () => {

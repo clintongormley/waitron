@@ -113,7 +113,7 @@ import "./errors.js";
  * touch only some of it. `backend`/`clock` are unused here but Tasks 5/6's `POST /api/sales` calls
  * `recordTillSale` with them, so wiring them into this one interface now keeps it — and every caller
  * that builds it — stable across the whole slice. `secureCookies` decides the session cookie's
- * `Secure` attribute (TRUE on a production HTTPS host, FALSE on loopback dev with no TLS).
+ * `Secure` attribute (true for operator TLS or a persisted box leaf, false for leaf-less HTTP dev).
  */
 export interface TillApiDeps {
   db: Database;

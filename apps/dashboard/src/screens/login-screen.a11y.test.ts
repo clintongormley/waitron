@@ -54,4 +54,19 @@ describe.each(["light", "dark"] as const)("login-screen a11y (%s theme)", (theme
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("renders account setup accessibly", async () => {
+    history.replaceState(
+      null,
+      "",
+      "/manage/account?token=token-1&purpose=invitation#email=new%40example.test",
+    );
+    const { el, host } = await mountWidget<LoginScreen>(
+      "dashboard-login-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
 });

@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import { defineConfig, type PluginOption } from "vite";
+import { devServerProxy } from "../../scripts/dev-server-proxy.js";
 
 import { buildManifest } from "./src/manifest.js";
 
@@ -46,11 +47,11 @@ export default defineConfig({
     // Matches the server's own no-bump behaviour.
     strictPort: true,
     proxy: {
-      "/api": { target: "https://127.0.0.1:8080", secure: false },
+      "/api": devServerProxy(),
       // Product images (`<img src="/media/<sha256>.<ext>">`) are served same-origin in production; in
       // dev the till runs on its own port, so proxy `/media` to the API. Till-side image rendering is
       // a later slice, but the proxy entry is cheap and keeps both apps' dev configs consistent.
-      "/media": { target: "https://127.0.0.1:8080", secure: false },
+      "/media": devServerProxy(),
     },
   },
 });

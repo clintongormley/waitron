@@ -241,10 +241,35 @@ export class LoginScreen extends LitElement {
     this.invitationCodeError = "";
   }
 
+  #clearSecrets(): void {
+    this.password = "";
+    this.confirmPassword = "";
+    this.secondFactor = "";
+    this.pin = "";
+    this.confirmPin = "";
+    this.passwordVisible = false;
+    this.newPasswordVisible = false;
+    this.confirmPasswordVisible = false;
+    this.pinVisible = false;
+    this.confirmPinVisible = false;
+    this.passwordError = "";
+    this.confirmPasswordError = "";
+    this.pinError = "";
+    this.confirmPinError = "";
+  }
+
   #showInvitationCode(): void {
+    this.#clearSecrets();
     this.actionPurpose = "invitation";
     this.errorKey = null;
     this.step = "code";
+  }
+
+  #submitAccountOnEnter(event: KeyboardEvent): void {
+    submitOnEnter(
+      event,
+      this.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]"),
+    );
   }
 
   #continue(): void {
@@ -277,23 +302,10 @@ export class LoginScreen extends LitElement {
 
   #cancelLogin(): void {
     this.email = "";
-    this.password = "";
-    this.confirmPassword = "";
-    this.secondFactor = "";
-    this.pin = "";
-    this.confirmPin = "";
+    this.#clearSecrets();
     this.invitationCode = "";
-    this.passwordVisible = false;
-    this.newPasswordVisible = false;
-    this.confirmPasswordVisible = false;
-    this.pinVisible = false;
-    this.confirmPinVisible = false;
     this.errorKey = null;
     this.emailError = "";
-    this.passwordError = "";
-    this.confirmPasswordError = "";
-    this.pinError = "";
-    this.confirmPinError = "";
     this.invitationCodeError = "";
     this.step = "email";
   }
@@ -393,7 +405,7 @@ export class LoginScreen extends LitElement {
             : "";
       this.confirmPinError =
         this.confirmPin === ""
-          ? t("form.pin_required")
+          ? t("form.confirm_pin_required")
           : this.pin !== this.confirmPin
             ? t("account.pin_mismatch")
             : "";
@@ -559,6 +571,7 @@ export class LoginScreen extends LitElement {
                   label=${t("account.invitation_code")}
                   error=${this.invitationCodeError}
                   .value=${this.invitationCode}
+                  @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
                   @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInvitationCodeChange(e)}
                 ></wt-input>`
               : nothing
@@ -572,6 +585,7 @@ export class LoginScreen extends LitElement {
             type=${this.newPasswordVisible ? "text" : "password"}
             error=${this.passwordError}
             .value=${this.password}
+            @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
           >
             <wt-button
@@ -580,7 +594,9 @@ export class LoginScreen extends LitElement {
               variant="ghost"
               data-test="toggle-new-password"
               aria-label=${
-                this.newPasswordVisible ? t("login.hide_password") : t("login.show_password")
+                this.newPasswordVisible
+                  ? t("account.hide_new_password")
+                  : t("account.show_new_password")
               }
               ?disabled=${this.busy}
               @click=${() => (this.newPasswordVisible = !this.newPasswordVisible)}
@@ -596,13 +612,7 @@ export class LoginScreen extends LitElement {
             type=${this.confirmPasswordVisible ? "text" : "password"}
             error=${this.confirmPasswordError}
             .value=${this.confirmPassword}
-            @keydown=${(e: KeyboardEvent) =>
-              this.actionPurpose === "password_reset"
-                ? submitOnEnter(
-                    e,
-                    this.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]"),
-                  )
-                : undefined}
+            @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onConfirmPasswordChange(e)}
           >
             <wt-button
@@ -611,7 +621,9 @@ export class LoginScreen extends LitElement {
               variant="ghost"
               data-test="toggle-confirm-password"
               aria-label=${
-                this.confirmPasswordVisible ? t("login.hide_password") : t("login.show_password")
+                this.confirmPasswordVisible
+                  ? t("account.hide_confirm_password")
+                  : t("account.show_confirm_password")
               }
               ?disabled=${this.busy}
               @click=${() => (this.confirmPasswordVisible = !this.confirmPasswordVisible)}
@@ -630,6 +642,7 @@ export class LoginScreen extends LitElement {
                     type=${this.pinVisible ? "text" : "password"}
                     error=${this.pinError}
                     .value=${this.pin}
+                    @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
                   >
                     <wt-button
@@ -638,7 +651,7 @@ export class LoginScreen extends LitElement {
                       variant="ghost"
                       data-test="toggle-new-pin"
                       aria-label=${
-                        this.pinVisible ? t("login.hide_password") : t("login.show_password")
+                        this.pinVisible ? t("account.hide_new_pin") : t("account.show_new_pin")
                       }
                       ?disabled=${this.busy}
                       @click=${() => (this.pinVisible = !this.pinVisible)}
@@ -654,7 +667,7 @@ export class LoginScreen extends LitElement {
                     type=${this.confirmPinVisible ? "text" : "password"}
                     error=${this.confirmPinError}
                     .value=${this.confirmPin}
-                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]"))}
+                    @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onConfirmPinChange(e)}
                   >
                     <wt-button
@@ -663,7 +676,9 @@ export class LoginScreen extends LitElement {
                       variant="ghost"
                       data-test="toggle-confirm-pin"
                       aria-label=${
-                        this.confirmPinVisible ? t("login.hide_password") : t("login.show_password")
+                        this.confirmPinVisible
+                          ? t("account.hide_confirm_pin")
+                          : t("account.show_confirm_pin")
                       }
                       ?disabled=${this.busy}
                       @click=${() => (this.confirmPinVisible = !this.confirmPinVisible)}

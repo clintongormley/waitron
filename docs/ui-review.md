@@ -8,7 +8,8 @@ corrects what is wrong or unintuitive, and the fixes land. This file records whe
 walkthrough survives a context clear.
 
 **Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190>, dashboard
-<http://localhost:5191>, setup <http://localhost:5192>. The till enrols itself on first load in dev
+<http://localhost:5191>, setup <http://localhost:5192>. The server on `:8080` uses HTTP without a
+development box leaf and HTTPS when one is present; each Vite proxy selects the same protocol. The till enrols itself on first load in dev
 mode — no code, no approval step. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
 
 **Running the stack from a worktree.** Start it with `wa-wt demo <worktree-name>` or

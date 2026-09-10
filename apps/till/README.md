@@ -26,7 +26,8 @@ itself:
 ## Running it in dev
 
 The till is a same-origin front end: run the server's till API on `:8080` and the Vite dev server on
-`:5190`, which proxies `/api` → `http://127.0.0.1:8080` (`vite.config.ts`).
+`:5190`. The proxy inspects the shared box state and sends `/api` and `/media` to HTTP for a
+leaf-less demo or HTTPS for a server using its persisted self-signed leaf (`vite.config.ts`).
 
 1. **Provision a venue.** `waitron-provision venue` creates the tenant, location, till, node (SIF)
    and invoice series a sellable venue needs — see
@@ -123,7 +124,7 @@ cash, print the filed ticket with its Veri\*Factu QR.
   config) is a later slice.
 - **7c prepare & collect** (kitchen states) — the remaining Counter POS slice — is not here. (7b park
   & retrieve HAS landed; see the note above.)
-- **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the app
-  is served by Vite on loopback over plain HTTP, so the session cookie is not marked `Secure` (boot
-  derives that from whether TLS is configured); production HTTPS, LAN exposure and serving the built
-  assets are that deployment slice's job.
+- **The Vite page stays on loopback HTTP in development.** Its proxy matches the server transport:
+  HTTP for a fresh demo, or HTTPS when shared box state contains the development leaf. Server-issued
+  session cookies follow that resolved transport. The packaged box provides LAN binding and serves the
+  built app over its trusted HTTPS origin.

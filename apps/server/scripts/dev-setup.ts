@@ -690,7 +690,7 @@ async function main(): Promise<void> {
   console.log("");
   console.log("  till       http://localhost:5190");
   console.log("  dashboard  http://localhost:5191");
-  console.log("  server     http://localhost:8080");
+  console.log("  server     localhost:8080   (HTTP fresh; HTTPS with a preserved box leaf)");
   // `pnpm dev` starts the setup wizard (apps/setup, Vite 5192) too, but a venue was just
   // provisioned so the box boots in TRADING mode — where `/setup-api` is unrouted: boot.ts registers
   // every `/setup-api` route (via `mountDiscovery` and `mountSetup`) exclusively inside the

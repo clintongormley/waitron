@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
+import { devServerProxy } from "../../scripts/dev-server-proxy.js";
 
 export default defineConfig({
   // Shared brand assets — see the till config for the full rationale.
@@ -15,9 +16,9 @@ export default defineConfig({
     // duplicate `pnpm dev`, which also collides 8080).
     strictPort: true,
     proxy: {
-      // The box serves its API over HTTPS with a self-signed certificate in development, so every
-      // app's Vite proxy uses `secure: false` to accept that leaf.
-      "/setup-api": { target: "https://127.0.0.1:8080", secure: false },
+      // Match the server protocol selected from the shared box state; setup mode has a self-signed
+      // leaf, while an inactive setup app may also run beside a leaf-less HTTP demo.
+      "/setup-api": devServerProxy(),
     },
   },
 });

@@ -136,12 +136,9 @@ export interface ServerConfig {
    * `WAITRON_LOG_MAX_FILES` overrides it (a positive integer). */
   logMaxFiles: number;
   /**
-   * The PEM files that make this host serve HTTPS. BOTH-or-NEITHER (loadConfig refuses a
-   * half-configured pair): absent means plain HTTP for loopback dev, present means TLS. This task
-   * only makes the process TLS-CAPABLE — production local-CA trust and LAN binding are deployment
-   * (#9). `boot.ts` also derives the session cookie's `Secure` attribute from whether this is set
-   * (`secureCookies: config.tls !== undefined`): a cookie marked `Secure` is never sent back over
-   * plain HTTP, so it must track the transport the host actually serves.
+   * Operator-supplied PEM files. BOTH-or-NEITHER (loadConfig refuses a half-configured pair).
+   * They override the box leaf persisted under `stateDir`; with neither source, loopback development
+   * uses plain HTTP. `boot.ts` resolves that same choice for the listener and cookie security.
    */
   tls?: { certFile: string; keyFile: string };
   /** WHICH till this process is — the fiscal identity provisioning stamped into the environment,
@@ -837,9 +834,8 @@ export function loadConfig(
     logDir: isUnset(logDir) ? join(resolvedStateDir, "logs") : logDir,
     logMaxBytes: positiveInt(env, "WAITRON_LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES),
     logMaxFiles: positiveInt(env, "WAITRON_LOG_MAX_FILES", DEFAULT_LOG_MAX_FILES),
-    // Conditionally present, never present-but-undefined: an absent `tls` key is what "no TLS
-    // configured" means downstream (`config.tls !== undefined` decides `secureCookies` and whether
-    // `buildServeOptions` reads any files at all).
+    // Conditionally present, never present-but-undefined. This is only the operator override;
+    // trading boot may still resolve the persisted box leaf under `stateDir`.
     ...(tls === undefined ? {} : { tls }),
     // The till's own fiscal identity, resolved the same way every other caller does — see
     // `till-config.ts`. Loaded AFTER `required(env, "DATABASE_URL")` above so a host missing both
