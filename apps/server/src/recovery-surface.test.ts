@@ -2,6 +2,12 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
+import { AppError } from "@waitron/shared";
+import { createErrorBoundary } from "@waitron/server-kit";
+import "./errors.js";
+import { createRotatingFileSink } from "./log-file.js";
+import { createLogger } from "./logger.js";
 import { FRESH, afterFailure, type RecoveryState } from "./recovery-state.js";
 import { GENERIC_TEXT, OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
 
@@ -92,6 +98,55 @@ describe("recoveryApp", () => {
     const body = await (await app.request("/")).text();
     expect(body).not.toContain('<img src=x onerror="alert(1)">');
     expect(body).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+  });
+});
+
+/**
+ * What the log tail actually carries, run rather than reasoned about. Every piece below is the real
+ * one — the shared error boundary, this process's logger, the rotating sink and the page — so what
+ * it renders is what a box renders.
+ *
+ * It exists because `OPERATOR_TEXT`'s header used to claim that no params could reach the page. They
+ * can: the boundary logs `{ ...cause.params }` into the very file the page tails
+ * (`packages/server-kit/src/error-boundary.ts`). The design is unchanged and still sound (spec §5
+ * names the tail as a second attacker-influenceable channel) — what keeps a SECRET off this
+ * unauthenticated page is the repo's convention that an `AppError`'s params never carry one
+ * (`apps/server/src/errors.ts`), not the page. This test is that claim's receipt.
+ */
+describe("the log tail as a second channel out of the image", () => {
+  it("renders an AppError's params, escaped, after the real error boundary logs them", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-log-"));
+    const log = createLogger(
+      createRotatingFileSink({ dir: logDir, maxBytes: 1_000_000, maxFiles: 2 }),
+      () => new Date(),
+    );
+    const run = createErrorBoundary({ "server.config_invalid": 400 }, "probe.failed");
+    const api = new Hono();
+    api.get("/boom", (c) =>
+      run(c, log, () => {
+        // A param that is NOT a secret — the convention holds here, deliberately. The point is the
+        // channel, not a leak: this value travels the same route a secret param would.
+        throw new AppError("server.config_invalid", {
+          variable: "WAITRON_PROBE",
+          reason: "<param-from-outside-the-image>",
+        });
+      }),
+    );
+    expect((await api.request("/boom")).status).toBe(400);
+
+    const body = await (await recoveryApp({ state, logDir, onRetry: vi.fn() }).request("/")).text();
+    expect(body).toContain("WAITRON_PROBE");
+    // Present on the page, and escaped — both halves matter. Escaped-only would pass with the tail
+    // omitted entirely; present-only would pass with the tail rendered as raw HTML.
+    expect(body).toContain("&lt;param-from-outside-the-image&gt;");
+    expect(body).not.toContain("<param-from-outside-the-image>");
+
+    // The control, in the other direction: the same state with no log to tail carries neither, so
+    // the assertions above are reading the TAIL and not some other part of the page.
+    const withoutLog = await (
+      await recoveryApp({ state, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(withoutLog).not.toContain("WAITRON_PROBE");
   });
 });
 

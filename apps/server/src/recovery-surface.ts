@@ -19,8 +19,8 @@ export interface RecoveryDeps {
 }
 
 /** Escapes into HTML text/attribute content. This page is served before any authentication exists
- * and both the error code and the log tail are attacker-influenceable in principle, so every
- * interpolated value goes through this — never a raw template literal. Exported so the suite asserts
+ * and both the error code and the log tail are attacker-influenceable — the tail demonstrably so,
+ * see `OPERATOR_TEXT` — so every interpolated value goes through this, never a raw template literal. Exported so the suite asserts
  * the page's exact rendered bytes against this rule rather than against a second copy of it. */
 export function escapeHtml(value: string): string {
   return value
@@ -77,11 +77,18 @@ type RecoveryCode = ErrorCode | "server.boot_incomplete";
 /**
  * What the page says, keyed by error code.
  *
- * EVERY string here is fixed and chosen by code. This page is served over the venue's LAN with no
- * login, so nothing the box caught — no message, no stack, no params — may reach it (spec §5); the
- * only values interpolated from outside the image are the error CODE and the log TAIL, both escaped
- * and both treated as attacker-influenceable. The real error goes to the container's stdout,
- * scrubbed, which is the installer's channel.
+ * EVERY string here is fixed and chosen by code, and the caught error's own message and stack never
+ * reach the page — those go to the container's stdout, scrubbed, which is the installer's channel.
+ * Exactly two values on this page come from outside the image, and spec §5 names both: the error
+ * CODE and the log TAIL, each HTML-escaped and each treated as attacker-influenceable.
+ *
+ * The TAIL is worth stating plainly, because it is a wider channel than the code. It is the server's
+ * own `waitron.log`, and the shared error boundary writes an `AppError`'s params into that file
+ * (`packages/server-kit/src/error-boundary.ts`), so a param CAN be read off this page by anyone on
+ * the venue's LAN, with no login. What keeps that safe is not this page: it is the repo's convention
+ * that an `AppError`'s params never carry a secret — the rule `apps/server/src/errors.ts` states for
+ * `server.config_invalid` and its siblings. This page is why that convention matters beyond a log
+ * file. Pinned by `recovery-surface.test.ts` → "the log tail as a second channel out of the image".
  *
  * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
