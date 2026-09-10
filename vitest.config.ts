@@ -13,8 +13,14 @@ import { defineConfig } from "vitest/config";
 //   `packages/*/drizzle` SQL creates against other modules' tables, module-seams reads every
 //   non-test source file under `packages/provisioning/src` and `apps/server/src` for a `from
 //   "<regime package>"` prefix, coverage-thresholds pins
-//   which package holds which coverage bar, and brand-icons pins each app's `index.html` icon
-//   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`;
+//   which package holds which coverage bar, brand-icons pins each app's `index.html` icon
+//   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`,
+//   enum-add-value-safety reads every migration set named by
+//   `packages/migrations/migrations.manifest.json` for a migration that NAMES an enum label a
+//   migration in the same pending batch ADDED — drizzle applies a set's pending migrations in one
+//   transaction, so PostgreSQL rejects that on an existing database while a fresh one passes — and
+//   journal-monotonic reads the same sets' `meta/_journal.json` for a `when` value at or below one
+//   already recorded, which drizzle's `max(created_at)` watermark skips with no error;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
 //   runs licence.yml's `dco` step extracted from the workflow file.
 //
