@@ -125,6 +125,41 @@ export class VenueOperationsScreen extends LitElement {
     void this.#save(() => this.api.createDepartment({ name, tradingName, defaultServiceMode }));
   }
 
+  #addMenu(): void {
+    const name = this.#value("menu-name").trim();
+    if (name === "") {
+      this.error = t("venue.required");
+      return;
+    }
+    void this.#save(() => this.api.createMenu(name));
+  }
+
+  #addOffer(menuId: string, root: ParentNode): void {
+    const productId = this.#value(`offer-product-${menuId}`, root);
+    const sectionName = this.#value(`offer-section-${menuId}`, root).trim();
+    const grossPrice = this.#value(`offer-price-${menuId}`, root);
+    if (productId === "" || sectionName === "" || grossPrice === "") {
+      this.error = t("venue.required");
+      return;
+    }
+    void this.#save(async () => {
+      const section = await this.api.createMenuSection(menuId, {
+        name: { en: sectionName, es: sectionName },
+        displayOrder: 0,
+      });
+      await this.api.createMenuItem(menuId, {
+        sectionId: section.id,
+        productId,
+        grossPrice,
+        displayOrder: 0,
+      });
+    });
+  }
+
+  #name(names: Record<string, string>): string {
+    return names.en ?? names.es ?? Object.values(names)[0] ?? "";
+  }
+
   #saveZone(zoneId: string, root: ParentNode): void {
     const departmentId = this.#value(`zone-department-${zoneId}`, root);
     const mode = this.#value(`zone-mode-${zoneId}`, root);
@@ -284,36 +319,36 @@ export class VenueOperationsScreen extends LitElement {
       <h2>${t("venue.zones")}</h2>
       <div class="grid">
         ${model.floorZones.map((zone) => {
-        const configured = model.zones.find((candidate) => candidate.id === zone.id);
-        const assignments = model.zoneMenus.filter((item) => item.zoneId === zone.id);
-        return html`<article class="panel" data-zone=${zone.id}>
-          <h3>${zone.name}</h3>
-          <div class="form-row">
-            <label
-              >${t("venue.department")}<select name=${`zone-department-${zone.id}`}>
-                ${model.departments.map(
-              (department) =>
-                html`<option
-                  value=${department.id}
-                  ?selected=${configured?.departmentId === department.id}
-                >
-                  ${department.name}
-                </option>`,
-            )}
-              </select></label
-            >
-            <label
-              >${t("venue.service_style")}<select name=${`zone-mode-${zone.id}`}>
-                ${this.#modeOptions("", true)}
-              </select></label
-            >
-            <wt-button
-              ?disabled=${this.busy || model.departments.length === 0}
-              @click=${(event: Event) => this.#saveZone(zone.id, (event.currentTarget as Element).parentElement!)}
-              >${t("venue.save_zone")}</wt-button
-            >
-          </div>
-          ${model.menus.map((menu, index) => {
+          const configured = model.zones.find((candidate) => candidate.id === zone.id);
+          const assignments = model.zoneMenus.filter((item) => item.zoneId === zone.id);
+          return html`<article class="panel" data-zone=${zone.id}>
+            <h3>${zone.name}</h3>
+            <div class="form-row">
+              <label
+                >${t("venue.department")}<select name=${`zone-department-${zone.id}`}>
+                  ${model.departments.map(
+                  (department) =>
+                    html`<option
+                      value=${department.id}
+                      ?selected=${configured?.departmentId === department.id}
+                    >
+                      ${department.name}
+                    </option>`,
+                )}
+                </select></label
+              >
+              <label
+                >${t("venue.service_style")}<select name=${`zone-mode-${zone.id}`}>
+                  ${this.#modeOptions("", true)}
+                </select></label
+              >
+              <wt-button
+                ?disabled=${this.busy || model.departments.length === 0}
+                @click=${(event: Event) => this.#saveZone(zone.id, (event.currentTarget as Element).parentElement!)}
+                >${t("venue.save_zone")}</wt-button
+              >
+            </div>
+            ${model.menus.map((menu, index) => {
             const assignment = assignments.find((item) => item.menuId === menu.id);
             return html`<div class="menu">
               <span>${menu.name}${assignment?.isDefault ? ` — ${t("venue.default")}` : ""}</span
@@ -327,8 +362,75 @@ export class VenueOperationsScreen extends LitElement {
               >
             </div>`;
           })}
-        </article>`;
-      })}
+          </article>`;
+        })}
+      </div>
+    </section>`;
+  }
+
+  #menus() {
+    const model = this.model!;
+    return html`<section>
+      <h2>${t("venue.menus")}</h2>
+      <div class="panel form-row">
+        <label
+          >${t("venue.menu_name")} <span class="required">*</span><input name="menu-name" required
+        /></label>
+        <wt-button data-test="add-menu" ?disabled=${this.busy} @click=${() => this.#addMenu()}
+          >${t("venue.add_menu")}</wt-button
+        >
+      </div>
+      <div class="grid">
+        ${model.menus.map((menu) => {
+          const offers = model.offers.filter((offer) => offer.menuId === menu.id);
+          const availableProducts = model.products.filter(
+            (product) => !offers.some((offer) => offer.productId === product.id),
+          );
+          return html`<article class="panel" data-menu=${menu.id}>
+            <h3>${menu.name}</h3>
+            ${
+              offers.length === 0
+                ? html`<p class="muted">${t("venue.no_offers")}</p>`
+                : html`<ul>
+                    ${offers.map(
+                      (offer) =>
+                        html`<li>
+                          ${this.#name(offer.sectionName)} — ${this.#name(offer.descriptions)} —
+                          ${offer.grossPrice}
+                        </li>`,
+                    )}
+                  </ul>`
+            }
+            <div class="form-row">
+              <label
+                >${t("venue.product")} <span class="required">*</span
+                ><select name=${`offer-product-${menu.id}`}>
+                  ${availableProducts.map(
+                    (product) =>
+                      html`<option value=${product.id}>
+                        ${this.#name(product.descriptions)}
+                      </option>`,
+                  )}
+                </select></label
+              >
+              <label
+                >${t("venue.section")} <span class="required">*</span
+                ><input name=${`offer-section-${menu.id}`} required
+              /></label>
+              <label
+                >${t("venue.price")} <span class="required">*</span
+                ><input name=${`offer-price-${menu.id}`} inputmode="decimal" required
+              /></label>
+              <wt-button
+                variant="secondary"
+                ?disabled=${this.busy || availableProducts.length === 0}
+                @click=${(event: Event) =>
+                  this.#addOffer(menu.id, (event.currentTarget as Element).parentElement!)}
+                >${t("venue.add_offer")}</wt-button
+              >
+            </div>
+          </article>`;
+        })}
       </div>
     </section>`;
   }
@@ -376,7 +478,7 @@ export class VenueOperationsScreen extends LitElement {
       ${
         this.model === undefined
           ? nothing
-          : html`${this.#departments()}${this.#zones()}${this.#routing()}`
+          : html`${this.#departments()}${this.#menus()}${this.#zones()}${this.#routing()}`
       }`;
   }
 }

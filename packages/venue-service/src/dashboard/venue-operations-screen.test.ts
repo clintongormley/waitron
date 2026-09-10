@@ -48,6 +48,18 @@ const model: VenueServiceView = {
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
   ],
+  products: [{ id: "p1", descriptions: { en: "Negroni" }, pricingUnit: "each", active: true }],
+  offers: [
+    {
+      id: "i1",
+      menuId: "m1",
+      productId: "p1",
+      sectionId: "sec1",
+      sectionName: { en: "Cocktails" },
+      descriptions: { en: "Negroni" },
+      grossPrice: "11.00",
+    },
+  ],
 };
 
 async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {
@@ -74,6 +86,8 @@ describe("venue operations screen", () => {
     expect(text).toContain("Deli counter");
     expect(text).toContain("Deli takeaway");
     expect(text).toContain("Monday 09:00–18:00");
+    expect(text).toContain("Negroni");
+    expect(text).toContain("11.00");
   });
 
   it("creates a second department from the required management fields", async () => {
@@ -93,6 +107,38 @@ describe("venue operations screen", () => {
       name: "Events",
       tradingName: "Casa Delgado Events",
       defaultServiceMode: "invoice_first",
+    });
+  });
+
+  it("creates a menu and adds an existing product with a menu-specific price", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      createMenu: vi.fn().mockResolvedValue({ id: "m3" }),
+      createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
+      createMenuItem: vi.fn().mockResolvedValue({ id: "i2" }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+
+    (el.shadowRoot!.querySelector('[name="menu-name"]') as HTMLInputElement).value =
+      "Upstairs cocktails";
+    (el.shadowRoot!.querySelector('[data-test="add-menu"]') as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.createMenu).toHaveBeenCalledWith("Upstairs cocktails");
+
+    const deli = el.shadowRoot!.querySelector('[data-menu="m2"]')!;
+    (deli.querySelector('[name="offer-section-m2"]') as HTMLInputElement).value = "Cocktails";
+    (deli.querySelector('[name="offer-price-m2"]') as HTMLInputElement).value = "9.00";
+    (deli.querySelector("wt-button:last-of-type") as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.createMenuSection).toHaveBeenCalledWith("m2", {
+      name: { en: "Cocktails", es: "Cocktails" },
+      displayOrder: 0,
+    });
+    expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
+      productId: "p1",
+      sectionId: "sec2",
+      grossPrice: "9.00",
+      displayOrder: 0,
     });
   });
 });

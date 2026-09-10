@@ -20,7 +20,9 @@ describe("VenueServiceApi", () => {
       .mockResolvedValueOnce(jsonResponse([{ id: "m1", name: "Restaurant", active: true }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "c1", name: "Cocktails" }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "s1", name: "Bar", isDefault: false }]))
-      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]));
+      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: "p1", descriptions: { en: "Negroni" } }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: "i1", productId: "p1", grossPrice: "9.00" }]));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
 
     await expect(api.load()).resolves.toMatchObject({
@@ -35,6 +37,8 @@ describe("VenueServiceApi", () => {
       "/management-api/categories",
       "/management-api/stations",
       "/management-api/zones",
+      "/management-api/catalogues/m1/products",
+      "/management-api/catalogues/m1/offers",
     ]);
   });
 
@@ -53,6 +57,14 @@ describe("VenueServiceApi", () => {
     await api.configureZone("z1", { departmentId: "d1", serviceMode: null });
     await api.allowMenu("z1", "m1", { displayOrder: 0, makeDefault: true });
     await api.createRoute({ zoneId: "z1", categoryId: "c1", stationId: "s1" });
+    await api.createMenu("Terrace drinks");
+    await api.createMenuSection("m1", { name: { en: "Cocktails" }, displayOrder: 0 });
+    await api.createMenuItem("m1", {
+      productId: "p1",
+      sectionId: "sec1",
+      grossPrice: "11.00",
+      displayOrder: 0,
+    });
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/departments", "POST"],
@@ -60,6 +72,9 @@ describe("VenueServiceApi", () => {
       ["/management-api/venue-service/zones/z1", "PUT"],
       ["/management-api/venue-service/zones/z1/menus/m1", "PUT"],
       ["/management-api/venue-service/routes", "POST"],
+      ["/management-api/catalogues", "POST"],
+      ["/management-api/catalogues/m1/sections", "POST"],
+      ["/management-api/catalogues/m1/items", "POST"],
     ]);
   });
 });

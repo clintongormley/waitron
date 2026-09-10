@@ -54,6 +54,23 @@ export interface VenueServiceChoices {
   categories: NamedRow[];
   stations: (NamedRow & { isDefault?: boolean })[];
   floorZones: FloorZone[];
+  products: Product[];
+  offers: MenuOffer[];
+}
+export interface Product {
+  id: string;
+  descriptions: Record<string, string>;
+  pricingUnit: "each" | "weight";
+  active: boolean;
+}
+export interface MenuOffer {
+  id: string;
+  menuId: string;
+  productId: string;
+  sectionId: string;
+  sectionName: Record<string, string>;
+  descriptions: Record<string, string>;
+  grossPrice: string;
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
@@ -68,7 +85,30 @@ export class VenueServiceApi {
       this.request<VenueServiceChoices["stations"]>("/management-api/stations", "GET"),
       this.request<FloorZone[]>("/management-api/zones", "GET"),
     ]);
-    return { ...model, menus, categories, stations, floorZones };
+    const [productLists, offerLists] = await Promise.all([
+      Promise.all(
+        menus.map((menu) =>
+          this.request<Product[]>(`/management-api/catalogues/${menu.id}/products`, "GET"),
+        ),
+      ),
+      Promise.all(
+        menus.map((menu) =>
+          this.request<MenuOffer[]>(`/management-api/catalogues/${menu.id}/offers`, "GET"),
+        ),
+      ),
+    ]);
+    const products = [
+      ...new Map(productLists.flat().map((product) => [product.id, product])).values(),
+    ];
+    return {
+      ...model,
+      menus,
+      categories,
+      stations,
+      floorZones,
+      products,
+      offers: offerLists.flat(),
+    };
   }
 
   createDepartment(input: {
@@ -77,6 +117,24 @@ export class VenueServiceApi {
     defaultServiceMode: ServiceMode;
   }): Promise<Department> {
     return this.request("/management-api/venue-service/departments", "POST", input);
+  }
+
+  createMenu(name: string): Promise<NamedRow> {
+    return this.request("/management-api/catalogues", "POST", { name });
+  }
+
+  createMenuSection(
+    menuId: string,
+    input: { name: Record<string, string>; displayOrder: number },
+  ): Promise<{ id: string }> {
+    return this.request(`/management-api/catalogues/${menuId}/sections`, "POST", input);
+  }
+
+  createMenuItem(
+    menuId: string,
+    input: { productId: string; sectionId: string; grossPrice: string; displayOrder: number },
+  ): Promise<{ id: string }> {
+    return this.request(`/management-api/catalogues/${menuId}/items`, "POST", input);
   }
 
   replaceHours(departmentId: string, hours: Omit<HoursInterval, "departmentId">[]): Promise<void> {

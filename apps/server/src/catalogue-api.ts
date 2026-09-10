@@ -21,12 +21,15 @@ import {
   catalogueExists,
   createCatalogue,
   createCategory,
+  createMenuItem,
+  createMenuSection,
   createOptionGroup,
   createOptionGroupItem,
   createProduct,
   listCatalogues,
   listCataloguesForLocation,
   listCategories,
+  listMenuOffers,
   listOptionGroupItems,
   listOptionGroups,
   listProductOptionGroupIds,
@@ -312,6 +315,65 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       const { name } = body;
       const created = await gated(sessionId, (tx) => createCatalogue(tx, tenantId, { name }));
+      return c.json(created, 201);
+    }),
+  );
+
+  app.get("/management-api/catalogues/:id/offers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const rows = await gated(sessionId, (tx) => listMenuOffers(tx, tenantId, [menuId]));
+      return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/catalogues/:id/sections", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (!isPlainObject(body.name)) {
+        throw new AppError("management.request_invalid", { field: "name" });
+      }
+      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      const created = await gated(sessionId, (tx) =>
+        createMenuSection(tx, tenantId, {
+          menuId,
+          name: body.name as Record<string, string>,
+          ...(displayOrder === undefined ? {} : { displayOrder }),
+        }),
+      );
+      return c.json(created, 201);
+    }),
+  );
+
+  app.post("/management-api/catalogues/:id/items", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (typeof body.productId !== "string") {
+        throw new AppError("management.request_invalid", { field: "productId" });
+      }
+      if (typeof body.sectionId !== "string") {
+        throw new AppError("management.request_invalid", { field: "sectionId" });
+      }
+      if (typeof body.grossPrice !== "string") {
+        throw new AppError("management.request_invalid", { field: "grossPrice" });
+      }
+      const productId = requireUuidParam(body.productId, "ProductId");
+      const sectionId = requireUuidParam(body.sectionId, "MenuSectionId");
+      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      const created = await gated(sessionId, (tx) =>
+        createMenuItem(tx, tenantId, {
+          menuId,
+          productId,
+          sectionId,
+          grossPrice: body.grossPrice as string,
+          ...(displayOrder === undefined ? {} : { displayOrder }),
+        }),
+      );
       return c.json(created, 201);
     }),
   );
