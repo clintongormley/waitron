@@ -262,8 +262,9 @@ export interface IntegratedPayRequest {
  * The outcome of an integrated pay, as DATA — a decline / stall / offline-refusal is never an
  * exception (nothing may block a sale on anything but the sale itself, CLAUDE.md §5). `captured`
  * carries the filed/replayed ticket; the three non-captured arms carry no ticket (nothing was filed
- * and the order stays `open`, so the till simply retries). `timeout` is reserved — the provider
- * currently collapses a poll-window stall into `failed`/`declined` (see {@link toPayOutcome}).
+ * and the order stays `open`, so the till simply retries). `timeout` is PRODUCED by the SumUp
+ * adapter — it reports a poll-window stall as `attempting` (the row stays open for `resolvePending`);
+ * Stripe still collapses a stall into `failed`/`declined` (see {@link toPayOutcome}).
  */
 export type IntegratedPayOutcome =
   | { outcome: "captured"; ticket: TillSaleResult }
@@ -1508,9 +1509,11 @@ async function finalizeSettleRecovery(
  * `till-sale-integrated.test.ts`, which needs no container, CLAUDE.md §4). `captured` and
  * `accepted_offline` both chained a sale (their `settledAt` is set), so both map to the `captured` arm
  * carrying the ticket the caller filed; `network_unavailable` maps to its own arm (nothing filed);
- * every other non-terminal state — today just `failed`, which `provider.ts`'s `drive` uses for BOTH a
- * decline and a poll-window stall — maps to `declined`. The `timeout` arm stays reserved for when a
- * provider learns to tell those two apart; the till renders both the same today.
+ * `attempting` — the state the SumUp adapter returns on a poll-window stall, leaving the row open for
+ * `resolvePending` — maps to `timeout`, the arm reserved for exactly that case. Every other
+ * non-terminal state (Stripe's `failed`, which its `drive` uses for BOTH a decline and a stall) maps
+ * to `declined`. The till renders `timeout` and `declined` the same today (retry or take cash), but
+ * distinguishing them keeps a stall from being mislabelled a hard decline.
  */
 export function toPayOutcome(
   result: PaymentResult,
@@ -1521,6 +1524,9 @@ export function toPayOutcome(
   }
   if (result.state === "network_unavailable") {
     return { outcome: "network_unavailable" };
+  }
+  if (result.state === "attempting") {
+    return { outcome: "timeout" };
   }
   return { outcome: "declined" };
 }

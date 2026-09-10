@@ -196,6 +196,9 @@ importers:
       '@waitron/payments-stripe':
         specifier: workspace:*
         version: link:../../packages/payments-stripe
+      '@waitron/payments-sumup':
+        specifier: workspace:*
+        version: link:../../packages/payments-sumup
       '@waitron/printing':
         specifier: workspace:*
         version: link:../../packages/printing

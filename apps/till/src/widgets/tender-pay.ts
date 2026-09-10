@@ -47,7 +47,8 @@ export interface CollectCardDetail {
  * `"none"` keeps the Card button on the #62 manual (datáfono) path; every other value makes it emit
  * `collect-card` instead. `"simulator"` is selected by Demo/Prepare onboarding, never device config.
  */
-export type CardProvider = "none" | "stripe_terminal" | "stripe_on_device" | "simulator";
+export type CardProvider =
+  "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
 
 /**
  * The non-`captured` variants of `POST /api/pay`'s outcome (`PayOutcome`, `../api/client.js`) — the

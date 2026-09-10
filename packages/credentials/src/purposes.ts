@@ -17,6 +17,10 @@ export const PURPOSES = {
    * is the RFC 5322 sender shown to recipients. Both remain sealed in the tenant vault. */
   "email.smtp": ["url", "from"],
   "payments.stripe": ["secretKey", "webhookSecret", "successUrl", "cancelUrl"],
+  /** SumUp Cloud API. `affiliateAppId`/`affiliateKey` come from the developer portal's Affiliate
+   * Keys page and carry our `payment_ref` to SumUp as the client-supplied lookup key; a merchant
+   * without one seals the literal `-` in both, and the host then omits the affiliate block. */
+  "payments.sumup": ["apiKey", "merchantCode", "affiliateAppId", "affiliateKey"],
   /**
    * `certKind` is `"sello"` or `"representante"` — validated by the READER, not here: this package
    * declares field names and never their vocabularies, which is the line that keeps it a leaf.

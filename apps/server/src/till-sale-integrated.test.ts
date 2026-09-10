@@ -55,4 +55,11 @@ describe("toPayOutcome", () => {
   it("failed → { outcome: 'declined' } (a decline OR a poll-window stall — the provider collapses both)", () => {
     expect(toPayOutcome(result("failed"), null)).toEqual({ outcome: "declined" });
   });
+
+  it("maps an attempting result (SumUp poll timeout) to the timeout arm", () => {
+    // SumUp reports a poll-window stall as `attempting` — the row stays open for `resolvePending`,
+    // nothing filed, order stays `open`. The till renders `timeout` and `declined` the same (retry
+    // or take cash), but the arm is distinct so a stall is not mislabelled a decline.
+    expect(toPayOutcome(result("attempting"), null)).toEqual({ outcome: "timeout" });
+  });
 });

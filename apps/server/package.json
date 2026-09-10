@@ -53,6 +53,7 @@
     "@waitron/module": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
+    "@waitron/payments-sumup": "workspace:*",
     "@waitron/printing": "workspace:*",
     "@waitron/provisioning": "workspace:*",
     "@waitron/purchasing": "workspace:*",

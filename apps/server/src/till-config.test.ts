@@ -141,6 +141,41 @@ describe("loadTillConfig", () => {
       expect(config.stripeReaderId).toBeUndefined();
     });
 
+    it("reads sumup_cloud + reader id", () => {
+      const config = loadTillConfig({
+        ...base,
+        WAITRON_TILL_CARD_PROVIDER: "sumup_cloud",
+        WAITRON_TILL_SUMUP_READER_ID: "rdr_1",
+      });
+      expect(config.cardProvider).toBe("sumup_cloud");
+      expect(config.sumupReaderId).toBe("rdr_1");
+      // The Stripe reader stays absent — the two providers never carry each other's reader id.
+      expect(config.stripeReaderId).toBeUndefined();
+    });
+
+    it("refuses a sumup_cloud provider with no reader id (server.till_config_missing)", () => {
+      const error = captureThrow(() =>
+        loadTillConfig({ ...base, WAITRON_TILL_CARD_PROVIDER: "sumup_cloud" }),
+      );
+      expect(codeOf(error)).toBe("server.till_config_missing");
+      // toEqual (not toMatchObject): the env var NAME is the only field the code may carry.
+      expect(isAppError(error) && error.params).toEqual({ key: "WAITRON_TILL_SUMUP_READER_ID" });
+    });
+
+    it("refuses a sumup_cloud provider with an EMPTY reader id (server.till_config_missing)", () => {
+      // The `required` "absent OR empty" rule: a `WAITRON_TILL_SUMUP_READER_ID=` line is missing,
+      // not a valid empty reader — the same treatment stripe_terminal's reader gets.
+      const error = captureThrow(() =>
+        loadTillConfig({
+          ...base,
+          WAITRON_TILL_CARD_PROVIDER: "sumup_cloud",
+          WAITRON_TILL_SUMUP_READER_ID: "",
+        }),
+      );
+      expect(codeOf(error)).toBe("server.till_config_missing");
+      expect(isAppError(error) && error.params).toEqual({ key: "WAITRON_TILL_SUMUP_READER_ID" });
+    });
+
     it("enables tips on the literal '1' as well as 'true'", () => {
       const config = loadTillConfig({ ...base, WAITRON_TILL_TIPS: "1" });
       expect(config.tipsEnabled).toBe(true);
