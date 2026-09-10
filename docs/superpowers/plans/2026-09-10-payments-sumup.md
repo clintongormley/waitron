@@ -26,12 +26,12 @@
 
 ## Decisions this plan makes (each depends on an experiment not yet run — flag for review)
 
-1. **Our `payment_ref` is sent to SumUp as `affiliate.foreign_transaction_id`.** SumUp's create-checkout body has no client-supplied `client_transaction_id`; the `affiliate` block (`app_id`, `key`, `foreign_transaction_id`, all required by the OpenAPI file) is the only client-supplied key, and the retrieve endpoint looks up by it. If experiment 2a shows the lookup works while `PENDING`, the crash window between T1 and the first poll is closed for free. If the merchant has no affiliate key (experiment 0.2 fails), the host seals `affiliateAppId`/`affiliateKey` as the literal `-` and the client OMITS the `affiliate` block; the sweep then relies on the `client_transaction_id` stamped in T1.5 (below). Both paths are built and tested.
+1. **Our `payment_ref` is sent to SumUp as `affiliate.foreign_transaction_id`.** SumUp's create-checkout body has no client-supplied `client_transaction_id`; the `affiliate` block (`app_id`, `key`, `foreign_transaction_id`, all required by the OpenAPI file) is the only client-supplied key, and the retrieve endpoint looks up by it. If experiment 2a shows the lookup works while `PENDING`, the crash window between T1 and the first poll is closed for free. If the merchant has no affiliate key (experiment 0.2 fails), the host seals `affiliateAppId`/`affiliateKey` as the literal `-` and the client OMITS the `affiliate` block; the sweep then relies on the `client_transaction_id` stamped in T1.5 (below). Both paths are built and tested. Accepted residual in the no-affiliate branch: a create SumUp accepted but whose response was lost (crash before T1.5) leaves the row with no key SumUp knows — neither a stamped `client_transaction_id` nor a sent `foreign_transaction_id` — so the sweep finds nothing and, past the grace period, resolves it `failed` though the customer may have paid. The spec's orphan self-heal (§3) that catches this lives in the deferred reconciler (§6); until it lands, the affiliate key is what closes the window, which is why the build strongly prefers it. Flagged for the owner at finish-branch.
 2. **A T1.5 write stamps SumUp's `client_transaction_id` into `external_ref` while the row is still `attempting`.** On capture, `captureAttempting` overwrites `external_ref` with the SumUp transaction `id`, which is what the refund endpoint addresses. So `external_ref` means "the poll key" on an `attempting` row and "the refundable id" on a `captured` one; the adapter's header says so.
 3. **`resolvePending` treats "not found at SumUp" as still pending for a grace period (15 minutes from the row's `created_at`), then resolves it `failed` without an incident**: SumUp holds no transaction, so no money moved. `REFUNDED` and any unknown status resolve `failed` WITH the new incident (spec §3).
 4. **Refunds go to `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds`** (the spec's `/v0.1/me/refund/{txn_id}` is gone from SumUp's OpenAPI file). `void` and `refund` both call it in full; `partialRefund` passes `amount`. If experiment 4a shows an immediate refund is refused (`409`), the recorded failed refund and the reconcile sweep are the backstop, and `void` becomes a follow-up.
 5. **A definite HTTP rejection of the create call (4xx) resolves the row `failed`; a thrown network error leaves it `attempting`.** A 4xx means SumUp did not accept the checkout, so the reader never woke. A timeout or connection reset means we do not know.
-6. **`resolvePending` is a third duty on the host's pass loop** (`payments.resolve_pending`), run only when a card provider exists, alongside `fiscal.drain` and `payments.reconcile.stripe`. It runs on every node that has a provider (a provider is per-till), not only the singleton, because the rows it resolves are this till's own attempts.
+6. **`resolvePending` runs on every tick as a LOGGED side-effect of the pass loop, wrapping the singleton pass — not as a health-tracked duty** (revised from the first draft's "third pass duty" after the pre-flight review, which found that path both fails to run on a non-primary node and 503s `/health`). It runs on every node that has a card provider, independent of the singleton gate, because the rows it resolves are THIS node's own `attempting` card rows and a sell-only local secondary that never drains/reconciles (`singletonPass` returns an empty pass there — `apps/server/src/singleton-pass.ts:13`) must still sweep the card sales it took. It is deliberately NOT a `Duty` on `/health`: `createHealthState` seeds every `ALL_DUTIES` member on every node and a never-run seeded duty reads stale → 503 (`apps/server/src/health.ts:74,220`), so a conditional duty cannot join that set without 503ing a no-card node; a stuck sweep surfaces as a `resolve_pending.failed` log line instead — the same channel a mirror's stalled pull uses, and the deferred SumUp reconciler is the same criticality tier and likewise off `/health`. Honouring the returned `nextDueAt` to back the cadence off is a deferred refinement; the loop's own tick drives re-runs, and the sweep is a cheap no-op (one empty `SELECT`) when there is nothing pending.
 7. **The SumUp reversal path is written in `@waitron/payments-sumup` against a structural `ProcessorRefunder`, not by importing `reverseViaStripe`.** Importing `@waitron/payments-stripe` from a SumUp package would make one vendor depend on another. The two files are the same T1/T2 shape; lifting them into a neutral `@waitron/payments` primitive is a follow-up (Task 7 records it in the backlog), because two shipped Stripe providers depend on the existing one and that move deserves its own review.
 
 ## File map
@@ -44,6 +44,7 @@
 | `packages/payments/src/simulator.ts`, `src/testing/fake-provider.ts` | all-zeros `resolvePending` | 1 |
 | `packages/payments/src/index.ts` (+ `index.test.ts`) | export the two store functions and the type | 1 |
 | `packages/payments-stripe/src/provider.ts`, `src/device-provider.ts` | all-zeros `resolvePending` | 1 |
+| `apps/server/src/till-sale-integrated.pg.test.ts` | all-zeros `resolvePending` on the `cannedProvider` structural test double | 1 |
 | `packages/payments-sumup/package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.sandbox.config.ts` | package scaffold | 2 |
 | `packages/payments-sumup/src/errors.ts` | `sumup.tenant_mismatch` | 2 |
 | `packages/payments-sumup/src/client.ts` (+ `client.test.ts`) | the narrow `SumUpClient` seam, `toMinorUnits`, `toMajorUnits`, `fromMajorUnits` | 2 |
@@ -59,7 +60,7 @@
 | `apps/server/src/sumup-account.ts` (+ `.test.ts`) | credential → `SumUpClient` resolver | 6 |
 | `apps/server/src/till-config.ts` (+ `.test.ts`) | `sumup_cloud` + `WAITRON_TILL_SUMUP_READER_ID` | 6 |
 | `apps/server/src/boot.ts`, `boot-card-provider.test.ts` | the `sumup_cloud` branch; the pass-loop duty | 6 |
-| `apps/server/src/pass.ts` (+ `pass.test.ts`) | optional `resolvePending` duty | 6 |
+| `apps/server/src/boot.ts` (+ `boot.test.ts` if the wrapper needs a boot-level assertion) | `withPendingSweep` wrapper around the singleton pass; runs `resolvePending` per tick when a provider exists | 6 |
 | `apps/server/src/till-sale.ts` (+ `till-sale-integrated.test.ts`) | `attempting` → `timeout` outcome | 6 |
 | `apps/till/src/api/client.ts`, `src/widgets/tender-pay.ts` | `"sumup_cloud"` in the two `CardProvider` unions | 6 |
 | `packages/payments-sumup/src/collect.sandbox.test.ts` | the live plug-in suite against the paired Solo | 7 |
@@ -236,6 +237,8 @@ export async function stampAttemptingRef(
 
 `packages/payments-stripe/src/device-provider.ts`: same, doc "the device SDK returns a terminal outcome before `collect` writes its row". Add a one-line `it("resolvePending is all-zeros")` beside each provider's existing `forward` all-zeros test (`packages/payments/src/simulator.test.ts`, `packages/payments/src/testing/fake-provider.test.ts`, `packages/payments-stripe/src/provider.test.ts`, `packages/payments-stripe/src/device-provider.test.ts`) — coverage in `@waitron/payments` is at 98%, an untested method fails the gate.
 
+There is a FIFTH implementer the class-grep misses: `cannedProvider` in `apps/server/src/till-sale-integrated.pg.test.ts` returns an object literal typed `: PaymentProvider` (five methods, no `resolvePending`). Adding the interface method makes it a compile error, so add `resolvePending: () => Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 })` to that literal. It is a test double, so no separate test is owed — the suite that uses it exercises it.
+
 - [ ] **Step 5: Verify**
 
 ```bash
@@ -244,7 +247,7 @@ pnpm --filter @waitron/payments-stripe lint && pnpm --filter @waitron/payments-s
 pnpm typecheck && pnpm format:check
 ```
 
-Expected: all green; the whole-workspace typecheck proves no other `PaymentProvider` implementer exists (the grep on 2026-09-10 found four: simulator, fake, terminal, on-device).
+Expected: all green; the whole-workspace typecheck is what proves every `PaymentProvider` implementer was updated — four classes (simulator, fake, terminal, on-device) PLUS the `cannedProvider` structural double in `till-sale-integrated.pg.test.ts` (Step 4). A missed implementer surfaces here as a "Property 'resolvePending' is missing" compile error; fix it and re-run rather than treating the typecheck as a surprise.
 
 - [ ] **Step 6: Commit**
 
@@ -916,7 +919,7 @@ Expected: PASS (10 tests).
 (Leave it as `it.todo` with that text; Task 4 fills it in. The reason the two-tenant probe runs here and not on PGlite is CLAUDE.md §3's till-reroute receipt: only a run as `app_user` on a real cluster caught the by-id leak.)
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/payments-sumup test:coverage`
-Expected: green, coverage over the floor (the stubs' throw lines are uncovered — acceptable until Tasks 4–5; if the floor fails, mark the three stub bodies `/* v8 ignore next */` and REMOVE the ignores in the task that implements them).
+Expected: green, coverage over the floor (the stubs' throw lines are uncovered — acceptable until Tasks 4–5; if the floor fails, mark ALL FOUR stub bodies (`resolvePending`, `void`, `refund`, `partialRefund`) `/* v8 ignore next */` and REMOVE each ignore in the task that implements that method — `resolvePending` in Task 4, the three reversals in Task 5).
 
 - [ ] **Step 6: Verify and commit**
 
@@ -1142,6 +1145,8 @@ export const NOT_FOUND_GRACE_MS = 15 * 60_000;
 ```
 
 Add the imports (`listAttempting`, `tillsForWorkingOrders` from `@waitron/payments`; `tenantId as brandTenantId`, `tillId as brandTillId` from `@waitron/shared`). `IncidentSink`'s `tenantId`/`tillId` are branded, hence the brands; `saleId` is omitted (an attempting row has none).
+
+Known, accepted: because the incident carries no `saleId`, `recordIncidentOnce` dedups per open `(tenant, till, code, sale_id=null)`, so two unactionable rows on the SAME till in one sweep collapse to ONE incident and `incidentsRaised` undercounts (the Task-4 tests use a pass-through sink, so they count each call and do not see this — that is fine, the count is a log field, not an assertion of DB state). Spec §3 only requires that a human be alerted, which one incident per till satisfies. State this in the method's header so a future reader does not expect one incident per row.
 
 - [ ] **Step 4: Run the sweep suite and the hermetic suite**
 
@@ -1405,7 +1410,7 @@ git commit -s -m "payments-sumup: reversals via the refund endpoint, the fetch b
 - Modify: `apps/server/package.json` (add `"@waitron/payments-sumup": "workspace:*"` to dependencies), then `pnpm install`
 
 **Interfaces:**
-- Produces: purpose `"payments.sumup": ["apiKey", "merchantCode", "affiliateAppId", "affiliateKey"]`; `CardProvider` gains `"sumup_cloud"`; `TillConfig.sumupReaderId?: string` (required iff `sumup_cloud`, env `WAITRON_TILL_SUMUP_READER_ID`); `sumupClientResolver(deps: SumUpAccountDeps): (tenantId) => Promise<SumUpClient>`; `PassDeps.resolvePending?: (now: Date) => Promise<ForwardResult>`; duty name `RESOLVE_PENDING_DUTY = "payments.resolve_pending"`.
+- Produces: purpose `"payments.sumup": ["apiKey", "merchantCode", "affiliateAppId", "affiliateKey"]`; `CardProvider` gains `"sumup_cloud"`; `TillConfig.sumupReaderId?: string` (required iff `sumup_cloud`, env `WAITRON_TILL_SUMUP_READER_ID`); `sumupClientResolver(deps: SumUpAccountDeps): (tenantId) => Promise<SumUpClient>`; `withPendingSweep(inner, provider, log)` in `boot.ts` (the per-tick sweep wrapper, Decision 6) — no `PassDeps`/`pass.ts` change.
 
 - [ ] **Step 1: The purpose.** Add to `PURPOSES` after `"payments.stripe"`:
 
@@ -1497,7 +1502,7 @@ export function sumupClientResolver(deps: SumUpAccountDeps): (tenantId: TenantId
 
 spread into the return like `stripeReaderId`. Tests in `till-config.test.ts`, mirroring the three `stripe_terminal` cases at lines 121, 155, 165: reads `sumup_cloud` + reader id; refuses a missing reader id (`server.till_config_missing`, `{ key: "WAITRON_TILL_SUMUP_READER_ID" }`); refuses an empty one.
 
-- [ ] **Step 5: Boot.** `buildCardProvider` takes a second deps object — extend its signature minimally: add a parameter `sumupDeps: SumUpAccountDeps` after `deps` (every caller is `boot.ts` and the test). New branch before the `stripe_on_device` fall-through:
+- [ ] **Step 5: Boot.** `buildCardProvider` takes a second deps object — add a parameter `sumupDeps: SumUpAccountDeps` after `deps`. NOTE the signature is `buildCardProvider(cfg, deps, onboardingIntent?, paymentTestProviders = false)` (`boot.ts:313`): inserting after `deps` SHIFTS the two trailing optional args, so the one live call site (`boot.ts:1699`, which passes `config.onboardingIntent, config.paymentTestProviders` positionally) and `boot-card-provider.test.ts`'s calls must be REORDERED, not just extended. Typecheck catches a miss, but reorder deliberately. New branch before the `stripe_on_device` fall-through:
 
 ```ts
   if (cfg.cardProvider === "sumup_cloud") {
@@ -1517,25 +1522,57 @@ spread into the return like `stripeReaderId`. Tests in `till-config.test.ts`, mi
 
 (`recordIncidentOnce` from `@waitron/core` — `boot.ts` already imports from core; it is what `StripeReconciler` passes.) `boot-card-provider.test.ts`: add `seedTenantWithSumUpKey`, a `cfgFor` variant carrying `sumupReaderId`, and two cases: builds a `SumUpCloudProvider` for `sumup_cloud`; fails loudly with no `payments.sumup` credential.
 
-**The sweep duty.** In `pass.ts`: `export const RESOLVE_PENDING_DUTY = "payments.resolve_pending";` `PassDeps.resolvePending?: (now: Date) => Promise<ForwardResult>;` and after the reconcile duty:
+**The sweep, wired as a wrapper (revised from the first draft's pass-duty — see Decision 6).** Do NOT add `resolvePending` to `PassDeps`, `ALL_DUTIES`, `DUTY_BUDGET_MS`, or `health.ts`; do NOT touch `pass.ts`. Instead add a wrapper in `boot.ts` that runs the sweep around the singleton pass. Define, near the other `boot.ts` helpers:
 
 ```ts
-  // The card provider's own attempting rows (a poll that timed out, a lost create response). Only
-  // when this node holds a provider; a non-singleton still runs it, because these are THIS till's
-  // attempts, not a venue-wide settlement duty.
-  if (deps.resolvePending !== undefined) {
-    const resolvePending = deps.resolvePending;
-    duties.push(
-      await attempt(RESOLVE_PENDING_DUTY, now, deps.log, deps.monotonicMs, async () => {
-        const result = await resolvePending(now);
-        deps.log("info", "resolve_pending.complete", { captured: result.forwarded, failed: result.declined, incidentsRaised: result.incidentsRaised, nextDueAt: result.nextDueAt?.toISOString() ?? null });
-        return { nextDueAt: result.nextDueAt, skipped: 0, parked: 0 };
-      }),
-    );
-  }
+/** Run the card provider's own `resolvePending` sweep on every tick, wrapping (not replacing) the
+ * singleton fiscal pass. Independent of the singleton gate because the sweep resolves THIS node's
+ * own `attempting` card rows — a sell-only local secondary that takes card sales must sweep them
+ * even though it never drains/reconciles (`singletonPass` returns an empty pass there). Log-only:
+ * NOT a health-tracked `Duty`, because `createHealthState` seeds every `ALL_DUTIES` member on every
+ * node and a conditional duty that never runs on a no-card node would read stale → `/health` 503
+ * (health.ts:74,220). A stuck sweep surfaces as `resolve_pending.failed`, the channel a mirror's
+ * stalled pull uses; it is a card-settlement backstop, not a fiscal-legal or process-liveness
+ * signal, so it does not gate `/health` (the deferred SumUp reconciler is the same tier, likewise
+ * off it). The returned `nextDueAt` is logged, not yet used to pace the loop. */
+function withPendingSweep(
+  inner: (now: Date) => Promise<PassReport>,
+  provider: PaymentProvider | undefined,
+  log: Logger,
+): (now: Date) => Promise<PassReport> {
+  if (provider === undefined) return inner;
+  return async (now) => {
+    const report = await inner(now);
+    try {
+      const r = await provider.resolvePending(now);
+      log("info", "resolve_pending.complete", {
+        captured: r.forwarded,
+        failed: r.declined,
+        incidentsRaised: r.incidentsRaised,
+        nextDueAt: r.nextDueAt?.toISOString() ?? null,
+      });
+    } catch (error) {
+      log("warn", "resolve_pending.failed", { error: String(error) });
+    }
+    return report;
+  };
+}
 ```
 
-Read `attempt`'s return contract in `pass.ts` first and match it exactly; read `apps/server/src/health.ts`'s `recordPass` to confirm an extra duty name needs no registration (if it pins duty names, add the constant there). In `boot.ts`'s `runLoop`, pass `resolvePending: cardProvider === undefined ? undefined : (at2) => cardProvider.resolvePending(at2)` — note `runPass` is called inside `singletonPass`; move the `resolvePending` call OUTSIDE the singleton gate only if `singletonPass` skips `runPass` entirely on a non-singleton (read it; if it does, run the sweep in the non-singleton branch too, since a sell-only secondary has its own attempts). `pass.test.ts`: two cases — absent `resolvePending` → two duties as today; present → a third `DutyReport` named `payments.resolve_pending` carrying the returned `nextDueAt`.
+Then wrap the loop's `pass` at `boot.ts:2386`:
+
+```ts
+    pass: withPendingSweep(
+      singletonPass(
+        () => holders.singletonRole.current,
+        (at) => runPass({ /* …unchanged… */ }, at),
+      ),
+      cardProvider,   // the PaymentProvider | undefined already built at boot.ts:1699
+      log,
+    ),
+```
+
+`PaymentProvider` and `Logger` are already imported in `boot.ts` (the provider from `@waitron/payments`, `Logger` from its logging import — confirm and add if absent). This runs the sweep on EVERY trading node with a provider (primary or secondary), leaves the `PassReport`/`/health` contract untouched, and needs no `pass.ts` change (so the first draft's stale-comment concern is moot). Test `withPendingSweep` directly in `boot.test.ts` (or a small `boot-pending-sweep.test.ts`): (a) with `provider === undefined` it returns `inner` unchanged and never calls the provider; (b) with a fake provider whose `resolvePending` returns a known `ForwardResult`, it calls it once per invocation, logs `resolve_pending.complete`, and returns the INNER report verbatim (health unaffected); (c) when `resolvePending` rejects, it logs `resolve_pending.failed` and still returns the inner report (a sweep failure never breaks the pass). A stubbed `inner` and a `FakePaymentProvider`-shaped double suffice — no container needed.
 
 - [ ] **Step 6: The till's outcome.** `toPayOutcome` in `till-sale.ts`:
 
@@ -1612,7 +1649,7 @@ Then the §2 gate (`pnpm lint && pnpm typecheck && pnpm format:check && pnpm tes
 
 - §1 no new interface → `resolvePending` is the one neutral addition the spec itself names (§3). ✔ Task 1.
 - §2 T1 / create / poll / T2; only `SUCCESSFUL`/`FAILED`/`CANCELLED` resolve; `REFUNDED`/unknown deferred; never `simple_status`; no terminate on timeout. ✔ Task 3 (`classify`, the timeout test, no `terminate` on the seam at all).
-- §3 row stays `attempting`, `settledAt: null`; `resolvePending` terminates every row; `REFUNDED` → failed + incident; unknown → failed + incident naming the value; all-zeros on existing adapters. ✔ Tasks 1, 4. The not-found grace period is an addition the spec did not foresee (it assumed a transaction always exists once created) — Decision 3.
+- §3 row stays `attempting`, `settledAt: null`; `resolvePending` terminates every row; `REFUNDED` → failed + incident; unknown → failed + incident naming the value; all-zeros on existing adapters (four classes + the `cannedProvider` double). ✔ Tasks 1, 4. The not-found grace period is an addition the spec did not foresee (it assumed a transaction always exists once created) — Decision 3. Wiring is a logged per-tick wrapper (`withPendingSweep`), not a health duty — Decision 6, revised after the pre-flight review found the duty path both skipped non-primary nodes and 503'd `/health`.
 - §4 webhooks deferred. ✔ Not built; the runbook's experiment 3 informs the later wiring.
 - §5 `partialRefund: true`; `void` → refund endpoint. ✔ Task 5, Decision 4.
 - §6 scope: `resolvePending` + all-zeros; `SumUpCloudProvider`; narrow client seam (create, get transaction, refund); hermetic fake; real binding coverage-excluded; wiring tests following payments-stripe's layout. ✔ Tasks 1–5. Deferred list untouched.
