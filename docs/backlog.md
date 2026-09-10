@@ -107,7 +107,15 @@ steps take owner sign-off at land):
    on a push to `main`/tag still on `code` (so `publish` is unaffected), with the steps in a reusable
    `image-smoke.yml` also driven by a nightly + on-request `image-nightly.yml`.
    Proven end to end on 2026-09-09: a blank box → phone setup → provision → trading over HTTPS
-   → enrolled till → a recorded preproduction sale (design §11). **Still open under this step:** the
+   → enrolled till → a recorded preproduction sale (design §11). **A first real-hardware bringup
+   (2026-09-10) surfaced and fixed two box bugs — #302:** the setup→trading self-restart hung
+   (the app SIGTERM'd itself but `server.close()` never resolved while the setup page's keep-alive
+   poll held a socket, so it never exited and Docker never restarted it → now `closeListener` drops
+   the sockets + an 8s shutdown deadline forces exit), and the box advertised its Docker bridge
+   addresses (172.x) over mDNS/cert/reach so `waitron.local` flapped → now only the default-route
+   interface. *Follow-up left (pre-existing, narrow):* the shutdown REJECT path still gates its
+   failure-log flush before exit, so a `close()` rejection + a stalled stdout pipe is an uncovered
+   hang. **Still open under this step:** the
    first-run chooser's modes 1–2 (*Onboarding*, the four-mode wizard — a separate, wider surface than
    the backup wizard below), and OFF-BOX backup destinations (mirror → S3 → Drive; only
    `LocalFsBackend` exists).
@@ -557,10 +565,13 @@ unchanged, so no new H2 receipt
      *Debt → CI / test infra*. (h) A hung real-PG suite LEAKS its
      running cluster containers (Ryuk off), starving the next run; `pnpm reap` only removes labelled
      containers older than 2h, so a fresh leak survives — inspect creation times, ownership and attached volumes, then remove only your own
-     confirmed leftovers before re-validating. (i) `staff-screen.test.ts` (dashboard, browser mode) flaked once on CI
-     with `vi.mock("@simplewebauthn/browser")` not applying (`mockClear is not a function` across the
-     whole suite); passed on re-run and locally. If recurrent, it is a vitest browser-mode
-     module-mock-hoisting issue to fix, not re-run.
+     confirmed leftovers before re-validating. (i) the dashboard browser suites flake on CI with `vi.mock("@simplewebauthn/browser")` not
+     applying — first `staff-screen.test.ts` (`mockClear is not a function`), then #302's CI hit
+     `profile-screen.test.ts:216` (`startRegistration is not a spy`); both pass on re-run and locally
+     (profile-screen 4/4 local). Now confirmed RECURRENT, so it is the real vitest browser-mode
+     module-mock-hoisting bug to fix (not re-run) — in flight in the `flaky-test` worktree (Codex,
+     2026-09-10), alongside the venue-service (#297) browser-package CI-grouping fix and a
+     `@waitron/db` shard-1/3 real-PG flake seen on the same #302 run.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
 `packages/composition`, every NEW module package, `apps/dashboard` module screens,
