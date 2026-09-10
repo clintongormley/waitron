@@ -177,6 +177,19 @@ Traps, each of which cost a round trip:
   (`bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer: Permission denied (1100)`,
   measured 2026-09-06), so a run that reaches a browser package is driven from the host, never
   from a Codex seat.
+- **Every gate here migrates a VIRGIN database, so nothing exercised an UPGRADE from a released
+  schema until 2026-09-10.** Drizzle applies a set's PENDING migrations in one transaction, and
+  PostgreSQL refuses to name a label added by `ALTER TYPE … ADD VALUE` in that same transaction
+  unless the type was created there too — a virgin database, which creates the type in that batch, is
+  the one shape where it is legal. Green CI is therefore no evidence about a box. Cost: a bricked box,
+  an hour of guesswork, and a wipe that destroyed the evidence. Guard:
+  `scripts/enum-add-value-safety.test.ts`; the upgrade regression is
+  `packages/db/src/migrate-upgrade.pg.test.ts`.
+- **Drizzle picks what to apply from `max(created_at)` alone**, never from a journal position, so an
+  entry whose `when` sits below one already recorded never runs — no error, a database that applied
+  part of a set and exited 0. The core journal is already in that shape and no edit to it repairs
+  every release point, so some points still upgrade incompletely. Guard:
+  `scripts/journal-monotonic.test.ts`.
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the

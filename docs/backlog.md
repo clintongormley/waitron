@@ -199,8 +199,13 @@ design-review section apply.
   the recovery page renders curated operator text keyed by error code instead of `unknown` — the
   operator's only window is that page; an explicit `provisioning.database_ahead` check for a
   database migrated by a different image (the 2026-09-10 `try-branch` → `install.sh` bricking, whose
-  exact schema artefact was never confirmed because the box was reset — the spec's real-PG
-  experiment settles it); the scrubbed real error to `docker logs` for the installer; and a
+  schema artefact is now CONFIRMED and reproduced: the core set's `0013` adds the `bluetooth` label
+  to `print_transport` and `0014` names it in a `CHECK`, and drizzle applies a set's pending
+  migrations in ONE transaction, so every existing box aborted with `55P04` and applied nothing while
+  a virgin database — the only shape CI migrates — passed. Repaired on `fix/core-migration-upgrade`
+  with `packages/db/src/migrate-upgrade.pg.test.ts` as the regression test and two root guards,
+  `scripts/enum-add-value-safety.test.ts` and `scripts/journal-monotonic.test.ts`); the scrubbed real
+  error to `docker logs` for the installer; and a
   one-way-migration warning in `try-branch.sh`), **the recovery spec** (a degraded-but-trading mode + the
   module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
   installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick

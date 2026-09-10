@@ -2,7 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A box on a released core schema can upgrade to HEAD. Today none can.
+**Goal:** A box on a released core schema can upgrade to HEAD. Today only a box already carrying
+entry 13 can — release points 1–13 throw (measured; see the table below).
 
 **Architecture:** One SQL change to an already-landed migration, plus two static guards in the root
 Vitest project so neither defect shape can return.
@@ -58,16 +59,24 @@ and then to HEAD:
 | box at core entry | today | after this branch |
 | --- | --- | --- |
 | 0 (fresh) | complete 15/15 | complete 15/15 |
-| 1 | throws | **skips 5 — loud, see below** |
-| 2 | throws | skips 5 — loud |
-| 3–6 | throws | skips 4…1 — loud |
-| 7–14 | throws | complete 15/15 |
+| 1 | throws | **skips 5 — silent, see below** |
+| 2 | throws | skips 5 — silent |
+| 3–6 | throws | skips 4…1 — silent |
+| 7–13 | throws | complete 15/15 |
+| 14 | complete 15/15 | complete 15/15 |
+
+Point 14 is the one existing box that already upgrades: it has applied `0013`, so the
+`ALTER TYPE … ADD VALUE` is committed before the batch that names the label begins. Only points 1–13
+throw. (A first draft of this table said 7–14 throw; re-running the suite falsified that.)
 
 **Defect B cannot be fixed by editing the journal, and this was measured rather than assumed.**
 Raising entries 2–6 above entry 1 makes points 1–2 clean but breaks points 3–7, which then RE-APPLY
 `0002_device_profile_form_factor` and fail with "type already exists" — a database has already
 recorded the old watermark, so no assignment of `when` values satisfies both directions. Lowering
-entries 0–1 instead changes nothing, because the database stored the old value, not the file's.
+entries 0–1 below entry 2 does not leave the picture unchanged either, as a first draft claimed:
+re-run, release point 1 then FAILS with `42P01: relation "deployment" does not exist`, rather than
+completing with skips. Only the outcome was measured; the mechanism behind that particular SQLSTATE
+was not traced, and no repair direction has yet produced a journal that satisfies every point.
 
 So this branch fixes Defect A, which is where every real box actually sits (the incident box was at
 the entry-12/13 era), and guards both shapes. Making the residual entry-1-to-6 skip LOUD instead of
@@ -223,6 +232,21 @@ describe("the core migration set upgrades an existing database", () => {
   }, 180_000);
 });
 ```
+
+**As implemented, this suite differs from the draft above, in three ways review asked for:**
+
+- It goes through the package's own `createPostgresDb` + `runMigrations` (as sibling
+  `packages/db/src/migrate.test.ts` does) instead of importing `drizzle`/`migrate` from
+  `drizzle-orm/node-postgres` and re-deriving `migrationsSchema: "public"`, which
+  `packages/db/src/migrate.ts` already hardcodes. The journal row count stays a direct query:
+  `appliedSchemaVersion` lives in `@waitron/migrations`, which depends on `@waitron/db`, so importing
+  it here would be circular.
+- `NON_MONOTONIC_POINTS` is DERIVED from `journal.entries[].when` rather than written out as
+  `[1, 2, 3, 4, 5, 6]`, so it cannot drift by eye from the journal and empties itself if the journal
+  is ever repaired. It still evaluates to those six points.
+- The comment does NOT say the residual skip is made loud by the diagnosability branch. That branch is
+  not merged, so in THIS branch the skip is unmitigated; the comment says so and names where it is
+  handled (`migrations.incomplete` in `applyMigrations`, on `feat/boot-failure-diagnosability`).
 
 - [ ] **Step 2: Run it to watch it fail**
 
@@ -492,6 +516,12 @@ describe("every migration set's journal is strictly increasing", () => {
   }
 });
 ```
+
+**One claim in that docstring was falsified after it was written** and is corrected here rather than
+in history: "lowering the earlier ones changes nothing" is wrong. Lowering entries 0–1 below entry 2
+makes release point 1 FAIL with `42P01: relation "deployment" does not exist` instead of completing
+with skips. The conclusion the docstring draws is unchanged — no assignment of `when` values
+satisfies every release point — but the observation it rests on is that failure, not a no-op.
 
 - [ ] **Step 2: Run it, and prove it by deletion**
 
