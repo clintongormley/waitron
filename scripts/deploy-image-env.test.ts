@@ -206,6 +206,49 @@ describe("the run-from-web installer", () => {
   });
 });
 
+describe("the try-a-branch helper", () => {
+  // Read tolerantly (as the installer block does) so the assertions go red before the file exists
+  // rather than the read throwing at import.
+  let TRY = "";
+  try {
+    TRY = read("deploy/try-branch.sh");
+  } catch {
+    /* not created yet */
+  }
+
+  it("is a bash script", () => {
+    expect(TRY).toMatch(/^#!.*\bbash\b/);
+  });
+
+  it("builds the image from the repo git context with deploy/Dockerfile", () => {
+    // Docker fetches the branch itself — no clone, no pnpm — so the git URL and the Dockerfile path
+    // must both appear on the build.
+    expect(TRY).toMatch(/docker\s+build/);
+    expect(TRY).toMatch(/-f\s+deploy\/Dockerfile/);
+    expect(TRY).toContain("github.com/clintongormley/waitron.git");
+  });
+
+  it("selects the branch via the git #-fragment from an argument, not a hardcoded ref", () => {
+    // `…waitron.git#<ref>` where <ref> is a variable (the branch arg), so any branch can be built.
+    expect(TRY).toMatch(/waitron\.git#\$\{?\w+\}?/);
+  });
+
+  it("overrides the image inline on compose up rather than editing .env", () => {
+    // WAITRON_IMAGE set on the same command as `docker compose … up` — the whole point is to leave
+    // the box's .env untouched.
+    expect(TRY).toMatch(/WAITRON_IMAGE=\S*[^\n]*docker\s+compose[^\n]*\bup\b/);
+  });
+
+  it("honours WAITRON_DIR, defaulting to /opt/waitron like prepare.sh", () => {
+    expect(TRY).toMatch(/WAITRON_DIR:-\/opt\/waitron/);
+  });
+
+  it("reports a script-prefixed error when misused, like its siblings", () => {
+    // prepare.sh and install.sh both write `<script>.sh: … >&2`; a required branch arg needs the same.
+    expect(TRY).toMatch(/try-branch\.sh:[^\n]*>&2/);
+  });
+});
+
 describe("every copy of the box's hostname", () => {
   it("is the one boot.ts declares", () => {
     expect(IMAGE_ENV.WAITRON_MANAGEMENT_RP_ID).toBe(HOSTNAME);
