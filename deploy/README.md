@@ -1,16 +1,18 @@
 # Running a Waitron node
 
-A node is two containers: the Waitron app and its Postgres. Everything the node keeps lives in five
-named Docker volumes, so `docker volume` is the whole of a box's life — back those up and you have
-backed up the box.
+A node is a few containers: the Waitron app, its Postgres, a local mail capture, and the print agent.
+Everything the node keeps lives in the named Docker volumes below, so `docker volume` is the whole of
+a box's life — back those up and you have backed up the box.
 
-| volume    | mounted at                 | holds                                                                                                  |
-| --------- | -------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `db`      | `/var/lib/postgresql`      | the cluster                                                                                            |
-| `state`   | `/var/lib/waitron/state`   | the box's identity: `secrets.env`, `instance.env`, `trading.env`, `modules.json`, the CA and leaf PEMs |
-| `logs`    | `/var/lib/waitron/logs`    | the rotating log file                                                                                  |
-| `backups` | `/var/lib/waitron/backups` | local encrypted backup archives, when they are switched on                                             |
-| `media`   | `/var/lib/waitron/media`   | product images                                                                                         |
+| volume        | mounted at                     | holds                                                                                                    |
+| ------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `db`          | `/var/lib/postgresql`           | the cluster                                                                                                |
+| `state`       | `/var/lib/waitron/state`        | the box's identity: `secrets.env`, `instance.env`, `trading.env`, `modules.json`, the CA and leaf PEMs    |
+| `logs`        | `/var/lib/waitron/logs`         | the rotating log file                                                                                      |
+| `backups`     | `/var/lib/waitron/backups`      | local encrypted backup archives, when they are switched on                                                |
+| `media`       | `/var/lib/waitron/media`        | product images                                                                                             |
+| `mailpit`     | `/data`                         | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)                  |
+| `print_agent` | `/var/lib/waitron-print-agent`  | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                       |
 
 ## Preparing a box
 
