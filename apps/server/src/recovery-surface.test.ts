@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { FRESH, afterFailure, type RecoveryState } from "./recovery-state.js";
-import { recoveryApp } from "./recovery-surface.js";
+import { GENERIC_TEXT, OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
 
 const state = afterFailure(
   afterFailure(afterFailure(FRESH, "module.config_invalid", new Date()), "x", new Date()),
@@ -92,5 +92,86 @@ describe("recoveryApp", () => {
     const body = await (await app.request("/")).text();
     expect(body).not.toContain('<img src=x onerror="alert(1)">');
     expect(body).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+  });
+});
+
+/** The page as an operator sees it, for one recorded failure code. */
+async function pageFor(lastErrorCode: string | null): Promise<string> {
+  const app = recoveryApp({
+    state: {
+      failures: 3,
+      level: "recovery",
+      lastErrorCode,
+      lastFailureAt: new Date().toISOString(),
+    },
+    logDir: "/nonexistent",
+    onRetry: vi.fn(),
+  });
+  return await (await app.request("/")).text();
+}
+
+describe("curated operator text", () => {
+  // Compared through `escapeHtml`, because that is what the page renders: every curated string is
+  // escaped like any other interpolation, so a title carrying an apostrophe reaches the page as
+  // `&#39;`. Using the module's own function rather than a second copy of the rule here.
+  it("renders the title and action for every code in the table", async () => {
+    for (const [code, text] of Object.entries(OPERATOR_TEXT)) {
+      const body = await pageFor(code);
+      expect(body).toContain(escapeHtml(text.title));
+      expect(body).toContain(escapeHtml(text.action));
+    }
+  });
+
+  it("tells the operator of an ahead database to restore or reinstall — never to wipe", async () => {
+    const body = await pageFor("provisioning.database_ahead");
+    expect(body).toMatch(/restore it from a backup, or reinstall/i);
+    expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
+  });
+
+  // The CONVERSE of the test above, and the one that matters: every code the entrypoint can
+  // actually persist must have an entry. Without it the table can rot into uselessness one new code
+  // at a time, each falling silently to the generic line — which is what `unknown` did to the first
+  // real box's operator.
+  it("has an entry for every code the entrypoint can classify or throw", () => {
+    const classified = [
+      "provisioning.database_unreachable",
+      "provisioning.schema_mismatch",
+      "unknown",
+    ];
+    const thrownByRunEntry = [
+      "server.config_missing",
+      "provisioning.admin_uri_not_a_url",
+      "provisioning.database_ahead",
+      "migrations.set_missing",
+      "migrations.incomplete",
+      "server.boot_incomplete",
+    ];
+    const missing = [...classified, ...thrownByRunEntry].filter(
+      (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it("renders the generic line for a code it does not know, without throwing", async () => {
+    const body = await pageFor("some.code.invented.later");
+    expect(body).toContain(GENERIC_TEXT.title);
+    expect(body).toContain(GENERIC_TEXT.action);
+  });
+
+  it("renders the generic line when no failure has been recorded at all", async () => {
+    const body = await pageFor(null);
+    expect(body).toContain(GENERIC_TEXT.title);
+  });
+
+  // The code is read from a file on the box and treated as attacker-influenceable, and a plain
+  // object literal inherits `Object.prototype` — so a lookup keyed on "toString" or "constructor"
+  // finds a FUNCTION, which `?? GENERIC_TEXT` does not catch and whose `.title` is undefined. The
+  // page must still render the generic line rather than throwing or printing "undefined".
+  it("renders the generic line for an inherited property name, not a prototype value", async () => {
+    for (const code of ["toString", "constructor", "__proto__", "valueOf"]) {
+      const body = await pageFor(code);
+      expect(body).toContain(GENERIC_TEXT.title);
+      expect(body).not.toContain("undefined");
+    }
   });
 });
