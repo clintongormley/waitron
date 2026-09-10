@@ -62,9 +62,13 @@ function socketCodeOf(error: unknown): string | null {
  * shape filter, but it is in neither list, so it stays `unknown`. `boot-failure.test.ts` walks each
  * list and pins that control.
  *
- * `unknown` is the rare fallback now, and on the page it means "the installer can read the reason on
- * the box" — which is true, because `runEntry` writes the scrubbed error to stdout for every
- * failure.
+ * `unknown` is the rare fallback now. `runEntry` writes the scrubbed error to the container's stdout
+ * for every failure OF THE BOOT SEQUENCE ITSELF — not for every failure: `readRecoveryState` and the
+ * pre-boot counter write happen before that try block, and the counter write is deliberately allowed
+ * to throw, so a box whose state volume is unwritable exits with only `server.boot_failed
+ * { errorCode }` and no detail. Measured on the built bundle: an unwritable state directory prints
+ * that one line and nothing else. The page does not promise otherwise — it tells the operator to ask
+ * whoever installed the box, which is true either way.
  */
 export function classifyBootFailure(error: unknown): string {
   if (isAppError(error)) return error.code;

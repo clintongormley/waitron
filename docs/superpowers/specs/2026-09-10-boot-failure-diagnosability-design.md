@@ -116,7 +116,13 @@ been migrated forward; only the ahead direction is a failure.
 
 `renderPage` gains a table `code → { title, action }` of fixed strings, and renders that beside the
 existing level, failure count, log tail and retry button. Examples, wording to be settled in the
-plan:
+plan — **and settled differently, 2026-09-11:** the shipped strings are in `OPERATOR_TEXT`
+(`apps/server/src/recovery-surface.ts`), which is the authority. Two rows below were changed during
+implementation because they gave an operator advice that cannot help: a restart cannot fix the wrong
+password or missing database that `provisioning.database_unreachable` now also covers, and restoring
+a backup can re-raise `migrations.incomplete`, because a restore runs the same update. The generic
+row no longer promises the reason was written down anywhere, because a box whose state volume is
+unwritable fails before anything is written. See §9.
 
 | code | shown to the operator |
 | --- | --- |
