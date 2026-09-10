@@ -63,6 +63,27 @@ docker compose logs -f app                    # the server's JSON lines
 Both services are `restart: unless-stopped`, so the box comes back on its own after a power cut and
 after the app's own requested restart at the end of the setup wizard.
 
+### Trying a branch before it merges
+
+CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to
+GHCR), so there is no PR image to `pull`. `try-branch.sh` builds one on the box — Docker fetches the
+branch itself, so no checkout or `pnpm` is needed — and runs it, leaving `.env` untouched. The box
+must already be prepared (Docker installed and `/opt/waitron/compose.yml` in place from `prepare.sh`);
+this only swaps the image, it does not set a box up.
+
+```bash
+deploy/try-branch.sh <branch-or-ref> [extra docker build args…]
+# on a box that has no checkout (already prepared):
+curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/try-branch.sh | sudo bash -s -- <branch-or-ref>
+```
+
+It tags the image after the ref (`waitron:<ref>`, with unsafe characters dashed and the name capped
+to a valid length) and sets `WAITRON_IMAGE` inline for that one `docker compose up`. A plain
+`docker compose up -d` afterwards drops back to whatever the box's `.env` selects — the published
+`:main` unless you have set `WAITRON_IMAGE` there. `<ref>` is any ref on the public repo — a PR
+branch, or a commit SHA to pin exactly what you build. Add `sudo` if your user is not in the `docker`
+group; the first build takes several minutes (it builds the whole app).
+
 ### The health check accepts either endpoint
 
 `GET /health` is **503 by design** on a box that has not been provisioned yet — no duty loop means
