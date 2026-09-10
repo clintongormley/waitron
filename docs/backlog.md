@@ -90,7 +90,9 @@ steps take owner sign-off at land):
 
 1. **A node as containers, and a from-scratch primary. Container packaging LANDED #285** — the
    two containers + `deploy/compose.yml` + named volumes,
-   `deploy/prepare.sh`, the entrypoint that ensures the database shape on every boot, the
+   `deploy/prepare.sh` (with `deploy/install.sh`, a `curl … | sudo bash` run-from-web wrapper that
+   fetches `prepare.sh` and the files it needs, then hands off — tracks `main`, pinnable via
+   `WAITRON_REF`; distinct from the bootable-USB installer below), the entrypoint that ensures the database shape on every boot, the
    recovery-supervisor half (an escalating failure counter that serves a page over the box's own leaf
    when boot fails), the box serving its own leaf over HTTPS in ALL modes (setup, recovery AND
    trading — a trading-mode plain-HTTP bug the run-it proof caught, design §11), and the CI `image`
