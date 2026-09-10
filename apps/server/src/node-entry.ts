@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
 import pg from "pg";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { createPostgresDb } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
@@ -302,10 +302,6 @@ async function persistState(deps: EntryDeps, next: RecoveryState): Promise<void>
   }
 }
 
-/** The same bound `sqlStateOf` walks (`packages/shared/src/sql-state.ts`), and for the same reason:
- * a self-referential `cause` must not spin, not because five levels are known to be needed. */
-const MAX_CAUSE_DEPTH = 5;
-
 /** An `AppError`'s params as one line, or a placeholder when they will not serialise. */
 function paramsLine(params: unknown): string {
   try {
@@ -331,6 +327,11 @@ function paramsLine(params: unknown): string {
  *
  * Only the outer stack is included. A stack per level triples the output for the frames of a driver
  * the installer cannot act on; the names and messages are what name the fault.
+ *
+ * Its own loop, but not its own bound: `MAX_CAUSE_DEPTH` is imported from `@waitron/shared`'s
+ * `cause-chain.ts`, which carries the self-reference and depth arguments for all three walks.
+ * `firstCodeInCauseChain` itself cannot serve here — it returns the FIRST accepted code and stops,
+ * while this keeps every level.
  */
 function failureDetail(error: unknown): string {
   const lines: string[] = [];

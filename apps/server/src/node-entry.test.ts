@@ -555,7 +555,8 @@ describe("runEntry", () => {
     expect(reported).toContain("non-error thrown: boot gave up");
   });
 
-  // The bound `sqlStateOf` uses, for the same reason — a self-referential `cause` must not spin.
+  // `MAX_CAUSE_DEPTH` from `@waitron/shared`, the same bound `sqlStateOf` walks and for the same
+  // reason — a self-referential `cause` must not spin.
   it("stops walking a self-referential cause rather than spinning", async () => {
     const reportFailure = vi.fn();
     const looped: Error & { cause?: unknown } = new Error("loops on itself");

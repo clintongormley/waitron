@@ -1,7 +1,10 @@
 /** How far down a `cause` chain to look before giving up. Drizzle puts the driver's error one
  * level down; the bound exists so no chain — cyclic or merely long — can spin, not because five
- * levels are known to be needed. */
-const MAX_CAUSE_DEPTH = 5;
+ * levels are known to be needed.
+ *
+ * Exported because `failureDetail` (`apps/server/src/node-entry.ts`) walks the same chains for a
+ * different purpose and must not disagree with these two about how deep one goes. */
+export const MAX_CAUSE_DEPTH = 5;
 
 /**
  * The first `code` in an error's `cause` chain that `accept` recognises, or `null`.
@@ -9,7 +12,12 @@ const MAX_CAUSE_DEPTH = 5;
  * The walk exists because the code is not on the error its callers catch: Drizzle wraps the
  * driver's error rather than re-exposing its fields. `sqlStateOf` (`sql-state.ts`) and
  * `classifyBootFailure`'s socket lookup (`apps/server/src/boot-failure.ts`) differ ONLY in the
- * predicate, so the loop and its termination argument are made once, here.
+ * predicate, so THOSE TWO share this loop.
+ *
+ * A third walk exists and does not reuse it: `failureDetail` (`apps/server/src/node-entry.ts`)
+ * collects every level's name, message and params rather than stopping at the first match, so it
+ * cannot be a predicate over this function. It imports `MAX_CAUSE_DEPTH` above, so the BOUND and
+ * the argument for it are still stated once even though the loop is not.
  *
  * Termination rests on `MAX_CAUSE_DEPTH` ALONE. The `cause === current` line is a redundant early
  * exit, kept because it names the one cycle shape cheaply: measured 2026-09-10, deleting the bound
