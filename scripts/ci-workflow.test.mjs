@@ -370,6 +370,17 @@ function membersDeclaringTests() {
     .map((pkg) => pkg.name);
 }
 
+/** Every workspace member that declares the Vitest browser provider. */
+function browserPackages() {
+  return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
+    .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
+    .filter((pkg) => {
+      const manifest = JSON.parse(readFileSync(join(pkg.path, "package.json"), "utf8"));
+      return manifest.devDependencies?.["@vitest/browser"] !== undefined;
+    })
+    .map((pkg) => pkg.name);
+}
+
 // `pnpmLs`'s timeout/error path is the regression fix for the hang above, so it carries its own
 // assertions — otherwise deleting the `timeout` or a throw leaves the suite green (CLAUDE.md §4,
 // "prove a guard by deletion"). A fake `run` exercises each branch deterministically; one real case
@@ -493,6 +504,19 @@ describe("the test shards", () => {
   it("caps light-bin package concurrency explicitly", () => {
     for (const id of ["test-light-a", "test-light-b"]) {
       expect(job(id).body.join("\n")).toContain("--workspace-concurrency=2");
+    }
+  });
+
+  it("gives every browser package its own shard and installs Chromium there", () => {
+    const browser = browserPackages();
+    expect(browser.length).toBeGreaterThan(0);
+
+    for (const name of browser) {
+      const dedicated = shards.filter((shard) => shard.filters.includes(name));
+      expect(dedicated, name).toHaveLength(1);
+
+      const body = job(dedicated[0].id).body.join("\n");
+      expect(body, name).toContain(`pnpm --filter ${name} exec playwright install chromium`);
     }
   });
 

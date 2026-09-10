@@ -106,6 +106,7 @@ jobs:
       till: ${{ steps.gates.outputs.till }}
       dashboard: ${{ steps.gates.outputs.dashboard }}
       setup: ${{ steps.gates.outputs.setup }}
+      venue_service: ${{ steps.gates.outputs.venue_service }}
       server: ${{ steps.gates.outputs.server }}
       fiscal_verifactu: ${{ steps.gates.outputs.fiscal_verifactu }}
       bookings: ${{ steps.gates.outputs.bookings }}
@@ -192,8 +193,8 @@ jobs:
           # emit nothing, and it matters for ONE of the outputs rather than being a nicety for all of
           # them: `code`. An empty `scope` would be safe: it is not the literal `packages`, so
           # every branch below falls through to running everything. An empty `code` would NOT be —
-          # all nine gated jobs test `needs.changes.outputs.code == 'true'` (bundle-smoke, typecheck,
-          # all five test shards, both mutation runs), so an empty value skips every one of them, and
+          # every code-gated job tests `needs.changes.outputs.code == 'true'` (bundle-smoke,
+          # typecheck, all test shards and both mutation runs), so an empty value skips them, and
           # the `ci` aggregate counts a skip as a pass by design. That is a green pull request with
           # nothing run.
           #
@@ -227,19 +228,17 @@ jobs:
             echo "deploy=$deploy"
           } >> "$GITHUB_OUTPUT"
 
-      # Which gated jobs have anything to do? Seven today — all five test shards and the two
-      # mutation runs — and none of them CAN be expressed as a filter on the job itself; see
+      # Which scope-gated jobs have anything to do? None can be expressed as a filter on the job
+      # itself; see
       # gateOutputs' own comment for the two wrong formulations and why each fails.
       #
-      # Six of the seven ask whether one named package is in the resolved scope. `light` does not:
-      # test-light's own filters SUBTRACT every package that has a shard of its own, so it has work
+      # Most ask whether one named package is in the resolved scope. The light-bin gates do not:
+      # their own filters SUBTRACT every package that has a shard of its own, so each has work
       # when the scope holds a package that is neither one of those nor one of the members with no
       # test script — which is why a gate is a predicate over the scope rather than a package name.
       # See SCOPE_GATES and OWN_SHARD_PACKAGES in scripts/changed-scope.mjs.
       #
-      # ONE `pnpm ls` for all seven. Not mainly for the time — measured locally, the query is 0.20s
-      # against the node script's 0.04s, so seven of them would cost only a second or two — but
-      # because all seven gates are answers about the SAME resolved scope. Resolving it once makes
+      # ONE `pnpm ls` for all gates. The gates are answers about the SAME resolved scope. Resolving it once makes
       # them consistent by construction, and keeps this step from growing a stanza per gated job.
       #
       # That query is where the EXPANSION happens, and it is still pnpm's: one `--filter "...<pkg>"`
@@ -279,12 +278,9 @@ jobs:
             # that into `node scripts/changed-scope.mjs` prints
             # every gate false — because `packagesInScope("")` is the empty Set, the DEFINITE answer
             # "nothing matched", not the `null` that fails closed. Re-run on 2026-08-08 against the
-            # tree as it now stands, `printf '' | node scripts/changed-scope.mjs` prints `heavy=false
-            # ui=false till=false dashboard=false light=false verifactu=false shared=false` on stderr
-            # and the same seven lines on stdout, exit 0. (The pnpm half of that end-to-end run is
-            # quoted above and is unaffected by adding a gate; only the line COUNT here moved, which
-            # is why this half was re-measured rather than re-worded.) With every scope gate false,
-            # all five test shards and both mutation jobs skip — every job in this file that runs a
+            # tree as it now stands, `printf '' | node scripts/changed-scope.mjs` prints every scope
+            # gate as false on stdout, exit 0. With every scope gate false,
+            # all test shards and both mutation jobs skip — every job in this file that runs a
             # test — while `bundle-smoke` and `typecheck` still run, because they gate on `code`
             # alone. `ci` counts a skip as a pass by design, so that is a green pull request whose
             # tests never ran.
@@ -1059,6 +1055,46 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/setup" test:coverage
 
+  # Venue service combines server-side configuration tests with a Chromium dashboard project.
+  # Its own runner installs Chromium and keeps browser execution out of the light package bins.
+  test-venue-service:
+    timeout-minutes: 15
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/venue-service exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - run: pnpm --filter @waitron/venue-service exec playwright install chromium
+
+      - name: Run the venue-service shard
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/venue-service" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/venue-service" test:coverage
+
   # Bookings owns both a browser project and a database project. Its own runner keeps
   # Chromium out of the database bins and gives failures a package-specific job result.
   test-bookings:
@@ -1187,6 +1223,7 @@ jobs:
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/setup"
+          set -- "$@" --filter "!@waitron/venue-service"
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           set -- "$@" --filter "!@waitron/bookings"
@@ -1260,6 +1297,7 @@ jobs:
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/setup"
+          set -- "$@" --filter "!@waitron/venue-service"
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           set -- "$@" --filter "!@waitron/bookings"
@@ -1281,7 +1319,6 @@ jobs:
           set -- "$@" --filter "!@waitron/shared"
           set -- "$@" --filter "!@waitron/server-kit"
           set -- "$@" --filter "!@waitron/dashboard-modules"
-          set -- "$@" --filter "!@waitron/venue-service"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -1395,6 +1432,7 @@ jobs:
       - test-till
       - test-dashboard
       - test-setup
+      - test-venue-service
       - test-bookings
       - test-sync
       - test-light-a
