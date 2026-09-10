@@ -324,9 +324,10 @@ design-review section apply.
   the dashboard's shared `#submit`. *Live dashboard→register→print e2e still owed* — the test box is
   un-onboarded (no tenant/deployment yet); onboard it, then approve the agent, register the USB printer,
   and print a real job.
-  **4.** SumUp once the Solo experiments
-  ([research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md)) are
-  run and recorded. The manual receipt for 1 is the owner's HP
+  **4.** SumUp — **IN BUILD** (`feat/payments-sumup`, plan `2026-09-10-payments-sumup.md`); the
+  runbook's
+  ([research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md))
+  experiments run through it on 2026-09-11. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
 - **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
   `packages/sync`, `packages/membership`, `packages/db`'s harness, `apps/server`'s promote / rejoin /
@@ -1683,6 +1684,9 @@ genuinely-decision-bearing.
   ones (the online-payments page read 2026-09-10 no longer describes a signature at all and says to
   confirm every event by API call); does `void` map onto the refund endpoint (which has moved to
   `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds`).
+- **Follow-up:** lift `reverseViaStripe` and `reverseViaSumUp` into one neutral `@waitron/payments`
+  reversal primitive (structural refunder seam) — deferred from the SumUp build because two shipped
+  Stripe providers depend on the existing one.
 
 **Bizum (parked research, 2026-08-30 — no decision, revisit when payment providers are built):**
 
