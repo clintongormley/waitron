@@ -507,6 +507,8 @@ export type Doneness = (typeof DONENESS)[number];
  * no-doneness sale stays byte-identical to before.
  */
 export interface SaleLine {
+  /** Stable server line identity on a retrieved order; omitted for a newly selected line. */
+  workingOrderLineId?: string;
   productId?: string;
   menuItemId?: string;
   quantity: string;

@@ -1234,6 +1234,9 @@ export class TillApp extends LitElement {
         quantity: line.quantity,
         ...toWireLineExtras(line),
       };
+      if (line.workingOrderLineId !== undefined) {
+        saleLine.workingOrderLineId = line.workingOrderLineId;
+      }
       if (line.options !== undefined && line.options.length > 0) {
         saleLine.options = line.options.map(toWireOption);
       }
@@ -1567,7 +1570,13 @@ export class TillApp extends LitElement {
           droppedAProduct = true;
           continue;
         }
-        lines.push({ product, quantity: displayQuantity(product, line.quantity) });
+        lines.push({
+          product,
+          quantity: displayQuantity(product, line.quantity),
+          ...(line.workingOrderLineId === undefined
+            ? {}
+            : { workingOrderLineId: line.workingOrderLineId }),
+        });
       }
       if (droppedAProduct) this.errorKey = "held.product_gone";
       this.#store.loadFrom(order.id, lines, order.label ?? undefined);

@@ -57,6 +57,8 @@ export interface SelectedLineOption {
 
 /** One rung-up basket line: a product and how much of it (a count for `each`, a kg string for `weight`). */
 export interface OrderLine {
+  /** Stable server identity retained while editing a retrieved line. */
+  workingOrderLineId?: string;
   product: TillProduct;
   /** A count (e.g. "2") for an `each` product; a measured kg weight (e.g. "0.320") for `weight`. */
   quantity: string;

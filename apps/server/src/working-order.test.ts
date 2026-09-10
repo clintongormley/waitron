@@ -857,6 +857,51 @@ describe("getHeldOrder", () => {
 });
 
 describe("updateHeldOrder", () => {
+  it("keeps a quantity-only offer edit on the original line id and locked price", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+    const before = await db.execute<{ id: string }>(sql`
+      select id from working_order_lines
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`);
+    const lineId = before.rows[0]!.id;
+
+    await db.execute(sql`
+      update menu_items set gross_price = 9.00
+      where tenant_id = ${cfg.tenantId} and id = ${premiumCafeOfferId}`);
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: lineId,
+          menuItemId: premiumCafeOfferId,
+          quantity: "2",
+        },
+      ],
+    });
+
+    const after = await db.execute<{
+      id: string;
+      quantity: string;
+      unit_price_gross: string;
+      line_total: string;
+    }>(sql`
+      select id, quantity, unit_price_gross, line_total
+      from working_order_lines
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`);
+    expect(after.rows).toEqual([
+      {
+        id: lineId,
+        quantity: "2.000",
+        unit_price_gross: "3.25",
+        line_total: "6.50",
+      },
+    ]);
+  });
+
   it("replaces an offer line using the order's stored zone and refreshes its attribution", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();

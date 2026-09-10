@@ -2657,6 +2657,7 @@ export interface HeldOrder {
    * remain readable while older order paths are migrated to menu-item identity.
    */
   lines: {
+    workingOrderLineId?: string;
     menuItemId?: string;
     productId: string | null;
     quantity: string;
@@ -2791,6 +2792,7 @@ export async function getHeldOrder(
         return { productId: line.productId, quantity: line.quantity };
       }
       return {
+        workingOrderLineId: line.id,
         menuItemId: context.menuItemId,
         productId: line.productId,
         quantity: line.quantity,
@@ -2828,7 +2830,12 @@ export async function getHeldOrder(
  */
 export interface UpdateHeldOrderRequest {
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines`.
-  lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+  lines: ({
+    workingOrderLineId?: string;
+    productId?: string;
+    menuItemId?: string;
+    quantity: string;
+  } & LineExtras)[];
   label?: string;
 }
 
@@ -2867,6 +2874,75 @@ export async function updateHeldOrder(
     // unconditional guard `parkOrder` makes.
     if (req.lines.length === 0) {
       throw new AppError("sale.empty_basket", {});
+    }
+
+    // A quantity-only edit keeps the line's commercial lock and stable id. The client identifies the
+    // stored parent line explicitly; every line must still name the same product/offer, remain in the
+    // same order, and have no modifier children or customisation change. Anything else takes the
+    // replacement path below and is priced from the current offer.
+    const storedRows = await tx
+      .select({
+        id: workingOrderLines.id,
+        parentLineId: workingOrderLines.parentLineId,
+        productId: workingOrderLines.productId,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+      })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.tenantId, cfg.tenantId),
+          eq(workingOrderLines.workingOrderId, id),
+        ),
+      )
+      .orderBy(workingOrderLines.lineNo);
+    const storedParents = storedRows.filter((line) => line.parentLineId === null);
+    const contextByLine = new Map(
+      (await VENUE_SERVICE.listLineContexts(tx, cfg, id)).map((line) => [
+        line.workingOrderLineId,
+        line,
+      ]),
+    );
+    const preservesEveryLine =
+      storedRows.length === storedParents.length &&
+      req.lines.length === storedParents.length &&
+      req.lines.every((line, index) => {
+        const stored = storedParents[index];
+        if (
+          stored === undefined ||
+          line.workingOrderLineId !== stored.id ||
+          line.note !== undefined ||
+          line.doneness !== undefined
+        ) {
+          return false;
+        }
+        return line.menuItemId !== undefined
+          ? contextByLine.get(stored.id)?.menuItemId === line.menuItemId &&
+              line.productId === undefined
+          : line.productId === stored.productId && line.menuItemId === undefined;
+      });
+    if (preservesEveryLine) {
+      for (let index = 0; index < req.lines.length; index++) {
+        const requested = req.lines[index]!;
+        const stored = storedParents[index]!;
+        await tx
+          .update(workingOrderLines)
+          .set({
+            quantity: requested.quantity,
+            lineTotal: grossLineTotal(stored.unitPriceGross, requested.quantity),
+          })
+          .where(
+            and(
+              eq(workingOrderLines.tenantId, cfg.tenantId),
+              eq(workingOrderLines.workingOrderId, id),
+              eq(workingOrderLines.id, stored.id),
+            ),
+          );
+      }
+      await tx
+        .update(workingOrders)
+        .set({ label: req.label ?? null })
+        .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)));
+      return;
     }
 
     // Price the new basket (refusing an unknown product) BEFORE deleting anything, so a bad line
