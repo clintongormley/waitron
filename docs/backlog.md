@@ -203,10 +203,19 @@ design-review section apply.
   to `print_transport` and `0014` names it in a `CHECK`, and drizzle applies a set's pending
   migrations in ONE transaction, so every existing box aborted with `55P04` and applied nothing while
   a virgin database passed — which, until that branch added an upgrade test for the core set, was the
-  only shape any gate migrated, and still is for every module set. Repaired on
-  `fix/core-migration-upgrade` with `packages/db/src/migrate-upgrade.pg.test.ts` as the regression
-  test and two root guards,
-  `scripts/enum-add-value-safety.test.ts` and `scripts/journal-monotonic.test.ts`); the scrubbed real
+  only shape any gate migrated, and still is for every module set. **Repaired and LANDED #307**, with
+  `packages/db/src/migrate-upgrade.pg.test.ts` as the regression test and two root guards,
+  `scripts/enum-add-value-safety.test.ts` and `scripts/journal-monotonic.test.ts`. **Left open by
+  #307, deliberately:** core release points 1 to 6 still upgrade INCOMPLETELY and silently, because
+  the core journal's entries 2 to 6 carry `when` values below entry 1's and drizzle picks what to
+  apply from `max(created_at)` alone. No edit to the journal repairs it — a database at release
+  point 2 and one at point 3 carry the same watermark yet need opposite values for entry 2 — so the
+  only real repair is a squashed baseline, which is an owner decision nobody has taken. The
+  mitigation is to make the skip loud rather than silent: `migrations.incomplete`, thrown by
+  `applyMigrations`, on the diagnosability branch below. **Also left by #307:** editing `0014`
+  changed its drizzle hash, so any database that applied the old one (every dev or demo database
+  created since #304) will be refused by that branch's `provisioning.database_ahead` check once it
+  merges — the remedy is `wa-wt reset demo`); the scrubbed real
   error to `docker logs` for the installer; and a
   one-way-migration warning in `try-branch.sh`), **the recovery spec** (a degraded-but-trading mode + the
   module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
