@@ -52,8 +52,8 @@ function toTableCfg(tenantId: string, locationId: string, locale: SeedLocale): T
 }
 
 /**
- * Seed the floor plan onto `locationId` under the caller's tenant context: the three zones
- * (Comedor/Terraza/Barra), ~16 placed tables, and the four service statuses. Zones are created
+ * Seed the floor plan onto `locationId` under the caller's tenant context: five service zones,
+ * ~16 placed tables, and the four service statuses. Zones are created
  * before any table (a table's `zoneId` must name a LIVE zone of this location — `setTablePlacement`
  * enforces it, `zone.not_found` otherwise), and each table is placed (`setTablePlacement`)
  * immediately after it is created.
@@ -106,6 +106,9 @@ export async function seedFloor(
       await tx.execute(sql`
         update floor_zones set name = ${zone.name[locale]}, display_order = ${zone.displayOrder}
         where tenant_id = ${tenantId} and id = ${zoneId}`);
+      await tx.execute(sql`
+        update zone_service_policies set service_mode = 'prepay'
+        where tenant_id = ${tenantId} and zone_id = ${zoneId}`);
     } else {
       await tx.execute(sql`
         insert into zone_service_policies
@@ -138,7 +141,7 @@ export async function seedFloor(
     insert into zone_service_policies
       (tenant_id, location_id, zone_id, department_id, service_mode, is_counter_default)
     values (
-      ${tenantId}, ${locationId}, ${upstairsBarZone.id}, ${defaultPolicy.department_id}, null, false
+      ${tenantId}, ${locationId}, ${upstairsBarZone.id}, ${defaultPolicy.department_id}, 'prepay', false
     )`);
   if (menuIds !== undefined) {
     for (const [index, menuId] of [menuIds.restaurant, menuIds.lunch].entries()) {
@@ -151,27 +154,31 @@ export async function seedFloor(
       where tenant_id = ${tenantId} and zone_id = ${upstairsBarZone.id}`);
   }
 
-  const downstairsBarZoneId = zoneIds.get("bar");
-  if (downstairsBarZoneId === undefined) throw new Error("seedFloor: no downstairs bar zone");
-  const { rows: barStations } = await tx.execute<{ id: string; name: string }>(sql`
-    select id, name from kitchen_stations
-    where tenant_id = ${tenantId} and location_id = ${locationId}
-      and name in ('Downstairs bar', 'Upstairs bar')`);
-  const downstairsStationId = barStations.find((station) => station.name === "Downstairs bar")?.id;
-  const upstairsStationId = barStations.find((station) => station.name === "Upstairs bar")?.id;
-  if (downstairsStationId === undefined || upstairsStationId === undefined) {
-    throw new Error("seedFloor: bar preparation stations were not created");
-  }
-  for (const [zoneId, stationId] of [
-    [downstairsBarZoneId, downstairsStationId],
-    [upstairsBarZone.id, upstairsStationId],
-  ] as const) {
-    await tx.execute(sql`
-      insert into preparation_routes
-        (tenant_id, location_id, zone_id, category_id, station_id, no_preparation)
-      select ${tenantId}, ${locationId}, ${zoneId}, id, ${stationId}, false
-      from categories
-      where tenant_id = ${tenantId} and station_id = ${downstairsStationId}`);
+  if (menuIds !== undefined) {
+    const downstairsBarZoneId = zoneIds.get("bar");
+    if (downstairsBarZoneId === undefined) throw new Error("seedFloor: no downstairs bar zone");
+    const { rows: barStations } = await tx.execute<{ id: string; name: string }>(sql`
+      select id, name from kitchen_stations
+      where tenant_id = ${tenantId} and location_id = ${locationId}
+        and name in ('Downstairs bar', 'Upstairs bar')`);
+    const downstairsStationId = barStations.find(
+      (station) => station.name === "Downstairs bar",
+    )?.id;
+    const upstairsStationId = barStations.find((station) => station.name === "Upstairs bar")?.id;
+    if (downstairsStationId === undefined || upstairsStationId === undefined) {
+      throw new Error("seedFloor: bar preparation stations were not created");
+    }
+    for (const [zoneId, stationId] of [
+      [downstairsBarZoneId, downstairsStationId],
+      [upstairsBarZone.id, upstairsStationId],
+    ] as const) {
+      await tx.execute(sql`
+        insert into preparation_routes
+          (tenant_id, location_id, zone_id, category_id, station_id, no_preparation)
+        select ${tenantId}, ${locationId}, ${zoneId}, id, ${stationId}, false
+        from categories
+        where tenant_id = ${tenantId} and station_id = ${downstairsStationId}`);
+    }
   }
 
   const { rows: deliZoneRows } = await tx.execute<{ id: string }>(sql`

@@ -4,7 +4,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "departments", locationColumns: ["location_id"] },
     { name: "zone_service_policies", locationColumns: ["location_id"] },
     { name: "zone_menus" },
-    { name: "device_zone_defaults" },
     { name: "preparation_routes", locationColumns: ["location_id"] },
     { name: "department_hours" },
   ],

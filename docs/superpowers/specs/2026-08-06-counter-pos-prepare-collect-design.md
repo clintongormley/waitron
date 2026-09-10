@@ -1,5 +1,8 @@
 # Counter POS — prepare & collect (sub-project 7, slice 7c) + the line-add price-snapshot foundation — design
 
+> **2026-09-10:** New orders now snapshot a zone's department and service mode, and preparation is
+> routed by zone, product and category. See `2026-09-09-venue-departments-and-menus-design.md`.
+
 **Date:** 2026-08-06. **Sub-project:** 7 (Counter POS UI), third slice — **7c (prepare & collect)**,
 which also **owns the shared foundation** the parallel integrated-card-terminal slice builds on:
 line-add price snapshot, order **placing**, price-lock, and the **pay-timing** config. **Status:**

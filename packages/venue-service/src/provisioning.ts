@@ -61,7 +61,8 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           on conflict (tenant_id, zone_id, menu_id) do nothing`);
         await tx.execute(sql`
           update zone_service_policies set default_menu_id = ${menuId}
-          where tenant_id = ${node.tenantId} and zone_id = ${zoneId}`);
+          where tenant_id = ${node.tenantId} and zone_id = ${zoneId}
+            and default_menu_id is null`);
       }
       return "default department and counter zone ready";
     },

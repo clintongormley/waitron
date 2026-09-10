@@ -442,7 +442,7 @@ describe("product-form", () => {
     expect(fired).toBe(false);
   });
 
-  // ── Product → default-course routing (KDS-2), the sibling of the station override above ─────────────
+  // ── Product → default-course routing (KDS-2) ───────────────────────────────────────────────────
 
   it("renders the default-course select in edit mode (a none option + one per course)", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {

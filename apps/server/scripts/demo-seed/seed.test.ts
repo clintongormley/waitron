@@ -142,16 +142,20 @@ describe("seedDemoRestaurant", () => {
       const { rows: serviceZoneRows } = await tx.execute<{
         zone_name: string;
         department_name: string;
+        service_mode: string;
+        is_counter_default: boolean;
         menus: string[];
       }>(sql`
         select z.name as zone_name, d.name as department_name,
+               coalesce(p.service_mode, d.default_service_mode) as service_mode,
+               p.is_counter_default,
                array_agg(c.name order by zm.display_order) as menus
         from zone_service_policies p
         join floor_zones z on z.tenant_id = p.tenant_id and z.id = p.zone_id
         join departments d on d.tenant_id = p.tenant_id and d.id = p.department_id
         join zone_menus zm on zm.tenant_id = p.tenant_id and zm.zone_id = p.zone_id
         join catalogues c on c.tenant_id = zm.tenant_id and c.id = zm.menu_id
-        group by z.name, d.name
+        group by z.name, d.name, p.service_mode, d.default_service_mode, p.is_counter_default
         order by z.name`);
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
         select d.name as department_name, count(distinct h.weekday)::int as days
@@ -231,26 +235,36 @@ describe("seedDemoRestaurant", () => {
       {
         zone_name: "Deli counter",
         department_name: "Deli",
+        service_mode: "prepay",
+        is_counter_default: false,
         menus: ["Deli takeaway"],
       },
       {
         zone_name: "Dining room",
         department_name: "Restaurant and bar",
+        service_mode: "table_tab",
+        is_counter_default: false,
         menus: ["Casa Delgado", "Menú del Día"],
       },
       {
         zone_name: "Downstairs bar",
         department_name: "Restaurant and bar",
+        service_mode: "prepay",
+        is_counter_default: true,
         menus: ["Casa Delgado", "Menú del Día"],
       },
       {
         zone_name: "Terrace",
         department_name: "Restaurant and bar",
+        service_mode: "table_tab",
+        is_counter_default: false,
         menus: ["Casa Delgado", "Menú del Día"],
       },
       {
         zone_name: "Upstairs bar",
         department_name: "Restaurant and bar",
+        service_mode: "prepay",
+        is_counter_default: false,
         menus: ["Casa Delgado", "Menú del Día"],
       },
     ]);

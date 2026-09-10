@@ -148,7 +148,7 @@ describe("demo seed end-to-end", () => {
     if (mediaDir !== undefined) await rm(mediaDir, { recursive: true, force: true });
   });
 
-  it("seeds a venue whose reports, both menus, media, and mixed order all compose", async () => {
+  it("seeds a venue whose reports, menus, media, and mixed order all compose", async () => {
     const venue = await provisionVenue();
     const start = Date.now();
 
@@ -182,8 +182,12 @@ describe("demo seed end-to-end", () => {
     expect(compareDecimal(read.close.cash.tenderTotal, decimal("0.00"))).toBeGreaterThan(0);
     expect(read.close.counts.sales).toBeGreaterThan(0);
 
-    // (2) Catalogues: both demo menus are accessible, Casa Delgado sorts FIRST and is the default.
-    expect(read.menus.map((m) => m.name)).toEqual(["Casa Delgado", "Menú del Día"]);
+    // (2) Catalogues: all demo menus are accessible, Casa Delgado sorts FIRST and is the default.
+    expect(read.menus.map((m) => m.name)).toEqual([
+      "Casa Delgado",
+      "Deli takeaway",
+      "Menú del Día",
+    ]);
     expect(read.menus[0]!.isDefault).toBe(true);
     const menuDelDia = read.menus.find((m) => m.name === "Menú del Día")!;
     expect(menuDelDia.isDefault).toBe(false);

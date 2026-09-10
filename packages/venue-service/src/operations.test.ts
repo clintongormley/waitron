@@ -203,6 +203,7 @@ describe("venue service routing", () => {
         {
           zoneId: downstairsZone.rows[0]!.id,
           departmentId: department.id,
+          serviceMode: "prepay",
         },
       );
       await expect(listServiceZones(tx, { tenantId, locationId })).resolves.toEqual([
@@ -211,7 +212,8 @@ describe("venue service routing", () => {
           name: "Downstairs",
           departmentId: department.id,
           departmentName: "Restaurant and bar",
-          serviceMode: "table_tab",
+          serviceMode: "prepay",
+          serviceModeOverride: "prepay",
         },
         {
           id: upstairsZone.rows[0]!.id,
@@ -219,6 +221,7 @@ describe("venue service routing", () => {
           departmentId: department.id,
           departmentName: "Restaurant and bar",
           serviceMode: "table_tab",
+          serviceModeOverride: null,
         },
       ]);
       const menu = await createCatalogue(tx, tenantId, { name: "Drinks" });

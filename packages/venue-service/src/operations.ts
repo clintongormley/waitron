@@ -191,6 +191,7 @@ export async function listServiceZones(tx: Transaction, cfg: VenueScope) {
   return rows.map(({ zoneMode, departmentMode, ...row }) => ({
     ...row,
     serviceMode: (zoneMode ?? departmentMode) as ServiceMode,
+    serviceModeOverride: zoneMode as ServiceMode | null,
   }));
 }
 
@@ -686,6 +687,34 @@ export async function recordOrderServiceContext(
   });
 }
 
+/** Adopt a new zone's current department and service mode while retaining existing line snapshots. */
+export async function retargetOrderServiceContext(
+  tx: Transaction,
+  cfg: VenueScope,
+  workingOrderId: string,
+  zoneId: string,
+): Promise<void> {
+  const context = await resolveZoneContext(tx, cfg, zoneId);
+  const updated = await tx
+    .update(orderServiceContexts)
+    .set({
+      zoneId: context.zoneId,
+      departmentId: context.departmentId,
+      serviceMode: context.serviceMode,
+    })
+    .where(
+      and(
+        eq(orderServiceContexts.tenantId, cfg.tenantId),
+        eq(orderServiceContexts.locationId, cfg.locationId),
+        eq(orderServiceContexts.workingOrderId, workingOrderId),
+      ),
+    )
+    .returning({ workingOrderId: orderServiceContexts.workingOrderId });
+  if (updated.length === 0) {
+    throw new AppError("order.service_context_missing", { workingOrderId });
+  }
+}
+
 export async function getOrderServiceContext(
   tx: Transaction,
   cfg: VenueScope,
@@ -804,7 +833,7 @@ export async function recordWorkingLineContexts(
         menuName: offer.menuName,
         departmentId: context.departmentId,
         departmentName: department.name,
-        categoryName: offer.category,
+        categoryName: offer.category ?? "Uncategorised",
         pricingUnit: offer.pricingUnit,
         vatClass: offer.vatClass,
         allergens: offer.allergens,

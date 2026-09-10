@@ -317,6 +317,14 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // the primary control below drains for — `resolveClient` is resolved BEFORE the entorno guard
     // regardless (drain.ts:226), so the tripwire fires on the tenant either way.
     const seeded = await seedFiscalRegistro(mirror.admin, {
+      ids: {
+        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
+        locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        seriesId: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      },
+      reuseExistingParents: true,
       envio: true,
       cadena: true,
       entorno: "preproduction",

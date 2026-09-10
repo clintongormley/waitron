@@ -81,7 +81,7 @@ export interface MenuOffer extends MenuItem {
   descriptions: Record<string, string>;
   pricingUnit: PricingUnit;
   vatClass: VatClass;
-  category: string;
+  category: string | null;
   allergens: ProductAllergens | null;
   diet: DietProfile | null;
   dietDerivation: DietDerivation | null;
@@ -376,9 +376,50 @@ export async function createMenuItem(
     displayOrder?: number;
   },
 ): Promise<MenuItem> {
+  const [product] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(and(eq(products.tenantId, tenantId), eq(products.id, input.productId)));
+  if (product === undefined)
+    throw new AppError("product.not_found", { productId: input.productId });
+  const [section] = await tx
+    .select({ id: menuSections.id })
+    .from(menuSections)
+    .where(
+      and(
+        eq(menuSections.tenantId, tenantId),
+        eq(menuSections.menuId, input.menuId),
+        eq(menuSections.id, input.sectionId),
+      ),
+    );
+  if (section === undefined) {
+    throw new AppError("menu_section.not_found", {
+      menuId: input.menuId,
+      sectionId: input.sectionId,
+    });
+  }
+  const [existing] = await tx
+    .select({ id: menuItems.id })
+    .from(menuItems)
+    .where(
+      and(
+        eq(menuItems.tenantId, tenantId),
+        eq(menuItems.menuId, input.menuId),
+        eq(menuItems.productId, input.productId),
+      ),
+    );
   const [row] = await tx
     .insert(menuItems)
     .values({ tenantId, ...input })
+    .onConflictDoUpdate({
+      target: [menuItems.tenantId, menuItems.menuId, menuItems.productId],
+      set: {
+        sectionId: input.sectionId,
+        grossPrice: input.grossPrice,
+        displayOrder: input.displayOrder ?? 0,
+        active: true,
+      },
+    })
     .returning({
       id: menuItems.id,
       menuId: menuItems.menuId,
@@ -388,6 +429,50 @@ export async function createMenuItem(
       displayOrder: menuItems.displayOrder,
       active: menuItems.active,
     });
+  if (existing === undefined) {
+    const defaults = await tx
+      .select({
+        groupId: productOptionGroups.groupId,
+        optionId: optionGroupItems.id,
+        priceDelta: optionGroupItems.priceDelta,
+      })
+      .from(productOptionGroups)
+      .innerJoin(
+        optionGroups,
+        and(
+          eq(optionGroups.tenantId, productOptionGroups.tenantId),
+          eq(optionGroups.id, productOptionGroups.groupId),
+          eq(optionGroups.active, true),
+        ),
+      )
+      .innerJoin(
+        optionGroupItems,
+        and(
+          eq(optionGroupItems.tenantId, productOptionGroups.tenantId),
+          eq(optionGroupItems.groupId, productOptionGroups.groupId),
+          eq(optionGroupItems.active, true),
+        ),
+      )
+      .where(
+        and(
+          eq(productOptionGroups.tenantId, tenantId),
+          eq(productOptionGroups.productId, input.productId),
+        ),
+      )
+      .orderBy(productOptionGroups.sort, optionGroupItems.sort, optionGroupItems.id);
+    const byGroup = new Map<
+      string,
+      { groupId: string; options: { optionId: string; priceDelta: string }[] }
+    >();
+    for (const option of defaults) {
+      const group = byGroup.get(option.groupId) ?? { groupId: option.groupId, options: [] };
+      group.options.push({ optionId: option.optionId, priceDelta: option.priceDelta });
+      byGroup.set(option.groupId, group);
+    }
+    if (byGroup.size > 0) {
+      await setMenuItemOptionGroups(tx, tenantId, row!.id, [...byGroup.values()]);
+    }
+  }
   return row!;
 }
 
@@ -448,12 +533,32 @@ export async function setMenuItemOptionGroups(
     .select({ productId: menuItems.productId })
     .from(menuItems)
     .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, menuItemId)));
-  if (menuItem === undefined)
-    throw new AppError("catalogue.not_found", { catalogueId: menuItemId });
+  if (menuItem === undefined) throw new AppError("menu_item.not_found", { menuItemId });
 
   const groupIds = groups.map((group) => group.groupId);
   if (new Set(groupIds).size !== groupIds.length) {
     throw new AppError("options.group_invalid", { reason: "duplicate" });
+  }
+  const requiredGroups = await tx
+    .select({ id: productOptionGroups.groupId })
+    .from(productOptionGroups)
+    .innerJoin(
+      optionGroups,
+      and(
+        eq(optionGroups.tenantId, productOptionGroups.tenantId),
+        eq(optionGroups.id, productOptionGroups.groupId),
+      ),
+    )
+    .where(
+      and(
+        eq(productOptionGroups.tenantId, tenantId),
+        eq(productOptionGroups.productId, menuItem.productId),
+        eq(optionGroups.required, true),
+        eq(optionGroups.active, true),
+      ),
+    );
+  if (requiredGroups.some((group) => !groupIds.includes(group.id))) {
+    throw new AppError("options.group_invalid", { reason: "required_group_missing" });
   }
   if (groupIds.length > 0) {
     const attached = await tx
@@ -555,7 +660,7 @@ export async function listMenuOffers(
       descriptions: products.descriptions,
       pricingUnit: products.pricingUnit,
       vatClass: products.vatClass,
-      category: sql<string>`coalesce(${categories.name}, 'Uncategorised')`,
+      category: categories.name,
       allergens: products.allergens,
       diet: products.diet,
       dietDerivation: products.dietDerivation,

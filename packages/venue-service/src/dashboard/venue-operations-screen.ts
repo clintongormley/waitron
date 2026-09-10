@@ -2,6 +2,8 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
 import type {
   MenuOffer,
   ServiceMode,
@@ -12,7 +14,7 @@ import type {
 import { t } from "./strings.js";
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
-const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 @customElement("dashboard-venue-operations-screen")
 export class VenueOperationsScreen extends LitElement {
@@ -84,6 +86,7 @@ export class VenueOperationsScreen extends LitElement {
   @property({ attribute: false }) api!: VenueServiceApi;
   @state() private model?: VenueServiceView;
   @state() private error?: string;
+  @state() private fieldErrors: Record<string, string> = {};
   @state() private busy = false;
 
   override connectedCallback(): void {
@@ -111,6 +114,7 @@ export class VenueOperationsScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.error = undefined;
+    this.fieldErrors = {};
     try {
       await action();
       await this.#load();
@@ -121,23 +125,47 @@ export class VenueOperationsScreen extends LitElement {
     }
   }
 
+  #validateRequired(
+    fields: readonly { name: string; label: string }[],
+    root: ParentNode = this.renderRoot,
+  ): boolean {
+    const errors: Record<string, string> = {};
+    for (const field of fields) {
+      if (this.#value(field.name, root).trim() === "") {
+        errors[field.name] = `${field.label}: ${t("venue.field_required")}`;
+      }
+    }
+    this.fieldErrors = errors;
+    this.error = undefined;
+    return Object.keys(errors).length === 0;
+  }
+
+  #fieldError(name: string) {
+    const error = this.fieldErrors[name];
+    return error === undefined
+      ? nothing
+      : html`<p class="field-error" data-field-error=${name}>${error}</p>`;
+  }
+
   #addDepartment(): void {
     const name = this.#value("department-name").trim();
     const tradingName = this.#value("trading-name").trim();
     const defaultServiceMode = this.#value("department-mode") as ServiceMode;
-    if (name === "" || tradingName === "" || !MODES.includes(defaultServiceMode)) {
-      this.error = t("venue.required");
+    if (
+      !this.#validateRequired([
+        { name: "department-name", label: t("venue.name") },
+        { name: "trading-name", label: t("venue.trading_name") },
+        { name: "department-mode", label: t("venue.service_style") },
+      ]) ||
+      !MODES.includes(defaultServiceMode)
+    )
       return;
-    }
     void this.#save(() => this.api.createDepartment({ name, tradingName, defaultServiceMode }));
   }
 
   #addMenu(): void {
     const name = this.#value("menu-name").trim();
-    if (name === "") {
-      this.error = t("venue.required");
-      return;
-    }
+    if (!this.#validateRequired([{ name: "menu-name", label: t("venue.menu_name") }])) return;
     void this.#save(() => this.api.createMenu(name));
   }
 
@@ -145,17 +173,31 @@ export class VenueOperationsScreen extends LitElement {
     const productId = this.#value(`offer-product-${menuId}`, root);
     const sectionName = this.#value(`offer-section-${menuId}`, root).trim();
     const grossPrice = this.#value(`offer-price-${menuId}`, root);
-    if (productId === "" || sectionName === "" || grossPrice === "") {
-      this.error = t("venue.required");
+    if (
+      !this.#validateRequired(
+        [
+          { name: `offer-product-${menuId}`, label: t("venue.product") },
+          { name: `offer-section-${menuId}`, label: t("venue.section") },
+          { name: `offer-price-${menuId}`, label: t("venue.price") },
+        ],
+        root,
+      )
+    )
       return;
-    }
     void this.#save(async () => {
-      const section = await this.api.createMenuSection(menuId, {
-        name: { en: sectionName, es: sectionName },
-        displayOrder: 0,
-      });
+      const existingSection = this.model?.offers.find(
+        (offer) => offer.menuId === menuId && this.#name(offer.sectionName) === sectionName,
+      );
+      const sectionId =
+        existingSection?.sectionId ??
+        (
+          await this.api.createMenuSection(menuId, {
+            name: { en: sectionName, es: sectionName },
+            displayOrder: 0,
+          })
+        ).id;
       await this.api.createMenuItem(menuId, {
-        sectionId: section.id,
+        sectionId,
         productId,
         grossPrice,
         displayOrder: 0,
@@ -165,10 +207,13 @@ export class VenueOperationsScreen extends LitElement {
 
   #saveOffer(menuId: string, menuItemId: string, root: ParentNode): void {
     const grossPrice = this.#value(`offer-price-${menuItemId}`, root);
-    if (grossPrice === "") {
-      this.error = t("venue.required");
+    if (
+      !this.#validateRequired(
+        [{ name: `offer-price-${menuItemId}`, label: t("venue.price") }],
+        root,
+      )
+    )
       return;
-    }
     void this.#save(() => this.api.updateMenuItem(menuId, menuItemId, { grossPrice }));
   }
 
@@ -280,10 +325,13 @@ export class VenueOperationsScreen extends LitElement {
   #saveZone(zoneId: string, root: ParentNode): void {
     const departmentId = this.#value(`zone-department-${zoneId}`, root);
     const mode = this.#value(`zone-mode-${zoneId}`, root);
-    if (departmentId === "") {
-      this.error = t("venue.required");
+    if (
+      !this.#validateRequired(
+        [{ name: `zone-department-${zoneId}`, label: t("venue.department") }],
+        root,
+      )
+    )
       return;
-    }
     void this.#save(() =>
       this.api.configureZone(zoneId, {
         departmentId,
@@ -297,8 +345,19 @@ export class VenueOperationsScreen extends LitElement {
     const weekday = Number(this.#value("hours-weekday"));
     const opensAt = this.#value("hours-opens");
     const closesAt = this.#value("hours-closes");
-    if (departmentId === "" || opensAt === "" || closesAt === "" || opensAt === closesAt) {
-      this.error = t("venue.required");
+    if (
+      !this.#validateRequired([
+        { name: "hours-department", label: t("venue.department") },
+        { name: "hours-opens", label: t("venue.opens") },
+        { name: "hours-closes", label: t("venue.closes") },
+      ])
+    )
+      return;
+    if (opensAt === closesAt) {
+      this.fieldErrors = {
+        "hours-opens": `${t("venue.opens")}: ${t("venue.time_distinct")}`,
+        "hours-closes": `${t("venue.closes")}: ${t("venue.time_distinct")}`,
+      };
       return;
     }
     const existing = (this.model?.hours ?? [])
@@ -320,10 +379,15 @@ export class VenueOperationsScreen extends LitElement {
     const separator = subject.indexOf(":");
     const kind = subject.slice(0, separator);
     const subjectId = subject.slice(separator + 1);
-    if ((kind !== "category" && kind !== "product") || subjectId === "" || target === "") {
-      this.error = t("venue.required");
+    if (
+      !this.#validateRequired([
+        { name: "route-subject", label: t("venue.product_or_category") },
+        { name: "route-target", label: t("venue.station") },
+      ]) ||
+      (kind !== "category" && kind !== "product") ||
+      subjectId === ""
+    )
       return;
-    }
     void this.#save(() =>
       this.api.createRoute({
         ...(kind === "category" ? { categoryId: subjectId } : { productId: subjectId }),
@@ -349,7 +413,7 @@ export class VenueOperationsScreen extends LitElement {
       .filter((interval) => interval.departmentId === departmentId)
       .map(
         (interval) =>
-          `${DAYS_EN[interval.weekday]} ${interval.opensAt.slice(0, 5)}–${interval.closesAt.slice(0, 5)}`,
+          `${t(`venue.day.${interval.weekday as 0 | 1 | 2 | 3 | 4 | 5 | 6}`)} ${interval.opensAt.slice(0, 5)}–${interval.closesAt.slice(0, 5)}`,
       );
   }
 
@@ -422,23 +486,25 @@ export class VenueOperationsScreen extends LitElement {
         <div class="form-row">
           <label
             >${t("venue.name")} <span class="required">*</span
-            ><input name="department-name" required
-          /></label>
+            ><input name="department-name" required />${this.#fieldError("department-name")}</label
+          >
           <label
             >${t("venue.trading_name")} <span class="required">*</span
-            ><input name="trading-name" required
-          /></label>
+            ><input name="trading-name" required />${this.#fieldError("trading-name")}</label
+          >
           <label
             >${t("venue.service_style")} <span class="required">*</span
             ><select name="department-mode">
-              ${this.#modeOptions("prepay")}
-            </select></label
+              ${this.#modeOptions("prepay")}</select
+            >${this.#fieldError("department-mode")}</label
           >
-          <wt-button
-            data-test="add-department"
-            ?disabled=${this.busy}
-            @click=${() => this.#addDepartment()}
-            >${t("venue.add_department")}</wt-button
+          <wt-form-actions
+            ><wt-button
+              data-test="add-department"
+              ?disabled=${this.busy}
+              @click=${() => this.#addDepartment()}
+              >${t("venue.add_department")}</wt-button
+            ></wt-form-actions
           >
         </div>
       </div>
@@ -448,27 +514,33 @@ export class VenueOperationsScreen extends LitElement {
           <label
             >${t("venue.department")} <span class="required">*</span
             ><select name="hours-department">
-              ${model.departments.map((d) => html`<option value=${d.id}>${d.name}</option>`)}
-            </select></label
+              ${model.departments.map((d) => html`<option value=${d.id}>${d.name}</option>`)}</select
+            >${this.#fieldError("hours-department")}</label
           >
           <label
             >${t("venue.weekday")}<select name="hours-weekday">
-              ${DAYS_EN.map((day, index) => html`<option value=${index}>${day}</option>`)}
+              ${DAYS.map((day) => html`<option value=${day}>${t(`venue.day.${day}`)}</option>`)}
             </select></label
           >
           <label
             >${t("venue.opens")} <span class="required">*</span
-            ><input name="hours-opens" type="time" required
-          /></label>
+            ><input name="hours-opens" type="time" required />${this.#fieldError(
+              "hours-opens",
+            )}</label
+          >
           <label
             >${t("venue.closes")} <span class="required">*</span
-            ><input name="hours-closes" type="time" required
-          /></label>
-          <wt-button
-            data-test="add-hours"
-            ?disabled=${this.busy || model.departments.length === 0}
-            @click=${() => this.#addHours()}
-            >${t("venue.add_hours")}</wt-button
+            ><input name="hours-closes" type="time" required />${this.#fieldError(
+              "hours-closes",
+            )}</label
+          >
+          <wt-form-actions
+            ><wt-button
+              data-test="add-hours"
+              ?disabled=${this.busy || model.departments.length === 0}
+              @click=${() => this.#addHours()}
+              >${t("venue.add_hours")}</wt-button
+            ></wt-form-actions
           >
         </div>
       </div>
@@ -496,18 +568,24 @@ export class VenueOperationsScreen extends LitElement {
                       >
                         ${department.name}
                       </option>`,
-                  )}
-                </select></label
+                  )}</select
+                >${this.#fieldError(`zone-department-${zone.id}`)}</label
               >
               <label
                 >${t("venue.service_style")}<select name=${`zone-mode-${zone.id}`}>
-                  ${this.#modeOptions("", true)}
+                  ${this.#modeOptions(configured?.serviceModeOverride ?? "", true)}
                 </select></label
               >
-              <wt-button
-                ?disabled=${this.busy || model.departments.length === 0}
-                @click=${(event: Event) => this.#saveZone(zone.id, (event.currentTarget as Element).parentElement!)}
-                >${t("venue.save_zone")}</wt-button
+              <wt-form-actions
+                ><wt-button
+                  ?disabled=${this.busy || model.departments.length === 0}
+                  @click=${(event: Event) =>
+                    this.#saveZone(
+                      zone.id,
+                      (event.currentTarget as Element).parentElement!.parentElement!,
+                    )}
+                  >${t("venue.save_zone")}</wt-button
+                ></wt-form-actions
               >
             </div>
             ${model.menus.map((menu, index) => {
@@ -536,10 +614,13 @@ export class VenueOperationsScreen extends LitElement {
       <h2>${t("venue.menus")}</h2>
       <div class="panel form-row">
         <label
-          >${t("venue.menu_name")} <span class="required">*</span><input name="menu-name" required
-        /></label>
-        <wt-button data-test="add-menu" ?disabled=${this.busy} @click=${() => this.#addMenu()}
-          >${t("venue.add_menu")}</wt-button
+          >${t("venue.menu_name")} <span class="required">*</span
+          ><input name="menu-name" required />${this.#fieldError("menu-name")}</label
+        >
+        <wt-form-actions
+          ><wt-button data-test="add-menu" ?disabled=${this.busy} @click=${() => this.#addMenu()}
+            >${t("venue.add_menu")}</wt-button
+          ></wt-form-actions
         >
       </div>
       <div class="grid">
@@ -567,23 +648,34 @@ export class VenueOperationsScreen extends LitElement {
                       html`<option value=${product.id}>
                         ${this.#name(product.descriptions)}
                       </option>`,
-                  )}
-                </select></label
+                  )}</select
+                >${this.#fieldError(`offer-product-${menu.id}`)}</label
               >
               <label
                 >${t("venue.section")} <span class="required">*</span
-                ><input name=${`offer-section-${menu.id}`} required
-              /></label>
+                ><input name=${`offer-section-${menu.id}`} required />${this.#fieldError(
+                  `offer-section-${menu.id}`,
+                )}</label
+              >
               <label
                 >${t("venue.price")} <span class="required">*</span
-                ><input name=${`offer-price-${menu.id}`} inputmode="decimal" required
-              /></label>
-              <wt-button
-                variant="secondary"
-                ?disabled=${this.busy || availableProducts.length === 0}
-                @click=${(event: Event) =>
-                  this.#addOffer(menu.id, (event.currentTarget as Element).parentElement!)}
-                >${t("venue.add_offer")}</wt-button
+                ><input
+                  name=${`offer-price-${menu.id}`}
+                  inputmode="decimal"
+                  required
+                />${this.#fieldError(`offer-price-${menu.id}`)}</label
+              >
+              <wt-form-actions
+                ><wt-button
+                  variant="secondary"
+                  ?disabled=${this.busy || availableProducts.length === 0}
+                  @click=${(event: Event) =>
+                    this.#addOffer(
+                      menu.id,
+                      (event.currentTarget as Element).parentElement!.parentElement!,
+                    )}
+                  >${t("venue.add_offer")}</wt-button
+                ></wt-form-actions
               >
             </div>
           </article>`;
@@ -621,8 +713,8 @@ export class VenueOperationsScreen extends LitElement {
                     ${this.#name(product.descriptions)}
                   </option>`,
               )}
-            </optgroup>
-          </select></label
+            </optgroup></select
+          >${this.#fieldError("route-subject")}</label
         >
         <label
           >${t("venue.zones")}<select name="route-zone">
@@ -634,22 +726,28 @@ export class VenueOperationsScreen extends LitElement {
           >${t("venue.station")} <span class="required">*</span
           ><select name="route-target">
             ${model.stations.map((station) => html`<option value=${station.id}>${station.name}</option>`)}
-            <option value="none">${t("venue.no_preparation")}</option>
-          </select></label
+            <option value="none">${t("venue.no_preparation")}</option></select
+          >${this.#fieldError("route-target")}</label
         >
-        <wt-button
-          data-test="add-route"
-          ?disabled=${this.busy || (model.categories.length === 0 && model.products.length === 0)}
-          @click=${() => this.#addRoute()}
-          >${t("venue.add_route")}</wt-button
+        <wt-form-actions
+          ><wt-button
+            data-test="add-route"
+            ?disabled=${this.busy || (model.categories.length === 0 && model.products.length === 0)}
+            @click=${() => this.#addRoute()}
+            >${t("venue.add_route")}</wt-button
+          ></wt-form-actions
         >
       </div>
     </section>`;
   }
 
   override render() {
+    const fieldErrors = Object.values(this.fieldErrors);
     return html`<h1>${t("venue.title")}</h1>
-      ${this.error === undefined ? nothing : html`<div role="alert">${this.error}</div>`}
+      <wt-form-error-summary
+        heading=${t("venue.form_error_heading")}
+        .errors=${[...fieldErrors, ...(this.error === undefined ? [] : [this.error])]}
+      ></wt-form-error-summary>
       ${
         this.model === undefined
           ? nothing

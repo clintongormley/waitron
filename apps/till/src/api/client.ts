@@ -394,7 +394,7 @@ export interface TillMenuOffer {
   descriptions: Record<string, string>;
   pricingUnit: "each" | "weight";
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
-  category: string;
+  category: string | null;
   allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
   diet: DietProfile | null;
   dietDerivation: DietDerivation | null;

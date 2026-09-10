@@ -290,7 +290,7 @@ hosted in Spain (owner decision 2026-09-05), so asesor Q16 does not arise.
 :8080 (HTTP for leaf-less shared state, HTTPS when a development box leaf is present; the Vite
 proxies select the matching protocol). The till enrols itself on first load in dev mode — no code, no approval step. Till PIN **5555**;
 dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a believable demo
-restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16 tables), staff
+restaurant: three menus (~44 products with per-dish images), a floor plan (5 zones / ~16 tables), staff
 on PIN 5555, and ~28 days of back-dated preproduction sales — English by default, Spanish via
 `WAITRON_SEED_LOCALE=es-ES`. Use `wa-wt onboarding <worktree-name>` for a fresh shipping-style
 onboarding wizard. `wa-wt reset demo|onboarding [worktree-name]` wipes and rebuilds that target.
@@ -799,17 +799,19 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
   [implementation plan](superpowers/plans/2026-09-09-venue-departments-and-menus.md) record the
   delivered slice and remaining work. The branch adds menu-item pricing, zone offer selection,
   frozen service context, zone/category preparation routing, context-preserving order transfers,
-  counter preparation fire, device-specific default zones, configuration transfer, a fresh venue's
+  counter preparation fire, device-specific default zones, portable configuration transfer, a fresh venue's
   initial menu/zone assignment and a one-operational-venue provisioning guard. Products and menus are
   separate dashboard sections; menu offers and preparation routes can be created, edited or removed;
   the venue screen shows departments, zones, hours, routes and readiness findings. Boot and standby
   adoption enforce the operational venue boundary. The exact Restaurant/Deli demo includes shared
   kitchen preparation, distinct flows and hours, and upstairs/downstairs bars that route the same
   Negroni product locally while charging different menu prices. Follow-ups are removal of legacy
-  product/menu price and fixed-station compatibility fields; enforcement of hours and calendar
-  exceptions; workforce assignments; immutable department attribution and reporting; replication
-  smoke; and the till menu-refresh defect. Inventory, recipe depth and multi-venue cloud management
-  remain separate work.
+  product/menu price and fixed-station compatibility fields; custom per-menu modifier authoring (new
+  offers currently copy the product's active choices); enforcement of hours and calendar
+  exceptions; workforce assignments; immutable department attribution and reporting; batched venue
+  readiness/offer queries; replication smoke; and the till menu-refresh defect. Inventory, recipe depth and multi-venue cloud management
+  remain separate work. Device-zone defaults are re-enrolled rather than transferred because device
+  enrolment rows are deliberately reset.
 - **Modifiers / quantity deferred follow-ons** (all landed — #184/#186/#187/#190/#193): on-screen
   expo/station-queue/tab modifier `×N`; extract the shared `#allergens` render across
   basket/station-queue/expo; fold the base-allergen `products` join into the KDS queue select; the

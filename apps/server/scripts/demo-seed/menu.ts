@@ -1,12 +1,11 @@
-// Demo menu content for the two-menu Casa Delgado seed (Phase 2, Task 6). This is DEV/DEMO data — it
+// Demo menu content for the three-menu Casa Delgado seed. This is DEV/DEMO data — it
 // stands up a plausible Spanish deli + restaurant for the multi-menu till demo and the sales
 // generator, NOT a real venue's catalogue. Plausibility, not fiscal/culinary accuracy, is the bar.
 //
-// Two catalogues (menus):
-//   - CASA_DELGADO — the à-la-carte menu: a deli COUNTER (weight-priced charcuterie, cheeses and
-//     conservas, routed to the kitchen "Cocina") plus a RESTAURANT (each-priced tapas, raciones,
-//     mains, desserts routed to "Cocina", and drinks routed to the bar "Barra").
+// Three catalogues (menus):
+//   - CASA_DELGADO — the restaurant menu: tapas, mains and desserts prepared in the kitchen.
 //   - MENU_DEL_DIA — the fixed-price lunch menu: a handful of each-priced courses, all kitchen.
+//   - DELI_TAKEAWAY — weight-priced charcuterie, cheeses and conservas for the deli counter.
 //
 // Content is authored under the BARE language tag (`en`/`es`) — the "author bare, file full-tag"
 // model of feature B. Every product carries BOTH bare locales (`en` + `es`) so `seedCatalogues` can
@@ -14,7 +13,7 @@
 // is the FULL tag its bare content files under — see `SEED_INVOICE_LOCALE`. Spanish
 // i18n VALUES are fine here — `apps/*` is out of the english-only guard's scope (CLAUDE.md §3); only
 // code IDENTIFIERS stay English. Each `image` is the committed PNG basename Task 9's media step
-// creates — this module only names them, and the names are UNIQUE across both catalogues so
+// creates — this module only names them, and the names are UNIQUE across the catalogues so
 // `seedCatalogues`' image→productId map has no collisions.
 //
 // VAT (Spanish IVA, GROSS/VAT-inclusive `unitPrice`): prepared/deli food is `reduced` (10%), basic

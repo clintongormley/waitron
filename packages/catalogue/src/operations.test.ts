@@ -98,6 +98,9 @@ describe("catalogue operations", () => {
         sectionId: downstairsSection.id,
         grossPrice: "11.00",
       });
+      expect(
+        (await listMenuOffers(tx, tenantId, [upstairs.id]))[0]!.optionGroups[0]!.options[0]!,
+      ).toMatchObject({ id: orange.id, priceDelta: "0.25" });
       await setMenuItemOptionGroups(tx, tenantId, nine.id, [
         { groupId: garnish.id, options: [{ optionId: orange.id, priceDelta: "0.50" }] },
       ]);
@@ -174,13 +177,36 @@ describe("catalogue operations", () => {
       expect((await listMenuOffers(tx, tenantId, [downstairs.id]))[0]!.grossPrice).toBe("12.50");
       await deactivateMenuItem(tx, tenantId, downstairs.id, eleven.id);
       await expect(listMenuOffers(tx, tenantId, [downstairs.id])).resolves.toEqual([]);
+      const restored = await createMenuItem(tx, tenantId, {
+        menuId: downstairs.id,
+        productId: product.id,
+        sectionId: downstairsSection.id,
+        grossPrice: "13.00",
+      });
+      expect(restored).toMatchObject({ id: eleven.id, active: true, grossPrice: "13.00" });
       await expect(
         updateMenuItem(tx, tenantId, downstairs.id, crypto.randomUUID(), { grossPrice: "8.00" }),
       ).rejects.toMatchObject({ code: "menu_item.not_found" });
+      await expect(
+        createMenuItem(tx, tenantId, {
+          menuId: downstairs.id,
+          productId: crypto.randomUUID(),
+          sectionId: downstairsSection.id,
+          grossPrice: "8.00",
+        }),
+      ).rejects.toMatchObject({ code: "product.not_found" });
+      await expect(
+        createMenuItem(tx, tenantId, {
+          menuId: downstairs.id,
+          productId: product.id,
+          sectionId: crypto.randomUUID(),
+          grossPrice: "8.00",
+        }),
+      ).rejects.toMatchObject({ code: "menu_section.not_found" });
     });
   });
 
-  it("keeps a category-less product visible as an uncategorised menu offer", async () => {
+  it("keeps a category-less product visible with its null category", async () => {
     await asTenant(async (tx) => {
       const menu = await createCatalogue(tx, tenantId, { name: "Counter" });
       const product = await createProduct(tx, tenantId, {
@@ -203,7 +229,7 @@ describe("catalogue operations", () => {
       });
 
       await expect(listMenuOffers(tx, tenantId, [menu.id])).resolves.toEqual([
-        expect.objectContaining({ id: item.id, category: "Uncategorised" }),
+        expect.objectContaining({ id: item.id, category: null }),
       ]);
     });
   });
@@ -243,6 +269,11 @@ describe("catalogue operations", () => {
       });
       await setProductOptionGroups(tx, tenantId, product.id, [attached.id]);
 
+      await expect(setMenuItemOptionGroups(tx, tenantId, item.id, [])).rejects.toMatchObject({
+        code: "options.group_invalid",
+        params: { reason: "required_group_missing" },
+      });
+
       await expect(
         setMenuItemOptionGroups(tx, tenantId, item.id, [
           { groupId: unattached.id, options: [{ optionId: size.id, priceDelta: "0.00" }] },
@@ -261,6 +292,9 @@ describe("catalogue operations", () => {
           { groupId: attached.id, options: [{ optionId: sauce.id, priceDelta: "0.00" }] },
         ]),
       ).resolves.toBeUndefined();
+      await expect(
+        setMenuItemOptionGroups(tx, tenantId, crypto.randomUUID(), []),
+      ).rejects.toMatchObject({ code: "menu_item.not_found" });
     });
   });
 

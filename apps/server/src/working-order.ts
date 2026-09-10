@@ -210,6 +210,8 @@ async function priceOrderLines(
       }))
     : catalogue.products;
   const invoiceLocales = catalogue.invoiceLocales;
+  // `priceBasketWithOptions` selects by its historical `productId` field. In offer mode that selector
+  // is the menu-item id; keep the underlying product id separately for persisted rows and errors.
   const lines = requestedLines.map((line) => ({
     ...line,
     productId: line.menuItemId ?? line.productId ?? "",
@@ -233,10 +235,10 @@ async function priceOrderLines(
     | { kind: "child"; optionGroupItemId: string; menuItemId: string | null };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
-  // Per-PRODUCT cache of `optionGroupItemId → { item, groupId }`, built once per distinct product rather
+  // Per-SELECTION cache of `optionGroupItemId → { item, groupId }`, built once per distinct sellable row rather
   // than once per LINE: ordering N lines of the same product (e.g. 3× the same burger with different
   // modifiers) resolved this map N times before. Same resolved values either way — pure de-duplication
-  // of in-memory work, keyed on `product.id` so two different products never share a cache entry.
+  // of in-memory work. A row id is a product id on the legacy path and a menu-item id on the offer path.
   type OptionItemRow = (typeof available)[number]["optionGroups"][number]["items"][number];
   const itemByIdByProduct = new Map<
     string,
@@ -247,6 +249,7 @@ async function priceOrderLines(
     if (product === undefined) {
       throw new AppError("sale.unknown_product", { productId: line.productId });
     }
+    const underlyingProductId = offerBySelectionId.get(line.productId)?.productId ?? line.productId;
 
     // Per-line customisation (spec §2/§3), NON-FISCAL. Validate + normalise BEFORE pricing so a bad
     // value aborts the whole basket rather than half-persisting. The wire type is a lie (JSON), so the
@@ -278,7 +281,7 @@ async function priceOrderLines(
     // client is never the gate. A `weight` line with NO options is untouched.
     if (selected.length > 0 && product.pricingUnit !== "each") {
       throw new AppError("options.unsupported_product", {
-        productId: line.productId,
+        productId: underlyingProductId,
         pricingUnit: product.pricingUnit,
       });
     }
@@ -316,7 +319,7 @@ async function priceOrderLines(
         if (found === undefined) {
           throw new AppError("option.not_found", {
             optionGroupItemId: sel.optionGroupItemId,
-            productId: line.productId,
+            productId: underlyingProductId,
           });
         }
         // Validate EACH wire entry's quantity is a positive integer BEFORE summing, so a crafted
@@ -325,7 +328,7 @@ async function priceOrderLines(
         const entryQty = sel.quantity ?? 1;
         if (!Number.isInteger(entryQty) || entryQty < 1) {
           throw new AppError("options.selection_invalid", {
-            productId: line.productId,
+            productId: underlyingProductId,
             groupId: found.groupId,
             reason: "quantity_invalid",
           });
@@ -347,7 +350,7 @@ async function priceOrderLines(
         const qty = qtyById.get(optionGroupItemId)!;
         if (qty > found.item.maxQuantity) {
           throw new AppError("options.selection_invalid", {
-            productId: line.productId,
+            productId: underlyingProductId,
             groupId: found.groupId,
             reason: "quantity_invalid",
           });
@@ -373,21 +376,21 @@ async function priceOrderLines(
         const count = tallyByGroup.get(group.id) ?? 0;
         if (group.required && count === 0) {
           throw new AppError("options.selection_invalid", {
-            productId: line.productId,
+            productId: underlyingProductId,
             groupId: group.id,
             reason: "required",
           });
         }
         if (count < group.minSelect) {
           throw new AppError("options.selection_invalid", {
-            productId: line.productId,
+            productId: underlyingProductId,
             groupId: group.id,
             reason: "below_min",
           });
         }
         if (count > group.maxSelect) {
           throw new AppError("options.selection_invalid", {
-            productId: line.productId,
+            productId: underlyingProductId,
             groupId: group.id,
             reason: "above_max",
           });
@@ -411,7 +414,7 @@ async function priceOrderLines(
     // CHILD row inherits none (no ticket_item, KDS coursing is per dish).
     lineMeta.push({
       kind: "parent",
-      productId: offerBySelectionId.get(line.productId)?.productId ?? line.productId,
+      productId: underlyingProductId,
       menuItemId: line.menuItemId ?? null,
       courseId: line.courseId ?? product.courseId ?? null,
       note,
@@ -465,15 +468,10 @@ async function priceOrderLines(
   // (`sales.locale`/`sales.invoice_locales`, stamped by `recordSale` from `cfg`) are still sourced from
   // boot-time config, so a config-vs-env drift can still file a header inconsistent with these lines
   // (immutable record, §5) — a residual gap tracked in the backlog, not closed here. That `invoice_locales`
-  // value comes from the SAME `listAvailableProducts` read above (it projects `locations.invoice_locales`
-  // alongside the products via `resolveAccessibleCatalogueIds`, one read), so no second `locations`
-  // query is issued here — and it reflects a REAL `locations` row whenever this loop runs: the loop
-  // iterates `priced.lines`, which are non-empty only if every input line resolved a product from that
-  // read, which returns products only when `resolveAccessibleCatalogueIds` found ≥1 accessible catalogue
-  // for `cfg.locationId` — i.e. the `locations` row exists (an absent location yields no products, so
-  // every line would have thrown `sale.unknown_product` above, and `invoiceLocales` would be the `?? []`
-  // empty fallback). So if the loop body runs, `invoiceLocales` is the genuine row value, not the
-  // absent-location default. `toInvoiceLineDescriptions`
+  // value comes from the SAME `listAvailableProducts` read above: `resolveAccessibleCatalogueIds`
+  // projects `locations.invoice_locales` independently of whether products are priced through legacy
+  // catalogue rows or menu offers. An absent location yields the helper's documented `[]` fallback.
+  // `toInvoiceLineDescriptions`
   // graceful-fills and NEVER throws (§5: nothing may block a sale), and mutating `priced.lines` in place
   // propagates the re-key to BOTH the `working_order_lines` rows built below AND the filed `sale_lines`
   // (the same `priced` is threaded back out and fed to `recordSale`). The inherited/locked paths
@@ -2054,7 +2052,12 @@ export async function moveTab(
   await assertTabOpen(tx, cfg, tabId);
 
   const involved = await tx
-    .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
+    .select({
+      id: diningTables.id,
+      tabId: diningTables.tabId,
+      active: diningTables.active,
+      zoneId: diningTables.zoneId,
+    })
     .from(diningTables)
     .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)))
     .orderBy(diningTables.id)
@@ -2064,6 +2067,12 @@ export async function moveTab(
     involved.find((t) => t.id === toTableId),
     toTableId,
   );
+
+  const target = involved.find((table) => table.id === toTableId)!;
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
+  if (serviceContext !== null && target.zoneId !== null) {
+    await VENUE_SERVICE.retargetOrderContext(tx, cfg, tabId, target.zoneId);
+  }
 
   // Free the source table(s) the tab currently covers, then point the target — clearing ITS status_id
   // too, since the moved-in party turns the target over (openTab parity, design §4).
@@ -2087,11 +2096,29 @@ export async function joinTable(
   await assertTabOpen(tx, cfg, tabId);
 
   const [table] = await tx
-    .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
+    .select({
+      id: diningTables.id,
+      tabId: diningTables.tabId,
+      active: diningTables.active,
+      zoneId: diningTables.zoneId,
+    })
     .from(diningTables)
     .where(eq(diningTables.id, tableId))
     .for("update");
   await assertTableAvailable(tx, table, tableId);
+
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
+  if (
+    serviceContext !== null &&
+    table?.zoneId !== null &&
+    table?.zoneId !== undefined &&
+    table.zoneId !== serviceContext.zoneId
+  ) {
+    throw new AppError("service_zone.join_mismatch", {
+      orderZoneId: serviceContext.zoneId,
+      tableZoneId: table.zoneId,
+    });
+  }
 
   await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
 }
@@ -2577,7 +2604,7 @@ export async function unjoinTable(
   // absent/foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId and
   // fail closed, design §3).
   const [table] = await tx
-    .select({ tabId: diningTables.tabId })
+    .select({ tabId: diningTables.tabId, zoneId: diningTables.zoneId })
     .from(diningTables)
     .where(eq(diningTables.id, tableId))
     .for("update");
@@ -2617,6 +2644,9 @@ export async function unjoinTable(
   const newTabId = randomUUID();
   await createOpenOrder(tx, cfg, newTabId, [], null);
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
+  if (table.zoneId !== null && (await VENUE_SERVICE.findOrderContext(tx, cfg, newTabId)) !== null) {
+    await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
+  }
   await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
   await transferLines(tx, cfg, tabId, newTabId, transfers);
   return { tabId: newTabId };
@@ -2671,7 +2701,7 @@ export interface HeldOrder {
       pricingUnit: "each" | "weight";
       unitPrice: string;
       vatClass: "general" | "reduced" | "super_reduced" | "zero";
-      category: string;
+      category: string | null;
       allergens: Readonly<
         Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
       > | null;

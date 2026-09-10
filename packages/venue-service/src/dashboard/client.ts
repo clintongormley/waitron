@@ -14,6 +14,7 @@ export interface ServiceZone {
   departmentId: string;
   departmentName: string;
   serviceMode: ServiceMode;
+  serviceModeOverride: ServiceMode | null;
 }
 export interface PreparationRoute {
   id: string;

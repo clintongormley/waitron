@@ -111,15 +111,16 @@ describe("seedCatalogues", () => {
     expect(res.products.some((p) => p.descriptions[LOCALE] === "Mixed salad")).toBe(true);
 
     const cocina = res.stations.find((s) => s.name === "Kitchen");
-    const barra = res.stations.find((s) => s.name === "Bar");
+    const downstairsBar = res.stations.find((s) => s.name === "Downstairs bar");
+    const upstairsBar = res.stations.find((s) => s.name === "Upstairs bar");
     const deli = res.stations.find((s) => s.name === "Deli counter");
     expect(cocina?.is_default).toBe(true);
-    expect(barra).toBeDefined();
-    expect(barra?.is_default).toBe(false);
+    expect(downstairsBar?.is_default).toBe(false);
+    expect(upstairsBar?.is_default).toBe(false);
     expect(deli?.is_default).toBe(false);
 
     // Routing: a drinks category → the bar (Barra); a food category → the kitchen (Cocina).
-    expect(res.drinksRoute[0]?.station_name).toBe("Bar");
+    expect(res.drinksRoute[0]?.station_name).toBe("Downstairs bar");
     expect(res.charcuterieRoute[0]?.station_name).toBe("Deli counter");
 
     // The returned map covers every seeded product and points at a real created id.

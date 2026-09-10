@@ -29,17 +29,30 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
     await expect(runSeed()).resolves.toBe("default department and counter zone ready");
-    await db.execute(sql`update zone_service_policies set service_mode = 'invoice_first'`);
+    const menus = await db.execute<{ id: string }>(sql`
+      insert into catalogues (tenant_id, name)
+      values (${tenantId}, 'Provisioned'), (${tenantId}, 'Authored') returning id`);
+    await db.execute(sql`
+      update locations set catalogue_id = ${menus.rows[0]!.id} where id = ${locationId}`);
+    await db.execute(sql`
+      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+      select ${tenantId}, zone_id, ${menus.rows[1]!.id}, 1
+      from zone_service_policies where tenant_id = ${tenantId}`);
+    await db.execute(sql`
+      update zone_service_policies
+      set service_mode = 'invoice_first', default_menu_id = ${menus.rows[1]!.id}`);
     await runSeed();
 
     const departments = await db.execute<{ count: number }>(sql`
       select count(*)::int as count from departments where tenant_id = ${tenantId}`);
     const zones = await db.execute<{ count: number }>(sql`
       select count(*)::int as count from floor_zones where tenant_id = ${tenantId}`);
-    const policies = await db.execute<{ service_mode: string | null }>(sql`
-      select service_mode from zone_service_policies where tenant_id = ${tenantId}`);
+    const policies = await db.execute<{ service_mode: string | null; default_menu_id: string }>(sql`
+      select service_mode, default_menu_id from zone_service_policies where tenant_id = ${tenantId}`);
     expect(departments.rows[0]!.count).toBe(1);
     expect(zones.rows[0]!.count).toBe(1);
-    expect(policies.rows).toEqual([{ service_mode: "invoice_first" }]);
+    expect(policies.rows).toEqual([
+      { service_mode: "invoice_first", default_menu_id: menus.rows[1]!.id },
+    ]);
   });
 });

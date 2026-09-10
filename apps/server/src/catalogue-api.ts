@@ -110,6 +110,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.invalid_id": 400,
   "catalogue.not_found": 404,
   "menu_item.not_found": 404,
+  "product.not_found": 404,
+  "menu_section.not_found": 404,
   "allergen.invalid_code": 400,
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,

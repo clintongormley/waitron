@@ -1,5 +1,8 @@
 # Catalogue — priced products the till can sell — Design
 
+> **2026-09-10:** Products are now independent of sellable menu offers; each offer owns its menu,
+> section, price and modifier choices. See `2026-09-09-venue-departments-and-menus-design.md`.
+
 **Date:** 2026-08-05
 **Status:** Approved in brainstorming
 **Scope:** The minimal priced-item model a till reads to build a basket, and the thin change to the

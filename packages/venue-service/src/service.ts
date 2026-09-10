@@ -8,6 +8,7 @@ import {
   listZoneOffers,
   listWorkingLineContexts,
   recordOrderServiceContext,
+  retargetOrderServiceContext,
   recordWorkingLineContexts,
   resolvePreparationRoute,
   resolveNewOrderZone,
@@ -28,6 +29,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveNewOrderZone,
   resolveZoneOffer,
   recordOrderContext: recordOrderServiceContext,
+  retargetOrderContext: retargetOrderServiceContext,
   recordLineContexts: recordWorkingLineContexts,
   getOrderContext: getOrderServiceContext,
 };

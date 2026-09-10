@@ -12,6 +12,7 @@ declare module "@waitron/shared" {
       expected: string;
       actual: string;
     };
+    "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
     "route.missing": { zoneId: string; productId: string };
     "route.not_found": { routeId: string };
     "route.subject_not_found": { subject: string; id: string };

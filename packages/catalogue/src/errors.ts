@@ -36,8 +36,10 @@ declare module "@waitron/shared" {
      * the composite FK backstop would reject the missing reference with 23503. Composite FKs also
      * reject tenant-inconsistent references; catalogue existence alone does not check that. */
     "catalogue.not_found": { catalogueId: string };
-    /** A menu offer edit names no active item belonging to that menu. */
-    "menu_item.not_found": { menuId: string; menuItemId: string };
+    /** A menu offer operation names no active item; menuId is present when the route supplies it. */
+    "menu_item.not_found": { menuId?: string; menuItemId: string };
+    "product.not_found": { productId: string };
+    "menu_section.not_found": { menuId: string; sectionId: string };
     /**
      * An option group's AUTHORING config violated one of its DB invariants (ordering modifiers, Task
      * 11): the select bounds must satisfy `max_select >= min_select >= 0`, and a `required` group must

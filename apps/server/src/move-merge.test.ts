@@ -140,6 +140,50 @@ async function statusIdOf(tableId: string): Promise<string | null> {
   return rows[0]!.status_id;
 }
 
+async function serviceContextOf(tabId: string): Promise<{
+  zoneId: string;
+  departmentId: string;
+  serviceMode: string;
+} | null> {
+  const { rows } = await db.execute<{
+    zone_id: string;
+    department_id: string;
+    service_mode: string;
+  }>(sql`
+    select zone_id, department_id, service_mode
+    from order_service_contexts
+    where working_order_id = ${tabId}`);
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : { zoneId: row.zone_id, departmentId: row.department_id, serviceMode: row.service_mode };
+}
+
+async function configureTableZone(
+  cfg: TillConfig,
+  tableId: string,
+  name: string,
+  serviceMode: "table_tab" | "prepay",
+): Promise<{ zoneId: string; departmentId: string }> {
+  const departmentId = randomUUID();
+  const zoneId = randomUUID();
+  await db.execute(sql`
+    insert into departments
+      (id, tenant_id, location_id, name, trading_name, default_service_mode)
+    values
+      (${departmentId}, ${cfg.tenantId}, ${cfg.locationId}, ${name}, ${name}, ${serviceMode})`);
+  await db.execute(sql`
+    insert into floor_zones (id, tenant_id, location_id, name)
+    values (${zoneId}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+  await db.execute(sql`
+    insert into zone_service_policies
+      (tenant_id, location_id, zone_id, department_id, service_mode)
+    values
+      (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${departmentId}, ${serviceMode})`);
+  await db.execute(sql`update dining_tables set zone_id = ${zoneId} where id = ${tableId}`);
+  return { zoneId, departmentId };
+}
+
 /** Seed one active table_service_statuses row (TS-2 schema) as the owner; returns its id. */
 async function seedStatus(cfg: TillConfig, label: string): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(sql`
@@ -285,6 +329,30 @@ describe("moveTabLines", () => {
 });
 
 describe("moveTab", () => {
+  it("adopts the destination table's zone policy while keeping the existing lines", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const src = await seedTable(cfg, "Zone-src");
+    const dst = await seedTable(cfg, "Zone-dst");
+    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
+    const source = await configureTableZone(cfg, src, "Downstairs", "table_tab");
+    const destination = await configureTableZone(cfg, dst, "Upstairs", "prepay");
+    await db.execute(sql`
+      insert into order_service_contexts
+        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+      values
+        (${cfg.tenantId}, ${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
+
+    const before = await linesOf(tabId);
+    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
+
+    expect(await serviceContextOf(tabId)).toEqual({
+      zoneId: destination.zoneId,
+      departmentId: destination.departmentId,
+      serviceMode: "prepay",
+    });
+    expect(await linesOf(tabId)).toEqual(before);
+  });
+
   it("relocates a tab to a free table: source freed + its status cleared, target points at the tab", async () => {
     const { cfg, cafeId } = await setupVenue();
     const src = await seedTable(cfg, "Src");
@@ -375,6 +443,25 @@ describe("moveTab", () => {
 });
 
 describe("joinTable", () => {
+  it("refuses to join a table from a different service zone", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t1 = await seedTable(cfg, "Join-downstairs");
+    const t2 = await seedTable(cfg, "Join-upstairs");
+    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
+    const source = await configureTableZone(cfg, t1, "Join downstairs", "table_tab");
+    const destination = await configureTableZone(cfg, t2, "Join upstairs", "table_tab");
+    await db.execute(sql`
+      insert into order_service_contexts
+        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+      values
+        (${cfg.tenantId}, ${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
+
+    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
+      code: "service_zone.join_mismatch",
+      params: { orderZoneId: source.zoneId, tableZoneId: destination.zoneId },
+    });
+  });
+
   it("extends a tab's coverage to a free table: BOTH tables point at the one tab, no line-move", async () => {
     const { cfg, cafeId } = await setupVenue();
     const t1 = await seedTable(cfg, "J1");

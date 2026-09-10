@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
+import {
+  nodeId as brandNodeId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import type { NodeId, TenantId, TillId } from "@waitron/shared";
 import { currentSif, registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
@@ -18,6 +22,8 @@ const DEFAULT_ENTORNO: Entorno = "production";
 
 export interface SeededDrainOptions {
   count: number;
+  /** Reuse an operational venue's fiscal identity instead of creating another venue. */
+  identity?: { tenantId: string; tillId: string; nodeId: string; nif: string };
   /**
    * Future task hook (Task 9's error-2004/AceptadoConErrores path) — the fake AEAT this suite
    * uses defaults `serverNow` to 2026-07-21T00:00:00Z, so a `futureDated` row is stamped
@@ -63,6 +69,7 @@ export interface SeededDrain {
 // (`SeededDrainOptions` carries no `serverNow` field — matching the brief's interface literally).
 const PAST_FECHA = "2026-07-20";
 const FUTURE_FECHA = "2026-07-22";
+let reusedIdentitySequence = 10_000;
 
 /** AEAT's `sf:fecha` ("DD-MM-YYYY") from this file's own ISO ("YYYY-MM-DD") literals. */
 function toAeatDate(isoDate: string): string {
@@ -183,8 +190,27 @@ export async function seedPendingEnvios(
   db: Database,
   opts: SeededDrainOptions,
 ): Promise<SeededDrain> {
-  const { tenantId, tillId, nodeId } = await seedTenantWithSif(db);
-  const sif = await db.transaction((tx) => currentSif(tx, tenantId, nodeId));
+  const seeded =
+    opts.identity === undefined
+      ? await seedTenantWithSif(db)
+      : {
+          tenantId: brandTenantId(opts.identity.tenantId),
+          tillId: brandTillId(opts.identity.tillId),
+          nodeId: brandNodeId(opts.identity.nodeId),
+        };
+  const { tenantId, tillId, nodeId } = seeded;
+  const sif = await db.transaction((tx) =>
+    opts.identity === undefined
+      ? currentSif(tx, tenantId, nodeId)
+      : registerSif(tx, {
+          tenantId,
+          nodeId,
+          nif: opts.identity.nif,
+          idSistemaInformatico: "WT",
+        }),
+  );
+  const firstSequence = opts.identity === undefined ? 1 : reusedIdentitySequence;
+  if (opts.identity !== undefined) reusedIdentitySequence += opts.count;
 
   const tenantRow = await db.execute<{ legal_name: string }>(sql`
     select legal_name from tenants where id = ${tenantId}
@@ -198,17 +224,18 @@ export async function seedPendingEnvios(
   const registroIds: string[] = [];
   const facturaKeys: string[] = [];
 
-  for (let i = 1; i <= opts.count; i += 1) {
+  for (let offset = 0; offset < opts.count; offset += 1) {
+    const sequence = firstSequence + offset;
     // Deterministic, distinct, and hex-valid (registros_huella_ck: /^[0-9A-F]{64}$/) — digits
     // alone already satisfy that character class, so no hex letters are needed.
-    const huella = String(i).padStart(64, "0");
+    const huella = String(sequence).padStart(64, "0");
     const { registroId, numSerieFactura } = await insertPendingAlta(db, {
       tenantId,
       tillId,
       nodeId,
       sifId: sif.id,
       nif: sif.nif,
-      secuencia: i,
+      secuencia: sequence,
       huella,
       fecha,
       entorno,

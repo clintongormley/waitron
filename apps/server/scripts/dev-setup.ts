@@ -324,7 +324,7 @@ export async function inspectVenues(
   }
 }
 
-/** Provision one preproduction venue + SIF, then seed the full demo restaurant (two menus, floor,
+/** Provision one preproduction venue + SIF, then seed the full demo restaurant (three menus, floor,
  * staff, media, and `salesDays` of back-dated preproduction sales) via `seedDemoRestaurant`. Returns
  * the five fiscal ids the server boots against. The bare `seedLocale` drives every seeded string; the
  * full tag it maps to (`SEED_INVOICE_LOCALE`) drives the location's `invoiceLocales`; `salesDays` is

@@ -66,7 +66,9 @@ async function resolveStationIds(
     returning id`);
   const bar = barra[0]?.id;
   if (bar === undefined) {
-    throw new Error(`seedCatalogues: failed to create "Barra" station for location ${locationId}`);
+    throw new Error(
+      `seedCatalogues: failed to create "Downstairs bar" station for location ${locationId}`,
+    );
   }
   const { rows: upstairsRows } = await tx.execute<{ id: string }>(sql`
     insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)

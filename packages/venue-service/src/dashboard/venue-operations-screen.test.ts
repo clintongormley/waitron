@@ -1,11 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import "./venue-operations-screen.js";
 
 const hosts: HTMLElement[] = [];
+beforeEach(() => setLocale("en"));
 afterEach(() => {
+  setLocale("en");
   for (const host of hosts.splice(0)) host.remove();
 });
 
@@ -41,7 +44,8 @@ const model: VenueServiceView = {
       name: "Dining room",
       departmentId: "d1",
       departmentName: "Restaurant and bar",
-      serviceMode: "table_tab",
+      serviceMode: "prepay",
+      serviceModeOverride: "prepay",
     },
   ],
   routes: [
@@ -95,6 +99,35 @@ async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {
 }
 
 describe("venue operations screen", () => {
+  it("shows a summary and a message beside every missing required department field", async () => {
+    const api = { load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi;
+    const el = await mount(api);
+
+    (el.shadowRoot!.querySelector('[data-test="add-department"]') as HTMLElement).click();
+    await el.updateComplete;
+
+    const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
+    expect(summary.shadowRoot!.textContent).toContain("problem with this form");
+    expect(summary.shadowRoot!.textContent).toContain("Department name");
+    expect(summary.shadowRoot!.textContent).toContain("Trading name");
+    expect(
+      el.shadowRoot!.querySelector('[data-field-error="department-name"]')?.textContent,
+    ).toContain("Department name");
+    expect(
+      el.shadowRoot!.querySelector('[data-field-error="trading-name"]')?.textContent,
+    ).toContain("Trading name");
+  });
+
+  it("uses localized weekday names", async () => {
+    setLocale("es");
+    const api = { load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    expect(el.shadowRoot!.textContent).toContain("Lunes 09:00–18:00");
+    expect(el.shadowRoot!.querySelector('[name="hours-weekday"]')?.textContent).toContain(
+      "Domingo",
+    );
+  });
+
   it("shows departments, trading names, zones, menu defaults and hours", async () => {
     const api = { load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -113,6 +146,9 @@ describe("venue operations screen", () => {
       ).value,
     ).toBe("11.00");
     expect(text).toContain("Dining room");
+    expect(
+      el.shadowRoot!.querySelector('[name="zone-mode-z1"]') as HTMLSelectElement,
+    ).toHaveProperty("value", "prepay");
     expect(el.shadowRoot!.querySelector('[data-test="readiness-issue-0"]')!.textContent).toContain(
       "Negroni",
     );
@@ -177,6 +213,47 @@ describe("venue operations screen", () => {
       productId: "p1",
       sectionId: "sec2",
       grossPrice: "9.00",
+      displayOrder: 0,
+    });
+  });
+
+  it("reuses an existing named section when adding another product", async () => {
+    const sectionModel: VenueServiceView = {
+      ...model,
+      products: [
+        ...model.products,
+        { id: "p2", descriptions: { en: "Olives" }, pricingUnit: "each", active: true },
+      ],
+      offers: [
+        ...model.offers,
+        {
+          id: "i2",
+          menuId: "m2",
+          productId: "p2",
+          sectionId: "sec2",
+          sectionName: { en: "Snacks" },
+          descriptions: { en: "Olives" },
+          grossPrice: "4.00",
+        },
+      ],
+    };
+    const api = {
+      load: vi.fn().mockResolvedValue(sectionModel),
+      createMenuSection: vi.fn(),
+      createMenuItem: vi.fn().mockResolvedValue({ id: "i3" }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const deli = el.shadowRoot!.querySelector('[data-menu="m2"]')!;
+    (deli.querySelector('[name="offer-section-m2"]') as HTMLInputElement).value = "Snacks";
+    (deli.querySelector('[name="offer-price-m2"]') as HTMLInputElement).value = "5.00";
+    (deli.querySelector("wt-button:last-of-type") as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(api.createMenuSection).not.toHaveBeenCalled();
+    expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
+      productId: "p1",
+      sectionId: "sec2",
+      grossPrice: "5.00",
       displayOrder: 0,
     });
   });

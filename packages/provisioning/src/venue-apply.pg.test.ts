@@ -206,18 +206,17 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       const samePlan = planVenue(venueRequest("B12345678"), ALL_MODULES);
       const different = venueRequest("B12345678");
       different.location.name = "Another venue";
-      const [same, other] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         applyVenue(samePlan, { db: owner, modules: ALL_MODULES }),
         applyVenue(planVenue(different, ALL_MODULES), {
           db: secondOwner,
           modules: ALL_MODULES,
         }),
       ]);
-      expect(same.status).toBe("fulfilled");
-      expect(other).toMatchObject({
-        status: "rejected",
-        reason: { code: "provisioning.second_venue" },
-      });
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "rejected")).toEqual([
+        expect.objectContaining({ reason: { code: "provisioning.second_venue" } }),
+      ]);
       const counts = await owner.execute<{ locations: number; nodes: number }>(sql`
         select
           (select count(*) from locations)::int as locations,

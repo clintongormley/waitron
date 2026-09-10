@@ -112,7 +112,7 @@ export interface ZoneMenuOffer {
   readonly descriptions: Readonly<Record<string, string>>;
   readonly pricingUnit: "each" | "weight";
   readonly vatClass: string;
-  readonly category: string;
+  readonly category: string | null;
   readonly allergens: Readonly<
     Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
   > | null;
@@ -183,6 +183,12 @@ export interface VenueServiceContribution {
     menuItemId: string,
   ): Promise<ZoneMenuOffer>;
   recordOrderContext(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    workingOrderId: string,
+    zoneId: string,
+  ): Promise<void>;
+  retargetOrderContext(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },
     workingOrderId: string,

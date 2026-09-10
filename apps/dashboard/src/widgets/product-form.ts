@@ -204,7 +204,7 @@ export class ProductForm extends LitElement {
   @property({ attribute: false }) courses: Course[] = [];
 
   /** Every reusable option group (from `DashboardApi.listOptionGroups`), the attach section's picker
-   * source (Task 12). Rendered in BOTH create and edit mode — unlike the station/course overrides, the
+   * source (Task 12). Rendered in BOTH create and edit mode — unlike the course override, the
    * server accepts `optionGroupIds` on the create route too. Empty by default; the screen assigns it. */
   @property({ attribute: false }) optionGroups: OptionGroup[] = [];
 
@@ -342,8 +342,8 @@ export class ProductForm extends LitElement {
   }
 
   /**
-   * The course `<select>` changed (edit mode only, so `this.product` is set). Like the station override,
-   * the product course is a SEPARATE server route (`setProductCourse`), so it fires its own live event
+   * The course `<select>` changed (edit mode only, so `this.product` is set). The product course uses
+   * a separate server route (`setProductCourse`), so it fires its own live event
    * rather than joining the confirm patch. The empty option maps to `null` (clear the default course),
    * any other value to the course id; emit `set-product-course { productId, courseId }` bubbles+composed
    * for the screen. `stopPropagation` is defensive consistency with the other composed `<select>` handlers.
@@ -422,7 +422,7 @@ export class ProductForm extends LitElement {
   // Pick + ORDER which reusable option groups apply: an ordered list of picked rows (↑/↓/Remove) plus a
   // picker offering only the groups not yet picked. This state lives on the FORM (not a screen), because
   // the picked set is part of the SAME create/update body the confirm button sends — there is no
-  // separate "save the attach set" route to call immediately, the way `set-product-station` is.
+  // separate "save the attach set" route to call immediately.
 
   /** The groups not yet in `selectedGroupIds` — the picker's option list, in `optionGroups` order. */
   #availableGroups(): OptionGroup[] {
@@ -749,7 +749,7 @@ export class ProductForm extends LitElement {
           </select>
         </label>
         ${
-          // Default course (KDS-2) — EDIT MODE ONLY, the sibling of the station override above: a new
+          // Default course (KDS-2) — EDIT MODE ONLY: a new
           // product has no id yet, so the course write is offered only on an existing product. No
           // persisted value is projected by the read, so it starts on "— none —" and is a write affordance.
           this.product

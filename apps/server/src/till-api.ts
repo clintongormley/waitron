@@ -285,6 +285,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "service_zone.default_missing": 409,
   "service_zone.offer_not_allowed": 400,
   "service_zone.mode_incompatible": 409,
+  "service_zone.join_mismatch": 409,
   "order.service_context_missing": 409,
   "route.subject_not_found": 404,
   "route.missing": 409,

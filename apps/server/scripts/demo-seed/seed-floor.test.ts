@@ -94,7 +94,13 @@ describe("seedFloor", () => {
       return { zones, tables, statuses };
     });
 
-    expect(res.zones.map((z) => z.name)).toEqual(["Dining room", "Terrace", "Bar", "Deli counter"]);
+    expect(res.zones.map((z) => z.name)).toEqual([
+      "Dining room",
+      "Terrace",
+      "Downstairs bar",
+      "Upstairs bar",
+      "Deli counter",
+    ]);
     expect(res.zones.every((z) => z.active)).toBe(true);
 
     // ~16 tables, each placed (a live zone, a capacity, and a full spatial placement).
