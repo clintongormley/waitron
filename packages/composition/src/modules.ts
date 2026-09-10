@@ -23,7 +23,9 @@ import { WORKFORCE_CLASSIFICATION, WORKFORCE_CONFIGURATION_TRANSFER } from "@wai
 import {
   VENUE_SERVICE,
   VENUE_SERVICE_CLASSIFICATION,
+  VENUE_SERVICE_PERMISSIONS,
   VENUE_SERVICE_PROVISIONING,
+  VENUE_SERVICE_ROUTES,
 } from "@waitron/venue-service";
 import {
   WORKFORCE_ES_CLASSIFICATION,
@@ -91,6 +93,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     venueService: VENUE_SERVICE,
     configurationTransfer: { kind: "none" },
     provisioning: VENUE_SERVICE_PROVISIONING,
+    routes: VENUE_SERVICE_ROUTES,
+    permissions: VENUE_SERVICE_PERMISSIONS,
   },
   {
     name: "identity",

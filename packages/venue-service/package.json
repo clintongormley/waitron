@@ -16,11 +16,14 @@
   "dependencies": {
     "@waitron/catalogue": "workspace:*",
     "@waitron/db": "workspace:*",
+    "@waitron/identity": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/server-kit": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.6.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.4",

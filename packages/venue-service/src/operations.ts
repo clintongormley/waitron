@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { catalogues, floorZones, kitchenStations, products, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { listMenuOffers, type MenuOffer } from "@waitron/catalogue";
@@ -25,6 +25,21 @@ export interface Department {
   tradingName: string;
   defaultServiceMode: ServiceMode;
   active: boolean;
+}
+
+export async function listDepartments(tx: Transaction, cfg: VenueScope): Promise<Department[]> {
+  const rows = await tx
+    .select({
+      id: departments.id,
+      name: departments.name,
+      tradingName: departments.tradingName,
+      defaultServiceMode: departments.defaultServiceMode,
+      active: departments.active,
+    })
+    .from(departments)
+    .where(and(eq(departments.tenantId, cfg.tenantId), eq(departments.locationId, cfg.locationId)))
+    .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
+  return rows.map((row) => ({ ...row, defaultServiceMode: row.defaultServiceMode as ServiceMode }));
 }
 
 /** List the active, configured zones that can start a new order at this venue. */
@@ -507,6 +522,30 @@ export async function createPreparationRoute(
     })
     .returning({ id: preparationRoutes.id });
   return row!.id;
+}
+
+export async function listPreparationRoutes(tx: Transaction, cfg: VenueScope) {
+  return tx
+    .select({
+      id: preparationRoutes.id,
+      zoneId: preparationRoutes.zoneId,
+      categoryId: preparationRoutes.categoryId,
+      productId: preparationRoutes.productId,
+      stationId: preparationRoutes.stationId,
+      noPreparation: preparationRoutes.noPreparation,
+    })
+    .from(preparationRoutes)
+    .where(
+      and(
+        eq(preparationRoutes.tenantId, cfg.tenantId),
+        eq(preparationRoutes.locationId, cfg.locationId),
+      ),
+    )
+    .orderBy(
+      desc(preparationRoutes.zoneId),
+      desc(preparationRoutes.productId),
+      asc(preparationRoutes.id),
+    );
 }
 
 /** Resolve zone/product, zone/category, venue/product, then venue/category. */

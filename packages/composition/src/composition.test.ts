@@ -8,6 +8,12 @@ import {
 import { manifestSets } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
+import {
+  VENUE_SERVICE,
+  VENUE_SERVICE_PERMISSIONS,
+  VENUE_SERVICE_PROVISIONING,
+  VENUE_SERVICE_ROUTES,
+} from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 
 describe("ALL_MODULES is the migration source of truth", () => {
@@ -92,6 +98,14 @@ describe("ALL_MODULES vocabulary seat", () => {
 });
 
 describe("ALL_MODULES provisioning and fiscal seats", () => {
+  it("venue service declares its service, provisioning, route, and permission seats", () => {
+    const venueService = ALL_MODULES.find((module) => module.name === "venue-service");
+    expect(venueService?.venueService).toBe(VENUE_SERVICE);
+    expect(venueService?.provisioning).toBe(VENUE_SERVICE_PROVISIONING);
+    expect(venueService?.routes).toBe(VENUE_SERVICE_ROUTES);
+    expect(venueService?.permissions).toBe(VENUE_SERVICE_PERMISSIONS);
+  });
+
   it("fiscal declares its provisioning contribution and fills the fiscal slot, by reference", () => {
     const fiscal = ALL_MODULES.find((m) => m.name === "fiscal-verifactu");
     expect(fiscal?.provisioning).toBe(FISCAL_PROVISIONING);
