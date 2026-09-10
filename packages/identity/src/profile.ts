@@ -5,11 +5,16 @@ import { AppError, assertSupportedLocale } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
+import {
+  confirmEmailChangeByCode,
+  issueAccountAction,
+  type IssuedAccountAction,
+} from "./account-action.js";
 import { webauthnCredentials } from "./schema/webauthn.js";
 import { sessions } from "./schema/sessions.js";
 import { resolveManagementSession } from "./management-session.js";
 import {
-  asEmailTaken,
+  asPersonUniqueViolation,
   assertDisplayNameAvailable,
   assertEmailAvailable,
   normalizeAndValidateEmail,
@@ -220,6 +225,7 @@ export async function readOwnProfile(tx: Transaction, input: Owner) {
     lastNames: person.lastNames,
     telephone: person.telephone,
     email: person.email,
+    pendingEmail: person.pendingEmail,
     locale: person.locale,
     hasPassword: person.passwordHash !== null,
     hasTotp: person.totpSecret !== null,
@@ -238,8 +244,9 @@ export async function saveOwnProfile(
       telephone?: string | null;
       email: string;
       locale: string;
+      emailCodeKey?: Buffer;
     },
-): Promise<void> {
+): Promise<IssuedAccountAction | null> {
   const person = await ownPerson(tx, input);
   const displayName = input.displayName.trim();
   if (displayName === "") throw new AppError("profile.invalid", { field: "displayName" });
@@ -265,15 +272,39 @@ export async function saveOwnProfile(
         firstNames,
         lastNames,
         telephone,
-        email,
+        pendingEmail: changedEmail ? email : null,
         locale,
-        emailVerifiedAt: changedEmail ? null : person.emailVerifiedAt,
       })
       .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
   } catch (error) {
-    asEmailTaken(error, email);
+    asPersonUniqueViolation(error, { displayName, email });
   }
-  if (changedEmail) await invalidateLinks(tx, input.tenantId, person.id);
+  if (!changedEmail) {
+    if (person.pendingEmail !== null) await invalidateLinks(tx, input.tenantId, person.id);
+    return null;
+  }
+  await invalidateLinks(tx, input.tenantId, person.id);
+  return issueAccountAction(tx, {
+    tenantId: input.tenantId,
+    personId: person.id,
+    purpose: "email_change",
+    targetEmail: email,
+    codeKey: input.emailCodeKey,
+  });
+}
+
+export async function confirmOwnEmailChange(
+  tx: Transaction,
+  input: Owner & { code: string; codeKey: Buffer },
+): Promise<string | null> {
+  const person = await ownPerson(tx, input);
+  const email = await confirmEmailChangeByCode(tx, {
+    tenantId: input.tenantId,
+    personId: person.id,
+    code: input.code,
+    codeKey: input.codeKey,
+  });
+  return email;
 }
 
 export async function changeOwnPin(

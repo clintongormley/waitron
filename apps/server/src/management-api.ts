@@ -287,6 +287,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // not the `?? 400` default).
   "person.email_invalid": 400,
   "person.email_taken": 409,
+  "profile.invalid": 400,
   "person.display_name_taken": 409,
   "person.last_admin": 409,
   "person.transition_invalid": 409,
@@ -387,13 +388,8 @@ const run = createErrorBoundary(STATUS, "management.failed");
  * it. A malformed id passed straight into a `uuid` column would `22P02` → an opaque 500; refusing
  * it here as `person.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a
  * clean 404. This screens SHAPE only — it does NOT check existence: a WELL-FORMED id that names
- * no row (a person that does not exist, ) passes this guard, reaches the identity `UPDATE persons
- * … WHERE id = <id>` (which matches zero rows and throws nothing — the staff mutations carry no
- * `.returning()`/row-count check), and the route answers 204, the same silent no-op an
- * out-of-range PATCH `status` gets. This is where the guard DIVERGES from till-api.ts's
- * `requireUuidId`: that file's routes then look the row up and throw on absence; the identity
- * staff mutations do not. The three gated `/staff/:id/…` routes (patch, reset-pin, set-password)
- * pass `c.req.param("id")` (a `string` in their route-typed context) and share this one guard.
+ * no row passes this guard; the identity operation then returns `person.not_found`. Every staff
+ * route that takes a person id shares this shape guard before its tenant-scoped lookup.
  */
 function requirePersonId(id: string): string {
   if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
@@ -1047,15 +1043,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Create a person. Gated (401 before any DB work; `createPerson` then enforces `person.manage`).
-  // The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why) and screened: a missing
-  // or non-string `displayName`, `role` or `pin` — every field of a `null`/non-object body included —
-  // is refused as `management.request_invalid` naming the FIELDS, never their values. `email` is
-  // required for every staff account; its SHAPE and
-  // per-tenant uniqueness are `createPerson`'s job (`person.email_invalid` → 400, `person.email_taken`
-  // → 409). The narrowed
-  // fields are bound to locals AFTER the guard because that narrowing does not survive into the
-  // `withTenant` closure — the same pattern the login route above uses. Returns the new id at 201.
+  // Create a pending person and issue their invitation in the same transaction. Body validation
+  // happens before the transaction; identity owns authorization and tenant-wide uniqueness.
   app.post("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1113,15 +1102,18 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
-      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
-        return c.json({ invitationSent: false });
-      }
-      const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "person.manage",
         });
+      });
+      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+        return c.json({ invitationSent: false });
+      }
+      const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
         return issueAccountAction(tx, {
           tenantId: deps.cfg.tenantId,
           personId,
@@ -1174,11 +1166,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Reset a person's PIN. Gated. `:id` screened with `isUuid` (→ `person.not_found`); the body is
-  // coerced to `{}` (via `readJsonBody`, see the login route) so a `null`/non-object body hits the same guard,
-  // then `pin` must be a string else `management.request_invalid` naming the FIELD, never the PIN
-  // itself. The narrowed `pin` is bound to a local before the closure; `resetPin` enforces
-  // `person.manage` and length-checks the value.
+  // Clear a person's PIN and end their open device sessions. The person chooses the replacement in
+  // their own profile; an administrator never handles it.
   app.post("/management-api/staff/:id/reset-pin", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1207,6 +1196,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "person.manage",
+        });
+      });
       if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
         return c.json({ invitationSent: false });
       }
@@ -1228,6 +1224,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "person.manage",
+        });
+      });
       if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
         return c.json({ invitationSent: false });
       }

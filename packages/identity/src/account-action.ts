@@ -1,7 +1,7 @@
 import "./errors.js";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { isUniqueViolation, uniqueViolationConstraint, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
@@ -11,11 +11,13 @@ import { managementAccountActions } from "./schema/management-account-actions.js
 import { managementSessions } from "./schema/management-sessions.js";
 import { persons } from "./schema/persons.js";
 
-export type AccountActionPurpose = "invitation" | "password_reset";
+export type AccountActionPurpose = "invitation" | "password_reset" | "email_change";
+type CredentialActionPurpose = Exclude<AccountActionPurpose, "email_change">;
 
 export const ACCOUNT_ACTION_TTL_MS = {
   invitation: 24 * 60 * 60 * 1000,
   password_reset: 30 * 60 * 1000,
+  email_change: 30 * 60 * 1000,
 } as const;
 export const ACCOUNT_ACTION_CODE_TTL_MS = 10 * 60 * 1000;
 export const ACCOUNT_ACTION_CODE_ATTEMPTS = 5;
@@ -57,6 +59,7 @@ export async function issueAccountAction(
     personId: string;
     purpose: AccountActionPurpose;
     codeKey?: Buffer;
+    targetEmail?: string;
     now?: Date;
   },
 ): Promise<IssuedAccountAction> {
@@ -75,7 +78,16 @@ export async function issueAccountAction(
   if (person.status === "suspended") {
     throw new AppError("person.suspended", { personId: input.personId });
   }
+  if (input.purpose === "invitation" && person.status !== "pending") {
+    throw new AppError("person.transition_invalid", {});
+  }
+  if (input.purpose === "email_change" && person.status !== "active") {
+    throw new AppError("person.transition_invalid", {});
+  }
   if (person.email === null) throw new AppError("person.email_invalid", {});
+  const deliveryEmail =
+    input.purpose === "email_change" ? normalizeEmail(input.targetEmail ?? "") : person.email;
+  if (!isValidEmail(deliveryEmail)) throw new AppError("person.email_invalid", {});
 
   await tx
     .update(managementAccountActions)
@@ -103,11 +115,12 @@ export async function issueAccountAction(
       tenantId: input.tenantId,
       personId: input.personId,
       purpose: input.purpose,
+      targetEmail: input.purpose === "email_change" ? deliveryEmail : null,
       tokenHash: hashToken(token),
       codeHash:
         code === undefined
           ? null
-          : hashCode(input.codeKey!, input.tenantId, person.email, input.purpose, code),
+          : hashCode(input.codeKey!, input.tenantId, deliveryEmail, input.purpose, code),
       codeExpiresAt: codeExpiresAt ?? null,
       createdAt: nowIso,
       expiresAt,
@@ -116,7 +129,7 @@ export async function issueAccountAction(
   return {
     id: row!.id,
     personId: input.personId,
-    email: person.email,
+    email: deliveryEmail,
     displayName: person.displayName,
     locale: person.locale,
     purpose: input.purpose,
@@ -128,10 +141,92 @@ export async function issueAccountAction(
 
 interface CompletionInput {
   tenantId: string;
-  purpose: AccountActionPurpose;
+  purpose: CredentialActionPurpose;
   password: string;
   pin?: string;
   now?: Date;
+}
+
+export async function confirmEmailChangeByCode(
+  tx: Transaction,
+  input: { tenantId: string; personId: string; code: string; codeKey: Buffer; now?: Date },
+): Promise<string | null> {
+  const nowIso = (input.now ?? new Date()).toISOString();
+  const [action] = await tx
+    .select({
+      id: managementAccountActions.id,
+      codeHash: managementAccountActions.codeHash,
+      targetEmail: managementAccountActions.targetEmail,
+    })
+    .from(managementAccountActions)
+    .where(
+      and(
+        eq(managementAccountActions.tenantId, input.tenantId),
+        eq(managementAccountActions.personId, input.personId),
+        eq(managementAccountActions.purpose, "email_change"),
+        isNull(managementAccountActions.usedAt),
+        gt(managementAccountActions.expiresAt, nowIso),
+        gt(managementAccountActions.codeExpiresAt, nowIso),
+        lt(managementAccountActions.codeAttempts, ACCOUNT_ACTION_CODE_ATTEMPTS),
+      ),
+    )
+    .orderBy(sql`${managementAccountActions.createdAt} desc`)
+    .limit(1)
+    .for("update");
+  if (action?.codeHash === null || action?.targetEmail === null || action === undefined)
+    return null;
+  const supplied = Buffer.from(
+    hashCode(input.codeKey, input.tenantId, action.targetEmail, "email_change", input.code),
+    "hex",
+  );
+  const stored = Buffer.from(action.codeHash, "hex");
+  if (stored.length !== supplied.length || !timingSafeEqual(stored, supplied)) {
+    await tx
+      .update(managementAccountActions)
+      .set({ codeAttempts: sql`${managementAccountActions.codeAttempts} + 1` })
+      .where(
+        and(
+          eq(managementAccountActions.tenantId, input.tenantId),
+          eq(managementAccountActions.id, action.id),
+        ),
+      );
+    return null;
+  }
+  const claimed = await tx
+    .update(managementAccountActions)
+    .set({ usedAt: nowIso })
+    .where(
+      and(
+        eq(managementAccountActions.tenantId, input.tenantId),
+        eq(managementAccountActions.id, action.id),
+        isNull(managementAccountActions.usedAt),
+      ),
+    )
+    .returning({ id: managementAccountActions.id });
+  if (claimed.length !== 1) return null;
+  try {
+    const changed = await tx
+      .update(persons)
+      .set({ email: action.targetEmail, pendingEmail: null, emailVerifiedAt: nowIso })
+      .where(
+        and(
+          eq(persons.id, input.personId),
+          eq(persons.tenantId, input.tenantId),
+          eq(persons.pendingEmail, action.targetEmail),
+        ),
+      )
+      .returning({ email: persons.email });
+    if (changed.length !== 1) return null;
+    return changed[0]!.email;
+  } catch (error) {
+    if (
+      isUniqueViolation(error) &&
+      uniqueViolationConstraint(error) === "persons_tenant_email_uq"
+    ) {
+      throw new AppError("person.email_taken", { email: action.targetEmail });
+    }
+    throw error;
+  }
 }
 
 export interface AccountActionCompletion {

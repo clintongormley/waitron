@@ -265,6 +265,7 @@ export async function adoptFromPrimary(
       databaseUrl: deps.databaseUrl,
       migrationsDatabaseUrl: deps.migrationsDatabaseUrl,
       environment: bundle.environment,
+      accountKey: bundle.accountKey,
     });
     // Mint the offline break-glass secret AFTER the mirror is stamped: this is the ONLY promotable
     // node, so adopt is the right enrolment point. The raw secret is returned exactly once; only its

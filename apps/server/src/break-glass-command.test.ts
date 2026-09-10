@@ -184,6 +184,39 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
     expect((await readPerson(tenantId, adminId))!.status).toBe("active");
   });
 
+  it("clears second factors and linked login methods so the replacement password restores access", async () => {
+    const { tenantId, adminId } = await setupTenant();
+    await withTenant(suite.admin, tenantId, async (tx) => {
+      await tx.execute(
+        sql`update persons set totp_secret = 'sealed', google_subject = 'subject' where id = ${adminId}`,
+      );
+      await tx.execute(
+        sql`insert into webauthn_credentials (tenant_id, person_id, credential_id, public_key) values (${tenantId}, ${adminId}, 'credential', 'key')`,
+      );
+      await tx.execute(
+        sql`insert into recovery_codes (tenant_id, person_id, code_hash) values (${tenantId}, ${adminId}, ${"a".repeat(64)})`,
+      );
+    });
+
+    expect((await run(baseEnv(tenantId))).code).toBe(0);
+
+    const state = await suite.admin.execute<{
+      totp_secret: string | null;
+      google_subject: string | null;
+      passkeys: number;
+      recovery_codes: number;
+    }>(sql`select p.totp_secret, p.google_subject,
+      (select count(*)::int from webauthn_credentials w where w.person_id=p.id) as passkeys,
+      (select count(*)::int from recovery_codes r where r.person_id=p.id) as recovery_codes
+      from persons p where p.id=${adminId}`);
+    expect(state.rows[0]).toEqual({
+      totp_secret: null,
+      google_subject: null,
+      passkeys: 0,
+      recovery_codes: 0,
+    });
+  });
+
   it("missing new-password env → returns 2 (usage) and does NOT touch the row", async () => {
     const { tenantId, adminId } = await setupTenant();
     const before = await readPerson(tenantId, adminId);
@@ -317,5 +350,7 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
 afterEach(async () => {
   await suite.admin.execute(sql`delete from management_sessions`);
   await suite.admin.execute(sql`delete from sessions`);
+  await suite.admin.execute(sql`delete from webauthn_credentials`);
+  await suite.admin.execute(sql`delete from recovery_codes`);
   await suite.admin.execute(sql`delete from persons`);
 });

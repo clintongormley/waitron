@@ -14,6 +14,7 @@ import { encryptTotpSecret } from "./mfa.js";
 import {
   readOwnProfile,
   saveOwnProfile,
+  confirmOwnEmailChange,
   changeOwnPassword,
   changeOwnPin,
   beginOwnTotpEnrollment,
@@ -46,6 +47,7 @@ describe("your profile", () => {
       lastNames: null,
       telephone: null,
       email: f.email,
+      pendingEmail: null,
       locale: null,
       hasPassword: true,
       hasTotp: false,
@@ -83,21 +85,39 @@ describe("your profile", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
-    await withTenant(suite.db, f.tenantId, (tx) =>
+    const codeKey = Buffer.alloc(32, 19);
+    const emailChange = await withTenant(suite.db, f.tenantId, (tx) =>
       saveOwnProfile(tx, {
         ...f,
         ...details,
         email: " CHANGED@example.com ",
         currentPassword: "correct horse",
+        emailCodeKey: codeKey,
       }),
     );
+    expect(emailChange).toMatchObject({ email: "changed@example.com", code: expect.any(String) });
     expect(await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).toMatchObject({
       displayName: "New Name",
       firstNames: "Ada Augusta",
       lastNames: "Lovelace",
       telephone: "+44 20",
-      email: "changed@example.com",
+      email: f.email,
+      pendingEmail: "changed@example.com",
       locale: "en-GB",
+    });
+    await expect(
+      withTenant(suite.db, f.tenantId, (tx) =>
+        confirmOwnEmailChange(tx, { ...f, code: "000000", codeKey }),
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      withTenant(suite.db, f.tenantId, (tx) =>
+        confirmOwnEmailChange(tx, { ...f, code: emailChange!.code!, codeKey }),
+      ),
+    ).resolves.toBe("changed@example.com");
+    expect(await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).toMatchObject({
+      email: "changed@example.com",
+      pendingEmail: null,
     });
     await expect(
       withTenant(suite.db, f.tenantId, (tx) =>

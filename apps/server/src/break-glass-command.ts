@@ -1,5 +1,5 @@
-import { and, eq } from "drizzle-orm";
-import { type Database, withTenant } from "@waitron/db";
+import { and, eq, sql } from "drizzle-orm";
+import { isUniqueViolation, type Database, withTenant } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   assertPasswordLength,
@@ -13,17 +13,14 @@ type Env = Record<string, string | undefined>;
 
 /**
  * `waitron-break-glass` — the PHYSICAL break-glass admin reset. The first admin has no self-service
- * password reset, and every gated reset (`@waitron/identity`'s `setPassword`/`resetPin`) needs a
- * `person.manage` management session a locked-out admin cannot obtain. This resets the admin's
- * dashboard password (and, optionally, PIN) and REACTIVATES a suspended admin, for the box's single
- * tenant, gated ONLY by physical shell access plus the box's `DATABASE_URL` — nothing at the
- * application layer.
+ * password reset, and every administrative reset needs a `person.manage` session a locked-out admin
+ * cannot obtain. This clears linked login factors, resets the password (and optionally the PIN), and
+ * reactivates the admin for the box's single tenant.
  *
  * The deployment holds one tenant per database. The ungated reset lives HERE, not in
  * `@waitron/identity`, on purpose: exposing a reusable ungated reset from the identity package
- * would be a permission-bypass anyone could import. This command writes `persons` directly (the
- * same columns `setPassword`/`resetPin` set) under `withTenant`; the write is by id — the reset
- * bypasses the application permission gate.
+ * would be a permission bypass anyone could import. This command writes the account and removes its
+ * login factors under `withTenant`; the write is by id.
  *
  * Secrets come from the environment, NEVER argv — an argv element leaks into the process table
  * (`ps`), the same reason `waitron-recovery`/`register-till` read theirs from env. The new password
@@ -80,7 +77,7 @@ export async function runBreakGlassReset(deps: {
   // two can never drift on what "a PIN was given" means.
   const resetPin = newPin !== undefined && newPin !== "";
   if (resetPin) {
-    // Enforce the SAME PIN floor the gated `resetPin` applies (identity's `MIN_PIN_LENGTH`). A
+    // Enforce the same PIN floor as self-service profile changes. A
     // break-glass PIN that stores fine but falls below the floor the till keypad/login enforces would
     // re-lock the operator — the opposite of what this command is for. Too-short → usage error (2).
     try {
@@ -105,58 +102,85 @@ export async function runBreakGlassReset(deps: {
 
   const db = await deps.connect(databaseUrl);
   try {
-    return await withTenant(db, tenantId, async (tx) => {
-      // The deployment holds one tenant per database. The read is unfiltered: these are the box's
-      // admins.
-      const admins = await tx
-        .select({ id: persons.id })
-        .from(persons)
-        .where(eq(persons.role, "admin"));
+    try {
+      return await withTenant(db, tenantId, async (tx) => {
+        // The deployment holds one tenant per database. The read is unfiltered: these are the box's
+        // admins.
+        const admins = await tx
+          .select({ id: persons.id })
+          .from(persons)
+          .where(eq(persons.role, "admin"));
 
-      if (admins.length === 0) {
-        deps.out(`break-glass: no admin found for tenant ${tenantId}`);
-        return 1;
-      }
-
-      let targetId: string;
-      if (personArg !== undefined) {
-        if (!admins.some((a) => a.id === personArg)) {
-          deps.out(`break-glass: --person ${personArg} is not an admin of tenant ${tenantId}`);
+        if (admins.length === 0) {
+          deps.out(`break-glass: no admin found for tenant ${tenantId}`);
           return 1;
         }
-        targetId = personArg;
-      } else if (admins.length > 1) {
-        deps.out("break-glass: multiple admins found; re-run with --person <id>:");
-        for (const a of admins) deps.out(`  ${a.id}`);
+
+        let targetId: string;
+        if (personArg !== undefined) {
+          if (!admins.some((a) => a.id === personArg)) {
+            deps.out(`break-glass: --person ${personArg} is not an admin of tenant ${tenantId}`);
+            return 1;
+          }
+          targetId = personArg;
+        } else if (admins.length > 1) {
+          deps.out("break-glass: multiple admins found; re-run with --person <id>:");
+          for (const a of admins) deps.out(`  ${a.id}`);
+          return 1;
+        } else {
+          targetId = admins[0]!.id;
+        }
+
+        const updated = await tx
+          .update(persons)
+          .set({
+            passwordHash: hashPassword(newPassword),
+            ...(resetPin ? { pinHash: hashPin(newPin!) } : {}),
+            totpSecret: null,
+            googleSubject: null,
+            status: "active",
+          })
+          .where(and(eq(persons.id, targetId), eq(persons.role, "admin")))
+          .returning({ id: persons.id });
+
+        if (updated.length !== 1) {
+          // With a matched admin id this is exactly 1; anything else means the row vanished between
+          // the select and the update (a concurrent delete) — report rather than pretend.
+          deps.out(`break-glass: expected to reset one admin, affected ${String(updated.length)}`);
+          return 1;
+        }
+
+        await tx.execute(
+          sql`delete from webauthn_credentials where tenant_id=${tenantId} and person_id=${targetId}`,
+        );
+        await tx.execute(
+          sql`delete from recovery_codes where tenant_id=${tenantId} and person_id=${targetId}`,
+        );
+        await tx.execute(
+          sql`delete from totp_enrollments where tenant_id=${tenantId} and person_id=${targetId}`,
+        );
+        await tx.execute(
+          sql`update management_account_actions set used_at=now() where tenant_id=${tenantId} and person_id=${targetId} and used_at is null`,
+        );
+        await tx.execute(
+          sql`update management_sessions set ended_at=now() where tenant_id=${tenantId} and person_id=${targetId} and ended_at is null`,
+        );
+        await tx.execute(
+          sql`update sessions set ended_at=now() where tenant_id=${tenantId} and person_id=${targetId} and ended_at is null`,
+        );
+
+        const resets = resetPin ? "password, pin" : "password";
+        // NEVER echo the new secret — name the admin and WHAT was reset only.
+        deps.out(`break-glass: reset admin ${targetId} (${resets}, reactivated)`);
+        return 0;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        deps.out("break-glass: that display name is already used by an active account");
         return 1;
-      } else {
-        targetId = admins[0]!.id;
       }
-
-      // Same columns `setPassword`/`resetPin`/`reactivatePerson` set — reactivate in the same write.
-      const updated = await tx
-        .update(persons)
-        .set({
-          passwordHash: hashPassword(newPassword),
-          // `newPin!` is sound: `resetPin` is exactly `newPin` being a non-empty string.
-          ...(resetPin ? { pinHash: hashPin(newPin!) } : {}),
-          status: "active",
-        })
-        .where(and(eq(persons.id, targetId), eq(persons.role, "admin")))
-        .returning({ id: persons.id });
-
-      if (updated.length !== 1) {
-        // With a matched admin id this is exactly 1; anything else means the row vanished between
-        // the select and the update (a concurrent delete) — report rather than pretend.
-        deps.out(`break-glass: expected to reset one admin, affected ${String(updated.length)}`);
-        return 1;
-      }
-
-      const resets = resetPin ? "password, pin" : "password";
-      // NEVER echo the new secret — name the admin and WHAT was reset only.
-      deps.out(`break-glass: reset admin ${targetId} (${resets}, reactivated)`);
-      return 0;
-    });
+      throw error;
+    }
   } finally {
     await db.close();
   }

@@ -31,6 +31,7 @@ export interface OwnProfile {
   lastNames: string | null;
   telephone: string | null;
   email: string | null;
+  pendingEmail: string | null;
   locale: string | null;
   hasPassword: boolean;
   hasTotp: boolean;
@@ -1396,8 +1397,11 @@ export class DashboardApi {
       input,
     );
   }
-  saveProfile(input: ProfileDetails): Promise<void> {
-    return this.#request<void>("/management-api/session/me/profile", "PUT", input);
+  saveProfile(input: ProfileDetails): Promise<{ emailVerificationSent: boolean }> {
+    return this.#request("/management-api/session/me/profile", "PUT", input);
+  }
+  confirmProfileEmail(code: string): Promise<{ email: string }> {
+    return this.#request("/management-api/session/me/profile/email/confirm", "POST", { code });
   }
   changePassword(input: ProfileCredentials & { password: string }): Promise<void> {
     return this.#request<void>("/management-api/session/me/password", "PUT", input);
@@ -2542,6 +2546,7 @@ export class DashboardApi {
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
     sessionExpiresInSeconds?: number;
+    sessionIdleTimeoutSeconds?: number;
   }> {
     return this.#request<{
       personId: string;
@@ -2553,6 +2558,7 @@ export class DashboardApi {
       venueName: string;
       onboardingIntent?: "demo" | "prepare" | "live";
       sessionExpiresInSeconds?: number;
+      sessionIdleTimeoutSeconds?: number;
     }>("/management-api/session/me", "GET");
   }
 

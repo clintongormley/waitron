@@ -25,6 +25,8 @@ export const managementAccountActions = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
     purpose: text("purpose").notNull(),
+    /** The replacement login address for an email-change proof. Null for invitations and resets. */
+    targetEmail: text("target_email"),
     tokenHash: text("token_hash").notNull(),
     codeHash: text("code_hash"),
     codeExpiresAt: timestamp("code_expires_at", { withTimezone: true, mode: "string" }),
@@ -50,7 +52,11 @@ export const managementAccountActions = pgTable(
     index("management_account_actions_person_idx").on(t.tenantId, t.personId, t.purpose),
     check(
       "management_account_actions_purpose_ck",
-      sql`${t.purpose} in ('invitation', 'password_reset')`,
+      sql`${t.purpose} in ('invitation', 'password_reset', 'email_change')`,
+    ),
+    check(
+      "management_account_actions_target_email_ck",
+      sql`(${t.purpose} = 'email_change') = (${t.targetEmail} is not null)`,
     ),
     check("management_account_actions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
     check(

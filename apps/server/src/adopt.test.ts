@@ -75,6 +75,7 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
       database: "waitron_pp",
       password: "s3cr3t-pw",
     },
+    accountKey: Buffer.alloc(32, 9).toString("base64"),
     reservedIdentity: RESERVED,
     moduleOverrides: {},
     ...over,

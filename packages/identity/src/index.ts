@@ -11,7 +11,7 @@ export {
   endManagementSession,
 } from "./management-session.js";
 export type { ManagementSession } from "./management-session.js";
-export { rotateTotpSecrets } from "./mfa.js";
+export { encryptTotpSecret } from "./mfa.js";
 export type { TotpKeyEntry, TotpKeyRing } from "./mfa.js";
 export { loginManager, loginManagerById, authorizeManager } from "./manager-login.js";
 export {
@@ -32,6 +32,7 @@ export { persons, personStatus, personRole } from "./schema/persons.js";
 export {
   readOwnProfile,
   saveOwnProfile,
+  confirmOwnEmailChange,
   changeOwnPassword,
   changeOwnPin,
   beginOwnTotpEnrollment,
@@ -49,7 +50,6 @@ export { webauthnCredentials, webauthnChallenges } from "./schema/webauthn.js";
 export { MIN_PIN_LENGTH, assertPinLength } from "./verify-pin.js";
 export {
   clearPersonPin,
-  createPerson,
   deactivatePerson,
   invitePerson,
   listActivePersonsWithPermission,
@@ -58,12 +58,7 @@ export {
   normalizeAndValidateEmail,
   reactivatePersonForInvitation,
   resetPersonLogin,
-  resetPin,
-  setEmail,
-  setPassword,
   setPersonLocale,
-  setRole,
-  suspendPerson,
   updatePersonDetails,
 } from "./staff.js";
 export type { PersonSummary, StaffListEntry } from "./staff.js";

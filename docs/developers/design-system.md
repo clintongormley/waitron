@@ -139,7 +139,8 @@ this floor — removing the `min-width` regresses that guard.
 Use `wt-data-table` for sortable administrative collections such as people, devices, printers and
 canvases. Define columns and cell content in the consuming screen so domain actions stay outside the
 primitive. Always supply `aria-label`; use its loading, empty and error properties instead of
-replacing the table with unrelated markup.
+replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
+header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
 
 Variant- and state-like properties (`variant`, `size`, `name`, `raised`, `disabled`, `checked`,
 `invalid`, `open`) all reflect to attributes, which is what makes `:host([variant="..."])`-style

@@ -72,6 +72,8 @@ export interface MirrorBundle {
    * the bundle response and NEVER logged, the discipline the sync token held before it.
    */
   replication: { host: string; port: number; database: string; password: string };
+  /** Venue-wide key for encrypted account factors; transferred only inside this authenticated bundle. */
+  accountKey: string;
   reservedIdentity: ReservedIdentity;
   /**
    * The primary's enabled-module set as a sparse override map (SP-1b's modules.json inner map), read
@@ -110,6 +112,7 @@ export interface AssembleDeps {
   replication: ReplicationConfig;
   /** The name of the primary's database, dialled in a subscription's conninfo `dbname`. */
   database: string;
+  accountKey: string;
   /** The box's WireGuard public key (swap S2); the box image supplies it in S7, absent in dev/fixture. */
   wireguardPublicKey?: string;
 }
@@ -213,6 +216,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
       database: deps.database,
       password: deps.replication.password,
     },
+    accountKey: deps.accountKey,
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),
     wireguardPublicKey: deps.wireguardPublicKey,

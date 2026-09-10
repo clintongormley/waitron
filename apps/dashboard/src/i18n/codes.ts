@@ -73,8 +73,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No puedes desactivar tu propia cuenta. Pídeselo a otro administrador.",
   },
   "person.suspended": {
-    en: "This account is suspended — ask a manager",
-    es: "Esta cuenta está suspendida. Avisa a un responsable",
+    en: "This account is inactive — ask a manager",
+    es: "Esta cuenta está inactiva. Avisa a un responsable",
   },
   "person.not_found": {
     en: "That person could not be found",

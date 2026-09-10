@@ -85,6 +85,27 @@
       "when": 1788989271160,
       "tag": "0011_google_login_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789000366789,
+      "tag": "0012_pending_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789000408352,
+      "tag": "0013_email_change_action",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789000862596,
+      "tag": "0014_pending_email_unique",
+      "breakpoints": true
     }
   ]
 }

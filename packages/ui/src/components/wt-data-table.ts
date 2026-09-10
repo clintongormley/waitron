@@ -159,7 +159,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const label = this.ariaLabel || undefined;
     return html`
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
-        <table aria-label=${label ?? nothing}>
+        <table>
           <thead>
             <tr>
               ${this.columns.map(

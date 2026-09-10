@@ -47,8 +47,7 @@ declare module "@waitron/shared" {
      * — malformed, no domain dot, or contained whitespace. The address itself is not a credential and
      * carries no param. */
     "person.email_invalid": Record<string, never>;
-    /** Another person in this tenant already holds this normalised email — the create/setEmail insert
-     * hit the unique index. The domain concept is "already taken", not the column that collided (§3). */
+    /** Another person in this tenant already holds this normalised email. */
     "person.email_taken": { email: string };
     /** Another active or pending person already uses this display name. */
     "person.display_name_taken": { displayName: string };

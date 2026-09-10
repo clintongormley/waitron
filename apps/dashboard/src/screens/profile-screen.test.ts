@@ -18,6 +18,7 @@ function apiStub(overrides: Record<string, unknown> = {}) {
       lastNames: "Rivera",
       telephone: "+34 600 000 000",
       email: "alex@example.com",
+      pendingEmail: null,
       locale: "en-GB",
       hasPassword: true,
       hasTotp: false,
@@ -38,7 +39,8 @@ function apiStub(overrides: Record<string, unknown> = {}) {
     beginGoogleLink: vi.fn().mockResolvedValue({
       authorizationUrl: "https://accounts.google.test/link",
     }),
-    saveProfile: vi.fn().mockResolvedValue(undefined),
+    saveProfile: vi.fn().mockResolvedValue({ emailVerificationSent: false }),
+    confirmProfileEmail: vi.fn().mockResolvedValue({ email: "new@example.com" }),
     changePassword: vi.fn().mockResolvedValue(undefined),
     changePin: vi.fn().mockResolvedValue(undefined),
     beginTotp: vi.fn().mockResolvedValue({
@@ -65,8 +67,8 @@ async function flush(el: ProfileScreen) {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
 }
-async function mount() {
-  const api = apiStub();
+async function mount(overrides: Record<string, unknown> = {}) {
+  const api = apiStub(overrides);
   const { el, host } = await mountWidget<ProfileScreen>("dashboard-profile-screen", {
     api: api as unknown as DashboardApi,
     navigate: vi.fn(),
@@ -153,6 +155,28 @@ describe("your profile", () => {
     expect(api.saveProfile).toHaveBeenCalledWith(
       expect.objectContaining({ email: "new@example.com", currentPassword: "current" }),
     );
+  });
+  it("shows a pending replacement address and confirms its emailed code", async () => {
+    const { el, api } = await mount({
+      getProfile: vi.fn().mockResolvedValue({
+        displayName: "Alex",
+        firstNames: "Alex",
+        lastNames: "Rivera",
+        telephone: null,
+        email: "alex@example.com",
+        pendingEmail: "new@example.com",
+        locale: "en-GB",
+        hasPassword: true,
+        hasTotp: false,
+        hasGoogle: false,
+        passkeys: [],
+      }),
+    });
+    expect(el.shadowRoot!.textContent).toContain("new@example.com");
+    await click(el, "confirm-email");
+    input(el, "setupCode", "123456");
+    await click(el, "save");
+    expect(api.confirmProfileEmail).toHaveBeenCalledWith("123456");
   });
   it("validates matching new passwords and reports a rejected current password beside its input", async () => {
     const { el, api } = await mount();

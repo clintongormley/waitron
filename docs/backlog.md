@@ -23,12 +23,14 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 - **[superpowers/specs/2026-07-18-pos-architecture-design.md](superpowers/specs/2026-07-18-pos-architecture-design.md)
   §2** — the twenty numbered sub-projects (the strategy; changes rarely).
 
-**User management is complete** (owner walkthrough, 2026-09-09):
+**User management has its core operator slice** (owner walkthrough, 2026-09-09):
 the reusable table, searchable/filterable admin list, invitation setup, account lifecycle controls,
-self-service profile and login methods, password backoff, login/recovery polish and automatic return
-to login at session expiry are implemented under the
-[account setup and user management plan](superpowers/plans/2026-09-09-user-management-and-account-setup.md).
-Turnstile and SMS verification remain part of the later optional cloud/remote offering.
+self-service profile, verified email changes, authenticator/recovery codes, Google login, password
+backoff, login/recovery polish and automatic return to login at session expiry are implemented under
+the [account setup and user management plan](superpowers/plans/2026-09-09-user-management-and-account-setup.md).
+Still open: named passkeys and passkey-based reauthentication for an account with no password; an
+operator screen that stores Google provider credentials in the vault. Turnstile and SMS verification
+belong to the later optional cloud/remote offering.
 
 **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
 bypass, so a docs-only change is pushed straight to `main` — no PR, no CI wait. Branch, `commit -s`,

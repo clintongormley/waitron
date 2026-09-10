@@ -145,7 +145,7 @@ export class PersonEdit extends LitElement {
   }
 
   #statusOptions(person: PersonSummary): PersonSummary["status"][] {
-    return [person.status];
+    return person.status === "suspended" ? ["suspended"] : [person.status, "suspended"];
   }
 
   #input(testId: string, name: string, label: string, field: EditableField | "telephone") {
@@ -234,7 +234,7 @@ export class PersonEdit extends LitElement {
                     <select
                       data-test="edit-status"
                       name="status"
-                      disabled
+                      ?disabled=${person.personId === this.currentPersonId}
                       @change=${(event: Event) =>
                         (this.details = {
                           ...this.details,

@@ -419,7 +419,7 @@ export class DashboardApp extends LitElement {
 
   @state() private sessionNoticeCode: string | null = null;
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
-  private sessionLifetimeSeconds = 30 * 60;
+  private sessionIdleTimeoutSeconds = 30 * 60;
   private sessionGeneration = 0;
 
   readonly #onSessionInvalid = (event: Event): void => {
@@ -441,8 +441,8 @@ export class DashboardApp extends LitElement {
 
   readonly #onSessionActive = (): void => {
     if (this.sessionRole !== undefined) {
-      this.#scheduleSessionExpiry(this.sessionLifetimeSeconds);
-      this.#broadcastSessionDeadline(Date.now() + this.sessionLifetimeSeconds * 1000);
+      this.#scheduleSessionExpiry(this.sessionIdleTimeoutSeconds);
+      this.#broadcastSessionDeadline(Date.now() + this.sessionIdleTimeoutSeconds * 1000);
     }
   };
 
@@ -599,6 +599,7 @@ export class DashboardApp extends LitElement {
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
     sessionExpiresInSeconds?: number;
+    sessionIdleTimeoutSeconds?: number;
   }): void {
     if (!this.isConnected) return;
     this.sessionNoticeCode = null;
@@ -613,9 +614,10 @@ export class DashboardApp extends LitElement {
     this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
     this.onboardingIntent = me.onboardingIntent;
-    this.sessionLifetimeSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
-    this.#scheduleSessionExpiry(this.sessionLifetimeSeconds);
-    this.#broadcastSessionDeadline(Date.now() + this.sessionLifetimeSeconds * 1000);
+    const remainingSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
+    this.sessionIdleTimeoutSeconds = me.sessionIdleTimeoutSeconds ?? 30 * 60;
+    this.#scheduleSessionExpiry(remainingSeconds);
+    this.#broadcastSessionDeadline(Date.now() + remainingSeconds * 1000);
     this.#writeScreenUrl(this.screen, true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
   }

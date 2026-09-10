@@ -177,6 +177,7 @@ function mountApp(
       designated,
       replication: withReplication ? REPLICATION : undefined,
       database: PRIMARY_DATABASE,
+      accountKey: Buffer.alloc(32, 9).toString("base64"),
     },
     log,
   );

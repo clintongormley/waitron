@@ -41,7 +41,7 @@ async function table(props: Partial<WtDataTable<Row>> = {}): Promise<WtDataTable
 test("renders native table semantics and consumer-provided cells", async () => {
   const el = await table();
   const native = el.shadowRoot!.querySelector("table")!;
-  expect(native.getAttribute("aria-label")).toBe("Users");
+  expect(el.shadowRoot!.querySelector("[role=region]")!.getAttribute("aria-label")).toBe("Users");
   expect([...native.querySelectorAll("th")].map((cell) => cell.textContent?.trim())).toEqual([
     "Name",
     "Count",
@@ -55,7 +55,7 @@ test("updates its accessible name when the host label changes", async () => {
   const el = await table();
   el.setAttribute("aria-label", "Devices");
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("table")!.getAttribute("aria-label")).toBe("Devices");
+  expect(el.shadowRoot!.querySelector("[role=region]")!.getAttribute("aria-label")).toBe("Devices");
 });
 
 test("sorts without mutating the consumer's rows and toggles the direction", async () => {

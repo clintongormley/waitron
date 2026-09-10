@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { generateSync } from "otplib";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -9,12 +10,15 @@ import {
   hashPin,
   registerModulePermissions,
   startManagementSession,
+  encryptTotpSecret,
+  hashPassword,
 } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { IDLE_TIMEOUT_MS } from "@waitron/identity";
 import type { Logger } from "./logger.js";
-import { mountMeApi } from "./me-api.js";
+import { mountMeApi, type MeApiDeps } from "./me-api.js";
+import type { AccountEmail } from "./account-email.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
@@ -86,7 +90,9 @@ const MODULES = ["core", "bookings"];
 // not in the effective set and the manager whoami below could not carry it.
 registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
 
-function mountApp(): Hono {
+const PROFILE_KEY_RING = { current: { version: 1, key: Buffer.alloc(32, 6) } };
+
+function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
   const app = new Hono();
   mountMeApi(
     app,
@@ -96,6 +102,8 @@ function mountApp(): Hono {
       venueLocale: VENUE_LOCALE,
       onboardingIntent: "prepare",
       modules: MODULES,
+      credentialKeyRing: PROFILE_KEY_RING,
+      ...overrides,
     },
     noopLog,
   );
@@ -176,6 +184,7 @@ describe("mountMeApi — whoami", () => {
         permissions: string[];
         modules: string[];
         sessionExpiresInSeconds: number;
+        sessionIdleTimeoutSeconds: number;
       },
     ).toEqual({
       personId: me,
@@ -187,6 +196,7 @@ describe("mountMeApi — whoami", () => {
       permissions: [],
       modules: MODULES,
       sessionExpiresInSeconds: IDLE_TIMEOUT_MS / 1000,
+      sessionIdleTimeoutSeconds: IDLE_TIMEOUT_MS / 1000,
     });
   });
 
@@ -210,6 +220,7 @@ describe("mountMeApi — whoami", () => {
         permissions: string[];
         modules: string[];
         sessionExpiresInSeconds: number;
+        sessionIdleTimeoutSeconds: number;
       },
     ).toEqual({
       personId: localed,
@@ -221,6 +232,7 @@ describe("mountMeApi — whoami", () => {
       permissions: [],
       modules: MODULES,
       sessionExpiresInSeconds: IDLE_TIMEOUT_MS / 1000,
+      sessionIdleTimeoutSeconds: IDLE_TIMEOUT_MS / 1000,
     });
   });
 
@@ -262,6 +274,66 @@ describe("mountMeApi — whoami", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management_session.required" },
     });
+  });
+});
+
+describe("mountMeApi — profile credentials", () => {
+  it("passes the TOTP key into a password change for an authenticator-enrolled person", async () => {
+    const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+    await suite.db.execute(sql`
+      update persons
+      set password_hash=${hashPassword("current password")},
+          totp_secret=${encryptTotpSecret(secret, PROFILE_KEY_RING.current)}
+      where id=${me}`);
+
+    const response = await send(mountApp(), "PUT", "/management-api/session/me/password", {
+      cookie: await cookieFor(me),
+      body: {
+        currentPassword: "current password",
+        totp: generateSync({ secret }),
+        password: "replacement password",
+      },
+    });
+
+    expect(response.status).toBe(204);
+  });
+
+  it("keeps the old login email until the code sent to the replacement is confirmed", async () => {
+    await suite.db.execute(sql`
+      update persons set email='old@example.com', pending_email=null,
+        password_hash=${hashPassword("current password")}, totp_secret=null where id=${me}`);
+    const sent: AccountEmail[] = [];
+    const codeKey = Buffer.alloc(32, 21);
+    const app = mountApp({
+      accountActionCodeKey: codeKey,
+      accountActionBaseUrl: "https://waitron.example/",
+      sendAccountEmail: async (message) => void sent.push(message),
+    });
+    const cookie = await cookieFor(me);
+    const saved = await send(app, "PUT", "/management-api/session/me/profile", {
+      cookie,
+      body: {
+        displayName: "Me",
+        firstNames: "Alex",
+        lastNames: "Rivera",
+        telephone: null,
+        email: "new@example.com",
+        locale: "en-GB",
+        currentPassword: "current password",
+      },
+    });
+    expect(await saved.json()).toEqual({ emailVerificationSent: true });
+    expect(sent).toHaveLength(1);
+    const pending = await send(app, "GET", "/management-api/session/me/profile", { cookie });
+    expect(await pending.json()).toMatchObject({
+      email: "old@example.com",
+      pendingEmail: "new@example.com",
+    });
+    const confirmed = await send(app, "POST", "/management-api/session/me/profile/email/confirm", {
+      cookie,
+      body: { code: sent[0]!.code },
+    });
+    expect(await confirmed.json()).toEqual({ email: "new@example.com" });
   });
 });
 

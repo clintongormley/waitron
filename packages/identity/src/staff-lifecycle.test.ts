@@ -226,7 +226,7 @@ describe("invited person lifecycle", () => {
       withTenant(suite.db, isolatedTenant, (tx) =>
         updatePersonDetails(tx, {
           managementSessionId: sessionId,
-          personId,
+          personId: personId.toUpperCase(),
           displayName: "Owner",
           firstNames: "Only",
           lastNames: "Owner",

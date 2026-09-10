@@ -284,6 +284,9 @@ importers:
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
+      otplib:
+        specifier: ^13.4.1
+        version: 13.4.1
       tsx:
         specifier: ^4.23.1
         version: 4.23.1

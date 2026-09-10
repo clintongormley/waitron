@@ -37,7 +37,8 @@ export async function startManagementSession(
 
 /**
  * Resolve a live session to its person + role, or throw. Missing/ended → `management_session.required`;
- * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`.
+ * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`;
+ * a pending person → `management_session.required`.
  * On success it bumps `last_seen_at` (the sliding window) and returns the person's current role plus
  * their stored UI `locale` (`persons.locale`, `null` when they have set no preference).
  */

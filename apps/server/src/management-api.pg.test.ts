@@ -175,6 +175,62 @@ async function countPersonsNamed(tenantId: string, displayName: string): Promise
 }
 
 describe("Management API staff + session routes over real Postgres", () => {
+  it("lets only one concurrent invitation claim a live display name", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+    const responses = await Promise.all([
+      app.request("/management-api/staff", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(invitationBody("Same till name", "first-same@example.test")),
+      }),
+      app.request("/management-api/staff", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(invitationBody(" same till name ", "second-same@example.test")),
+      }),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+    const matching = await suite.admin.execute<{ count: number }>(sql`
+      select count(*)::int as count from persons
+      where tenant_id=${tenantId} and lower(display_name)='same till name'`);
+    expect(matching.rows[0]!.count).toBe(1);
+  });
+
+  it("preserves one active admin when two admins concurrently demote themselves", async () => {
+    const { tenantId, managerId } = await setupTenant();
+    await suite.admin.execute(sql`update persons set role='admin' where id=${managerId}`);
+    const app = mountApp(tenantId);
+    const ownerCookie = await login(app, "owner@example.test", "dashPass123");
+    const managerCookie = await login(app, MANAGER_EMAIL);
+    const owner = await suite.admin.execute<{ id: string }>(
+      sql`select id from persons where tenant_id=${tenantId} and email='owner@example.test'`,
+    );
+    const edit = (id: string, cookie: string, displayName: string, email: string) =>
+      app.request(`/management-api/staff/${id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          displayName,
+          firstNames: displayName,
+          lastNames: "Admin",
+          telephone: null,
+          email,
+          role: "staff",
+          status: "active",
+        }),
+      });
+    const responses = await Promise.all([
+      edit(owner.rows[0]!.id, ownerCookie, "Administradora", "owner@example.test"),
+      edit(managerId, managerCookie, "The Manager", MANAGER_EMAIL),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
+    const remaining = await suite.admin.execute<{ count: number }>(sql`
+      select count(*)::int as count from persons
+      where tenant_id=${tenantId} and role='admin' and status='active'`);
+    expect(remaining.rows[0]!.count).toBe(1);
+  });
   it("links and then signs in with a configured Google account", async () => {
     const { tenantId } = await setupTenant();
     const exchange = vi.fn().mockResolvedValue({ subject: "google-subject-1" });

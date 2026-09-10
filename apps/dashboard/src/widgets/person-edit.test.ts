@@ -36,11 +36,19 @@ describe("person-edit", () => {
     expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!.value).toBe(
       "active",
     );
+    expect(
+      [...el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!.options].map(
+        (option) => option.value,
+      ),
+    ).toEqual(["active", "suspended"]);
     change(el, "edit-first-names", "Ada Augusta Byron");
     change(el, "edit-telephone", "+44 21");
     const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!;
     role.value = "admin";
     role.dispatchEvent(new Event("change"));
+    const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!;
+    status.value = "suspended";
+    status.dispatchEvent(new Event("change"));
     await el.updateComplete;
     const saved = new Promise<CustomEvent>((resolve) =>
       el.addEventListener("save-person", (event) => resolve(event as CustomEvent), { once: true }),
@@ -53,7 +61,7 @@ describe("person-edit", () => {
       telephone: "+44 21",
       email: "ada@example.com",
       role: "admin",
-      status: "active",
+      status: "suspended",
     });
   });
 

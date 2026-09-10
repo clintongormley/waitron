@@ -24,6 +24,7 @@ const cfg: TradingConfig = {
   migrationsDatabaseUrl: "postgres://mig@localhost/waitron",
   environment: "production",
   onboardingIntent: "live",
+  accountKey: Buffer.alloc(32, 8).toString("base64"),
 };
 
 describe("writeTradingEnv", () => {
@@ -50,7 +51,10 @@ describe("writeTradingEnv", () => {
         "DATABASE_URL=postgres://app@localhost/waitron\n" +
         "WAITRON_MIGRATIONS_DATABASE_URL=postgres://mig@localhost/waitron\n" +
         "WAITRON_ENV=production\n" +
-        "WAITRON_ONBOARDING_INTENT=live\n",
+        "WAITRON_ONBOARDING_INTENT=live\n" +
+        "WAITRON_ACCOUNT_KEY=" +
+        Buffer.alloc(32, 8).toString("base64") +
+        "\n",
     );
   });
 

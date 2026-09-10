@@ -19,11 +19,13 @@ people's records are outside this surface.
 The server derives your identity from the session and checks the deployment tenant explicitly.
 Changing email or password and removing a passkey require your current password, plus your TOTP
 code if enrolled. Accounts without a password use password recovery to establish one first.
-An email change clears email verification and invalidates outstanding invitation/reset links.
+An email change keeps the verified login address in place, records the replacement as pending, and
+invalidates outstanding invitation/reset links. A short-lived code sent to the replacement address
+makes it the login only after the signed-in person enters that code in their profile.
 A password change invalidates outstanding links and other dashboard sessions, preserving the
 current session. Passkey removal must not remove the only remaining login method.
 
-No schema changes or new tables are needed. Identity owns the profile operations; the server
+Identity adds pending-email and email-action fields to its existing tables. Identity owns the profile operations; the server
 exposes session-scoped endpoints; the dashboard owns the forms and browser passkey ceremony.
 Permission filtering for the remaining built-in navigation is a separate backlog item.
 

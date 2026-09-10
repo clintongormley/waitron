@@ -41,6 +41,7 @@ describe("your profile as app_user", () => {
       lastNames: null,
       telephone: null,
       email: "profile@example.com",
+      pendingEmail: null,
       locale: null,
       hasPassword: true,
       hasTotp: false,
@@ -61,7 +62,8 @@ describe("your profile as app_user", () => {
         locale: "en-GB",
       }),
     });
-    expect(saved.status).toBe(204);
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ emailVerificationSent: false });
     const people = await suite.admin.execute<{ id: string; display_name: string; role: string }>(
       sql`select id,display_name,role from persons where id in (${personId},${colleagueId})`,
     );
@@ -291,6 +293,8 @@ describe("Me API over real Postgres (the identity property: the session's person
         locale: string | null;
         venueLocale: string;
         venueName: string;
+        sessionExpiresInSeconds: number;
+        sessionIdleTimeoutSeconds: number;
         permissions: string[];
         modules: string[];
       },
@@ -298,6 +302,7 @@ describe("Me API over real Postgres (the identity property: the session's person
       personId: p,
       role: "staff",
       sessionExpiresInSeconds: 1800,
+      sessionIdleTimeoutSeconds: 1800,
       locale: null,
       venueLocale: "es-ES",
       venueName: "Deli Test SL",

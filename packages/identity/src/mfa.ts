@@ -1,9 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
 import { recoveryCodes } from "./schema/recovery-codes.js";
-import { persons } from "./schema/persons.js";
 
 const PREFIX = "v1";
 const RECOVERY_CODE_COUNT = 10;
@@ -63,31 +61,6 @@ export function decryptTotpSecret(
   } catch {
     return null;
   }
-}
-
-/** Re-seal every TOTP secret that still uses the previous credential key before it is retired. */
-export async function rotateTotpSecrets(
-  tx: Transaction,
-  tenantId: string,
-  ring: TotpKeyRing,
-): Promise<number> {
-  const rows = await tx
-    .select({ id: persons.id, stored: persons.totpSecret })
-    .from(persons)
-    .where(and(eq(persons.tenantId, tenantId), isNotNull(persons.totpSecret)))
-    .for("update");
-  let rotated = 0;
-  for (const row of rows) {
-    const opened = decryptTotpSecret(row.stored!, ring);
-    if (opened === null) throw new AppError("totp.key_unavailable", { personId: row.id });
-    if (opened.keyVersion === ring.current.version) continue;
-    await tx
-      .update(persons)
-      .set({ totpSecret: encryptTotpSecret(opened.secret, ring.current) })
-      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, row.id)));
-    rotated += 1;
-  }
-  return rotated;
 }
 
 function recoveryHash(code: string): string {

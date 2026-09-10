@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { isUniqueViolation, uniqueViolationConstraint } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, assertSupportedLocale } from "@waitron/shared";
@@ -36,6 +36,24 @@ export function asEmailTaken(err: unknown, email: string): never {
     if (constraint === "persons_tenant_email_uq") {
       throw new AppError("person.email_taken", { email });
     }
+  }
+  throw err;
+}
+
+export function asPersonUniqueViolation(
+  err: unknown,
+  input: { email?: string; displayName: string },
+): never {
+  const constraint = isUniqueViolation(err) ? uniqueViolationConstraint(err) : undefined;
+  if (constraint === "persons_tenant_live_display_name_uq") {
+    throw new AppError("person.display_name_taken", { displayName: input.displayName });
+  }
+  if (
+    (constraint === "persons_tenant_email_uq" ||
+      constraint === "persons_tenant_pending_email_uq") &&
+    input.email !== undefined
+  ) {
+    throw new AppError("person.email_taken", { email: input.email });
   }
   throw err;
 }
@@ -88,7 +106,7 @@ export async function assertEmailAvailable(
     .where(
       and(
         eq(persons.tenantId, tenantId),
-        eq(sql`lower(${persons.email})`, email),
+        or(eq(sql`lower(${persons.email})`, email), eq(sql`lower(${persons.pendingEmail})`, email)),
         excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
       ),
     );
@@ -172,7 +190,7 @@ export async function updatePersonDetails(
   if (input.status === "suspended" && authorizedBy === input.personId.toLowerCase()) {
     throw new AppError("person.self_deactivation", {});
   }
-  if (input.status !== person.status) {
+  if (input.status !== person.status && input.status !== "suspended") {
     throw new AppError("person.transition_invalid", {});
   }
   if (input.role !== person.role && (input.role === "admin" || person.role === "admin")) {
@@ -211,15 +229,10 @@ export async function updatePersonDetails(
       })
       .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
   } catch (error) {
-    if (
-      isUniqueViolation(error) &&
-      uniqueViolationConstraint(error) !== "persons_tenant_email_uq"
-    ) {
-      throw new AppError("person.display_name_taken", { displayName });
-    }
-    asEmailTaken(error, email);
+    asPersonUniqueViolation(error, { displayName, email });
   }
-  if (email !== person.email) await revokePersonAccess(tx, tenantId, person.id);
+  if (email !== person.email || input.status !== person.status)
+    await revokePersonAccess(tx, tenantId, person.id);
 }
 
 /** Marks a person inactive without rewriting their identity fields. */
@@ -318,28 +331,17 @@ export async function resetPersonLogin(
   if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
     throw new AppError("person.last_admin", {});
   }
-  try {
-    await tx
-      .update(persons)
-      .set({
-        pinHash: null,
-        passwordHash: null,
-        totpSecret: null,
-        googleSubject: null,
-        emailVerifiedAt: null,
-        status: "pending",
-      })
-      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
-  } catch (error) {
-    if (
-      isUniqueViolation(error) &&
-      (uniqueViolationConstraint(error) === undefined ||
-        uniqueViolationConstraint(error) === "persons_tenant_live_display_name_uq")
-    ) {
-      throw new AppError("person.display_name_taken", { displayName: person.displayName });
-    }
-    throw error;
-  }
+  await tx
+    .update(persons)
+    .set({
+      pinHash: null,
+      passwordHash: null,
+      totpSecret: null,
+      googleSubject: null,
+      emailVerifiedAt: null,
+      status: "pending",
+    })
+    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
   await tx
     .delete(webauthnCredentials)
     .where(
@@ -378,17 +380,21 @@ export async function reactivatePersonForInvitation(
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status !== "suspended") throw new AppError("person.transition_invalid", {});
   await assertDisplayNameAvailable(tx, tenantId, person.displayName, person.id);
-  await tx
-    .update(persons)
-    .set({
-      status: "pending",
-      pinHash: null,
-      passwordHash: null,
-      totpSecret: null,
-      googleSubject: null,
-      emailVerifiedAt: null,
-    })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+  try {
+    await tx
+      .update(persons)
+      .set({
+        status: "pending",
+        pinHash: null,
+        passwordHash: null,
+        totpSecret: null,
+        googleSubject: null,
+        emailVerifiedAt: null,
+      })
+      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+  } catch (error) {
+    asPersonUniqueViolation(error, { displayName: person.displayName });
+  }
   await tx
     .delete(webauthnCredentials)
     .where(

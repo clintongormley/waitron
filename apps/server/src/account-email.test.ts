@@ -72,6 +72,33 @@ describe("account email", () => {
     expect(message.text).toContain("At the restaurant, enter 123456 on the Waitron login screen");
   });
 
+  it("explains how to confirm a replacement email", async () => {
+    const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
+    const sender = createAccountEmailSender(
+      { url: "smtp://mail.example.test:587", from: "hello@example.test" },
+      { sendMail },
+    );
+    await sender({
+      purpose: "email_change",
+      email: "new@example.test",
+      displayName: "Bea",
+      actionUrl: "https://dashboard.example.test/",
+      code: "123456",
+      codeExpiresAt: "2026-09-08T12:10:00.000Z",
+      expiresAt: "2026-09-08T12:30:00.000Z",
+      locale: "en-GB",
+    });
+    expect(sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "new@example.test",
+        subject: "Confirm your new Waitron email",
+      }),
+    );
+    expect((sendMail.mock.calls[0]![0] as { text: string }).text).toContain(
+      "Enter 123456 in your Waitron profile",
+    );
+  });
+
   it("localises a Spanish recipient's invitation and expiry", async () => {
     const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
     const sender = createAccountEmailSender(

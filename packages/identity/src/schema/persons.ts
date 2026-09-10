@@ -44,7 +44,7 @@ export const persons = pgTable(
     pinHash: text("pin_hash"),
     passwordHash: text("password_hash"),
     /** AES-256-GCM ciphertext containing the recoverable TOTP secret. The server decrypts it with
-     * the deployment credential key so authenticator verification continues to work offline. */
+     * the venue account key shared with mirrors so authenticator verification works after failover. */
     totpSecret: text("totp_secret"),
     /** The person's preferred UI language (a SUPPORTED_LOCALES code). Null = no
      * preference; the app falls back to the venue default. Validated at the
@@ -56,6 +56,9 @@ export const persons = pgTable(
      * low-level fixtures. Unique per tenant, case-insensitively, through the custom migration's
      * functional partial index. */
     email: text("email"),
+    /** A requested replacement address. It does not become a login identifier until the person
+     * proves they control it. */
+    pendingEmail: text("pending_email"),
     /** Records when the person completed a bearer link delivered to this address. Changing the
      * address clears the record. */
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true, mode: "string" }),
@@ -81,6 +84,9 @@ export const persons = pgTable(
     uniqueIndex("persons_tenant_google_subject_uq")
       .on(t.tenantId, t.googleSubject)
       .where(sql`${t.googleSubject} is not null`),
+    uniqueIndex("persons_tenant_pending_email_uq")
+      .on(t.tenantId, sql`lower(${t.pendingEmail})`)
+      .where(sql`${t.pendingEmail} is not null`),
     check("persons_display_name_ck", sql`length(${t.displayName}) > 0`),
     check("persons_first_names_ck", sql`${t.firstNames} is null or length(${t.firstNames}) > 0`),
     check("persons_last_names_ck", sql`${t.lastNames} is null or length(${t.lastNames}) > 0`),
@@ -92,5 +98,9 @@ export const persons = pgTable(
     ),
     check("persons_totp_secret_ck", sql`${t.totpSecret} is null or length(${t.totpSecret}) > 0`),
     check("persons_locale_ck", sql`${t.locale} is null or length(${t.locale}) > 0`),
+    check(
+      "persons_pending_email_ck",
+      sql`${t.pendingEmail} is null or length(${t.pendingEmail}) > 0`,
+    ),
   ],
 );

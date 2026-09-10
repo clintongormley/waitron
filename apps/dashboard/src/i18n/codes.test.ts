@@ -56,8 +56,10 @@ it("defaults to the active locale when none is passed", () => {
 
 it("has actionable copy for Google login failures", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   for (const code of ["google.invalid", "google.already_linked", "google.second_factor_required"]) {
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
   }
 });
 

@@ -421,6 +421,7 @@ describe("dashboard-app", () => {
           permissions: [],
           modules: [],
           sessionExpiresInSeconds: 1,
+          sessionIdleTimeoutSeconds: 2,
         }),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -471,6 +472,7 @@ describe("dashboard-app", () => {
           permissions: [],
           modules: [],
           sessionExpiresInSeconds: 1,
+          sessionIdleTimeoutSeconds: 2,
         }),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -478,10 +480,10 @@ describe("dashboard-app", () => {
       await el.updateComplete;
       await vi.advanceTimersByTimeAsync(750);
       window.dispatchEvent(new Event("waitron-session-active"));
-      await vi.advanceTimersByTimeAsync(749);
+      await vi.advanceTimersByTimeAsync(1_249);
       await el.updateComplete;
       expect(overview(el)).not.toBeNull();
-      await vi.advanceTimersByTimeAsync(251);
+      await vi.advanceTimersByTimeAsync(752);
       await el.updateComplete;
       expect(login(el)).not.toBeNull();
     } finally {

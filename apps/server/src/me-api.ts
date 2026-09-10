@@ -14,10 +14,12 @@ import {
 } from "@waitron/workforce";
 import {
   permissionsForRole,
+  IDLE_TIMEOUT_MS,
   resolveManagementSession,
   setPersonLocale,
   readOwnProfile,
   saveOwnProfile,
+  confirmOwnEmailChange,
   changeOwnPassword,
   changeOwnPin,
   removeOwnPasskey,
@@ -44,6 +46,7 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
+import type { AccountEmailSender } from "./account-email.js";
 
 /**
  * The deployment holds one tenant per database. The deps the "me" API needs — the SAME minimal
@@ -76,6 +79,10 @@ export interface MeApiDeps {
    */
   modules: string[];
   credentialKeyRing?: TotpKeyRing;
+  accountActionCodeKey?: Buffer;
+  accountActionBaseUrl?: string;
+  privacyNoticeUrl?: string;
+  sendAccountEmail?: AccountEmailSender;
 }
 
 /**
@@ -94,8 +101,10 @@ export interface MeApiDeps {
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
+  "password.too_short": 400,
   "password.throttled": 429,
   "totp.invalid": 401,
+  "pin.too_short": 400,
   "passkey.not_registered": 404,
   "person.email_taken": 409,
   "person.email_invalid": 400,
@@ -137,6 +146,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing ?? {
     current: { version: 1, key: randomBytes(32) },
   };
+  const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const profileThrottle = createPasswordThrottle();
   /** Run `fn` on the app role under this venue's tenant — the one place the withTenant/asAppUser pair
    * is expressed, so no route re-implements it. */
@@ -176,6 +186,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     currentPassword:
       body.currentPassword === undefined ? undefined : textField(body, "currentPassword"),
     totp: body.totp === undefined ? undefined : textField(body, "totp"),
+    keyRing: credentialKeyRing,
   });
 
   app.get("/management-api/session/me/profile", (c) =>
@@ -203,8 +214,43 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         locale: textField(body, "locale"),
         ...credentials(body),
       };
-      await updateProfile(managementSessionId, (tx) => saveOwnProfile(tx, input));
-      return c.body(null, 204);
+      const issued = await updateProfile(managementSessionId, (tx) =>
+        saveOwnProfile(tx, { ...input, emailCodeKey: accountActionCodeKey }),
+      );
+      let emailVerificationSent = false;
+      if (issued !== null && deps.sendAccountEmail !== undefined) {
+        try {
+          await deps.sendAccountEmail({
+            ...issued,
+            actionUrl: deps.accountActionBaseUrl ?? "/",
+            locale: issued.locale ?? deps.venueLocale,
+            privacyNoticeUrl: deps.privacyNoticeUrl,
+          });
+          emailVerificationSent = true;
+        } catch (error) {
+          log("error", "account_email.send_failed", {
+            purpose: issued.purpose,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      return c.json({ emailVerificationSent });
+    }),
+  );
+  app.post("/management-api/session/me/profile/email/confirm", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const email = await asStaff((tx) =>
+        confirmOwnEmailChange(tx, {
+          tenantId: deps.cfg.tenantId,
+          managementSessionId,
+          code: textField(body, "code"),
+          codeKey: accountActionCodeKey,
+        }),
+      );
+      if (email === null) throw new AppError("account_action.invalid", {});
+      return c.json({ email });
     }),
   );
   app.put("/management-api/session/me/password", (c) =>
@@ -258,7 +304,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           beginOwnTotpEnrollment(tx, {
             tenantId: deps.cfg.tenantId,
             managementSessionId,
-            keyRing: credentialKeyRing,
             ...credentials(body),
           }),
         ),
@@ -290,7 +335,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           regenerateOwnRecoveryCodes(tx, {
             tenantId: deps.cfg.tenantId,
             managementSessionId,
-            keyRing: credentialKeyRing,
             ...credentials(body),
           }),
         ),
@@ -305,7 +349,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         disableOwnTotp(tx, {
           tenantId: deps.cfg.tenantId,
           managementSessionId,
-          keyRing: credentialKeyRing,
           ...credentials(body),
         }),
       );
@@ -389,6 +432,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           0,
           Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000),
         ),
+        sessionIdleTimeoutSeconds: IDLE_TIMEOUT_MS / 1000,
       });
     }),
   );

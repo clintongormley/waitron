@@ -26,6 +26,7 @@ type Mode =
   | "disable-totp"
   | "unlink-google"
   | "passkey"
+  | "email"
   | "codes";
 type Field =
   | "displayName"
@@ -265,7 +266,10 @@ export class ProfileScreen extends LitElement {
       if (!f.confirmPin) errors.confirmPin = t("form.pin_required");
       else if (f.confirmPin !== f.pin) errors.confirmPin = t("account.pin_mismatch");
     }
-    if (this.mode === "totp" && this.totpSetup !== null && !f.setupCode) {
+    if (
+      ((this.mode === "totp" && this.totpSetup !== null) || this.mode === "email") &&
+      !f.setupCode
+    ) {
       errors.setupCode = t("profile.code_required");
     }
     this.errors = errors;
@@ -315,6 +319,8 @@ export class ProfileScreen extends LitElement {
         await this.api.unlinkGoogle(credentials);
       } else if (this.mode === "passkey") {
         await this.#addPasskey(credentials);
+      } else if (this.mode === "email") {
+        await this.api.confirmProfileEmail(f.setupCode);
       }
       if (!this.isConnected) return;
       this.#edit("view");
@@ -386,6 +392,19 @@ export class ProfileScreen extends LitElement {
                     </dd>
                     <dt>${t("login.email")}</dt>
                     <dd>${p.email ?? "—"}</dd>
+                    ${
+                      p.pendingEmail === null
+                        ? nothing
+                        : html`<dt>${t("profile.pending_email")}</dt>
+                            <dd>
+                              ${p.pendingEmail}
+                              <wt-button
+                                data-test="confirm-email"
+                                @click=${() => this.#edit("email")}
+                                >${t("profile.confirm_email")}</wt-button
+                              >
+                            </dd>`
+                    }
                     <dt>${t("profile.language")}</dt>
                     <dd>
                       ${this.locales.find((l) => l.code === (p.locale ?? this.venueLocale))?.label}
@@ -520,7 +539,7 @@ export class ProfileScreen extends LitElement {
                 </section>`
               : html`<section class="fields">
                   <h2>
-                    ${t(this.mode === "details" ? "profile.details" : this.mode === "password" ? "profile.change_password" : this.mode === "pin" ? "profile.change_pin" : this.mode === "totp" ? "profile.setup_authenticator" : this.mode === "recovery" ? "profile.replace_recovery_codes" : this.mode === "google" ? "profile.google_login" : this.mode === "disable-totp" ? "profile.disable_authenticator" : this.mode === "unlink-google" ? "profile.unlink_google" : this.mode === "passkey" ? "staff.add_passkey" : "profile.remove_passkey")}
+                    ${t(this.mode === "details" ? "profile.details" : this.mode === "password" ? "profile.change_password" : this.mode === "pin" ? "profile.change_pin" : this.mode === "totp" ? "profile.setup_authenticator" : this.mode === "recovery" ? "profile.replace_recovery_codes" : this.mode === "google" ? "profile.google_login" : this.mode === "disable-totp" ? "profile.disable_authenticator" : this.mode === "unlink-google" ? "profile.unlink_google" : this.mode === "passkey" ? "staff.add_passkey" : this.mode === "email" ? "profile.confirm_email" : "profile.remove_passkey")}
                   </h2>
                   ${
                     this.mode === "details"
@@ -545,6 +564,12 @@ export class ProfileScreen extends LitElement {
                   }
                   ${this.mode === "password" ? html`${this.#input("password", "account.new_password", "password", "new-password")}${this.#input("confirmPassword", "account.confirm_password", "password", "new-password")}` : nothing}
                   ${this.mode === "pin" ? html`${this.#input("pin", "account.new_pin", "password", "off")}${this.#input("confirmPin", "account.confirm_pin", "password", "off")}` : nothing}
+                  ${
+                    this.mode === "email"
+                      ? html`<p class="hint">${t("profile.email_code_hint")}</p>
+                          ${this.#input("setupCode", "profile.email_code", "text", "one-time-code")}`
+                      : nothing
+                  }
                   ${
                     this.mode === "totp" && this.totpSetup !== null
                       ? html`
