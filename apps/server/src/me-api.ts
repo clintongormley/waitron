@@ -428,9 +428,9 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         onboardingIntent: deps.onboardingIntent,
         permissions: permissionsForRole(role),
         modules: deps.modules,
-        sessionExpiresInSeconds: Math.max(
-          0,
-          Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000),
+        sessionExpiresInSeconds: Math.min(
+          IDLE_TIMEOUT_MS / 1000,
+          Math.max(0, Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000)),
         ),
         sessionIdleTimeoutSeconds: IDLE_TIMEOUT_MS / 1000,
       });
