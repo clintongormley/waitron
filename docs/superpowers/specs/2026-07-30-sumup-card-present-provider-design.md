@@ -159,6 +159,16 @@ in Stripe's model — maps onto the same endpoint is **unverified** (§7).
 
 Listed because the CLAUDE.md §1 rule applies to vendor documentation as much as to our own code.
 
+> **2026-09-10.** All four went to SumUp on 2026-09-08 (no reply) and are now being settled on a
+> real Solo instead: [research/2026-09-10-sumup-solo-experiments.md](../../research/2026-09-10-sumup-solo-experiments.md),
+> one experiment per item, results recorded there. Two of the documentation facts this section
+> rests on have changed since 2026-07-30: the refund endpoint is now
+> `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds` (§5's `/v0.1/me/refund/`
+> path is the old one), and the online-payments webhook page no longer describes a signature or a
+> nine-step retry — it lists four retries and says to confirm every event by calling the API. Item 1's
+> candidate is `affiliate.foreign_transaction_id`, a client-supplied LOOKUP key on the create call;
+> whether it also deduplicates is what experiment 2b measures.
+
 1. **Whether we may _supply_ `client_transaction_id` rather than only read it back.** What is verified
    is that the checkout response carries it and that the transactions endpoint accepts it as a lookup
    parameter. If we can supply it, a retried `collect` is idempotent at the vendor; if not, the

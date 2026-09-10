@@ -1,6 +1,11 @@
 # Questions for SumUp before we build the card-reader integration (2026-09-08)
 
-**Status: SENT to SumUp 2026-09-08; awaiting reply.** The card-reader build (Track H) does not start until the answers land — question 4 (does the reader work offline once paired) is design-invalidating.
+**Status: SENT to SumUp 2026-09-08; no reply as of 2026-09-10.** The owner now has a SumUp Solo, so the
+answers come from the device instead: the experiment runbook is
+[2026-09-10-sumup-solo-experiments.md](2026-09-10-sumup-solo-experiments.md) (runs from 2026-09-11), one
+experiment per question below, each stating its failing case up front. The card-reader build (Track H)
+starts from the recorded results, not from SumUp's inbox. If SumUp does reply, their answer is a second
+source to set beside the measurement, not a replacement for it.
 
 Context to give SumUp: we are building a restaurant point-of-sale for Spain. We want to drive a
 SumUp card reader (Solo, or whichever model you recommend for a counter) from our own software using
