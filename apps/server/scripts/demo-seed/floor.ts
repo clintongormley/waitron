@@ -52,7 +52,7 @@ export interface SeedStatus {
 export const DEMO_ZONES: SeedZone[] = [
   { key: "dining", name: { en: "Dining room", es: "Comedor" }, displayOrder: 0 },
   { key: "terrace", name: { en: "Terrace", es: "Terraza" }, displayOrder: 1 },
-  { key: "bar", name: { en: "Bar", es: "Barra" }, displayOrder: 2 },
+  { key: "bar", name: { en: "Downstairs bar", es: "Bar de abajo" }, displayOrder: 2 },
 ];
 
 export const DEMO_TABLES: SeedTable[] = [

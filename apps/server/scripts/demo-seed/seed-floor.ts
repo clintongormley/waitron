@@ -130,11 +130,55 @@ export async function seedFloor(
     zoneIds.set(zone.key, zoneId);
   }
 
+  const upstairsBarZone = await createZone(tx, cfg, {
+    name: locale === "en" ? "Upstairs bar" : "Bar de arriba",
+    displayOrder: 3,
+  });
+  await tx.execute(sql`
+    insert into zone_service_policies
+      (tenant_id, location_id, zone_id, department_id, service_mode, is_counter_default)
+    values (
+      ${tenantId}, ${locationId}, ${upstairsBarZone.id}, ${defaultPolicy.department_id}, null, false
+    )`);
+  if (menuIds !== undefined) {
+    for (const [index, menuId] of [menuIds.restaurant, menuIds.lunch].entries()) {
+      await tx.execute(sql`
+        insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+        values (${tenantId}, ${upstairsBarZone.id}, ${menuId}, ${index})`);
+    }
+    await tx.execute(sql`
+      update zone_service_policies set default_menu_id = ${menuIds.restaurant}
+      where tenant_id = ${tenantId} and zone_id = ${upstairsBarZone.id}`);
+  }
+
+  const downstairsBarZoneId = zoneIds.get("bar");
+  if (downstairsBarZoneId === undefined) throw new Error("seedFloor: no downstairs bar zone");
+  const { rows: barStations } = await tx.execute<{ id: string; name: string }>(sql`
+    select id, name from kitchen_stations
+    where tenant_id = ${tenantId} and location_id = ${locationId}
+      and name in ('Downstairs bar', 'Upstairs bar')`);
+  const downstairsStationId = barStations.find((station) => station.name === "Downstairs bar")?.id;
+  const upstairsStationId = barStations.find((station) => station.name === "Upstairs bar")?.id;
+  if (downstairsStationId === undefined || upstairsStationId === undefined) {
+    throw new Error("seedFloor: bar preparation stations were not created");
+  }
+  for (const [zoneId, stationId] of [
+    [downstairsBarZoneId, downstairsStationId],
+    [upstairsBarZone.id, upstairsStationId],
+  ] as const) {
+    await tx.execute(sql`
+      insert into preparation_routes
+        (tenant_id, location_id, zone_id, category_id, station_id, no_preparation)
+      select ${tenantId}, ${locationId}, ${zoneId}, id, ${stationId}, false
+      from categories
+      where tenant_id = ${tenantId} and station_id = ${downstairsStationId}`);
+  }
+
   const { rows: deliZoneRows } = await tx.execute<{ id: string }>(sql`
     insert into floor_zones (tenant_id, location_id, name, display_order, active)
     values (
       ${tenantId}, ${locationId},
-      ${locale === "en" ? "Deli counter" : "Mostrador de charcutería"}, 3, true
+      ${locale === "en" ? "Deli counter" : "Mostrador de charcutería"}, 4, true
     ) returning id`);
   const deliZoneId = deliZoneRows[0]?.id;
   if (deliZoneId === undefined) throw new Error("seedFloor: failed to create deli service zone");

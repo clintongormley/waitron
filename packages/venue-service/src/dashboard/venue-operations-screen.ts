@@ -197,16 +197,19 @@ export class VenueOperationsScreen extends LitElement {
   }
 
   #addRoute(): void {
-    const categoryId = this.#value("route-category");
+    const subject = this.#value("route-subject");
     const zoneId = this.#value("route-zone");
     const target = this.#value("route-target");
-    if (categoryId === "" || target === "") {
+    const separator = subject.indexOf(":");
+    const kind = subject.slice(0, separator);
+    const subjectId = subject.slice(separator + 1);
+    if ((kind !== "category" && kind !== "product") || subjectId === "" || target === "") {
       this.error = t("venue.required");
       return;
     }
     void this.#save(() =>
       this.api.createRoute({
-        categoryId,
+        ...(kind === "category" ? { categoryId: subjectId } : { productId: subjectId }),
         zoneId: zoneId === "" ? null : zoneId,
         ...(target === "none" ? { noPreparation: true } : { stationId: target }),
       }),
@@ -327,14 +330,14 @@ export class VenueOperationsScreen extends LitElement {
               <label
                 >${t("venue.department")}<select name=${`zone-department-${zone.id}`}>
                   ${model.departments.map(
-                  (department) =>
-                    html`<option
-                      value=${department.id}
-                      ?selected=${configured?.departmentId === department.id}
-                    >
-                      ${department.name}
-                    </option>`,
-                )}
+                    (department) =>
+                      html`<option
+                        value=${department.id}
+                        ?selected=${configured?.departmentId === department.id}
+                      >
+                        ${department.name}
+                      </option>`,
+                  )}
                 </select></label
               >
               <label
@@ -349,19 +352,19 @@ export class VenueOperationsScreen extends LitElement {
               >
             </div>
             ${model.menus.map((menu, index) => {
-            const assignment = assignments.find((item) => item.menuId === menu.id);
-            return html`<div class="menu">
-              <span>${menu.name}${assignment?.isDefault ? ` — ${t("venue.default")}` : ""}</span
-              ><span class="actions"
-                >${assignment === undefined ? html`<wt-button variant="secondary" ?disabled=${this.busy || configured === undefined} @click=${() => void this.#save(() => this.api.allowMenu(zone.id, menu.id, { displayOrder: index, makeDefault: false }))}>${t("venue.make_available")}</wt-button>` : nothing}<wt-button
-                  variant="secondary"
-                  ?disabled=${this.busy || configured === undefined || assignment?.isDefault === true}
-                  @click=${() => void this.#save(() => this.api.allowMenu(zone.id, menu.id, { displayOrder: index, makeDefault: true }))}
-                  >${t("venue.make_default")}</wt-button
-                ></span
-              >
-            </div>`;
-          })}
+              const assignment = assignments.find((item) => item.menuId === menu.id);
+              return html`<div class="menu">
+                <span>${menu.name}${assignment?.isDefault ? ` — ${t("venue.default")}` : ""}</span
+                ><span class="actions"
+                  >${assignment === undefined ? html`<wt-button variant="secondary" ?disabled=${this.busy || configured === undefined} @click=${() => void this.#save(() => this.api.allowMenu(zone.id, menu.id, { displayOrder: index, makeDefault: false }))}>${t("venue.make_available")}</wt-button>` : nothing}<wt-button
+                    variant="secondary"
+                    ?disabled=${this.busy || configured === undefined || assignment?.isDefault === true}
+                    @click=${() => void this.#save(() => this.api.allowMenu(zone.id, menu.id, { displayOrder: index, makeDefault: true }))}
+                    >${t("venue.make_default")}</wt-button
+                  ></span
+                >
+              </div>`;
+            })}
           </article>`;
         })}
       </div>
@@ -440,13 +443,26 @@ export class VenueOperationsScreen extends LitElement {
     return html`<section>
       <h2>${t("venue.routing")}</h2>
       <ul>
-        ${model.routes.map((route) => html`<li>${model.categories.find((c) => c.id === route.categoryId)?.name ?? route.productId} → ${route.noPreparation ? t("venue.no_preparation") : (model.stations.find((s) => s.id === route.stationId)?.name ?? route.stationId)} (${route.zoneId === null ? t("venue.all_zones") : (model.floorZones.find((z) => z.id === route.zoneId)?.name ?? route.zoneId)})</li>`)}
+        ${model.routes.map((route) => html`<li>${route.productId === null ? (model.categories.find((c) => c.id === route.categoryId)?.name ?? route.categoryId) : (model.products.find((p) => p.id === route.productId)?.descriptions.en ?? model.products.find((p) => p.id === route.productId)?.descriptions.es ?? route.productId)} → ${route.noPreparation ? t("venue.no_preparation") : (model.stations.find((s) => s.id === route.stationId)?.name ?? route.stationId)} (${route.zoneId === null ? t("venue.all_zones") : (model.floorZones.find((z) => z.id === route.zoneId)?.name ?? route.zoneId)})</li>`)}
       </ul>
       <div class="panel form-row">
         <label
-          >${t("venue.category")} <span class="required">*</span
-          ><select name="route-category">
-            ${model.categories.map((category) => html`<option value=${category.id}>${category.name}</option>`)}
+          >${t("venue.product_or_category")} <span class="required">*</span
+          ><select name="route-subject">
+            <optgroup label=${t("venue.category")}>
+              ${model.categories.map(
+                (category) =>
+                  html`<option value=${`category:${category.id}`}>${category.name}</option>`,
+              )}
+            </optgroup>
+            <optgroup label=${t("venue.product")}>
+              ${model.products.map(
+                (product) =>
+                  html`<option value=${`product:${product.id}`}>
+                    ${this.#name(product.descriptions)}
+                  </option>`,
+              )}
+            </optgroup>
           </select></label
         >
         <label
@@ -464,7 +480,7 @@ export class VenueOperationsScreen extends LitElement {
         >
         <wt-button
           data-test="add-route"
-          ?disabled=${this.busy || model.categories.length === 0}
+          ?disabled=${this.busy || (model.categories.length === 0 && model.products.length === 0)}
           @click=${() => this.#addRoute()}
           >${t("venue.add_route")}</wt-button
         >

@@ -161,6 +161,28 @@ describe("seedDemoRestaurant", () => {
         order by d.name`);
       const { rows: stationRows } = await tx.execute<{ name: string }>(sql`
         select name from kitchen_stations where active order by name`);
+      const { rows: negroniRows } = await tx.execute<{
+        product_id: string;
+        menu_name: string;
+        gross_price: string;
+      }>(sql`
+        select mi.product_id, c.name as menu_name, mi.gross_price
+        from menu_items mi
+        join products p on p.tenant_id = mi.tenant_id and p.id = mi.product_id
+        join catalogues c on c.tenant_id = mi.tenant_id and c.id = mi.menu_id
+        where p.descriptions->>'en' = 'Negroni'
+        order by mi.gross_price`);
+      const { rows: cocktailRouteRows } = await tx.execute<{
+        zone_name: string;
+        station_name: string;
+      }>(sql`
+        select z.name as zone_name, s.name as station_name
+        from preparation_routes r
+        join categories c on c.tenant_id = r.tenant_id and c.id = r.category_id
+        join floor_zones z on z.tenant_id = r.tenant_id and z.id = r.zone_id
+        join kitchen_stations s on s.tenant_id = r.tenant_id and s.id = r.station_id
+        where c.name = 'Drinks'
+        order by z.name`);
       return {
         menus,
         products,
@@ -172,6 +194,8 @@ describe("seedDemoRestaurant", () => {
         serviceZones: serviceZoneRows,
         hours: hoursRows,
         stations: stationRows.map((row) => row.name),
+        negroniOffers: negroniRows,
+        cocktailRoutes: cocktailRouteRows,
       };
     });
 
@@ -205,11 +229,6 @@ describe("seedDemoRestaurant", () => {
     ]);
     expect(read.serviceZones).toEqual([
       {
-        zone_name: "Bar",
-        department_name: "Restaurant and bar",
-        menus: ["Casa Delgado", "Menú del Día"],
-      },
-      {
         zone_name: "Deli counter",
         department_name: "Deli",
         menus: ["Deli takeaway"],
@@ -220,7 +239,17 @@ describe("seedDemoRestaurant", () => {
         menus: ["Casa Delgado", "Menú del Día"],
       },
       {
+        zone_name: "Downstairs bar",
+        department_name: "Restaurant and bar",
+        menus: ["Casa Delgado", "Menú del Día"],
+      },
+      {
         zone_name: "Terrace",
+        department_name: "Restaurant and bar",
+        menus: ["Casa Delgado", "Menú del Día"],
+      },
+      {
+        zone_name: "Upstairs bar",
         department_name: "Restaurant and bar",
         menus: ["Casa Delgado", "Menú del Día"],
       },
@@ -229,7 +258,16 @@ describe("seedDemoRestaurant", () => {
       { department_name: "Deli", days: 6 },
       { department_name: "Restaurant and bar", days: 7 },
     ]);
-    expect(read.stations).toEqual(["Bar", "Deli counter", "Kitchen"]);
+    expect(read.stations).toEqual(["Deli counter", "Downstairs bar", "Kitchen", "Upstairs bar"]);
+    expect(read.negroniOffers).toEqual([
+      { product_id: expect.any(String), menu_name: "Menú del Día", gross_price: "9.00" },
+      { product_id: expect.any(String), menu_name: "Casa Delgado", gross_price: "11.00" },
+    ]);
+    expect(new Set(read.negroniOffers.map((offer) => offer.product_id)).size).toBe(1);
+    expect(read.cocktailRoutes).toEqual([
+      { zone_name: "Downstairs bar", station_name: "Downstairs bar" },
+      { zone_name: "Upstairs bar", station_name: "Upstairs bar" },
+    ]);
 
     // Floor: the ~16-table demo plan (seedFloor seeds 16).
     expect(read.tables).toBeGreaterThanOrEqual(16);

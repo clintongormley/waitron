@@ -38,7 +38,9 @@ export interface SeedCataloguesResult {
 }
 
 /** The logical routing targets a seed category names, mapped to their concrete `kitchen_stations.id`. */
-type StationIds = Record<"kitchen" | "bar" | "deli", string>;
+type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
+  upstairsBar: string;
+};
 
 /** Resolve the location's provisioned Cocina station and create its non-default Barra station. */
 async function resolveStationIds(
@@ -60,15 +62,25 @@ async function resolveStationIds(
   // Seed scripts have no management session, so insert the non-default station directly.
   const { rows: barra } = await tx.execute<{ id: string }>(sql`
     insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
-    values (${tenantId}, ${locationId}, 'Bar', 1, false, true)
+    values (${tenantId}, ${locationId}, 'Downstairs bar', 1, false, true)
     returning id`);
   const bar = barra[0]?.id;
   if (bar === undefined) {
     throw new Error(`seedCatalogues: failed to create "Barra" station for location ${locationId}`);
   }
+  const { rows: upstairsRows } = await tx.execute<{ id: string }>(sql`
+    insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
+    values (${tenantId}, ${locationId}, 'Upstairs bar', 2, false, true)
+    returning id`);
+  const upstairsBar = upstairsRows[0]?.id;
+  if (upstairsBar === undefined) {
+    throw new Error(
+      `seedCatalogues: failed to create "Upstairs bar" station for location ${locationId}`,
+    );
+  }
   const { rows: deliRows } = await tx.execute<{ id: string }>(sql`
     insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
-    values (${tenantId}, ${locationId}, 'Deli counter', 2, false, true)
+    values (${tenantId}, ${locationId}, 'Deli counter', 3, false, true)
     returning id`);
   const deli = deliRows[0]?.id;
   if (deli === undefined) {
@@ -76,7 +88,7 @@ async function resolveStationIds(
       `seedCatalogues: failed to create "Deli counter" station for location ${locationId}`,
     );
   }
-  return { kitchen, bar, deli };
+  return { kitchen, bar, upstairsBar, deli };
 }
 
 /**
@@ -164,6 +176,21 @@ export async function seedCatalogues(
   const casaId = await seedOne(CASA_DELGADO, provisionedMenus[0]?.id);
   const diaId = await seedOne(MENU_DEL_DIA);
   const deliId = await seedOne(DELI_TAKEAWAY);
+
+  const negroniId = productsByImage.get("negroni.png");
+  if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");
+  const cocktailSection = await createMenuSection(tx, tenantId, {
+    menuId: diaId,
+    name: { [locale]: locale === "en" ? "Cocktails" : "Cócteles" },
+    displayOrder: MENU_DEL_DIA.categories.length,
+  });
+  await createMenuItem(tx, tenantId, {
+    menuId: diaId,
+    productId: negroniId,
+    sectionId: cocktailSection.id,
+    grossPrice: "9.00",
+    displayOrder: 0,
+  });
 
   await assignCatalogueToLocation(tx, locationId, casaId);
   await addCatalogueToLocation(tx, tenantId, locationId, diaId);

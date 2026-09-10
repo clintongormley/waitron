@@ -141,4 +141,23 @@ describe("venue operations screen", () => {
       displayOrder: 0,
     });
   });
+
+  it("routes a product exception for one zone", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      createRoute: vi.fn().mockResolvedValue({ id: "r1" }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    (el.shadowRoot!.querySelector('[name="route-subject"]') as HTMLSelectElement).value =
+      "product:p1";
+    (el.shadowRoot!.querySelector('[name="route-zone"]') as HTMLSelectElement).value = "z1";
+    (el.shadowRoot!.querySelector('[name="route-target"]') as HTMLSelectElement).value = "s1";
+    (el.shadowRoot!.querySelector('[data-test="add-route"]') as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.createRoute).toHaveBeenCalledWith({
+      productId: "p1",
+      zoneId: "z1",
+      stationId: "s1",
+    });
+  });
 });

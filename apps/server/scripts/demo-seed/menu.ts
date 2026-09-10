@@ -476,6 +476,13 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "bar",
       products: [
         {
+          descriptions: { en: "Negroni", es: "Negroni" },
+          pricingUnit: "each",
+          unitPrice: "11.00",
+          vatClass: "general",
+          image: "negroni.png",
+        },
+        {
           descriptions: { en: "Glass of house red", es: "Copa de vino tinto de la casa" },
           pricingUnit: "each",
           unitPrice: "3.50",
