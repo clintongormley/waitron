@@ -61,8 +61,8 @@ export interface EnsureBoxSecretsDeps {
   makeKeyRing?: () => GeneratedKeyRing; // default generateKeyRing
   /**
    * The addresses the leaf's iPAddress SANs cover beyond 127.0.0.1. Defaults to this host's
-   * non-internal IPv4s (`listBoxIpv4`); boot passes the operator override when one is configured,
-   * because a containerised box's own interface address is not the one devices dial.
+   * default-route interface IPv4s (`listBoxIpv4`); boot passes the operator override when one is
+   * configured, because a containerised box's own interface address is not the one devices dial.
    */
   listIpv4?: () => string[];
 }
@@ -96,9 +96,9 @@ const exists = (p: string): Promise<boolean> =>
  *     <stateDir>/tls/server.crt      <stateDir>/tls/server.key (0600)
  *     <stateDir>/secrets.env         (0600)   # KEY=VALUE, LF-terminated
  *
- * The leaf's iPAddress SANs are `127.0.0.1` plus every detected non-internal IPv4 that falls inside
- * the CA's permitted subtrees (`isPermittedLeafIpv4` — loopback + RFC1918), so a dial by loopback or
- * by LAN IP authenticates. An out-of-set address (a `100.64/10` CGNAT / Tailscale address, a
+ * The leaf's iPAddress SANs are `127.0.0.1` plus the box's default-route interface IPv4s
+ * (`listBoxIpv4`) that fall inside the CA's permitted subtrees (`isPermittedLeafIpv4` — loopback +
+ * RFC1918), so a dial by loopback or by LAN IP authenticates. An out-of-set address (a `100.64/10` CGNAT / Tailscale address, a
  * `169.254` link-local, a public IP) is dropped rather than added: a SAN the name-constrained CA
  * cannot vouch for would make `ca.verify(leaf)` fail and the box serve no HTTPS at all. This does
  * NOT load or consume the secrets — that

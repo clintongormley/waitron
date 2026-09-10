@@ -145,6 +145,7 @@ import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
 import { resolveTradingTls } from "./trading-tls.js";
 import { buildLandingApp } from "./landing-app.js";
+import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
@@ -538,10 +539,8 @@ export function startLandingListener(
     });
   });
   return {
-    close: () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      ),
+    // closeListener drops keep-alive sockets so this resolves — see the main listener's close below.
+    close: () => closeListener(server),
   };
 }
 
@@ -605,9 +604,10 @@ function makeStartedServer(
       // above all — would otherwise be left holding an undrained pool on exactly the path that
       // failed.
       try {
-        await new Promise<void>((resolve, reject) =>
-          server.close((error) => (error ? reject(error) : resolve())),
-        );
+        // closeListener drops idle keep-alive sockets (then all, after a grace) so this resolves —
+        // Node's server.close() otherwise waits forever on the setup page's poll connection, which
+        // wedged the setup→trading self-restart (process never exited → Docker never restarted it).
+        await closeListener(server);
       } finally {
         // Close the plain-HTTP landing listener too (when one was started), in the `finally` so a
         // rejecting `server.close()` above never leaks it. `.catch(() => {})` for the same reason the

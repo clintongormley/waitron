@@ -150,6 +150,12 @@ declare module "@waitron/shared" {
      */
     "server.shutdown_failed": { errorCode: string };
     /**
+     * Shutdown did not finish within the deadline, so the process is exiting anyway (a box's restart
+     * mechanism is SIGTERM → shutdown → exit → Docker restarts it, so a shutdown that never finishes
+     * is a box that never comes back). Logged only, on the way out; carries just the deadline.
+     */
+    "server.shutdown_timeout": { deadlineMs: number };
+    /**
      * A caught value that is NOT an AppError reached the till API's `run` wrapper — an unclassified
      * fault (a driver error, a request-body parse failure, a bug), surfaced to the client as an
      * opaque 500 so nothing internal leaks. `run` logs the structured `codeOf` classification under
