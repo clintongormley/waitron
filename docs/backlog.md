@@ -23,7 +23,7 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 - **[superpowers/specs/2026-07-18-pos-architecture-design.md](superpowers/specs/2026-07-18-pos-architecture-design.md)
   §2** — the twenty numbered sub-projects (the strategy; changes rarely).
 
-**User management has its core operator slice** (owner walkthrough, 2026-09-09):
+**User management has its core operator slice — LANDED #298** (owner walkthrough, 2026-09-09):
 the reusable table, searchable/filterable admin list, invitation setup, account lifecycle controls,
 self-service profile, verified email changes, authenticator/recovery codes, Google login, password
 backoff, login/recovery polish and automatic return to login at session expiry are implemented under
@@ -1422,12 +1422,12 @@ genuinely-decision-bearing.
   (`Promise.all([computeDailyClose(tx), computeTopSellers(tx), countOpenTables(tx)])`, also
   `daily-close`). pg@8 queues them (serial, correct, no speedup, a deprecation warning); it BREAKS in
   pg@9. Replace with sequential awaits or one combined query before pg@9 lands.
-- **Account follow-ups after #294.** Track P: design an encrypted retry queue for invitation and
+- **Account follow-ups after #294 and #298.** Track P: design an encrypted retry queue for invitation and
   password-reset email; the [account design](superpowers/specs/2026-09-08-dashboard-account-activation-design.md)
   defers automatic delivery retries and forbids storing raw bearer tokens in a plain queue. Track 1:
   scope routine passwordless email login and SMS before adding either; the shipped email flow is
-  activation/recovery. Verify replacement email addresses before switching the login address; the
-  current profile flow marks a changed address unverified but applies it immediately. The
+  activation/recovery. Replacement email addresses remain pending until the user verifies a
+  short-lived code; the original address remains the login until then. The
   deployment-configured privacy-notice link now appears in invitations, account setup and Your
   profile; the restaurant still owns the notice content and contact. Add passkey-backed
   reauthentication and names/removal for passkeys on passwordless accounts before treating profile
