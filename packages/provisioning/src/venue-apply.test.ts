@@ -191,7 +191,7 @@ describe("applyVenue", () => {
   });
 
   it("seeds the starter profiles only once across re-runs (idempotent find-or-create by name)", async () => {
-    // The profiles belong to the TENANT, not a shop, so a D8 second-shop re-run must not duplicate
+    // The profiles belong to the tenant, so a same-venue re-run must not duplicate
     // them. applyVenue find-or-creates by name. Proven by deletion: drop the existing-name filter and
     // the second run throws device_profile.name_taken (the per-tenant name unique).
     const first = await applyVenue(planVenue(request("B20202020"), ALL_MODULES), {
@@ -239,6 +239,41 @@ describe("applyVenue", () => {
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
     expect(tenants.rows[0]?.n).toBe(1); // exactly one tenant, not two
+    expect(second.locationId).toBe(first.locationId);
+    expect(second.tillId).toBe(first.tillId);
+    expect(second.nodeId).toBe(first.nodeId);
+    const venueRows = await suite.db.execute<{
+      locations: number;
+      tills: number;
+      nodes: number;
+    }>(sql`
+      select
+        (select count(*) from locations where tenant_id = ${first.tenantId})::int as locations,
+        (select count(*) from tills where tenant_id = ${first.tenantId})::int as tills,
+        (select count(*) from nodes where tenant_id = ${first.tenantId})::int as nodes`);
+    expect(venueRows.rows[0]).toEqual({ locations: 1, tills: 1, nodes: 1 });
+  });
+
+  it("refuses a different operational venue for the same tenant", async () => {
+    const firstRequest = request("B12121212");
+    await applyVenue(planVenue(firstRequest, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const secondRequest = request("B12121212");
+    secondRequest.location.name = "Another venue";
+
+    await expect(
+      applyVenue(planVenue(secondRequest, ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      }),
+    ).rejects.toMatchObject({ code: "provisioning.second_venue" });
+
+    const locations = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from locations
+      where tenant_id = ${deriveTenantId("ES", "B12121212")}`);
+    expect(locations.rows[0]?.n).toBe(1);
   });
 
   it("collapses country/taxId case + surrounding-whitespace variants to ONE tenant on re-run (no duplicate, no PK error, §5)", async () => {
@@ -269,9 +304,8 @@ describe("applyVenue", () => {
     expect(tenants.rows[0]?.n).toBe(1); // exactly one tenant across both casings, not two
   });
 
-  it("seeds the admin only once across re-runs — the D8 second-shop path adds no duplicate", async () => {
-    // create-location/create-till/create-node deliberately ADD a shop on a re-run (a tenant has many
-    // shops), but the admin belongs to the TENANT, not a shop. A plain `insert into persons` would
+  it("seeds the admin only once across same-venue re-runs", async () => {
+    // The admin belongs to the tenant. A plain `insert into persons` would
     // add a second role='admin' person every run; the conditional seed (insert-where-not-exists)
     // makes the re-run a no-op, mirroring ensure-tenant. Proven by DELETION: revert seed-admin to a
     // plain insert and this assertion reads 2.
@@ -291,7 +325,7 @@ describe("applyVenue", () => {
     expect(admins.rows[0]?.n).toBe(1); // exactly one admin, not one per run
   });
 
-  it("mints a distinct installation number per node under one tenant", async () => {
+  it("does not mint another node or installation on a same-venue re-run", async () => {
     const a = await applyVenue(planVenue(request("B11111111"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -300,13 +334,11 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    expect(a.tenantId).toBe(b.tenantId);
+    expect(a.nodeId).toBe(b.nodeId);
     const installs = await suite.db.execute<{ numero_instalacion: number }>(sql`
       select numero_instalacion from registro_sif
       where node_id in (${a.nodeId}, ${b.nodeId}) and revocado_en is null`);
-    expect(installs.rows).toHaveLength(2);
-    // fresh node ⇒ fresh install #, new chain
-    expect(installs.rows[0]?.numero_instalacion).not.toBe(installs.rows[1]?.numero_instalacion);
+    expect(installs.rows).toHaveLength(1);
   });
 
   it("refuses a plan with no ensure-tenant — the scope it adopts must be present", async () => {

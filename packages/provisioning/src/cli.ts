@@ -521,8 +521,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       // (`adoptFromPrimary`) — every tenant-creation path — through the shared `assertNoForeignTenant`
       // guard: with row-level security gone, `withTenant` no longer filters by tenant, so a foreign
       // `(country, tax_id)` in this database would expose one business's rows to the other. The SAME
-      // identity proceeds — `applyVenue`'s ON CONFLICT DO NOTHING reuses the tenant and adds a shop
-      // (D8) — and an empty database proceeds as the first tenant. The identity applied is the
+      // identity proceeds to `applyVenue`, which reuses an exact same-venue plan and refuses different
+      // venue details — and an empty database proceeds as the first tenant. The identity applied is the
       // ensure-tenant action's, canonicalized by planVenue.
       const ensure = actions.find((a) => a.kind === "ensure-tenant");
       if (ensure !== undefined && ensure.kind === "ensure-tenant") {
@@ -919,7 +919,7 @@ function assertEnvironment(environment: string): DeploymentEnvironment {
  * case or in leading/trailing whitespace is handled too — and `deriveTenantId` self-normalizes as a
  * backstop. The footgun this all defends: `es`/`ES` (or a taxId differing only in case or surrounding
  * whitespace) for one business would otherwise derive DIFFERENT tenant ids and mint two permanent,
- * unmergeable tenants — a re-run meant to add a shop would silently start a second SIF chain instead
+ * unmergeable tenants — a same-venue retry would silently start a second SIF chain instead
  * of reusing the first (§5). `.trim().toUpperCase()` collapses exactly case and surrounding
  * whitespace; INTERNAL whitespace is left intact (a taxId's inner content is not ours to alter), so
  * `"B123 45678"` stays a distinct identity. Canonicalizing collapses the case/space variants to the

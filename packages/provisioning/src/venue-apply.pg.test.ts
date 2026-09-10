@@ -53,6 +53,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
   let pg: RealPostgres;
   let superuser: Database;
   let owner: Database; // waitron_migrator @ target — `instance` migrated AS it, so it owns the tables
+  let ownerUri: string;
 
   beforeAll(async () => {
     pg = await startBarePostgres();
@@ -64,7 +65,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     const admin = await createPostgresDb(adminUri);
     // The target is opened AS the migrator (the role option): the migration and the post-migrate role
     // work run as it, so it owns every table — which is what `applyVenue` then inserts as below.
-    const ownerUri = withRole(withDatabase(adminUri, DATABASE), "waitron_migrator");
+    ownerUri = withRole(withDatabase(adminUri, DATABASE), "waitron_migrator");
     try {
       // Stand up the whole deployment as prov_admin: create the migrator, the db it owns, migrate AS
       // it, create the two login roles (each with FIXED_PW), stamp. waitron_migrator owns the tables.
@@ -120,6 +121,10 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     });
     // The fiscal module's seed ran inside the venue transaction and reported its SIF line.
     expect(result.seeded).toEqual([
+      {
+        module: "venue-service",
+        report: "default department and counter zone ready",
+      },
       {
         module: "fiscal-verifactu",
         report: expect.stringMatching(/^SIF .* \(installation \d+\)$/),
@@ -189,6 +194,34 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
         inactivity_timeout_seconds: 300,
       },
     ]);
+  });
+
+  it("serialises concurrent same-venue retries and refuses a competing different venue", async () => {
+    const secondOwner = await createPostgresDb(ownerUri);
+    try {
+      const samePlan = planVenue(venueRequest("B12345678"), ALL_MODULES);
+      const different = venueRequest("B12345678");
+      different.location.name = "Another venue";
+      const [same, other] = await Promise.allSettled([
+        applyVenue(samePlan, { db: owner, modules: ALL_MODULES }),
+        applyVenue(planVenue(different, ALL_MODULES), {
+          db: secondOwner,
+          modules: ALL_MODULES,
+        }),
+      ]);
+      expect(same.status).toBe("fulfilled");
+      expect(other).toMatchObject({
+        status: "rejected",
+        reason: { code: "provisioning.second_venue" },
+      });
+      const counts = await owner.execute<{ locations: number; nodes: number }>(sql`
+        select
+          (select count(*) from locations)::int as locations,
+          (select count(*) from nodes)::int as nodes`);
+      expect(counts.rows).toEqual([{ locations: 1, nodes: 1 }]);
+    } finally {
+      await secondOwner.close();
+    }
   });
 
   it("readTenantIdentities reads the real committed tenant — the venue guard's real read (§5)", async () => {

@@ -181,6 +181,10 @@ declare module "@waitron/shared" {
      * statement back in its message, and this file's header forbids a param that could carry one.
      * `database` is operator-typed configuration and never a secret. */
     "provisioning.venue_conflict": { database: string };
+    /** A database that already contains one operational venue was asked to create a different one.
+     * Each venue has its own primary/fiscal cluster, while a cloud control plane may coordinate
+     * several such databases. A byte-for-byte re-run of the existing venue remains idempotent. */
+    "provisioning.second_venue": Record<string, never>;
     /** A SECOND, DIFFERENT tenant was asked to stand up in a database that already holds
      * one. Refused: one tenant per database is the post-RLS isolation boundary. This branch dropped
      * row-level security on the premise that each database carries a single tenant, so `withTenant`
@@ -192,7 +196,7 @@ declare module "@waitron/shared" {
      * mirror adopt orchestrator (`adoptFromPrimary`, `apps/server/src/adopt.ts`) — through the shared
      * `assertNoForeignTenant` guard (`packages/provisioning/src/tenant-guard.ts`): each reads the
      * existing `(country, tax_id)` set before applying and refuses any identity but the one already
-     * present. The SAME identity re-provisions (spec D8 second shop); an empty database proceeds as
+     * present. The SAME identity proceeds to the single-venue guard; an empty database proceeds as
      * the first tenant. This is NOT `venue_conflict` (a concurrent unique-key race on ONE identity);
      * it is a refusal of a FOREIGN identity.
      *
