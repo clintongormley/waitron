@@ -62,10 +62,11 @@ const KNOWN_NON_MONOTONIC = new Map<string, { entries: string[]; reason: string 
         "point 3 needs it AT OR BELOW or `0002` re-applies — contradictory for any single value. " +
         "(Two candidate repairs were also run, on 2026-09-10, and each failed in one of those two " +
         "directions.) The " +
-        "residual skip is UNMITIGATED here — a runtime check that counts applied migrations " +
-        "against shipped ones (`migrations.incomplete`) is being added on " +
-        "`feat/boot-failure-diagnosability`, and until that merges nothing names this case. " +
-        "Fixing the journal itself means a squashed baseline, a separate decision.",
+        "skip is no longer SILENT: `applyMigrations` counts applied migrations against shipped " +
+        "ones and throws `migrations.incomplete` (`packages/migrations/src/apply.ts`), so such a " +
+        "database refuses to boot rather than running on a schema it does not have. It is still " +
+        "not REPAIRED — those release points cannot upgrade at all — and repairing them means a " +
+        "squashed baseline, a separate decision.",
     },
   ],
 ]);
