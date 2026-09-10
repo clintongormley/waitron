@@ -361,16 +361,43 @@ unfiltered `main` run, not a wrong hook.
   plus `inmutabilidad`. Works because the snapshot chain deliberately lags the DB (custom migrations
   are snapshot-less). Paid for on #165.
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal
-  file, so an entry whose `when` sits AT OR BELOW one the database already recorded never runs — no
-  error, a set that applied part of itself and exited 0 (`drizzle-orm@0.45.2/pg-core/dialect.js:57`
-  reads the watermark; `:62` applies only where `recorded < candidate`, so an EQUAL value is skipped
-  too). The core journal is already in that shape, and no edit repairs it: a database at release
-  point 2 and one at release point 3 both carry entry 1's `when` as their watermark, because entry
-  2's RECORDED value sits below it — so point 2 needs entry 2's `when` ABOVE that watermark or
-  `0002` is skipped, while point 3 needs it AT OR BELOW or `0002` re-applies. Contradictory for any
-  single value. Cost: core release points 1–6 upgrade incompletely and silently, found only while
-  investigating the 2026-09-10 bricked box, and this branch cannot repair them. Guard:
+  file, so an entry whose `when` sits AT OR BELOW one the database already recorded never runs, and
+  DRIZZLE raises nothing — it applies part of a set and returns cleanly
+  (`drizzle-orm@0.45.2/pg-core/dialect.js:57` reads the watermark; `:62` applies only where
+  `recorded < candidate`, so an EQUAL value is skipped too). **Waitron no longer exits 0 on that**:
+  `applyMigrations` counts the journal afterwards and throws `migrations.incomplete` (next entry).
+  Every restatement of this mechanism points here rather than repeating the citation — a drizzle bump
+  would otherwise make several copies wrong at once. The core journal is already in that shape, and
+  no edit repairs it: a database at release point 2 and one at release point 3 both carry entry 1's
+  `when` as their watermark, because entry 2's RECORDED value sits below it — so point 2 needs entry
+  2's `when` ABOVE that watermark or `0002` is skipped, while point 3 needs it AT OR BELOW or `0002`
+  re-applies. Contradictory for any single value. Cost: core release points 1–6 upgrade incompletely
+  and silently, found only while investigating the 2026-09-10 bricked box. Guard:
   `scripts/journal-monotonic.test.ts`.
+- **`applyMigrations` refuses to report success on a short set.** It compares the journal rows a set
+  recorded against the entries the image ships and throws `migrations.incomplete` when fewer applied,
+  so a boot against an old release point fails loudly instead of serving a half-migrated schema. Cost:
+  a database at the core set's entry 1 reached HEAD with 10 of 15 applied and no error, and the wrong
+  schema surfaced later as an unclassified driver failure. Pointer:
+  `packages/migrations/src/apply-complete.pg.test.ts`.
+- **Every path that migrates a live database carries an ahead-of-image check, and `deploy/try-branch.sh`
+  is a one-way door.** `assertNotAhead` (`@waitron/provisioning`) compares the database's journal
+  hashes against the image's files after `ensureInstance` and refuses to boot on
+  `provisioning.database_ahead`; there is no backward migration, so the only remedy is restore or
+  reinstall, and `try-branch.sh` warns on every run because it cannot tell whether a ref carries a
+  migration. Cost: without the check, an ahead database re-migrates CLEANLY — drizzle applies nothing
+  and throws nothing (measured with a control, 2026-09-10) — so the mismatch showed up only as an
+  unclassified driver error in whatever query first touched the changed schema. Pointer:
+  `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §4.2/§4.5/§9.
+- **The unauthenticated recovery page renders fixed strings chosen by code, never the caught error's
+  words.** The error's own text goes to the container's stdout only, through `redactSecrets` — the
+  installer's channel. Exactly two values on the page come from outside the image: the error CODE and
+  the LOG TAIL, and the tail is the wider one, because the shared error boundary writes an
+  `AppError`'s params into `waitron.log`. So the convention that params never carry a secret (stated
+  per-code in `apps/server/src/errors.ts`) is what keeps a page anyone on the venue's LAN can open
+  safe. A page edit that interpolated a caught message, or a new code carrying a credential in its
+  params, breaks a security boundary nothing outside the design states. Pointer: same design, §5;
+  `apps/server/src/recovery-surface.ts`.
 - **A new product domain lands as a MODULE, not as new code in the core.** A domain is a package that
   fills the contract seats (schema, sync, provisioning, fiscal, vocabulary…) and is named only by
   `@waitron/composition`; generic code never learns it exists. Cost of the other shape: a whole regime

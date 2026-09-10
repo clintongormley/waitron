@@ -65,6 +65,23 @@ docker compose logs -f app                    # the server's JSON lines
 The services are all `restart: unless-stopped`, so the box comes back on its own after a power cut and
 after the app's own requested restart at the end of the setup wizard.
 
+### When the app will not boot
+
+The box serves a recovery page instead of the app, and that page names a CODE and shows the tail of
+`waitron.log` — enough for the restaurant to act on, deliberately not enough to diagnose from. The
+real reason goes somewhere the restaurant never looks and only whoever prepared the box can read:
+
+```bash
+cd /opt/waitron
+docker compose logs app | tail -50    # the failed boot's error, its cause chain, and its stack
+```
+
+That output is the caught error's own words — a missing column, a refused connection, the counts
+behind `migrations.incomplete`, the migration hashes behind `provisioning.database_ahead` — with any
+credentials embedded in a URL masked before it is written. `docker compose logs` keeps it across the
+container's own restart loop, so read it before pulling a new image: `docker compose up -d` on a
+fresh image starts a new container and the previous boot's output goes with the old one.
+
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to
