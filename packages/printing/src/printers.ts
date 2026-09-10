@@ -8,34 +8,30 @@ import { isPgError, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 
-/** The pg SQLSTATEs the printer writes may raise once the app-layer required-field pre-check passes,
- * so a driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
+/** The pg SQLSTATEs a printer write may raise once the app-layer required-field pre-check passes, so a
+ * driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
  * `printers_transport_fields_ck` CHECK (a transport whose required fields are absent — the DB backstop
- * behind `REQUIRED_FIELDS`); `23503` is the composite `(tenant_id, agent_id) → print_agents` FK (a
- * printer bound to an agent id that names no agent in this tenant). Both are matched down the cause
- * chain by `@waitron/db`'s shared `isPgError` (Drizzle wraps every failed query in a `DrizzleQueryError`
- * whose own `.code` is undefined — the SQLSTATE lives on `.cause.code` under node-postgres, or one
- * level deeper under PGlite), the same walk it uses for `23505` in `isUniqueViolation`. */
+ * behind `REQUIRED_FIELDS`); `23505` is the partial UNIQUE `printers_local_key_key` on
+ * `(tenant_id, location_id, local_key)` (a create/re-key whose device id already names a printer in
+ * this venue). Both are matched down the cause chain by `@waitron/db`'s shared `isPgError` (Drizzle
+ * wraps every failed query in a `DrizzleQueryError` whose own `.code` is undefined — the SQLSTATE lives
+ * on `.cause.code` under node-postgres, or one level deeper under PGlite). */
 const CHECK_VIOLATION = "23514";
-const FOREIGN_KEY_VIOLATION = "23503";
+const UNIQUE_VIOLATION = "23505";
 
 /**
- * Translate a printer write's driver error into a friendly domain code, or rethrow. The composite
- * `(tenant_id, agent_id)` FK violation (a printer pointed at an agent id that does not exist in this
- * tenant) becomes `agent.not_found` (the Task-4 forward note); the transport-fields CHECK violation
- * becomes `printer.invalid_config`. Anything else propagates unchanged (the route boundary opaques it
- * to a 500). `agentId` is echoed on `agent.not_found` for the operator; a CHECK violation carries the
- * stable `transport_fields` reason (the specific missing field is unknowable from the SQLSTATE alone —
- * `createPrinter`'s pre-check names it precisely on the common path).
+ * Translate a printer write's driver error into a friendly domain code, or rethrow. A unique violation
+ * on `printers_local_key_key` (the device id in this write already names a printer in this venue)
+ * becomes `printer.already_registered`; the transport-fields CHECK violation becomes
+ * `printer.invalid_config`. Anything else propagates unchanged (the route boundary opaques it to a
+ * 500). `localKey` is echoed on `printer.already_registered` so the dashboard can point at the existing
+ * registration; a CHECK violation carries the stable `transport_fields` reason (the specific missing
+ * field is unknowable from the SQLSTATE alone — `createPrinter`'s pre-check names it precisely on the
+ * common path).
  */
-function translatePrinterWriteError(error: unknown, agentId: string | undefined): never {
-  // ASSUMPTION: the only client-reachable FK on `printers` is the composite (tenant_id, agent_id) →
-  // print_agents — `tenant_id`/`location_id` come from server-controlled `cfg`, never client input — so
-  // a 23503 on a printer write means the agent binding. If a future schema adds another client-supplied
-  // FK column to `printers`, this blanket mapping must narrow (e.g. read the constraint name) rather
-  // than mislabel that violation `agent.not_found`.
-  if (agentId !== undefined && isPgError(error, FOREIGN_KEY_VIOLATION)) {
-    throw new AppError("agent.not_found", { id: agentId });
+function translatePrinterWriteError(error: unknown, localKey: string | undefined): never {
+  if (localKey !== undefined && isPgError(error, UNIQUE_VIOLATION)) {
+    throw new AppError("printer.already_registered", { localKey });
   }
   if (isPgError(error, CHECK_VIOLATION)) {
     throw new AppError("printer.invalid_config", { reason: "transport_fields" });
@@ -67,27 +63,28 @@ export type { PrintTransport } from "@waitron/print-agent";
 export interface CreatePrinterInput {
   name: string;
   transport: PrintTransport;
-  agentId?: string;
   host?: string;
   port?: number;
-  usbPath?: string;
+  localKey?: string;
   pollId?: string;
 }
 
 /**
  * The connection fields each transport's adapter REQUIRES present (printing subsystem §2b) — the
  * app-layer mirror of the `printers_transport_fields_ck` CHECK in
- * packages/db/drizzle/0001_db_baseline_sql.sql: usb needs an agent + a device path; network_tcp
- * needs an agent + a host (port defaults to 9100); cloud_poll needs a poll id (no agent — it
- * self-polls). The DB CHECK + the composite FK remain the INTEGRITY backstop; this pre-check
- * exists only to turn a missing field into a friendly `printer.invalid_config` instead of a raw
- * 23514 constraint violation. It asserts required fields are PRESENT, not that the others are
- * absent — matching the CHECK exactly (a transport none of the three is already unrepresentable:
- * the `transport` column is the `print_transport` enum).
+ * packages/db/drizzle/0014_central_printer_provisioning_sql.sql: usb/bluetooth need `local_key` (the
+ * USB serial / Bluetooth MAC — the stable device id an agent matches at run time); network_tcp needs a
+ * `host` (port defaults to 9100); cloud_poll needs a `poll_id` (no agent — it self-polls). No transport
+ * requires an agent binding: which agent serves a printer is discovered at run time from the devices it
+ * can see, never stored (schema/printers.ts). The DB CHECK + the partial UNIQUE remain the INTEGRITY
+ * backstop; this pre-check exists only to turn a missing field into a friendly `printer.invalid_config`
+ * instead of a raw 23514 constraint violation. It asserts required fields are PRESENT, not that the
+ * others are absent — matching the CHECK exactly.
  */
 const REQUIRED_FIELDS: Record<PrintTransport, readonly (keyof CreatePrinterInput)[]> = {
-  usb: ["agentId", "usbPath"],
-  network_tcp: ["agentId", "host"],
+  usb: ["localKey"],
+  bluetooth: ["localKey"],
+  network_tcp: ["host"],
   cloud_poll: ["pollId"],
 };
 
@@ -98,9 +95,9 @@ const REQUIRED_FIELDS: Record<PrintTransport, readonly (keyof CreatePrinterInput
  *
  * The only app-layer validation is a required-field presence pre-check (`REQUIRED_FIELDS`), which
  * throws `printer.invalid_config` with a stable English `reason` (e.g. `network_tcp_missing_host`).
- * Everything else — tenant consistency of the `agent_id` binding, the transport CHECK — is enforced
- * by the DB (the composite FK + `printers_transport_fields_ck`), proven in packages/db's
- * printing.test.ts, so this verb stays a thin insert.
+ * Everything else — the transport CHECK, the local_key uniqueness — is enforced by the DB
+ * (`printers_transport_fields_ck` + the partial UNIQUE `printers_local_key_key`), proven in
+ * packages/db's printing.test.ts, so this verb stays a thin insert.
  */
 export async function createPrinter(
   tx: Transaction,
@@ -124,37 +121,36 @@ export async function createPrinter(
         transport: input.transport,
         // Undefined connection fields are OMITTED by drizzle, so each falls to its column default —
         // NULL for the transport-specific columns, 9100 for `port` (schema/printers.ts).
-        agentId: input.agentId,
         host: input.host,
         port: input.port,
-        usbPath: input.usbPath,
+        localKey: input.localKey,
         pollId: input.pollId,
       })
       .returning({ id: printers.id });
     return { id: row!.id };
   } catch (error) {
-    // A bad `agent_id` (an agent that does not exist in this tenant) raises the composite FK's 23503,
-    // mapped to a friendly `agent.not_found` rather than an opaque 500 (the Task-4 forward note).
-    return translatePrinterWriteError(error, input.agentId);
+    // A local_key that already names a printer in this venue raises the partial UNIQUE's 23505,
+    // mapped to a friendly `printer.already_registered` rather than an opaque 500.
+    return translatePrinterWriteError(error, input.localKey);
   }
 }
 
 /**
  * The fields a `printer.manage` operator may edit on an existing printer (design §6, the Impresoras
  * config form). Every field is OPTIONAL — a PATCH touches only what it names — and the connection
- * fields plus `agentId` accept an explicit `null` to CLEAR them (e.g. moving a printer off an agent),
+ * fields accept an explicit `null` to CLEAR them (e.g. de-registering a device before re-pairing),
  * which `undefined` (absent) does not. `transport`/`ticketScope`/`active` round out the editable
- * config. The transport-fields CHECK and the composite agent FK remain the DB INTEGRITY backstop, so a
- * partial edit that leaves a transport short of a required field surfaces as `printer.invalid_config`
- * (23514) and a bad agent as `agent.not_found` (23503), never a raw constraint 500.
+ * config. The transport-fields CHECK and the partial local_key UNIQUE remain the DB INTEGRITY
+ * backstop, so a partial edit that leaves a transport short of a required field surfaces as
+ * `printer.invalid_config` (23514) and a re-key to an already-registered device as
+ * `printer.already_registered` (23505), never a raw constraint 500.
  */
 export interface UpdatePrinterInput {
   name?: string;
   transport?: PrintTransport;
-  agentId?: string | null;
   host?: string | null;
   port?: number | null;
-  usbPath?: string | null;
+  localKey?: string | null;
   pollId?: string | null;
   ticketScope?: "station" | "order";
   active?: boolean;
@@ -165,10 +161,9 @@ export interface PrinterRow {
   id: string;
   name: string;
   transport: PrintTransport;
-  agentId: string | null;
   host: string | null;
   port: number | null;
-  usbPath: string | null;
+  localKey: string | null;
   pollId: string | null;
   ticketScope: "station" | "order";
   active: boolean;
@@ -178,9 +173,9 @@ export interface PrinterRow {
  * Apply a partial edit to a printer (design §6). Only the fields PRESENT in `patch` are written —
  * an absent field is left unchanged, an explicit `null` clears a nullable one — so the caller's
  * screen decides what changes. `0` rows updated (an unknown id or one excluded by the tenant
- * predicate) → `printer.not_found`. The transport-fields CHECK / agent FK are the DB backstop,
- * translated to `printer.invalid_config` / `agent.not_found` (`createPrinter`'s reasoning, for
- * the update path). The explicit tenant predicate limits the update to `cfg.tenantId`; all values
+ * predicate) → `printer.not_found`. The transport-fields CHECK / local_key UNIQUE are the DB backstop,
+ * translated to `printer.invalid_config` / `printer.already_registered` (`createPrinter`'s reasoning,
+ * for the update path). The explicit tenant predicate limits the update to `cfg.tenantId`; all values
  * bind as `$n`.
  */
 export async function updatePrinter(
@@ -220,7 +215,7 @@ export async function updatePrinter(
       .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)))
       .returning({ id: printers.id });
   } catch (error) {
-    return translatePrinterWriteError(error, patch.agentId ?? undefined);
+    return translatePrinterWriteError(error, patch.localKey ?? undefined);
   }
   if (updated.length === 0) throw new AppError("printer.not_found", { id });
 }
@@ -262,10 +257,9 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       id: printers.id,
       name: printers.name,
       transport: printers.transport,
-      agentId: printers.agentId,
       host: printers.host,
       port: printers.port,
-      usbPath: printers.usbPath,
+      localKey: printers.localKey,
       pollId: printers.pollId,
       ticketScope: printers.ticketScope,
       active: printers.active,

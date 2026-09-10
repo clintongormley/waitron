@@ -22,12 +22,16 @@ declare module "@waitron/shared" {
     /** No printer with this id is visible in the current tenant. `id` is the id looked up. */
     "printer.not_found": { id: string };
     /** A supplied printer config was rejected by `createPrinter` (printers.ts) before any write: a
-     * transport whose REQUIRED connection fields are absent — `agent_id`+`host` for `network_tcp`,
-     * `agent_id`+`usb_path` for `usb`, `poll_id` for `cloud_poll`. This mirrors the DB
-     * `printers_transport_fields_ck` CHECK, which stays the integrity backstop; the app-layer check
-     * only turns a missing field into this friendly code rather than a raw 23514. `reason` is a stable
-     * English discriminator (e.g. `network_tcp_missing_host`), never a user-facing sentence. */
+     * transport whose REQUIRED connection fields are absent — `host` for `network_tcp`, `local_key`
+     * for `usb`/`bluetooth`, `poll_id` for `cloud_poll`; no transport requires `agent_id`. This mirrors
+     * the DB `printers_transport_fields_ck` CHECK, which stays the integrity backstop; the app-layer
+     * check only turns a missing field into this friendly code rather than a raw 23514. `reason` is a
+     * stable English discriminator (e.g. `network_tcp_missing_host`), never a user-facing sentence. */
     "printer.invalid_config": { reason: string };
+    /** A create/register whose stable device key (USB serial / Bluetooth MAC) already names a printer
+     * in this venue — the partial UNIQUE (tenant_id, location_id, local_key). `localKey` is echoed so
+     * the dashboard can point at the existing registration. */
+    "printer.already_registered": { localKey: string };
     /** No print agent with this id is visible in the current tenant. `id` is the id looked up. */
     "agent.not_found": { id: string };
     /** The agent's bearer token did not verify, or the agent has been revoked — `requireAgent`

@@ -62,12 +62,13 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     });
   }
 
-  // A network_tcp printer (agent_id + host satisfy the transport CHECK) bound to `agent`.
-  async function seedPrinter(tenant: string, agent: string, name: string): Promise<string> {
+  // A network_tcp printer (host satisfies the transport CHECK). No stored agent binding — an agent is
+  // discovered at run time, so a printer names none.
+  async function seedPrinter(tenant: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into printers (tenant_id, location_id, name, transport, agent_id, host)
-            values (${tenant}, ${locationOf(tenant)}, ${name}, 'network_tcp', ${agent}, '10.0.0.5')
+        sql`insert into printers (tenant_id, location_id, name, transport, host)
+            values (${tenant}, ${locationOf(tenant)}, ${name}, 'network_tcp', '10.0.0.5')
             returning id`,
       );
       return r.rows[0]!.id;
@@ -83,6 +84,36 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       );
       return r.rows[0]!.id;
     });
+  }
+
+  // Insert a printer with an arbitrary transport/field combination — the probe for the
+  // `printers_transport_fields_ck` CHECK and the `printers_local_key_key` partial UNIQUE. Only the
+  // fields relevant to a transport are supplied; the rest stay NULL. `transport` is a bound param
+  // coerced into the print_transport column in assignment context (so an unknown enum value raises
+  // the enum's own error, not a syntax error).
+  function insertPrinter(
+    tenant: string,
+    opts: {
+      transport: string;
+      name?: string;
+      localKey?: string | null;
+      host?: string | null;
+      pollId?: string | null;
+    },
+  ): Promise<{ id: string }[]> {
+    const name = opts.name ?? "Probe printer";
+    const localKey = opts.localKey ?? null;
+    const host = opts.host ?? null;
+    const pollId = opts.pollId ?? null;
+    return asApp(tenant, (tx) =>
+      tx
+        .execute<{ id: string }>(
+          sql`insert into printers (tenant_id, location_id, name, transport, local_key, host, poll_id)
+              values (${tenant}, ${locationOf(tenant)}, ${name}, ${opts.transport}, ${localKey}, ${host}, ${pollId})
+              returning id`,
+        )
+        .then((r) => r.rows),
+    );
   }
 
   // ---- print_agents -------------------------------------------------------------------------
@@ -131,8 +162,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   // ---- printers -----------------------------------------------------------------------------
 
   it("printers: exposes every column through the Drizzle export, with the port and ticket_scope defaults", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent for printer");
-    const id = await seedPrinter(TENANT_A, agent, "Kitchen printer");
+    const id = await seedPrinter(TENANT_A, "Kitchen printer");
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update printers set active = false where id = ${id}`),
     );
@@ -144,54 +174,15 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     );
     expect(row!.name).toBe("Kitchen printer");
     expect(row!.transport).toBe("network_tcp");
-    expect(row!.agentId).toBe(agent);
+    expect(row!.localKey).toBeNull(); // network_tcp carries no local_key
     expect(row!.host).toBe("10.0.0.5");
     expect(row!.port).toBe(9100); // the column default applied
     expect(row!.ticketScope).toBe("station"); // the enum default
     expect(row!.active).toBe(false);
   });
 
-  it("printers: the agent binding is tenant-consistent (composite FK to print_agents)", async () => {
-    const agentB = await seedAgent(TENANT_B, "Agent B");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into printers (tenant_id, location_id, name, transport, agent_id, host)
-              values (${TENANT_A}, ${LOCATION_A}, 'Cross-tenant agent', 'network_tcp', ${agentB}, '10.0.0.9')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, agent_id)
-  });
-
-  it("printers: the transport-fields CHECK rejects a usb printer with no usb_path", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent for usb");
-    // usb requires agent_id AND usb_path; supplying the agent but omitting usb_path violates the CHECK.
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into printers (tenant_id, location_id, name, transport, agent_id)
-              values (${TENANT_A}, ${LOCATION_A}, 'Bad usb', 'usb', ${agent})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23514"); // check_violation — printers_transport_fields_ck
-  });
-
-  it("printers: the transport-fields CHECK admits a well-formed usb + cloud_poll printer", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent usb ok");
-    // usb with agent + usb_path satisfies the CHECK.
-    const usbId = await asApp(TENANT_A, (tx) =>
-      tx
-        .execute<{ id: string }>(
-          sql`insert into printers (tenant_id, location_id, name, transport, agent_id, usb_path)
-              values (${TENANT_A}, ${LOCATION_A}, 'USB printer', 'usb', ${agent}, '/dev/usb/lp0')
-              returning id`,
-        )
-        .then((r) => r.rows[0]!.id),
-    );
-    expect(usbId).toBeDefined();
-    // cloud_poll needs only poll_id (no agent — it self-polls).
+  it("printers: the transport-fields CHECK admits a well-formed cloud_poll printer", async () => {
+    // cloud_poll needs only poll_id (it self-polls; usb/bluetooth/network_tcp are covered below).
     const cloudId = await asApp(TENANT_A, (tx) =>
       tx
         .execute<{ id: string }>(
@@ -207,8 +198,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   // ---- print_jobs ---------------------------------------------------------------------------
 
   it("print_jobs: round-trips the bytea payload and the delivery lifecycle columns", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent for job");
-    const printer = await seedPrinter(TENANT_A, agent, "Printer for job");
+    const printer = await seedPrinter(TENANT_A, "Printer for job");
     const id = await seedJob(TENANT_A, printer);
     // The agent runtime transitions queued → printing → done via UPDATE (app_user holds UPDATE).
     await asApp(TENANT_A, (tx) =>
@@ -232,8 +222,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("print_jobs: the printer binding is tenant-consistent (composite FK to printers)", async () => {
-    const agentA = await seedAgent(TENANT_A, "Agent A for FK");
-    const printerA = await seedPrinter(TENANT_A, agentA, "Printer A for FK");
+    const printerA = await seedPrinter(TENANT_A, "Printer A for FK");
     const e = await captureError(() =>
       asApp(TENANT_B, (tx) =>
         tx.execute(
@@ -243,5 +232,100 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       ),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, printer_id)
+  });
+
+  // ---- central-printer-provisioning: local_key / bluetooth / claimed_by ---------------------
+
+  it("printers: rejects a usb printer with no local_key (CHECK 23514)", async () => {
+    const e = await captureError(() =>
+      insertPrinter(TENANT_A, { transport: "usb", localKey: null }),
+    );
+    expect(pgErrorCode(e)).toBe("23514"); // printers_transport_fields_ck
+  });
+
+  it("printers: accepts usb keyed on a serial and bluetooth keyed on a MAC", async () => {
+    const usb = await insertPrinter(TENANT_A, { transport: "usb", localKey: "SN-ABC123" });
+    expect(usb[0]!.id).toBeDefined();
+    const bt = await insertPrinter(TENANT_A, {
+      transport: "bluetooth",
+      localKey: "AA:BB:CC:DD:EE:FF",
+    });
+    expect(bt[0]!.id).toBeDefined();
+  });
+
+  it("printers: rejects a network_tcp printer with no host (CHECK 23514)", async () => {
+    const e = await captureError(() =>
+      insertPrinter(TENANT_A, { transport: "network_tcp", host: null }),
+    );
+    expect(pgErrorCode(e)).toBe("23514"); // printers_transport_fields_ck
+  });
+
+  it("printers: rejects a second registration of the same (location, local_key) (UNIQUE 23505)", async () => {
+    await insertPrinter(TENANT_A, { transport: "usb", localKey: "SN-DUP" });
+    const e = await captureError(() =>
+      insertPrinter(TENANT_A, { transport: "usb", localKey: "SN-DUP" }),
+    );
+    expect(pgErrorCode(e)).toBe("23505"); // printers_local_key_key partial UNIQUE
+  });
+
+  it("printers: allows two NULL-local_key printers in one location (partial index)", async () => {
+    const a = await insertPrinter(TENANT_A, { transport: "network_tcp", host: "10.0.0.1" });
+    expect(a[0]!.id).toBeDefined();
+    const b = await insertPrinter(TENANT_A, { transport: "network_tcp", host: "10.0.0.2" });
+    expect(b[0]!.id).toBeDefined();
+  });
+
+  it("printers: the old (tenant_id, agent_id) FK and the agent_id/usb_path columns are gone", async () => {
+    // Decision #2: prove the drop by reading pg_constraint back, do not assume DROP COLUMN cascaded.
+    const fk = await suite.admin.execute(
+      sql`select 1 from pg_constraint
+          where conrelid = 'printers'::regclass and conname = 'printers_agent_fk'`,
+    );
+    expect(fk.rows).toHaveLength(0);
+    // No surviving FK on printers still references print_agents.
+    const refs = await suite.admin.execute<{ conname: string }>(
+      sql`select conname from pg_constraint
+          where conrelid = 'printers'::regclass and contype = 'f'
+            and confrelid = 'print_agents'::regclass`,
+    );
+    expect(refs.rows).toHaveLength(0);
+    const cols = await suite.admin.execute<{ column_name: string }>(
+      sql`select column_name from information_schema.columns
+          where table_name = 'printers' and column_name in ('agent_id', 'usb_path')`,
+    );
+    expect(cols.rows).toHaveLength(0);
+  });
+
+  it("print_jobs: rejects claimed_by naming an agent in another tenant (composite FK 23503)", async () => {
+    const printerA = await seedPrinter(TENANT_A, "Printer A for claim FK");
+    const agentB = await seedAgent(TENANT_B, "Agent B for claim FK");
+    // A tenant-A job whose claimed_by points at a tenant-B agent violates (tenant_id, claimed_by).
+    const e = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`insert into print_jobs (tenant_id, location_id, printer_id, payload, claimed_by)
+              values (${TENANT_A}, ${LOCATION_A}, ${printerA}, decode('00', 'hex'), ${agentB})`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(e)).toBe("23503"); // print_jobs_claimed_by_fk
+  });
+
+  it("print_jobs: accepts claimed_by naming an agent in the same tenant, and NULL", async () => {
+    const agentA = await seedAgent(TENANT_A, "Agent A claim ok");
+    const printerA = await seedPrinter(TENANT_A, "Printer A claim ok");
+    const claimed = await asApp(TENANT_A, (tx) =>
+      tx
+        .execute<{ id: string }>(
+          sql`insert into print_jobs (tenant_id, location_id, printer_id, payload, claimed_by)
+              values (${TENANT_A}, ${LOCATION_A}, ${printerA}, decode('00', 'hex'), ${agentA})
+              returning id`,
+        )
+        .then((r) => r.rows),
+    );
+    expect(claimed[0]!.id).toBeDefined();
+    // NULL claimed_by is skipped by MATCH SIMPLE (a queued job).
+    const queued = await seedJob(TENANT_A, printerA);
+    expect(queued).toBeDefined();
   });
 });

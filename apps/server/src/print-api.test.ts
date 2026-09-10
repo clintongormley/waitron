@@ -181,7 +181,9 @@ async function knock(
   return { token, verificationNumber, joinId: token.slice(0, token.indexOf(".")) };
 }
 
-/** Create a network_tcp printer bound to `agentId` via the management route, returning its id. */
+/** Create a network_tcp printer via the management route, returning its id. The `agentId` is passed in
+ * the body but IGNORED by the create route (which agent serves a printer is derived at run time, never
+ * stored — design §3); it is kept here so callers read naturally against a just-enrolled agent. */
 async function createPrinterVia(app: Hono, agentId: string, name = "Cocina"): Promise<string> {
   const res = await send(app, "POST", "/management-api/printers", {
     cookie: managerCookie,
@@ -189,6 +191,44 @@ async function createPrinterVia(app: Hono, agentId: string, name = "Cocina"): Pr
   });
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
+}
+
+/** Create a usb printer keyed on `localKey` (the USB serial) via the management route. */
+async function createUsbPrinter(app: Hono, localKey: string, name = "USB"): Promise<string> {
+  const res = await send(app, "POST", "/management-api/printers", {
+    cookie: managerCookie,
+    body: { name, transport: "usb", localKey },
+  });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
+interface PullJob {
+  id: string;
+  printerId: string;
+  transport: string;
+  host: string | null;
+  port: number | null;
+  localKey: string | null;
+  payload: string;
+}
+interface PullReply {
+  nodeId: string;
+  servers: { nodeId: string; url: string; standing: string }[];
+  jobs: PullJob[];
+  discoveryUntil: number | null;
+}
+
+/** POST the agent pull carrying an inventory (`visible`/`scanned` default to empty), asserting 200 and
+ * returning the parsed reply. The pull is a POST (design §8): the body carries the box's live inventory. */
+async function pull(
+  app: Hono,
+  token: string,
+  inventory: { visible?: unknown; scanned?: unknown } = {},
+): Promise<PullReply> {
+  const res = await send(app, "POST", "/print-api/agent/jobs", { bearer: token, body: inventory });
+  expect(res.status).toBe(200);
+  return (await res.json()) as PullReply;
 }
 
 /** Enqueue one job on `printerId` (directly via the outbox verb — there is no enqueue ROUTE in this
@@ -326,12 +366,12 @@ describe("the deleted enrol/codes routes are gone", () => {
   });
 });
 
-describe("GET /print-api/agent/jobs — the pull carries nodeId + servers", () => {
+describe("POST /print-api/agent/jobs — the pull carries nodeId + servers", () => {
   it("echoes this node's id and the venue's routable servers (primary first) alongside the jobs", async () => {
     const app = mountApp({ pairingOpen: true });
     const { agentId, token } = await joinAndAccept(app);
     await createPrinterVia(app, agentId);
-    const res = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    const res = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       nodeId: string;
@@ -351,7 +391,7 @@ describe("mountPrintApi — agent claim + report", () => {
     const payload = esc().text("Mesa 4").cut().bytes();
     const jobId = await enqueue(printerId, payload);
 
-    const res = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    const res = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(res.status).toBe(200);
     const { jobs } = (await res.json()) as {
       jobs: {
@@ -360,7 +400,7 @@ describe("mountPrintApi — agent claim + report", () => {
         transport: string;
         host: string | null;
         port: number | null;
-        usbPath: string | null;
+        localKey: string | null;
         payload: string;
       }[];
     };
@@ -371,29 +411,31 @@ describe("mountPrintApi — agent claim + report", () => {
       transport: "network_tcp",
       host: "10.0.0.9",
       port: 9100,
-      usbPath: null,
+      localKey: null,
     });
     // The opaque bytes round-trip through base64 exactly.
     expect(Buffer.from(jobs[0]!.payload, "base64").equals(Buffer.from(payload))).toBe(true);
     // The claim COMMITTED within the request: a fresh read sees the job as `printing`, and a SECOND
     // claim returns nothing (it is no longer `queued`).
     expect((await jobRow(jobId)).status).toBe("printing");
-    const again = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    const again = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(((await again.json()) as { jobs: unknown[] }).jobs).toHaveLength(0);
   });
 
-  it("claims ONLY the calling agent's own printers' jobs (cross-agent → empty)", async () => {
+  it("does NOT claim a usb job whose key the pulling box cannot see (derived eligibility)", async () => {
+    // Derived eligibility (design §3/§5): a usb printer's job is claimable ONLY by the box that
+    // currently SEES its local_key. `mine` pulls WITHOUT that key visible, so the usb job stays queued —
+    // the replacement for the old agent-bound scope (network_tcp is now location-scoped, so a
+    // cross-agent claim of a network printer is expected, not a leak; the key-scope is the isolation).
     const app = mountApp();
     const mine = await joinAndAccept(app, "Mine");
-    const other = await joinAndAccept(app, "Other");
-    const otherPrinter = await createPrinterVia(app, other.agentId, "Other printer");
-    const jobId = await enqueue(otherPrinter, new Uint8Array([1]));
+    const serial = `SN-${randomUUID()}`;
+    const usbPrinter = await createUsbPrinter(app, serial, "Other USB");
+    const jobId = await enqueue(usbPrinter, new Uint8Array([1]));
 
-    // My token must see nothing — the job is on the other agent's printer.
-    const res = await send(app, "GET", "/print-api/agent/jobs", { bearer: mine.token });
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { jobs: unknown[] }).jobs).toHaveLength(0);
-    expect((await jobRow(jobId)).status).toBe("queued"); // untouched, still the other agent's
+    const res = await pull(app, mine.token, { visible: [], scanned: [] });
+    expect(res.jobs).toHaveLength(0);
+    expect((await jobRow(jobId)).status).toBe("queued"); // untouched — the key is not visible
   });
 
   it("reports done → the job is done with delivered_at; failed → failed with attempts++ and last_error", async () => {
@@ -403,7 +445,7 @@ describe("mountPrintApi — agent claim + report", () => {
     const doneJob = await enqueue(printerId, new Uint8Array([1]));
     const failJob = await enqueue(printerId, new Uint8Array([2]));
     // Claim both so they are `printing` (the state a real agent reports from).
-    await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
 
     const doneRes = await send(app, "POST", `/print-api/agent/jobs/${doneJob}/result`, {
       bearer: token,
@@ -430,7 +472,7 @@ describe("mountPrintApi — agent claim + report", () => {
     const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
-    await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     const res = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: token,
       body: { status: "failed" }, // no `error` — the route defaults it to ""
@@ -442,18 +484,18 @@ describe("mountPrintApi — agent claim + report", () => {
   });
 
   it("a report for another agent's job is an idempotent no-op (204, the job is NOT mutated)", async () => {
-    // THE GUARD (proven by deletion): `reportPrintJob`'s `and p.agent_id = ${agentId}` join scopes the
-    // report to the caller's own printers. The OTHER agent CLAIMS the job first so it is `printing` (not
-    // `queued`) — otherwise the idempotency guard (`status = 'printing'`) alone would block the report
-    // and the agent-scope deletion would FALSE-pass. With the job `printing`, deleting the `p.agent_id`
-    // predicate makes this cross-agent report mutate the other agent's job (status → done), flipping the
-    // `toBe("printing")` assertion red.
+    // THE GUARD (proven by deletion): `reportPrintJob`'s `and print_jobs.claimed_by = ${agentId}`
+    // predicate scopes the report to the agent that CLAIMED the job (design §5). The OTHER agent CLAIMS
+    // the job first so it is `printing` and stamped `claimed_by = other` — otherwise the idempotency
+    // guard (`status = 'printing'`) alone would block the report and the claimer-scope deletion would
+    // FALSE-pass. With the job `printing`, deleting the `claimed_by` predicate makes this cross-agent
+    // report mutate the other agent's job (status → done), flipping the `toBe("printing")` assertion red.
     const app = mountApp();
     const mine = await joinAndAccept(app, "Mine");
     const other = await joinAndAccept(app, "Other");
     const otherPrinter = await createPrinterVia(app, other.agentId, "Other printer");
     const jobId = await enqueue(otherPrinter, new Uint8Array([1]));
-    await send(app, "GET", "/print-api/agent/jobs", { bearer: other.token }); // other claims → printing
+    await send(app, "POST", "/print-api/agent/jobs", { bearer: other.token }); // other claims → printing
 
     const res = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: mine.token,
@@ -472,7 +514,7 @@ describe("mountPrintApi — agent claim + report", () => {
     const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
-    await send(app, "GET", "/print-api/agent/jobs", { bearer: token }); // claim → printing
+    await send(app, "POST", "/print-api/agent/jobs", { bearer: token }); // claim → printing
 
     const first = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: token,
@@ -527,12 +569,12 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("the agent routes refuse a missing / malformed Bearer with 401 agent.unauthorized", async () => {
     const app = mountApp();
-    const noAuth = await send(app, "GET", "/print-api/agent/jobs");
+    const noAuth = await send(app, "POST", "/print-api/agent/jobs");
     expect(noAuth.status).toBe(401);
     expect((await noAuth.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "agent.unauthorized" },
     });
-    const garbage = await send(app, "GET", "/print-api/agent/jobs", { bearer: "not.a.token" });
+    const garbage = await send(app, "POST", "/print-api/agent/jobs", { bearer: "not.a.token" });
     expect(garbage.status).toBe(401);
     // A revoked-shaped but valid uuid selector with a bad secret also folds to the same 401.
     const badSecret = await send(app, "POST", `/print-api/agent/jobs/${randomUUID()}/result`, {
@@ -548,20 +590,160 @@ describe("mountPrintApi — agent claim + report", () => {
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     // Works before revoke.
-    expect((await send(app, "GET", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
+    expect((await send(app, "POST", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
 
     const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
       cookie: managerCookie,
     });
     expect(revoke.status).toBe(204);
 
-    const claim = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
+    const claim = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(claim.status).toBe(401);
     const report = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: token,
       body: { status: "done" },
     });
     expect(report.status).toBe(401);
+  });
+});
+
+describe("POST /print-api/agent/jobs — inventory pull + discovery window", () => {
+  it("carries the inventory and claims by visible key (usb)", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    // A unique serial per test — the suite shares one tenant/location and the partial UNIQUE is on
+    // (tenant_id, location_id, local_key), so a fixed key would clash with a sibling test's printer.
+    const serial = `SN-${randomUUID()}`;
+    const printerId = await createUsbPrinter(app, serial, "Cocina USB");
+    const payload = esc().text("Mesa 4").cut().bytes();
+    const jobId = await enqueue(printerId, payload);
+
+    // NOT visible → NOT eligible (design §3): the usb job stays queued when its key is absent from the
+    // reported inventory — an empty visible set degenerates the local branch to `false`.
+    const blind = await pull(app, token, { visible: [], scanned: [] });
+    expect(blind.jobs).toHaveLength(0);
+    expect((await jobRow(jobId)).status).toBe("queued");
+
+    // Visible → claimed, the wire job carrying the printer's local_key (not a usb_path).
+    const seen = await pull(app, token, {
+      visible: [{ transport: "usb", localKey: serial }],
+      scanned: [],
+    });
+    expect(seen.jobs).toHaveLength(1);
+    expect(seen.jobs[0]).toMatchObject({
+      id: jobId,
+      printerId,
+      transport: "usb",
+      localKey: serial,
+      host: null,
+    });
+    expect(Buffer.from(seen.jobs[0]!.payload, "base64").equals(Buffer.from(payload))).toBe(true);
+    expect((await jobRow(jobId)).status).toBe("printing");
+  });
+
+  it("returns discoveryUntil after a discovery window is opened", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    // Window shut → the pull reply carries null.
+    expect((await pull(app, token)).discoveryUntil).toBeNull();
+
+    const start = await send(app, "POST", "/management-api/printer-discovery/start", {
+      cookie: managerCookie,
+    });
+    expect(start.status).toBe(200);
+    const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
+    expect(discoveryUntil).toBeGreaterThan(Date.now());
+
+    // The agent's next pull carries the same window end so the box knows to scan until it.
+    expect((await pull(app, token)).discoveryUntil).toBe(discoveryUntil);
+  });
+
+  it("GET /management-api/discovered-printers lists reported devices, marking registered ones", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app, "Inventory agent");
+    const registeredSerial = `SN-${randomUUID()}`;
+    const unregisteredSerial = `SN-${randomUUID()}`;
+    // The agent reports two visible usb devices on its pull.
+    await pull(app, token, {
+      visible: [
+        { transport: "usb", localKey: registeredSerial, make: "Epson", model: "TM-T20" },
+        { transport: "usb", localKey: unregisteredSerial, make: "Star" },
+      ],
+      scanned: [],
+    });
+    // Register only the first.
+    await createUsbPrinter(app, registeredSerial, "Registered USB");
+
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as {
+      agentId: string;
+      agentName: string | null;
+      transport: string;
+      localKey?: string;
+      make?: string;
+      alreadyRegistered: boolean;
+    }[];
+    const one = rows.find((r) => r.localKey === registeredSerial)!;
+    const two = rows.find((r) => r.localKey === unregisteredSerial)!;
+    expect(one).toMatchObject({
+      agentId,
+      agentName: "Inventory agent",
+      transport: "usb",
+      make: "Epson",
+      alreadyRegistered: true,
+    });
+    expect(two).toMatchObject({
+      agentId,
+      agentName: "Inventory agent",
+      transport: "usb",
+      alreadyRegistered: false,
+    });
+  });
+
+  it("POST /management-api/printers with a duplicate local_key → 409 printer.already_registered", async () => {
+    const app = mountApp();
+    await joinAndAccept(app);
+    const serial = `SN-DUP-${randomUUID()}`;
+    await createUsbPrinter(app, serial, "First");
+    const dup = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Second", transport: "usb", localKey: serial },
+    });
+    expect(dup.status).toBe(409);
+    expect(
+      (await dup.json()) as { error: { code: string; params: { localKey: string } } },
+    ).toMatchObject({
+      error: { code: "printer.already_registered", params: { localKey: serial } },
+    });
+  });
+
+  it("create requires localKey for usb (422) and ignores agentId/usbPath", async () => {
+    const app = mountApp();
+    const { agentId } = await joinAndAccept(app);
+    // usb with NO localKey — the (ignored) agentId/usbPath do not satisfy the requirement → 422.
+    const missing = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Bad usb", transport: "usb", agentId, usbPath: "/dev/usb/lp0" },
+    });
+    expect(missing.status).toBe(422);
+    expect((await missing.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "printer.invalid_config" },
+    });
+    // With localKey present the ignored fields are harmless → 201.
+    const ok = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Good usb",
+        transport: "usb",
+        localKey: `SN-OK-${randomUUID()}`,
+        agentId,
+        usbPath: "/dev/usb/lp0",
+      },
+    });
+    expect(ok.status).toBe(201);
   });
 });
 
@@ -644,12 +826,12 @@ describe("mountPrintApi — management: printers CRUD", () => {
     expect(off.active).toBe(false);
   });
 
-  it("creates each transport's shape (usb with usb_path, cloud_poll with poll_id, tcp with explicit port)", async () => {
+  it("creates each transport's shape (usb keyed on local_key, cloud_poll with poll_id, tcp with explicit port)", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
     const usb = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "USB", transport: "usb", agentId, usbPath: "/dev/usb/lp0" },
+      body: { name: "USB", transport: "usb", localKey: `SN-${randomUUID()}` },
     });
     expect(usb.status).toBe(201);
     const cloud = await send(app, "POST", "/management-api/printers", {
@@ -677,7 +859,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
       body: {
         transport: "network_tcp", // unchanged, but exercises the transport patch-branch
         port: 9300,
-        usbPath: null, // clear (nullable)
+        localKey: null, // clear (nullable) — network_tcp carries no local_key
         pollId: null, // clear (nullable)
         ticketScope: "order",
         active: true,
@@ -686,9 +868,9 @@ describe("mountPrintApi — management: printers CRUD", () => {
     expect(res.status).toBe(204);
     const rows = (await (
       await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
-    ).json()) as { id: string; port: number; ticketScope: string; usbPath: string | null }[];
+    ).json()) as { id: string; port: number; ticketScope: string; localKey: string | null }[];
     const row = rows.find((r) => r.id === printerId)!;
-    expect(row).toMatchObject({ port: 9300, ticketScope: "order", usbPath: null });
+    expect(row).toMatchObject({ port: 9300, ticketScope: "order", localKey: null });
   });
 
   it("update rejects a non-boolean active → 400", async () => {
@@ -730,11 +912,11 @@ describe("mountPrintApi — management: printers CRUD", () => {
 
   it("create with a transport short of its required fields → 422 printer.invalid_config", async () => {
     const app = mountApp();
-    const { agentId } = await joinAndAccept(app);
-    // usb requires agentId + usbPath; supplying the agent but omitting usbPath is invalid config.
+    await joinAndAccept(app);
+    // usb requires local_key; omitting it is invalid config (the app-layer required-field pre-check).
     const res = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Bad usb", transport: "usb", agentId },
+      body: { name: "Bad usb", transport: "usb" },
     });
     expect(res.status).toBe(422);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -742,20 +924,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
     });
   });
 
-  it("create bound to an unknown agent id → 404 agent.not_found (the composite FK, mapped friendly)", async () => {
-    const app = mountApp();
-    const ghost = randomUUID();
-    const res = await send(app, "POST", "/management-api/printers", {
-      cookie: managerCookie,
-      body: { name: "Ghost", transport: "network_tcp", agentId: ghost, host: "10.0.0.1" },
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string; params: { id: string } } }).toMatchObject(
-      { error: { code: "agent.not_found", params: { id: ghost } } },
-    );
-  });
-
-  it("create screens the body (missing name → 400; bad transport → 400; non-uuid agentId → 400)", async () => {
+  it("create screens the body (missing name → 400; bad transport → 400; non-integer port → 400)", async () => {
     const app = mountApp();
     const noName = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
@@ -777,18 +946,11 @@ describe("mountPrintApi — management: printers CRUD", () => {
       error: { code: "management.request_invalid", params: { field: "transport" } },
     });
 
-    const badAgent = await send(app, "POST", "/management-api/printers", {
-      cookie: managerCookie,
-      body: { name: "X", transport: "network_tcp", agentId: "not-a-uuid", host: "10.0.0.1" },
-    });
-    expect(badAgent.status).toBe(400);
-
     const badPort = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: {
         name: "X",
         transport: "network_tcp",
-        agentId: randomUUID(),
         host: "10.0.0.1",
         port: "high",
       },
@@ -817,24 +979,22 @@ describe("mountPrintApi — management: printers CRUD", () => {
     expect(malformed.status).toBe(400);
   });
 
-  it("update clears a connection field with an explicit null and re-binds the agent", async () => {
+  it("update re-keys a usb printer's local_key", async () => {
     const app = mountApp();
-    const first = await joinAndAccept(app, "First");
-    const second = await joinAndAccept(app, "Second");
-    const printerId = await createPrinterVia(app, first.agentId, "Movable");
-    // Re-bind to the second agent and move host — an explicit set of both fields.
+    await joinAndAccept(app);
+    const firstSerial = `SN-${randomUUID()}`;
+    const secondSerial = `SN-${randomUUID()}`;
+    const printerId = await createUsbPrinter(app, firstSerial, "Movable USB");
+    // Re-key to a new device serial (a usb printer swapped for a replacement unit).
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
-      body: { agentId: second.agentId, host: "10.0.0.30" },
+      body: { localKey: secondSerial },
     });
     expect(res.status).toBe(204);
     const rows = (await (
       await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
-    ).json()) as { id: string; agentId: string; host: string }[];
-    expect(rows.find((r) => r.id === printerId)).toMatchObject({
-      agentId: second.agentId,
-      host: "10.0.0.30",
-    });
+    ).json()) as { id: string; localKey: string }[];
+    expect(rows.find((r) => r.id === printerId)).toMatchObject({ localKey: secondSerial });
   });
 });
 

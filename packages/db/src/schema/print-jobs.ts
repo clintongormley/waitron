@@ -52,6 +52,11 @@ export const printJobs = pgTable(
     // The target printer. Bare column: the tenant-consistent (tenant_id, printer_id) → printers
     // composite FK is hand-written in the --custom migration.
     printerId: uuid("printer_id").notNull(),
+    // The agent currently holding this job (set on claim, overwritten by a lease reclaim). Bare
+    // column: the tenant-consistent (tenant_id, claimed_by) → print_agents composite FK is hand-written
+    // in the --custom migration (MATCH SIMPLE skips it on NULL). Authorises the report — only the
+    // claimer reports its own job (runtime.ts). NULL while queued and after the job leaves `printing`.
+    claimedBy: uuid("claimed_by"),
     // OPAQUE ESC/POS bytes (Slice B fills them; the subsystem never inspects them).
     payload: bytea("payload").notNull(),
     status: printJobStatus("status").notNull().default("queued"),

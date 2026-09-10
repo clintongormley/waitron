@@ -204,6 +204,27 @@ announce over mDNS `_pdl-datastream._tcp`; that a printer-class USB device binds
 the exact container capabilities each scan needs. Confirmed on hardware before the spec's testing rows
 are ticked.
 
+### Hardware receipt (2026-09-10, `clinton@waitron.local`)
+
+Verified on the real box with the arriving ESC/POS printer:
+
+- **USB is the easy path — printer-class, not vendor-specific.** The printer binds `usblp` and appears
+  as `/dev/usb/lp0` (`crw-rw---- root:lp`). Identity comes from the USB device dir reached three parents
+  up from `/sys/class/usbmisc/lp0`: `serial=B120300001` (→ `localKey`), `manufacturer=YICHIP3121`
+  (→ make), `product="USB Portable Printer"` (→ model). `ieee1284_id` is empty, so identity is those
+  three attrs — no IEEE-1284 parsing. `readUsbPrinters`' walk was re-run against the real `/sys` from
+  inside the container and returned exactly these values.
+- **Container access confirmed as the unprivileged `node` user:** `--device /dev/usb/lp0` plus
+  `group_add` gid 7 (`lp`, which owns the node's write bit) — the node user's `groups` include `7(lp)`
+  and it wrote ESC/POS to the device. `--network host` for mDNS. The BlueZ DBus-socket mount ships but
+  was not exercised (no adapter, below).
+- **End-to-end USB print CONFIRMED:** the node user wrote ESC/POS (init + centred/left formatting) to
+  `/dev/usb/lp0` and a physical slip printed. Operator note: thermal paper is one-sided — it must be
+  loaded coated-side to the print head, or the paper feeds blank.
+- **Deferred, honestly:** the live Bluetooth path (the box has no adapter — no `hci`, nothing under
+  `/sys/class/bluetooth`) and live mDNS discovery (no network printer on the LAN). Both seams and their
+  parsers ship and are fixture-tested; the live radios/sockets are gated for a later receipt.
+
 ## 8. The agent loop and wire protocol
 
 The loop (`agent.ts`, §4 of the #289 design) gains: **on each poll, report `visibleKeys()`**; **while a
@@ -225,7 +246,7 @@ Changed:
 | --- | --- |
 | `POST /management-api/printers` | body drops `agentId`/`usbPath`, gains optional `localKey`; `network_tcp` needs `host`, `usb`/`bluetooth` need `localKey`. `locationId` still injected from `cfg`, never the client. |
 | `PATCH /management-api/printers/:id` | drops `agentId`/`usbPath`, gains `localKey`; the rest (name, host, port, ticketScope, active) unchanged. |
-| `GET /print-api/agent/jobs` | now carries the agent's inventory in the request; claim scoped by §3; reply gains `discoveryUntil`. |
+| `POST /print-api/agent/jobs` | pull is a POST (it carries the agent's inventory in the request body); claim scoped by §3; reply gains `discoveryUntil`. |
 | `POST /print-api/agent/jobs/:id/result` | report authorised by `claimed_by` (§5). |
 
 New:

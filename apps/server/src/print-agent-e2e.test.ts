@@ -9,12 +9,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { enqueuePrintJob, esc } from "@waitron/printing";
-import {
-  NetworkTcpTransport,
-  RoutingTransport,
-  UsbTransport,
-  createAgent,
-} from "@waitron/print-agent";
+import { FakeSink, NetworkTcpTransport, RoutingTransport, createAgent } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import {
   locationId as brandLocationId,
@@ -33,16 +28,26 @@ import "./errors.js";
 
 // The whole print-agent path, in one process and with no real hardware: the REAL server routes
 // (mountPrintApi + mountJoinApi, on PGlite) driven by the REAL agent loop (createAgent) whose fetch is
-// routed into `app.request`, through a REAL NetworkTcpTransport to a loopback TCP listener standing in
-// for the printer. This lives in apps/server because packages never import apps — the agent package
-// cannot reach the routes it must be proven against, so the wiring that joins them is proven here.
-// PGlite (not real Postgres) is enough: this asserts the request/response flow and the byte path, not
-// grants or concurrency, which `print-api.pg.test.ts` covers as `app_user`.
+// routed into `app.request`, over a REAL RoutingTransport that dispatches by transport — a real
+// NetworkTcpTransport to a loopback TCP listener for the network_tcp printer, and a FakeSink standing
+// in for the local device node of the usb printer. The fake `Host` reports the usb serial in its
+// `visibleDevices` inventory (the eligibility key the server matches, §5) and `resolve`s a claimed
+// job's `localKey` to a device target. This lives in apps/server because packages never import apps —
+// the agent package cannot reach the routes it must be proven against, so the wiring that joins them
+// is proven here. PGlite (not real Postgres) is enough: this asserts the request/response flow and the
+// byte path (register → pull-with-inventory → deliver → done → revoke-halts); grants and the derived
+// authorization boundary are proven as `app_user` on real Postgres in `print-api.pg.test.ts` and
+// `packages/printing`'s `runtime.eligibility.test.ts`.
 const noopLog: Logger = () => {};
 
 // A fixed http origin the agent is configured against and the fake fetch strips before handing the
 // path to `app.request` (Hono routes on the pathname, so the origin is arbitrary).
 const BASE = "http://waitron.e2e";
+
+// The usb printer's stable local handle (a device serial). The agent reports it in every pull's
+// `visible` inventory, and it is the `local_key` the usb printer is registered under — the two must
+// match for the server to judge the usb job eligible for this box (§5).
+const USB_SERIAL = "USB-SN-E2E";
 
 let tenantId: string;
 let locationId: string;
@@ -154,7 +159,7 @@ afterEach(async () => {
 });
 
 describe("print-agent end to end", () => {
-  it("joins, is accepted, pulls a job, prints bytes, marks it done — then revoke halts it", async () => {
+  it("joins, is accepted, pulls with inventory, delivers a network + a usb job, marks both done — then revoke halts it", async () => {
     const loopback = printer!;
 
     // 1. One app carrying both surfaces, sharing ONE pairing window (the venue's one window). Open it,
@@ -183,15 +188,23 @@ describe("print-agent end to end", () => {
       noopLog,
     );
 
-    // 3. The agent: config against BASE, a real routing transport over a real TCP adapter, and a fetch
-    //    that routes every wire call into the server under test.
+    // 3. The agent: config against BASE, a real routing transport (a real TCP adapter for network_tcp,
+    //    a byte-capturing FakeSink standing in for the usb device node), a `visibleDevices` inventory
+    //    reporting the usb serial the box "sees" (the eligibility key the server matches for a usb job),
+    //    and a fetch that routes every wire call into the server under test. `resolve` is the fake host's
+    //    default passthrough: it maps a claimed job's `localKey` to the target's `devicePath`, which the
+    //    FakeSink ignores while recording the exact bytes — so the usb byte path is asserted without a
+    //    real device node. The network_tcp job carries no `localKey` and reaches the real TCP adapter.
+    const usbSink = new FakeSink();
     const transport = new RoutingTransport({
       network_tcp: new NetworkTcpTransport(),
-      usb: new UsbTransport(),
+      usb: usbSink,
+      bluetooth: new FakeSink(),
     });
     const host = fakeHost({
       config: { serverUrl: BASE, name: "e2e" },
       transport,
+      visibleDevices: async () => [{ transport: "usb", localKey: USB_SERIAL }],
       fetch: (input, init) => Promise.resolve(app.request(input, init)),
     });
     const agent = createAgent({ host });
@@ -240,13 +253,15 @@ describe("print-agent end to end", () => {
     );
     expect(acceptRes.status).toBe(204);
 
-    // 2. Register the network_tcp printer at the loopback's host:port, bound to this agent.
+    // 2. Register the two printers at this venue — a network_tcp one at the loopback's host:port and a
+    //    usb one keyed on the serial the agent reports. Neither carries an agent binding: which box
+    //    serves a printer is DERIVED at pull time from the venue (network_tcp) and the reported visible
+    //    keys (usb), never stored (design §3).
     const printerRes = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: {
         name: "Cocina",
         transport: "network_tcp",
-        agentId: joinId,
         host: loopback.host,
         port: loopback.port,
       },
@@ -254,22 +269,45 @@ describe("print-agent end to end", () => {
     expect(printerRes.status).toBe(201);
     const printerId = ((await printerRes.json()) as { id: string }).id;
 
+    const usbPrinterRes = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Barra USB", transport: "usb", localKey: USB_SERIAL },
+    });
+    expect(usbPrinterRes.status).toBe(201);
+    const usbPrinterId = ((await usbPrinterRes.json()) as { id: string }).id;
+
     // 6. Next tick sees `approved` and pulls — but there is no job yet: phase `running`, no bytes.
     await agent.runOnce();
     expect(agent.status.phase).toBe("running");
 
-    // 7. Enqueue one job; the next tick claims it, sends the bytes to the loopback, reports `done`.
-    const payload = esc().text("Mesa 4").cut().bytes();
+    // 7. Enqueue one job per printer; the next tick claims BOTH (the pull carries the visible usb serial,
+    //    so the usb job is eligible for this box; the network_tcp job is eligible by venue), pushes each
+    //    through its adapter — the network bytes to the loopback socket, the usb bytes to the FakeSink —
+    //    and reports both `done`.
+    const networkPayload = esc().text("Mesa 4").cut().bytes();
+    const usbPayload = esc().text("Barra 2").cut().bytes();
     const { jobId } = await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      return enqueuePrintJob(tx, { tenantId, locationId }, printerId, payload);
+      return enqueuePrintJob(tx, { tenantId, locationId }, printerId, networkPayload);
+    });
+    const { jobId: usbJobId } = await withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return enqueuePrintJob(tx, { tenantId, locationId }, usbPrinterId, usbPayload);
     });
 
     await agent.runOnce();
     expect(agent.status.phase).toBe("running");
+    // The network_tcp bytes reach the real loopback listener verbatim.
     const received = await loopback.firstConnection;
-    expect(received.equals(Buffer.from(payload))).toBe(true);
+    expect(received.equals(Buffer.from(networkPayload))).toBe(true);
+    // The usb bytes reach the fake device sink verbatim, addressed to the usb printer's id (the
+    // RoutingTransport dispatched by transport, `resolve` mapped the serial to the target).
+    expect(usbSink.written).toHaveLength(1);
+    expect(usbSink.written[0]!.printerId).toBe(usbPrinterId);
+    expect(Buffer.from(usbSink.written[0]!.bytes).equals(Buffer.from(usbPayload))).toBe(true);
+    // Both jobs are marked done.
     expect(await jobStatus(jobId)).toBe("done");
+    expect(await jobStatus(usbJobId)).toBe("done");
 
     // 8. Revoke the agent; the next tick's pull is 401 → phase `unauthorized`, token cleared.
     const revokeRes = await send(app, "POST", `/management-api/print-agents/${joinId}/revoke`, {

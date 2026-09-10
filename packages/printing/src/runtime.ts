@@ -60,9 +60,17 @@ export interface AgentRuntimeDeps {
   tx: Transaction;
   /** The tenant the agent belongs to, enforced by the pull's explicit tenant predicate. */
   cfg: { tenantId: string };
-  /** The calling agent. The pull claims ONLY jobs on printers this agent serves (authorization
-   * scope): a cross-agent pull matches no printer and claims nothing. */
+  /** The calling agent. NOT an eligibility filter (printers carry no agent binding) — it is stamped
+   * into `claimed_by` on every claim and is what authorises the later report (only the claimer reports
+   * its own job). */
   agentId: string;
+  /** The venue the agent serves. A `network_tcp` printer is claimable by any agent reporting this
+   * `locationId` — the venue IS the eligibility for a network printer (design §3). */
+  locationId: string;
+  /** The stable device keys (USB serials, Bluetooth MACs) the agent currently SEES on its box. A
+   * usb/bluetooth printer is eligible only when its `local_key` is one of these; an empty set matches
+   * no local printer. Local mode has no devices to enumerate, so its callers pass `[]`. */
+  visibleKeys: string[];
   /** Where claimed bytes go — a real `RoutingTransport` in production, a `FakeSink` in tests. */
   transport: Transport;
 }
@@ -86,7 +94,7 @@ export type ClaimedJob = {
   transport: PrintTransport;
   host: string | null;
   port: number | null;
-  usb_path: string | null;
+  local_key: string | null;
 };
 
 /** The outcome an agent reports for one job (design §3c step 3). `done` → delivered; `failed` carries
@@ -105,11 +113,15 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * status filter OUT of the follow-up UPDATE's predicate is what makes `for update … skip locked`
  * UNAMBIGUOUSLY load-bearing. Delete the lock and two agents' SELECTs both return the same row, and
  * both UPDATEs (keyed only on `id`) then re-mark it — a double claim (runtime.race.test.ts proves
- * exactly this by deletion). All values bind as `$n` (Drizzle-parameterised), never concatenated; the
- * join to `printers` on `(tenant_id, id)` is the authorization scope — only THIS agent's printers'
- * jobs (a cross-agent pull claims nothing). A `failed` job under the attempt cap is re-claimed here
- * (the retry); at the cap it is filtered out (the bound). `for update of j` locks only the
- * `print_jobs` rows, not `printers`.
+ * exactly this by deletion). All values bind as `$n` (Drizzle-parameterised), never concatenated. The
+ * join to `printers` on `(tenant_id, id)` reads each job's connection facts; it is NOT the
+ * authorization scope. Eligibility is DERIVED (design §3): a `network_tcp` printer is claimable by any
+ * agent reporting this venue (`p.location_id = ctx.locationId`), a `usb`/`bluetooth` printer only when
+ * its `local_key` is one the agent currently SEES (`ctx.visibleKeys`). An empty `visibleKeys` degenerates
+ * the local branch to `false` (an `in ()` matches nothing — the drain.ts hazard). The claim stamps
+ * `claimed_by = agentId`, which records the holder (a lease reclaim OVERWRITES it) and is what later
+ * authorises the report. A `failed` job under the attempt cap is re-claimed here (the retry); at the
+ * cap it is filtered out (the bound). `for update of j` locks only the `print_jobs` rows, not `printers`.
  *
  * `p.active = true` makes a DEACTIVATED printer (`deactivatePrinter`) stop being served: the pull skips
  * ALL of its jobs — a queued job, an under-cap `failed` retry, AND a lease-expired stuck `printing` row
@@ -140,13 +152,23 @@ export async function claimPrintJobs(
   tx: Transaction,
   cfg: { tenantId: string },
   agentId: string,
+  ctx: { locationId: string; visibleKeys: string[] },
 ): Promise<ClaimedJob[]> {
+  // A usb/bluetooth printer is eligible only when its `local_key` is one the agent currently SEES. An
+  // EMPTY visible set must match nothing: `in ()` degenerates (the drain.ts hazard, runtime.ts's
+  // `id in ${ids}` guard below), so guard it with `false`. `local_key in ${array}` is the
+  // proven-correct Drizzle expansion — `in ($1, $2, …)` — NOT `= any(…)` / `in (${ids})`, both of
+  // which mis-expand for a text list.
+  const usbBt =
+    ctx.visibleKeys.length > 0
+      ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
+      : sql`false`;
   const picked = await tx.execute<{ id: string }>(sql`
     select j.id from print_jobs j
     join printers p on p.tenant_id = j.tenant_id and p.id = j.printer_id
     where j.tenant_id = ${cfg.tenantId}
-      and p.agent_id = ${agentId}
       and p.active = true
+      and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       and (
         j.status = 'queued'
         or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
@@ -161,34 +183,37 @@ export async function claimPrintJobs(
   if (picked.rows.length === 0) return [];
   const ids = picked.rows.map((r) => r.id);
 
-  // Mark the locked rows `printing` and STAMP `claimed_at = now()` (the lease anchor — a fresh claim and
-  // a lease reclaim both restart the lease), returning each with its printer's connection facts (the
-  // RETURNING join) so the push step needs no second read. Keeping the status filter OUT of this
+  // Mark the locked rows `printing`, STAMP `claimed_at = now()` (the lease anchor — a fresh claim and a
+  // lease reclaim both restart the lease) and record `claimed_by = agentId` (the holder — overwritten
+  // by a lease reclaim, and the report's authorization key), returning each with its printer's
+  // connection facts (the RETURNING join) so the push step needs no second read. Keeping the status filter OUT of this
   // UPDATE's predicate — it keys only on the ids the locking SELECT returned — is what makes
   // `for update … skip locked` UNAMBIGUOUSLY load-bearing (runtime.race.test.ts). `id in ${ids}` uses
   // Drizzle's array expansion — `in ($1, $2, …)` — the shape verified in
   // packages/fiscal-verifactu/src/drain.ts (NOT `= any(…)` nor `in (${ids})`, both of which mis-expand
   // for a uuid list). `ids` is non-empty (guarded above), so the expansion never degenerates to `in ()`.
   const claimed = await tx.execute<ClaimedJob>(sql`
-    update print_jobs set status = 'printing', claimed_at = now()
+    update print_jobs set status = 'printing', claimed_at = now(), claimed_by = ${agentId}
     from printers p
     where print_jobs.tenant_id = p.tenant_id
       and print_jobs.printer_id = p.id
       and print_jobs.id in ${ids}
     returning print_jobs.id, print_jobs.printer_id, print_jobs.payload,
-              p.transport, p.host, p.port, p.usb_path
+              p.transport, p.host, p.port, p.local_key
   `);
   return claimed.rows;
 }
 
 /**
- * REPORT (design §3c step 3) — record one job's delivery outcome, AGENT-SCOPED and IDEMPOTENT.
+ * REPORT (design §3c step 3) — record one job's delivery outcome, CLAIMER-SCOPED and IDEMPOTENT.
  * Extracted from `runAgentOnce` (Controller Ruling 6) so the SERVER path can report in a SEPARATE
  * request from the claim (the remote agent pushes the bytes, then POSTs the result). Two predicates
  * guard every report:
- *  - `from printers p … and p.agent_id = ${agentId}` is the AUTHORIZATION scope: an agent can only
- *    report on jobs served by its OWN printers, so a cross-agent report mutates nothing
- *    (`{ updated: false }`) — proven by deletion of that predicate.
+ *  - `and print_jobs.claimed_by = ${agentId}` is the AUTHORIZATION scope: only the agent that CLAIMED
+ *    the job (the `claimed_by` the claim stamped) may report it, so a report from any other agent
+ *    mutates nothing (`{ updated: false }`) — proven by deletion of that predicate. The old `printers`
+ *    join is gone: printers are never hard-deleted, so nothing scopes to them here; `claimed_by` is a
+ *    fact on the job row itself.
  *  - `and print_jobs.status = 'printing'` is the IDEMPOTENCY guard: a report only applies to a
  *    currently-CLAIMED job. Without it a duplicated report (a retried HTTP request) on the `failed`
  *    path would bump `attempts` a second time, burning the 5-attempt cap faster than deliveries
@@ -217,8 +242,8 @@ export async function reportPrintJob(
   input: { agentId: string; jobId: string; outcome: JobOutcome },
 ): Promise<{ updated: boolean }> {
   const { agentId, jobId, outcome } = input;
-  // Only the SET clause differs by outcome; the WHERE — the `status = 'printing'` idempotency guard, the
-  // `printer_id`→agent-scope join and the tenant predicate — is IDENTICAL for both, so it is written
+  // Only the SET clause differs by outcome; the WHERE — the tenant predicate, the `status = 'printing'`
+  // idempotency guard and the `claimed_by` claimer-scope — is IDENTICAL for both, so it is written
   // once. `done` stamps `delivered_at`; `failed` records `last_error` and bumps the bounded-retry
   // `attempts`. `${outcome.error}` binds as `$n` like every other value here, never concatenated.
   const setClause =
@@ -227,23 +252,21 @@ export async function reportPrintJob(
       : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
   const result = await tx.execute<{ id: string }>(sql`
     update print_jobs set ${setClause}
-    from printers p
-    where print_jobs.tenant_id = p.tenant_id
-      and print_jobs.printer_id = p.id
-      and print_jobs.tenant_id = ${cfg.tenantId}
+    where print_jobs.tenant_id = ${cfg.tenantId}
       and print_jobs.id = ${jobId}
       and print_jobs.status = 'printing'
-      and p.agent_id = ${agentId}
+      and print_jobs.claimed_by = ${agentId}
     returning print_jobs.id`);
   return { updated: result.rows.length > 0 };
 }
 
 export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResult> {
-  const { tx, cfg, agentId, transport } = deps;
+  const { tx, cfg, agentId, locationId, visibleKeys, transport } = deps;
 
-  // 1. PULL — claim a batch of this agent's due jobs (the locking `claimPrintJobs`, flipping them to
-  //    `printing`), returning each with its printer's connection facts so the push needs no second read.
-  const claimed = await claimPrintJobs(tx, cfg, agentId);
+  // 1. PULL — claim a batch of due jobs (the locking `claimPrintJobs`, flipping them to `printing`),
+  //    returning each with its printer's connection facts so the push needs no second read. Eligibility
+  //    is the venue + this agent's visible device keys; `agentId` is stamped as `claimed_by`.
+  const claimed = await claimPrintJobs(tx, cfg, agentId, { locationId, visibleKeys });
 
   // 2/3. PUSH each job, then REPORT its outcome. Per-job try/catch ISOLATES a down/erroring printer:
   //      its failure marks only that job `failed` and the loop moves on, so one dead printer never
@@ -264,7 +287,9 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       transport: job.transport,
       host: job.host,
       port: job.port,
-      usbPath: job.usb_path,
+      // Local mode + FakeSink ignores `devicePath`; on a real host the local_key → OS device-node
+      // resolution is the host's job (Task 6), so passing the raw key here is correct for both.
+      devicePath: job.local_key,
     };
     try {
       // The DB hands `payload` back as a Buffer; copy it into a plain Uint8Array so the transport

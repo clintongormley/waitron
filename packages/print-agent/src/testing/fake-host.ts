@@ -1,14 +1,30 @@
-import type { AgentConfig, AgentStatus, Host } from "../host.js";
-import { FakeSink, type Transport } from "../transport.js";
+import type {
+  AgentConfig,
+  AgentStatus,
+  DiscoveredDevice,
+  Host,
+  PairResult,
+  TransportKind,
+  VisibleDevice,
+} from "../host.js";
+import type { WireJob } from "../client.js";
+import { FakeSink, type PrinterTarget, type Transport } from "../transport.js";
 
 /** An in-memory Host: config/token live in fields, `sleep` resolves at once and records the ms,
- * `status` and the log are captured for assertions. The default `fetch` rejects (unreachable). */
+ * `status` and the log are captured for assertions. The default `fetch` rejects (unreachable). The
+ * device seam defaults to an empty box (no visible devices, no scan results) and a passthrough
+ * `resolve` that maps a job's `localKey` straight to a device path — the shape a suite overrides per
+ * test to drive discovery, resolution and pairing. */
 export function fakeHost(
   overrides: Partial<{
     config: AgentConfig | null;
     token: string | null;
     transport: Transport;
     fetch: typeof fetch;
+    visibleDevices: () => Promise<VisibleDevice[]>;
+    scan: (kinds?: TransportKind[]) => Promise<DiscoveredDevice[]>;
+    resolve: (job: WireJob) => Promise<PrinterTarget>;
+    pair: (mac: string) => Promise<PairResult>;
   }> = {},
 ): Host & {
   statuses: AgentStatus[];
@@ -58,5 +74,17 @@ export function fakeHost(
     status: (s) => {
       statuses.push(s);
     },
+    visibleDevices: overrides.visibleDevices ?? (async () => []),
+    scan: overrides.scan ?? (async () => []),
+    resolve:
+      overrides.resolve ??
+      (async (job) => ({
+        id: job.printerId,
+        transport: job.transport,
+        host: job.host,
+        port: job.port,
+        devicePath: job.localKey,
+      })),
+    pair: overrides.pair ?? (async () => ({ ok: false, error: "not implemented in fake host" })),
   };
 }

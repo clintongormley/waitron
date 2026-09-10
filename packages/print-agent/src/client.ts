@@ -5,7 +5,16 @@
  * join-and-accept handshake; `pullJobs`/`report` are the runtime's claim/settle loop.
  */
 
+import type { DiscoveredDevice, VisibleDevice } from "./host.js";
 import type { PrintTransport } from "./transport.js";
+
+/** The inventory the agent posts on every pull: the devices it can already reach (`visible`) and,
+ * only while a discovery window is open, what an active scan turned up (`scanned`). The server binds
+ * configured printers to real hardware from this. */
+export interface AgentInventory {
+  visible: VisibleDevice[];
+  scanned: DiscoveredDevice[];
+}
 
 /** The `/api/node` response, decoded into the shape the router compares across servers. */
 export interface NodeProbe {
@@ -52,16 +61,20 @@ export interface WireJob {
   transport: PrintTransport;
   host: string | null;
   port: number | null;
-  usbPath: string | null;
+  /** The printer's stable local handle (USB serial, Bluetooth MAC) — the agent's host resolves it to
+   * a device path before sending. `null` for a network printer. */
+  localKey: string | null;
   payload: Uint8Array;
 }
 
 /** The pull response: the serving node's id, the servers the venue holds (so the router can refresh
- * its set), and the claimed jobs. */
+ * its set), the claimed jobs, and — when the server has a discovery window open — the epoch-ms
+ * instant (`discoveryUntil`) until which the agent should actively scan on each pull. */
 export interface PullReply {
   nodeId: string;
   servers: ServerEntry[];
   jobs: WireJob[];
+  discoveryUntil: number | null;
 }
 
 /** The result the runtime reports back per job — `done`, or `failed` with the error text. */
@@ -71,7 +84,7 @@ export interface AgentClient {
   probeNode(url: string): Promise<Result<NodeProbe>>;
   join(url: string, name: string): Promise<Result<JoinReply>>;
   joinStatus(url: string, token: string): Promise<Result<JoinStatus>>;
-  pullJobs(url: string, token: string): Promise<Result<PullReply>>;
+  pullJobs(url: string, token: string, inventory: AgentInventory): Promise<Result<PullReply>>;
   report(url: string, token: string, jobId: string, outcome: JobOutcome): Promise<Result<void>>;
 }
 
@@ -224,11 +237,12 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
       transport: e.transport as PrintTransport,
       host: typeof e.host === "string" ? e.host : null,
       port: typeof e.port === "number" ? e.port : null,
-      usbPath: typeof e.usbPath === "string" ? e.usbPath : null,
+      localKey: typeof e.localKey === "string" ? e.localKey : null,
       payload: new Uint8Array(Buffer.from(e.payload, "base64")),
     });
   }
-  return { nodeId: b.nodeId, servers, jobs };
+  const discoveryUntil = typeof b.discoveryUntil === "number" ? b.discoveryUntil : null;
+  return { nodeId: b.nodeId, servers, jobs, discoveryUntil };
 }
 
 /** Builds an {@link AgentClient}. `fetch` is injected (never the global) so tests run without a
@@ -275,12 +289,16 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
         },
       );
     },
-    pullJobs(url, token) {
+    pullJobs(url, token, inventory) {
       return foldFetch(
         opts.fetch,
         `${url}/print-api/agent/jobs`,
         timeoutMs,
-        { headers: { authorization: `Bearer ${token}` } },
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify(inventory),
+        },
         parsePullReply,
       );
     },

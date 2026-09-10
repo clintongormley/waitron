@@ -92,6 +92,20 @@
       "when": 1788960459396,
       "tag": "0012_device_profile_inactivity_timeout_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788966189845,
+      "tag": "0013_central_printer_provisioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788966297914,
+      "tag": "0014_central_printer_provisioning_sql",
+      "breakpoints": true
     }
   ]
 }

@@ -349,6 +349,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That printer no longer exists",
     es: "Esa impresora ya no existe",
   },
+  // Registering a discovered USB/Bluetooth device whose stable id already names a printer in this venue
+  // (the partial local_key UNIQUE, mapped friendly in packages/printing/src/printers.ts).
+  "printer.already_registered": {
+    en: "That device is already registered as a printer",
+    es: "Ese dispositivo ya está dado de alta como impresora",
+  },
   "agent.not_found": {
     en: "That print agent no longer exists",
     es: "Ese agente de impresión ya no existe",

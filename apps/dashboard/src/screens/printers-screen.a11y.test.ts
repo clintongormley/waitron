@@ -50,10 +50,9 @@ const printers: Printer[] = [
     id: "p1",
     name: "Cocina",
     transport: "network_tcp",
-    agentId: "a1",
     host: "10.0.0.9",
     port: 9100,
-    usbPath: null,
+    localKey: null,
     pollId: null,
     ticketScope: "station",
     active: true,
@@ -62,10 +61,9 @@ const printers: Printer[] = [
     id: "p2",
     name: "Nube",
     transport: "cloud_poll",
-    agentId: null,
     host: null,
     port: null,
-    usbPath: null,
+    localKey: null,
     pollId: "poll-1",
     ticketScope: "order",
     active: false,
@@ -118,6 +116,32 @@ const tills: Till[] = [
 ];
 const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
 
+// Two discovered USB devices — one unregistered (its name field + Register action render) and one
+// already-registered (its "Registered" marker renders) — so the usb/bluetooth create surface is in the
+// a11y tree. Typed loosely (the stub is cast to DashboardApi), the shape matching DiscoveredPrinter.
+const discovered = [
+  {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "usb",
+    localKey: "SN-1",
+    make: "Epson",
+    model: "TM-T20",
+    name: "EPSON TM-T20",
+    alreadyRegistered: false,
+  },
+  {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "usb",
+    localKey: "SN-2",
+    make: "Star",
+    model: "TSP143",
+    name: null,
+    alreadyRegistered: true,
+  },
+];
+
 // A print agent knocking to join, so the pending queue + accept dialog are in the a11y tree.
 const pending: JoinRequestRow[] = [
   { id: "j1", kind: "print_agent", label: "kitchen-pi", createdAt: "2026-09-08T10:02:00.000Z" },
@@ -145,6 +169,8 @@ function stubApi(pairingOpen = false): DashboardApi {
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
+    startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
+    listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
     listStations: vi.fn().mockResolvedValue(stations),
     listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
       printerId === "p1" ? [{ stationId: "s1", printerId: "p1" }] : [],
@@ -198,6 +224,32 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     // Open the waiting row so the modal dialog and its three number buttons are in the a11y tree.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the usb + bluetooth discovered-device create surfaces accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+
+    // USB: the discovered list is in the a11y tree — an unregistered row's name field + Register
+    // button (a labelled control pair) and an already-registered row's "Registered" marker.
+    const transport = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=new-transport]")!;
+    transport.value = "usb";
+    transport.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=register-SN-1]")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("[data-test=discovered-registered-SN-2]")).toBeTruthy();
+    await expectNoA11yViolations(host);
+
+    // Bluetooth: the pairing note + Refresh action + the (filtered-empty) discovered placeholder.
+    transport.value = "bluetooth";
+    transport.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=bluetooth-pair-note]")).toBeTruthy();
     await expectNoA11yViolations(host);
   });
 });

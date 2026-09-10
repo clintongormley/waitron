@@ -1,4 +1,5 @@
 import {
+  BluetoothTransport,
   NetworkTcpTransport,
   RoutingTransport,
   UsbTransport,
@@ -8,6 +9,7 @@ import {
   type HostLog,
 } from "@waitron/print-agent";
 import type { EnvConfig } from "./config.js";
+import { type LinuxDevices, createLinuxDevices } from "./linux-devices.js";
 import type { FileState } from "./state.js";
 
 /** A one-line-per-call sink the structured logger writes to. `console` satisfies it. */
@@ -26,6 +28,9 @@ export interface ContainerHostOptions {
   log?: LineSink;
   /** The loop calls this on every status change; the setup page reads the latest value. */
   onStatus: (status: AgentStatus) => void;
+  /** The device seam — USB/network/Bluetooth discovery, pairing and resolution. Defaults to the real
+   * Linux implementation reading `/sys` and `/dev`; injected in tests so the host stays hermetic. */
+  devices?: LinuxDevices;
 }
 
 /** The name a config gets when neither env nor the saved file names one — env pins only the url. */
@@ -49,7 +54,9 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
   const transport = new RoutingTransport({
     network_tcp: new NetworkTcpTransport(),
     usb: new UsbTransport(),
+    bluetooth: new BluetoothTransport(),
   });
+  const devices = opts.devices ?? createLinuxDevices();
   return {
     config: async (): Promise<AgentConfig | null> => {
       // Env wins over the file: a compose-supplied address is never overridden by the setup page.
@@ -73,5 +80,11 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: structuredLog(opts.log ?? console),
     status: opts.onStatus,
+    // The device seam (design §7) — the real Linux USB/network/Bluetooth implementation, or an
+    // injected fake in tests. Its four methods ARE the host's.
+    visibleDevices: devices.visibleDevices,
+    scan: devices.scan,
+    pair: devices.pair,
+    resolve: devices.resolve,
   };
 }

@@ -30,6 +30,9 @@ const page = createSetupApp({
   // A compose-supplied address pins the server; the page then shows it read-only and refuses POST.
   envLocked: env.serverUrl !== undefined,
   defaultName: env.name ?? hostname(),
+  // Box-local Bluetooth pairing acts only on this box's radio (§2.3).
+  scanBluetooth: () => host.scan(["bluetooth"]),
+  pairBluetooth: (mac) => host.pair(mac),
 });
 
 // Published on the LAN by default (0.0.0.0); a venue wanting loopback changes the compose publish line.

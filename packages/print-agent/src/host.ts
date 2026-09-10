@@ -1,4 +1,7 @@
-import type { Transport } from "./transport.js";
+import type { WireJob } from "./client.js";
+import type { PrintTransport, PrinterTarget, Transport, TransportKind } from "./transport.js";
+
+export type { TransportKind } from "./transport.js";
 
 /**
  * The seam between the agent's logic and the machine it runs on (base spec §2.1). A container host reads
@@ -38,6 +41,37 @@ export interface HostLog {
   error(msg: string, fields?: Record<string, unknown>): void;
 }
 
+/** A device the agent already has a stable local handle for — a USB printer at a known serial, or a
+ * paired Bluetooth printer. Reported to the server on every pull (`local_key` is the printer's
+ * identity across reboots and re-plugs) so the admin can bind a configured printer to real hardware. */
+export interface VisibleDevice {
+  transport: "usb" | "bluetooth";
+  localKey: string;
+  make?: string;
+  model?: string;
+}
+
+/** A device turned up by an active scan during a discovery window — a broader set than
+ * {@link VisibleDevice}: a network printer answers with `host`/`port` and no `localKey`, a fresh
+ * Bluetooth device with a `name` the operator recognises but not yet a paired `localKey`. */
+export interface DiscoveredDevice {
+  transport: PrintTransport;
+  localKey?: string;
+  host?: string;
+  port?: number;
+  make?: string;
+  model?: string;
+  name?: string;
+}
+
+/** The outcome of a {@link Host.pair} attempt — `ok` with the paired device's `localKey` on success,
+ * or `ok: false` with an operator-facing `error`. */
+export interface PairResult {
+  ok: boolean;
+  localKey?: string;
+  error?: string;
+}
+
 export interface Host {
   config(): Promise<AgentConfig | null>;
   saveConfig(config: AgentConfig): Promise<void>;
@@ -49,4 +83,18 @@ export interface Host {
   sleep(ms: number): Promise<void>;
   log: HostLog;
   status(status: AgentStatus): void;
+  // The device seam (design §7). This deliberately supersedes the spec's sketch of §7
+  // (`visibleKeys()` / `resolve(target)` / `ResolvedSink`): the shipped shape is `visibleDevices()`,
+  // `resolve(job)` and a `scan(kinds?)` the loop drives inside a discovery window.
+  /** Devices with a stable local handle right now — reported to the server on every pull. */
+  visibleDevices(): Promise<VisibleDevice[]>;
+  /** An active discovery pass over the given transports (all discoverable kinds when omitted); run
+   * only while the server holds a discovery window open. */
+  scan(kinds?: TransportKind[]): Promise<DiscoveredDevice[]>;
+  /** Turns a claimed job's connection facts into a {@link PrinterTarget} the transport can send to —
+   * for a local job, mapping its `localKey` to the box's current device path. Throws when the device
+   * is gone, so the loop marks the job failed rather than sending nowhere. */
+  resolve(job: WireJob): Promise<PrinterTarget>;
+  /** Attempts to pair a Bluetooth printer by MAC, returning its `localKey` on success. */
+  pair(mac: string): Promise<PairResult>;
 }

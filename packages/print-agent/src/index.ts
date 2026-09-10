@@ -1,9 +1,19 @@
 export { POLL_INTERVAL_MS, createAgent } from "./agent.js";
 export type { Agent, AgentOptions } from "./agent.js";
-export type { AgentConfig, AgentPhase, AgentStatus, Host, HostLog } from "./host.js";
+export type {
+  AgentConfig,
+  AgentPhase,
+  AgentStatus,
+  DiscoveredDevice,
+  Host,
+  HostLog,
+  PairResult,
+  VisibleDevice,
+} from "./host.js";
 export { DEFAULT_TIMEOUT_MS, createClient } from "./client.js";
 export type {
   AgentClient,
+  AgentInventory,
   Failure,
   JobOutcome,
   JoinReply,
@@ -17,6 +27,7 @@ export type {
 export { Router } from "./router.js";
 export type { ProbeRound, RouterOptions, ServerState, TrackedServer } from "./router.js";
 export {
+  BluetoothTransport,
   DEFAULT_TCP_TIMEOUT_MS,
   FakeSink,
   NetworkTcpTransport,
@@ -29,4 +40,5 @@ export type {
   PrinterTarget,
   Transport,
   TransportAdapters,
+  TransportKind,
 } from "./transport.js";

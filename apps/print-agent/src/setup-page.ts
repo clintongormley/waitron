@@ -1,10 +1,17 @@
-import type { AgentConfig, AgentPhase, AgentStatus } from "@waitron/print-agent";
+import type {
+  AgentConfig,
+  AgentPhase,
+  AgentStatus,
+  DiscoveredDevice,
+  PairResult,
+} from "@waitron/print-agent";
 import { Hono } from "hono";
 
 /**
  * The LAN setup/status page (base spec §2.3). It has no database and no secret: it reads the live
  * `AgentStatus` the loop publishes, renders one card per phase, and — when the server address is not
- * pinned by env — lets the operator enter it, writing the same `config.json` the Host reads.
+ * pinned by env — lets the operator enter it, writing the same `config.json` the Host reads. A second
+ * card drives box-local Bluetooth pairing (Scan → Pair), acting only on the box's own radio (#289).
  */
 export interface SetupDeps {
   status: () => AgentStatus;
@@ -14,10 +21,15 @@ export interface SetupDeps {
    * so the page can never override a compose-supplied server. */
   envLocked: boolean;
   defaultName: string;
+  /** A box-local Bluetooth inquiry — `host.scan(["bluetooth"])`. */
+  scanBluetooth: () => Promise<DiscoveredDevice[]>;
+  /** Bonds a Bluetooth printer by MAC — `host.pair(mac)`. */
+  pairBluetooth: (mac: string) => Promise<PairResult>;
 }
 
 /** Minimal HTML-entity escaping for the untrusted strings the page interpolates — the agent's name,
- * a server-sent `lastError`. Without it a crafted error message could inject markup into the page. */
+ * a server-sent `lastError`, a Bluetooth device name/MAC. Without it a crafted string could inject
+ * markup into the page. */
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -37,6 +49,10 @@ function normaliseOrigin(raw: string): string | null {
   }
 }
 
+function card(inner: string): string {
+  return `<div class="card">${inner}</div>`;
+}
+
 function layout(body: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -47,18 +63,24 @@ function layout(body: string): string {
 <style>
   body { font-family: system-ui, sans-serif; margin: 0; background: #f5f5f5; color: #1a1a1a; }
   main { max-width: 30rem; margin: 2rem auto; padding: 0 1rem; }
-  .card { background: #fff; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .card { background: #fff; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 1rem; }
   h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+  h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
   label { display: block; margin: 1rem 0 .25rem; font-weight: 600; }
   input { width: 100%; padding: .5rem; font-size: 1rem; box-sizing: border-box; }
   button { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; }
   .error { color: #b00020; margin: 1rem 0; }
+  .ok { color: #0a7d28; margin: 1rem 0; }
   .muted { color: #555; }
+  ul.devices { list-style: none; padding: 0; margin: 1rem 0 0; }
+  ul.devices li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-top: 1px solid #eee; }
+  ul.devices form { margin: 0; }
+  ul.devices button { margin-top: 0; }
   dl { margin: 0; }
   dt { font-weight: 600; margin-top: .75rem; }
 </style>
 </head>
-<body><main><div class="card">${body}</div></main></body>
+<body><main>${body}</main></body>
 </html>`;
 }
 
@@ -136,22 +158,65 @@ ${lastError}
   }
 }
 
+/** The box-local Bluetooth pairing card: a Scan button, the last scan's found list (each with a Pair
+ * button), and the last pair outcome. `scanned === undefined` means "not scanned yet" (no list shown);
+ * an empty array means a scan that found nothing. */
+function bluetoothCard(state: {
+  scanned?: DiscoveredDevice[];
+  pair?: { mac: string; result: PairResult };
+}): string {
+  let found = "";
+  if (state.scanned !== undefined) {
+    if (state.scanned.length === 0) {
+      found = `<p class="muted">No Bluetooth printers found. Put the printer in pairing mode and scan again.</p>`;
+    } else {
+      const items = state.scanned
+        .map((d) => {
+          const mac = escapeHtml(d.localKey ?? "");
+          const label = escapeHtml(d.name ?? d.localKey ?? "unknown device");
+          return `<li><span>${label} <span class="muted">${mac}</span></span>
+<form method="post" action="/bluetooth/pair"><input type="hidden" name="mac" value="${mac}"><button type="submit">Pair</button></form></li>`;
+        })
+        .join("");
+      found = `<ul class="devices">${items}</ul>`;
+    }
+  }
+  let outcome = "";
+  if (state.pair !== undefined) {
+    outcome = state.pair.result.ok
+      ? `<p class="ok">Paired ${escapeHtml(state.pair.result.localKey ?? state.pair.mac)}.</p>`
+      : `<p class="error">Could not pair ${escapeHtml(state.pair.mac)}: ${escapeHtml(state.pair.result.error ?? "pairing failed")}</p>`;
+  }
+  return `<h2>Bluetooth printers</h2>
+<p>Pair a Bluetooth printer to this box, then choose it in the dashboard.</p>
+<form method="post" action="/bluetooth/scan"><button type="submit">Scan for printers</button></form>
+${found}${outcome}`;
+}
+
 export function createSetupApp(deps: SetupDeps): Hono {
   const app = new Hono();
 
-  app.get("/", async (c) => {
+  const mainCard = async (): Promise<string> => {
     const status = deps.status();
     if (status.phase === "unconfigured") {
       const saved = await deps.config();
-      return c.html(layout(formCard(deps, saved?.serverUrl ?? "")));
+      return formCard(deps, saved?.serverUrl ?? "");
     }
-    // Past the form, the phase's own card is the whole page: it already names the server it follows,
-    // so an env-locked agent needs no separate address line here. The guard above rules out
-    // `unconfigured`, but `AgentStatus` is one interface so the property narrowing does not reshape
-    // the object type — hence the assertion of the phase the guard has already proved.
+    // Past the form, the phase's own card names the server it follows, so an env-locked agent needs no
+    // separate address line. The guard rules out `unconfigured`, but `AgentStatus` is one interface so
+    // the narrowing does not reshape the object type — hence the assertion of the proven phase.
     const connected = status as AgentStatus & { phase: Exclude<AgentPhase, "unconfigured"> };
-    return c.html(layout(statusCard(connected)));
-  });
+    return statusCard(connected);
+  };
+
+  const renderRoot = async (bt: {
+    scanned?: DiscoveredDevice[];
+    pair?: { mac: string; result: PairResult };
+  }): Promise<string> => {
+    return layout(card(await mainCard()) + card(bluetoothCard(bt)));
+  };
+
+  app.get("/", async (c) => c.html(await renderRoot({})));
 
   app.post("/setup", async (c) => {
     if (deps.envLocked) {
@@ -164,12 +229,27 @@ export function createSetupApp(deps: SetupDeps): Hono {
     const origin = normaliseOrigin(rawUrl);
     if (origin === null) {
       return c.html(
-        layout(formCard(deps, rawUrl, `That is not a valid http(s) address: ${rawUrl}`)),
+        layout(card(formCard(deps, rawUrl, `That is not a valid http(s) address: ${rawUrl}`))),
         400,
       );
     }
     await deps.saveConfig({ serverUrl: origin, name: rawName === "" ? deps.defaultName : rawName });
     return c.redirect("/", 303);
+  });
+
+  app.post("/bluetooth/scan", async (c) => {
+    const scanned = await deps.scanBluetooth();
+    return c.html(await renderRoot({ scanned }));
+  });
+
+  app.post("/bluetooth/pair", async (c) => {
+    const form = await c.req.parseBody();
+    const mac = typeof form.mac === "string" ? form.mac.trim() : "";
+    if (mac === "") {
+      return c.html(await renderRoot({}), 400);
+    }
+    const result = await deps.pairBluetooth(mac);
+    return c.html(await renderRoot({ pair: { mac, result } }));
   });
 
   app.get("/status.json", (c) => c.json(deps.status()));

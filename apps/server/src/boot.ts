@@ -1745,24 +1745,24 @@ export async function startServer(
     log,
   );
   // The operational agent/device groups — NOT mounted under mirror mode, and NOT on a FENCED node.
-  // Unlike the dashboard read
-  // surface below (management/catalogue/report/recipe/schedule/purchasing/workforce/me), whose writes
-  // all sit behind non-GET verbs the read-only gate refuses, the PRINT group exposes a WRITE BEHIND A
-  // GET: `GET /print-api/agent/jobs` runs `claimPrintJobs`, a locking UPDATE (packages/printing/src/
-  // runtime.ts). The method gate (`read-only-gate.ts`, whose own comment at 6-24 flags exactly this)
-  // cannot catch a write on a GET. The device group's own writes are all behind non-GET verbs the gate
-  // already refuses; it is dropped from a mirror as part of the same operational surface, not for a
-  // write-behind-a-GET. So the read-only guarantee for these operational groups rests on NOT mounting
-  // them on a mirror rather than on the verb — where before this guard existed it rested only on their
-  // backing tables (`print_*`, `devices`) being unprovisioned on a mirror. A mirror provisions none of
-  // those tables anyway, so it loses nothing by their absence; a primary mounts both. This guard skips
-  // route REGISTRATION only — every shared boot value (`till`, `secureCookies`) is built above and read
-  // by the sibling mounts, so nothing downstream depends on these mounts having run.
+  // These are the whole operational surface (the agent pull/report + the device station/session), dropped
+  // on a read-only node for the tighter read-only-mirror posture: on a mirror their routes are ABSENT
+  // (404), where before this guard existed the read-only guarantee rested only on their backing tables
+  // (`print_*`, `devices`) being unprovisioned. The agent pull (`POST /print-api/agent/jobs`, whose
+  // `claimPrintJobs` is a locking UPDATE — packages/printing/src/runtime.ts) and the device writes are all
+  // non-safe verbs the read-only gate (`read-only-gate.ts`) already refuses, so un-mounting is
+  // belt-and-braces for the writes; its real value is denying the whole operational surface, including any
+  // safe-verb read the groups expose (e.g. `GET /print-api/agent/join/status`). (The pull was a
+  // write-behind-a-GET before the central-printer inventory work moved it to POST; the mount guard's
+  // rationale no longer hinges on that.) A mirror provisions none of those tables anyway, so it loses
+  // nothing by their absence; a primary mounts both. This guard skips route REGISTRATION only — every
+  // shared boot value (`till`, `secureCookies`) is built above and read by the sibling mounts, so nothing
+  // downstream depends on these mounts having run.
   // FENCED (membership rejoin R1): a returned/superseded node comes up `mode='primary'` (so `isMirror`
-  // is FALSE) but must be FULLY read-only. Because the read-only gate is verb-based it would let the
-  // print write-behind-a-GET through, so a fenced node un-mounts this surface for the SAME reason a
-  // mirror does — hence `!isMirror && !fenced`. The `fenced` local is the boot-captured decision (a
-  // fenced node leaves the fence only by a fresh boot), the same value the read-only gate above reads.
+  // is FALSE) but must be FULLY read-only. The verb gate would refuse the pull's POST there, but to deny
+  // the whole operational surface (its safe-verb reads included) a fenced node un-mounts this surface for
+  // the SAME reason a mirror does — hence `!isMirror && !fenced`. The `fenced` local is the boot-captured
+  // decision (a fenced node leaves the fence only by a fresh boot), the same value the read-only gate reads.
   // ALTITUDE (deliberate, deferred): the landed promotion design (promotion-runbook-design.md §3a
   // "Mount-and-gate everything") makes REQUEST-time gating the eventual form so live mirror→primary
   // promotion needs no restart. Boot un-mounting is chosen for now — tighter read-only-mirror posture,
