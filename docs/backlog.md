@@ -789,15 +789,15 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
 
 **Ordering / menu (SP18):**
 
-- **Venue departments and menu model — ordering and management slice implemented (owner, 2026-09-09;
-  branch `menus`, PR pending).** One venue contains Restaurant/bar and Deli departments with their
+- **Venue departments and menu model — ordering and management slice landed #297 (owner,
+  2026-09-09).** One venue contains Restaurant/bar and Deli departments with their
   own zones, menus and service defaults while sharing products and preparation stations. One product
   can have different prices/modifiers on different menus; zone/category routing selects the preparation
   station. The schema records department hours; enforcing those hours and assigning staff remain later
   work. Same legal seller is the working assumption, to confirm before go-live.
   [Design](superpowers/specs/2026-09-09-venue-departments-and-menus-design.md) and
   [implementation plan](superpowers/plans/2026-09-09-venue-departments-and-menus.md) record the
-  delivered slice and remaining work. The branch adds menu-item pricing, zone offer selection,
+  delivered slice and remaining work. The slice adds menu-item pricing, zone offer selection,
   frozen service context, zone/category preparation routing, context-preserving order transfers,
   counter preparation fire, device-specific default zones, portable configuration transfer, a fresh venue's
   initial menu/zone assignment and a one-operational-venue provisioning guard. Products and menus are
