@@ -91,19 +91,8 @@ describe("classifyBootFailure", () => {
     expect(classifyBootFailure(undefined)).toBe("unknown");
   });
 
-  // The same two guards `sql-state.test.ts` pins on its own walk, for the same reason: each is a
-  // branch that only a deliberately adversarial input reaches.
-  it("stops at the walk-depth bound rather than spinning down an unbounded chain", () => {
-    let deep: Error = Object.assign(new Error("bottom"), { code: "ECONNREFUSED" });
-    for (let i = 0; i < 8; i += 1) deep = new Error("wrap", { cause: deep });
-    expect(classifyBootFailure(deep)).toBe("unknown");
-  });
-
-  it("stops rather than spinning on a self-referential cause", () => {
-    const looped: { cause?: unknown } = new Error("loop");
-    looped.cause = looped;
-    expect(classifyBootFailure(looped)).toBe("unknown");
-  });
+  // The walk-depth bound and the self-reference exit are `firstCodeInCauseChain`'s, pinned once in
+  // `packages/shared/src/cause-chain.test.ts`. Both classification branches reach them through it.
 
   it("keeps the two SQLSTATE tables disjoint", () => {
     const overlap = UNREACHABLE_SQL_STATES.filter((state) =>

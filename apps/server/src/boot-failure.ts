@@ -1,8 +1,5 @@
-import { isAppError, sqlStateOf } from "@waitron/shared";
+import { firstCodeInCauseChain, isAppError, sqlStateOf } from "@waitron/shared";
 import "./errors.js";
-
-/** The same bound `sqlStateOf` uses, and for the same reason: a self-referential `cause` must not spin. */
-const MAX_CAUSE_DEPTH = 5;
 
 /**
  * Node socket-level failures. A refused connection is NOT a SQLSTATE — `sqlStateOf` returns null for
@@ -45,18 +42,14 @@ const SOCKET = new Set(UNREACHABLE_SOCKET_CODES);
 const UNREACHABLE = new Set(UNREACHABLE_SQL_STATES);
 const MISMATCH = new Set(SCHEMA_MISMATCH_SQL_STATES);
 
-/** The first `code` in the cause chain that names a socket failure we classify, or null. */
+/**
+ * The first `code` in the cause chain that names a socket failure we classify, or null.
+ *
+ * Same walk as `sqlStateOf`, different predicate — `firstCodeInCauseChain` (`@waitron/shared`) is
+ * the one copy, and it carries the depth-bound and self-reference arguments.
+ */
 function socketCodeOf(error: unknown): string | null {
-  let current: unknown = error;
-  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
-    if (typeof current !== "object" || current === null) return null;
-    const code: unknown = (current as { code?: unknown }).code;
-    if (typeof code === "string" && SOCKET.has(code)) return code;
-    const cause: unknown = (current as { cause?: unknown }).cause;
-    if (cause === current) return null;
-    current = cause;
-  }
-  return null;
+  return firstCodeInCauseChain(error, (code) => SOCKET.has(code));
 }
 
 /**
