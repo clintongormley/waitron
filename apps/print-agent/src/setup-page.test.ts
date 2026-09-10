@@ -9,6 +9,8 @@ function deps(overrides: Partial<SetupDeps> = {}): SetupDeps {
     saveConfig: async () => {},
     envLocked: false,
     defaultName: "kitchen-pi",
+    scanBluetooth: async () => [],
+    pairBluetooth: async () => ({ ok: false, error: "no fake" }),
     ...overrides,
   };
 }
@@ -193,7 +195,92 @@ describe("createSetupApp — POST /setup", () => {
     );
     const html = await (await app.request("/")).text();
     expect(html).toContain("https://box.test");
-    expect(html).not.toContain('<button type="submit"');
+    // No Save button — the locked address form is read-only. (The Bluetooth card's Scan button is a
+    // separate, always-present action, so the assertion targets the Save action specifically.)
+    expect(html).not.toContain(">Save</button>");
+  });
+});
+
+describe("createSetupApp — Bluetooth pairing", () => {
+  it("GET / shows the Bluetooth card with a Scan button", async () => {
+    const app = createSetupApp(deps());
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("Bluetooth printers");
+    expect(html).toContain('action="/bluetooth/scan"');
+    expect(html).toContain("Scan for printers");
+  });
+
+  it("POST /bluetooth/scan lists found devices with a Pair button per device", async () => {
+    const scanBluetooth = vi.fn(async () => [
+      { transport: "bluetooth" as const, localKey: "AA:BB:CC:DD:EE:FF", name: "Star TSP100" },
+    ]);
+    const app = createSetupApp(deps({ scanBluetooth }));
+    const res = await app.request("/bluetooth/scan", { method: "POST" });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(scanBluetooth).toHaveBeenCalledOnce();
+    expect(html).toContain("Star TSP100");
+    expect(html).toContain("AA:BB:CC:DD:EE:FF");
+    expect(html).toContain('action="/bluetooth/pair"');
+    expect(html).toContain('value="AA:BB:CC:DD:EE:FF"');
+  });
+
+  it("POST /bluetooth/scan with no devices says so", async () => {
+    const app = createSetupApp(deps({ scanBluetooth: async () => [] }));
+    const html = await (await app.request("/bluetooth/scan", { method: "POST" })).text();
+    expect(html).toContain("No Bluetooth printers found");
+  });
+
+  it("POST /bluetooth/pair pairs the MAC and shows success", async () => {
+    const pairBluetooth = vi.fn(async () => ({ ok: true, localKey: "AA:BB:CC:DD:EE:FF" }));
+    const app = createSetupApp(deps({ pairBluetooth }));
+    const res = await app.request("/bluetooth/pair", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF",
+    });
+    expect(res.status).toBe(200);
+    expect(pairBluetooth).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF");
+    expect(await res.text()).toContain("Paired AA:BB:CC:DD:EE:FF");
+  });
+
+  it("POST /bluetooth/pair shows the failure reason when pairing fails", async () => {
+    const app = createSetupApp(
+      deps({ pairBluetooth: async () => ({ ok: false, error: "AuthenticationFailed" }) }),
+    );
+    const res = await app.request("/bluetooth/pair", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF",
+    });
+    const html = await res.text();
+    expect(html).toContain("Could not pair AA:BB:CC:DD:EE:FF");
+    expect(html).toContain("AuthenticationFailed");
+  });
+
+  it("POST /bluetooth/pair with no MAC returns 400 and pairs nothing", async () => {
+    const pairBluetooth = vi.fn(async () => ({ ok: true, localKey: "x" }));
+    const app = createSetupApp(deps({ pairBluetooth }));
+    const res = await app.request("/bluetooth/pair", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "mac=",
+    });
+    expect(res.status).toBe(400);
+    expect(pairBluetooth).not.toHaveBeenCalled();
+  });
+
+  it("escapes a Bluetooth device name so it cannot inject markup", async () => {
+    const app = createSetupApp(
+      deps({
+        scanBluetooth: async () => [
+          { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF", name: "<script>x</script>" },
+        ],
+      }),
+    );
+    const html = await (await app.request("/bluetooth/scan", { method: "POST" })).text();
+    expect(html).not.toContain("<script>x</script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });
 

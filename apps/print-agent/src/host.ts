@@ -5,15 +5,11 @@ import {
   UsbTransport,
   type AgentConfig,
   type AgentStatus,
-  type DiscoveredDevice,
   type Host,
   type HostLog,
-  type PairResult,
-  type PrinterTarget,
-  type VisibleDevice,
-  type WireJob,
 } from "@waitron/print-agent";
 import type { EnvConfig } from "./config.js";
+import { type LinuxDevices, createLinuxDevices } from "./linux-devices.js";
 import type { FileState } from "./state.js";
 
 /** A one-line-per-call sink the structured logger writes to. `console` satisfies it. */
@@ -32,6 +28,9 @@ export interface ContainerHostOptions {
   log?: LineSink;
   /** The loop calls this on every status change; the setup page reads the latest value. */
   onStatus: (status: AgentStatus) => void;
+  /** The device seam — USB/network/Bluetooth discovery, pairing and resolution. Defaults to the real
+   * Linux implementation reading `/sys` and `/dev`; injected in tests so the host stays hermetic. */
+  devices?: LinuxDevices;
 }
 
 /** The name a config gets when neither env nor the saved file names one — env pins only the url. */
@@ -57,6 +56,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     usb: new UsbTransport(),
     bluetooth: new BluetoothTransport(),
   });
+  const devices = opts.devices ?? createLinuxDevices();
   return {
     config: async (): Promise<AgentConfig | null> => {
       // Env wins over the file: a compose-supplied address is never overridden by the setup page.
@@ -80,23 +80,11 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: structuredLog(opts.log ?? console),
     status: opts.onStatus,
-    // TODO(Task 6): real Linux implementation of the device seam — enumerate USB/Bluetooth devices,
-    // an active scan, MAC pairing, and localKey→device-path resolution. See the plan
-    // (.superpowers/sdd/2026-09-09-central-printer-provisioning). These stubs keep the loop's new
-    // contract satisfied meanwhile: no devices reported, no scan results, pairing unsupported, and a
-    // passthrough resolve that maps a job's localKey straight to a device path.
-    visibleDevices: async (): Promise<VisibleDevice[]> => [],
-    scan: async (): Promise<DiscoveredDevice[]> => [],
-    pair: async (): Promise<PairResult> => ({
-      ok: false,
-      error: "not implemented on this host yet",
-    }),
-    resolve: async (job: WireJob): Promise<PrinterTarget> => ({
-      id: job.printerId,
-      transport: job.transport,
-      host: job.host,
-      port: job.port,
-      devicePath: job.localKey,
-    }),
+    // The device seam (design §7) — the real Linux USB/network/Bluetooth implementation, or an
+    // injected fake in tests. Its four methods ARE the host's.
+    visibleDevices: devices.visibleDevices,
+    scan: devices.scan,
+    pair: devices.pair,
+    resolve: devices.resolve,
   };
 }

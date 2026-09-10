@@ -157,6 +157,59 @@ describe("createContainerHost — the rest of the seam", () => {
     ).rejects.toThrow(/no host/);
   });
 
+  it("exposes the injected device seam as its visibleDevices/scan/pair/resolve", async () => {
+    const devices = {
+      visibleDevices: vi.fn(async () => [
+        { transport: "usb" as const, localKey: "SN-1", make: "Epson", model: "TM-T20" },
+      ]),
+      scan: vi.fn(async () => [
+        { transport: "bluetooth" as const, localKey: "AA:BB:CC:DD:EE:FF", name: "Star" },
+      ]),
+      pair: vi.fn(async () => ({ ok: true, localKey: "AA:BB:CC:DD:EE:FF" })),
+      resolve: vi.fn(async () => ({
+        id: "p1",
+        transport: "usb" as const,
+        host: null,
+        port: null,
+        devicePath: "/dev/usb/lp0",
+      })),
+    };
+    const host = createContainerHost({
+      env: baseEnv,
+      state: new FileState(dir),
+      onStatus: () => {},
+      devices,
+    });
+    expect(await host.visibleDevices()).toEqual([
+      { transport: "usb", localKey: "SN-1", make: "Epson", model: "TM-T20" },
+    ]);
+    expect(await host.scan(["bluetooth"])).toEqual([
+      { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF", name: "Star" },
+    ]);
+    expect(devices.scan).toHaveBeenCalledWith(["bluetooth"]);
+    expect(await host.pair("AA:BB:CC:DD:EE:FF")).toEqual({
+      ok: true,
+      localKey: "AA:BB:CC:DD:EE:FF",
+    });
+    const job = {
+      id: "j1",
+      printerId: "p1",
+      transport: "usb" as const,
+      host: null,
+      port: null,
+      localKey: "SN-1",
+      payload: new Uint8Array(),
+    };
+    expect(await host.resolve(job)).toEqual({
+      id: "p1",
+      transport: "usb",
+      host: null,
+      port: null,
+      devicePath: "/dev/usb/lp0",
+    });
+    expect(devices.resolve).toHaveBeenCalledWith(job);
+  });
+
   it("logs one structured JSON line per call, carrying the level, message and fields", () => {
     const lines: string[] = [];
     const sink = {
