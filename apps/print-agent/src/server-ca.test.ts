@@ -99,7 +99,7 @@ describe("createServerTrustingFetch", () => {
     stateDir = await makeStateDir();
   });
   afterEach(async () => {
-    for (const s of servers) s.close();
+    for (const s of servers) s?.close();
     servers.length = 0;
     for (const dir of stateDirs) await rm(dir, { recursive: true, force: true });
     stateDirs.length = 0;
