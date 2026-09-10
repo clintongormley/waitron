@@ -152,7 +152,8 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
       });
       const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
       await claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] });
-      // The non-claimer's report matches nothing (claimed_by scopes the report), so it is a no-op.
+      // claimed_by scopes the report's UPDATE to the claimer: the non-claimer's report updates no row
+      // (`updated === false`); the claimer's updates it (`true`).
       expect(
         (
           await reportPrintJob(tx, cfg, {

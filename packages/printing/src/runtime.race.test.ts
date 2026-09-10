@@ -145,7 +145,7 @@ describe("double-pull race (real Postgres)", () => {
 
       const [aResult, bResult] = await Promise.all([aDone, bDone]);
 
-      // The load-bearing assertion: the job was delivered EXACTLY ONCE across both agents.
+      // The assertion that matters: the job was delivered EXACTLY ONCE across both agents.
       expect(gated.written.length + sinkB.written.length).toBe(1);
       expect(gated.written).toHaveLength(1);
       expect(sinkB.written).toHaveLength(0);
@@ -227,7 +227,7 @@ describe("double-pull race (real Postgres)", () => {
 
       const [aResult, bResult] = await Promise.all([aDone, bDone]);
 
-      // The load-bearing assertion: across both agents every job was claimed AT MOST once, and all N
+      // The assertion that matters: across both agents every job was claimed AT MOST once, and all N
       // were claimed. Deleting the lock makes B re-claim A's rows → duplicate ids, length 2N.
       const claimedIds = [...aResult.map((j) => j.id), ...bResult.map((j) => j.id)];
       expect(new Set(claimedIds).size).toBe(claimedIds.length); // no duplicate claim

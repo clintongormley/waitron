@@ -646,8 +646,8 @@ export class PrintersScreen extends LitElement {
     try {
       await this.api.createPrinter({ name, transport: device.transport, localKey });
       this.registerNames = { ...this.registerNames, [localKey]: "" };
-      await this.#load();
-      await this.#loadDiscovered();
+      // Independent reads — the printers list and the discovered list — run concurrently.
+      await Promise.all([this.#load(), this.#loadDiscovered()]);
     } catch (error) {
       this.errorKey = codeOf(error);
     } finally {
