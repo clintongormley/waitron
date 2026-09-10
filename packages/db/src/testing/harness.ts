@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { beforeAll, afterAll, describe } from "vitest";
+import { beforeAll, afterAll, describe, inject } from "vitest";
 import { createPgliteDb, type Database } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -51,27 +51,20 @@ export interface Target {
   teardown(): Promise<void>;
 }
 
-// Memoized: every file that imports this module computes POSTGRES_COVERED at
-// module scope (client.test.ts, migrate.test.ts, describeEachTarget itself),
-// which without caching means several `docker info` child-process spawns —
-// each with a 10s timeout — per test run for a fact that cannot change
-// mid-run.
+// Cache the fallback probe within each isolated test file.
 let cachedDockerAvailable: boolean | undefined;
 
 export function dockerAvailable(): boolean {
+  // Global setup has already started and migrated this container. A redundant CLI
+  // probe can fail independently; actual database/boot failures still fail the suites.
+  if (inject("sharedPg") !== undefined) return true;
   if (cachedDockerAvailable !== undefined) return cachedDockerAvailable;
   try {
     execFileSync("docker", ["info"], { stdio: "ignore", timeout: 10_000 });
     cachedDockerAvailable = true;
   } catch {
-    // Stryker disable next-line all: unreachable on any machine that has
-    // Docker, which includes every CI runner and every contributor's laptop
-    // this package requires — the same reasoning the ignore comment below
-    // documents for coverage.
-    /* v8 ignore start */
     cachedDockerAvailable = false;
   }
-  /* v8 ignore stop */
   return cachedDockerAvailable;
 }
 

@@ -4,15 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { describeEachTarget, dockerAvailable, resolveTargets } from "./harness.js";
 
 describe("dockerAvailable", () => {
-  it("memoizes: a second call returns the same result without spawning docker again", () => {
-    // Vitest isolates each test file's module graph, so within this file
-    // dockerAvailable's module-level cache starts empty regardless of any
-    // other file (describeEachTarget above already primed it once via its
-    // own call) — calling it again here is what exercises the cache-hit
-    // branch at all, rather than only ever the first-call miss.
-    const first = dockerAvailable();
-    const second = dockerAvailable();
-    expect(second).toBe(first);
+  it("recognizes the container supplied by this package's global setup", () => {
+    expect(dockerAvailable()).toBe(true);
   });
 });
 

@@ -1,23 +1,32 @@
 import { userEvent } from "@vitest/browser/context";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { startAuthentication } from "@simplewebauthn/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type { DashboardApi } from "../api/client.js";
 import { LoginScreen } from "./login-screen.js";
 
-// The real `startAuthentication` drives `navigator.credentials.get`, which needs a physical
-// authenticator and cannot run headless. Mock the whole module: `startAuthentication` resolves the
-// assertion the verify step echoes back, so the screen's chain runs end to end under test.
-vi.mock("@simplewebauthn/browser", () => ({
-  startAuthentication: vi.fn().mockResolvedValue({ id: "cred-abc" }),
-  startRegistration: vi.fn().mockResolvedValue({ id: "cred-abc" }),
-}));
+// Keep the real WebAuthn library; stub only the hardware boundary so an earlier
+// library import still reaches the stub when the operator starts the ceremony.
+beforeEach(() => {
+  vi.spyOn(navigator.credentials, "get").mockResolvedValue({
+    id: "cred-abc",
+    rawId: new Uint8Array([1]).buffer,
+    type: "public-key",
+    authenticatorAttachment: "platform",
+    response: {
+      clientDataJSON: new Uint8Array([2]).buffer,
+      authenticatorData: new Uint8Array([3]).buffer,
+      signature: new Uint8Array([4]).buffer,
+      userHandle: new Uint8Array([5]).buffer,
+    },
+    getClientExtensionResults: () => ({}),
+    toJSON: vi.fn(),
+  } as PublicKeyCredential);
+});
 
 afterEach(cleanupWidgets);
-// Shared across tests (the module mock is file-scoped), so clear its call log between them.
-afterEach(() => vi.mocked(startAuthentication).mockClear());
+afterEach(() => vi.restoreAllMocks());
 afterEach(() => vi.useRealTimers());
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -31,7 +40,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     completeAccountActionByCode: vi.fn().mockResolvedValue({ personId: "p1", authenticated: true }),
     passkeyAuthOptions: vi
       .fn()
-      .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "abc" } }),
+      .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "AQID" } }),
     passkeyAuthVerify: vi.fn().mockResolvedValue({ personId: "p9" }),
     getGoogleConfig: vi.fn().mockResolvedValue({
       configured: true,
@@ -640,8 +649,8 @@ describe("login-screen", () => {
     expect((await heard).code).toBe("en-GB");
   });
 
-  // Passkey login: options → startAuthentication(the browser ceremony, mocked) → verify → logged-in.
   it("runs the passkey ceremony and logs in the returned person", async () => {
+    const warn = vi.spyOn(console, "warn");
     const api = stubApi();
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await continueWithEmail(el);
@@ -650,12 +659,27 @@ describe("login-screen", () => {
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
     expect((await loggedIn).personId).toBe("p9");
-    // v13 wraps the server's options blob under `optionsJSON` — NOT the bare options object.
-    expect(startAuthentication).toHaveBeenCalledWith({ optionsJSON: { challenge: "abc" } });
-    // The handle from options is echoed back with the assertion startAuthentication returned.
+    // The library warns if optionsJSON is omitted and its deprecated call shape is used.
+    expect(warn).not.toHaveBeenCalled();
+    expect(navigator.credentials.get).toHaveBeenCalledExactlyOnceWith({
+      publicKey: { challenge: new Uint8Array([1, 2, 3]).buffer, allowCredentials: undefined },
+      signal: expect.any(AbortSignal),
+    });
     expect(api.passkeyAuthVerify).toHaveBeenCalledWith({
       challengeHandle: "h1",
-      response: { id: "cred-abc" },
+      response: {
+        id: "cred-abc",
+        rawId: "AQ",
+        type: "public-key",
+        authenticatorAttachment: "platform",
+        clientExtensionResults: {},
+        response: {
+          clientDataJSON: "Ag",
+          authenticatorData: "Aw",
+          signature: "BA",
+          userHandle: "BQ",
+        },
+      },
     });
   });
 

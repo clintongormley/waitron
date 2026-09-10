@@ -1,15 +1,34 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { startRegistration } from "@simplewebauthn/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import type { ProfileScreen } from "./profile-screen.js";
 import "./profile-screen.js";
 
-vi.mock("@simplewebauthn/browser", () => ({
-  startRegistration: vi.fn().mockResolvedValue({ id: "new-credential" }),
-}));
+// Stub the hardware boundary so the real library can be imported in any order.
+beforeEach(() => {
+  vi.spyOn(navigator.credentials, "create").mockResolvedValue({
+    id: "new-credential",
+    rawId: new Uint8Array([1]).buffer,
+    type: "public-key",
+    authenticatorAttachment: "platform",
+    response: {
+      clientDataJSON: new Uint8Array([2]).buffer,
+      attestationObject: new Uint8Array([3]).buffer,
+      getTransports: () => ["internal"],
+    },
+    getClientExtensionResults: () => ({}),
+    toJSON: vi.fn(),
+  } as PublicKeyCredential);
+});
 afterEach(cleanupWidgets);
-afterEach(() => vi.clearAllMocks());
+afterEach(() => vi.restoreAllMocks());
+
+const registrationOptions = {
+  challenge: "AQID",
+  rp: { name: "Waitron", id: "localhost" },
+  user: { id: "BAUG", name: "alex@example.com", displayName: "Alex" },
+  pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+};
 function apiStub(overrides: Record<string, unknown> = {}) {
   return {
     getProfile: vi.fn().mockResolvedValue({
@@ -56,7 +75,7 @@ function apiStub(overrides: Record<string, unknown> = {}) {
     removePasskey: vi.fn().mockResolvedValue(undefined),
     passkeyRegisterOptions: vi
       .fn()
-      .mockResolvedValue({ challengeHandle: "handle", options: { challenge: "challenge" } }),
+      .mockResolvedValue({ challengeHandle: "handle", options: registrationOptions }),
     passkeyRegisterVerify: vi.fn().mockResolvedValue({ credentialId: "new-credential" }),
     disableTotp: vi.fn().mockResolvedValue(undefined),
     unlinkGoogle: vi.fn().mockResolvedValue(undefined),
@@ -208,15 +227,40 @@ describe("your profile", () => {
     expect(api.changePin).toHaveBeenCalledWith({ currentPassword: "current", pin: "4321" });
   });
   it("adds a passkey for this session and confirms removal with current credentials", async () => {
+    const warn = vi.spyOn(console, "warn");
     const { el, api } = await mount();
     await click(el, "add-passkey");
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({ currentPassword: "current" });
-    expect(startRegistration).toHaveBeenCalledWith({ optionsJSON: { challenge: "challenge" } });
+    // Preserve the optionsJSON contract: the deprecated call shape emits a warning.
+    expect(warn).not.toHaveBeenCalled();
+    expect(navigator.credentials.create).toHaveBeenCalledExactlyOnceWith({
+      publicKey: {
+        ...registrationOptions,
+        challenge: new Uint8Array([1, 2, 3]).buffer,
+        user: { ...registrationOptions.user, id: new Uint8Array([4, 5, 6]).buffer },
+        excludeCredentials: undefined,
+      },
+      signal: expect.any(AbortSignal),
+    });
     expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
       challengeHandle: "handle",
-      response: { id: "new-credential" },
+      response: {
+        id: "new-credential",
+        rawId: "AQ",
+        type: "public-key",
+        authenticatorAttachment: "platform",
+        clientExtensionResults: {},
+        response: {
+          clientDataJSON: "Ag",
+          attestationObject: "Aw",
+          transports: ["internal"],
+          publicKeyAlgorithm: undefined,
+          publicKey: undefined,
+          authenticatorData: undefined,
+        },
+      },
     });
     await click(el, "remove-passkey");
     input(el, "currentPassword", "current");
