@@ -97,9 +97,10 @@ export interface MigratedPostgresOptions {
  * Shared-container startup and the one-off migrated helpers use this constructor. The dual-target
  * harness clones the shared core template; it does not start a container per suite.
  *
- * `client.test.ts` and `migrate.test.ts` still construct their own directly. They are testing
- * `createPostgresDb` and `runMigrations` against a bare server, so routing them through a helper
- * built on top of both would make each suite depend on the thing it exists to check.
+ * Some suites still construct their own directly — `client.test.ts` and `migrate.test.ts` among
+ * them. They are testing `createPostgresDb` and `runMigrations` against a bare server, so routing
+ * them through a helper built on top of both would make each suite depend on the thing it exists to
+ * check.
  *
  * `migrate-upgrade.pg.test.ts` takes a container of its own from this constructor rather than the
  * shared template: it needs MANY databases, each stopped at a DIFFERENT migration point, which a

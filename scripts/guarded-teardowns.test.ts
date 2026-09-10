@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest";
  *
  * **This guard is a backstop, not the primary defence.** `@waitron/db/testing/lifecycle.js` owns the
  * hooks for the suites that use it, so they cannot write a teardown at all, guarded or otherwise.
- * What remains in scope here is the residue that legitimately builds its own resources —
+ * What remains in scope here is the residue that legitimately builds its own resources — among them,
  * `client.test.ts` and `migrate.test.ts` construct containers because they are the unit tests OF the
  * constructor and the migrator, `testing/postgres.test.ts` tests the very surface the helper is
  * built on, and `migrate-upgrade.pg.test.ts` needs many databases each at a DIFFERENT migration
