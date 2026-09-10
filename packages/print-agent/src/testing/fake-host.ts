@@ -4,6 +4,7 @@ import type {
   DiscoveredDevice,
   Host,
   PairResult,
+  TransportKind,
   VisibleDevice,
 } from "../host.js";
 import type { WireJob } from "../client.js";
@@ -21,7 +22,7 @@ export function fakeHost(
     transport: Transport;
     fetch: typeof fetch;
     visibleDevices: () => Promise<VisibleDevice[]>;
-    scan: (kinds?: ("usb" | "network_tcp" | "bluetooth")[]) => Promise<DiscoveredDevice[]>;
+    scan: (kinds?: TransportKind[]) => Promise<DiscoveredDevice[]>;
     resolve: (job: WireJob) => Promise<PrinterTarget>;
     pair: (mac: string) => Promise<PairResult>;
   }> = {},

@@ -362,6 +362,26 @@ describe("createAgent — inventory, discovery and resolve", () => {
     expect(inventoryOf(c, 2).scanned).toEqual([]);
   });
 
+  it("a throwing discovery scan never blocks the job pull (isolated failure)", async () => {
+    // The real box has no Bluetooth adapter, so scan(["bluetooth"]) throws `spawn bluetoothctl ENOENT`.
+    // A scan failure inside an open window must be isolated: the tick still pulls jobs every time.
+    const scan = vi.fn(async () => {
+      throw new Error("spawn bluetoothctl ENOENT");
+    });
+    const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+    // Every reply keeps the discovery window open (far-future instant), so ticks 2 and 3 both scan.
+    const pulls = vi.fn(async () =>
+      okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+    );
+    const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
+    await agent.runOnce(); // opens the window (no prior window → no scan yet)
+    await agent.runOnce(); // window open → scan throws, but the pull must still happen
+    await agent.runOnce(); // window still open → scan throws again, pull still happens
+    expect(scan).toHaveBeenCalledTimes(2);
+    expect(pulls).toHaveBeenCalledTimes(3); // a scan error never suppresses a pull
+    expect(host.statuses.at(-1)?.phase).toBe("running");
+  });
+
   it("resolves a usb job before sending", async () => {
     const resolved: PrinterTarget = {
       id: "p1",

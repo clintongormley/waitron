@@ -5,7 +5,7 @@ import {
   type JobOutcome,
   type WireJob,
 } from "./client.js";
-import type { AgentConfig, AgentStatus, Host } from "./host.js";
+import type { AgentConfig, AgentStatus, DiscoveredDevice, Host } from "./host.js";
 import { Router } from "./router.js";
 
 /** The idle poll interval (base spec §4 step 6). A non-empty batch re-polls at once; only an empty pull sleeps. */
@@ -225,7 +225,19 @@ export function createAgent(opts: AgentOptions): Agent {
     // Report the box's device inventory on every pull. `visible` is always gathered; `scanned` is an
     // active discovery pass, run only while the previous reply's window is still open (cross-tick).
     const visible = await host.visibleDevices();
-    const scanned = host.now() < discoveryUntil ? await host.scan() : [];
+    // Discovery is isolated from the pull: a throwing scan (e.g. the box has no Bluetooth adapter, so
+    // `scan(["bluetooth"])` throws `spawn bluetoothctl ENOENT`) must NEVER stop the job pull. Catch it,
+    // log it, and pull with whatever inventory we have — repeated scan failures must not suppress printing.
+    let scanned: DiscoveredDevice[] = [];
+    if (host.now() < discoveryUntil) {
+      try {
+        scanned = await host.scan();
+      } catch (error) {
+        host.log.warn("scan failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     const pulled = await client.pullJobs(current, token, { visible, scanned });
     if (!pulled.ok) {
       if (pulled.failure.kind === "unauthorized") {

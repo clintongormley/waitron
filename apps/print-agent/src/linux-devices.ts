@@ -22,7 +22,9 @@ import { type UsbPrinter, readUsbPrinters } from "./usb.js";
 export interface LinuxDeviceOptions {
   /** sysfs root — `/sys` in production; a fixture tmpdir in tests. */
   sysfsRoot?: string;
-  /** device-node root — `/dev` in production; defaults to `<sysfsRoot>/dev` for a single-root fixture. */
+  /** device-node root — defaults to `/dev` (production; a sibling of `/sys`, never nested under the
+   * sysfs root). A single-root fixture that keeps `/sys` and `/dev` under one tmpdir passes it
+   * explicitly (`<tmpdir>/dev`). */
   devRoot?: string;
   /** Bluetooth seam; defaults to a live `bluetoothctl` host. */
   bluetooth?: BluetoothHost;
@@ -40,7 +42,10 @@ export type LinuxDevices = Pick<Host, "visibleDevices" | "scan" | "pair" | "reso
 
 export function createLinuxDevices(opts: LinuxDeviceOptions = {}): LinuxDevices {
   const sysfsRoot = opts.sysfsRoot ?? "/sys";
-  const devRoot = opts.devRoot ?? `${sysfsRoot}/dev`;
+  // Production `/dev` is a SIBLING of `/sys`, not `<sysfsRoot>/dev`: deriving it from sysfsRoot would
+  // resolve a real USB node to `/sys/dev/usb/lp0` and the agent would open the wrong path. A single-root
+  // fixture nests the two and passes devRoot explicitly.
+  const devRoot = opts.devRoot ?? "/dev";
   const bluetooth = opts.bluetooth ?? createBluetoothctlHost({ run: runBluetoothctl });
   const btDevicePath = opts.btDevicePath ?? liveBtDevicePath;
   const scanNetwork = opts.scanNetwork ?? liveMdnsScan;
@@ -163,12 +168,12 @@ function runBluetoothctl(args: string[]): Promise<string> {
 }
 
 /** The RFCOMM write node for a paired MAC. The box's Bluetooth adapter was unconfirmed at the
- * 2026-09-10 capture, so this binding is settled at the manual receipt (spec §7). SINGLE PAIRED PRINTER
- * ONLY until then: every MAC maps to the same `/dev/rfcomm0`, so two paired BT printers would collide —
- * the Step 6c receipt replaces this with a per-MAC bound node. */
+ * 2026-09-10 capture, so a real per-MAC RFCOMM binding is settled at the manual receipt (spec §7).
+ * Until then there is NO honest per-MAC node — a shared `/dev/rfcomm0` would route two paired printers
+ * to the same node — so resolving a BT job FAILS LOUD rather than advertising a bogus shared path. The
+ * Step 6c receipt replaces this with a real per-MAC bound node. */
 function liveBtDevicePath(mac: string): string {
-  void mac; // named for the contract; the concrete per-MAC rfcomm index is settled at the receipt.
-  return "/dev/rfcomm0";
+  throw new Error(`bluetooth device ${mac} resolution not implemented (Step 6c receipt)`);
 }
 
 /** One mDNS `_pdl-datastream._tcp` query, collecting responses for a short window and decoding each

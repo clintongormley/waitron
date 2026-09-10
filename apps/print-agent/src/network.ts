@@ -1,7 +1,8 @@
 import type { DiscoveredDevice } from "@waitron/print-agent";
 
 /**
- * The mDNS service printers announce a raw-9100 (ESC/POS) queue under. The packets here are synthesised
+ * The mDNS service under which printers announce a raw-9100 (ESC/POS) queue — `_pdl-datastream._tcp`.
+ * The packets here are synthesised
  * from the design's §7 shape; that a real printer announces exactly this is to be confirmed by the
  * Step 6d real-LAN receipt (the controller runs it), not yet verified. `parsePdlResponse` decodes one
  * response packet into the printers it advertises. The live multicast socket is a separate, gated seam
