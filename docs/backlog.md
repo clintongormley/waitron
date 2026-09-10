@@ -565,7 +565,7 @@ unchanged, so no new H2 receipt
      *Debt → CI / test infra*. (h) A hung real-PG suite LEAKS its
      running cluster containers (Ryuk off), starving the next run; `pnpm reap` only removes labelled
      containers older than 2h, so a fresh leak survives — inspect creation times, ownership and attached volumes, then remove only your own
-     confirmed leftovers before re-validating. (i) **Fix prepared in [#303](https://github.com/clintongormley/waitron/pull/303) (2026-09-10):**
+     confirmed leftovers before re-validating. (i) **FIXED — [#303](https://github.com/clintongormley/waitron/pull/303) LANDED (2026-09-10):**
      the browser WebAuthn mock failure recurred in `profile-screen.test.ts` in run 34507423350.
      Login/profile tests now stub `navigator.credentials` and exercise the real library, including
      its option/response conversion. The same run's db failure was `deployment.test.ts` reporting
