@@ -66,19 +66,34 @@ export interface OperatorText {
 }
 
 /**
+ * The recovery-state marker for an attempt whose outcome is not known YET — `node-entry.ts` writes it
+ * before the server starts, so a boot that HANGS (and therefore never produces a real code) still
+ * leaves the page something true to say. Not an `AppError` code: nothing throws it, and it is in no
+ * registry. A boot that does throw overwrites it with `classifyBootFailure`'s answer.
+ *
+ * It lives HERE, in the page's own module, and `node-entry.ts` imports it — not the other way round,
+ * though the entrypoint is what writes it. node-entry already imports this module for `recoveryApp`,
+ * so exporting it from there closes a cycle, and the cycle is not a crash but a silent wrong answer:
+ * esbuild bundles the container's entry (`dist/node-entry.js`) with recovery-surface's body ahead of
+ * node-entry's `var`, so the computed key below evaluated to `undefined`. Measured on that bundle —
+ * `Object.keys(OPERATOR_TEXT)` printed `"undefined"` in place of `server.boot_incomplete`, while
+ * every unit test passed, because vitest evaluates the two modules in the other order.
+ */
+export const BOOT_INCOMPLETE = "server.boot_incomplete";
+
+/**
  * A code the recovery state can carry. `ErrorCode` is the shared registry's own union, so a typo in
  * a thrown code below is a typecheck failure rather than a page that silently renders the generic
- * line. `server.boot_incomplete` is added by hand because it is NOT a thrown `AppError` — it is the
- * marker `node-entry.ts` writes before the server starts, so a boot that HANGS still leaves the page
- * something true to say — and therefore is in no registry.
+ * line; `BOOT_INCOMPLETE` is added by hand because it is in no registry.
  */
-type RecoveryCode = ErrorCode | "server.boot_incomplete";
+type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE;
 
 /**
  * What the page says, keyed by error code.
  *
  * EVERY string here is fixed and chosen by code, and the caught error's own message and stack never
- * reach the page — those go to the container's stdout, scrubbed, which is the installer's channel.
+ * reach the page — a failure of the boot sequence itself sends them to the container's stdout,
+ * scrubbed, which is the installer's channel (the limit is on `GENERIC_TEXT`).
  * Exactly two values on this page come from outside the image, and spec §5 names both: the error
  * CODE and the log TAIL, each HTML-escaped and each treated as attacker-influenceable.
  *
@@ -111,8 +126,14 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
   },
   "provisioning.database_unreachable": {
-    title: "The box's database is not responding.",
-    action: "Wait a minute and press Retry. If it keeps failing, restart the box.",
+    // Three causes wear this one code: the bounded connection wait timing out, and the SQLSTATEs
+    // `28P01` (wrong password) and `3D000` (no such database) — `boot-failure.ts`. Hence "could not
+    // connect" rather than "is not responding" (a refusal IS a response), and an escalation the
+    // operator can walk down: the retry fixes the first cause, and only a person can fix the other
+    // two, which is why the action says a restart cannot.
+    title: "Waitron could not connect to the box's database.",
+    action:
+      "Wait a minute and press Retry — the database may still be starting up. If that does not help, restart the box. If it still fails, ask whoever installed this box to check its database settings: a restart cannot fix a wrong password or a missing database.",
   },
   "provisioning.database_not_owned": {
     title: "The box's database belongs to another program.",
@@ -124,9 +145,22 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     action: "Ask whoever installed this box to check its settings.",
   },
   "migrations.incomplete": {
+    // The one entry that deliberately does NOT offer the restore. A cold restore runs the migrations
+    // itself (`restore.ts` → `applyMigrations`), so a restore is one of the things that raises this
+    // code — and an operator whose backup is from the failing release point would be sent round that
+    // loop with no exit and no other instruction.
     title: "The box's database was only partly updated.",
     action:
-      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
+      "Ask whoever installed this box to look at it. Restoring a backup may not help: a restore runs the same update, and it can stop in the same place.",
+  },
+  "deployment.environment_mismatch": {
+    // Configuration, not a broken database — so no restore and no reinstall: neither changes which
+    // database this box points at, and a restore onto the wrong one is the worse outcome. Named
+    // rather than left to the generic line because it is a CLAUDE.md §5 case: the environments do
+    // not share a series, and a sale filed from the wrong one leaves a permanent hole in the other.
+    title:
+      "This box and its database do not belong to the same system: one is set up for real sales, the other for testing.",
+    action: "Ask whoever installed this box to check its settings.",
   },
   "server.config_missing": {
     title: "The box's configuration is incomplete.",
@@ -136,7 +170,7 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     title: "The box's configuration is invalid.",
     action: "Ask whoever installed this box to check its settings.",
   },
-  "server.boot_incomplete": {
+  [BOOT_INCOMPLETE]: {
     title: "Waitron did not finish starting.",
     action: "Press Retry. If it keeps failing, ask whoever installed this box to look at it.",
   },
@@ -147,14 +181,20 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
 };
 
 /**
- * The fallback, and what `unknown` now means: the classifier could not name this one, but
- * `runEntry` wrote the real reason to the container's stdout, so the sentence below is true rather
- * than a shrug. An unrecognised code renders this and never throws — a box that failed before it
- * ever wrote a log still has to serve this page.
+ * The fallback, and what `unknown` renders: the classifier could not name this one. An unrecognised
+ * code renders this and never throws — a box that failed before it ever wrote a log still has to
+ * serve this page.
+ *
+ * The action names a person rather than promising the reason is written down somewhere. `runEntry`
+ * reports the scrubbed error for every failure of the BOOT SEQUENCE — but `readRecoveryState` and
+ * the pre-boot counter write both run before that try/catch, and the counter write is deliberately
+ * allowed to throw, so a failed state volume reaches the outer handler, which logs
+ * `server.boot_failed { errorCode }` and no detail at all. Naming the person is true in every case;
+ * naming the detail was not.
  */
 export const GENERIC_TEXT: OperatorText = {
   title: "Waitron could not start.",
-  action: "Whoever installed this box can read the reason from it.",
+  action: "Ask whoever installed this box to look at it.",
 };
 
 /**

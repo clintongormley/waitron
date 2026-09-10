@@ -199,11 +199,18 @@ describe("curated operator text", () => {
     }
   });
 
-  // The CONVERSE of the test above, and the one that matters: every code the entrypoint can
-  // actually persist must have an entry. Without it the table can rot into uselessness one new code
-  // at a time, each falling silently to the generic line — which is what `unknown` did to the first
-  // real box's operator.
-  it("has an entry for every code the entrypoint can classify or throw", () => {
+  // The CONVERSE of the test above. Its scope is the ENTRYPOINT's OWN vocabulary — the codes
+  // `classifyBootFailure` produces and the codes `runEntry` throws before `startServer` — and it is
+  // NOT every code that can reach the page: the entrypoint persists `classifyBootFailure(error)` for
+  // any error out of `startServer`, so the whole of `boot.ts` lands here, and
+  // `provisioning.replication_not_ready`, `sync.subscription_failed` and the `credentials.*` family
+  // do fall to the generic line. The name says "the entrypoint" for that reason.
+  //
+  // `deployment.environment_mismatch` is listed by hand as the one exception, because it is the
+  // `boot.ts` code a generic line fails worst: a box running against the OTHER environment's
+  // database is CLAUDE.md §5 territory (a pre-production sale burns a hole in the production
+  // series), and "Waitron could not start." would leave its operator pressing Retry.
+  it("has an entry for every code the entrypoint itself classifies or throws", () => {
     const classified = [
       "provisioning.database_unreachable",
       "provisioning.schema_mismatch",
@@ -217,10 +224,45 @@ describe("curated operator text", () => {
       "migrations.incomplete",
       "server.boot_incomplete",
     ];
-    const missing = [...classified, ...thrownByRunEntry].filter(
+    const fromBootByHand = ["deployment.environment_mismatch"];
+    const missing = [...classified, ...thrownByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
     );
     expect(missing).toEqual([]);
+  });
+
+  // `classifyBootFailure` returns `provisioning.database_unreachable` for three different causes: the
+  // bounded connection wait timing out, and the SQLSTATEs `28P01` (wrong password) and `3D000` (no
+  // such database) (`boot-failure.ts`, `UNREACHABLE_SQL_STATES`). Restarting a box cannot change a
+  // password or create a database, so an action that ends at "restart the box" is advice that cannot
+  // work for two of the three. Both halves are asserted: the retry that DOES fix the transient cause,
+  // and the person who can fix the other two.
+  it("offers a database_unreachable both a retry and the person a restart cannot replace", () => {
+    const text = OPERATOR_TEXT["provisioning.database_unreachable"];
+    expect(text).toBeDefined();
+    expect(text!.action).toMatch(/retry/i);
+    expect(text!.action).toMatch(/ask whoever installed this box/i);
+  });
+
+  // A cold restore RUNS the migrations (`apps/server/src/restore.ts` → `applyMigrations`), so a
+  // restore is one of the things that can raise `migrations.incomplete` in the first place. Telling
+  // an operator whose backup is from the failing release point to restore is a loop with no exit,
+  // and this page is the only instruction they get.
+  it("does not answer a partly-updated database with the restore that can raise it", () => {
+    const text = OPERATOR_TEXT["migrations.incomplete"];
+    expect(text).toBeDefined();
+    expect(text!.action).not.toMatch(/restore it from a backup, or reinstall/i);
+    expect(text!.action).toMatch(/ask whoever installed this box/i);
+  });
+
+  // The generic line used to promise the reason had been written where the installer could read it.
+  // `runEntry` writes it from ONE try/catch, and `readRecoveryState` and the pre-boot counter write
+  // both run before that block — the counter write deliberately allowed to throw — so a failed state
+  // volume escapes to the outer handler, which logs `server.boot_failed { errorCode }` and no detail
+  // at all. The page must not promise what that path does not deliver.
+  it("does not promise the generic failure's reason was written down anywhere", () => {
+    expect(GENERIC_TEXT.action).not.toMatch(/read the reason/i);
+    expect(GENERIC_TEXT.action).toMatch(/ask whoever installed this box/i);
   });
 
   it("renders the generic line for a code it does not know, without throwing", async () => {
