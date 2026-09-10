@@ -1508,17 +1508,22 @@ jobs:
           set -euo pipefail
           # GHCR refuses an uppercase path, and github.repository_owner keeps the account's casing.
           repo="ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')/waitron"
+          # The print-agent image is the app repo with a `-print-agent` suffix, so the casing fold is shared.
+          agent_repo="$repo-print-agent"
           # Always the immutable one, so a box can be pinned to an exact commit.
-          tags="$repo:sha-$(printf '%s' "$SHA" | cut -c1-7)"
+          short="sha-$(printf '%s' "$SHA" | cut -c1-7)"
+          tags="$repo:$short"
+          agent_tags="$agent_repo:$short"
           case "$REF" in
             # What deploy/compose.yml defaults to: `docker compose pull` on a box follows main.
-            refs/heads/main) tags="$tags,$repo:main" ;;
+            refs/heads/main) tags="$tags,$repo:main"; agent_tags="$agent_tags,$agent_repo:main" ;;
             # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
             # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.
-            refs/tags/v*) tags="$tags,$repo:${REF#refs/tags/v}" ;;
+            refs/tags/v*) tags="$tags,$repo:${REF#refs/tags/v}"; agent_tags="$agent_tags,$agent_repo:${REF#refs/tags/v}" ;;
           esac
-          echo "$tags"
+          echo "$tags"; echo "$agent_tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v3
         with:
@@ -1537,6 +1542,19 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,ignore-error=true
+
+      - name: Publish the print-agent image to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: print-agent
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.agent_tags }}
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
