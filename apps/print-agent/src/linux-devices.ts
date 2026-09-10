@@ -72,8 +72,11 @@ export function createLinuxDevices(opts: LinuxDeviceOptions = {}): LinuxDevices 
   return {
     async visibleDevices(): Promise<VisibleDevice[]> {
       const usbDevices = (await usb()).map(dropPath);
-      // A Bluetooth adapter can be absent or wedged; its failure must never suppress the USB inventory
-      // the pull carries, so BT is best-effort here (an explicit scan/pair still surfaces the error).
+      // Paired-BT enumeration is best-effort and, while BT resolution is deferred (Step 6c receipt),
+      // effectively unused: `pairedLocal()` builds each device path via the live binding, which throws
+      // unconditionally until a real per-MAC RFCOMM node exists, so this catch currently drops EVERY
+      // paired BT device in production — not only a missing/wedged adapter. Either way a BT failure must
+      // never suppress the USB inventory the pull carries (an explicit scan/pair still surfaces it).
       let btDevices: VisibleDevice[];
       try {
         btDevices = (await pairedLocal()).map(dropPath);
