@@ -96,6 +96,8 @@ describe("applyInstance against a blank container", () => {
       expect(after.inside?.stamp).toBe("preproduction");
       expect(after.inside?.migratedSets).toEqual([
         "core",
+        "catalogue",
+        "venue-service",
         "identity",
         "workforce",
         "workforce-es",
