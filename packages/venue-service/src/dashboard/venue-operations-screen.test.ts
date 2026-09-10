@@ -99,6 +99,17 @@ async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {
 }
 
 describe("venue operations screen", () => {
+  it("shows a load error when the venue configuration request fails", async () => {
+    const api = {
+      load: vi.fn().mockRejectedValue(new Error("offline")),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+
+    expect(
+      el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.textContent,
+    ).toContain("could not be loaded");
+  });
+
   it("shows a summary and a message beside every missing required department field", async () => {
     const api = { load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -163,6 +174,32 @@ describe("venue operations screen", () => {
     (el.shadowRoot!.querySelector('[data-test="deactivate-department-d2"]') as HTMLElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.deactivateDepartment).toHaveBeenCalledWith("d2");
+  });
+
+  it("shows a save error and prevents a second save while the first is pending", async () => {
+    let rejectSave!: (error: Error) => void;
+    const pending = new Promise<void>((_resolve, reject) => {
+      rejectSave = reject;
+    });
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      deactivateDepartment: vi.fn().mockReturnValue(pending),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const button = el.shadowRoot!.querySelector(
+      '[data-test="deactivate-department-d2"]',
+    ) as HTMLElement;
+
+    button.click();
+    button.click();
+    expect(api.deactivateDepartment).toHaveBeenCalledTimes(1);
+    rejectSave(new Error("write failed"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+
+    expect(
+      el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.textContent,
+    ).toContain("could not be saved");
   });
 
   it("creates a second department from the required management fields", async () => {
@@ -295,6 +332,72 @@ describe("venue operations screen", () => {
       zoneId: "z1",
       stationId: "s1",
     });
+  });
+
+  it("routes a category across all zones without preparation", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      createRoute: vi.fn().mockResolvedValue({ id: "r2" }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    (el.shadowRoot!.querySelector('[name="route-subject"]') as HTMLSelectElement).value =
+      "category:c1";
+    (el.shadowRoot!.querySelector('[name="route-zone"]') as HTMLSelectElement).value = "";
+    (el.shadowRoot!.querySelector('[name="route-target"]') as HTMLSelectElement).value = "none";
+    (el.shadowRoot!.querySelector('[data-test="add-route"]') as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(api.createRoute).toHaveBeenCalledWith({
+      categoryId: "c1",
+      zoneId: null,
+      noPreparation: true,
+    });
+  });
+
+  it("renders every readiness issue and both preparation-route shapes", async () => {
+    const variedModel: VenueServiceView = {
+      ...model,
+      readiness: [
+        { code: "venue.department_missing" },
+        { code: "zone.department_missing", zoneId: "z1", zoneName: "Dining room" },
+        { code: "zone.menu_missing", zoneId: "z2", zoneName: "Deli counter" },
+        {
+          code: "zone.menu_empty",
+          zoneId: "z1",
+          zoneName: "Dining room",
+          menuId: "m1",
+          menuName: "Casa Delgado",
+        },
+      ],
+      routes: [
+        {
+          id: "r1",
+          zoneId: null,
+          categoryId: "c1",
+          productId: null,
+          stationId: null,
+          noPreparation: true,
+        },
+        {
+          id: "r2",
+          zoneId: "z1",
+          categoryId: null,
+          productId: "p1",
+          stationId: "s1",
+          noPreparation: false,
+        },
+      ],
+    };
+    const api = { load: vi.fn().mockResolvedValue(variedModel) } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const text = el.shadowRoot!.textContent!;
+
+    expect(text).toContain("Create an active department");
+    expect(text).toContain("Dining room needs an active department");
+    expect(text).toContain("Deli counter needs a default menu");
+    expect(text).toContain("Casa Delgado has no products for Dining room");
+    expect(text).toContain("All service zones");
+    expect(text).toContain("No preparation");
   });
 
   it("removes a preparation route from the shared data table", async () => {
