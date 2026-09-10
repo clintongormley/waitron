@@ -136,8 +136,10 @@ the CA and leaf certificates, the node's own secrets — is minted on the first 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
 sniffing everywhere the box reports its own addresses: the SANs in the leaf certificate it presents,
 the reach URLs and QR the setup wizard shows, and the mDNS responder's answers. Leave it empty on a
-real box — host networking already sees the LAN, and unset means today's sniffing behaviour exactly.
-Set it where the container cannot see the LAN itself: a bridge or cloud profile, and Docker Desktop,
+real box — unset, the box advertises only its **default-route interface** (its real uplink), so the
+Docker bridge interfaces every box carries (`docker0`/`br-*`, on 172.x) are not advertised and
+`waitron.local` resolves to a reachable address without any override. Set it where the container
+cannot see the LAN itself: a bridge or cloud profile, and Docker Desktop,
 whose `--network host` puts the container on the Linux VM's network (`192.168.65.x`), not on the
 Mac's. Loopback addresses are refused, and a non-IPv4 entry fails the boot with
 `server.config_invalid`.

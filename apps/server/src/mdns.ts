@@ -68,8 +68,7 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
   const { hostname, getAddresses, log } = deps;
   // Only ever runs on the real-`multicast-dns` default path — every unit test injects `makeSocket` —
   // so it is left to the `apps/server` coverage aggregate rather than pinned by a real-socket unit
-  // test, the same real-only-path posture `box-reach.ts`'s `listBoxIpv4` and `discovery-api.ts`'s
-  // default `renderQrSvg` record.
+  // test, the same real-only-path posture `discovery-api.ts`'s default `renderQrSvg` records.
   const makeSocket = deps.makeSocket ?? (() => multicastDns() as MdnsSocket);
   const socket = makeSocket();
 

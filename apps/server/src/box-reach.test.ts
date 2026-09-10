@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildReachInfo, parseBoxAddresses } from "./box-reach.js";
+import type { networkInterfaces } from "node:os";
+import { buildReachInfo, defaultRouteIface, listBoxIpv4, parseBoxAddresses } from "./box-reach.js";
+
+type Ifaces = ReturnType<typeof networkInterfaces>;
+const asIfaces = (v: unknown): Ifaces => v as Ifaces;
 
 const base = { hostname: "waitron.local", listIpv4: () => ["192.168.1.5", "10.0.0.9"] };
 
@@ -104,5 +108,86 @@ describe("parseBoxAddresses", () => {
         params: expect.objectContaining({ reason: "box_addresses_invalid" }),
       }),
     );
+  });
+});
+
+describe("listBoxIpv4", () => {
+  // A box always runs under Docker (network_mode: host), so the host carries docker0 / br-* bridge
+  // interfaces alongside the real LAN NIC. Their 172.x addresses are non-internal, so the old
+  // loopback-only filter advertised them over mDNS / in the cert SANs — and a phone that resolved
+  // waitron.local to one could not connect. Advertise only the default-route interface's addresses.
+  const withBridges = asIfaces({
+    lo: [{ address: "127.0.0.1", family: "IPv4", internal: true }],
+    eth0: [
+      { address: "192.168.10.10", family: "IPv4", internal: false },
+      { address: "fe80::1", family: "IPv6", internal: false },
+    ],
+    docker0: [{ address: "172.17.0.1", family: "IPv4", internal: false }],
+    "br-abc123": [{ address: "172.18.0.1", family: "IPv4", internal: false }],
+  });
+
+  it("returns only the default-route interface's IPv4, excluding Docker bridges", () => {
+    expect(listBoxIpv4({ interfaces: () => withBridges, defaultRouteIface: () => "eth0" })).toEqual(
+      ["192.168.10.10"],
+    );
+  });
+
+  it("keeps a legitimate 172.x LAN when it is the uplink, not treating it as a bridge", () => {
+    const on172 = asIfaces({
+      eth0: [{ address: "172.16.5.9", family: "IPv4", internal: false }],
+      docker0: [{ address: "172.17.0.1", family: "IPv4", internal: false }],
+    });
+    expect(listBoxIpv4({ interfaces: () => on172, defaultRouteIface: () => "eth0" })).toEqual([
+      "172.16.5.9",
+    ]);
+  });
+
+  it("falls back to non-virtual interfaces when there is no default route", () => {
+    // No uplink resolvable (isolated/static LAN): keep every non-internal IPv4 EXCEPT those on a
+    // known virtual/container bridge interface, so a box with a gateway is not left unreachable.
+    expect(
+      listBoxIpv4({ interfaces: () => withBridges, defaultRouteIface: () => undefined }),
+    ).toEqual(["192.168.10.10"]);
+  });
+});
+
+describe("defaultRouteIface", () => {
+  it("reads the interface carrying the 0.0.0.0 route from /proc/net/route", () => {
+    const route =
+      "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n" +
+      "eth0\t00000000\t010A0A0A\t0003\t0\t0\t100\t00000000\t0\t0\t0\n" +
+      "docker0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n";
+    expect(defaultRouteIface(() => route)).toBe("eth0");
+  });
+
+  it("is undefined when the route table cannot be read (e.g. not Linux)", () => {
+    expect(
+      defaultRouteIface(() => {
+        throw new Error("ENOENT");
+      }),
+    ).toBeUndefined();
+  });
+
+  it("is undefined when there is no default route", () => {
+    const route = "Iface\tDestination\tGateway\tFlags\n" + "docker0\t000011AC\t00000000\t0001\n";
+    expect(defaultRouteIface(() => route)).toBeUndefined();
+  });
+
+  it("ignores a 0.0.0.0/1 route (zero destination but non-zero mask), not just the destination", () => {
+    // A VPN often installs 0.0.0.0/1 + 128.0.0.0/1 to override the default without replacing it; the
+    // destination is zero but the mask is not, so it must NOT be taken for the real default route.
+    const route =
+      "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n" +
+      "tun0\t00000000\t00000000\t0003\t0\t0\t0\t00000080\t0\t0\t0\n" +
+      "eth0\t00000000\t0102A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\n";
+    expect(defaultRouteIface(() => route)).toBe("eth0");
+  });
+
+  it("picks the lowest-metric default route when several compete", () => {
+    const route =
+      "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n" +
+      "wlan0\t00000000\t0102A8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0\n" +
+      "eth0\t00000000\t0102A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\n";
+    expect(defaultRouteIface(() => route)).toBe("eth0");
   });
 });

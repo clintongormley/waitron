@@ -1,13 +1,15 @@
+import { readFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { AppError } from "@waitron/shared";
 import { isPermittedLeafIpv4 } from "./self-signed-cert.js";
 import "./errors.js";
 
 /**
- * Pure helpers describing how a device on the LAN reaches this box: its non-internal IPv4
- * addresses, the URLs built from them plus the `.local` hostname, and the single URL the IP-QR
- * encodes. The discovery API, the boot wiring and `box-secrets.ts` (the leaf's iPAddress SANs)
- * consume this; nothing here does I/O beyond enumerating the interfaces, and even that is injectable.
+ * Pure helpers describing how a device on the LAN reaches this box: its LAN IPv4 addresses (the
+ * default-route interface's — see `listBoxIpv4`), the URLs built from them plus the `.local`
+ * hostname, and the single URL the IP-QR encodes. The discovery API, the boot wiring and
+ * `box-secrets.ts` (the leaf's iPAddress SANs) consume this; the only I/O is enumerating the
+ * interfaces and reading the default route, and both are injectable.
  */
 
 export interface ReachInfo {
@@ -31,20 +33,80 @@ export interface BuildReachOptions {
   listIpv4?: () => string[];
 }
 
+/** Interface-name prefixes for the virtual/container bridges a box's host carries. Used ONLY on the
+ *  fallback path (no default route resolvable): the box always runs under Docker, so `docker0`,
+ *  `br-<hash>` and `docker_gwbridge` sit beside the real NIC, and their 172.x addresses are
+ *  non-internal — advertising them makes `waitron.local` resolve to an address no device can reach.
+ *  A denylist is brittle, which is why it is only the fallback; the default-route interface is the
+ *  primary signal and needs no name knowledge. VPN interfaces (tun/tap/wireguard) are deliberately
+ *  NOT listed: on a box reachable only over a VPN with no default route, that address may be its
+ *  only reach, so the fallback must keep it. */
+const VIRTUAL_IFACE_PREFIXES = ["docker", "br-", "veth", "virbr", "cni", "flannel", "cali"];
+
 /**
- * Non-internal IPv4 addresses of this host. `internal` drops loopback and the `IPv4` filter drops
- * the IPv6 entries `networkInterfaces` returns for the same interface.
+ * The interface carrying the default route (0.0.0.0/0), read from Linux's `/proc/net/route`, or
+ * undefined when there is none or it cannot be read (a non-Linux dev host, an isolated LAN with no
+ * gateway). The columns are `Iface Destination Gateway Flags RefCnt Use Metric Mask …`; the default
+ * route is the one whose Destination AND Mask are both all-zero (a `0.0.0.0/1` route has a zero
+ * destination but a non-zero mask, and is NOT it), and when several exist the lowest Metric wins (so
+ * a wired NIC beats a higher-metric Wi-Fi or VPN). The reader is injected so the parse is testable.
  *
- * Left to the `apps/server` coverage aggregate rather than pinned by a real-interface test: what it
- * returns depends on the host's interfaces, so an assertion on the VALUE would be untestable. The
- * boot suite calls it to assert the addresses it returns are ABSENT from an overridden leaf, which
- * holds whatever this host answers.
+ * `/proc/net/route` is a procfs (in-memory) file and this is read on the low-frequency mDNS/discovery
+ * paths, so the synchronous read is cheap; it is not memoized deliberately, to keep the helper pure.
  */
-export function listBoxIpv4(): string[] {
-  return Object.values(networkInterfaces())
-    .flat()
-    .filter((n): n is NonNullable<typeof n> => !!n && n.family === "IPv4" && !n.internal)
-    .map((n) => n.address);
+export function defaultRouteIface(
+  readRoute: () => string = () => readFileSync("/proc/net/route", "utf8"),
+): string | undefined {
+  let text: string;
+  try {
+    text = readRoute();
+  } catch {
+    return undefined;
+  }
+  let best: { iface: string; metric: number } | undefined;
+  for (const line of text.split("\n").slice(1)) {
+    const cols = line.trim().split(/\s+/);
+    if (cols.length < 8 || cols[1] !== "00000000" || cols[7] !== "00000000") continue;
+    const parsed = Number.parseInt(cols[6], 10);
+    const metric = Number.isNaN(parsed) ? Infinity : parsed;
+    if (best === undefined || metric < best.metric) best = { iface: cols[0], metric };
+  }
+  return best?.iface;
+}
+
+export interface ListBoxIpv4Deps {
+  /** Injected for tests; default enumerates the real interfaces. */
+  interfaces?: typeof networkInterfaces;
+  /** Injected for tests; default reads the host's default-route interface. */
+  defaultRouteIface?: () => string | undefined;
+}
+
+/**
+ * The box's own LAN IPv4 addresses — the ones it advertises over mDNS, in its leaf's iPAddress SANs
+ * and in its reach URLs. It returns ONLY the default-route interface's addresses: that is the box's
+ * real uplink, and Docker's bridges (docker0/br-*) carry no default route, so they are excluded
+ * without a name denylist and a venue legitimately on a 172.x LAN is kept (its NIC holds the route).
+ * When no default route is resolvable it falls back to every non-internal IPv4 except those on a
+ * known virtual/bridge interface, so a box with a gateway is never left unreachable.
+ *
+ * `internal` drops loopback; the `IPv4` filter drops the IPv6 entries `networkInterfaces` returns.
+ */
+export function listBoxIpv4(deps: ListBoxIpv4Deps = {}): string[] {
+  const ifaces = (deps.interfaces ?? networkInterfaces)();
+  const ipv4Of = (entries: (typeof ifaces)[string]): string[] =>
+    (entries ?? [])
+      .filter((n): n is NonNullable<typeof n> => !!n && n.family === "IPv4" && !n.internal)
+      .map((n) => n.address);
+
+  const uplink = (deps.defaultRouteIface ?? defaultRouteIface)();
+  if (uplink !== undefined) {
+    const addrs = ipv4Of(ifaces[uplink]);
+    if (addrs.length > 0) return addrs;
+  }
+
+  return Object.entries(ifaces)
+    .filter(([name]) => !VIRTUAL_IFACE_PREFIXES.some((p) => name.startsWith(p)))
+    .flatMap(([, entries]) => ipv4Of(entries));
 }
 
 /** Build `scheme://host`, appending `:port` only when it is not the scheme default (443/80). */

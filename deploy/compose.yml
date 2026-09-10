@@ -25,8 +25,9 @@ services:
       # database and the roles, then deletes it from the environment it hands the server: the server
       # itself never holds superuser credentials.
       WAITRON_BOOTSTRAP_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres
-      # Only for a profile where interface sniffing cannot see the LAN (a bridge/cloud compose, or
-      # Docker Desktop, whose "host" network is the Linux VM's). Empty = sniff, the on-prem default.
+      # Only for a profile where the default-route interface is not the LAN (a bridge/cloud compose,
+      # or Docker Desktop, whose "host" network is the Linux VM's). Empty = advertise the default-route
+      # interface only, the on-prem default (Docker bridges are excluded automatically).
       WAITRON_BOX_ADDRESSES: ${WAITRON_BOX_ADDRESSES:-}
       # The passkey relying party, and the origin every till is handed (advertisedOrigin defaults to
       # it). The image bakes waitron.local, which is right for an on-prem box and WRONG for any
