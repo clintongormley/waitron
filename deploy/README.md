@@ -86,6 +86,13 @@ to a valid length) and sets `WAITRON_IMAGE` inline for that one `docker compose 
 branch, or a commit SHA to pin exactly what you build. Add `sudo` if your user is not in the `docker`
 group; the first build takes several minutes (it builds the whole app).
 
+**It migrates the box's database one way.** If the branch carries a database migration, running it
+changes the box's database, and there is no backward migration — a plain `docker compose up -d` back
+to `:main` afterwards can fail to boot with `provisioning.database_ahead`, whose only fix is
+restoring from a backup or reinstalling. The script cannot tell whether a given ref carries one (the
+branch's files are not on the box until the build fetches them), so it warns every time. Safe on a
+demo box; take a backup first on a box holding a real venue's records.
+
 ### The health check accepts either endpoint
 
 `GET /health` is **503 by design** on a box that has not been provisioned yet — no duty loop means
