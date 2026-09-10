@@ -66,9 +66,41 @@ describe("redactSecrets", () => {
     );
   });
 
-  // Control for the query-parameter branch: `pg` reads `password` case-sensitively (`?PASSWORD=`
-  // parses to a null password, measured), and a non-password parameter must survive untouched, or
-  // the branch above would also pass with a rule that eats every query string.
+  // Control for the query-parameter branch: `pg` reads `password` case-sensitively, and a
+  // non-password parameter must survive untouched, or the branch above would also pass with a rule
+  // that eats every query string. Measured on `postgres://u@localhost/db?PASSWORD=UPPER_SECRET`:
+  // `pg-connection-string@2.14.0`'s `parse()` returns the EMPTY STRING for `password`, and a
+  // `pg@8.22.0` `Client` then reports `null` because it falls back to its default when the parsed
+  // value is empty. (An earlier version of this comment said "parses to a null password" — the
+  // conclusion holds, the upper-case parameter is not a credential position, but null is what the
+  // Client reports, not what the parser returns.)
+  // Two shapes the first version of the character classes stopped at, both measured against the
+  // installed parser (`pg-connection-string@2.14.0`, the one `pg@8.22.0` resolves):
+  //   postgres://u:p@ss@localhost/db      -> password "p@ss"
+  //   postgres://u:se cret@localhost/db   -> password "se cret"
+  // An unencoded `@` is legal in the user-info because WHATWG `new URL` splits the authority on the
+  // LAST `@`; a space survives because `parse` percent-encodes spaces before handing the string to
+  // `new URL`. Masking up to the first `@` left `ss` on the page, and the spaced password was not
+  // masked at all.
+  it("masks a password containing an unencoded @", () => {
+    expect(redactSecrets("connect failed: postgres://u:p@ss@localhost/db")).toBe(
+      "connect failed: postgres://u:***@localhost/db",
+    );
+  });
+
+  it("masks a password containing a space", () => {
+    expect(redactSecrets("connect failed: postgres://u:se cret@localhost/db")).toBe(
+      "connect failed: postgres://u:***@localhost/db",
+    );
+  });
+
+  // The same two shapes in the query position: `?password=se cret` also parses to "se cret".
+  it("masks a query password containing a space", () => {
+    expect(redactSecrets("postgres://u@localhost/db?password=se cret")).toBe(
+      "postgres://u@localhost/db?password=***",
+    );
+  });
+
   it("leaves other query parameters, and a differently-cased one, alone", () => {
     const text = "postgres://u@localhost/db?sslmode=require&application_name=waitron";
     expect(redactSecrets(text)).toBe(text);
