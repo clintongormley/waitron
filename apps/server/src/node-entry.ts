@@ -8,8 +8,8 @@ import { AppError, isAppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { createPostgresDb } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
-// Aliased: `EntryDeps` has a field of the same name, and an unaliased import beside it reads as
-// though the object literal below were calling itself.
+// Aliased: this module exports its own `assertNotAhead` — the wrapper that opens the connection —
+// and `EntryDeps` has a field of the same name.
 import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning";
 import {
   DEFAULT_MIGRATIONS_ROOT,
@@ -38,7 +38,7 @@ import {
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
-import { recoveryApp } from "./recovery-surface.js";
+import { BOOT_INCOMPLETE, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
 import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
@@ -59,12 +59,6 @@ const STAYED_UP_MS = 120_000;
 
 const WAIT_ATTEMPTS = 60;
 const WAIT_DELAY_MS = 1000;
-
-/** The recovery-state marker for an attempt whose outcome is not known YET — written before the
- * server starts, so a boot that HANGS (and therefore never produces a real code) still leaves the
- * page something true to say. Not an `AppError` code: nothing throws it. A boot that does throw
- * overwrites it with `codeOf`'s classification. */
-const BOOT_INCOMPLETE = "server.boot_incomplete";
 
 export interface WaitDeps {
   /** One connect-and-query round trip, or a rejection. */
@@ -217,8 +211,9 @@ export interface EntryDeps {
   /** Executes a staged restore before loadBoxEnv/startServer opens application pools. */
   runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
   /** Refuses a database migrated by a different image. Injected so `runEntry` stays unit-testable;
-   *  the real one opens its own connection (see the wiring at the bottom of this file). */
-  assertNotAhead?: (migrationsDatabaseUrl: string) => Promise<void>;
+   *  it defaults to the real `assertNotAhead` above, like every other optional dependency here — a
+   *  caller that omits it gets the guard, not a silence no test could notice. */
+  assertNotAhead?: (migrationsDatabaseUrl: string, migrationsRoot: string) => Promise<void>;
   /**
    * The INSTALLER's channel — the container's stdout, which is `docker logs`, never the
    * `waitron.log` the recovery page tails. It is the one place the caught error's own words may
@@ -243,9 +238,11 @@ export interface EntryDeps {
   /**
    * Where the migration sets live. Typed `string`, never `string | null`, although
    * `ensureInstance` accepts null: null means "resolve from the bundle's own directory", which is
-   * exactly the value that fails a real container's first boot with `migrations.set_missing`. The
-   * default is the same expression `startServer` passes, so the entrypoint and the server it starts
-   * can never migrate from two different folders.
+   * exactly the value that fails a real container's first boot with `migrations.set_missing`.
+   *
+   * ONE folder, stated once here: the default is the same expression `startServer` passes, and
+   * `runEntry` hands this same value to the ahead check — so the entrypoint, its ahead check and the
+   * server it starts can never read three different folders.
    */
   migrationsRoot?: string;
   exit?: (code: number) => void;
@@ -356,10 +353,32 @@ function failureDetail(error: unknown): string {
 }
 
 /**
+ * Refuse a database carrying migrations this image does not ship: connect as the migrator, compare
+ * the journals against the migration files under `migrationsRoot`, close. The default for
+ * `EntryDeps.assertNotAhead`, so it is the shape `runStagedRestore` already sets — the real
+ * implementation, never a no-op that a caller could lose the guard to by forgetting the dependency.
+ *
+ * `migrationsRoot` is a parameter rather than a closure over the entrypoint's own, so this can BE
+ * that default: the one folder both halves read is `EntryDeps.migrationsRoot`, which `runEntry`
+ * passes in.
+ */
+export async function assertNotAhead(
+  migrationsDatabaseUrl: string,
+  migrationsRoot: string,
+): Promise<void> {
+  const db = await createPostgresDb(migrationsDatabaseUrl);
+  try {
+    await assertDatabaseNotAhead(db, manifestSets(), migrationsRoot);
+  } finally {
+    await db.close();
+  }
+}
+
+/**
  * One container start: decide the level, bring the cluster into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
  *
- * THREE orderings carry the whole design, and each is invisible in production if it is wrong:
+ * FOUR orderings carry the whole design, and each is invisible in production if it is wrong:
  *
  * 1. The level is read FIRST, before anything touches Postgres. A database-side failure is exactly
  *    what puts a box in recovery, so deciding after the wait and the bootstrap would make the page
@@ -373,6 +392,11 @@ function failureDetail(error: unknown): string {
  * 3. It CLEARS only from the stayed-up callback — `startServer` resolved AND the process then
  *    survived `STAYED_UP_MS`. Clearing on "started" alone is a measurement where pass and fail look
  *    alike: a module throwing five seconds in would reset the counter on every attempt.
+ * 4. The ahead check runs AFTER `ensureInstance` and BEFORE `startServer`. Before `ensureInstance`
+ *    it would refuse a legitimately BEHIND database — an ordinary upgrade — which `ensureInstance`
+ *    is about to migrate forward; after `startServer` it would arrive behind the first query that
+ *    touches the changed schema, which is the unclassified driver error this branch exists to
+ *    remove. Pinned by "checks for an ahead database after ensureInstance, never before".
  *
  * `startServer` resolving is the signal rather than a healthy `/health` probe because `/health` is
  * 503 on a setup box by design, so a health-gated reset would drive every unprovisioned box into
@@ -448,7 +472,10 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     // whole point — drizzle applies and reports nothing for an ahead journal, so the mismatch would
     // otherwise surface as an unclassified driver error in whatever query first touched the changed
     // schema (spec §4.2, proven in `schema-ahead.pg.test.ts`).
-    await (deps.assertNotAhead ?? (() => Promise.resolve()))(urls.migrationsDatabaseUrl);
+    await (deps.assertNotAhead ?? assertNotAhead)(
+      urls.migrationsDatabaseUrl,
+      deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT,
+    );
 
     // AFTER `ensureInstance`, which has just written `instance.env` — that file is where the merged
     // environment's `DATABASE_URL` comes from.
@@ -500,8 +527,8 @@ function bootThisProcess(): Promise<void> {
   const env = { ...process.env };
   delete process.env[BOOTSTRAP_URL];
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  // `config.ts`'s own fallback, verbatim (it stores this one unresolved), so the entrypoint's own
-  // ahead check and the server it starts can never read two different folders.
+  // `config.ts`'s own fallback, verbatim (it stores this one unresolved). The one-folder rule is
+  // stated on `EntryDeps.migrationsRoot`.
   const migrationsRoot = isUnset(env.WAITRON_MIGRATIONS_DIR)
     ? DEFAULT_MIGRATIONS_ROOT
     : env.WAITRON_MIGRATIONS_DIR;
@@ -522,14 +549,6 @@ function bootThisProcess(): Promise<void> {
       }),
     ensureInstance,
     runStagedRestore,
-    assertNotAhead: async (migrationsDatabaseUrl) => {
-      const db = await createPostgresDb(migrationsDatabaseUrl);
-      try {
-        await assertDatabaseNotAhead(db, manifestSets(), migrationsRoot);
-      } finally {
-        await db.close();
-      }
-    },
     reportFailure: (text) => void process.stdout.write(`${text}\n`),
     loadBoxEnv,
     readRecoveryState,

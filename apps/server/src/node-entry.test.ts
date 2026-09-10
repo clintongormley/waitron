@@ -22,6 +22,10 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
         replicationPassword: "r",
       }),
     ),
+    // Stubbed here, unlike `runStagedRestore` below it: the real default opens a connection to
+    // whatever `ensureInstance` returned, and these suites hand it a URL nothing answers. One test
+    // (`defaults the ahead check to the real one`) overrides this back to `undefined` on purpose.
+    assertNotAhead: vi.fn(() => Promise.resolve()),
     loadBoxEnv: vi.fn((base: NodeJS.ProcessEnv) => Promise.resolve({ ...base })),
     readRecoveryState: vi.fn(() => Promise.resolve(FRESH)),
     writeRecoveryState: vi.fn(() => Promise.resolve()),
@@ -675,6 +679,38 @@ describe("runEntry", () => {
     );
     // A legitimately BEHIND database must be migrated forward before it is judged.
     expect(order).toEqual(["ensureInstance", "assertNotAhead", "startServer"]);
+  });
+
+  // `assertNotAhead` used to default to `() => Promise.resolve()`, alone among this interface's
+  // optional dependencies — every other one defaults to the real implementation, the line above it
+  // being `deps.runStagedRestore ?? runStagedRestore`. A no-op default loses the guard for any caller
+  // that forgets the dependency, and silently: nothing throws, nothing logs, the server just starts
+  // against a database the image cannot read.
+  //
+  // The probe: omit the dependency and hand `ensureInstance` a URL whose port refuses instantly
+  // (127.0.0.1:1). The real default opens a connection there, so the boot fails and the server is
+  // never started. What the FAILING case would print — a no-op default — is a resolved `runEntry`
+  // with `startServer` called, which is what this asserted before the default was changed.
+  it("defaults the ahead check to the real one, not to a no-op", async () => {
+    const startServer = vi.fn<StartServer>(() =>
+      Promise.resolve({ close: () => Promise.resolve() }),
+    );
+    await expect(
+      runEntry(
+        deps({
+          assertNotAhead: undefined,
+          ensureInstance: vi.fn(() =>
+            Promise.resolve({
+              databaseUrl: "postgres://app",
+              migrationsDatabaseUrl: "postgres://waitron@127.0.0.1:1/waitron",
+              replicationPassword: "r",
+            }),
+          ),
+          startServer,
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(startServer).not.toHaveBeenCalled();
   });
 });
 
