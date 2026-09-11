@@ -24,6 +24,13 @@ const DEFAULT_CARD: CardFacts = {
   authCode: "328600",
 };
 
+/** A reader paired (or pairing) via `pairReader`. Distinct from `Held` (a transaction). */
+interface HeldReader {
+  id: string;
+  name: string;
+  status: string;
+}
+
 interface Held extends CardFacts {
   id: string;
   clientTransactionId: string;
@@ -44,7 +51,12 @@ interface Held extends CardFacts {
  * findable — 404 — until it resolves; models a reader that has not started the checkout),
  * `refundRefusesNext`; `resolveOnFirstFind(status)` gives the next checkout `status` the first time
  * it is polled (a resolution that lands mid-collect); `setStatus(clientTransactionId, status)`
- * writes any status, including `REFUNDED` or an unknown one, for the sweep tests. */
+ * writes any status, including `REFUNDED` or an unknown one, for the sweep tests.
+ *
+ * Reader management (Task 6/7): `pairReader` inserts a reader as `processing` — matching the real
+ * client, the device confirms asynchronously — and `setReaderStatus(id, status)` is the test's stand-in
+ * for that confirmation (typically to `"paired"`); `readerStatus` reports `online` for a `"paired"`
+ * reader only. `setMemberships` overrides the default single-merchant list `memberships()` returns. */
 export class FakeSumUp implements SumUpClient {
   lastCreate: Parameters<SumUpClient["createCheckout"]>[0] | undefined;
   lastRefund: { transactionId: string; amount?: Decimal } | undefined;
@@ -57,6 +69,12 @@ export class FakeSumUp implements SumUpClient {
   private nextResolveOnFirstFind: SumUpTransaction["status"] | undefined;
   private nextCard: CardFacts | undefined;
   private readonly held: Held[] = [];
+  private readonly readers: HeldReader[] = [];
+  /** Mirrors the live account's one seeded merchant (docs/research/2026-09-10-sumup-solo-experiments
+   * §0.3); override with `setMemberships` for a multi-merchant seat test. */
+  private membershipsList: { merchantCode: string; name: string }[] = [
+    { merchantCode: "MY2NPHDW", name: "Test restaurant" },
+  ];
 
   declineNext(): void {
     this.next = "FAILED";
@@ -190,5 +208,54 @@ export class FakeSumUp implements SumUpClient {
     const h = this.held.find((x) => x.id === params.transactionId);
     if (h !== undefined && params.amount === undefined) h.status = "REFUNDED";
     return Promise.resolve({ status: "accepted" });
+  }
+
+  listReaders(): Promise<{ id: string; name: string; status: string }[]> {
+    return Promise.resolve(this.readers.map((r) => ({ id: r.id, name: r.name, status: r.status })));
+  }
+
+  pairReader(params: {
+    pairingCode: string;
+    name: string;
+  }): Promise<{ id: string; status: string }> {
+    const id = nextId("rdr");
+    this.readers.push({ id, name: params.name, status: "processing" });
+    return Promise.resolve({ id, status: "processing" });
+  }
+
+  getReader(readerId: string): Promise<{ id: string; status: string } | null> {
+    const r = this.readers.find((x) => x.id === readerId);
+    return Promise.resolve(r === undefined ? null : { id: r.id, status: r.status });
+  }
+
+  /** The test's stand-in for the device confirming pairing (or any other status transition).
+   * Throws for an id `pairReader` never returned, mirroring `setStatus`'s unknown-id guard. */
+  setReaderStatus(readerId: string, status: string): void {
+    const r = this.readers.find((x) => x.id === readerId);
+    if (r === undefined) throw new Error(`FakeSumUp: no reader ${readerId}`);
+    r.status = status;
+  }
+
+  readerStatus(readerId: string): Promise<{ online: boolean; detail?: string }> {
+    const r = this.readers.find((x) => x.id === readerId);
+    if (r === undefined) return Promise.reject(new Error(`FakeSumUp: no reader ${readerId}`));
+    return Promise.resolve(
+      r.status === "paired" ? { online: true, detail: "Wi-Fi / IDLE" } : { online: false },
+    );
+  }
+
+  deleteReader(readerId: string): Promise<void> {
+    const i = this.readers.findIndex((x) => x.id === readerId);
+    if (i !== -1) this.readers.splice(i, 1);
+    return Promise.resolve();
+  }
+
+  /** Override the merchant list `memberships()` returns — default is the one seeded merchant. */
+  setMemberships(list: { merchantCode: string; name: string }[]): void {
+    this.membershipsList = list;
+  }
+
+  memberships(): Promise<{ merchantCode: string; name: string }[]> {
+    return Promise.resolve(this.membershipsList);
   }
 }

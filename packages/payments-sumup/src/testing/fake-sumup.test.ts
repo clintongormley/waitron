@@ -213,6 +213,69 @@ describe("FakeSumUp", () => {
     expect(next.status).toBe("accepted");
   });
 
+  it("pairReader inserts a reader as processing, listable and gettable", async () => {
+    const fake = new FakeSumUp();
+
+    const paired = await fake.pairReader({ pairingCode: "ABC12345", name: "Counter" });
+
+    expect(paired.status).toBe("processing");
+    expect(await fake.listReaders()).toEqual([
+      { id: paired.id, name: "Counter", status: "processing" },
+    ]);
+    expect(await fake.getReader(paired.id)).toEqual({ id: paired.id, status: "processing" });
+  });
+
+  it("setReaderStatus flips a reader from processing to paired, and readerStatus reports online", async () => {
+    const fake = new FakeSumUp();
+    const paired = await fake.pairReader({ pairingCode: "ABC12345", name: "Counter" });
+    expect((await fake.readerStatus(paired.id)).online).toBe(false);
+
+    fake.setReaderStatus(paired.id, "paired");
+
+    expect(await fake.getReader(paired.id)).toEqual({ id: paired.id, status: "paired" });
+    expect((await fake.readerStatus(paired.id)).online).toBe(true);
+  });
+
+  it("setReaderStatus throws for an unknown reader id", () => {
+    const fake = new FakeSumUp();
+    expect(() => fake.setReaderStatus("rdr_missing", "paired")).toThrow(
+      "FakeSumUp: no reader rdr_missing",
+    );
+  });
+
+  it("getReader returns null for an unknown reader id", async () => {
+    const fake = new FakeSumUp();
+    expect(await fake.getReader("rdr_missing")).toBeNull();
+  });
+
+  it("readerStatus throws for an unknown reader id", async () => {
+    const fake = new FakeSumUp();
+    await expect(fake.readerStatus("rdr_missing")).rejects.toThrow(
+      "FakeSumUp: no reader rdr_missing",
+    );
+  });
+
+  it("deleteReader removes a reader so it no longer lists or gets", async () => {
+    const fake = new FakeSumUp();
+    const paired = await fake.pairReader({ pairingCode: "ABC12345", name: "Counter" });
+
+    await fake.deleteReader(paired.id);
+
+    expect(await fake.listReaders()).toEqual([]);
+    expect(await fake.getReader(paired.id)).toBeNull();
+  });
+
+  it("memberships defaults to one merchant, and setMemberships overrides it", async () => {
+    const fake = new FakeSumUp();
+    expect(await fake.memberships()).toEqual([
+      { merchantCode: "MY2NPHDW", name: "Test restaurant" },
+    ]);
+
+    fake.setMemberships([{ merchantCode: "OTHER1", name: "Other Merchant" }]);
+
+    expect(await fake.memberships()).toEqual([{ merchantCode: "OTHER1", name: "Other Merchant" }]);
+  });
+
   it("records the last createCheckout and refund params, and nothing before the first call", async () => {
     const fake = new FakeSumUp();
     expect(fake.lastCreate).toBeUndefined();

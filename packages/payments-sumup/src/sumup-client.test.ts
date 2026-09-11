@@ -182,3 +182,170 @@ describe("sumupClient findTransaction card mapping", () => {
     expect(t).toEqual({ id: "txn_3", status: "SUCCESSFUL", amount: decimal("1.00") });
   });
 });
+
+// The five reader-management calls (Task 6) plus `memberships`, used by the reader-pairing UI
+// (Task 7's SumUp seat) to pair/monitor/remove a reader and let the operator pick a merchant. Each
+// test asserts the exact method + path — the shapes are the experiments runbook's recorded live
+// responses (docs/research/2026-09-10-sumup-solo-experiments.md §0.3-0.5), not a guess.
+describe("sumupClient reader management", () => {
+  function stub(
+    responder: (method: string, pathname: string) => { status: number; body?: unknown },
+  ): { fetch: typeof fetch; calls: [string, string][] } {
+    const calls: [string, string][] = [];
+    const f: typeof fetch = (url, init) => {
+      const method = (init as RequestInit | undefined)?.method ?? "GET";
+      const pathname = new URL(String(url)).pathname;
+      calls.push([method, pathname]);
+      const { status, body } = responder(method, pathname);
+      // A 204 (deleteReader) forbids a body on the Response constructor entirely — not just an
+      // empty string — so it takes a distinct branch with no headers either.
+      if (status === 204) return Promise.resolve(new Response(null, { status: 204 }));
+      const text = body === undefined ? "" : JSON.stringify(body);
+      return Promise.resolve(
+        new Response(text, { status, headers: { "content-type": "application/json" } }),
+      );
+    };
+    return { fetch: f, calls };
+  }
+
+  it("lists the readers paired to the merchant account", async () => {
+    const s = stub(() => ({
+      status: 200,
+      body: {
+        items: [
+          { id: "rdr_1", name: "Counter", status: "paired" },
+          { id: "rdr_2", name: "Terrace", status: "paired" },
+        ],
+      },
+    }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MY2NPHDW", fetch: s.fetch });
+
+    const readers = await client.listReaders();
+
+    expect(readers).toEqual([
+      { id: "rdr_1", name: "Counter", status: "paired" },
+      { id: "rdr_2", name: "Terrace", status: "paired" },
+    ]);
+    expect(s.calls).toContainEqual(["GET", "/v0.1/merchants/MY2NPHDW/readers"]);
+  });
+
+  it("pairs a reader from a code", async () => {
+    const calls: [string, string][] = [];
+    const fetchStub = async (url: string, init: RequestInit) => {
+      calls.push([init.method!, new URL(url).pathname]);
+      return new Response(JSON.stringify({ id: "rdr_9", status: "processing" }), { status: 201 });
+    };
+    const c = sumupClient({
+      apiKey: "k",
+      merchantCode: "MY2NPHDW",
+      fetch: fetchStub as typeof fetch,
+    });
+
+    const r = await c.pairReader({ pairingCode: "ABC12345", name: "Counter" });
+
+    expect(r).toEqual({ id: "rdr_9", status: "processing" });
+    expect(calls).toContainEqual(["POST", "/v0.1/merchants/MY2NPHDW/readers"]);
+  });
+
+  it("sends the pairing code and name as pairing_code/name in the request body", async () => {
+    let seenBody: string | undefined;
+    const f: typeof fetch = (_url, init) => {
+      seenBody = String((init as RequestInit | undefined)?.body ?? "");
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "rdr_9", status: "processing" }), { status: 201 }),
+      );
+    };
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: f });
+
+    await client.pairReader({ pairingCode: "ABC12345", name: "Counter" });
+
+    expect(JSON.parse(seenBody ?? "null")).toEqual({
+      pairing_code: "ABC12345",
+      name: "Counter",
+    });
+  });
+
+  it("gets a single reader by id", async () => {
+    const s = stub(() => ({ status: 200, body: { id: "rdr_1", status: "paired" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    const r = await client.getReader("rdr_1");
+
+    expect(r).toEqual({ id: "rdr_1", status: "paired" });
+    expect(s.calls).toContainEqual(["GET", "/v0.1/merchants/MC/readers/rdr_1"]);
+  });
+
+  it("returns null for a reader id SumUp does not recognise", async () => {
+    const s = stub(() => ({ status: 404, body: { detail: "Reader not found" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    const r = await client.getReader("rdr_missing");
+
+    expect(r).toBeNull();
+  });
+
+  it("maps an ONLINE reader status to online:true with connection/screen detail", async () => {
+    const s = stub(() => ({
+      status: 200,
+      body: {
+        data: {
+          status: "ONLINE",
+          connection_type: "Wi-Fi",
+          state: "IDLE",
+          firmware_version: "3.3.42.2",
+        },
+      },
+    }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    const status = await client.readerStatus("rdr_1");
+
+    expect(status.online).toBe(true);
+    expect(status.detail).toContain("Wi-Fi");
+    expect(status.detail).toContain("IDLE");
+    expect(s.calls).toContainEqual(["GET", "/v0.1/merchants/MC/readers/rdr_1/status"]);
+  });
+
+  it("maps an OFFLINE reader status to online:false", async () => {
+    const s = stub(() => ({
+      status: 200,
+      body: { data: { status: "OFFLINE", connection_type: "Wi-Fi", state: "IDLE" } },
+    }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    const status = await client.readerStatus("rdr_1");
+
+    expect(status.online).toBe(false);
+  });
+
+  it("deletes a reader", async () => {
+    const s = stub(() => ({ status: 204 }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    await client.deleteReader("rdr_1");
+
+    expect(s.calls).toContainEqual(["DELETE", "/v0.1/merchants/MC/readers/rdr_1"]);
+  });
+
+  it("lists the merchant memberships this API key can act as", async () => {
+    const s = stub(() => ({
+      status: 200,
+      body: {
+        items: [
+          {
+            resource_id: "MY2NPHDW",
+            type: "merchant",
+            resource: { name: "Test restaurant" },
+            roles: ["role_admin", "role_owner"],
+          },
+        ],
+      },
+    }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    const memberships = await client.memberships();
+
+    expect(memberships).toEqual([{ merchantCode: "MY2NPHDW", name: "Test restaurant" }]);
+    expect(s.calls).toContainEqual(["GET", "/v0.1/memberships"]);
+  });
+});

@@ -35,7 +35,7 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
   const timeoutMs = opts.timeoutMs ?? 20_000;
   const mc = encodeURIComponent(opts.merchantCode);
   const call = async (
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     body?: unknown,
   ): Promise<{ status: number; json: unknown }> => {
@@ -143,6 +143,48 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         p.amount === undefined ? {} : { amount: toMinorUnits(p.amount) },
       );
       return { status: r.status >= 400 ? "refused" : "accepted" } as const;
+    },
+    async listReaders() {
+      const r = await call("GET", `/v0.1/merchants/${mc}/readers`);
+      const items = (r.json as { items: { id: string; name: string; status: string }[] }).items;
+      return items.map((i) => ({ id: i.id, name: i.name, status: i.status }));
+    },
+    async pairReader(p: { pairingCode: string; name: string }) {
+      const r = await call("POST", `/v0.1/merchants/${mc}/readers`, {
+        pairing_code: p.pairingCode,
+        name: p.name,
+      });
+      const data = r.json as { id: string; status: string };
+      return { id: data.id, status: data.status };
+    },
+    async getReader(readerId: string) {
+      const r = await call("GET", `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`);
+      if (r.status === 404) return null;
+      const data = r.json as { id: string; status: string };
+      return { id: data.id, status: data.status };
+    },
+    async readerStatus(readerId: string) {
+      const r = await call(
+        "GET",
+        `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}/status`,
+      );
+      const data = (
+        r.json as { data: { status: string; connection_type?: string; state?: string } }
+      ).data;
+      const parts = [data.connection_type, data.state].filter((v): v is string => v !== undefined);
+      return {
+        online: data.status === "ONLINE",
+        ...(parts.length > 0 ? { detail: parts.join(" / ") } : {}),
+      };
+    },
+    async deleteReader(readerId: string): Promise<void> {
+      await call("DELETE", `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`);
+    },
+    async memberships() {
+      const r = await call("GET", "/v0.1/memberships");
+      const items = (r.json as { items: { resource_id: string; resource: { name: string } }[] })
+        .items;
+      return items.map((i) => ({ merchantCode: i.resource_id, name: i.resource.name }));
     },
   };
 }
