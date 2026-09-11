@@ -390,15 +390,17 @@ design-review section apply.
   the venue, USB/Bluetooth by the box currently reporting the device's stable key; printers keyed on
   `local_key` (USB **serial** / BT **MAC**, survives reboot/replug), the agent resolves key→device
   path/channel at print time; the report is authorised by a new `print_jobs.claimed_by`. **All three
-  local transports are discoverable** (IP via mDNS + a 9100 sweep, offering a one-click Add since 2026-09-11 — the manual host:port form is for printers the scan cannot see —
+  local transports are discoverable** (IP via mDNS + a 9100 sweep, offering a one-click Add since 2026-09-11 — the manual host:port form was removed by #319 (2026-09-11), so the scan is now the ONLY way to add a printer —
   MAC-keyed IP deferred; #304 shipped the mDNS pass alone and the backlog wrongly recorded the sweep
   as landed — the owner's Epson TM-T88III answers on 9100 and announces nothing over mDNS (observed from a Mac on
   the owner's other VLAN — provisioning spec §7, 2026-09-11 addendum), so the
   sweep **LANDED #313 (2026-09-11)**: every address on the box's own IPv4 subnets up to a /22,
   connect-only, no bytes sent, each address once, mDNS entries win on merge. *Follow-ups, open:* **(i)**
   a printer on ANOTHER subnet than the box — the owner's home VLANs, not the deli's flat LAN — is
-  listed by neither pass (the box routes to it, so adding it by host:port prints); a configurable
-  extra-subnet list or a dashboard "probe this address" button would cover it. **(ii)** A sweep in
+  listed by neither pass. Until #319 the manual host:port form was the workaround (the box routes to
+  it, so it printed); #319 removed that form, so today such a printer **cannot be added at all** — and
+  that is the owner's home setup (box on one VLAN, both printers on another). A configurable
+  extra-subnet list or a dashboard "probe this address" button restores it; build one of these first. **(ii)** A sweep in
   flight keeps connecting after the discovery window closes (Codex run-it on #313 measured 189 of 253
   connects started after expiry; bounded to ~2 s on a /24, ~8 s on a /22) — the fix is to pass the
   deadline through `Host.scan` in `packages/print-agent`, which every fake host implements. **(iii)** The
@@ -426,13 +428,25 @@ design-review section apply.
   At-least-once reclaim accepted for MVP (per-claim token
   later). Security-review item (the authz boundary moves to venue/visible-keys). Replaces the manual
   create form (agent dropdown) with a transport-aware flow + a discovered-printers list.
-  *Printer settings UI (2026-09-11, built and reviewed; awaiting landing):* agents, printers and the latest
-  100 jobs use tables and modal editors. Add printer scans all supported transports into one results
-  table of unregistered devices; each row has Add, with no type selector or manual connection form.
-  Registered printers retain the last reported presence beneath their name. Printing rules now owns
-  station/ticket routing and receipt/drawer policy. Agent host reporting, exact pending-job totals,
-  last-print time and a stored-job text preview support the tables. Bluetooth pairing itself remains
-  on the agent setup page. Design: [printer settings](superpowers/specs/2026-09-11-printer-settings-tables.md).
+  *Printer settings UI, LANDED #319 (2026-09-11):* agents, printers and the latest 100 jobs use tables
+  and modal editors (a shared portrait `wt-modal` in `@waitron/ui` with a fixed Save/Cancel footer). Add
+  printer scans all supported transports into one results table of unregistered devices; each row has
+  Add, with no type selector and **no manual host:port form any more** (follow-up (i) under #313 above —
+  a printer the scan cannot see now has no way in). Registered printers keep the last reported presence
+  beneath their name. Printing rules is its own page (station/ticket routing, receipt/drawer policy).
+  Agent host reporting (`0016_print_agent_host`, an additive nullable column), exact pending-job totals,
+  last-print time and a stored-job text preview support the tables. Bluetooth pairing itself remains on
+  the agent setup page. Design: [printer settings](superpowers/specs/2026-09-11-printer-settings-tables.md);
+  the [review record](superpowers/specs/2026-09-11-printer-settings-review.md) lists every finding with
+  its disposition. *Open from it:* **(i)** printer Delete is one click (deactivate, history kept) while
+  agent Delete asks twice — a confirmation was raised at review (M4) and declined as a behaviour change
+  outside the redesign; **(ii)** the job preview is text-only: graphics reported as omitted, unsupported
+  or truncated commands flagged, never a paper-layout replica; **(iii)** `wt-switch` exposes no semantic
+  `name`, so the modal forms use native named inputs for their toggles (L2) — give `wt-switch` a `name`
+  and migrate them; **(iv)** table cell styles are inline because cells render inside `wt-data-table`'s
+  shadow root (L2); **(v)** the job-statistics timestamps rely on Node parsing PostgreSQL's text output,
+  pinned by test on Node only (L13); **(vi)** physical Bluetooth/network discovery and printed paper
+  layout were not exercised by the review or the branch.
   *Hardware receipt (2026-09-10, real ESC/POS printer on the box):* USB confirmed end-to-end — the agent
   container discovers the printer off `/sys` (serial-keyed) and a physical slip printed via `--device
   /dev/usb/lp0` + `group_add 7` as the unprivileged `node` user (spec §7). The run-it review caught a
