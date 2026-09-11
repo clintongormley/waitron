@@ -31,8 +31,7 @@
 - `packages/payments/src/card-provider.ts` — the `CardProviderContribution` seat type + `selectCardProviders`/`cardProviderById` selector; exported from `@waitron/payments`.
 - `packages/payments/src/schema/card-readers.ts` — `card_readers` table.
 - `packages/payments/src/schema/device-card-readers.ts` — `device_card_readers` table.
-- `packages/payments/drizzle/0003_card_readers.sql` (generated) + `0004_card_readers_sql.sql` (custom: grants, composite FKs, uniques) + snapshots.
-- `packages/payments/drizzle/0005_payment_reader_id_sql.sql` (custom, or generated `0005_*` + custom `0006_*_sql` — see Task 3).
+- `packages/payments/drizzle/`: `0003_card_readers.sql` + `0004_card_readers_sql.sql` (Task 1); `0005_device_card_readers.sql` + `0006_device_card_readers_sql.sql` (Task 2); `0007_payment_reader_id.sql` (+ `0008_*_sql.sql` only if the FK needs hand-writing) (Task 3) — plus snapshots. (The payments journal ends at `0002`, so `0003` is the next free number.)
 - `packages/payments-sumup/src/card-provider.ts` — `SUMUP_CARD_PROVIDER` (server seat).
 - `packages/payments-sumup/src/dashboard/index.ts` + `panel.ts` + `strings.ts` + `client.ts` + `sumup-connect-form.ts` + `sumup-add-reader.ts` — browser panel (`@waitron/payments-sumup/dashboard`).
 - `packages/payments-stripe/src/card-provider.ts` — `STRIPE_CARD_PROVIDER` (server seat).
@@ -44,7 +43,9 @@
 - `apps/dashboard/src/widgets/reader-picker.ts` — the payment-time reader picker (reused by slice 2).
 - Root guard: extend `scripts/module-seams.test.ts` (no new file).
 
-**Modified files** (exact edits in the tasks): `packages/payments/src/{index.ts,classification.ts,schema/index.ts}`, `packages/payments-sumup/src/{index.ts,sumup-client.ts,client.ts,testing/*}`, `packages/payments-stripe/src/index.ts`, `packages/composition/src/{index.ts,modules.ts}`, `packages/identity/src/permissions.ts`, `packages/db/src/schema/devices.ts`, `packages/db/drizzle/*` (new core migration dropping two columns), `apps/server/src/{boot.ts,till-config.ts,till-api.ts,device-session.ts,device-api.ts,errors.ts}`, `apps/till/src/{api/client.ts,widgets/tender-pay.ts,widgets/card-grid.ts,screens/till-counter-screen.ts,till-app.ts}`, `apps/dashboard/src/{dashboard-app.ts,api/client.ts,screens/devices-screen.ts,i18n/strings.ts,i18n/codes.ts}`, the demo/seed/fixture files that insert `devices.card_provider`.
+> **Plan refinement of the spec (I3).** Spec §3's "Knock-on facts" imagined folding SumUp/Stripe into `ALL_MODULES` as table-less modules and making `WaitronModule.migrations` optional. This plan does NOT do that: `WaitronModule.migrations` is required, and forcing empty migration sets onto pure adapter packages is friction with no payoff. Instead the card-provider seat is a **standalone registry** — `CARD_PROVIDERS` in `packages/composition/src/card-providers.ts` (server) and `CARD_PROVIDER_PANELS` in `packages/dashboard-modules` (browser), each the exact parallel of `ALL_MODULES` / `DASHBOARD_MODULES`. So `packages/module`'s descriptor and `packages/composition/src/modules.ts` are NOT touched, and the spec's "run the whole workspace after touching `packages/module`" note does not apply; run it after touching `packages/composition` instead.
+
+**Modified files** (exact edits in the tasks): `packages/payments/src/{index.ts,classification.ts,schema/index.ts}`, `packages/payments-sumup/src/{index.ts,sumup-client.ts,client.ts,errors.ts,testing/*}`, `packages/payments-stripe/src/index.ts`, `packages/composition/src/index.ts`, `packages/dashboard-modules/src/index.ts`, `packages/identity/src/permissions.ts`, `packages/db/src/schema/devices.ts`, `packages/db/drizzle/*` (new core migration dropping two columns), `apps/server/src/{boot.ts,till-config.ts,till-api.ts,device-session.ts,device-api.ts,errors.ts}`, `apps/till/src/{api/client.ts,widgets/tender-pay.ts,widgets/card-grid.ts,screens/till-counter-screen.ts,till-app.ts}`, `apps/dashboard/src/{dashboard-app.ts,api/client.ts,screens/devices-screen.ts,i18n/strings.ts,i18n/codes.ts}`, the demo/seed/fixture files that insert `devices.card_provider`.
 
 ---
 
@@ -61,12 +62,12 @@
 **Interfaces:**
 - Produces: table `cardReaders` with columns `id, tenantId, provider, providerRef, name, active, createdAt, retiredAt` and `unique("card_readers_tenant_id_key").on(tenantId, id)` (the composite-FK target Task 3 and Task 2 use), `unique("card_readers_provider_ref_key").on(tenantId, provider, providerRef)`.
 
-- [ ] **Step 1: Write the failing schema-shape test.** Mirror `packages/db/src/schema/devices.fk.test.ts`. On a real-PG or PGlite target, insert a tenant + a `card_readers` row and assert it round-trips; assert the `(tenant_id, provider, provider_ref)` unique rejects a duplicate; assert `retired_at` defaults null.
+- [ ] **Step 1: Write the failing schema-shape test.** Use `useRealPostgres` + `asAppUser` (not PGlite) so this doubles as the grant check — grants are not enforced on PGlite (CLAUDE.md §4). The accessor pattern is the one `useRealPostgres` returns (an accessor that throws before setup); `withTenant`/`asAppUser` come from `@waitron/db`. Assert the row round-trips; the `(tenant_id, provider, provider_ref)` unique rejects a duplicate; `retired_at` defaults null.
 
 ```ts
-// card-readers.fk.test.ts — shape + unique
+// card-readers.fk.test.ts — shape + unique (useRealPostgres accessor `pg`)
 it("stores a reader and rejects a duplicate (tenant, provider, provider_ref)", async () => {
-  const db = pg(); // useRealPostgres accessor
+  const db = pg(); // the useRealPostgres accessor, throws before setup
   await withTenant(db, tenantId, async (tx) => { await asAppUser(tx);
     await tx.insert(cardReaders).values({ tenantId, provider: "sumup", providerRef: "rdr_1", name: "Counter" });
   });
@@ -255,10 +256,10 @@ Import `cardReaders` from `./card-readers.js` at the top of `payments.ts`.
 ```ts
 // packages/payments/src/card-provider.ts
 import type { Database } from "@waitron/db";
-import type { KeyRing } from "@waitron/credentials";
-import type { Purpose } from "@waitron/credentials";
-import type { TenantId } from "@waitron/shared";
+import type { KeyRing, Purpose } from "@waitron/credentials";
+import { AppError, type TenantId, type TillId } from "@waitron/shared";
 import type { PaymentProvider } from "./provider.js";
+import type { IncidentSink } from "./reconcile.js";
 
 /** A browser-safe field descriptor for the generic connect form. `secret` fields are password inputs
  * and are never echoed back by any GET. `optional` lets a field (SumUp affiliate) be left blank. */
@@ -277,6 +278,11 @@ export type ReaderAddMode =
 export interface ConnectResult {
   /** The merchant name to show for confirmation; the seat has verified the credentials. */
   merchantName: string;
+  /** The COMPLETE payload to seal under `credentialPurpose`, assembled by the seat from the form
+   * values plus anything it discovered (SumUp fills in `merchantCode` from the memberships call and
+   * the `-` affiliate placeholders). The route validates it with `validatePayload` and seals it
+   * verbatim, so the generic route never assembles a provider-shaped payload. */
+  sealedPayload: Record<string, string>;
 }
 
 export interface AddReaderResult {
@@ -290,8 +296,11 @@ export interface CardProviderContribution {
   readonly credentialPurpose: Purpose;         // "payments.sumup" | "payments.stripe"
   readonly credentialFields: readonly ProviderCredentialField[];
   readonly readerAdd: ReaderAddMode;
-  /** Verify the typed credentials against the provider WITHOUT sealing. Throws
-   * `payment.provider_credential_rejected` on failure. Returns the merchant name to confirm. */
+  /** Verify the typed credentials against the provider WITHOUT sealing, and return the merchant name
+   * to confirm PLUS the complete payload to seal. Throws `payment.provider_credential_rejected` on a
+   * bad credential. If the credential spans several merchants and `payload` names none, throws
+   * `payment.provider_merchant_ambiguous` with `{ merchants: [{ code, name }] }` (codes and names are
+   * not secrets) so the form offers a picker and re-submits `payload` with the chosen `merchantCode`. */
   connect(deps: { fetch?: typeof fetch }, payload: Record<string, string>): Promise<ConnectResult>;
   /** Build the live PaymentProvider from the sealed credential (called by the pool). */
   build(deps: CardProviderBuildDeps): PaymentProvider;
@@ -388,7 +397,7 @@ it("pairs a reader from a code", async () => {
 
 - [ ] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement** the five methods in `sumup-client.ts` using the existing `call(method, path, body?)` helper (`sumup-client.ts:46`), and add them to the `SumUpClient` interface in `client.ts`. `readerStatus` maps the `status` field (`ONLINE`/`OFFLINE`) and includes the connection type in `detail`. A `>= 500` throws (existing `call` behaviour); a 404 on `getReader` returns null.
+- [ ] **Step 3: Implement** the five methods in `sumup-client.ts` using the existing `call(method, path, body?)` helper (`sumup-client.ts:46`), and add them to the `SumUpClient` interface in `client.ts`. **`call`'s `method` param is typed `"GET" | "POST"` (`sumup-client.ts:37`) — widen it to include `"DELETE"`** for `deleteReader`. `readerStatus` maps the `status` field (`ONLINE`/`OFFLINE`) and includes the connection type in `detail`. A `>= 500` throws (existing `call` behaviour); a 404 on `getReader` returns null. Also add a `memberships()` method here (used by the SumUp connect seat in Task 7): `GET /v0.1/memberships` → the merchant list.
 
 - [ ] **Step 4: Grow the fake** (`FakeSumUpClient`) so hermetic seat/provider tests can drive pairing: an in-memory reader map, `pairReader` inserts with `processing`, a test helper to flip it to `paired`, `readerStatus` returns online.
 
@@ -408,18 +417,19 @@ it("pairs a reader from a code", async () => {
 **Interfaces:**
 - Produces: `export const SUMUP_CARD_PROVIDER: CardProviderContribution` with `providerId: "sumup"`, `credentialPurpose: "payments.sumup"`, `credentialFields` = apiKey (secret), merchantCode is DERIVED not entered (see below), affiliateAppId/affiliateKey (secret, optional), `readerAdd: { kind: "pairing-poll", codeLabelKey: "payments.sumup.pairing_code" }`.
 
-Design note the executor must honour: **the operator enters only the API key (+ optional affiliate).** `connect` calls SumUp's memberships endpoint (`GET /v0.1/memberships`) with that key, reads the merchant code, and returns `{ merchantName }`. The sealed payload is the full four-field `payments.sumup` shape (`apiKey, merchantCode, affiliateAppId, affiliateKey`, `-` for absent affiliate) — so `credentialFields` describes the FORM (apiKey + affiliate), while the SEALED payload is assembled in `connect`'s caller (the payments-api route) from the form values + the derived merchant code. Add a `deriveSealedPayload(form, merchantCode)` helper on the seat so the route stays provider-agnostic.
+Design note the executor must honour: **the operator enters only the API key (+ optional affiliate).** `connect` calls SumUp's memberships endpoint (`GET /v0.1/memberships`) with that key, reads the merchant code, and returns BOTH `merchantName` and the complete `sealedPayload` — the full four-field `payments.sumup` shape (`apiKey, merchantCode, affiliateAppId, affiliateKey`, `-` for an absent affiliate). So `credentialFields` describes the FORM (apiKey + affiliate); the seat assembles the sealed payload inside `connect` and the generic route seals `result.sealedPayload` verbatim (C1). If the key spans several merchants and `payload.merchantCode` is absent, `connect` throws `payment.provider_merchant_ambiguous` with `{ merchants: [{ code, name }] }` and the form re-submits with the chosen `merchantCode`.
 
 - [ ] **Step 1: Write failing tests** with a `FakeSumUpClient` + a stub memberships fetch:
-  - `connect` with a good key returns `{ merchantName: "Test restaurant" }`; with a bad key (memberships 401) throws `payment.provider_credential_rejected`.
+  - `connect` with a good key over a single-merchant membership returns `{ merchantName: "Test restaurant", sealedPayload: { apiKey, merchantCode: "MY2NPHDW", affiliateAppId: "-", affiliateKey: "-" } }`.
+  - `connect` with a bad key (memberships 401) throws `payment.provider_credential_rejected`.
+  - `connect` with a key spanning two merchants and no `merchantCode` throws `payment.provider_merchant_ambiguous` carrying both `{ code, name }`; re-calling with the chosen `merchantCode` returns that merchant's `sealedPayload`.
   - `build` returns a `SumUpCloudProvider` whose `provider === "sumup"`.
   - `readers.add({ name, code })` calls `pairReader` and returns `{ providerRef, status }`.
   - `readers.status(ref)` maps online; `readers.remove(ref)` calls `deleteReader`.
-  - `deriveSealedPayload({ apiKey, affiliateAppId: "-", affiliateKey: "-" }, "MY2NPHDW")` equals the four-field payload with `-` affiliates.
 
 - [ ] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement** `SUMUP_CARD_PROVIDER`. `connect` builds a `sumupClient` from the form key and calls a new `memberships()` client method (add it in Task 6 or here — add here if missed) OR calls `GET /v0.1/memberships` directly through the injected fetch. `build` reads the sealed credential via the same shape as `sumupClientResolver` and constructs `SumUpCloudProvider` with `resolveReader` supplied by the pool (see Task 10), `incidents: recordIncidentOnce` (import from apps/server? No — keep the seat pure: accept `incidents` in `CardProviderBuildDeps`). **Adjust `CardProviderBuildDeps` in Task 5 to include `incidents: IncidentSink` and `resolveReader`** if not already; the executor reconciles Task 5's type with this need — prefer passing `resolveReader` and `incidents` through `build`'s deps.
+- [ ] **Step 3: Implement** `SUMUP_CARD_PROVIDER`, and register `payment.provider_merchant_ambiguous` in `packages/payments-sumup/src/errors.ts` (no secret in its params — merchant codes and names only). `connect` builds a `sumupClient` from the form key and calls a `memberships()` client method (add it to `SumUpClient` in Task 6, or here if missed), assembles `sealedPayload`, and throws the ambiguity error when needed. `build` reads the sealed credential via the same shape as `sumupClientResolver` and constructs `SumUpCloudProvider`, taking `resolveReader` and `incidents` from `CardProviderBuildDeps` (both are on the Task 5 type — the seat stays pure, no import from apps/server).
 
 - [ ] **Step 4: Export** `SUMUP_CARD_PROVIDER` from `packages/payments-sumup/src/index.ts`.
 
@@ -467,7 +477,7 @@ Design note the executor must honour: **the operator enters only the API key (+ 
 **Interfaces:**
 - Produces: `export const CARD_PROVIDERS: readonly CardProviderContribution[] = [SUMUP_CARD_PROVIDER, STRIPE_CARD_PROVIDER]`.
 
-- [ ] **Step 1: Write the failing test.** `card-providers.test.ts`: `selectCardProviders(CARD_PROVIDERS)` has keys `["sumup","stripe"]` and no duplicate. Seam test: a new describe block asserting `apps/server/src` files import `@waitron/payments-sumup` / `@waitron/payments-stripe` ONLY via an allowlist (the existing `sumup-account.ts`, `stripe-account.ts`, `webhook.ts`, `boot.ts` — each with a stated reason), mirroring the provisioning-block pattern (`module-seams.test.ts:86-103`), plus a positive control (a synthetic file importing a provider package is flagged).
+- [ ] **Step 1: Write the failing test.** `card-providers.test.ts`: `selectCardProviders(CARD_PROVIDERS)` has keys `["sumup","stripe"]` and no duplicate. Seam test: a new describe block asserting `apps/server/src` files import `@waitron/payments-sumup` / `@waitron/payments-stripe` ONLY via an allowlist. **Derive the allowlist by grep, don't trust a hard-coded four-file list** — at authoring time `grep -rl '@waitron/payments-sumup\|@waitron/payments-stripe' apps/server/src` returns `boot.ts`, `stripe-account.ts`, `sumup-account.ts`, `webhook.ts`; put each in the allowlist `Map` with a one-line reason (e.g. `boot.ts → "env buildCardProvider + hosted/webhook wiring; migrates behind the seat later — Task 12 removes it"`). Mirror the provisioning-block pattern (`module-seams.test.ts:86-103`) and add a positive control (a synthetic file importing a provider package is flagged). **Do NOT copy the regime rule's "every allowlist entry must genuinely import the package" sub-assertion** — Task 12 empties `boot.ts` from the list mid-branch, and a strict sub-assertion would go red between commits; instead the allowlist is advisory (non-allowlisted files must be clean; allowlisted files may or may not import). Task 12 removes `boot.ts` when it becomes clean.
 
 - [ ] **Step 2: Run, expect FAIL.**
 
@@ -538,14 +548,14 @@ export function createCardProviderPool(deps: {
 **Interfaces:**
 - Produces routes (all `payments.manage`-gated via the `gated` helper pattern, `print-api.ts:331-339`; `authorizeManager`/`Permission` from `@waitron/identity`):
   - `GET  /management-api/payments/providers` → `[{ providerId, displayName?, state: "connected"|"not_connected"|"simulator", merchantName?, credentialFields, readerAdd }]`
-  - `POST /management-api/payments/providers/:id/connect` body = form payload → verifies via the seat, seals via `putCredential`, evicts the pool, returns `{ merchantName }` (NO secret)
+  - `POST /management-api/payments/providers/:id/connect` body = form payload (may include a chosen `merchantCode`) → `seat.connect(...)` returns `{ merchantName, sealedPayload }`; the route `validatePayload(seat.credentialPurpose, result.sealedPayload)` then `putCredential`, evicts the pool, and returns `{ merchantName }` (NO secret). A `payment.provider_merchant_ambiguous` from the seat is relayed with its `{ merchants }` list so the form can re-submit with a `merchantCode`.
   - `POST /management-api/payments/providers/:id/disconnect` → refuses `payment.provider_in_use` (params `{ activeReaders }`) if any active `card_readers` row uses it; else `deleteCredential` + evict
   - `GET  /management-api/payments/readers` → `[{ id, provider, name, active, deviceCount }]`
   - `POST /management-api/payments/readers` body `{ providerId, name, code?, reference? }` → relays to the seat's `readers.add`, inserts a `card_readers` row, returns `{ id, status }`
   - `GET  /management-api/payments/readers/:id/status` → `{ online, detail? }` (relays to the seat)
   - `POST /management-api/payments/readers/:id/retire` → UPDATE `active=false, retired_at=now()`; relays to the seat's `readers.remove`
   - `GET  /management-api/devices/:id/reader` and `PUT /management-api/devices/:id/reader` body `{ readerId | null }` → read/write `device_card_readers`
-- New error codes (both `en`+`es` in dashboard `codes.ts`, Task 15): `reader.not_found`, `reader.provider_disconnected`, `payment.provider_in_use`, `payment.provider_credential_rejected` (from the seat), `payment.pairing_expired`, `payment.pairing_refused`.
+- New error codes (both `en`+`es` in dashboard `codes.ts`, Task 15): `reader.not_found`, `reader.provider_disconnected`, `payment.provider_in_use`, `payment.provider_credential_rejected` (from the seat), `payment.provider_merchant_ambiguous` (from the seat), `payment.pairing_expired`, `payment.pairing_refused`. (`reader.provider_mismatch` was dropped — `reader.provider_disconnected` covers it.)
 
 - [ ] **Step 1: Write failing real-PG tests** as `app_user` (rolsuper=f), with two tenants:
   - connect seals and the response has NO field value; a bad key → `payment.provider_credential_rejected`.
@@ -556,7 +566,7 @@ export function createCardProviderPool(deps: {
 
 - [ ] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement** `mountPaymentsApi(app, deps, log)` following `print-api.ts` exactly: a `STATUS` map + `createErrorBoundary`, `requireManagementSession`, the `gated` helper with `PAYMENTS_MANAGE_PERMISSION: Permission = "payments.manage"`, `readJsonBody`/`requireString`/`requireEnum`/`requireUuidParam` for body screening, and **`eq(tenantId)` on every by-id read**. The connect route: `cardProviderById(CARD_PROVIDERS, id)`, `seat.connect(...)`, `validatePayload(purpose, sealed)`, `putCredential`, `pool.evict(id)`. Relays never name a provider.
+- [ ] **Step 3: Implement** `mountPaymentsApi(app, deps, log)` following `print-api.ts` exactly: a `STATUS` map + `createErrorBoundary`, `requireManagementSession`, the `gated` helper with `PAYMENTS_MANAGE_PERMISSION: Permission = "payments.manage"`, `readJsonBody`/`requireString`/`requireEnum`/`requireUuidParam` for body screening, and **`eq(tenantId)` on every by-id read**. The connect route: `const seat = cardProviderById(CARD_PROVIDERS, id)`, `const { merchantName, sealedPayload } = await seat.connect({ fetch }, payload)`, `validatePayload(seat.credentialPurpose, sealedPayload)`, `putCredential(tx, ring, { tenantId, purpose: seat.credentialPurpose, value: sealedPayload })`, `pool.evict(id)`, return `{ merchantName }`. Relays never name a provider.
 
 - [ ] **Step 4: Mount + pool in boot.** In `boot.ts`, after the vault ring is open and the till cfg resolved, construct `const cardPool = createCardProviderPool({ providers: CARD_PROVIDERS, db, ring, tenantId: till.tenantId, nodeId: till.nodeId, environment: config.environment, incidents: recordIncidentOnce })` and `mountPaymentsApi(app, { db, cfg: till, ring, pool: cardPool, providers: CARD_PROVIDERS }, log)` inside the trading/`!fencedOrMirror` block beside `mountPrintApi`. Import `CARD_PROVIDERS` from `@waitron/composition` (allowlisted in the seam test).
 
@@ -581,18 +591,21 @@ export function createCardProviderPool(deps: {
 - [ ] **Step 1: Write failing tests.**
   - Real-PG: a device with a default SumUp reader, `/api/pay` (fake provider in the pool) captures and stamps `payments.reader_id`; a `/api/pay` naming a different active reader overrides the default; naming another tenant's reader → `reader.not_found`; a device with no default and no `readerId` → `reader.not_found` (or the existing "no provider configured" error, chosen deliberately — pick `reader.not_found` and assert it).
   - `till-config.test.ts`: the card cases are REMOVED; assert `loadTillConfig` no longer reads `WAITRON_TILL_CARD_PROVIDER` (a set value is ignored, not an error) — or delete those cases and add one asserting the field is absent from the returned config.
-  - `GET /api/till`: for a device with a default reader, `cardProvider` is that reader's provider string; demo/prepare → `"simulator"`; no default → `"none"`.
+  - `GET /api/till`: for a device with a default reader, `cardProvider` is that reader's provider string MAPPED to the till's union (see the map below); demo/prepare → `"simulator"`; no default → `"none"`.
 
 - [ ] **Step 2: Run, expect FAIL.**
 
 - [ ] **Step 3: Implement.**
   - `buildCardProvider` collapses to: demo/prepare (and prepare+testProviders=false) → `SimulatorPaymentProvider`; otherwise `undefined` (readers now come from the pool). Keep the simulator branch and its tests.
   - `/api/pay`: resolve `readerId = body.readerId ?? defaultReaderFor(device)`; load `card_readers` row (with `eq(tenantId)`); `pool.get(row.provider, () => Promise.resolve(row.providerRef))`; drive `payWorkingOrderIntegrated` with that provider; stamp `reader_id`. In demo/prepare, keep using `deps.cardProvider` (the simulator) and stamp no reader.
-  - `GET /api/till`: compute the per-device provider string from the device's default reader (join `device_card_readers` → `card_readers`), falling back to `"simulator"` (intent) or `"none"`. Add an `activeReaders` list to the payload for the picker (Task 17).
+  - **Provider-string mapping (I1).** `card_readers.provider` / the seat `providerId` are `"sumup"` / `"stripe"`, but the till's `CardProvider` union is `"sumup_cloud"` / `"stripe_terminal"` / `"stripe_on_device"` / `"simulator"` / `"none"` (`apps/till/src/api/client.ts:99`). When building `GET /api/till`'s per-device `cardProvider` string, map `"sumup" → "sumup_cloud"` and `"stripe" → "stripe_terminal"`. Put this map in one helper (server-side) so the till's closed union is never handed an unknown value.
+  - `GET /api/till`: compute the per-device provider string from the device's default reader (join `device_card_readers` → `card_readers`, apply the map above), falling back to `"simulator"` (intent) or `"none"`. Add an `activeReaders` list to the payload for the picker (Task 17).
   - Remove the three card fields + `CARD_PROVIDERS` from `till-config.ts` and every reference; the till's `CardProvider` string union stays in `apps/till` (still `none|stripe_terminal|stripe_on_device|sumup_cloud|simulator`).
+  - **`stripe_on_device` (Tap-to-Pay) is deferred in this slice (I2).** It was reachable only through the env `WAITRON_TILL_CARD_PROVIDER=stripe_on_device` selection this task removes, and no venue uses it (env-only, nothing in production). The till branch stays dormant; nothing selects it after the cutover. Restoring it as a per-device on-device mode (a device flag, not a `card_readers` row, since the paying phone IS the reader) is a follow-up recorded in _Scope → Deferred_. Do NOT try to route it through a reader row.
+  - **Seam allowlist (I4):** this task removes `boot.ts`'s direct `@waitron/payments-sumup` / `@waitron/payments-stripe` imports (reader construction moved to the pool; only `SimulatorPaymentProvider` from `@waitron/payments` remains). In the SAME commit, remove `boot.ts` from the Task 9 provider-package allowlist in `scripts/module-seams.test.ts`, and re-grep the remaining allowlist entries (`stripe-account.ts`, `sumup-account.ts`, `webhook.ts`) to confirm each still genuinely imports a provider package — so the seam test stays green across the cutover.
   - Update `.env.example` / `apps/till/README.md` env tables to drop `WAITRON_TILL_CARD_PROVIDER`/`WAITRON_TILL_SUMUP_READER_ID`/`WAITRON_TILL_STRIPE_READER_ID` (base-to-tip receipt sweep, CLAUDE.md §1).
 
-- [ ] **Step 4: Run** the whole workspace-scoped set: `pnpm --filter @waitron/server test:coverage` + `pnpm --filter @waitron/till test:coverage`. Expected PASS.
+- [ ] **Step 4: Run** the whole workspace-scoped set: `pnpm --filter @waitron/server test:coverage` + `pnpm --filter @waitron/till test:coverage` + `pnpm test -- module-seams`. Expected PASS.
 
 - [ ] **Step 5: Commit.** `-m "Route each card sale to its reader's provider and remove the env card selection"`
 
@@ -612,7 +625,7 @@ export function createCardProviderPool(deps: {
 
 - [ ] **Step 2: Run, expect FAIL** (columns still present).
 
-- [ ] **Step 3: Drop them.** Remove the two columns from `devices.ts`; `pnpm --filter @waitron/db db:generate --name drop_device_card_columns` (emits `ALTER TABLE "devices" DROP COLUMN ...`, the `0003_drop_device_kind.sql` idiom). Remove the fields from `device-session.ts` (`DeviceBinding` 134-135, projection 159-160, mapper 186-187), the `/api/device/me` echo (`device-api.ts:337-338`), the PATCH hardware handler (body type, `set` type, the two `if (... in body)` blocks, `updated` type, `returning` — `device-api.ts:532-584`), and the now-unused `CARD_PROVIDERS` import there. In the dashboard, remove the `CARD_PROVIDERS` const, `HardwareEdit.cardProvider`/`cardReaderId`, the select + reader input in `#renderHardware`, `#cardProviderName`, the `updated()` reconcile loop, the `patchDeviceHardware` type fields, and the four `devices.card_provider*` i18n keys. Fix every seed/fixture insert (`dev-setup.ts:437`, `demo-seed/seed-floor.ts:48`, `testing/venue-fixtures.ts:52`, and the demo scripts).
+- [ ] **Step 3: Drop them.** Remove the two columns from `devices.ts`; `pnpm --filter @waitron/db db:generate --name drop_device_card_columns` (emits `ALTER TABLE "devices" DROP COLUMN ...`, the `0003_drop_device_kind.sql` idiom). Remove the fields from `device-session.ts` (`DeviceBinding` 134-135, projection 159-160, mapper 186-187), the `/api/device/me` echo (`device-api.ts:337-338`), the PATCH hardware handler (body type, `set` type, the two `if (... in body)` blocks, `updated` type, `returning` — `device-api.ts:532-584`), and the now-unused `CARD_PROVIDERS` import there. In the dashboard, remove the `CARD_PROVIDERS` const, `HardwareEdit.cardProvider`/`cardReaderId`, the select + reader input in `#renderHardware`, `#cardProviderName`, the `updated()` reconcile loop, the `patchDeviceHardware` type fields, and the four `devices.card_provider*` i18n keys. Fix every seed/fixture insert that sets `devices.card_provider`: `apps/server/scripts/dev-setup.ts:437`, `apps/server/scripts/demo-seed/seed-floor.ts:48`, `apps/server/src/testing/venue-fixtures.ts:52`, and the demo scripts `apps/server/scripts/{park-retrieve-demo.ts,till-demo.ts,integrated-card-demo.ts}` (grep `cardProvider` across `apps/server` to confirm none is missed — base-to-tip receipt sweep, CLAUDE.md §1).
 
 - [ ] **Step 4: Run** the whole workspace: `pnpm typecheck && pnpm test` (this touches `packages/db` schema — a value many suites assert). Expected PASS.
 
@@ -647,7 +660,7 @@ export interface CardProviderPanel {
 export const CARD_PROVIDER_PANELS: readonly CardProviderPanel[]; // in dashboard-modules
 ```
 
-- [ ] **Step 1: Write failing browser tests** for the SumUp panel's pairing dialog (the critical one). Mirror the printers-screen scan machinery (`printers-screen.ts:660-703`) with fake timers:
+- [ ] **Step 1: Write failing browser tests** for the SumUp panel's pairing dialog (the critical one). Mirror the printers-screen SCAN machinery — the real precedent is the scan timer (`#scanTimer`/`#scanUntil`/`#scanInFlight`, `#scan`/`#scanTick`/`#endScan`, `printers-screen.ts:305-312, 660-703`) cleared in `disconnectedCallback` (`printers-screen.ts:326-328`) — with fake timers:
   - entering a code + pressing Pair calls `POST readers` then polls `GET readers/:id/status` every 2s; on `paired` it emits `onAdded` and closes.
   - a 5-minute countdown renders and decrements; at expiry it shows `payment.pairing_expired` copy and offers _try again_.
   - `disconnectedCallback` clears the timer (prove by deletion: without the clear, a tick fires after detach).
@@ -655,7 +668,9 @@ export const CARD_PROVIDER_PANELS: readonly CardProviderPanel[]; // in dashboard
 
 - [ ] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement the panels.** Each `dashboard/index.ts` mirrors `BOOKINGS_DASHBOARD` (`packages/bookings/src/dashboard/index.ts`): a side-effect `import "./strings.js"` (registers the catalogue), a small `client.ts` built from `ctx.request`, and the `CardProviderPanel` object. The SumUp add-reader element copies the printers-screen timer fields (`#pollTimer`, `#pollUntil`, `#pollInFlight`, `#endPoll`) and countdown; the connect form follows the design-system Forms contract (semantic `name`, required markers, `wt-form-error-summary`, secret fields behind `wt-help-tooltip` for the affiliate keys, `wt-form-actions`). Add the `"./dashboard"` subpath export to each package.json (`{".": "./src/index.ts", "./dashboard": "./src/dashboard/index.ts"}`).
+- [ ] **Step 3: Implement the panels.** Each `dashboard/index.ts` mirrors `BOOKINGS_DASHBOARD` (`packages/bookings/src/dashboard/index.ts`): a side-effect `import "./strings.js"` (registers the catalogue), a small `client.ts` built from `ctx.request`, and the `CardProviderPanel` object. The SumUp add-reader element copies the printers-screen scan-timer shape (a poll `setInterval` + a wall-clock `until` + an in-flight guard, cleared in `disconnectedCallback` — the real field names there are `#scanTimer`/`#scanUntil`/`#scanInFlight`/`#endScan`; name the pairing equivalents to taste) plus a 5-minute countdown; the connect form follows the design-system Forms contract (semantic `name`, required markers, `wt-form-error-summary`, secret fields behind `wt-help-tooltip` for the affiliate keys, `wt-form-actions`). Add the `"./dashboard"` subpath export to each package.json (`{".": "./src/index.ts", "./dashboard": "./src/dashboard/index.ts"}`).
+
+- [ ] **Step 3b: Extend the browser seam guard (M5).** In `scripts/module-seams.test.ts`, add `@waitron/payments-sumup` and `@waitron/payments-stripe` to the `APP_FORBIDDEN` list so `apps/dashboard` may not import a provider package directly — the provider panels must be reached only through `@waitron/dashboard-modules`'s `CARD_PROVIDER_PANELS` (the browser twin of the server seam rule). Note the `/dashboard` subpath is what `dashboard-modules` imports; `apps/dashboard` imports neither the subpath nor the root.
 
 - [ ] **Step 4: Build the registry.** `packages/dashboard-modules/src/card-providers.ts`:
 ```ts
@@ -766,5 +781,5 @@ retireReader(id: string): Promise<void> { return this.#request(`/management-api/
 ## Self-review notes (author)
 
 - **Spec coverage:** §1 data model → Tasks 1-3; §2 provider accounts + first credential write → Tasks 7/8/11; §3 provider-owned flow + seat + seam → Tasks 5/7/8/9/14; §4 routing + picker → Tasks 12/17; §5 till boot + practice mode → Task 12; §6 errors/security/testing → Tasks 11/14/15 + the isolation probes throughout; scope drops of the env path and device columns → Tasks 12/13. Redsys stays parked (no task), as specified.
-- **Type consistency:** `CardProviderContribution` (Task 5) is the one seat type reused by Tasks 7, 8, 9, 10; `CardProviderPanel` (Task 14) is its browser twin used by Tasks 14, 15. `providerRef` is the single opaque-reference name across schema (Task 1), seat (Task 5), and API (Task 11).
-- **Open reconciliation for the executor:** Task 7 needs `resolveReader` + `incidents` in `CardProviderBuildDeps` — fold them into the Task 5 type when Task 5 is implemented (noted in Task 7 step 3), so the pool (Task 10) passes them through `build`.
+- **Type consistency:** `CardProviderContribution` (Task 5) is the one seat type reused by Tasks 7, 8, 9, 10; `CardProviderPanel` (Task 14) is its browser twin used by Tasks 14, 15. `providerRef` is the single opaque-reference name across schema (Task 1), seat (Task 5), and API (Task 11). `CardProviderBuildDeps` (Task 5) already carries `resolveReader` + `incidents`, which the pool (Task 10) supplies and Tasks 7/8's `build` consume.
+- **Review-fold (2026-09-11):** a fresh-context review found and this revision fixed — the connect→seal flow (connect now returns `sealedPayload`, C1), the `"sumup"→"sumup_cloud"` / `"stripe"→"stripe_terminal"` till-string map (I1), the `stripe_on_device` deferral (I2, see below), the standalone-registry refinement (I3), the seam-allowlist cutover ordering (I4), and the Task 5 imports (I5). `stripe_on_device` Tap-to-Pay is deferred: it was env-only and unused, and restoring it as a per-device on-device mode is a follow-up (add it to `docs/backlog.md` at land alongside slice 2).

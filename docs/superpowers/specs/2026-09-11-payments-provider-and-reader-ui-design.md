@@ -165,11 +165,11 @@ risk trigger:
 
 ## Section 3 — each provider module owns its reader flow
 
-SumUp and Stripe join the composition list (`packages/composition/src/modules.ts`) as modules, each
-filling a **new card-provider seat** on the `WaitronModule` descriptor
-(`packages/module/src/module.ts`). The seat is the single home for a provider's specifics; generic
-code names no provider. This mirrors the existing fiscal-regime seam (`scripts/module-seams.test.ts`)
-and the dashboard-module seam (`@waitron/dashboard-modules`).
+SumUp and Stripe each fill a **new card-provider seat** (`CardProviderContribution`), assembled by
+composition into a standalone `CARD_PROVIDERS` registry (see _Knock-on facts_ for why this is a
+registry and not an `ALL_MODULES` membership). The seat is the single home for a provider's
+specifics; generic code names no provider. This mirrors the existing fiscal-regime seam
+(`scripts/module-seams.test.ts`) and the dashboard-module seam (`@waitron/dashboard-modules`).
 
 ### The seat (server side)
 
@@ -215,10 +215,14 @@ and "readers". Adding Redsys later is one new package plus one line in the compo
 
 ### Knock-on facts
 
-- **A provider module owns no tables**, so the descriptor's `migrations` seat becomes optional and
-  the classification/graph guards treat an absent set as owning nothing. (SumUp/Stripe packages ship
-  a card-provider seat and dashboard contribution, not a migration set; the `card_readers` /
-  `device_card_readers` tables belong to the generic `payments` module, which already has a set.)
+- **Providers are a standalone registry, not `ALL_MODULES` members** (refined at plan time). SumUp and
+  Stripe own no tables, and `WaitronModule.migrations` is required, so rather than force empty
+  migration sets onto adapter packages the card-provider seat is assembled into a standalone
+  `CARD_PROVIDERS` list in `@waitron/composition` (server) and `CARD_PROVIDER_PANELS` in
+  `@waitron/dashboard-modules` (browser) — the exact parallels of `ALL_MODULES` / `DASHBOARD_MODULES`.
+  The `WaitronModule` descriptor is untouched; the `card_readers` / `device_card_readers` tables
+  belong to the generic `payments` module, which already has a migration set. Adding Redsys later is
+  one new package plus one line in `CARD_PROVIDERS`.
 - **The seam test grows a rule:** `apps/server/src` reaches a provider package
   (`@waitron/payments-sumup`, `@waitron/payments-stripe`) only through the composition list — with a
   small, reason-carrying allowlist for the Stripe hosted-checkout and webhook code
@@ -261,7 +265,7 @@ refuses the simulator and test credentials.")
 **New error codes**, each with `en`+`es` text in `apps/dashboard/src/i18n/codes.ts` and named for the
 domain concept, never the throwing package (CLAUDE.md §3):
 
-- `reader.not_found`, `reader.provider_disconnected`, `reader.provider_mismatch`
+- `reader.not_found`, `reader.provider_disconnected`
 - `payment.pairing_expired`, `payment.pairing_refused`
 - `payment.provider_credential_rejected` (connect-time verify failed)
 - `payment.provider_in_use` (disconnect refused; params: `{ activeReaders: <count> }`)
@@ -284,8 +288,7 @@ None carries a secret in its params, so the recovery-page boundary holds
 - **Migrations** covered by the root guards: `scripts/classification-complete.test.ts` (every new
   table classified once) and, since no `reject_mutation` trigger is added,
   `append-only-enable-always` is unaffected. Run the whole workspace after touching
-  `packages/composition` (a value more than one suite asserts) and `packages/module` (the descriptor
-  shape).
+  `packages/composition` (a value more than one suite asserts).
 - **Seam** proven by a synthetic positive control (a server file importing a provider package
   outside the allowlist fails the test), per `module-seams`' existing pattern.
 
@@ -295,8 +298,8 @@ None carries a secret in its params, so the recovery-page boundary holds
 
 - `card_readers`, `device_card_readers`, `payments.reader_id`; drop `devices.card_provider` /
   `card_reader_id`.
-- The `CardProviderContribution` seat on `WaitronModule`; SumUp and Stripe filling it; the
-  composition-list additions and the seam-test rule.
+- The `CardProviderContribution` seat; SumUp and Stripe filling it; the standalone `CARD_PROVIDERS` /
+  `CARD_PROVIDER_PANELS` registries and the seam-test rule.
 - The generic Payments screen (providers list + readers `wt-data-table`), the provider-contributed
   connect forms and add-reader dialogs, `payments-api.ts`, `payments.manage`.
 - The lazy provider pool; connect-time credential verification; the first dashboard credential-write
@@ -307,6 +310,11 @@ None carries a secret in its params, so the recovery-page boundary holds
 
 **Deferred, each with a reason:**
 
+- **Stripe `stripe_on_device` (Tap-to-Pay on the phone)** — reachable today only through the env
+  `WAITRON_TILL_CARD_PROVIDER=stripe_on_device` selection this slice removes, and no venue uses it
+  (env-only, nothing in production). The paying phone IS the reader, so it is not a `card_readers`
+  row; restoring it means a per-device on-device MODE flag, a small follow-up. The till branch stays
+  dormant until then.
 - **The handheld-to-reader link (slice 2)** — NFC > QR > picker, session-scoped, drops on logout /
   idle-timeout / another handheld taking the reader. The picker built here is its UI seam. NFC may
   need no native app if the tag carries the same URL the QR does (iOS reads a URL tag from the lock
