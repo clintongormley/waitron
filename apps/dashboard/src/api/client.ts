@@ -1068,6 +1068,10 @@ export interface DiscoveredPrinter {
   model?: string | null;
   name?: string | null;
   alreadyRegistered: boolean;
+  /** The registered printer this device matches (usb/bluetooth on `localKey`, network on host:port), or null. */
+  printerId: string | null;
+  /** Epoch ms of the agent report that last carried this device. */
+  lastSeenAt: number;
 }
 
 /** The `PATCH /management-api/printers/:id` body — mirrors `@waitron/printing`'s `UpdatePrinterInput`.

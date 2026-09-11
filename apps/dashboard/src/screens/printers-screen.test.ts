@@ -77,6 +77,8 @@ const discovered: DiscoveredPrinter[] = [
     model: "TM-T20",
     name: "EPSON TM-T20",
     alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: 1_700_000_000_000,
   },
   {
     agentId: "a1",
@@ -87,6 +89,8 @@ const discovered: DiscoveredPrinter[] = [
     model: "TSP143",
     name: null,
     alreadyRegistered: true,
+    printerId: "p2",
+    lastSeenAt: 1_700_000_000_000,
   },
 ];
 
@@ -102,6 +106,24 @@ const discoveredNetwork: DiscoveredPrinter[] = [
     model: "TM-m30",
     name: "Kitchen IP",
     alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: 1_700_000_000_000,
+  },
+];
+
+// A Scan result that IS the registered printer p1 (matched by the server on host:port): hidden from the
+// results, and reported as "seen" against p1's row in the registered list.
+const discoveredRegisteredNetwork: DiscoveredPrinter[] = [
+  {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "network_tcp",
+    host: "10.0.0.5",
+    port: 9100,
+    name: "Counter",
+    alreadyRegistered: true,
+    printerId: "p1",
+    lastSeenAt: 1_700_000_000_000,
   },
 ];
 
@@ -743,11 +765,36 @@ describe("printers-screen", () => {
     expect(api.startPrinterDiscovery).toHaveBeenCalledWith();
     expect(api.listDiscoveredPrinters).toHaveBeenCalled();
 
-    // The found IP printer is offered as a pre-fill; using it stamps host+port into the form.
-    q(el, "[data-test=use-result-0]")!.click();
-    await el.updateComplete;
-    expect((el as unknown as { newHost: string }).newHost).toBe("10.0.0.77");
-    expect((el as unknown as { newPort: string }).newPort).toBe("9100");
+    // The found IP printer is added in one click, named from what the scan announced; the manual
+    // host/port form is for printers the scan cannot see.
+    q(el, "[data-test=add-result-0]")!.click();
+    await flush(el);
+    expect(api.createPrinter).toHaveBeenCalledWith({
+      name: "Kitchen IP",
+      transport: "network_tcp",
+      host: "10.0.0.77",
+      port: 9100,
+    });
+    expect(api.listPrinters).toHaveBeenCalledTimes(2); // reloaded after the add
+  });
+
+  it("hides a scan result that is already registered and shows when it was seen against that printer", async () => {
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredRegisteredNetwork),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    // The registered list carries the status from the very first load, not only after a Scan.
+    const seen = q(el, "[data-test=printer-seen-p1]");
+    expect(seen).toBeTruthy();
+    expect(seen!.textContent).toContain("Cocina agent");
+    expect(seen!.textContent).toMatch(/\d{1,2}:\d{2}/);
+    expect(q(el, "[data-test=printer-seen-p2]")).toBeNull();
+
+    q(el, "[data-test=scan-printers]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=discovered-row-net-0]")).toBeNull();
+    expect(q(el, "[data-test=add-result-0]")).toBeNull();
   });
 
   it("Scan shows a busy button and keeps re-reading the discovered list for the listen period", async () => {
@@ -759,6 +806,7 @@ describe("printers-screen", () => {
       const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork) });
       const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(api.listDiscoveredPrinters).mockClear(); // the load's own read
       await el.updateComplete;
 
       const button = () => q(el, "[data-test=scan-printers]")!;
@@ -794,6 +842,7 @@ describe("printers-screen", () => {
       const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork) });
       const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(api.listDiscoveredPrinters).mockClear(); // the load's own read
       q(el, "[data-test=scan-printers]")!.click();
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(2);
@@ -818,6 +867,7 @@ describe("printers-screen", () => {
       });
       const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(api.listDiscoveredPrinters).mockClear(); // the load's own read
       q(el, "[data-test=scan-printers]")!.click();
       el.remove();
       open({ discoveryUntil: Date.now() + 60_000 });
@@ -832,11 +882,12 @@ describe("printers-screen", () => {
     vi.useFakeTimers();
     try {
       let deliver!: (v: DiscoveredPrinter[]) => void;
-      const api = stubApi({
-        listDiscoveredPrinters: vi.fn(() => new Promise<DiscoveredPrinter[]>((r) => (deliver = r))),
-      });
+      const api = stubApi();
       const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(api.listDiscoveredPrinters)
+        .mockClear() // the load's own read
+        .mockImplementation(() => new Promise<DiscoveredPrinter[]>((r) => (deliver = r)));
       q(el, "[data-test=scan-printers]")!.click();
       await vi.advanceTimersByTimeAsync(0);
       expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(1);
@@ -854,15 +905,14 @@ describe("printers-screen", () => {
     vi.useFakeTimers();
     try {
       let deliver!: (v: DiscoveredPrinter[]) => void;
-      const api = stubApi({
-        listDiscoveredPrinters: vi
-          .fn()
-          .mockResolvedValueOnce(discoveredNetwork)
-          .mockImplementationOnce(() => new Promise<DiscoveredPrinter[]>((r) => (deliver = r)))
-          .mockResolvedValue(discoveredNetwork),
-      });
+      const api = stubApi();
       const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(api.listDiscoveredPrinters)
+        .mockClear() // the load's own read
+        .mockResolvedValueOnce(discoveredNetwork)
+        .mockImplementationOnce(() => new Promise<DiscoveredPrinter[]>((r) => (deliver = r)))
+        .mockResolvedValue(discoveredNetwork);
       q(el, "[data-test=scan-printers]")!.click();
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(2); // the slow one is outstanding

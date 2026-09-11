@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { drawerPolicyName, jobStatusName, printModeName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -357,32 +357,44 @@ export class PrintersScreen extends LitElement {
     this.armedAllowId = null;
     this.armedDenyId = null;
     try {
-      const [agents, printers, jobs, stations, tills, locations, pairing, pendingJoins] =
-        await Promise.all([
-          this.api.listAgents(),
-          this.api.listPrinters(),
-          this.api.listRecentJobs(),
-          // The station↔printer mapping section needs the full station list for its toggles.
-          // `listStations()` (GET /management-api/stations) is `till.configure`-gated, whereas the mapping
-          // WRITES are `printer.manage`-gated — but that mismatch is unreachable: both permissions map to
-          // exactly {manager, admin} (packages/identity/src/permissions.ts), so every user who can reach
-          // this screen holds both. If the role→permission map ever grants `printer.manage` WITHOUT
-          // `till.configure`, move this read to a `printer.manage`-gated stations endpoint (raised by
-          // Copilot on the KDS-4 PR).
-          this.api.listStations(),
-          // Counter receipt/drawer (§5): the tills (receipt-printer picker) + locations (print-mode toggle).
-          // `listTills()` is `printer.manage`-gated (this screen's own permission); `getLocations()` is
-          // `schedule.manage`-gated, the same unreachable-mismatch shape as `listStations()` above — both
-          // `printer.manage` and `schedule.manage` sit in the MANAGER set (packages/identity/src/permissions.ts;
-          // admin holds ALL), so the two map to the identical {manager, admin} and every user who reaches
-          // this screen holds both.
-          this.api.listTills(),
-          this.api.getLocations(),
-          // The shared pairing window + this surface's join queue (kind "print_agent"). Both take their
-          // permission from the row's KIND, so they serve the printers screen exactly as the devices one.
-          this.api.pairingMode(),
-          this.api.joinRequests("print_agent"),
-        ]);
+      const [
+        agents,
+        printers,
+        jobs,
+        stations,
+        tills,
+        locations,
+        pairing,
+        pendingJoins,
+        discovered,
+      ] = await Promise.all([
+        this.api.listAgents(),
+        this.api.listPrinters(),
+        this.api.listRecentJobs(),
+        // The station↔printer mapping section needs the full station list for its toggles.
+        // `listStations()` (GET /management-api/stations) is `till.configure`-gated, whereas the mapping
+        // WRITES are `printer.manage`-gated — but that mismatch is unreachable: both permissions map to
+        // exactly {manager, admin} (packages/identity/src/permissions.ts), so every user who can reach
+        // this screen holds both. If the role→permission map ever grants `printer.manage` WITHOUT
+        // `till.configure`, move this read to a `printer.manage`-gated stations endpoint (raised by
+        // Copilot on the KDS-4 PR).
+        this.api.listStations(),
+        // Counter receipt/drawer (§5): the tills (receipt-printer picker) + locations (print-mode toggle).
+        // `listTills()` is `printer.manage`-gated (this screen's own permission); `getLocations()` is
+        // `schedule.manage`-gated, the same unreachable-mismatch shape as `listStations()` above — both
+        // `printer.manage` and `schedule.manage` sit in the MANAGER set (packages/identity/src/permissions.ts;
+        // admin holds ALL), so the two map to the identical {manager, admin} and every user who reaches
+        // this screen holds both.
+        this.api.listTills(),
+        this.api.getLocations(),
+        // The shared pairing window + this surface's join queue (kind "print_agent"). Both take their
+        // permission from the row's KIND, so they serve the printers screen exactly as the devices one.
+        this.api.pairingMode(),
+        this.api.joinRequests("print_agent"),
+        // The discovered inventory also feeds the "seen on … at …" status against each registered
+        // printer, so it loads with the list — not only when a discovered transport is picked.
+        this.api.listDiscoveredPrinters(),
+      ]);
       // Pair each printer id with its OWN station set at fetch time, so the correlation cannot drift on
       // a later reorder/filter the way a positional array-zip would. (Still one call per printer — the
       // N+1 is a tracked follow-up, out of scope here; only the zip fragility is being removed.)
@@ -424,6 +436,7 @@ export class PrintersScreen extends LitElement {
       );
       this.pairing = pairing;
       this.pendingJoins = pendingJoins;
+      this.discovered = discovered;
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -611,12 +624,12 @@ export class PrintersScreen extends LitElement {
 
   /** Capture the picked transport. A native `<select>` `change` is `composed: false`, so `stopPropagation`
    * is defensive consistency with the composed `wt-change` handlers, not a boundary guard. Switching to a
-   * usb/bluetooth transport reads the discovered inventory (there is no manual form for those); switching
-   * to network_tcp clears the list (its results only appear on an explicit Scan). */
+   * usb/bluetooth transport re-reads the discovered inventory (there is no manual form for those). The
+   * list is never cleared here: it also carries the seen-status of every registered printer, and each
+   * section filters it by transport. */
   #onNewTransport(event: Event): void {
     event.stopPropagation();
     this.newTransport = (event.target as HTMLSelectElement).value as PrintTransport;
-    this.discovered = [];
     if (DISCOVERED_TRANSPORTS.includes(this.newTransport)) void this.#refreshDiscovered();
   }
 
@@ -692,10 +705,42 @@ export class PrintersScreen extends LitElement {
     this.registerNames = { ...this.registerNames, [localKey]: value };
   }
 
-  /** Stamp a scanned network_tcp result's host + port into the manual IP form. */
-  #useResult(result: DiscoveredPrinter): void {
-    this.newHost = result.host ?? "";
-    this.newPort = result.port == null ? "" : String(result.port);
+  /** Register a scanned network_tcp result in one click, named from what the scan announced (the
+   * label the row shows — editable afterwards in the list), then reload the list and the results so the
+   * row leaves the results and gains its seen-status. Shares the `submitting` gate with the other
+   * form submissions; a rejection becomes the `errorKey` banner. */
+  async #addResult(result: DiscoveredPrinter): Promise<void> {
+    if (this.submitting || result.host == null) return;
+    this.errorKey = null;
+    this.submitting = true;
+    try {
+      await this.api.createPrinter({
+        name: this.#discoveredLabel(result),
+        transport: result.transport,
+        host: result.host,
+        ...(result.port == null ? {} : { port: result.port }),
+      });
+      await this.#load();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
+    }
+  }
+
+  /** "Seen on {agent} at {time}" for a registered printer an agent has reported (usb/bluetooth on every
+   * poll; network only while a Scan is listening), or nothing. The server matched it (`printerId`). */
+  #seenStatus(printerId: string): TemplateResult | typeof nothing {
+    const seen = this.discovered.find((d) => d.printerId === printerId);
+    if (seen === undefined) return nothing;
+    const time = new Intl.DateTimeFormat(currentLocale(), { timeStyle: "short" }).format(
+      new Date(seen.lastSeenAt),
+    );
+    return html`<span data-test="printer-seen-${printerId}"
+      >${t("printers.seen_at")
+        .replace("{agent}", seen.agentName ?? "")
+        .replace("{time}", time)}</span
+    >`;
   }
 
   /** Add a network_tcp printer from the manual IP form, then reload. A blank name is a no-op. Host + port
@@ -1066,6 +1111,7 @@ export class PrintersScreen extends LitElement {
         <div class="details" style="margin-bottom: var(--wt-space-3)">
           <span class="meta">
             <span data-test="printer-transport-${p.id}">${transportName(p.transport)}</span>
+            ${this.#seenStatus(p.id)}
           </span>
         </div>
         <div class="row">
@@ -1252,7 +1298,10 @@ export class PrintersScreen extends LitElement {
   /** The manual IP (network_tcp) add form: name + host + port + Add, plus a Scan that opens the
    * discovery window and offers any found IP printer to pre-fill host + port. */
   #renderNetworkForm(): TemplateResult {
-    const found = this.discovered.filter((d) => d.transport === "network_tcp");
+    // Only what is NOT yet registered: a registered printer's presence shows against its own row.
+    const found = this.discovered.filter(
+      (d) => d.transport === "network_tcp" && !d.alreadyRegistered,
+    );
     return html`
       <div class="new">
         <wt-input
@@ -1311,9 +1360,10 @@ export class PrintersScreen extends LitElement {
                         <wt-button
                           variant="secondary"
                           size="sm"
-                          data-test="use-result-${i}"
-                          @click=${() => this.#useResult(d)}
-                          >${t("printers.use_result")}</wt-button
+                          data-test="add-result-${i}"
+                          ?disabled=${this.submitting}
+                          @click=${() => void this.#addResult(d)}
+                          >${t("printers.add_result")}</wt-button
                         >
                       </div>
                     </wt-card>
