@@ -363,10 +363,16 @@ design-review section apply.
   MAC-keyed IP deferred; #304 shipped the mDNS pass alone and the backlog wrongly recorded the sweep
   as landed — the owner's Epson TM-T88III answers on 9100 and announces nothing over mDNS (observed from a Mac on
   the owner's other VLAN — provisioning spec §7, 2026-09-11 addendum), so the
-  sweep landed separately in `feat/print-agent-9100-sweep`, 2026-09-11: every address on the box's own
-  IPv4 subnets up to a /22, connect-only, no bytes sent. *Follow-up:* a printer on ANOTHER subnet than
-  the box — the owner's home VLANs, not the deli's flat LAN — is reached by neither pass; a configurable
-  extra-subnet list or a dashboard "probe this address" button would cover it), and **active discovery runs only inside a dashboard-opened window** (cheap
+  sweep **LANDED #313 (2026-09-11)**: every address on the box's own IPv4 subnets up to a /22,
+  connect-only, no bytes sent, each address once, mDNS entries win on merge. *Follow-ups, open:* **(i)**
+  a printer on ANOTHER subnet than the box — the owner's home VLANs, not the deli's flat LAN — is
+  listed by neither pass (the box routes to it, so adding it by host:port prints); a configurable
+  extra-subnet list or a dashboard "probe this address" button would cover it. **(ii)** A sweep in
+  flight keeps connecting after the discovery window closes (Codex run-it on #313 measured 189 of 253
+  connects started after expiry; bounded to ~2 s on a /24, ~8 s on a /22) — the fix is to pass the
+  deadline through `Host.scan` in `packages/print-agent`, which every fake host implements. **(iii)** The
+  sweep has not yet run on the box; the live seams sit in `linux-devices.ts`'s coverage-ignored block
+  awaiting the network receipt), and **active discovery runs only inside a dashboard-opened window** (cheap
   presence-of-registered-devices stays always-on for serving); the discovered inventory + window are
   IN-MEMORY on the server (no new tables). **Bluetooth is IN SCOPE now** (was parked) as a third live
   transport with box-local pairing on the agent setup page. No printer drivers (raw ESC/POS; page
