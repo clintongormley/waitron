@@ -154,11 +154,12 @@ tender:
       reference: string | null }  // operator-keyed external_ref, MANUAL tender only
 ```
 
-**The tender block is built in ONE new helper, `readTenderBlock`, called by all THREE ticket
+**The tender block is built in ONE new helper, `readTenderBlock`, called by all FOUR ticket
 construction sites** — `fileImmediateSale` (line ~693, cash + manual-card immediate sales, reused by
-Mode-T integrated collect), `finalizeCapture` (line ~1058, integrated fresh capture), and
-`readSettledTicket` (line ~469, reprints + concurrent replays). Today those three build the result
-inline and independently; only `readSettledTicket` reads the sale back. The plan touches all three —
+Mode-T integrated collect), `finalizeCapture` (line ~1058, integrated fresh capture),
+`finalizeRecovery` (the lost-T2 card-recovery path — a captured payment whose sale was never filed),
+and `readSettledTicket` (line ~469, reprints + concurrent replays). Today those four build the result
+inline and independently; only `readSettledTicket` reads the sale back. The plan touches all four —
 there is no single chokepoint to edit, and assuming one was a false claim caught in spec self-review.
 
 `readTenderBlock(tx, cfg, workingOrderId, { cashChange })` reads the sale's `tenders` row (method,
