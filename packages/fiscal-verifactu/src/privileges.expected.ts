@@ -17,6 +17,7 @@ export const PRIVILEGES: Record<string, string> = {
   bookings: "SIU",
   cadenas: "SIU",
   canvases: "SIUD",
+  card_readers: "SIU",
   catalogues: "SIU",
   categories: "SIU",
   contadores_instalacion: "SIU",
