@@ -56,6 +56,11 @@ switch (Skip avoids a dead end), and a fresh Remember tick binds to whichever id
 authenticates as, so the typed email and the saved one can differ; (c) the alternatives list renders
 only on the password, passkey and Google screens (design-system doc narrowed to match).
 
+**Venue operations management tabs — in progress (2026-09-11).** Shared tabs, tables, hamburger
+action menus and modal editors split Status, Departments, Menus, Service zones and menus, and
+Preparation routing. [Design](superpowers/specs/2026-09-11-venue-tabs-design.md) and
+[plan](superpowers/plans/2026-09-11-venue-tabs.md).
+
 **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
 bypass, so a docs-only change is pushed straight to `main` — no PR, no CI wait. Branch, `commit -s`,
 fast-forward `main`, push. Feature/code still goes through a PR.

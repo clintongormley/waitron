@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /** `<repo>/packages`. Derived, so the guard survives being run from anywhere. */
@@ -289,5 +289,6 @@ export function sourceFilesIn(packageName: string): string[] {
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
     .filter((entry) => !(productionOnly && entry.endsWith(".test.ts")))
     .map((entry) => join(root, entry))
+    .filter((entry) => statSync(entry).isFile())
     .sort();
 }

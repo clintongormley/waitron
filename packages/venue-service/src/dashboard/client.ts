@@ -139,12 +139,31 @@ export class VenueServiceApi {
     return this.request("/management-api/venue-service/departments", "POST", input);
   }
 
+  updateDepartment(
+    departmentId: string,
+    input: {
+      name: string;
+      tradingName: string;
+      defaultServiceMode: ServiceMode;
+    },
+  ): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/departments/${departmentId}`,
+      "PATCH",
+      input,
+    );
+  }
+
   deactivateDepartment(departmentId: string): Promise<void> {
     return this.request(`/management-api/venue-service/departments/${departmentId}`, "DELETE");
   }
 
   createMenu(name: string): Promise<NamedRow> {
     return this.request("/management-api/catalogues", "POST", { name });
+  }
+
+  updateMenu(menuId: string, name: string): Promise<void> {
+    return this.request(`/management-api/catalogues/${menuId}`, "PATCH", { name });
   }
 
   createMenuSection(
@@ -202,6 +221,19 @@ export class VenueServiceApi {
     noPreparation?: boolean;
   }): Promise<{ id: string }> {
     return this.request("/management-api/venue-service/routes", "POST", input);
+  }
+
+  updateRoute(
+    routeId: string,
+    input: {
+      zoneId: string | null;
+      categoryId?: string | null;
+      productId?: string | null;
+      stationId?: string | null;
+      noPreparation?: boolean;
+    },
+  ): Promise<void> {
+    return this.request(`/management-api/venue-service/routes/${routeId}`, "PUT", input);
   }
 
   deleteRoute(routeId: string): Promise<void> {

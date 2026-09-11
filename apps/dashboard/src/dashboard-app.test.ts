@@ -2203,6 +2203,143 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 });
 
 describe("dashboard URL navigation", () => {
+  it.each([
+    { modules: ["venue-service"], permissions: [] },
+    { modules: [], permissions: ["venue_service.manage"] },
+  ])(
+    "denies a saved venue tab unless both module and permission are present: %j",
+    async ({ modules, permissions }) => {
+      const url = new URL(location.href);
+      url.pathname = "/manage/venue-operations/view/menus";
+      history.replaceState(null, "", url);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({
+            personId: "p1",
+            role: "manager",
+            locale: "en",
+            venueLocale: "en",
+            modules,
+            permissions,
+          }),
+        }),
+        request: stubRequest,
+      });
+      await flush(el);
+      expect(navItem(el, "venue-operations")).toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-venue-operations-screen")).toBeNull();
+      expect(overview(el)).toBeTruthy();
+      expect(location.pathname).toBe("/manage/overview");
+    },
+  );
+
+  it("preserves a module-owned tab through refresh and Back from another section", async () => {
+    const url = new URL(location.href);
+    url.pathname = "/manage/venue-operations/view/menus";
+    url.searchParams.set("dev", "1");
+    history.replaceState(null, "", url);
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p1",
+        role: "manager",
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        permissions: ["venue_service.manage"],
+        modules: ["venue-service"],
+        venueName: "Venue",
+      }),
+    });
+    const request: DashboardRequest = async (path) =>
+      (path === "/management-api/venue-service"
+        ? { departments: [], zones: [], routes: [], hours: [], zoneMenus: [], readiness: [] }
+        : []) as never;
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
+    await flush(el);
+    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    await expect
+      .poll(
+        () =>
+          el
+            .shadowRoot!.querySelector("dashboard-venue-operations-screen")
+            ?.shadowRoot?.querySelector("wt-tabs")?.value,
+      )
+      .toBe("menus");
+    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    el.remove();
+    const { el: refreshed } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
+    await flush(refreshed);
+    await expect
+      .poll(
+        () =>
+          refreshed
+            .shadowRoot!.querySelector("dashboard-venue-operations-screen")
+            ?.shadowRoot?.querySelector("wt-tabs")?.value,
+      )
+      .toBe("menus");
+    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    expect(location.search).toBe(url.search);
+    navItem(refreshed, "staff")!.click();
+    await flush(refreshed);
+    expect(location.pathname).toBe("/manage/staff");
+    const back = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.back();
+    await back;
+    await flush(refreshed);
+    await expect
+      .poll(
+        () =>
+          refreshed
+            .shadowRoot!.querySelector("dashboard-venue-operations-screen")
+            ?.shadowRoot?.querySelector("wt-tabs")?.value,
+      )
+      .toBe("menus");
+    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    expect(location.search).toBe(url.search);
+  });
+
+  it("preserves a module-owned tab while signing in to a protected destination", async () => {
+    const url = new URL(location.href);
+    url.pathname = "/manage/venue-operations/view/menus";
+    url.searchParams.set("dev", "1");
+    history.replaceState(null, "", url);
+    const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });
+    const request: DashboardRequest = async (path) =>
+      (path === "/management-api/venue-service"
+        ? { departments: [], zones: [], routes: [], hours: [], zoneMenus: [], readiness: [] }
+        : []) as never;
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe }),
+      request,
+    });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    getMe.mockResolvedValue({
+      personId: "p1",
+      role: "manager",
+      locale: "en-GB",
+      venueLocale: "en-GB",
+      permissions: ["venue_service.manage"],
+      modules: ["venue-service"],
+      venueName: "Venue",
+    });
+    emitLoggedIn(login(el)!);
+    await flush(el);
+    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    await expect
+      .poll(
+        () =>
+          el
+            .shadowRoot!.querySelector("dashboard-venue-operations-screen")
+            ?.shadowRoot?.querySelector("wt-tabs")?.value,
+      )
+      .toBe("menus");
+    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    expect(location.search).toBe(url.search);
+  });
+
   it("restores the requested section after a session probe and after refresh", async () => {
     const url = new URL(location.href);
     url.pathname = "/manage/staff";

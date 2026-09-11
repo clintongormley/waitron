@@ -1192,7 +1192,10 @@ describe("catalogue operations", () => {
   it("renames a catalogue", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
-      await renameCatalogue(tx, cat.id, "Delicatessen");
+      await renameCatalogue(tx, tenantId, cat.id, "Delicatessen");
+      await expect(
+        renameCatalogue(tx, "00000000-0000-4000-8000-000000000001" as TenantId, cat.id, "Wrong"),
+      ).rejects.toMatchObject({ code: "catalogue.not_found" });
       const [seen] = await listCatalogues(tx);
       expect(seen!.name).toBe("Delicatessen");
     });

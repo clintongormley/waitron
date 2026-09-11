@@ -38,6 +38,7 @@ import {
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
   setProductOptionGroups,
+  renameCatalogue,
   updateOptionGroup,
   updateOptionGroupItem,
   updateMenuItem,
@@ -54,7 +55,7 @@ import {
 } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { readJsonBody } from "@waitron/server-kit";
+import { readJsonBody, requireString } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
@@ -321,6 +322,18 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const { name } = body;
       const created = await gated(sessionId, (tx) => createCatalogue(tx, tenantId, { name }));
       return c.json(created, 201);
+    }),
+  );
+
+  app.patch("/management-api/catalogues/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const name = requireString(body.name, "name");
+      if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
+      await gated(sessionId, (tx) => renameCatalogue(tx, tenantId, catalogueId, name));
+      return c.body(null, 204);
     }),
   );
 

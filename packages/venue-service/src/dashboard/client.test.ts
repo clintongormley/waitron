@@ -11,6 +11,37 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("VenueServiceApi", () => {
+  it("sends edits to the existing department, menu and route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    const department = {
+      name: "Deli",
+      tradingName: "Deli counter",
+      defaultServiceMode: "prepay" as const,
+    };
+    const route = {
+      zoneId: null,
+      categoryId: "c1",
+      productId: null,
+      stationId: null,
+      noPreparation: true,
+    };
+    await api.updateDepartment("d1", department);
+    await api.updateMenu("m1", "Dinner");
+    await api.updateRoute("r1", route);
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      ["/management-api/venue-service/departments/d1", "PATCH", department],
+      ["/management-api/catalogues/m1", "PATCH", { name: "Dinner" }],
+      ["/management-api/venue-service/routes/r1", "PUT", route],
+    ]);
+  });
+
   it("loads the service model and its authoring choices", async () => {
     const fetchImpl = vi
       .fn()

@@ -932,7 +932,10 @@ export class DashboardApp extends LitElement {
   readonly #url = new UrlStateController(this, () => this.#onHistory(), dashboardPath);
 
   #writeScreenUrl(screen: ScreenId, replace = false): void {
-    this.#url.write({ dashboard: screen }, replace);
+    this.#url.write(
+      { dashboard: screen, ...(this.#url.read("dashboard") === screen ? {} : { view: null }) },
+      replace,
+    );
   }
 
   readonly #onHistory = (): void => {

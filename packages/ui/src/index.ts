@@ -51,3 +51,6 @@ export type {
 export { submitOnEnter } from "./submit-on-enter.js";
 
 export { UrlStateController, type UrlPathConfig } from "./url-state.js";
+
+export { WtRowActions } from "./components/wt-row-actions.js";
+export { WtTabs, type TabItem } from "./components/wt-tabs.js";

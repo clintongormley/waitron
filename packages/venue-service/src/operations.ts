@@ -219,6 +219,26 @@ export async function createDepartment(
   return { ...row!, defaultServiceMode: row!.defaultServiceMode as ServiceMode };
 }
 
+export async function updateDepartment(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  input: { name: string; tradingName: string; defaultServiceMode: ServiceMode },
+): Promise<void> {
+  const [row] = await tx
+    .update(departments)
+    .set(input)
+    .where(
+      and(
+        eq(departments.id, departmentId),
+        eq(departments.tenantId, cfg.tenantId),
+        eq(departments.locationId, cfg.locationId),
+      ),
+    )
+    .returning({ id: departments.id });
+  if (row === undefined) throw new AppError("department.not_found", { departmentId });
+}
+
 export async function deactivateDepartment(
   tx: Transaction,
   cfg: VenueScope,
@@ -887,16 +907,18 @@ export async function copyWorkingLineContext(
   });
 }
 
-export async function createPreparationRoute(
+export interface PreparationRouteInput {
+  zoneId?: string | null;
+  categoryId?: string | null;
+  productId?: string | null;
+  target: PreparationRoute;
+}
+
+async function validatePreparationRoute(
   tx: Transaction,
   cfg: VenueScope,
-  input: {
-    zoneId?: string | null;
-    categoryId?: string | null;
-    productId?: string | null;
-    target: PreparationRoute;
-  },
-): Promise<string> {
+  input: PreparationRouteInput,
+): Promise<void> {
   if (input.zoneId !== undefined && input.zoneId !== null) {
     await resolveZoneContext(tx, cfg, input.zoneId);
   }
@@ -937,6 +959,14 @@ export async function createPreparationRoute(
       throw new AppError("route.station_inactive", { stationId: input.target.stationId });
     }
   }
+}
+
+export async function createPreparationRoute(
+  tx: Transaction,
+  cfg: VenueScope,
+  input: PreparationRouteInput,
+): Promise<string> {
+  await validatePreparationRoute(tx, cfg, input);
   try {
     const [row] = await tx
       .insert(preparationRoutes)
@@ -951,6 +981,38 @@ export async function createPreparationRoute(
       })
       .returning({ id: preparationRoutes.id });
     return row!.id;
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new AppError("route.duplicate", {});
+    throw error;
+  }
+}
+
+export async function updatePreparationRoute(
+  tx: Transaction,
+  cfg: VenueScope,
+  routeId: string,
+  input: PreparationRouteInput,
+): Promise<void> {
+  await validatePreparationRoute(tx, cfg, input);
+  try {
+    const [row] = await tx
+      .update(preparationRoutes)
+      .set({
+        zoneId: input.zoneId ?? null,
+        categoryId: input.categoryId ?? null,
+        productId: input.productId ?? null,
+        stationId: input.target.kind === "station" ? input.target.stationId : null,
+        noPreparation: input.target.kind === "no_preparation",
+      })
+      .where(
+        and(
+          eq(preparationRoutes.id, routeId),
+          eq(preparationRoutes.tenantId, cfg.tenantId),
+          eq(preparationRoutes.locationId, cfg.locationId),
+        ),
+      )
+      .returning({ id: preparationRoutes.id });
+    if (row === undefined) throw new AppError("route.not_found", { routeId });
   } catch (error) {
     if (isUniqueViolation(error)) throw new AppError("route.duplicate", {});
     throw error;

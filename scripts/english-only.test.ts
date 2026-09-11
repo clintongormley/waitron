@@ -15,8 +15,9 @@
  * root project typechecks nothing (CLAUDE.md §2). Nothing in `packages/db` imports it; the root
  * config measures its coverage and `packages/db`'s config excludes it.
  */
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import {
@@ -72,6 +73,28 @@ const discovered = GENERIC_PACKAGES.flatMap((name) =>
 );
 
 describe("configuration", () => {
+  it("scans real TypeScript files without reading screenshot directories named after tests", () => {
+    const fixture = mkdtempSync(join(tmpdir(), "waitron-vocabulary-"));
+    try {
+      const source = join(fixture, "src");
+      const screenshotDirectory = join(source, "__screenshots__", "widget.test.ts");
+      mkdirSync(screenshotDirectory, { recursive: true });
+      const testFile = join(source, "widget.test.ts");
+      const nestedFile = join(screenshotDirectory, "nested.ts");
+      writeFileSync(testFile, "export const count = 1;\n");
+      writeFileSync(nestedFile, "export const total = 2;\n");
+      writeFileSync(join(screenshotDirectory, "failure.png"), "image");
+      const files = sourceFilesIn(relative(PACKAGES_ROOT, fixture));
+      expect(files).toEqual([nestedFile, testFile].sort());
+      expect(files.map(readSource)).toEqual([
+        "export const total = 2;\n",
+        "export const count = 1;\n",
+      ]);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
   it("scopes itself to the generic packages, in this order", () => {
     expect([...GENERIC_PACKAGES]).toEqual([
       "db",
