@@ -124,12 +124,12 @@ describe("isRootScopePath", () => {
 
 describe("isImageInputPath", () => {
   // The box image's build and runtime inputs: everything under deploy/ (the Dockerfile compose
-  // builds, the compose file itself, the operator prepare.sh, the .env template). This is what the
+  // builds, the compose file itself, the operator waitron.sh, the .env template). This is what the
   // `image` job's smoke actually exercises, so a change here is the one that must re-run it on a
   // pull request. Match the WHOLE directory, not a named-file allowlist: too broad only re-runs a
   // ~2-minute smoke on a deploy/README.md edit, while too narrow would silently skip the smoke on a
   // NEW image-input file nobody remembered to list — the dangerous direction (CLAUDE.md §2).
-  it.each(["deploy/Dockerfile", "deploy/compose.yml", "deploy/prepare.sh", "deploy/.env.example"])(
+  it.each(["deploy/Dockerfile", "deploy/compose.yml", "deploy/waitron.sh", "deploy/.env.example"])(
     "treats %s as an image input",
     (path) => {
       expect(isImageInputPath(path)).toBe(true);
