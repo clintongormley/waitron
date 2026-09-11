@@ -133,6 +133,13 @@ declare module "@waitron/shared" {
      * params — the refusal names no row, the `sync.*`/`tunnel.*` no-leak discipline.
      */
     "node.membership_superseded_on_boot": Record<string, never>;
+    /** `POST /api/node/enrol-self` reached from a non-loopback address. On-node self-enrol is a
+     * loopback-only trust gate (design §1.1): anything that can reach the box's loopback can already
+     * read its vault, so enrolling a loopback caller grants nothing new; a LAN caller must not. */
+    "node.enrol_not_local": Record<string, never>;
+    /** This node cannot self-enrol a print agent because it is not the primary — only the primary can
+     * write `print_agents` (a mirror's DB is a read-only subscriber). The mirror-today case (spec §7). */
+    "node.enrol_unavailable": Record<string, never>;
     /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error Node attaches to the
      * `'error'` event (`EADDRINUSE` for the common case of a fixed default port already taken,
