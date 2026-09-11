@@ -34,6 +34,7 @@ import {
 import { SimulatorPaymentProvider, type PaymentProvider } from "@waitron/payments";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { recordIncidentOnce } from "@waitron/core";
+import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
@@ -104,6 +105,8 @@ import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
+import { mountPaymentsApi } from "./payments-api.js";
+import { createCardProviderPool } from "./card-provider-pool.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
@@ -1930,6 +1933,34 @@ export async function startServer(
     mountPrintApi(
       app,
       { db, cfg: till, readMembership: () => readNodeMembership(db), pairingMode },
+      log,
+    );
+    // The card-payments MANAGEMENT surface on the SAME app (design Phase C): connect/disconnect a
+    // provider, add/retire readers, and set a device's default reader — all `payments.manage`-gated.
+    // The pool is built ONCE here (one live provider per id, rebuilt on a credential change via
+    // `evict`) and shared with the routes; it reaches a seat only through `CARD_PROVIDERS`, the
+    // composition list, so `boot.ts` names no provider package for this path (the env `buildCardProvider`
+    // path above stays until Task 12's cutover). `ring` + `recordIncidentOnce` are the same handles the
+    // sibling payment wiring uses. Not mounted under mirror/fenced mode, the sibling operational surfaces' rule.
+    const cardPool = createCardProviderPool({
+      providers: CARD_PROVIDERS,
+      db,
+      ring,
+      tenantId: till.tenantId,
+      nodeId: till.nodeId,
+      environment: config.environment,
+      incidents: recordIncidentOnce,
+    });
+    mountPaymentsApi(
+      app,
+      {
+        db,
+        cfg: till,
+        ring,
+        environment: config.environment,
+        pool: cardPool,
+        providers: CARD_PROVIDERS,
+      },
       log,
     );
   }
