@@ -259,6 +259,18 @@ design-review section apply.
   from the #289/#304 join flow, NOT the box-wiring branch): the "print agents waiting to join" list does
   not live-update (a knock only appears after a manual page refresh), and the pairing window's "Open
   until …" timestamp renders in UTC instead of the venue's local time zone.*
+  *On-node agent auto-enrolment — IN FLIGHT (spec
+  [2026-09-11-on-node-agent-auto-enrolment-design.md](superpowers/specs/2026-09-11-on-node-agent-auto-enrolment-design.md)):
+  a print agent on the PRIMARY box enrols itself silently over loopback (`POST /api/node/enrol-self`,
+  loopback-only) — no pairing window, no number, no human — removing the #308 live-test friction where the
+  box's own agent had to be number-matched by hand. Carries: `print_agents.node_id` (one self-enrolled
+  agent per node, refresh-not-duplicate, no FK to `nodes`), a revoke "allow again" action (a sticking
+  revoke would otherwise be a one-way door), and provenance in the agents list. The MIRROR half is
+  designed (§7) but DEFERRED by owner decision: a mirror agent can't reach the primary over TLS today
+  (it trusts only its local box CA) and needs to for job-pull regardless, so it's gated on a separate
+  cross-box print-agent-TLS effort; the vouch (signed dormant key + endorsement chain) slots into the
+  same route later. Must-measure-on-the-box: the server actually sees `127.0.0.1` as the on-box caller's
+  remote address under `network_mode: host` + TLS, with a LAN control reading a different address.*
   *Op note: `try-branch.sh` swaps images against the box's INSTALLED compose, so testing a compose change
   (like this one) on a box prepared from older `main` needs its `compose.yml` refreshed first; out of
   scope for try-branch's image-swap contract.*
