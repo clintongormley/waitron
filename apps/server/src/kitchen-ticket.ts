@@ -19,16 +19,10 @@
  * gains emphasis, and adding a bold command to packages/printing is out of this task's scope. The
  * layout below uses only the existing verbs.
  */
-import { esc } from "@waitron/printing";
+import { FEED_BEFORE_CUT, esc } from "@waitron/printing";
 
 /** The pass header for an `order`-scope ticket — the printed VALUE the expediter reads ("pass"). */
 const ORDER_HEADER = "PASE";
-
-/**
- * Blank lines fed before the cut, so the tear-off clears the print head and the operator has
- * something to grip. Matches the test-print payload's `feed(3)` in print-api.ts.
- */
-const FEED_BEFORE_CUT = 3;
 
 /** One fired line: a quantity and the product name, snapshotted at fire time by the caller.
  *  `modifiers` are the parent dish's selected options (ordering modifiers) — each a snapshotted option

@@ -31,6 +31,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
+  FEED_BEFORE_CUT,
   claimPrintJobs,
   createPrinter,
   deactivatePrinter,
@@ -106,7 +107,13 @@ const RECENT_JOBS_LIMIT = 100;
  * operator triggers to confirm a printer + its agent are wired up end to end. Built ONCE at module
  * load (the bytes are deterministic); `enqueuePrintJob` copies them into each job's `bytea`. Kept
  * deliberately minimal — init, two lines, a paper feed, a full cut. */
-const TEST_PRINT_PAYLOAD = esc().init().line("Waitron").line("Test print").feed(3).cut().bytes();
+const TEST_PRINT_PAYLOAD = esc()
+  .init()
+  .line("Waitron")
+  .line("Test print")
+  .feed(FEED_BEFORE_CUT)
+  .cut()
+  .bytes();
 
 /**
  * Every AppError CODE these routes answer, and the HTTP status it maps to. CLIENT faults only: a

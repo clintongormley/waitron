@@ -47,7 +47,7 @@
  * millimetres are verified MANUALLY on the real printer (design §5); the guarantee here is only that
  * the bytes are DETERMINISTIC and carry every mandated element, which `receipt-ticket.test.ts` pins.
  */
-import { esc } from "@waitron/printing";
+import { FEED_BEFORE_CUT, esc } from "@waitron/printing";
 import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 
 import type { CardDetails } from "@waitron/payments";
@@ -133,12 +133,6 @@ const QTY_BADGE = "×";
  * the width simply run together with one space rather than wrapping.
  */
 const RECEIPT_WIDTH = 42;
-
-/**
- * Blank lines fed before the cut, so the tear-off clears the print head and the customer has something
- * to grip. Matches `formatKitchenTicket`'s `feed(3)` and the test-print payload in print-api.ts.
- */
-const FEED_BEFORE_CUT = 3;
 
 /**
  * Format a money amount for the paper — the EDGE where a `Decimal` string becomes human-readable text.

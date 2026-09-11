@@ -21,7 +21,7 @@ export type {
   UpdatePrinterInput,
 } from "./printers.js";
 export { enqueuePrintJob } from "./outbox.js";
-export { EscBuilder, esc } from "./escpos.js";
+export { EscBuilder, esc, FEED_BEFORE_CUT } from "./escpos.js";
 export {
   MAX_DELIVERY_ATTEMPTS,
   PULL_BATCH_LIMIT,

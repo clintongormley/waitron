@@ -18,7 +18,16 @@ const ESC = 0x1b;
 /** GS — the group-separator lead byte (0x1D) beginning the cut command. */
 const GS = 0x1d;
 /** LF — line feed (0x0A): prints the buffered line and advances one line. */
+
 const LF = 0x0a;
+
+/**
+ * Blank lines every ticket feeds before its cut, so the tear-off clears the print head and the
+ * holder has something to grip. The cutter sits above the head: five lines is the measured
+ * margin — three left the Epson TM-T88III's cut on the last printed line (owner's test print,
+ * 2026-09-11). One value for the test print, the kitchen ticket and the receipt.
+ */
+export const FEED_BEFORE_CUT = 5;
 
 /**
  * Text encoding: ONE byte per character via Latin-1 (ISO-8859-1), so every code point 0x00-0xFF maps
@@ -87,7 +96,7 @@ export class EscBuilder {
     return this;
   }
 
-  /** Full cut — `GS V 0`. Severs the paper completely. */
+  /** Full cut — `GS V 0`. Severs the paper completely. Callers feed {@link FEED_BEFORE_CUT} first. */
   cut(): this {
     this.parts.push(GS, 0x56, 0x00);
     return this;
