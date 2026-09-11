@@ -67,6 +67,14 @@ interface EditablePrinter {
  * only the box can read, so those transports register from the discovered list (§10). */
 const TRANSPORTS: readonly PrintTransport[] = ["network_tcp", "usb", "bluetooth"];
 
+/** How long Scan keeps re-reading the discovered list, and how often. The agents learn the window is
+ * open on their next poll (every 2 s) and post what they found on the pull after that, so the first
+ * results land several seconds after the press; a single read right after opening the window sees
+ * nothing (owner, 2026-09-11: several presses before a result). The server's window stays open far
+ * longer (3 min); this is only how long the screen listens for a press. */
+export const SCAN_LISTEN_MS = 10_000;
+export const SCAN_POLL_MS = 2_000;
+
 /** The transports registered from the discovered-devices list rather than a manual form — a physical USB
  * or Bluetooth device is keyed by a stable id (USB serial / MAC) that only the box can read. */
 const DISCOVERED_TRANSPORTS: readonly PrintTransport[] = ["usb", "bluetooth"];
@@ -288,6 +296,8 @@ export class PrintersScreen extends LitElement {
   // on Scan, and on Refresh — never at connect (discovery is on-demand). `registerNames` holds the name
   // typed against each unregistered row, keyed by the device's `localKey`.
   @state() private discovered: DiscoveredPrinter[] = [];
+  /** A Scan press is listening for results — the button is busy and a second press is ignored. */
+  @state() private scanning = false;
   @state() private registerNames: Record<string, string> = {};
 
   @state() private errorKey: string | null = null;
@@ -618,15 +628,26 @@ export class PrintersScreen extends LitElement {
   }
 
   /** Open the venue discovery window (the expensive LAN sweep / Bluetooth inquiry the agents run), then
-   * read what turned up so the network_tcp form can offer a found IP printer to pre-fill. A rejection
-   * becomes the `errorKey` banner. */
+   * keep re-reading what turned up for {@link SCAN_LISTEN_MS} so the network_tcp form can offer a found
+   * IP printer to pre-fill as soon as an agent reports it. A rejection becomes the `errorKey` banner and
+   * ends the listen. The screen leaving the page ends it too (`isConnected`). */
   async #scan(): Promise<void> {
+    if (this.scanning) return;
     this.errorKey = null;
+    this.scanning = true;
     try {
       await this.api.startPrinterDiscovery();
-      await this.#loadDiscovered();
+      const until = Date.now() + SCAN_LISTEN_MS;
+      for (;;) {
+        await this.#loadDiscovered();
+        if (Date.now() >= until) break;
+        await new Promise((resolve) => setTimeout(resolve, SCAN_POLL_MS));
+        if (!this.isConnected) break;
+      }
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.scanning = false;
     }
   }
 
@@ -1230,8 +1251,12 @@ export class PrintersScreen extends LitElement {
           @click=${() => void this.#createPrinter()}
           >${t("printers.add_printer")}</wt-button
         >
-        <wt-button variant="secondary" data-test="scan-printers" @click=${() => void this.#scan()}
-          >${t("printers.scan")}</wt-button
+        <wt-button
+          variant="secondary"
+          data-test="scan-printers"
+          ?loading=${this.scanning}
+          @click=${() => void this.#scan()}
+          >${this.scanning ? t("printers.scanning") : t("printers.scan")}</wt-button
         >
       </div>
       ${

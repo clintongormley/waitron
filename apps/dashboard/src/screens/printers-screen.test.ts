@@ -16,7 +16,7 @@ import type {
   StationPrinter,
   Till,
 } from "../api/client.js";
-import { PrintersScreen } from "./printers-screen.js";
+import { PrintersScreen, SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
 
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
@@ -748,6 +748,44 @@ describe("printers-screen", () => {
     await el.updateComplete;
     expect((el as unknown as { newHost: string }).newHost).toBe("10.0.0.77");
     expect((el as unknown as { newPort: string }).newPort).toBe("9100");
+  });
+
+  it("Scan shows a busy button and keeps re-reading the discovered list for the listen period", async () => {
+    // The agents learn the window is open on their next 2 s poll and post results on the pull after
+    // that, so a single read right after opening the window sees nothing (the owner pressed Scan
+    // several times before a result appeared, 2026-09-11). The screen must listen for a while.
+    vi.useFakeTimers();
+    try {
+      const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork) });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+
+      const button = () => q(el, "[data-test=scan-printers]")!;
+      button().click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(api.startPrinterDiscovery).toHaveBeenCalledTimes(1);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(1);
+      expect(button().hasAttribute("loading")).toBe(true);
+      expect(button().textContent?.trim()).toBe(t("printers.scanning"));
+
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(2);
+
+      // A second press while listening is ignored — one window, one listener.
+      button().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.startPrinterDiscovery).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS);
+      await el.updateComplete;
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(SCAN_LISTEN_MS / SCAN_POLL_MS + 1);
+      expect(button().hasAttribute("loading")).toBe(false);
+      expect(button().textContent?.trim()).toBe(t("printers.scan"));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // ── Printers: register a discovered USB / Bluetooth device (design §10) ─────────────────────────────
