@@ -442,6 +442,15 @@ design-review section apply.
   migrated to `loading` (design-system says so); **(iii)** the agent's own scan pass is unchanged (1.5 s
   mDNS listen per tick, repeated for the 3-minute window) — lengthen only if a printer still needs several
   presses after the 10 s listen.
+  *Scan results vs. registered printers, LANDED #318 (2026-09-11):* the discovered list carries the
+  registered printer each device matches (`printerId` — local key, or host:port for network; a null
+  port matches 9100) plus `lastSeenAt`; both dashboard discovered lists hide matched devices, each
+  registered printer's row shows "Seen on <box> · <time>", and a found network printer is added in one
+  click ("Add"). *Open from it:* **(i)** the seen-status is as of the last read (load/Scan/Refresh) and
+  the server forgets an entry 15 s after the last report — not a live presence light; a periodic
+  re-read or a server-side last-seen column would make it one; **(ii)** `alreadyRegistered` stays on
+  the wire beside `printerId` (derived; the spec's wire table names it); **(iii)** a host-less
+  `network_tcp` result would render a row with a dead Add button — no such result exists today.
   *Deferred follow-ups (surfaced at finish-branch, not taken):* extract an in-memory `createDiscoveredStore`
   from `mountPrintApi` (altitude); dedupe the `VisibleDeviceWire`/`DiscoveredDeviceWire` types against
   `@waitron/print-agent` via a type-only import IF `module-seams` permits; fold `#registerDiscovered` into
