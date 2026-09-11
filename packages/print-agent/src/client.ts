@@ -39,6 +39,7 @@ export type Failure =
   | { kind: "unauthorized" }
   | { kind: "rate_limited" } // 429 — window flood OR pending cap; both mean back off
   | { kind: "pairing_closed" } // 403 — the venue's pairing window is shut
+  | { kind: "refused" } // self-enrol only — the box's OWN server said no (any non-2xx); NOT a pairing event
   | { kind: "bad_reply"; detail: string };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; failure: Failure };
@@ -83,6 +84,10 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
 export interface AgentClient {
   probeNode(url: string): Promise<Result<NodeProbe>>;
   join(url: string, name: string): Promise<Result<JoinReply>>;
+  /** Silently enrol on THIS box's own loopback (design §3, on-node auto-enrolment). Unlike {@link join}
+   * this never reaches a pairing window: a 201 hands back a ready token, and any other status folds to
+   * one `refused` — the box will not self-enrol us — while a transport failure is `unreachable`. */
+  enrolSelf(url: string, name: string): Promise<Result<{ token: string }>>;
   joinStatus(url: string, token: string): Promise<Result<JoinStatus>>;
   pullJobs(url: string, token: string, inventory: AgentInventory): Promise<Result<PullReply>>;
   report(url: string, token: string, jobId: string, outcome: JobOutcome): Promise<Result<void>>;
@@ -275,6 +280,35 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
           return { token: b.token, verificationNumber: b.verificationNumber };
         },
       );
+    },
+    async enrolSelf(url, name) {
+      // NOT foldFetch: that helper maps the status to a failure kind BEFORE the body (403 →
+      // pairing_closed, 409 → bad_reply, 429 → rate_limited), so it can never emit `refused` and would
+      // mislabel a self-enrol refusal as a pairing event. A self-enrol is a local POST to this box's own
+      // loopback, so every non-2xx means one thing — the box will not self-enrol us — and folds to one
+      // `refused`; a transport throw/abort/timeout is `unreachable` (nothing answered on the device).
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await opts.fetch(`${url}/api/node/enrol-self`, {
+          method: "POST",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+          signal: controller.signal,
+        });
+        if (response.status !== 201) return { ok: false, failure: { kind: "refused" } };
+        const b = await readJson(response);
+        // A 201 without a usable token is our own server breaking its contract; we still have no token,
+        // so it is not an enrolment — fold it to `refused` rather than inventing a bad_reply surface.
+        if (b === undefined || typeof b.token !== "string") {
+          return { ok: false, failure: { kind: "refused" } };
+        }
+        return { ok: true, value: { token: b.token } };
+      } catch (error) {
+        return { ok: false, failure: { kind: "unreachable", detail: describeRejection(error) } };
+      } finally {
+        clearTimeout(timer);
+      }
     },
     joinStatus(url, token) {
       return foldFetch(

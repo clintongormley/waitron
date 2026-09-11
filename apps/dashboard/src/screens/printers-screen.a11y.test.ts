@@ -33,6 +33,7 @@ const agents: PrintAgentRow[] = [
     id: "a1",
     name: "Cocina agent",
     active: true,
+    nodeId: null,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
   },
@@ -40,6 +41,7 @@ const agents: PrintAgentRow[] = [
     id: "a2",
     name: "Barra agent",
     active: false,
+    nodeId: "n1", // self-enrolled + revoked: axe scans the provenance marker and the allow-again control
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
   },

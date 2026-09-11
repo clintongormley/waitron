@@ -26,6 +26,7 @@ const agents: PrintAgentRow[] = [
     id: "a1",
     name: "Cocina agent",
     active: true,
+    nodeId: null, // manually enrolled — no provenance marker
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
   },
@@ -33,6 +34,7 @@ const agents: PrintAgentRow[] = [
     id: "a2",
     name: "Barra agent",
     active: false,
+    nodeId: "n1", // self-enrolled on a node, then revoked — marker + allow-again
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
   },
@@ -176,6 +178,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinters: vi.fn().mockResolvedValue(printers),
     listRecentJobs: vi.fn().mockResolvedValue(jobs),
     revokeAgent: vi.fn().mockResolvedValue(undefined),
+    allowAgent: vi.fn().mockResolvedValue(undefined),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
     openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
     closePairingMode: vi.fn().mockResolvedValue(undefined),
@@ -595,6 +598,56 @@ describe("printers-screen", () => {
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await el.updateComplete;
     q(el, "[data-test=revoke-agent-a1]")!.click();
+    await flush(el);
+
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
+  });
+
+  // ── Agents: provenance + allow-again (on-node self-enrolment) ───────────────────────────────────────
+
+  it("marks a self-enrolled agent (node id present) and not a manually-enrolled one", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    // a2 carries a node id → the "on this box" provenance marker shows.
+    expect(q(el, "[data-test=agent-provenance-a2]")).toBeTruthy();
+    expect(text(el, "[data-test=agent-provenance-a2]")).toBe(
+      t("printers.provenance_self", "es-ES"),
+    );
+    // a1 has a null node id (manual enrolment) → no marker.
+    expect(q(el, "[data-test=agent-provenance-a1]")).toBeNull();
+  });
+
+  it("re-allows a revoked agent only on the confirming second click, then reloads", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    // The allow-again control shows only on a revoked agent (a2), not an active one (a1).
+    expect(q(el, "[data-test=allow-agent-a2]")).toBeTruthy();
+    expect(q(el, "[data-test=allow-agent-a1]")).toBeNull();
+
+    q(el, "[data-test=allow-agent-a2]")!.click();
+    await el.updateComplete;
+    expect(api.allowAgent).not.toHaveBeenCalled();
+    expect(text(el, "[data-test=allow-agent-a2]")).toBe(t("printers.allow_confirm", "es-ES"));
+
+    q(el, "[data-test=allow-agent-a2]")!.click();
+    await flush(el);
+    expect(api.allowAgent).toHaveBeenCalledWith("a2");
+    expect(api.listAgents).toHaveBeenCalledTimes(2); // reloaded
+  });
+
+  it("shows an error and keeps the list when a re-allow is rejected", async () => {
+    const api = stubApi({ allowAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=allow-agent-a2]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=allow-agent-a2]")!.click();
     await flush(el);
 
     const banner = q(el, "[role=alert]")?.textContent;

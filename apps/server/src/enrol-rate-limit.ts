@@ -1,16 +1,18 @@
 // Keeps `device.join_rate_limited` (errors.ts) reachable from this file — the ONE code this limiter
-// throws, shared by both knock surfaces (the device knock and the print-agent knock both build it with
-// this default). The reachability convention device.ts / kitchen.ts follow. See errors.ts.
+// throws, shared by its three consumers (the device knock, the print-agent knock, and the loopback
+// self-enrol route all build it with this default). The reachability convention device.ts / kitchen.ts
+// follow. See errors.ts.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 
 /**
- * The rate-limit for the unauthenticated knock routes (`POST /api/device/join`, device-identity-1 §8,
- * and `POST /print-api/agent/join`, which reuses this same limiter). A per-process, in-memory, GLOBAL
- * fixed-window counter, checked at the TOP of the handler BEFORE the body is parsed and BEFORE any DB
- * work — so a rejected attempt touches no DB. Both surfaces throw the SAME `device.join_rate_limited`
- * (the agent client reads the HTTP 429, not the code string); the window, cap and topology reasoning
- * below are shared.
+ * The rate-limit for the enrol surfaces. TWO are unauthenticated knock routes (`POST /api/device/join`,
+ * device-identity-1 §8, and `POST /print-api/agent/join`); the THIRD is `POST /api/node/enrol-self`
+ * (node-enrol-api.ts), which is loopback-gated rather than an unauthenticated knock but reuses this same
+ * limiter for the same DoS / connection-pool defence. A per-process, in-memory, GLOBAL fixed-window
+ * counter, checked at the TOP of the handler BEFORE the body is parsed and BEFORE any DB work — so a
+ * rejected attempt touches no DB. All three throw the SAME `device.join_rate_limited` (the agent client
+ * reads the HTTP 429, not the code string); the window, cap and topology reasoning below are shared.
  *
  * Why a limit at all, and why THIS shape:
  *  - It is not the primary guard on either surface: the device knock is admitted only while an admin

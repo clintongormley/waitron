@@ -133,6 +133,15 @@ declare module "@waitron/shared" {
      * params — the refusal names no row, the `sync.*`/`tunnel.*` no-leak discipline.
      */
     "node.membership_superseded_on_boot": Record<string, never>;
+    /** `POST /api/node/enrol-self` reached from a non-loopback address. On-node self-enrol is a
+     * loopback-only trust gate (design §1.1): anything that can reach the box's loopback can already
+     * read its vault, so enrolling a loopback caller grants nothing new; a LAN caller must not.
+     * Mapped to HTTP 403 by node-enrol-api.ts's local STATUS map, not here. */
+    "node.enrol_not_local": Record<string, never>;
+    /** This node cannot self-enrol a print agent because it is not the primary — only the primary can
+     * write `print_agents` (a mirror's DB is a read-only subscriber). The defensive refusal for a non-primary node the read-only gate does not cover — a real mirror's POST is refused earlier with `node.read_only` (spec §5).
+     * Mapped to HTTP 409 by node-enrol-api.ts's local STATUS map, not here. */
+    "node.enrol_unavailable": Record<string, never>;
     /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error Node attaches to the
      * `'error'` event (`EADDRINUSE` for the common case of a fixed default port already taken,
@@ -1154,6 +1163,13 @@ declare module "@waitron/shared" {
      * device's recovery is its own "Try again", which knocks afresh with a new number. HTTP 400.
      */
     "device.join_mismatch": Record<string, never>;
+    /**
+     * A node's own print agent asked to self-enrol against a row that was deliberately REVOKED
+     * (`active = false`); self-enrol refuses rather than silently reactivating it, so a revoke sticks
+     * until an admin re-allows the node (on-node auto-enrolment design §4). NO params: the fact is the
+     * refusal, not the node — nothing non-secret worth echoing. The enrol route maps it to HTTP 403.
+     */
+    "device.join_revoked": Record<string, never>;
     /**
      * No pending join request with that id in this tenant — never existed, already accepted or denied,
      * or lapsed past its TTL. All fold into one code: the admin's recovery is the same in every case,

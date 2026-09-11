@@ -1,5 +1,5 @@
 import "./errors.js";
-import { randomBytes, randomInt } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { type Transaction, devices, joinRequests, printAgents } from "@waitron/db";
 import { hashSecret, verifySecret } from "@waitron/identity";
@@ -488,4 +488,57 @@ export async function denyJoinRequest(
     .delete(joinRequests)
     .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
   return row.kind;
+}
+
+/**
+ * Enrol THIS node's own print agent (on-node auto-enrolment design §1.1, §3). Idempotent per node: a
+ * node that has lost its token (a wiped volume, a reinstall) re-asks, and this refreshes the existing
+ * row's token rather than inserting a second — so the agent id is stable and its printer bindings
+ * survive. A row that has been REVOKED (`active = false`) is NOT silently reactivated: self-enrol
+ * refuses with `device.join_revoked` so a deliberate revoke sticks (spec §4); an admin's "allow again"
+ * is the only way back. The returned token is the accept-shape `${agentId}.${secret}` so it
+ * authenticates through `authenticateAgent` exactly like a knock-and-accept token. By-id/by-node reads
+ * carry the tenant predicate (CLAUDE.md §3).
+ */
+export async function selfEnrolNodeAgent(
+  tx: Transaction,
+  cfg: TillConfig,
+  input: { nodeId: string; name: string },
+): Promise<{ agentId: string; token: string }> {
+  const [existing] = await tx
+    .select({ id: printAgents.id, active: printAgents.active })
+    .from(printAgents)
+    .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.nodeId, input.nodeId)));
+
+  // A revoked row (`active = false`) is refused, never silently reactivated (spec §4) — checked BEFORE
+  // minting the token so a refused re-enrol does not spend a scrypt (`hashSecret`) it will throw away.
+  if (existing !== undefined && !existing.active) throw new AppError("device.join_revoked", {});
+
+  const secret = randomBytes(32).toString("base64url");
+  const tokenHash = hashSecret(secret);
+
+  if (existing !== undefined) {
+    await tx
+      .update(printAgents)
+      .set({ tokenHash })
+      .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.id, existing.id)));
+    return { agentId: existing.id, token: `${existing.id}.${secret}` };
+  }
+
+  // First enrol for this node. No advisory lock (unlike createJoinRequest): exactly one agent process
+  // runs per box, so two concurrent first-time enrols for the SAME node are not a real shape. If they
+  // ever raced, the loser hits the `(tenant, node_id)` unique index as a 23505 and its agent simply
+  // re-asks next tick, finding the row and refreshing — no wrong row, no duplicate. That backstop, not
+  // a lock, is what keeps the invariant.
+  const agentId = randomUUID();
+  await tx.insert(printAgents).values({
+    id: agentId,
+    tenantId: cfg.tenantId,
+    locationId: cfg.locationId,
+    nodeId: input.nodeId,
+    name: input.name,
+    tokenHash,
+    active: true,
+  });
+  return { agentId, token: `${agentId}.${secret}` };
 }

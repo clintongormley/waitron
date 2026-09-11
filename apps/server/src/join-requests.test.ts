@@ -12,6 +12,7 @@ import {
   listPendingJoinRequests,
   readAgentJoinStatus,
   readJoinStatus,
+  selfEnrolNodeAgent,
   type AcceptResult,
 } from "./join-requests.js";
 // `useTemplateDb` is NOT on the `@waitron/db` barrel — the exports map is enumerated (CLAUDE.md §3),
@@ -25,6 +26,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { verifySecret } from "@waitron/identity";
+import { authenticateAgent } from "@waitron/printing";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { TillConfig } from "./till-config.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -985,5 +987,67 @@ describe("readAgentJoinStatus", () => {
     expect(
       await asApp(cfgB, (tx) => readAgentJoinStatus(tx, cfgB, madeA.joinId, madeA.token)),
     ).toBe("not_approved");
+  });
+});
+
+describe("selfEnrolNodeAgent", () => {
+  it("mints one agent per node whose token authenticates", async () => {
+    const cfg = (await setupVenue(suite.admin)).cfg;
+    const nodeId = randomUUID();
+    const { agentId, token } = await asApp(cfg, (tx) =>
+      selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }),
+    );
+    // The token is the accept-shape `${id}.${secret}` and authenticates as this agent.
+    const auth = await asApp(cfg, (tx) => authenticateAgent(tx, { tenantId: cfg.tenantId }, token));
+    expect(auth.agentId).toBe(agentId);
+  });
+
+  it("is idempotent per node: a second call refreshes the token, keeps one row and the same id", async () => {
+    const cfg = (await setupVenue(suite.admin)).cfg;
+    const nodeId = randomUUID();
+    const first = await asApp(cfg, (tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }));
+    const second = await asApp(cfg, (tx) =>
+      selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box again" }),
+    );
+    expect(second.agentId).toBe(first.agentId); // stable id → printer bindings survive
+    expect(second.token).not.toBe(first.token); // fresh secret
+
+    const rows = await asApp(cfg, (tx) =>
+      tx
+        .select()
+        .from(printAgents)
+        .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.nodeId, nodeId))),
+    );
+    expect(rows).toHaveLength(1);
+
+    // The old token no longer authenticates; the new one does, as the same agent.
+    await expect(
+      asApp(cfg, (tx) => authenticateAgent(tx, { tenantId: cfg.tenantId }, first.token)),
+    ).rejects.toThrow(/unauthorized/);
+    expect(
+      (await asApp(cfg, (tx) => authenticateAgent(tx, { tenantId: cfg.tenantId }, second.token)))
+        .agentId,
+    ).toBe(first.agentId);
+  });
+
+  it("refuses a revoked node's re-enrol with device.join_revoked and does NOT reactivate it", async () => {
+    const cfg = (await setupVenue(suite.admin)).cfg;
+    const nodeId = randomUUID();
+    const { agentId } = await asApp(cfg, (tx) =>
+      selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }),
+    );
+    // Revoke it (active := false), the deliberate revoke self-enrol must not silently undo.
+    await suite.admin.execute(sql`update print_agents set active = false where id = ${agentId}`);
+
+    expect(
+      await codeOf(() => asApp(cfg, (tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }))),
+    ).toBe("device.join_revoked");
+
+    const [{ active }] = (
+      await suite.admin.execute<{ active: boolean }>(
+        sql`select active from print_agents where id = ${agentId}`,
+      )
+    ).rows;
+    expect(active).toBe(false);
   });
 });

@@ -94,6 +94,7 @@ import type { SumUpAccountDeps } from "./sumup-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountNodeApi } from "./node-api.js";
+import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -1809,6 +1810,17 @@ export async function startServer(
       // handle — the one place in this boot that still binds it.
       readMembership: () => readNodeMembership(db),
     },
+    log,
+  );
+  // On-node print-agent self-enrol (design §1.1). Mounted on EVERY trading boot beside the probe —
+  // deliberately OUTSIDE the `!fencedOrMirror` block, so a mirror/fenced node carries the route too. On
+  // such a node the read-only gate refuses the POST with `node.read_only` BEFORE the route's `isPrimary`
+  // check runs; `isPrimary` (false here) is the defensive `node.enrol_unavailable` refusal for a
+  // non-primary node the read-only gate does not cover. Either refusal makes the agent fall back to the
+  // manual path (spec §2). Loopback-gated inside; `isPrimary` is the probe's `acceptingSales` predicate.
+  mountNodeEnrolApi(
+    app,
+    { db, cfg: till, nodeId: till.nodeId, isPrimary: isSingletonPrimary && !fencedOrMirror },
     log,
   );
   // The operational agent/device groups — NOT mounted under mirror mode, and NOT on a FENCED node.

@@ -493,18 +493,24 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/print-agents", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // The deployment holds one tenant per database. This read has no tenant filter. Newest
-      // enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
+      // Tenant-scoped like every other read (§3): since RLS was dropped (#255) `withTenant` no longer
+      // isolates SELECTs, so without the explicit `tenantId` predicate a manager would see every
+      // tenant's agents in a multi-tenant DB (mirrors the revoke/allow routes below and device-api.ts).
+      // Newest enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
             id: printAgents.id,
             name: printAgents.name,
             active: printAgents.active,
+            // Which node self-enrolled this agent over loopback, or NULL when a human enrolled it via
+            // knock-and-accept (on-node auto-enrolment design §3) — the provenance the dashboard shows.
+            nodeId: printAgents.nodeId,
             lastSeenAt: printAgents.lastSeenAt,
             enrolledAt: printAgents.enrolledAt,
           })
           .from(printAgents)
+          .where(eq(printAgents.tenantId, deps.cfg.tenantId))
           .orderBy(desc(printAgents.enrolledAt)),
       );
       return c.json(rows);
@@ -523,6 +529,26 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         tx
           .update(printAgents)
           .set({ active: false })
+          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .returning({ id: printAgents.id }),
+      );
+      if (updated.length === 0) throw new AppError("agent.not_found", { id });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Allow a revoked print agent again (printer.manage) ───────────────────────────────────────────
+  // The reverse of revoke: `active := true`. Revoke stopped being reversible by re-enrol once an
+  // on-node agent refuses to auto-re-enrol while revoked (design §4) — without this action a mistaken
+  // revoke of the box's own agent would permanently kill printing. 0 rows (unknown id) → agent.not_found.
+  app.post("/management-api/print-agents/:id/allow", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrintAgentId");
+      const updated = await gated(sessionId, (tx) =>
+        tx
+          .update(printAgents)
+          .set({ active: true })
           .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
           .returning({ id: printAgents.id }),
       );

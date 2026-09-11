@@ -39,6 +39,12 @@ export const printAgents = pgTable(
       .references(() => locations.id, { onDelete: "restrict" }),
     // The human label ("Cocina USB"), shown in the Impresoras management surface.
     name: text("name").notNull(),
+    // The node that enrolled this agent over loopback (on-node auto-enrolment design §3), or NULL when
+    // a human enrolled it through knock-and-accept (a till, a Pi). NO FK to `nodes`: the primary holds
+    // no `nodes` row for a mirror (it endorses the mirror's key and stores nothing — mirror-bundle.ts),
+    // so a FK would reject the very mirror self-enrol the follow-up (spec §7) exists to serve. Bare
+    // column, reason recorded here per CLAUDE.md §3.
+    nodeId: uuid("node_id"),
     // scrypt hash of the agent token (hashSecret, secret-hash.ts). Never the plaintext token.
     tokenHash: text("token_hash").notNull(),
     // Revoke = active := false, checked in requireAgent (a later task) for instant revocation. No hard delete.
@@ -53,5 +59,8 @@ export const printAgents = pgTable(
     // Composite (tenant_id, id) UNIQUE — the target `printers.agent_id`'s tenant-consistent
     // (tenant_id, agent_id) FK points at (printers.ts), the same role devices_tenant_id_key plays.
     unique("print_agents_tenant_id_key").on(t.tenantId, t.id),
+    // At most one self-enrolled agent per node. Postgres treats NULLs as DISTINCT by default, so the
+    // many manual (NULL) agents are unconstrained; only non-NULL node_ids are deduplicated.
+    unique("print_agents_tenant_node_key").on(t.tenantId, t.nodeId),
   ],
 );

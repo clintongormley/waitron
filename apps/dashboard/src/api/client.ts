@@ -1012,6 +1012,10 @@ export interface PrintAgentRow {
   id: string;
   name: string;
   active: boolean;
+  /** The node that self-enrolled this agent on its own box (`/api/node/enrol-self`), or null for an
+   * agent enrolled manually through the join-and-accept flow. The surface shows a provenance marker
+   * when it is set. */
+  nodeId: string | null;
   lastSeenAt: string | null;
   enrolledAt: string;
 }
@@ -2330,9 +2334,12 @@ export class DashboardApi {
   // ── Printing (print agents + printers + jobs) ────────────────────────────────────────────────────
   // The verbs the Impresoras screen drives, all printer.manage-gated server-side (the print-api.ts
   // management routes). Agents: `listAgents` reads the enrolled agents (newest first); `revokeAgent`
-  // deactivates an agent (204). A print agent JOINS through the shared join-and-accept mechanism above
+  // deactivates an agent and `allowAgent` reverses that (each 204). A print agent JOINS through the
+  // shared join-and-accept mechanism above
   // (`joinRequests("print_agent")` / `joinChallenge` / `denyJoinRequest` / `acceptPrintAgentJoinRequest`),
-  // not a pairing code. Printers: `listPrinters`/`createPrinter`/`updatePrinter`/`deactivatePrinter` are
+  // not a pairing code — though some agents self-enrolled silently on their own node (hence the `nodeId`
+  // provenance the list now carries), a path the dashboard never drives; it only drives the knock.
+  // Printers: `listPrinters`/`createPrinter`/`updatePrinter`/`deactivatePrinter` are
   // the config CRUD (create returns the minted id at 201; patch/deactivate answer an empty 204).
   // `listRecentJobs` is the status read; `testPrint` enqueues a known diagnostic payload (202).
   // Paths/bodies against apps/server/src/print-api.ts.
@@ -2348,6 +2355,13 @@ export class DashboardApi {
    * `{ code: "agent.not_found" }`. Never a hard delete — an agent is a durable identity. */
   revokeAgent(id: string): Promise<void> {
     return this.#request<void>(`/management-api/print-agents/${id}/revoke`, "POST");
+  }
+
+  /** `POST /management-api/print-agents/:id/allow` — reverse a revoke (flip `active = true`): the agent
+   * passes `requireAgent` again at once. Answers an empty 204; an unknown id rejects
+   * `{ code: "agent.not_found" }`. The inverse of `revokeAgent`. */
+  allowAgent(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/print-agents/${id}/allow`, "POST");
   }
 
   /** `GET /management-api/printers` — this tenant's printers by name (active AND deactivated, so the

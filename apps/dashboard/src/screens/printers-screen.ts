@@ -77,9 +77,11 @@ const DISCOVERED_TRANSPORTS: readonly PrintTransport[] = ["usb", "bluetooth"];
  * list + "new" form idiom, `@waitron/ui` primitives, `--wt-*` tokens). It manages three things:
  *
  *  - PRINT AGENTS — the always-on local processes that pull queued jobs and push bytes to the hardware.
- *    Lists the enrolled agents (name, active/revoked, last-seen); REVOKES an agent behind a TWO-STEP
- *    confirm (a revoke stops a working agent, so an accidental single click must not fire it — only
- *    ACTIVE agents show the control). A new agent JOINS through the SHARED join-and-accept mechanism
+ *    Lists the enrolled agents (name, active/revoked, last-seen, and an "on this box" marker when the
+ *    agent self-enrolled on a node — `nodeId` set); REVOKES an active agent behind a TWO-STEP confirm
+ *    (a revoke stops a working agent, so an accidental single click must not fire it) and, on a REVOKED
+ *    agent, shows "Allow again" — the inverse, behind the same two-step confirm. A new agent JOINS
+ *    through the SHARED join-and-accept mechanism
  *    (device-join-and-accept, the twin of the Devices screen): the venue-wide pairing window, a queue of
  *    agents asking to join (`api.joinRequests("print_agent")`, NO number in the row), and a per-request
  *    accept dialog that fetches `api.joinChallenge(id)` — three shuffled two-digit numbers of which the
@@ -155,6 +157,12 @@ export class PrintersScreen extends LitElement {
         gap: var(--wt-space-2);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .tag {
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm, 4px);
+        padding: 0 var(--wt-space-1);
+        color: var(--wt-color-text);
       }
       .new {
         display: flex;
@@ -251,6 +259,10 @@ export class PrintersScreen extends LitElement {
   // The id of the agent whose Revoke control is ARMED (awaiting a confirming second click), or null.
   @state() private armedRevokeId: string | null = null;
 
+  // The id of the agent whose "Allow again" control is ARMED, or null. Its own state (like Deny's) so
+  // arming one agent's re-allow does not disarm another agent's revoke.
+  @state() private armedAllowId: string | null = null;
+
   // The shared join-and-accept half (device-join-and-accept, reused for print agents; the Devices
   // screen documents each field). The pairing window as last read (undefined until the first read
   // settles); the print agents waiting to join, in server order, each carrying NO number; the request
@@ -317,6 +329,7 @@ export class PrintersScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     this.armedRevokeId = null;
+    this.armedAllowId = null;
     this.armedDenyId = null;
     try {
       const [agents, printers, jobs, stations, tills, locations, pairing, pendingJoins] =
@@ -432,9 +445,11 @@ export class PrintersScreen extends LitElement {
   }
 
   /** Reload the AGENTS only (not the option feeds) after an accept — the accepted request becomes an
-   * enrolled agent. Throws like `listAgents` itself; the one caller wraps it. Disarms any armed revoke. */
+   * enrolled agent. Throws like `listAgents` itself; the one caller wraps it. Disarms any armed revoke
+   * or allow. */
   async #reloadAgents(): Promise<void> {
     this.armedRevokeId = null;
+    this.armedAllowId = null;
     this.agents = await this.api.listAgents();
   }
 
@@ -548,6 +563,23 @@ export class PrintersScreen extends LitElement {
   /** Revoke the agent `id` holds, then reload. A rejection becomes the `errorKey` banner. */
   async #revokeAgent(id: string): Promise<void> {
     await this.#mutate(() => this.api.revokeAgent(id));
+  }
+
+  /** The two-step allow-again: the first click ARMS `id`, a second on the armed row confirms and
+   * re-allows. Mirrors the revoke idiom so an accidental single click cannot flip a revoked agent back
+   * on. Arming another row disarms the first (single-valued state). */
+  #onAllowAgent(id: string): void {
+    if (this.armedAllowId === id) {
+      this.armedAllowId = null;
+      void this.#allowAgent(id);
+      return;
+    }
+    this.armedAllowId = id;
+  }
+
+  /** Re-allow the revoked agent `id` holds, then reload. A rejection becomes the `errorKey` banner. */
+  async #allowAgent(id: string): Promise<void> {
+    await this.#mutate(() => this.api.allowAgent(id));
   }
 
   // ── Printers ───────────────────────────────────────────────────────────────────────────────────
@@ -783,7 +815,8 @@ export class PrintersScreen extends LitElement {
   // ── Renderers ────────────────────────────────────────────────────────────────────────────────────
 
   #renderAgent(agent: PrintAgentRow): TemplateResult {
-    const armed = this.armedRevokeId === agent.id;
+    const revokeArmed = this.armedRevokeId === agent.id;
+    const allowArmed = this.armedAllowId === agent.id;
     return html`<li data-test="agent-row-${agent.id}">
       <wt-card>
         <div class="row">
@@ -793,6 +826,13 @@ export class PrintersScreen extends LitElement {
               <span data-test="agent-status-${agent.id}"
                 >${agent.active ? t("printers.status_active") : t("printers.status_revoked")}</span
               >
+              ${
+                agent.nodeId !== null
+                  ? html`<span class="tag" data-test="agent-provenance-${agent.id}"
+                      >${t("printers.provenance_self")}</span
+                    >`
+                  : nothing
+              }
               <span data-test="agent-last-seen-${agent.id}"
                 >${this.#timestamp(agent.lastSeenAt)}</span
               >
@@ -804,12 +844,19 @@ export class PrintersScreen extends LitElement {
                   variant="danger"
                   size="sm"
                   data-test="revoke-agent-${agent.id}"
-                  data-armed=${armed ? "true" : nothing}
-                  aria-label=${`${armed ? t("printers.revoke_confirm") : t("printers.revoke")} ${agent.name}`}
+                  data-armed=${revokeArmed ? "true" : nothing}
+                  aria-label=${`${revokeArmed ? t("printers.revoke_confirm") : t("printers.revoke")} ${agent.name}`}
                   @click=${() => this.#onRevokeAgent(agent.id)}
-                  >${armed ? t("printers.revoke_confirm") : t("printers.revoke")}</wt-button
+                  >${revokeArmed ? t("printers.revoke_confirm") : t("printers.revoke")}</wt-button
                 >`
-              : nothing
+              : html`<wt-button
+                  size="sm"
+                  data-test="allow-agent-${agent.id}"
+                  data-armed=${allowArmed ? "true" : nothing}
+                  aria-label=${`${allowArmed ? t("printers.allow_confirm") : t("printers.allow")} ${agent.name}`}
+                  @click=${() => this.#onAllowAgent(agent.id)}
+                  >${allowArmed ? t("printers.allow_confirm") : t("printers.allow")}</wt-button
+                >`
           }
         </div>
       </wt-card>
