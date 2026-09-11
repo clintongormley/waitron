@@ -41,10 +41,24 @@ const LABEL = {
   total: "TOTAL",
   cash: "Efectivo",
   change: "Cambio",
+  card: "Tarjeta",
+  tip: "Propina",
+  charged: "Cobrado",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
+
+/**
+ * Spanish labels for a card tender's entry mode, printed on the second card line (design §3b). No
+ * entry for `"unknown"` — that line drops the entry-mode fragment entirely rather than printing a
+ * placeholder. Kept identical to `apps/server/src/receipt-ticket.ts`'s `ENTRY_MODE_LABEL`.
+ */
+const ENTRY_MODE_LABEL: Record<string, string> = {
+  contactless: "Sin contacto",
+  chip: "Chip",
+  swipe: "Banda",
+};
 
 /**
  * The multiplication sign for a per-option-quantity badge (`×2`). The SAME `×` (U+00D7) the printed
@@ -97,6 +111,73 @@ function issueDate(iso: string, locale: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(iso));
+}
+
+/**
+ * The tender block (design §3b), the allowed operational extra alongside `result.total`. Cash shows
+ * what was tendered (= total + change) and the change; card shows the scheme + masked PAN, an
+ * entry-mode·auth second line (present only when at least one of the two exists), an operator manual
+ * reference, and — only when a tip rode on the card — what was charged (total + tip) and the tip
+ * itself. Mirrors `apps/server/src/receipt-ticket.ts`'s identical branch over the same `TenderBlock`,
+ * kept in lock-step by convention (the paper must never carry FEWER tender elements than the screen).
+ */
+function renderTender(result: TillSaleResult, locale: string) {
+  const t = result.tender;
+  if (t.method === "cash") {
+    return html`
+      <div class="tender-row">
+        <span>${LABEL.cash}</span>
+        <span>${formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale)}</span>
+      </div>
+      <div class="tender-row">
+        <span>${LABEL.change}</span>
+        <span>${formatMoney(t.change, locale)}</span>
+      </div>
+    `;
+  }
+  // `·` is U+00B7 (middle dot) — matches the paper receipt's separator.
+  const second =
+    t.card === null
+      ? ""
+      : [
+          ENTRY_MODE_LABEL[t.card.entryMode],
+          t.card.authCode === null ? undefined : `Aut ${t.card.authCode}`,
+        ]
+          .filter((x) => x !== undefined)
+          .join(" · ");
+  return html`
+    ${
+      t.card === null
+        ? html`<div class="tender-row"><span>${LABEL.card}</span></div>`
+        : html`
+            <div class="tender-row">
+              <span>${LABEL.card} ${t.card.scheme} **** ${t.card.last4}</span>
+            </div>
+            ${second !== "" ? html`<div class="tender-row"><span>${second}</span></div>` : nothing}
+          `
+    }
+    ${
+      t.reference !== null
+        ? html`<div class="tender-row"><span>Ref. ${t.reference}</span></div>`
+        : nothing
+    }
+    ${
+      // String compare: the filed `tip`/`charged` are canonical decimal strings ("0.00"/"0.50") — a
+      // `decimal(...)` compare here would test object identity and always be true.
+      t.tip !== "0.00"
+        ? html`
+            <div class="tender-row">
+              <span>${LABEL.tip}</span>
+              <span>${formatMoney(t.tip, locale)}</span>
+            </div>
+            <div class="tender-row">
+              <span>${LABEL.charged}</span>
+              <span>${formatMoney(t.charged, locale)}</span>
+            </div>
+          `
+        : nothing
+    }
+  `;
 }
 
 /**
@@ -418,16 +499,7 @@ export class TillTicketView extends LitElement {
           <span>${formatMoney(r.total, locale)}</span>
         </div>
 
-        <div class="tender">
-          <div class="tender-row">
-            <span>${LABEL.cash}</span>
-            <span>${formatMoney(addDecimal(decimal(r.total), decimal(r.change)), locale)}</span>
-          </div>
-          <div class="tender-row">
-            <span>${LABEL.change}</span>
-            <span>${formatMoney(r.change, locale)}</span>
-          </div>
-        </div>
+        <div class="tender">${renderTender(r, locale)}</div>
 
         ${svg ? html`<div class="qr">${unsafeHTML(svg)}</div>` : nothing}
         <p class="legend">${LEGEND}</p>

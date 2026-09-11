@@ -63,4 +63,42 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     );
     await expectNoA11yViolations(host);
   });
+
+  // Card tender (design §3b) — the two structurally different branches (card facts known vs. not)
+  // render different markup, so both need their own a11y pass alongside the cash block above.
+  it("has no violations on a card-tendered receipt with full facts and a tip", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        result: {
+          ...result,
+          tender: {
+            method: "card",
+            charged: "9.90",
+            tip: "0.50",
+            card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
+            reference: null,
+          },
+        },
+        issuer,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on a card-tendered receipt with no card facts and a manual reference", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        result: {
+          ...result,
+          tender: { method: "card", charged: "9.40", tip: "0.00", card: null, reference: "4471" },
+        },
+        issuer,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

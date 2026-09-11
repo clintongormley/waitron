@@ -207,6 +207,92 @@ describe("till-ticket-view", () => {
     expect(t).toContain("0,60 €");
   });
 
+  // -----------------------------------------------------------------------------------------------
+  // Card tender (design §3b), mirroring `apps/server/src/receipt-ticket.test.ts`'s identical branch
+  // over the same `TenderBlock` — the on-screen block must never carry FEWER elements than the paper.
+  // -----------------------------------------------------------------------------------------------
+  describe("card tender (design §3b)", () => {
+    it("shows the scheme + masked PAN, and the entry-mode·auth line as one joined string", async () => {
+      const { el } = await mount({
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
+          reference: null,
+        },
+      });
+      const t = text(el);
+      expect(t).toContain("Tarjeta VISA **** 5838");
+      expect(t).not.toContain("Efectivo");
+      // Strengthened over Task 5's paper assertions: the entry-mode and auth code are asserted as ONE
+      // joined row (`·` = U+00B7), not two independent substrings that could have landed anywhere.
+      const rows = [...el.shadowRoot!.querySelectorAll(".tender-row")].map((r) => r.textContent);
+      expect(rows).toContain("Sin contacto · Aut 328600");
+    });
+
+    it("shows the Chip entry-mode label, and Propina/Cobrado only when a tip rode on the card", async () => {
+      const { el } = await mount({
+        tender: {
+          method: "card",
+          charged: "21.40",
+          tip: "0.50",
+          card: { scheme: "VISA", last4: "5838", entryMode: "chip", authCode: "112233" },
+          reference: null,
+        },
+      });
+      const t = text(el);
+      const rows = [...el.shadowRoot!.querySelectorAll(".tender-row")].map((r) => r.textContent);
+      expect(rows).toContain("Chip · Aut 112233");
+      expect(t).toContain("Propina");
+      expect(norm(t)).toContain("0,50 €");
+      expect(t).toContain("Cobrado");
+      expect(norm(t)).toContain("21,40 €");
+    });
+
+    it("omits Propina/Cobrado, and omits the entry-mode·auth line entirely, when the card carries neither", async () => {
+      const { el } = await mount({
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
+          reference: null,
+        },
+      });
+      const t = text(el);
+      expect(t).not.toContain("Propina");
+      expect(t).not.toContain("Cobrado");
+      // No stray `·`: the second line must be ABSENT (not present-but-empty) when neither fragment exists.
+      expect(t).not.toContain("·");
+      const rows = el.shadowRoot!.querySelectorAll(".tender-row");
+      expect(rows).toHaveLength(1); // only the "Tarjeta VISA **** 5838" row
+    });
+
+    it("shows Tarjeta alone, with no mask, when no card facts are known", async () => {
+      const { el } = await mount({
+        tender: { method: "card", charged: "20.90", tip: "0.00", card: null, reference: null },
+      });
+      const t = text(el);
+      expect(t).toContain("Tarjeta");
+      expect(t).not.toContain("****");
+    });
+
+    it("shows the operator's manual reference when present", async () => {
+      const { el } = await mount({
+        tender: { method: "card", charged: "20.90", tip: "0.00", card: null, reference: "4471" },
+      });
+      expect(text(el)).toContain("Ref. 4471");
+    });
+
+    it("still shows the cash Efectivo/Cambio rows for a cash sale, unchanged", async () => {
+      const { el } = await mount({ tender: { method: "cash", change: "0.60" } });
+      const t = text(el);
+      expect(t).toContain("Efectivo");
+      expect(t).toContain("Cambio");
+    });
+  });
+
   it("renders the QR from the verification URL and the VERI*FACTU legend", async () => {
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("svg")).not.toBeNull();
