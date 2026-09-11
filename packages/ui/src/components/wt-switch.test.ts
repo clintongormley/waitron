@@ -4,6 +4,18 @@ import "./wt-switch.js";
 
 afterEach(cleanup);
 
+test("forwards a semantic name and keeps unnamed switches unnamed", async () => {
+  const el = await mount('<wt-switch name="printer-active"></wt-switch>');
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.name).toBe("printer-active");
+  el.setAttribute("name", "ticketScope");
+  await (el as import("./wt-switch.js").WtSwitch).updateComplete;
+  expect(input.name).toBe("ticketScope");
+  el.removeAttribute("name");
+  await (el as import("./wt-switch.js").WtSwitch).updateComplete;
+  expect(input.hasAttribute("name")).toBe(false);
+});
+
 test("renders its label", async () => {
   const el = await mount('<wt-switch label="Modo formación"></wt-switch>');
   expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Modo formación");

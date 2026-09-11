@@ -1061,7 +1061,8 @@ export interface PrinterInput {
  * that reported it (null if it since went away), `make`/`model`/`name` its self-reported identity when
  * known, and `alreadyRegistered` is true when it matches a registered printer — a usb/bluetooth device
  * on its `localKey`, a network device on host:port — with `printerId` saying which; the discovered table
- * hides those rows and the registered printer's own row shows when it was seen. */
+ * hides active matches and offers disabled matches for reactivation. The registered printer's own
+ * row shows when it was seen. */
 export interface DiscoveredPrinter {
   agentId: string;
   agentName: string | null;
@@ -1095,9 +1096,16 @@ export interface PrinterPatch {
   active?: boolean;
 }
 
+export type PrintPreviewBlock =
+  | { kind: "text"; text: string }
+  | { kind: "feed"; lines: number }
+  | { kind: "cut" }
+  | { kind: "image"; width: number; height: number; data: string; qrData?: string };
+
 /** A bounded preview of the recorded printer commands. */
 export interface PrintJobPreview {
   text: string;
+  blocks: PrintPreviewBlock[];
   qrData: string[];
   omittedGraphics: boolean;
   truncated: boolean;

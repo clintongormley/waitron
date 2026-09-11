@@ -194,6 +194,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getPrintJobPreview: vi.fn().mockResolvedValue({
       text: "Receipt",
       qrData: [],
+      blocks: [{ kind: "text", text: "Receipt" }],
       omittedGraphics: false,
       truncated: false,
       unsupported: false,
@@ -245,7 +246,14 @@ function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | n
 }
 const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
 const text = (el: PrintersScreen, sel: string) => q(el, sel)?.textContent?.trim();
+async function filterPrinters(el: PrintersScreen, value: string): Promise<void> {
+  const select = q(el, '[name="printer-status-filter"]') as HTMLSelectElement;
+  select.value = value;
+  select.dispatchEvent(new Event("change"));
+  await flush(el);
+}
 async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {
+  if (!q(el, `[data-test="edit-printer-${id}"]`)) await filterPrinters(el, "all");
   q(el, `[data-test="edit-printer-${id}"]`)!.click();
   await flush(el);
 }
@@ -262,7 +270,7 @@ function typeField(el: PrintersScreen, sel: string, value: string): void {
 }
 
 function toggleSwitch(el: PrintersScreen, sel: string, checked: boolean): void {
-  const input = q(el, sel) as HTMLInputElement;
+  const input = q(el, sel)!.shadowRoot!.querySelector("input")!;
   input.checked = checked;
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
@@ -279,7 +287,7 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=agent-row-a1]")).toBeTruthy();
     expect(q(el, "[data-test=agent-row-a2]")).toBeTruthy();
     expect(q(el, "[data-test=printer-row-p1]")).toBeTruthy();
-    expect(q(el, "[data-test=printer-row-p2]")).toBeTruthy();
+    expect(q(el, "[data-test=printer-row-p2]")).toBeNull();
     expect(q(el, "[data-test=job-row-j1]")).toBeTruthy();
     expect(q(el, "[data-test=job-row-j2]")).toBeTruthy();
   });
@@ -302,6 +310,7 @@ describe("printers-screen", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
+    await filterPrinters(el, "all");
     expect(text(el, "[data-test=printer-transport-p1]")).toBe(
       transportName("network_tcp", "es-ES"),
     );
@@ -919,8 +928,13 @@ describe("printers-screen", () => {
     });
   });
 
-  it("hides registered USB devices and shows their seen-status on the printer", async () => {
-    const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
+  it("hides active registered USB devices and shows their seen-status on the printer", async () => {
+    const api = stubApi({
+      listPrinters: vi
+        .fn()
+        .mockResolvedValue(printers.map((printer) => ({ ...printer, active: true }))),
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
@@ -1190,13 +1204,18 @@ describe("printers-screen", () => {
     expect(banner).toContain(codeMessage("printer.not_found", "es-ES"));
   });
 
-  it("deactivates a printer, reloads, and disables the control for an already-inactive one", async () => {
+  it("deactivates a printer only after confirmation, reloads, and disables inactive deletion", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
+    await filterPrinters(el, "all");
     expect(q(el, "[data-test=deactivate-printer-p2]")!.hasAttribute("disabled")).toBe(true);
 
+    q(el, "[data-test=deactivate-printer-p1]")!.click();
+    await flush(el);
+    expect(api.deactivatePrinter).not.toHaveBeenCalled();
+    expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("printers.delete_confirm"));
     q(el, "[data-test=deactivate-printer-p1]")!.click();
     await flush(el);
     expect(api.deactivatePrinter).toHaveBeenCalledWith("p1");
@@ -1210,6 +1229,9 @@ describe("printers-screen", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
+    q(el, "[data-test=deactivate-printer-p1]")!.click();
+    await flush(el);
+    expect(api.deactivatePrinter).not.toHaveBeenCalled();
     q(el, "[data-test=deactivate-printer-p1]")!.click();
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("printer.not_found");
@@ -1543,6 +1565,9 @@ it.each([
       await flush(el);
       const modal = q(el, "[data-test=new-printer-modal]")!;
       const bounds = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      expect(
+        getComputedStyle(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')!).overflowWrap,
+      ).toBe("anywhere");
       const add = q(el, '[data-test="register-10.0.0.77:9100"]')!.getBoundingClientRect();
       expect(add.right).toBeLessThan(bounds.right);
       expect(add.left).toBeGreaterThan(bounds.left);
@@ -1626,4 +1651,115 @@ it("returns keyboard focus to the printer row trigger after editing through its 
   q(el, "[data-test=cancel-edit-printer]")!.click();
   await flush(el);
   expect(menu.shadowRoot!.activeElement).toBe(trigger);
+});
+
+it("edits printer activation through a named shared switch", async () => {
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
+  await flush(el);
+  await openPrinter(el);
+  const control = q(el, "[data-test=printer-active-p1]")!;
+  expect(control.tagName).toBe("WT-SWITCH");
+  expect(control.shadowRoot!.querySelector("input")!.name).toBe("printer-active");
+});
+
+it("keeps the delete confirmation menu open and disarms another printer", async () => {
+  const api = stubApi({
+    listPrinters: vi
+      .fn()
+      .mockResolvedValue(printers.map((printer) => ({ ...printer, active: true }))),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  const first = q(el, "[data-test=deactivate-printer-p1]")!;
+  const menu = first.closest("dashboard-row-actions")!;
+  menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  first.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  await flush(el);
+  expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+  expect(api.deactivatePrinter).not.toHaveBeenCalled();
+  q(el, "[data-test=deactivate-printer-p2]")!.click();
+  await flush(el);
+  expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("action.delete"));
+  q(el, "[data-test=deactivate-printer-p1]")!.click();
+  await flush(el);
+  expect(api.deactivatePrinter).not.toHaveBeenCalled();
+  q(el, "[data-test=test-print-p1]")!.click();
+  await flush(el);
+  expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("action.delete"));
+});
+
+it("defaults to active printers and filters disabled and all registrations", async () => {
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
+  await flush(el);
+  expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
+  expect(q(el, "[data-test=printer-row-p2]")).toBeNull();
+  const select = q(el, '[name="printer-status-filter"]') as HTMLSelectElement;
+  expect(select.value).toBe("active");
+  select.value = "disabled";
+  select.dispatchEvent(new Event("change"));
+  await flush(el);
+  expect(q(el, "[data-test=printer-row-p1]")).toBeNull();
+  expect(q(el, "[data-test=printer-row-p2]")).not.toBeNull();
+  select.value = "all";
+  select.dispatchEvent(new Event("change"));
+  await flush(el);
+  for (const id of ["p1", "p2", "p3"])
+    expect(q(el, `[data-test="printer-row-${id}"]`)).not.toBeNull();
+});
+
+it.each(["usb", "bluetooth", "network_tcp"] as const)(
+  "adds a disabled %s printer again by restoring its existing registration",
+  async (transport) => {
+    let active = false;
+    const stored = {
+      ...printers[2]!,
+      name: "Saved kitchen name",
+      transport,
+      host: transport === "network_tcp" ? "10.0.0.88" : null,
+      port: 9100,
+      localKey: transport === "network_tcp" ? null : "SN-2",
+    };
+    const device = {
+      ...discovered[1]!,
+      transport,
+      host: stored.host,
+      port: stored.port,
+      localKey: stored.localKey ?? undefined,
+    };
+    const api = stubApi({
+      listPrinters: vi.fn().mockImplementation(async () => [{ ...stored, active }]),
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([device]),
+      updatePrinter: vi.fn().mockImplementation(async () => {
+        active = true;
+      }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    const key = stored.localKey ?? "10.0.0.88:9100";
+    const add = q(el, `[data-test="register-${key}"]`)!;
+    expect(add).not.toBeNull();
+    expect(add.textContent).toContain(t("printers.add_again"));
+    add.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { active: true });
+    expect(api.createPrinter).not.toHaveBeenCalled();
+    expect(q(el, `[data-test="register-${key}"]`)).toBeNull();
+    expect(text(el, "[data-test=printer-row-p3]")).toContain("Saved kitchen name");
+  },
+);
+
+it("keeps a disabled printer available when adding it again fails", async () => {
+  const api = stubApi({
+    listDiscoveredPrinters: vi.fn().mockResolvedValue([discovered[1]!]),
+    updatePrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  await openDiscovery(el);
+  q(el, "[data-test=register-SN-2]")!.click();
+  await flush(el);
+  expect(api.createPrinter).not.toHaveBeenCalled();
+  expect(q(el, "[data-test=register-SN-2]")).not.toBeNull();
+  expect(text(el, "[role=alert]")).toContain(codeMessage("printer.not_found"));
 });

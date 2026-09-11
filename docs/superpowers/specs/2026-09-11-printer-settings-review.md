@@ -1,5 +1,9 @@
 # Printer settings review
 
+2026-09-11 follow-up: [printer follow-ups](2026-09-11-printer-followups.md) adds delete confirmation,
+active/disabled filtering and re-add, named switches, shadow-part cell styling, numeric timestamps
+and a visual receipt preview. The original design/review below records the earlier text-only behavior.
+
 The finish-branch review used Claude Opus 5 with read-only repository tools against base
 `c455ebaa7e7665fe6f3fe5d6f05e8bbc525b049e`, candidate `37033cab`, and took 371 seconds.
 Codex verified the findings and made the corrections below. No second whole-branch review was

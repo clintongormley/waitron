@@ -259,6 +259,12 @@ unfiltered `main` run, not a wrong hook.
   On the browser side `@waitron/dashboard-modules` is the composition list's twin — the one place that
   names every UI-bearing module (guarded by `module-seams` + `dashboard-browser-purity`), so
   `apps/dashboard` mounts modules without naming one, exactly as generic provisioning does not.
+- **A retained hardware registration must remain re-addable after deactivation.** Discovery matches
+  disabled records as well as active ones; the dashboard offers disabled matches as Add again and
+  reactivates their existing id, preserving history and routing. Only active matches disappear from
+  the add list. Cost: deleting a USB printer left it in the registered table and hid it from discovery,
+  blocking re-add. The table now defaults to Active with Disabled/All filters. Pointer:
+  `docs/superpowers/specs/2026-09-11-printer-followups.md`.
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It becomes a
   standalone LAN process that reaches a server over HTTP only, so it imports no other package in this
   repo; `@waitron/printing` depends on IT, never the reverse. An empty `dependencies` block is not the
@@ -532,6 +538,15 @@ unfiltered `main` run, not a wrong hook.
   there: the root project does not typecheck (§2), and a module tested only from there must be in the
   root `coverage.include` and excluded from its package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **Browser recovery tests read the native control inside a shared component.** A host's `checked`
+  property can report the expected value while its inner checkbox remains visibly wrong. The printer
+  follow-up review reproduced that split by preserving the emitted change while suppressing the host
+  update; the old assertion passed and the inner-input assertion failed. Pointer:
+  `apps/dashboard/src/screens/printing-rules-screen.test.ts` (`switchChecked`).
+- **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates
+  a screenshot directory named after its test file; the vocabulary guard tried to read that directory
+  and failed with `EISDIR` after an intentional TDD failure. `sourceFilesIn` now checks `isFile()`,
+  with a fixture preserving an actual nested source file (`scripts/english-only.test.ts`).
 - **A browser test using fake timers must advance an awaited animation frame or restore real timers
   first.** The printer modal close test stalled on its own paused `requestAnimationFrame`; asserting
   the native dialog's closed state avoids mixing that clock with the browser's queued close event

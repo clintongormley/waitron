@@ -1,5 +1,9 @@
 # Printer settings
 
+2026-09-11 follow-up: [printer follow-ups](2026-09-11-printer-followups.md) adds delete confirmation,
+active/disabled filtering and re-add, named switches, shadow-part cell styling, numeric timestamps
+and a visual receipt preview. The original design/review below records the earlier text-only behavior.
+
 Give hardware setup three readable tables: Print agents, Printers, and Recent print jobs. Add and
 edit actions open the shared portrait `wt-modal`; Save and Cancel stay in its footer. Keep the
 existing agent pairing flow inside the add modal. Adding a printer automatically scans every

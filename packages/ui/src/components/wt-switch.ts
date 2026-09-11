@@ -91,6 +91,7 @@ export class WtSwitch extends LitElement {
   @property({ type: Boolean, reflect: true }) checked = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property() label = "";
+  @property() name = "";
 
   // Unique per instance so a page with multiple wt-switch elements never
   // collides label `for`/input `id` pairs.
@@ -106,6 +107,7 @@ export class WtSwitch extends LitElement {
       <span class="control">
         <input
           id=${this.inputId}
+          name=${this.name || nothing}
           type="checkbox"
           role="switch"
           .checked=${this.checked}

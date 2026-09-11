@@ -1212,6 +1212,28 @@ describe("mountPrintApi — management: recent jobs", () => {
     ).toBe(404);
   });
 
+  it("returns an ISO last-print timestamp regardless of database date display settings", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused", "Timestamp printer");
+    await suite.db.execute(sql`
+      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
+      values (${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
+        '2020-01-02T03:04:05.678+02:00')`);
+    try {
+      await suite.db.execute(sql`set datestyle = 'SQL, DMY'`);
+      await suite.db.execute(sql`set timezone = 'Europe/Madrid'`);
+      const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+      expect(result.status).toBe(200);
+      const rows = (await result.json()) as { id: string; lastPrintAt: string | null }[];
+      expect(rows.find((row) => row.id === printerId)?.lastPrintAt).toBe(
+        "2020-01-02T01:04:05.678Z",
+      );
+    } finally {
+      await suite.db.execute(sql`set datestyle = 'ISO, MDY'`);
+      await suite.db.execute(sql`set timezone = 'UTC'`);
+    }
+  });
+
   it("summarises all printer jobs and excludes foreign tenant activity", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Summary printer");

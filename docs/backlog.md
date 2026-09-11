@@ -443,15 +443,22 @@ design-review section apply.
   last-print time and a stored-job text preview support the tables. Bluetooth pairing itself remains on
   the agent setup page. Design: [printer settings](superpowers/specs/2026-09-11-printer-settings-tables.md);
   the [review record](superpowers/specs/2026-09-11-printer-settings-review.md) lists every finding with
-  its disposition. *Open from it:* **(i)** printer Delete is one click (deactivate, history kept) while
-  agent Delete asks twice — a confirmation was raised at review (M4) and declined as a behaviour change
-  outside the redesign; **(ii)** the job preview is text-only: graphics reported as omitted, unsupported
-  or truncated commands flagged, never a paper-layout replica; **(iii)** `wt-switch` exposes no semantic
-  `name`, so the modal forms use native named inputs for their toggles (L2) — give `wt-switch` a `name`
-  and migrate them; **(iv)** table cell styles are inline because cells render inside `wt-data-table`'s
-  shadow root (L2); **(v)** the job-statistics timestamps rely on Node parsing PostgreSQL's text output,
-  pinned by test on Node only (L13); **(vi)** physical Bluetooth/network discovery and printed paper
-  layout were not exercised by the review or the branch.
+  its disposition.
+  *Follow-ups (2026-09-11):* Delete now requires confirmation. The printer table defaults to Active,
+  with Disabled and All filters; Add printer offers a disabled discovered device as **Add again**,
+  restoring the same registration, settings and pending jobs. Named `wt-switch` controls replace
+  the native hardware/routing toggles. Table-cell styles use shadow parts. Job-statistics timestamps
+  use numeric milliseconds; an API test with PostgreSQL `DateStyle = SQL, DMY` and a non-UTC timezone
+  reproduced HTTP 500 before the fix and passes afterwards. The preview now renders ordered text,
+  line feeds, cuts, native QR symbols and raster graphics on a selectable 58/80 mm paper approximation.
+  Unsupported or bounded-out content remains flagged. Design and limits:
+  [printer follow-ups](superpowers/specs/2026-09-11-printer-followups.md).
+  *Still open:* physical Bluetooth discovery and comparison of the preview against printed paper.
+  Read-only live checks with the branch dashboard found the disabled USB device, offered Add again,
+  and showed only the active network printer by default. The installed box was reached over IPv4 with
+  its own downloaded CA; live reactivation and diagnostic prints await explicit approval.
+  *Minor interaction follow-up:* choose and test one reset-on-dismiss policy for armed destructive
+  row actions across printers and agents; the current printer confirmation follows the agent pattern.
   *Hardware receipt (2026-09-10, real ESC/POS printer on the box):* USB confirmed end-to-end — the agent
   container discovers the printer off `/sys` (serial-keyed) and a physical slip printed via `--device
   /dev/usb/lp0` + `group_add 7` as the unprivileged `node` user (spec §7). The run-it review caught a
@@ -480,9 +487,10 @@ design-review section apply.
   *Deferred follow-ups (surfaced at finish-branch, not taken):* extract an in-memory `createDiscoveredStore`
   from `mountPrintApi` (altitude); dedupe the `VisibleDeviceWire`/`DiscoveredDeviceWire` types against
   `@waitron/print-agent` via a type-only import IF `module-seams` permits; fold `#registerDiscovered` into
-  the dashboard's shared `#submit`. *Live dashboard→register→print e2e still owed* — the test box is
-  un-onboarded (no tenant/deployment yet); onboard it, then approve the agent, register the USB printer,
-  and print a real job.
+  the dashboard's shared `#submit`. *Live dashboard→register→print e2e still owed.*
+  The earlier un-onboarded-box note is superseded by the 2026-09-11 live dashboard read: the box has
+  an approved agent, a disabled USB printer and an active network printer, both with delivered-job
+  history. The next check restores the USB printer with Add again and prints through both devices.
   **4.** SumUp — **LANDED #309** (`@waitron/payments-sumup`: `collect`, the `resolvePending` sweep,
   reversals, the `fetch` binding, and the server wiring — a `sumup_cloud` till provider + a
   `payments.sumup` sealed credential). Built defensively against the still-unrun experiments; the live
@@ -1935,6 +1943,12 @@ genuinely-decision-bearing.
   the waiter's phone. Resolve before designing any in-person Bizum UX.
 
 **CI / test infra:**
+
+- **Post-rebase browser suite-loading failure (2026-09-11 printer follow-ups).** Eleven UI suites
+  failed to load with "Vitest failed to find the current suite/runner". An unchanged full UI coverage
+  run and the subsequent push hook passed. Cause unconfirmed; on recurrence, retain the failed log
+  and inspect the browser module graph before changing caches or retrying. Receipt:
+  [printer follow-ups review](superpowers/specs/2026-09-11-printer-followups-review.md).
 
 - **`test-heavy` and `test-server` are sharded three ways** (#216; mechanism in CLAUDE.md §2). Vitest
   `--shard` splits by FILE COUNT, not duration, so imbalance is the real limit; bumping the matrix means
