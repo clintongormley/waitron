@@ -1,7 +1,10 @@
 # SumUp Solo experiments — answering the four questions with the reader in hand
 
 **Date written:** 2026-09-10. **Runs from:** 2026-09-11.
-**Status:** NOT YET RUN. Each experiment below has a _Result_ block to fill in as it is run.
+**Status:** IN PROGRESS (2026-09-11). Setup 0.2–0.6 are run and recorded below: the Solo is paired
+(`rdr_19F1G0V4JF98NBRQDARRW2293X`) and the healthy path works end to end. Experiment 1 onwards —
+starting with the design-invalidating standalone question — is still empty. Each experiment has a _Result_ block to
+fill in as it is run.
 
 The four questions in [2026-09-08-sumup-questions.md](2026-09-08-sumup-questions.md) went to SumUp on
 2026-09-08 and have had no reply. The owner now has a SumUp Solo, so the gate on the card-reader
@@ -93,10 +96,39 @@ The `merchant_code` is the `resource_id` of the merchant membership (example sha
 useful cross-check. Paste it into the env file and re-source it. If this call returns `401`, the
 key is wrong and nothing below will work; stop here.
 
+**Result (0.3, run 2026-09-11):** `HTTP 200`. One membership:
+`{"merchant_code":"MY2NPHDW","type":"merchant","name":"Test restaurant","roles":["role_admin","role_owner"]}`.
+
+Two baselines taken before pairing, both with the key from 0.2:
+
+- `GET /v0.1/merchants/MY2NPHDW/readers` → `HTTP 200 {"items":[]}`. No reader is paired to this
+  account, so 0.4 starts from nothing and the post-pairing list must hold exactly one item.
+- `GET /v2.1/merchants/MY2NPHDW/transactions/history?limit=1` → `HTTP 200 {"items":[]}`. The account
+  has taken no payments, so the first `SUCCESSFUL` row anywhere in 4c's report is 0.6's.
+
+**Does the key carry reader scope?** Worth settling before the five-minute pairing window is
+running. Reader ids are exactly 30 characters and the endpoint validates that BEFORE it
+authorizes, so the first two attempts measured nothing: `rdr_BOGUS` and a 32-character id both
+returned `HTTP 400 request validation failed` (`minLength: got 9, want 30`, then
+`maxLength: got 32, want 30`) — the same 400 an unauthorized key would have produced. With an
+exactly-30-character absent id the answer separates, and a wrong-key control proves the two
+outcomes differ:
+
+```
+good key, absent reader  HTTP 404  {"detail":"Reader not found"}
+bad  key, absent reader  HTTP 401  {"detail":"Unauthorized."}
+```
+
 ### 0.4 Pair the Solo to the Cloud API
 
 On the reader: **log out** of the merchant account, then open **Connections → API → Connect**. The
 reader shows an 8–9 character pairing code that expires after five minutes. Within that window:
+
+The log-out path, confirmed on the device 2026-09-11 (SumUp's help centre has no article for it):
+**top menu drawer → Settings → About → Log out**, which returns the Solo to its login screen.
+
+The device's own menu reads **Connections → Cloud API**, not `Connections → API` as SumUp's Cloud
+API page words it (firmware 3.3.42.2, 2026-09-11). Same menu; the docs are a word short.
 
 ```bash
 curl -s -X POST "$SUMUP_API/v0.1/merchants/$SUMUP_MERCHANT_CODE/readers" \
@@ -150,11 +182,28 @@ body's `data` carries `checkout_id` and `client_transaction_id`, which the later
 Run `rstatus` once now and paste it below. It is the baseline every later `rstatus` is compared to
 (expected: `status: ONLINE`, `connection_type: Wi-Fi`, `state: IDLE`, and the firmware version).
 
-**Result (0.5 baseline):**
+**Result (0.4, run 2026-09-11):** `POST …/readers` returned `HTTP 201` with
+`status: "processing"`, `device: {identifier: "200101525543", model: "solo"}`, and
+`id: "rdr_19F1G0V4JF98NBRQDARRW2293X"` (30 characters, as 0.3's probe found the API requires). The
+first poll still read `processing`; the second, about four seconds later, read `paired`. The
+readers list went from the `items: []` baseline of 0.3 to exactly one item with that id.
+
+**Result (0.5 baseline, run 2026-09-11):**
 
 ```
-(paste rstatus)
+{
+  "battery_level": 100.0,
+  "battery_temperature": 30,
+  "connection_type": "Wi-Fi",
+  "firmware_version": "3.3.42.2",
+  "last_activity": "2026-09-11T10:53:49.522611Z",
+  "state": "IDLE",
+  "status": "ONLINE"
+}
 ```
+
+The firmware is above all three thresholds 0.1 names (3.3.24.3 checkout, 3.3.28.0 terminate,
+3.3.39.0 status), so no experiment below is gated on a firmware update.
 
 ### 0.6 Control run — the healthy path works at all
 
@@ -171,11 +220,92 @@ shows €1.00, you tap, and within a few seconds both `tx client_transaction_id=
 **Failing case looks like:** a non-2xx status, or the reader never wakes. Then nothing below is
 meaningful until pairing is fixed. Do not continue.
 
-**Result (0.6):**
+**Result (0.6, run 2026-09-11):** `POST …/checkout` returned `HTTP 201` with
+`{"checkout_id":"d90376ad-71a6-4ef2-a5d2-6448b190dc7c","client_transaction_id":"8a096c39-a107-48aa-b7b9-ad532bdcf54e"}`.
+Run without an affiliate block (0.2's affiliate key was not created before this run).
+
+Observed timeline, polling the checkout and the reader status together every four seconds:
 
 ```
-(paste: HTTP status, the response data, tx output, ck output, seconds from tap to SUCCESSFUL)
+fired at 10:53:57Z
+10:54:01Z  checkout=pending    payment_status=null        reader=WAITING_FOR_CARD
+10:54:05Z  checkout=pending    payment_status=null        reader=WAITING_FOR_CARD
+10:54:10Z  checkout=pending    payment_status=null        reader=WAITING_FOR_CARD
+10:54:14Z  checkout=pending    payment_status=successful  reader=IDLE
+10:54:19Z  checkout=successful payment_status=successful  reader=IDLE
 ```
+
+The reader was showing the amount within four seconds of the call. The card was tapped between
+10:54:05 and 10:54:14.
+
+**`payment_status` and `status` do not flip together.** At 10:54:14 the checkout read
+`payment_status: "successful"` while `status` was still `pending`; `status` caught up at the next
+poll. A poller that waited on `status` alone would have been about five seconds slower here than
+one watching `payment_status`. This does not reach our adapter, which polls the TRANSACTIONS
+endpoint rather than the checkout endpoint (`findTransaction`,
+`packages/payments-sumup/src/sumup-client.ts`) — recorded because anything written later against
+the checkout endpoint has two fields to choose between and they are not interchangeable.
+
+The transaction, fetched by our `client_transaction_id` — the same call and the same query
+parameter the adapter's `findTransaction` makes:
+
+```json
+{ "id": "f37572ac-c534-407f-b0c5-59ba9eb4e19c", "transaction_code": "TAAA6BYAS7B",
+  "status": "SUCCESSFUL", "amount": 1.0, "currency": "EUR",
+  "timestamp": "2026-09-11T10:53:58.136Z", "entry_mode": "contactless", "card": "VISA",
+  "events": [ { "type": "PAYOUT", "status": "SCHEDULED", "amount": 0.98,
+                "fee_amount": 0.02, "timestamp": "2026-09-11T10:54:17.415Z" } ] }
+```
+
+Three things in that worth carrying forward:
+
+- **The adapter's parsing is now verified against the real API**, not just the fake: it reads
+  `{id, status, amount}` off exactly this body, and `status` is the upper-case `SUCCESSFUL` its
+  callers compare against. It was built defensively against these unrun experiments (#309).
+- **`timestamp` is the checkout's start, not the tap.** `10:53:58.136Z` is one second after the
+  checkout was fired and at least seven seconds before the card was presented. Anything that needs
+  the moment of payment cannot read this field for it.
+- **The fee on €1.00 was €0.02, payout €0.98**, as a `PAYOUT` event with status `SCHEDULED`. 4c
+  checks what this settles to.
+
+Refund this one at the end in experiment 4: transaction id `f37572ac-c534-407f-b0c5-59ba9eb4e19c`.
+
+**Entry-mode probe (run 2026-09-11, for the card-receipt design).** A second €1 checkout
+(`06513c6d-…`) taken on the CHIP slot instead of a tap, to learn SumUp's `entry_mode` value for a
+contact read. The payment FAILED at the PIN stage (`WAITING_FOR_PIN → PROCESSING → failed`, likely a
+mis-keyed PIN), but the transaction it left answers the question:
+
+```json
+{ "id": "1145fb12-…", "status": "FAILED", "card": { "last_4_digits": "6017", "type": "VISA" },
+  "entry_mode": "chip", "auth_code": null,
+  "verification_method": "online PIN", "simple_payment_type": "EMV" }
+```
+
+- `entry_mode` for a contact read is `"chip"` (contactless was `"contactless"` in 0.6). Those are the
+  two the card-receipt adapter maps to themselves; `magstripe`/`swipe → swipe`, everything else →
+  `unknown` ([card-receipt design §4.2](../superpowers/specs/2026-09-11-card-receipt-tender-details-design.md)).
+- A `FAILED` transaction still carries `card` and `entry_mode` but `auth_code: null`. The design
+  renders a card block only on a `captured` result, so a failed payment yields no receipt — this is a
+  confirmation, not a requirement.
+- The chip interface exposed a different PAN last-four (`6017`) than the contactless tap (`5838`) on
+  the same physical card. Expected (separate contact/contactless application pans); nothing reads it.
+
+**Successful chip capture (run 2026-09-11, the confirming result).** After the deliberate wrong-PIN
+control above, a correct-PIN chip payment (`8f357ea9-…`) captured:
+
+```json
+{ "id": "e0b4869c-…", "status": "SUCCESSFUL", "card": { "last_4_digits": "6017", "type": "VISA" },
+  "entry_mode": "chip", "auth_code": "434531",
+  "verification_method": "online PIN", "simple_payment_type": "EMV" }
+```
+
+So a SUCCESSFUL chip read carries `auth_code`; the FAILED one did not. `entry_mode` is `"chip"` on
+both. Net for the card-receipt design: contactless and chip both supply `{scheme, last4, entry_mode}`,
+and a capture (the only state that renders) always supplies `auth_code`. Between the control run (0.6,
+contactless, `5838`) and this one (chip, `6017`) there are now TWO uncancelled €1 captures for
+experiment 4 to refund. (One intervening checkout, `31028aae-…`, failed with `entry_mode: "none"`, `card: null` because the
+card was withdrawn from the chip slot too soon — before the contact read completed — per the owner
+at the reader; not a reader cooldown. A full insert on the next attempt captured.)
 
 Refund this one at the end in experiment 4, so leave its transaction `id` handy.
 
@@ -207,11 +337,34 @@ mutually exclusive on this firmware.
 
 Cancel the checkout on the reader's screen rather than paying (keep the money for the later runs).
 
-**Result (1a):**
+**Result (1a, run 2026-09-11): pairing and standalone use are MUTUALLY EXCLUSIVE on firmware
+3.3.42.2.** The experiment could not even be run as written, because the login it starts with is not
+offered:
 
-```
-(paste: could log in? pairing status after login; rstatus; checkout HTTP status; did the reader show €1.00?)
-```
+- **There is no log-in option anywhere on the reader while it is paired.** The failing case this
+  experiment predicted was "the reader refuses the login"; what actually happens is that the reader
+  never offers one.
+- **The paired home screen shows only the SumUp logo.** No amount entry, no charge screen — so the
+  device cannot take a payment of its own while paired, independently of the login question. This is
+  the observation that settles the design question; "no login" alone would not have.
+- **The cloud side stays healthy throughout.** Immediately after the failed attempt the reader still
+  read `status: "paired"` and `ONLINE / IDLE / Wi-Fi`, so nothing about this is a fault or a dropped
+  pairing.
+- **It is recoverable, but only by unpairing.** The device offers
+  **Connections → Cloud API → Disconnect**. SumUp documents the full undo as two steps — delete the
+  reader through the Readers API, then disconnect manually on the Solo — so a reader is either an
+  API terminal or a standalone terminal, switched by hand at the counter, never both at once.
+
+**Owner decision, 2026-09-11: accepted, and the outage design changes rather than the reader.** The
+bar keeps a separate standalone POS machine for the internet-down case instead of switching the
+paired Solo back and forth. The deli-hardware outage path is updated accordingly
+([deli hardware design §5](../superpowers/specs/2026-07-30-deli-hardware-design.md)); 1b and 1c below
+are no longer gating anything, though 1c is still worth running for a different reason (it tells us
+whether the reader needs the venue's Wi-Fi at all, or can live on its own SIM).
+
+Not measured, and worth stating so nobody assumes it: whether re-pairing after a disconnect issues a
+NEW reader id. If it does, every switch invalidates the `WAITRON_TILL_SUMUP_READER_ID` stamped into
+the till, which is an argument for the pairing UI rather than an env var.
 
 ### 1b. Standalone payment with the venue's internet gone
 
@@ -440,11 +593,26 @@ same-day reversal needs a delay or a different call, and the adapter's `void` mu
 asynchronous job rather than an inline call. Passing: `200 {}` and `status: REFUNDED` with a
 `REFUND` event.
 
-**Result (4a):**
+**Result (4a, run 2026-09-11): a FULL refund works on this route, but the top-level status does NOT
+flip.** `POST /v1.0/merchants/MY2NPHDW/payments/f37572ac-…/refunds` with body `{}` → **`HTTP 201`**
+(the runbook predicted 200; record: 201), body `{}`. Reading the transaction back:
 
+```json
+{ "status": "SUCCESSFUL", "amount": 1.0, "refunded_amount": null,
+  "events": [ {"type":"PAYOUT","status":"SCHEDULED","amount":0.98},
+              {"type":"REFUND","status":"REFUNDED","amount":1.0} ] }
 ```
-(paste: HTTP status + body; tx output)
-```
+
+A refund is a FIRST-CLASS separate transaction, not just a field change. It surfaces in TWO places:
+(1) as its own `type: REFUND` row in the transactions history (`id 11233372107` here), linked to the
+original payment by its `transaction_code` (`TAAA6BYAS7B`) — this is what the SumUp DASHBOARD lists as
+a *Rimborso*, confirmed by the owner's screenshot; and (2) as a `REFUND` event inside the original
+payment's `events[]`. What does NOT change is the original payment's top-level `status` — it stays
+`SUCCESSFUL` even on a full refund, and `refunded_amount` stays null. So a reconciler reads "refunded?"
+from the separate REFUND transactions (or the original's events), NEVER from the original's `status`.
+The adapter's own `refund()` only reads the HTTP code of the refund POST, so none of this breaks it;
+it is guidance for the reconciler. (An earlier draft of this note called the event the "only" trace —
+wrong: the separate refund transaction is the primary one.)
 
 ### 4b. Partial refund of the payment from 2a
 
@@ -463,11 +631,26 @@ a PARTIAL refund; the spec's status handling assumes `REFUNDED` means all the mo
 partial refund may leave the status at `SUCCESSFUL` with a `REFUND` event, which the sweep would
 then have to read from the events, not the status.
 
-**Result (4b):**
+**Result (4b, run 2026-09-11): the adapter's PARTIAL-refund route SILENTLY NO-OPS — a shipped bug.**
+`POST /v1.0/merchants/MY2NPHDW/payments/e0b4869c-…/refunds` with `{"amount":0.40}` (euros, exactly
+what the adapter sends — `toMajorUnits(0.40) = 0.40`, `packages/payments-sumup/src/client.ts:66`)
+returned **`HTTP 201 {}`** and refunded NOTHING: no `REFUND` event, `refunded_amount` null, and the
+transaction's advertised refund link still read `max_amount: 1.0` a minute later. Confirmed absent in
+the SumUp dashboard by the owner. A second `{"amount":0.80}` on the same route also returned `201` and
+also did nothing — so nothing over-refunded (the €1.20 of attempts were all no-ops), but only because
+the route ignores the amount body.
 
-```
-(paste)
-```
+**The partial DID work on the route the transaction advertises in its own `links`:**
+`POST /v0.2/refund/e0b4869c-…?merchant_code=MY2NPHDW` with `{"amount":0.40}` → **`HTTP 204`**, a
+`REFUND` event of `0.40`, and `max_amount` dropped `1.0 → 0.60`. So partial refunds ARE supported on
+the Solo; the `/v1.0/.../payments/{id}/refunds` path honours a full refund (empty body) but silently
+discards an `amount`.
+
+**Consequence for shipped code (#309):** `SumUpClient.refund` posts `{amount}` to the `/v1.0` path
+and reports `accepted` on any non-4xx (`sumup-client.ts:112-118`), so `reverseViaSumUp`'s PARTIAL
+path records a refund that never happened. Full reversals are fine. Fix is an endpoint/route change
+on the partial path, plus a regression test that asserts the balance actually moved (reading the
+`REFUND` event or `max_amount`, not the HTTP code). Logged to the backlog SumUp debt.
 
 ### 4c. What the customer and the fee report see (a few days later)
 
@@ -581,8 +764,11 @@ Tomorrow's plug-in checklist, once 0–1's curl run has answered the standalone 
 
 1. Run the runbook's sections 0–1 with curl first (pairing, the control run, the standalone
    question). The adapter needs the reader id from 0.4.
-2. `wa-wt demo waitron-feat-payments-sumup` (the dev stack from the worktree — CLAUDE.md §6), then
-   seal the credential from a file outside the repo:
+2. `wa-wt demo waitron` (the dev stack — CLAUDE.md §6). This said
+   `wa-wt demo waitron-feat-payments-sumup` when written; that branch landed as #309 and its
+   worktree was torn down, so the code is on `main` and the main checkout is the instance to run
+   (it needs a `pnpm install` first — CLAUDE.md §6 on the main checkout going stale). Then seal the
+   credential from a file outside the repo:
    ```bash
    cat > ~/.sumup-experiments/credential.json <<'EOF'
    {"apiKey":"…","merchantCode":"…","affiliateAppId":"…","affiliateKey":"…"}

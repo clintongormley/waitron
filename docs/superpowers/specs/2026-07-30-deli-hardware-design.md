@@ -108,9 +108,24 @@ and code already merged:
 | --- | --- |
 | Healthy | The server pushes a checkout to the Solo via SumUp's Cloud API. Fully integrated |
 | Deli broadband down, server on 4G failover | Still fully integrated — the reader was never on our network. This is why the optional router in §3 is worth buying |
-| Deli broadband down, no failover | Staff take the payment **standalone on the Solo**, over the reader's own mobile data, and record it in the POS as a **Mode 1 manual tender** — already landed |
-| Reader's mobile signal also drops | The Solo advertises an **offline mode** "as a backup if your signal drops". Its limits are unestablished — see §7 |
+| Deli broadband down, no failover | **Invalidated 2026-09-11 — see the note below.** As written: staff take the payment standalone on the Solo, over the reader's own mobile data, and record it in the POS as a Mode 1 manual tender |
+| Reader's mobile signal also drops | **Invalidated 2026-09-11 — see the note below.** As written: the Solo advertises an offline mode "as a backup if your signal drops". Its limits are unestablished — see §7 |
 | Everything down | Cash. The till keeps chaining sales locally throughout |
+
+**Measured 2026-09-11: the two middle rows do not work, and the outage answer is different.** A Solo
+paired to the Cloud API offers no log-in and no amount entry — its home screen is the SumUp logo and
+nothing else — so staff cannot take a payment on it by hand while our software drives it. The two
+modes are exclusive and switching between them is a manual **Connections → Cloud API → Disconnect**
+at the counter, which unpairs the reader and needs a re-pair afterwards. Evidence, including the
+control that shows the reader stayed `paired` and `ONLINE` throughout:
+[sumup solo experiments §1a](../../research/2026-09-10-sumup-solo-experiments.md).
+
+**Owner decision, 2026-09-11: the bar keeps a separate standalone POS machine for the internet-down
+case.** That is the replacement for both invalidated rows — a second, unpaired card terminal taking
+payments on its own mobile data, with the sale recorded in the POS as a Mode 1 manual tender exactly
+as the original row described. The reader-swapping alternative was rejected: it puts merchant
+credentials and a pairing ceremony in front of staff during an outage, which is the worst moment for
+either. Nothing in the code changes; what changes is the buy list and the runbook for staff.
 
 The reader's independence is sourced, not assumed: SumUp state the Solo ships with *"a 4G SIM card
 with free unlimited data so you can accept payments on the go"* and can use WiFi instead where

@@ -987,6 +987,11 @@ for the projected remainder.
   backend change. (Bookings SP2's `getMe` permission set is the first step off the coarse role gate.)
 - **Payment-provider config UI** (Stripe / SumUp / …) — none today (provider is env-stamped, sealed via
   the credentials CLI); also gated on the SumUp standalone-after-pairing experiment (*Debt → SumUp*).
+  Owner, 2026-09-11: this is wanted. Note it is MORE than a settings form — SumUp's reader pairing is
+  an interactive ceremony (the operator logs the reader out, reads an 8–9 character code off its
+  screen that expires in five minutes, and the server POSTs it and polls until `paired`), so the UI
+  owns a live flow with a countdown and a failure path, then stores the returned reader id where
+  `WAITRON_TILL_SUMUP_READER_ID` is read from today.
 - **More than one card provider loaded at once** (e.g. SumUp Solo and Square side by side) — today a till
   drives exactly ONE (`WAITRON_TILL_CARD_PROVIDER` is a single `CardProvider` enum; `buildCardProvider`
   returns one `PaymentProvider`; the pay path drives that single `deps.cardProvider`). A venue with two
@@ -1703,6 +1708,22 @@ genuinely-decision-bearing.
   account exists yet.
 
 **SumUp:**
+
+- **BUG (found 2026-09-11, live): the SumUp adapter's PARTIAL refund silently no-ops.**
+  `SumUpClient.refund` posts `{amount}` to `POST /v1.0/merchants/{mc}/payments/{id}/refunds`
+  (`packages/payments-sumup/src/sumup-client.ts:112`), which returns `HTTP 201` and refunds nothing
+  (no `REFUND` event, `max_amount` unchanged; confirmed in API + dashboard). A FULL refund (empty
+  body) on that route works. The partial works on the route the transaction advertises in its
+  `links`: `POST /v0.2/refund/{id}?merchant_code=` → `HTTP 204` + a `REFUND` event. Because `refund()`
+  reports `accepted` on any non-4xx, `reverseViaSumUp`'s partial path records a refund that never
+  happened. Fix: move the partial path to the `v0.2/refund` route (or find the correct `v1.0` body)
+  and add a regression test that asserts the balance moved (the `REFUND` event / `max_amount`), never
+  the HTTP code. Evidence: [research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md) §4b.
+- **Also from the 4a run: a refund is a SEPARATE `type: REFUND` transaction** (its own id, linked to
+  the original by `transaction_code`; what the dashboard lists as a *Rimborso*), AND a `REFUND` event
+  on the original. The original payment's top-level `status` never flips — it stays `SUCCESSFUL`,
+  `refunded_amount` null. A reconciler reads "refunded?" from the separate REFUND transactions or the
+  original's events, never from the original's `status`.
 
 - **Provider LANDED #309, built against the 2026-09-10 docs; four questions still settle by live
   experiment** ([sumup provider spec](superpowers/specs/2026-07-30-sumup-card-present-provider-design.md) §7;
