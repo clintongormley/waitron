@@ -73,6 +73,8 @@ export interface PairResult {
 }
 
 export interface Host {
+  /** Machine hostname when the host platform exposes it. */
+  hostname?(): string;
   config(): Promise<AgentConfig | null>;
   saveConfig(config: AgentConfig): Promise<void>;
   token(): Promise<string | null>;

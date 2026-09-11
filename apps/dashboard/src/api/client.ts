@@ -1011,6 +1011,7 @@ export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
 export interface PrintAgentRow {
   id: string;
   name: string;
+  host: string | null;
   active: boolean;
   /** The node that self-enrolled this agent on its own box (`/api/node/enrol-self`), or null for an
    * agent enrolled manually through the join-and-accept flow. The surface shows a provenance marker
@@ -1020,11 +1021,14 @@ export interface PrintAgentRow {
   enrolledAt: string;
 }
 
-/** One `GET /management-api/printers` row — mirrors `@waitron/printing`'s `PrinterRow`. The connection
+/** One `GET /management-api/printers` row — printer configuration plus full-history job totals. The connection
  * fields are transport-specific and null when unused (`localKey` = the USB serial / Bluetooth MAC for
  * `usb`/`bluetooth`); both active and deactivated printers are listed. There is no serving-agent column
  * any more — eligibility is derived at run time (central printer provisioning §3). */
 export interface Printer {
+  /** Queued, in-flight, and retryable failed jobs across the complete history. */
+  pendingJobs: number;
+  lastPrintAt: string | null;
   id: string;
   name: string;
   transport: PrintTransport;
@@ -1056,8 +1060,8 @@ export interface PrinterInput {
  * scanned `network_tcp` printer carries `host`/`port` and may have no `localKey`. `agentName` is the box
  * that reported it (null if it since went away), `make`/`model`/`name` its self-reported identity when
  * known, and `alreadyRegistered` is true when it matches a registered printer — a usb/bluetooth device
- * on its `localKey`, a network device on host:port — with `printerId` saying which; both discovered lists
- * hide those rows and the registered printer's own row shows when it was seen. */
+ * on its `localKey`, a network device on host:port — with `printerId` saying which; the discovered table
+ * hides those rows and the registered printer's own row shows when it was seen. */
 export interface DiscoveredPrinter {
   agentId: string;
   agentName: string | null;
@@ -1089,6 +1093,15 @@ export interface PrinterPatch {
   pollId?: string | null;
   ticketScope?: PrintTicketScope;
   active?: boolean;
+}
+
+/** A bounded preview of the recorded printer commands. */
+export interface PrintJobPreview {
+  text: string;
+  qrData: string[];
+  omittedGraphics: boolean;
+  truncated: boolean;
+  unsupported: boolean;
 }
 
 /** One `GET /management-api/print-jobs` row — the dashboard's status read (recent activity, newest
@@ -2325,6 +2338,10 @@ export class DashboardApi {
     return this.#request<PrintAgentRow[]>("/management-api/print-agents", "GET");
   }
 
+  updateAgent(id: string, patch: { name: string }): Promise<void> {
+    return this.#request<void>(`/management-api/print-agents/${id}`, "PATCH", patch);
+  }
+
   /** `POST /management-api/print-agents/:id/revoke` — revoke a print agent (flip `active = false`,
    * instant): a revoked agent fails `requireAgent` at once. Answers an empty 204; an unknown id rejects
    * `{ code: "agent.not_found" }`. Never a hard delete — an agent is a durable identity. */
@@ -2366,7 +2383,7 @@ export class DashboardApi {
   /** `GET /management-api/discovered-printers` — the merged in-memory list of devices the agents
    * currently see (always-on USB/BT presence) or found in an open discovery window.
    * Each carries the registered printer it matches (`printerId`, on the local key or on host:port) and
-   * when it was last reported (`lastSeenAt`): the create surfaces list only the unmatched ones, and the
+   * when it was last reported (`lastSeenAt`): the create table lists only the unmatched ones, and the
    * registered list shows the seen-status against the matched printer. */
   listDiscoveredPrinters(): Promise<DiscoveredPrinter[]> {
     return this.#request<DiscoveredPrinter[]>("/management-api/discovered-printers", "GET");
@@ -2385,6 +2402,10 @@ export class DashboardApi {
    * `{ code: "printer.not_found" }`. */
   deactivatePrinter(id: string): Promise<void> {
     return this.#request<void>(`/management-api/printers/${id}/deactivate`, "POST");
+  }
+
+  getPrintJobPreview(id: string): Promise<PrintJobPreview> {
+    return this.#request<PrintJobPreview>(`/management-api/print-jobs/${id}/preview`, "GET");
   }
 
   /** `GET /management-api/print-jobs` — the recent print jobs (newest first, bounded), the dashboard's

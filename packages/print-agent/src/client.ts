@@ -12,6 +12,7 @@ import type { PrintTransport } from "./transport.js";
  * only while a discovery window is open, what an active scan turned up (`scanned`). The server binds
  * configured printers to real hardware from this. */
 export interface AgentInventory {
+  host?: string;
   visible: VisibleDevice[];
   scanned: DiscoveredDevice[];
 }

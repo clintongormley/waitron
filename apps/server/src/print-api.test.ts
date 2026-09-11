@@ -832,6 +832,53 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
 });
 
 describe("mountPrintApi — management: agents", () => {
+  it("persists the authenticated agent hostname and edits only its display name", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app, "Original");
+    const response = await send(app, "POST", "/print-api/agent/jobs", {
+      bearer: token,
+      body: { visible: [], scanned: [], host: "kitchen-box.local" },
+    });
+    expect(response.status).toBe(200);
+    const edited = await send(app, "PATCH", `/management-api/print-agents/${agentId}`, {
+      cookie: managerCookie,
+      body: { name: "Kitchen" },
+    });
+    expect(edited.status).toBe(204);
+    const listed = await send(app, "GET", "/management-api/print-agents", {
+      cookie: managerCookie,
+    });
+    expect(await listed.json()).toContainEqual(
+      expect.objectContaining({
+        id: agentId,
+        name: "Kitchen",
+        host: "kitchen-box.local",
+      }),
+    );
+    await pull(app, token);
+    const again = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });
+    expect(await again.json()).toContainEqual(
+      expect.objectContaining({ id: agentId, host: "kitchen-box.local" }),
+    );
+  });
+
+  it("rejects unknown agents and invalid names when editing", async () => {
+    const app = mountApp();
+    const unknown = await send(app, "PATCH", `/management-api/print-agents/${randomUUID()}`, {
+      cookie: managerCookie,
+      body: { name: "Kitchen" },
+    });
+    expect(unknown.status).toBe(404);
+    const { agentId } = await joinAndAccept(app);
+    for (const name of ["", 42, null]) {
+      const response = await send(app, "PATCH", `/management-api/print-agents/${agentId}`, {
+        cookie: managerCookie,
+        body: { name },
+      });
+      expect(response.status).toBe(400);
+    }
+  });
+
   it("lists this tenant's agents (newest first) without the token hash", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app, "Listed agent");
@@ -1121,6 +1168,82 @@ describe("mountPrintApi — management: test-print", () => {
 });
 
 describe("mountPrintApi — management: recent jobs", () => {
+  it("returns a tenant-scoped preview only to printer managers", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    const jobId = await enqueue(
+      printerId,
+      esc().init().line("Receipt <safe>").feedAndCut().bytes(),
+    );
+    const path = `/management-api/print-jobs/${jobId}/preview`;
+    const preview = await send(app, "GET", path, { cookie: managerCookie });
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toMatchObject({ text: "Receipt <safe>\n", qrData: [] });
+    expect((await send(app, "GET", path)).status).toBe(401);
+    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
+    expect(
+      (
+        await send(app, "GET", `/management-api/print-jobs/${randomUUID()}/preview`, {
+          cookie: managerCookie,
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it("summarises all printer jobs and excludes foreign tenant activity", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused", "Summary printer");
+    const emptyId = await createPrinterVia(app, "unused", "Empty printer");
+    await suite.db.execute(sql`
+      insert into print_jobs (tenant_id, location_id, printer_id, payload)
+      select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex') from generate_series(1, 101)`);
+    await suite.db.execute(sql`
+      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at, delivered_at)
+      values (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'done', 0, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z'),
+             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'failed', 4, now(), null),
+             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'failed', 5, now(), null),
+             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'printing', 0, now(), null)`);
+    const foreignTenant = await seedTenant(suite.db);
+    const foreignLocation = randomUUID();
+    const foreignPrinter = randomUUID();
+    const foreignJob = randomUUID();
+    await suite.db
+      .execute(sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
+      values (${foreignLocation}, ${foreignTenant}, 'Other', array['es-ES'], 'Other')`);
+    await suite.db
+      .execute(sql`insert into printers (id, tenant_id, location_id, name, transport, host)
+      values (${foreignPrinter}, ${foreignTenant}, ${foreignLocation}, 'Other', 'network_tcp', 'other.local')`);
+    await suite.db
+      .execute(sql`insert into print_jobs (id, tenant_id, location_id, printer_id, payload)
+      values (${foreignJob}, ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'))`);
+    const foreignPreview = await send(
+      app,
+      "GET",
+      `/management-api/print-jobs/${foreignJob}/preview`,
+      { cookie: managerCookie },
+    );
+    expect(foreignPreview.status).toBe(404);
+    const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+    const printers = (await result.json()) as {
+      id: string;
+      pendingJobs: number;
+      lastPrintAt: string | null;
+    }[];
+    expect(printers.find((p) => p.id === printerId)).toMatchObject({ pendingJobs: 103 });
+    expect(printers.find((p) => p.id === printerId)!.lastPrintAt).toBe("2020-01-02T00:00:00.000Z");
+    expect(printers.find((p) => p.id === emptyId)).toMatchObject({
+      pendingJobs: 0,
+      lastPrintAt: null,
+    });
+    expect(printers.some((p) => p.id === foreignPrinter)).toBe(false);
+    const jobsResult = await send(app, "GET", "/management-api/print-jobs", {
+      cookie: managerCookie,
+    });
+    const jobs = (await jobsResult.json()) as { id: string }[];
+    expect(jobs).toHaveLength(100);
+    expect(jobs.some((j) => j.id === foreignJob)).toBe(false);
+  });
+
   it("lists recent jobs newest-first without the payload", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
@@ -1141,6 +1264,7 @@ describe("mountPrintApi — the printer.manage gate", () => {
   // Every gated route, as [method, path, body].
   const routes: ["GET" | "POST" | "PATCH", string, unknown?][] = [
     ["GET", "/management-api/print-agents"],
+    ["PATCH", `/management-api/print-agents/${DUMMY}`, { name: "Renamed" }],
     ["POST", `/management-api/print-agents/${DUMMY}/revoke`],
     ["POST", "/management-api/printers", { name: "X", transport: "network_tcp", host: "10.0.0.1" }],
     ["GET", "/management-api/printers"],

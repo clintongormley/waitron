@@ -19,6 +19,8 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    /** No print job with this id is visible in the current tenant. */
+    "print_job.not_found": { id: string };
     /** No printer with this id is visible in the current tenant. `id` is the id looked up. */
     "printer.not_found": { id: string };
     /** A supplied printer config was rejected by `createPrinter` (printers.ts) before any write: a

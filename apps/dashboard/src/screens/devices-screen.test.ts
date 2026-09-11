@@ -109,6 +109,8 @@ const printers: Printer[] = [
     id: "pr1",
     name: "Cocina",
     transport: "network_tcp",
+    pendingJobs: 0,
+    lastPrintAt: null,
     host: "10.0.0.9",
     port: 9100,
     localKey: null,

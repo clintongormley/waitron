@@ -426,6 +426,13 @@ design-review section apply.
   At-least-once reclaim accepted for MVP (per-claim token
   later). Security-review item (the authz boundary moves to venue/visible-keys). Replaces the manual
   create form (agent dropdown) with a transport-aware flow + a discovered-printers list.
+  *Printer settings UI (2026-09-11, built; awaiting branch finishing):* agents, printers and the latest
+  100 jobs use tables and modal editors. Add printer scans all supported transports into one results
+  table of unregistered devices; each row has Add, with no type selector or manual connection form.
+  Registered printers retain the last reported presence beneath their name. Printing rules now owns
+  station/ticket routing and receipt/drawer policy. Agent host reporting, exact pending-job totals,
+  last-print time and a stored-job text preview support the tables. Bluetooth pairing itself remains
+  on the agent setup page. Design: [printer settings](superpowers/specs/2026-09-11-printer-settings-tables.md).
   *Hardware receipt (2026-09-10, real ESC/POS printer on the box):* USB confirmed end-to-end — the agent
   container discovers the printer off `/sys` (serial-keyed) and a physical slip printed via `--device
   /dev/usb/lp0` + `group_add 7` as the unprivileged `node` user (spec §7). The run-it review caught a

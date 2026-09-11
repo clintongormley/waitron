@@ -36,6 +36,18 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
 }
 
 describe("createAgent — phases", () => {
+  it("reports the machine hostname independently of the agent display name", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    Object.assign(host, { hostname: () => "printer-box.local" });
+    const c = client();
+    await createAgent({ host, client: c }).runOnce();
+    expect(c.pullJobs).toHaveBeenCalledWith(A, "a1.s", {
+      visible: [],
+      scanned: [],
+      host: "printer-box.local",
+    });
+  });
+
   it("unconfigured: reports the phase and probes nothing", async () => {
     const host = fakeHost({ config: null });
     const c = client();

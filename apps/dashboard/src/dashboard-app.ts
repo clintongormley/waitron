@@ -45,6 +45,7 @@ import "./screens/purchases-screen.js";
 import "./screens/recipe-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
+import "./screens/printing-rules-screen.js";
 import "./screens/canvas-editor-screen.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
@@ -88,6 +89,7 @@ type CoreScreen =
   | "recipe"
   | "devices"
   | "printers"
+  | "printing-rules"
   | "canvas-editor"
   | "device-profiles"
   | "diagnostics"
@@ -171,6 +173,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "receipt", labelKey: "nav.receipt" },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
+      { screen: "printing-rules", labelKey: "nav.printing_rules" },
       { screen: "canvas-editor", labelKey: "nav.canvases" },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
@@ -1049,6 +1052,10 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-recipe-screen .api=${this.api}></dashboard-recipe-screen>`;
       case "devices":
         return html`<dashboard-devices-screen .api=${this.api}></dashboard-devices-screen>`;
+      case "printing-rules":
+        return html`<dashboard-printing-rules-screen
+          .api=${this.api}
+        ></dashboard-printing-rules-screen>`;
       case "printers":
         return html`<dashboard-printers-screen .api=${this.api}></dashboard-printers-screen>`;
       case "canvas-editor":

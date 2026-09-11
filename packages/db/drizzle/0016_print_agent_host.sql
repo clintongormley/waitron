@@ -1,0 +1,1 @@
+ALTER TABLE "print_agents" ADD COLUMN "host" text;
