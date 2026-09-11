@@ -1230,6 +1230,9 @@ importers:
       '@waitron/core':
         specifier: workspace:*
         version: link:../core
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db

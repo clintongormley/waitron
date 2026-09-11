@@ -18,3 +18,9 @@ export type { StripeReconcilerOptions, StripeReconcileAccount } from "./reconcil
 export { stripeSettlementReport } from "./report-source.js";
 export { stripeReportClient } from "./stripe-report-client.js";
 export type { StripeReportClient, StripeSessionRef, StripeSettlement } from "./report-client.js";
+export {
+  STRIPE_CARD_PROVIDER,
+  createStripeCardProvider,
+  defaultMakeStripe,
+} from "./card-provider.js";
+export type { MakeStripe } from "./card-provider.js";

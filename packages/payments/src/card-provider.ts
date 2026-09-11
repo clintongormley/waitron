@@ -47,8 +47,21 @@ export interface CardProviderContribution {
    * to confirm PLUS the complete payload to seal. Throws `payment.provider_credential_rejected` on a
    * bad credential. If the credential spans several merchants and `payload` names none, throws
    * `payment.provider_merchant_ambiguous` with `{ merchants: [{ code, name }] }` (codes and names are
-   * not secrets) so the form offers a picker and re-submits `payload` with the chosen `merchantCode`. */
-  connect(deps: { fetch?: typeof fetch }, payload: Record<string, string>): Promise<ConnectResult>;
+   * not secrets) so the form offers a picker and re-submits `payload` with the chosen `merchantCode`.
+   *
+   * `environment` and `tenantId` are the deployment context the route holds: a seat that can tell a
+   * key's environment from its shape (Stripe's `sk_live_`/`sk_test_` prefix) refuses a mismatched
+   * key with `payment.credential_environment_mismatch` before sealing. Both are optional so a seat
+   * that has no such notion (SumUp) ignores them and a caller that cannot supply them skips the
+   * guard. */
+  connect(
+    deps: {
+      fetch?: typeof fetch;
+      environment?: "preproduction" | "production";
+      tenantId?: TenantId;
+    },
+    payload: Record<string, string>,
+  ): Promise<ConnectResult>;
   /** Build the live PaymentProvider from the sealed credential (called by the pool). */
   build(deps: CardProviderBuildDeps): PaymentProvider;
   readers: {
