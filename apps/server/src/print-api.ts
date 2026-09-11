@@ -501,6 +501,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             id: printAgents.id,
             name: printAgents.name,
             active: printAgents.active,
+            // Which node self-enrolled this agent over loopback, or NULL when a human enrolled it via
+            // knock-and-accept (on-node auto-enrolment design §3) — the provenance the dashboard shows.
+            nodeId: printAgents.nodeId,
             lastSeenAt: printAgents.lastSeenAt,
             enrolledAt: printAgents.enrolledAt,
           })
@@ -523,6 +526,26 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         tx
           .update(printAgents)
           .set({ active: false })
+          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .returning({ id: printAgents.id }),
+      );
+      if (updated.length === 0) throw new AppError("agent.not_found", { id });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Allow a revoked print agent again (printer.manage) ───────────────────────────────────────────
+  // The reverse of revoke: `active := true`. Revoke stopped being reversible by re-enrol once an
+  // on-node agent refuses to auto-re-enrol while revoked (design §4) — without this action a mistaken
+  // revoke of the box's own agent would permanently kill printing. 0 rows (unknown id) → agent.not_found.
+  app.post("/management-api/print-agents/:id/allow", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrintAgentId");
+      const updated = await gated(sessionId, (tx) =>
+        tx
+          .update(printAgents)
+          .set({ active: true })
           .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
           .returning({ id: printAgents.id }),
       );

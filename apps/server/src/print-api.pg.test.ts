@@ -195,6 +195,26 @@ async function seedStation(tenant: Tenant, name: string): Promise<string> {
   return row.rows[0]!.id;
 }
 
+/** Read a print agent's `active` flag directly (owner SQL) — the check the allow/revoke tests make on
+ * the row itself, not through the API. */
+async function agentActive(agentId: string): Promise<boolean> {
+  const row = await suite.admin.execute<{ active: boolean }>(
+    sql`select active from print_agents where id = ${agentId}`,
+  );
+  return row.rows[0]!.active;
+}
+
+/** Seed one SELF-ENROLLED print agent directly (owner SQL) with a known `node_id` — the provenance the
+ * list must surface. `joinAndAccept` mints only human-enrolled (node_id NULL) agents, so a row with a
+ * node stamped on it is inserted here. A fresh `node_id` per call keeps `print_agents_tenant_node_key`
+ * (unique on the non-NULL node) happy across the shared clone. */
+async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
+  const row = await suite.admin.execute<{ id: string }>(sql`
+    insert into print_agents (tenant_id, location_id, name, node_id, token_hash)
+    values (${tenant.tenantId}, ${tenant.locationId}, 'Self-enrolled', ${nodeId}, 'x') returning id`);
+  return row.rows[0]!.id;
+}
+
 describe("Print API over real Postgres (as the app role)", () => {
   it("enrol → claim (committed within the request) → report done, all as the app role", async () => {
     const app = mountApp(tenantA);
@@ -367,6 +387,43 @@ describe("Print API over real Postgres (as the app role)", () => {
       const manager = await send(app, method, path, { cookie: managerCookie });
       expect(manager.status).toBe(200);
     }
+  });
+
+  it("allow-again reactivates a revoked agent (printer.manage)", async () => {
+    const app = mountApp(tenantA);
+    const { agentId } = await joinAndAccept(app, "Reactivable");
+    const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
+      cookie: managerCookie,
+    });
+    expect(revoke.status).toBe(204);
+    expect(await agentActive(agentId)).toBe(false);
+
+    const allow = await send(app, "POST", `/management-api/print-agents/${agentId}/allow`, {
+      cookie: managerCookie,
+    });
+    expect(allow.status).toBe(204);
+    expect(await agentActive(agentId)).toBe(true);
+  });
+
+  it("allow-again on an unknown id is agent.not_found (404)", async () => {
+    const app = mountApp(tenantA);
+    const res = await send(app, "POST", `/management-api/print-agents/${randomUUID()}/allow`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(404);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "agent.not_found" },
+    });
+  });
+
+  it("the agents list carries node provenance", async () => {
+    const app = mountApp(tenantA);
+    const someNode = randomUUID();
+    const id = await seedNodeAgent(tenantA, someNode);
+    const res = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<{ id: string; nodeId: string | null }>;
+    expect(rows.find((r) => r.id === id)?.nodeId).toBe(someNode);
   });
 });
 
