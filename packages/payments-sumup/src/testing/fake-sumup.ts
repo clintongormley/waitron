@@ -9,7 +9,22 @@ import type {
 let seq = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++seq).padStart(8, "0")}`;
 
-interface Held {
+/** The card facts a transaction carries, mirroring `SumUpTransaction`'s optional card fields. */
+interface CardFacts {
+  card?: { last4: string; type: string };
+  entryMode?: string;
+  authCode?: string | null;
+}
+
+/** A VISA contactless block matching the live control run (docs/research SumUp Solo experiments);
+ * every created/held transaction carries it unless a test overrides with `cardNext`. */
+const DEFAULT_CARD: CardFacts = {
+  card: { last4: "5838", type: "VISA" },
+  entryMode: "contactless",
+  authCode: "328600",
+};
+
+interface Held extends CardFacts {
   id: string;
   clientTransactionId: string;
   foreignTransactionId: string;
@@ -40,6 +55,7 @@ export class FakeSumUp implements SumUpClient {
   private nextRefundRefuses = false;
   private hideUntilSettled = false;
   private nextResolveOnFirstFind: SumUpTransaction["status"] | undefined;
+  private nextCard: CardFacts | undefined;
   private readonly held: Held[] = [];
 
   declineNext(): void {
@@ -71,6 +87,12 @@ export class FakeSumUp implements SumUpClient {
   resolveOnFirstFind(status: SumUpTransaction["status"]): void {
     this.nextResolveOnFirstFind = status;
   }
+  /** Give the next created checkout these card facts, or `null` for a transaction that carries NO
+   * card object (a SUCCESSFUL sale SumUp returned without card fields). One-shot; the default
+   * otherwise is the VISA contactless block. */
+  cardNext(facts: CardFacts | null): void {
+    this.nextCard = facts === null ? {} : facts;
+  }
 
   /** Resolve a stalled checkout by its client transaction id. */
   settle(clientTransactionId: string): void {
@@ -86,13 +108,15 @@ export class FakeSumUp implements SumUpClient {
   }
   /** Register a transaction the adapter never created through this fake (a crash-before-stamp row
    * the sweep must find by OUR key) — `foreignTransactionId` is the adapter's payment_ref. */
-  hold(t: {
-    foreignTransactionId: string;
-    status: SumUpTransaction["status"];
-    amount: Decimal;
-  }): string {
+  hold(
+    t: {
+      foreignTransactionId: string;
+      status: SumUpTransaction["status"];
+      amount: Decimal;
+    } & CardFacts,
+  ): string {
     const clientTransactionId = nextId("ctx");
-    this.held.push({ id: nextId("txn"), clientTransactionId, ...t });
+    this.held.push({ id: nextId("txn"), clientTransactionId, ...DEFAULT_CARD, ...t });
     return clientTransactionId;
   }
 
@@ -115,12 +139,14 @@ export class FakeSumUp implements SumUpClient {
       foreignTransactionId: params.foreignTransactionId,
       status: this.next,
       amount: params.amount,
+      ...(this.nextCard ?? DEFAULT_CARD),
       ...(this.nextResolveOnFirstFind === undefined
         ? {}
         : { onFirstFind: this.nextResolveOnFirstFind }),
     });
     this.next = "SUCCESSFUL";
     this.nextResolveOnFirstFind = undefined;
+    this.nextCard = undefined;
     return Promise.resolve({ accepted: true, checkoutId: nextId("chk"), clientTransactionId });
   }
 
@@ -142,7 +168,14 @@ export class FakeSumUp implements SumUpClient {
       h.onFirstFind = undefined;
     }
     if (this.hideUntilSettled && h.status === "PENDING") return Promise.resolve(null);
-    return Promise.resolve({ id: h.id, status: h.status, amount: h.amount });
+    return Promise.resolve({
+      id: h.id,
+      status: h.status,
+      amount: h.amount,
+      ...(h.card === undefined ? {} : { card: h.card }),
+      ...(h.entryMode === undefined ? {} : { entryMode: h.entryMode }),
+      ...(h.authCode === undefined ? {} : { authCode: h.authCode }),
+    });
   }
 
   refund(params: {

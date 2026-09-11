@@ -64,6 +64,19 @@ export interface CollectParams {
 }
 
 /**
+ * Card facts for the customer's proof of a card payment, filled by a provider that can supply them
+ * (SumUp does; Stripe leaves it undefined for now). Present only on a `captured` result. `scheme` is
+ * the network as the provider names it (underscores → spaces), NOT a curated set; `entryMode` is
+ * normalised to these four values; `authCode` is null when the transaction carries none.
+ */
+export interface CardDetails {
+  scheme: string;
+  last4: string;
+  entryMode: "contactless" | "chip" | "swipe" | "unknown";
+  authCode: string | null;
+}
+
+/**
  * The outcome of one provider operation, returned as DATA (never inside the caller's transaction —
  * see `PaymentProvider`). `settledAt` is what feeds `RecordSaleTender.settledAt`: non-null on a
  * `captured` result (the sale may then chain) and on an `accepted_offline` result (the acceptance
@@ -83,6 +96,9 @@ export interface PaymentResult {
    * awaits `forward()`. `settledAt` carries the acceptance time, so the sale chains immediately. */
   offline?: boolean;
   settledAt: Date | null;
+  /** Card facts for a card-present capture — the receipt's card block. Present only on a `captured`
+   * result whose provider can supply them; undefined for cash, manual, offline, failed, reversals. */
+  card?: CardDetails;
 }
 
 /**

@@ -215,7 +215,9 @@ function printTicket(ticket: TillSaleResult): void {
   console.log(`    invoiceNumber: ${ticket.invoiceNumber}`);
   console.log(`    issuedAt:      ${ticket.issuedAt}`);
   console.log(`    total:         ${ticket.total}`);
-  console.log(`    change:        ${ticket.change}`); // "0.00" — a card is charged the exact total
+  console.log(
+    `    change:        ${ticket.tender.method === "cash" ? ticket.tender.change : "0.00"}`,
+  ); // "0.00" — a card is charged the exact total
   console.log("    desglose (VAT breakdown):");
   for (const line of ticket.vatBreakdown) {
     console.log(`      rate ${line.rate}%  base ${line.base}  tax ${line.tax}`);

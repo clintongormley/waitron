@@ -419,7 +419,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const ticket = await saleRes.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/);
     expect(ticket.total).toBe("3.00");
-    expect(ticket.change).toBe("2.00");
+    expect(ticket.tender).toEqual({ method: "cash", change: "2.00" });
     expect(ticket.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
     expect(ticket.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     // VerifactuBackend always sets a verification URL, so the QR is a non-empty string.
@@ -522,7 +522,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
         { rate: "21.00", base: "2.48", tax: "0.52" },
       ]),
     );
-    expect(ticket.change).toBe("2.02"); // operational efectivo/cambio line
+    expect(ticket.tender).toEqual({ method: "cash", change: "2.02" }); // operational efectivo/cambio line
     // The QR is the AEAT verification URL — required on every RRSIF invoice, so a non-empty string.
     expect(typeof ticket.qr).toBe("string");
     expect(ticket.qr.length).toBeGreaterThan(0);
@@ -713,7 +713,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     const ticket = await pay.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/);
     expect(ticket.total).toBe("3.00");
-    expect(ticket.change).toBe("2.00");
+    expect(ticket.tender).toEqual({ method: "cash", change: "2.00" });
     expect(ticket.qr.length).toBeGreaterThan(0); // a genuine first filing carries the AEAT QR
 
     // 5. Exactly ONE chained fiscal record; the working order is now `settled` and the sale is filed
@@ -763,7 +763,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     expect(replayTicket.qr).toBe(ticket.qr);
     expect(replayTicket.qr.length).toBeGreaterThan(0);
     expect(replayTicket.vatBreakdown).toEqual(ticket.vatBreakdown);
-    expect(replayTicket.change).toBe("0.00");
+    expect(replayTicket.tender).toEqual({ method: "cash", change: "0.00" });
 
     // Still exactly ONE record — the replay filed nothing.
     const stillOne = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
@@ -1078,7 +1078,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     const ticket = await collect.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/);
     expect(ticket.total).toBe("3.00");
-    expect(ticket.change).toBe("2.00");
+    expect(ticket.tender).toEqual({ method: "cash", change: "2.00" });
     expect(ticket.qr.length).toBeGreaterThan(0); // a genuine fresh filing carries the AEAT QR
 
     const after = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {

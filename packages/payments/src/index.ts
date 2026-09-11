@@ -1,6 +1,7 @@
 // The entire public surface of @waitron/payments. Re-exports only — no logic here.
 export type {
   AsyncPaymentProvider,
+  CardDetails,
   CollectParams,
   ForwardResult,
   InboundSettlement,
@@ -25,6 +26,7 @@ export {
   expireInitiated,
   failAttempting,
   findCapturedPaymentForWorkingOrder,
+  findCapturedPaymentForWorkingOrderAnyProvider,
   findPaymentByRef,
   getPaymentByRef,
   insertAcceptedOffline,

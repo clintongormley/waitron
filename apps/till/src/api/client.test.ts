@@ -27,7 +27,7 @@ describe("TillApi", () => {
       issuedAt: "2026-08-05T10:00:00.000Z",
       total: "3.00",
       vatBreakdown: [],
-      change: "2.00",
+      tender: { method: "cash", change: "2.00" },
       qr: "x",
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(ticket));
@@ -54,7 +54,7 @@ describe("TillApi", () => {
         }),
       }),
     );
-    expect(result.change).toBe("2.00");
+    expect(result.tender).toEqual({ method: "cash", change: "2.00" });
     expect(result.invoiceNumber).toBe("A/1");
   });
 
@@ -65,7 +65,7 @@ describe("TillApi", () => {
       total: "3.00",
       vatBreakdown: [],
       lines: [{ descriptions: { "es-ES": "Café" }, quantity: "2", gross: "3.00" }],
-      change: "0.00",
+      tender: { method: "cash", change: "0.00" },
       qr: "x",
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ outcome: "captured", ticket }));
@@ -608,7 +608,7 @@ describe("TillApi", () => {
       issuedAt: "2026-08-06T10:00:00.000Z",
       total: "1.50",
       vatBreakdown: [],
-      change: "0.00",
+      tender: { method: "cash", change: "0.00" },
       qr: "x",
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(ticket));

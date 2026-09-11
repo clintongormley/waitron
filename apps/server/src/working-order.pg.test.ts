@@ -515,7 +515,7 @@ describe("payWorkingOrder", () => {
     // First sale of a fresh venue's series → A/1. Change is 5.00 tendered − 1.50.
     expect(res.invoiceNumber).toBe("A/1");
     expect(res.total).toBe("1.50");
-    expect(res.change).toBe("3.50");
+    expect(res.tender).toEqual({ method: "cash", change: "3.50" });
     expect(res.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
     // The FILED line list the receipt renders (Finding 2): the priced walk-up composition — name, the
     // display quantity, and the GROSS the line was filed at. Σ(gross) == total.
@@ -561,7 +561,7 @@ describe("payWorkingOrder", () => {
     // the filed total EQUALS the gross the customer was shown at park (`parkedTotal`).
     expect(res.total).toBe("3.50");
     expect(res.total).toBe(parkedTotal);
-    expect(res.change).toBe("1.50");
+    expect(res.tender).toEqual({ method: "cash", change: "1.50" });
     // The receipt line list is the STORED lock (Finding 2), not any client basket the till sent (it
     // sent none). The stored numeric(_,3) quantities ("1.000") print trailing-zero-trimmed ("1").
     expect(res.lines).toEqual([
@@ -605,7 +605,7 @@ describe("payWorkingOrder", () => {
     // list carries the edited quantity, and the immutable record's total matches — the edit reached the
     // fiscal record rather than being dropped.
     expect(res.total).toBe("3.00");
-    expect(res.change).toBe("2.00");
+    expect(res.tender).toEqual({ method: "cash", change: "2.00" });
     expect(res.lines).toEqual([
       { descriptions: { [LOCALE]: "Café" }, quantity: "2", gross: "3.00", parentLineNo: null },
     ]);
@@ -640,7 +640,7 @@ describe("payWorkingOrder", () => {
     });
 
     expect(res.total).toBe("1.50"); // the lock, not 9.99
-    expect(res.change).toBe("3.50");
+    expect(res.tender).toEqual({ method: "cash", change: "3.50" });
     // The IMMUTABLE fiscal record carries the locked price — read back as the owner.
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await saleCount(id)).toBe(1);
@@ -692,7 +692,7 @@ describe("payWorkingOrder", () => {
     // The replayed ticket carries the SAME mandatory Veri*Factu QR the original did, re-derived from
     // the filed record. `change` stays 0.00 — a documented replay limitation: the tendered cash is not
     // persisted and the drawer change was handed over at the ORIGINAL sale.
-    expect(second.change).toBe("0.00");
+    expect(second.tender).toEqual({ method: "cash", change: "0.00" });
     expect(second.qr).toBe(first.qr);
     expect(second.qr.length).toBeGreaterThan(0);
 
@@ -819,7 +819,7 @@ describe("payWorkingOrder", () => {
 
     // Filed the stored lock (1.50), not the garbage basket — settled exactly once.
     expect(res.total).toBe("1.50");
-    expect(res.change).toBe("3.50");
+    expect(res.tender).toEqual({ method: "cash", change: "3.50" });
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
@@ -917,7 +917,10 @@ describe("card tender (manual / datáfono)", () => {
 
     // A card charges the exact amount on the terminal — nothing is handed back.
     expect(res.total).toBe("1.50");
-    expect(res.change).toBe("0.00");
+    expect(res.tender.method).toBe("card");
+    // The operator's hand-keyed acquirer reference rides through end to end onto the ticket's tender
+    // block (a manual tender carries `reference`, `card: null`).
+    expect(res.tender).toMatchObject({ method: "card", reference: "OP-12345" });
     expect(res.invoiceNumber).toBe("A/1");
 
     // One sale + one chained registro, exactly as the cash path.
@@ -953,7 +956,7 @@ describe("card tender (manual / datáfono)", () => {
     });
 
     expect(res.total).toBe("3.50");
-    expect(res.change).toBe("0.00");
+    expect(res.tender.method).toBe("card");
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "3.50" }]);
     expect(await paymentsFor(id)).toEqual([
       { provider: "manual", state: "captured", amount: "3.50", linkedToSale: true },
@@ -979,7 +982,7 @@ describe("card tender (manual / datáfono)", () => {
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
     expect(second.total).toBe(first.total);
     expect(second.issuedAt).toBe(first.issuedAt);
-    expect(second.change).toBe("0.00");
+    expect(second.tender.method).toBe("card");
 
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
@@ -1463,7 +1466,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 
     expect(res.invoiceNumber).toBe("A/1");
     expect(res.total).toBe("1.50");
-    expect(res.change).toBe("3.50");
+    expect(res.tender).toEqual({ method: "cash", change: "3.50" });
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
@@ -1514,7 +1517,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     });
     expect(collected.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
     expect(collected.total).toBe("3.50");
-    expect(collected.change).toBe("0.00");
+    expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
     // The receipt line list is read back from the order's stored lock (Finding 2 — Mode-I collect
     // returns the already-filed ticket), so it matches the deferred invoice's composition.
     expect(collected.lines).toEqual([
@@ -1545,7 +1548,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       tender: { method: "cash", amount: "5.00" },
     });
     expect(collected.total).toBe("1.50");
-    expect(collected.change).toBe("3.50");
+    expect(collected.tender).toEqual({ method: "cash", change: "3.50" });
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);
     expect(await saleCount(id)).toBe(1);
   });
@@ -1566,7 +1569,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       lines: [],
       tender: { method: "card", amount: "1.50", externalRef: "OP-INV-1" },
     });
-    expect(collected.change).toBe("0.00");
+    expect(collected.tender.method).toBe("card");
     expect(await orderState(cardId)).toEqual({ status: "settled", settledAtSet: true });
 
     // The card tender AND a captured manual `payments` row linked to the settled sale — the #62
@@ -1693,7 +1696,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     });
     expect(collected.invoiceNumber).toBe("A/1"); // the FIRST filing is at collect
     expect(collected.total).toBe("1.50");
-    expect(collected.change).toBe("0.00");
+    expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
     // The receipt line list is the just-filed composition (Finding 2 — Mode-T files immediate at
     // collect from the stored lock).
     expect(collected.lines).toEqual([
@@ -1736,7 +1739,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // at the original collect).
     const replay = await collectOrder({ db: suite.admin, backend, clock }, cfg, req, OPERATOR);
     expect(replay.invoiceNumber).toBe("A/1");
-    expect(replay.change).toBe("0.00");
+    expect(replay.tender).toEqual({ method: "cash", change: "0.00" });
     expect(await saleCount(id)).toBe(1);
   });
 
@@ -1773,7 +1776,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // Fiscal result byte-unchanged: filed once at collect, A/1, one chained registro, one tender.
     expect(collected.invoiceNumber).toBe("A/1");
     expect(collected.total).toBe("1.50");
-    expect(collected.change).toBe("0.00");
+    expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);

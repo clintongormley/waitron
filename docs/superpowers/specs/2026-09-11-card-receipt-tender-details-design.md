@@ -154,19 +154,21 @@ tender:
       reference: string | null }  // operator-keyed external_ref, MANUAL tender only
 ```
 
-**The tender block is built in ONE new helper, `readTenderBlock`, called by all THREE ticket
+**The tender block is built in ONE new helper, `readTenderBlock`, called by all FOUR ticket
 construction sites** — `fileImmediateSale` (line ~693, cash + manual-card immediate sales, reused by
-Mode-T integrated collect), `finalizeCapture` (line ~1058, integrated fresh capture), and
-`readSettledTicket` (line ~469, reprints + concurrent replays). Today those three build the result
-inline and independently; only `readSettledTicket` reads the sale back. The plan touches all three —
+Mode-T integrated collect), `finalizeCapture` (line ~1058, integrated fresh capture),
+`finalizeRecovery` (the lost-T2 card-recovery path — a captured payment whose sale was never filed),
+and `readSettledTicket` (line ~469, reprints + concurrent replays). Today those four build the result
+inline and independently; only `readSettledTicket` reads the sale back. The plan touches all four —
 there is no single chokepoint to edit, and assuming one was a false claim caught in spec self-review.
 
-`readTenderBlock(tx, cfg, workingOrderId, { cashChange })` reads the sale's `tenders` row (method,
-`tip_amount` — exactly one per sale) and, for a card, the `payments` row for that working order
-(`findCapturedPaymentForWorkingOrder` already exists; keyed on `working_order_id`, which is
-`NOT NULL` from the first insert, so the read does NOT depend on the `sale_id` association having
-happened yet). Both reads carry their own `eq(tenantId, cfg.tenantId)` — one-tenant-per-db is NOT the
-query boundary (CLAUDE.md §3, the `getHeldOrder` cross-tenant leak).
+`readTenderBlock(tx, cfg, saleId, workingOrderId, { cashChange })` reads the sale's `tenders` row
+(method, `tip_amount` — exactly one per sale) and, for a card, the `payments` row for that working
+order (`findCapturedPaymentForWorkingOrderAnyProvider`; the ticket path knows the working order but
+not which provider settled it, so it does NOT filter by provider). The read is keyed on
+`working_order_id`, which is `NOT NULL` from the first insert, so it does NOT depend on the `sale_id`
+association having happened yet. Both reads carry their own `eq(tenantId, cfg.tenantId)` —
+one-tenant-per-db is NOT the query boundary (CLAUDE.md §3, the `getHeldOrder` cross-tenant leak).
 
 **The card block is fully read back from persisted rows, so a reprint is byte-identical to the first
 print BY CONSTRUCTION** — the same read path feeds both, which is the regression property the owner

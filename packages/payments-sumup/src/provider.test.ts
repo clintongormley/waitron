@@ -4,6 +4,65 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, isAppError, tenantId as brandTenantId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { setup } from "./testing/setup.js";
+import { cardFromTransaction, mapEntryMode } from "./provider.js";
+
+describe("SumUp card details mapping", () => {
+  it("maps SumUp entry modes to the four normalised values", () => {
+    expect(mapEntryMode("contactless")).toBe("contactless");
+    expect(mapEntryMode("chip")).toBe("chip");
+    expect(mapEntryMode("magstripe")).toBe("swipe");
+    expect(mapEntryMode("swipe")).toBe("swipe");
+    expect(mapEntryMode("something_new")).toBe("unknown");
+    expect(mapEntryMode(undefined)).toBe("unknown");
+  });
+
+  it("builds CardDetails from a transaction that carries the fields", () => {
+    expect(
+      cardFromTransaction({
+        id: "t1",
+        status: "SUCCESSFUL",
+        amount: decimal("1.00"),
+        card: { last4: "5838", type: "VISA_ELECTRON" },
+        entryMode: "contactless",
+        authCode: "328600",
+      }),
+    ).toEqual({
+      scheme: "VISA ELECTRON",
+      last4: "5838",
+      entryMode: "contactless",
+      authCode: "328600",
+    });
+  });
+
+  it("returns undefined when the transaction carries no card object", () => {
+    expect(
+      cardFromTransaction({ id: "t2", status: "SUCCESSFUL", amount: decimal("1.00") }),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for a malformed last4 (not exactly four digits) so it never reaches the store", () => {
+    expect(
+      cardFromTransaction({
+        id: "t2b",
+        status: "SUCCESSFUL",
+        amount: decimal("1.00"),
+        card: { last4: "58380", type: "VISA" },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("still builds a block when auth_code is missing (null), never throwing", () => {
+    expect(
+      cardFromTransaction({
+        id: "t3",
+        status: "SUCCESSFUL",
+        amount: decimal("1.00"),
+        card: { last4: "6017", type: "VISA" },
+        entryMode: "chip",
+      }),
+    ).toEqual({ scheme: "VISA", last4: "6017", entryMode: "chip", authCode: null });
+  });
+});
 
 // PGlite: this file proves the adapter's LOGIC (T1/T1.5/T2 sequencing, outcome mapping, the poll
 // window). Whether the same writes land as a non-superuser app_user member is sumup.test.ts's
@@ -97,6 +156,46 @@ describe("SumUpCloudProvider.collect", () => {
       (e: unknown) => isAppError(e) && e.code === "sumup.tenant_mismatch",
     );
     expect(fake.lastCreate).toBeUndefined();
+  });
+
+  it("a captured collect result carries the card block from the transaction", async () => {
+    const { provider, params } = await setup(suite);
+    const result = await provider.collect(params);
+    expect(result.state).toBe("captured");
+    expect(result.card).toEqual({
+      scheme: "VISA",
+      last4: "5838",
+      entryMode: "contactless",
+      authCode: "328600",
+    });
+  });
+
+  it("captures without failing when the transaction has no card fields (card undefined, never throws)", async () => {
+    const { provider, params } = await setup(suite, (f) => f.cardNext(null));
+    const result = await provider.collect(params);
+    expect(result.state).toBe("captured");
+    expect(result.card).toBeUndefined();
+  });
+
+  it("a SUCCESSFUL transaction with a malformed last4 still captures — the card block is dropped, never the charge", async () => {
+    // The run-it reviewer's money-safety case: a 5-char last_4_digits passed the old truthy guard,
+    // was built into the card block, then `payments_card_last4_ck` REJECTED the capture write
+    // (23514) — a real charge stuck `attempting`. The adapter must drop malformed card facts so the
+    // capture persists with card columns null (CLAUDE.md §5); the DB CHECK stays the backstop.
+    const { provider, params, row } = await setup(suite, (f) =>
+      f.cardNext({
+        card: { last4: "58380", type: "VISA" },
+        entryMode: "contactless",
+        authCode: "328600",
+      }),
+    );
+    const result = await provider.collect(params);
+    expect(result.state).toBe("captured");
+    expect(result.card).toBeUndefined();
+    const r = await row(result.paymentRef);
+    expect(r.state).toBe("captured");
+    expect(r.cardLast4).toBeNull();
+    expect(r.cardScheme).toBeNull();
   });
 });
 

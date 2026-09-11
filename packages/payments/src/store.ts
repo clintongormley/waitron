@@ -5,7 +5,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { workingOrders } from "@waitron/db";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
-import type { PaymentState } from "./provider.js";
+import type { CardDetails, PaymentState } from "./provider.js";
 
 /** A payment row as the store reads it back. `state` is a `PaymentState`; `amount`/`settledAt` are
  * the raw column strings (numeric/timestamptz), left as strings so no float or timezone
@@ -20,6 +20,12 @@ export interface PaymentRow {
    * when none. Read-side of the `external_ref` column, needed by the reversal path to address the
    * processor. */
   externalRef: string | null;
+  /** Card-present facts for the receipt's card block, set once at capture by a provider that
+   * supplies them (SumUp); null for cash/manual/offline/failed and for providers that do not. */
+  cardScheme: string | null;
+  cardLast4: string | null;
+  cardEntryMode: string | null;
+  cardAuthCode: string | null;
 }
 
 interface Key {
@@ -38,6 +44,9 @@ interface NewPayment {
    * manual tenders today, and reusable by integrated adapters later for the acquirer reference (as
    * `payments.external_ref`'s own schema comment notes); null when no such reference applies. */
   externalRef?: string;
+  /** Card-present facts, persisted at capture. Optional: only providers that supply them (SumUp)
+   * set it; cash/manual/offline/failed leave it undefined, so the columns stay NULL. */
+  card?: CardDetails;
 }
 
 const PAYMENT_COLUMNS = {
@@ -47,6 +56,10 @@ const PAYMENT_COLUMNS = {
   saleId: payments.saleId,
   settledAt: payments.settledAt,
   externalRef: payments.externalRef,
+  cardScheme: payments.cardScheme,
+  cardLast4: payments.cardLast4,
+  cardEntryMode: payments.cardEntryMode,
+  cardAuthCode: payments.cardAuthCode,
 };
 
 async function insertPayment(
@@ -62,6 +75,10 @@ async function insertPayment(
     paymentRef: params.paymentRef,
     amount: params.amount,
     externalRef: params.externalRef ?? null,
+    cardScheme: params.card?.scheme ?? null,
+    cardLast4: params.card?.last4 ?? null,
+    cardEntryMode: params.card?.entryMode ?? null,
+    cardAuthCode: params.card?.authCode ?? null,
     state,
     settledAt,
   });
@@ -110,11 +127,12 @@ export async function insertAttempting(tx: Transaction, params: NewPayment): Pro
  * only a row still `attempting`; if none matches, throws `payment.not_found`. */
 export async function captureAttempting(
   tx: Transaction,
-  params: Key & { settledAt: Date; externalRef: string },
+  params: Key & { settledAt: Date; externalRef: string; card?: CardDetails },
 ): Promise<PaymentRow> {
   return resolveAttempting(tx, params, "captured", {
     settledAt: params.settledAt.toISOString(),
     externalRef: params.externalRef,
+    card: params.card,
   });
 }
 
@@ -128,7 +146,7 @@ async function resolveAttempting(
   tx: Transaction,
   params: Key,
   state: "captured" | "failed",
-  extra: { settledAt?: string; externalRef?: string },
+  extra: { settledAt?: string; externalRef?: string; card?: CardDetails },
 ): Promise<PaymentRow> {
   const [row] = await tx
     .update(payments)
@@ -136,6 +154,10 @@ async function resolveAttempting(
       state,
       settledAt: extra.settledAt ?? null,
       externalRef: extra.externalRef ?? null,
+      cardScheme: extra.card?.scheme ?? null,
+      cardLast4: extra.card?.last4 ?? null,
+      cardEntryMode: extra.card?.entryMode ?? null,
+      cardAuthCode: extra.card?.authCode ?? null,
       updatedAt: sql`now()`,
     })
     .where(and(keyWhere(params), eq(payments.state, "attempting")))
@@ -290,16 +312,22 @@ export async function getPaymentByRef(
 export interface CapturedPaymentForOrder {
   id: string;
   paymentRef: string;
+  provider: string;
   amount: string; // numeric(12,2) as text
   saleId: string | null;
   externalRef: string | null;
   settledAt: string | null; // always set for captured/accepted_offline, but typed nullable like the column
   state: "captured" | "accepted_offline";
+  cardScheme: string | null;
+  cardLast4: string | null;
+  cardEntryMode: string | null;
+  cardAuthCode: string | null;
 }
 
 const CAPTURED_FOR_ORDER_COLUMNS = {
   ...PAYMENT_COLUMNS,
   paymentRef: payments.paymentRef,
+  provider: payments.provider,
 };
 
 /** The §4 capture-idempotency pre-check: has this working order already got a captured (or
@@ -325,13 +353,26 @@ export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
   key: { tenantId: string; provider: string; workingOrderId: string },
 ): Promise<CapturedPaymentForOrder | undefined> {
+  return selectCapturedForWorkingOrder(tx, key);
+}
+
+/** The shared body of both captured-payment reads: the most-recent captured/accepted-offline payment
+ * for a working order, tenant-scoped, optionally narrowed to ONE provider. `provider` omitted selects
+ * across every provider — Drizzle's `and()` drops an `undefined` clause, so the same query serves the
+ * provider-filtered §4 pre-check and the ticket path's any-provider read. The `desc nulls last`
+ * ordering and the at-most-one-per-order invariant are documented on
+ * `findCapturedPaymentForWorkingOrder`. */
+async function selectCapturedForWorkingOrder(
+  tx: Transaction,
+  key: { tenantId: string; workingOrderId: string; provider?: string },
+): Promise<CapturedPaymentForOrder | undefined> {
   const [row] = await tx
     .select(CAPTURED_FOR_ORDER_COLUMNS)
     .from(payments)
     .where(
       and(
         eq(payments.tenantId, key.tenantId),
-        eq(payments.provider, key.provider),
+        key.provider === undefined ? undefined : eq(payments.provider, key.provider),
         eq(payments.workingOrderId, key.workingOrderId),
         inArray(payments.state, ["captured", "accepted_offline"]),
       ),
@@ -339,6 +380,20 @@ export async function findCapturedPaymentForWorkingOrder(
     .orderBy(sql`${payments.settledAt} desc nulls last`)
     .limit(1);
   return row as CapturedPaymentForOrder | undefined;
+}
+
+/** The captured/accepted-offline payment for a working order, WITHOUT filtering by provider — the
+ * ticket/reprint path (readTenderBlock) knows the working order but not which provider settled it.
+ * Returns null when none (a cash sale, or a card sale whose payment row is absent). Shares
+ * `selectCapturedForWorkingOrder` with the provider-filtered read above, passing no `provider` so the
+ * query spans every provider; the only difference is the null (not undefined) empty return this
+ * caller wants. Tenant-scoped explicitly, like every read here (CLAUDE.md §3): one-tenant-per-database
+ * is not the query's isolation boundary. */
+export async function findCapturedPaymentForWorkingOrderAnyProvider(
+  tx: Transaction,
+  key: { tenantId: string; workingOrderId: string },
+): Promise<CapturedPaymentForOrder | null> {
+  return (await selectCapturedForWorkingOrder(tx, key)) ?? null;
 }
 
 /** A payment row plus its tenant, looked up by (provider, paymentRef) WITHOUT a tenant filter — the

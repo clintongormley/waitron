@@ -106,8 +106,32 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       const r = await call("GET", `/v2.1/merchants/${mc}/transactions?${param}`);
       if (r.status === 404) return null;
       if (r.status >= 400) throw new Error(`sumup GET transactions: HTTP ${r.status}`);
-      const t = r.json as { id: string; status: string; amount: number };
-      return { id: t.id, status: t.status, amount: fromMajorUnits(t.amount) };
+      const t = r.json as {
+        id: string;
+        status: string;
+        amount: number;
+        card?: { last_4_digits?: string; type?: string };
+        entry_mode?: string;
+        auth_code?: string | null;
+      };
+      // Card facts are best-effort receipt decoration: emit the `card` block only when it is
+      // well-formed enough to PERSIST — `last_4_digits` exactly four digits (matching the
+      // `payments_card_last4_ck` CHECK) plus a `type`. A malformed value drops the whole block so a
+      // real capture still records; the DB CHECK stays the backstop (CLAUDE.md §5).
+      const card =
+        t.card?.last_4_digits !== undefined &&
+        /^\d{4}$/.test(t.card.last_4_digits) &&
+        t.card.type !== undefined
+          ? { last4: t.card.last_4_digits, type: t.card.type }
+          : undefined;
+      return {
+        id: t.id,
+        status: t.status,
+        amount: fromMajorUnits(t.amount),
+        ...(card === undefined ? {} : { card }),
+        ...(t.entry_mode === undefined ? {} : { entryMode: t.entry_mode }),
+        ...(t.auth_code === undefined ? {} : { authCode: t.auth_code }),
+      };
     },
     async refund(p: { transactionId: string; amount?: Decimal }) {
       const r = await call(

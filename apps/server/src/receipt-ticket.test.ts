@@ -48,7 +48,7 @@ const FILED_SALE: TillSaleResult = {
       gross: "8.80",
     },
   ],
-  change: "9.10",
+  tender: { method: "cash", change: "9.10" },
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1&fecha=17-08-2026&importe=20.90",
 };
 
@@ -235,7 +235,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         { descriptions: { "es-ES": "Extra queso" }, quantity: "1", gross: "0.50", parentLineNo: 1 },
         { descriptions: { "es-ES": "Sin cebolla" }, quantity: "1", gross: "0.00", parentLineNo: 1 },
       ],
-      change: "0.00",
+      tender: { method: "cash", change: "0.00" },
       qr: FILED_SALE.qr,
     };
     const s = decodeTicket(
@@ -288,7 +288,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         // badge, rendered exactly as an unbadged option always was.
         { descriptions: { "es-ES": "Sin cebolla" }, quantity: "3", gross: "0.00", parentLineNo: 1 },
       ],
-      change: "0.00",
+      tender: { method: "cash", change: "0.00" },
       qr: FILED_SALE.qr,
     };
     const s = decodeTicket(
@@ -338,5 +338,170 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     const idx = s.indexOf("20,90");
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(s[idx + "20,90".length]).toBe(" ");
+  });
+
+  it("prints a card block with scheme, masked PAN, entry mode and auth code", () => {
+    const bytes = formatReceipt({
+      result: {
+        ...FILED_SALE,
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
+          reference: null,
+        },
+      },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+    });
+    const s = decodeTicket(bytes);
+    expect(s).toContain("Tarjeta VISA **** 5838");
+    // Assert the JOINED second line as ONE string: the entry-mode label and the auth code are joined
+    // by " · " (U+00B7 middle dot). Asserting the whole line proves the `·` survives the ESC/POS
+    // Latin-1 encode/decode round-trip — a regression to `•` (U+2022, not a Latin-1 code point) would
+    // corrupt on real thermal output, and this is the ONLY place that is caught on paper.
+    expect(s).toContain("Sin contacto · Aut 328600");
+    expect(s).not.toContain("Efectivo");
+  });
+
+  it("prints a chip card's entry mode joined to the auth code on one line", () => {
+    const bytes = formatReceipt({
+      result: {
+        ...FILED_SALE,
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "MASTERCARD", last4: "4291", entryMode: "chip", authCode: "911234" },
+          reference: null,
+        },
+      },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+    });
+    const s = decodeTicket(bytes);
+    expect(s).toContain("Tarjeta MASTERCARD **** 4291");
+    // Same joined-line invariant for the `chip` entry mode ("Chip") — the `·` must survive Latin-1.
+    expect(s).toContain("Chip · Aut 911234");
+  });
+
+  it("prints no entry-mode/auth second line — and no stray middle dot — when neither fact is known", () => {
+    // Entry mode `unknown` (no label) and a null auth code: the second card line has nothing to carry,
+    // so it is dropped entirely rather than printed empty or as a bare separator glyph. Both the middle
+    // dot and the empty line are absent — a regression that always emitted the joined line would print a
+    // stray `·` (both fragments absent) or an empty line right after the masked-PAN line.
+    const bytes = formatReceipt({
+      result: {
+        ...FILED_SALE,
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
+          reference: null,
+        },
+      },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+    });
+    const s = decodeTicket(bytes);
+    expect(s).toContain("Tarjeta VISA **** 5838");
+    // No stray middle dot anywhere (this fixture carries `·` in no other field).
+    expect(s).not.toContain("·");
+    // No empty second line: the masked-PAN line is followed by exactly the one block-separator blank
+    // line, never two consecutive blanks (which an always-emitted empty second line would produce).
+    expect(s).not.toContain("5838\n\n\n");
+  });
+
+  it("prints the tip and charged lines only when a tip rode on the card", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          tender: {
+            method: "card",
+            charged: "21.40",
+            tip: "0.50",
+            card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
+            reference: null,
+          },
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).toContain("Propina");
+    expect(s).toContain("Cobrado");
+  });
+
+  it("omits the tip/charged lines when there is no tip", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          tender: {
+            method: "card",
+            charged: "20.90",
+            tip: "0.00",
+            card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
+            reference: null,
+          },
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).not.toContain("Cobrado");
+    expect(s).not.toContain("Propina");
+  });
+
+  it("prints Tarjeta alone when no card facts are known", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          tender: { method: "card", charged: "20.90", tip: "0.00", card: null, reference: null },
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).toContain("Tarjeta");
+    expect(s).not.toContain("****");
+  });
+
+  it("prints a manual card reference when present", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          tender: { method: "card", charged: "20.90", tip: "0.00", card: null, reference: "4471" },
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).toContain("Ref. 4471");
+  });
+
+  it("still prints the cash block for a cash sale", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: { ...FILED_SALE, tender: { method: "cash", change: "9.10" } },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).toContain("Efectivo");
+    expect(s).toContain("Cambio");
   });
 });

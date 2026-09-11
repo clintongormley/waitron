@@ -7,8 +7,9 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
+import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { SUMUP_PROVIDER } from "./client.js";
 import type { CreateCheckoutOutcome, SumUpClient } from "./client.js";
 import { sumupClient } from "./sumup-client.js";
 import { SumUpCloudProvider } from "./provider.js";
@@ -94,6 +95,23 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
     expect(typeof found!.id).toBe("string");
     expect(found!.status).toBe("SUCCESSFUL");
     expect(found!.amount).toEqual(decimal("1.00"));
+
+    // (a2) The capture PERSISTED the card-present facts onto the `payments` row — the receipt's card
+    // block is read back from these columns, so a provider that captured cleanly but dropped the
+    // instrument facts would surface as a card receipt with no scheme/PAN. Keyed by OUR `payment_ref`
+    // under the real `SUMUP_PROVIDER` ("sumup", the string the adapter itself writes).
+    const row = await pg.db.transaction((tx) =>
+      getPaymentByRef(tx, {
+        tenantId: s.tenantId,
+        provider: SUMUP_PROVIDER,
+        paymentRef: result.paymentRef,
+      }),
+    );
+    expect(row).toBeDefined();
+    expect(row!.cardScheme).toBe("VISA");
+    expect(row!.cardLast4).toMatch(/^\d{4}$/);
+    expect(row!.cardEntryMode).toBe("contactless"); // for a tap; "chip" for an inserted card
+    expect(row!.cardAuthCode).not.toBeNull();
 
     // (b) The refund round-trips through the exact `id` findTransaction returned above —
     // `reverseViaSumUp` addresses the refund endpoint by `payments.externalRef`, which

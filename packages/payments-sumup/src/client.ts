@@ -16,6 +16,10 @@ export interface SumUpTransaction {
   id: string;
   status: SumUpStatus | (string & {});
   amount: Decimal;
+  /** Card facts SumUp returns on an in-person transaction; absent on some. */
+  card?: { last4: string; type: string };
+  entryMode?: string;
+  authCode?: string | null;
 }
 
 /** A create call has three outcomes, not two: accepted (the reader will wake), REFUSED by SumUp

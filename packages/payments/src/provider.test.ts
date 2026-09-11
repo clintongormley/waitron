@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import type { PaymentResult, PaymentResultState } from "./provider.js";
+import type { CardDetails, PaymentResult, PaymentResultState } from "./provider.js";
 
 describe("PaymentResult shape", () => {
   it("accepts a captured online result", () => {
@@ -48,5 +48,36 @@ describe("PaymentResult shape", () => {
       settledAt: null,
     };
     expect(r.state).toBe("network_unavailable");
+  });
+});
+
+describe("PaymentResult.card", () => {
+  it("carries an optional CardDetails block on a captured result", () => {
+    const card: CardDetails = {
+      scheme: "VISA",
+      last4: "5838",
+      entryMode: "contactless",
+      authCode: "328600",
+    };
+    const result: PaymentResult = {
+      provider: "sumup_cloud",
+      paymentRef: "ref_1",
+      state: "captured",
+      amount: decimal("1.00"),
+      settledAt: new Date("2026-09-11T10:53:58Z"),
+      card,
+    };
+    expect(result.card).toEqual(card);
+  });
+
+  it("omits card on a result whose provider supplies none", () => {
+    const result: PaymentResult = {
+      provider: "manual",
+      paymentRef: "ref_2",
+      state: "captured",
+      amount: decimal("1.00"),
+      settledAt: new Date(),
+    };
+    expect(result.card).toBeUndefined();
   });
 });
