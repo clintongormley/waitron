@@ -342,4 +342,115 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(s[idx + "20,90".length]).toBe(" ");
   });
+
+  it("prints a card block with scheme, masked PAN, entry mode and auth code", () => {
+    const bytes = formatReceipt({
+      result: {
+        ...FILED_SALE,
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
+          reference: null,
+        },
+      },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+    });
+    const s = decodeTicket(bytes);
+    expect(s).toContain("Tarjeta VISA **** 5838");
+    expect(s).toContain("Sin contacto");
+    expect(s).toContain("Aut 328600");
+    expect(s).not.toContain("Efectivo");
+  });
+
+  it("prints the tip and charged lines only when a tip rode on the card", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          tender: {
+            method: "card",
+            charged: "21.40",
+            tip: "0.50",
+            card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
+            reference: null,
+          },
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).toContain("Propina");
+    expect(s).toContain("Cobrado");
+  });
+
+  it("omits the tip/charged lines when there is no tip", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          tender: {
+            method: "card",
+            charged: "20.90",
+            tip: "0.00",
+            card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
+            reference: null,
+          },
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).not.toContain("Cobrado");
+    expect(s).not.toContain("Propina");
+  });
+
+  it("prints Tarjeta alone when no card facts are known", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          tender: { method: "card", charged: "20.90", tip: "0.00", card: null, reference: null },
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).toContain("Tarjeta");
+    expect(s).not.toContain("****");
+  });
+
+  it("prints a manual card reference when present", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          tender: { method: "card", charged: "20.90", tip: "0.00", card: null, reference: "4471" },
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).toContain("Ref. 4471");
+  });
+
+  it("still prints the cash block for a cash sale", () => {
+    const s = decodeTicket(
+      formatReceipt({
+        result: { ...FILED_SALE, tender: { method: "cash", change: "9.10" } },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+      }),
+    );
+    expect(s).toContain("Efectivo");
+    expect(s).toContain("Cambio");
+  });
 });

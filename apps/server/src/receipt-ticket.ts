@@ -98,10 +98,24 @@ const LABEL = {
   total: "TOTAL",
   cash: "Efectivo",
   change: "Cambio",
+  card: "Tarjeta",
+  tip: "Propina",
+  charged: "Cobrado",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
+
+/**
+ * Spanish labels for a card tender's entry mode, printed on the second card line (design §3b). No
+ * entry for `"unknown"` — that line drops the entry-mode fragment entirely rather than printing a
+ * placeholder (`ENTRY_MODE_LABEL[t.card.entryMode]` reads `undefined` for it).
+ */
+const ENTRY_MODE_LABEL: Record<string, string> = {
+  contactless: "Sin contacto",
+  chip: "Chip",
+  swipe: "Banda",
+};
 
 /**
  * The multiplication sign prefixed to a per-dish option-quantity badge (`×2`). Chosen to match the
@@ -291,14 +305,38 @@ export function formatReceipt({
   b.line(twoColumn(LABEL.total, formatMoney(result.total, locale)));
   b.line();
 
-  // Allowed operational extras: cash tendered (= total + change) and change.
-  b.line(
-    twoColumn(
-      LABEL.cash,
-      formatMoney(addDecimal(decimal(result.total), decimal(result.change)), locale),
-    ),
-  );
-  b.line(twoColumn(LABEL.change, formatMoney(result.change, locale)));
+  // Allowed operational extras — the tender block. Cash: cash tendered (= total + change) and change.
+  // Card: the scheme + masked PAN, entry mode + auth code, an operator manual reference, and — only
+  // when a tip rode on the card — what was charged (total + tip) and the tip itself.
+  const t = result.tender;
+  if (t.method === "cash") {
+    b.line(
+      twoColumn(
+        LABEL.cash,
+        formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale),
+      ),
+    );
+    b.line(twoColumn(LABEL.change, formatMoney(t.change, locale)));
+  } else {
+    if (t.card === null) {
+      b.line(LABEL.card);
+    } else {
+      b.line(`${LABEL.card} ${t.card.scheme} **** ${t.card.last4}`);
+      // `·` is U+00B7 (middle dot), a true Latin-1 code point — safe through the ESC/POS encoder,
+      // unlike `•` (U+2022) which is not.
+      const mode = ENTRY_MODE_LABEL[t.card.entryMode];
+      const auth = t.card.authCode === null ? undefined : `Aut ${t.card.authCode}`;
+      const second = [mode, auth].filter((x) => x !== undefined).join(" · ");
+      if (second !== "") b.line(second);
+    }
+    if (t.reference !== null) b.line(`Ref. ${t.reference}`);
+    // String compare: `tenders.tip_amount` is `numeric(12,2)`, always canonical "0.00"/"0.50" — a
+    // Decimal compare here would test object identity and always be true.
+    if (t.tip !== "0.00") {
+      b.line(twoColumn(LABEL.tip, formatMoney(t.tip, locale)));
+      b.line(twoColumn(LABEL.charged, formatMoney(t.charged, locale)));
+    }
+  }
   b.line();
 
   // The QR (arts. 20-21). A sale's cotejo URL can legitimately be "" (the fiscal backend minted none),
