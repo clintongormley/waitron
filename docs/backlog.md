@@ -418,6 +418,14 @@ design-review section apply.
   network printer on the BOX's LAN; the 2026-09-11 Epson observation above was taken from a Mac on the
   owner's other VLAN, and the sweep has not yet been run on the box); the seams + parsers ship
   fixture-tested, gated for a later receipt.
+  *First test print on the Epson, fixes LANDED #316 (2026-09-11):* Scan re-reads the discovered list every
+  2 s for 10 s with the button busy ("Scanning…" — a shared `wt-spinner` + `wt-button loading`, design-system
+  Primitives); tickets end through `feedAndCut()` (five lines, `FEED_BEFORE_CUT` in `@waitron/printing`).
+  *Open from it:* **(i)** five lines is chosen, not yet measured — the owner's next test print confirms the
+  cut clears the text; **(ii)** existing `?disabled=${busy}` buttons across the dashboard screens are not
+  migrated to `loading` (design-system says so); **(iii)** the agent's own scan pass is unchanged (1.5 s
+  mDNS listen per tick, repeated for the 3-minute window) — lengthen only if a printer still needs several
+  presses after the 10 s listen.
   *Deferred follow-ups (surfaced at finish-branch, not taken):* extract an in-memory `createDiscoveredStore`
   from `mountPrintApi` (altitude); dedupe the `VisibleDeviceWire`/`DiscoveredDeviceWire` types against
   `@waitron/print-agent` via a type-only import IF `module-seams` permits; fold `#registerDiscovered` into
