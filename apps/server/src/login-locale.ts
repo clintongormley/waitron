@@ -1,7 +1,7 @@
 import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isSupportedLocale } from "@waitron/shared";
 
 /** Match browser preferences to installed UI languages. Equal weights keep header order;
- * regional variants share a language. With no match, keep the venue's default. */
+ * regional variants share a language. Ignore malformed entries. With no match, keep the venue's default. */
 export function resolveLoginLocale(header: string | undefined, venueLocale: string): string {
   const fallback = isSupportedLocale(venueLocale) ? venueLocale : FALLBACK_LOCALE;
   const preferences = (header ?? "").split(",").flatMap((entry, index) => {

@@ -212,8 +212,9 @@ unfiltered `main` run, not a wrong hook.
 - **Dashboard sign-in matches the browser's `Accept-Language` preferences.** The public locale
   response carries a separate `loginDefault`; `venueDefault` still describes the venue and remains
   the fallback for signed-in people without a saved language. Returning to login after logout or
-  session expiry uses the browser match too. Guard late locale responses so they cannot overwrite
-  a newly authenticated person's language (`apps/dashboard/src/dashboard-app.test.ts`).
+  session expiry uses the last browser match, or the venue default until that match is available.
+  Guard late locale responses so they cannot overwrite a newly authenticated person's language
+  or an explicit choice on sign-in (`apps/dashboard/src/dashboard-app.test.ts`).
 - **Dashboard login is passkey-first without account enumeration.** On the initial email screen,
   offer passive browser passkey autofill when supported. After any syntactically valid email, start
   the same explicit passkey ceremony. If it is cancelled, open the password form and show passkey

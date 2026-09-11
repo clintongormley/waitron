@@ -382,7 +382,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     return venue.venueName;
   };
 
-  // Public identity and language defaults. Only loginDefault depends on the request;
+  // No session is required: like GET /api/locales, this exposes only public identity and languages.
+  // Only loginDefault depends on the request;
   // venueDefault remains the fallback for a signed-in person without a saved preference.
   app.get("/management-api/locales", (c) =>
     run(c, log, async () => {

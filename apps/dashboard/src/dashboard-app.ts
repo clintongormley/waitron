@@ -461,6 +461,11 @@ export class DashboardApp extends LitElement {
   @state() private venueName = "";
   @state() private onboardingIntent?: "demo" | "prepare" | "live";
 
+  // Returning to sign-in must have a language even when the server is unreachable.
+  #venueLocale = "es-ES";
+  #loginLocale?: string;
+  #loginLocaleChoice = 0;
+
   constructor() {
     super();
     // Follow a locale switch made anywhere (seed/login/the chooser's setLocale): on a locale change the
@@ -511,16 +516,18 @@ export class DashboardApp extends LitElement {
   }
 
   /** The server matches Accept-Language against the installed UI languages. A late response must
-   * not overwrite an authenticated user's preference or repaint a disconnected app. */
+   * not overwrite a person's explicit language choice or repaint a disconnected app. */
   async #seedLocale(): Promise<void> {
-    const generation = this.sessionGeneration;
+    const choice = this.#loginLocaleChoice;
     try {
-      const { loginDefault, venueName, onboardingIntent } = await this.api.getLocales();
-      if (!this.isConnected || this.screen !== "login" || generation !== this.sessionGeneration)
-        return;
+      const { loginDefault, venueDefault, venueName, onboardingIntent } =
+        await this.api.getLocales();
+      if (!this.isConnected || this.screen !== "login") return;
+      this.#venueLocale = venueDefault;
+      this.#loginLocale = loginDefault;
       this.venueName = venueName;
       this.onboardingIntent = onboardingIntent;
-      setLocale(loginDefault);
+      if (choice === this.#loginLocaleChoice) setLocale(loginDefault);
     } catch {
       // A failed language read must never block sign-in.
     }
@@ -593,6 +600,7 @@ export class DashboardApp extends LitElement {
     // The per-permission gate is applied on top, in `#nav` and `#permittedScreen`.
     this.#activate(me.modules);
     this.screen = this.#permittedScreen(this.#url.read("dashboard"));
+    this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
     this.onboardingIntent = me.onboardingIntent;
     const remainingSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
@@ -636,7 +644,10 @@ export class DashboardApp extends LitElement {
       { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
       true,
     );
-    if (this.isConnected) void this.#seedLocale();
+    if (this.isConnected) {
+      setLocale(this.#loginLocale ?? this.#venueLocale);
+      void this.#seedLocale();
+    }
   }
 
   /**
@@ -733,6 +744,7 @@ export class DashboardApp extends LitElement {
   async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
     const { code } = event.detail;
     if (this.screen === "login") {
+      this.#loginLocaleChoice += 1;
       setLocale(code);
       return;
     }

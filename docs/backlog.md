@@ -1709,6 +1709,9 @@ genuinely-decision-bearing.
   `docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md`. Also: the country
   pack now supplies **province → language derivation**, but the apps ship only Spanish and English
   catalogues, so a Catalan preference currently falls back to Spanish; add the regional catalogues.
+  **2026-09-11, `login-flow`:** dashboard sign-in now matches `Accept-Language` in
+  `apps/server/src/login-locale.ts`. This matcher is specific to the supported UI languages;
+  the shared resolver for product names, receipts and catalogues remains future work.
   The **venue
   default is derive-only, not admin-editable** yet; and the **dashboard's `es-ES` module default**
   (`apps/dashboard/src/i18n/t.ts` + `#venueLocale`) still needs the same flip the till got in #170

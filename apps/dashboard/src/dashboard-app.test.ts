@@ -84,7 +84,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
     // Per-user-language-preference (Task 10): getMe now carries the person's stored `locale` + the
     // `venueLocale` fallback (default: no preference at a Spanish venue → the UI stays es-ES); the boot
-    // seed reads `getLocales` (venueDefault es-ES) and the logged-in persist path writes `putLocale`.
+    // seed reads `getLocales` (loginDefault es-ES) and the logged-in persist path writes `putLocale`.
     // Module gating (Task 4): the default probe is a manager HOLDING `booking.manage` with `bookings`
     // enabled — reproducing the prior always-on bookings module for the Task-3 nav/screen tests. A test
     // that gates on the module supplies its own `permissions`/`modules`.
@@ -1644,6 +1644,91 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("es-ES");
   });
 
+  it("restores the venue language when logout and the language request both fail", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p1",
+        role: "manager",
+        locale: "en-GB",
+        venueLocale: "es-ES",
+        venueName: "Test SL",
+        permissions: [],
+        modules: [],
+      }),
+      logout: vi.fn().mockRejectedValue(new Error("offline")),
+      getLocales: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+    logoutBtn(el)!.click();
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+    expect(currentLocale()).toBe("es-ES");
+  });
+
+  it("preserves an explicit login language choice while the browser default is pending", async () => {
+    let resolveLocales!: (value: LocalesResponse) => void;
+    const api = stubApi({
+      getLocales: vi.fn(
+        () =>
+          new Promise<LocalesResponse>((resolve) => {
+            resolveLocales = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    logoutBtn(el)!.click();
+    await flush(el);
+    emit(login(el)!, "locale-selected", { code: "es-ES" });
+    await flush(el);
+    resolveLocales({
+      locales: [],
+      venueDefault: "es-ES",
+      loginDefault: "en-GB",
+      venueName: "Test SL",
+    });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    expect(api.putLocale).not.toHaveBeenCalled();
+  });
+
+  it("restores a known browser default immediately when logout completes", async () => {
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: "es-ES",
+          venueLocale: "es-ES",
+          venueName: "Test SL",
+          permissions: [],
+          modules: [],
+        }),
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "en-GB",
+        venueName: "Test SL",
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+    emitLoggedIn(login(el)!);
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    logoutBtn(el)!.click();
+    // Let logout finish, but observe the language before the seed's awaited read resumes.
+    await Promise.resolve();
+    expect(currentLocale()).toBe("en-GB");
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+  });
+
   it("returns to the browser-matched language after logout", async () => {
     const api = stubApi({
       getLocales: vi.fn().mockResolvedValue({
@@ -1662,7 +1747,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("en-GB");
   });
 
-  it("uses the venue fallback when no browser language matches (deep child via keyed)", async () => {
+  it("applies the supplied login default in nested controls", async () => {
     // No session → stays on `login`; the boot seed reads getLocales and applies its loginDefault (en-GB,
     // which differs from the es-ES module default so the switch is observable). The login screen is
     // recreated by the `keyed(currentLocale(), …)` wrapper, so a DEEP child of its own shadow renders English.
@@ -1811,7 +1896,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("es-ES"); // unchanged — the failed write never switched the UI
   });
 
-  it("logout uses the venue fallback when no browser language matches", async () => {
+  it("logout replaces a saved preference with the supplied login default", async () => {
     // With no browser match, the server supplies the venue default as loginDefault.
     // Logging out must apply that default instead of retaining the manager's saved English.
     const api = stubApi({
@@ -1836,7 +1921,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
   // ── Pending responses must not repaint a detached app ──
 
-  it("does not seed the venue default if the app disconnects mid-getLocales", async () => {
+  it("does not seed the login default if the app disconnects mid-getLocales", async () => {
     // The seed's setLocale(loginDefault) runs AFTER `await getLocales()`. Start with no session so the
     // seed runs; make getLocales pending, detach, then resolve: the seed must be SKIPPED. Deleting the
     // `if (!this.isConnected) return` after getLocales makes the seed fire and this fail.
@@ -1931,6 +2016,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     resolveLogout();
     await flush(el);
     expect(currentLocale()).toBe("en-GB"); // the revert to es-ES was skipped on the detached app
+    expect(api.getLocales).not.toHaveBeenCalled();
   });
 });
 
