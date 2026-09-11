@@ -457,6 +457,8 @@ design-review section apply.
   Read-only live checks with the branch dashboard found the disabled USB device, offered Add again,
   and showed only the active network printer by default. The installed box was reached over IPv4 with
   its own downloaded CA; live reactivation and diagnostic prints await explicit approval.
+  *Minor interaction follow-up:* choose and test one reset-on-dismiss policy for armed destructive
+  row actions across printers and agents; the current printer confirmation follows the agent pattern.
   *Hardware receipt (2026-09-10, real ESC/POS printer on the box):* USB confirmed end-to-end — the agent
   container discovers the printer off `/sys` (serial-keyed) and a physical slip printed via `--device
   /dev/usb/lp0` + `group_add 7` as the unprivileged `node` user (spec §7). The run-it review caught a
@@ -1941,6 +1943,12 @@ genuinely-decision-bearing.
   the waiter's phone. Resolve before designing any in-person Bizum UX.
 
 **CI / test infra:**
+
+- **Post-rebase browser suite-loading failure (2026-09-11 printer follow-ups).** Eleven UI suites
+  failed to load with "Vitest failed to find the current suite/runner". An unchanged full UI coverage
+  run and the subsequent push hook passed. Cause unconfirmed; on recurrence, retain the failed log
+  and inspect the browser module graph before changing caches or retrying. Receipt:
+  [printer follow-ups review](superpowers/specs/2026-09-11-printer-followups-review.md).
 
 - **`test-heavy` and `test-server` are sharded three ways** (#216; mechanism in CLAUDE.md §2). Vitest
   `--shard` splits by FILE COUNT, not duration, so imbalance is the real limit; bumping the matrix means

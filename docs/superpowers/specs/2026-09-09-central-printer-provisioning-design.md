@@ -157,6 +157,9 @@ dashboard-opened, venue-wide, time-boxed window pattern
   _(2026-09-11: a `network_tcp` result matches on host:port as well — it has no local key — and each
   entry carries the matched `printerId` plus `lastSeenAt`; the dashboard hides matched results and shows
   "seen on … at …" against the registered printer instead.)_
+  _(2026-09-11 printer follow-ups: disabled matches are offered as **Add again**, restoring the
+  existing registration. Active matches remain hidden. See
+  [printer follow-ups](2026-09-11-printer-followups.md).)_
 - `discoveryWindow` — the venue's `discoveryUntil`, set by the start route (§9), read into each poll
   reply. Both are transient; a server restart empties them and the next polls refill them (owner's
   in-memory decision).

@@ -23,3 +23,31 @@ The full repository gate additionally found that an intentional failing browser 
 The new fixture first returned both that directory and its nested source; `sourceFilesIn` now
 filters with `isFile()`, retaining the source. `pnpm exec vitest run scripts/english-only.test.ts`
 passes with the actual screenshot directory still present.
+
+## Review after rebasing onto #320
+
+Main independently landed the same scanner fix and a stronger fixture. The rebase retained both
+from main. A fresh isolated Opus 5 review of `bb4f3d05` → `b7a1d45b` took 197 seconds and found
+no Critical or Important defect. Real-Postgres probes exercised deactivation, discovery, duplicate
+creation and two concurrent reactivations: the duplicate returned 409, both reactivations returned
+204, and the ID, name, ticket scope and delivered-job timestamp survived. Mutation probes made the
+three transport re-add tests fail, and removing `data-keep-open` failed the delete-menu test against
+main's shared row actions. The three affected dashboard suites passed 124 tests in that candidate.
+
+| Minor finding | Disposition |
+| --- | --- |
+| Put the DateStyle receipt beside the aggregate | No additional comment: the API regression and this review record carry the experiment; the design already explains numeric milliseconds. |
+| Base64 expands the decoded bitmap budget | The design explicitly names decoded bytes. This is not a total JSON response-size cap; text summaries and encoding add overhead. |
+| Feed/block limits stop parsing while omitted images allow later text | Retained bounded-decoder policy, explicitly flagged by `truncated` and pinned by the limit tests. |
+| Closing and reopening a row menu may leave Delete armed | Unverified by the reviewer; retained the existing agent-confirmation pattern for this slice. A consistent reset-on-dismiss policy across destructive row actions remains a follow-up. |
+| Plain-text summary has no current widget consumer | Retained the explicitly specified text summary alongside visual blocks and its behavioral assertions. The widget uses the blocks. |
+
+The driver swept current and historical prose and added the missing disabled-match pointer to the
+central-provisioning design. The existing browser injection fixture includes HTML-looking text and
+a `javascript:` QR value; the passing suite requires literal text, no anchors/scripts and generated
+image data. The review did not exercise physical devices.
+
+The first post-rebase push failed before eleven UI suites could load, reporting "Vitest failed to
+find the current suite/runner". An unchanged complete UI coverage run passed, followed by the whole
+push hook (245 seconds). Cause unconfirmed; the failed log is retained at
+`/tmp/waitron-printer-rebase-push.log`. No cache deletion or source change was needed for those passes.
