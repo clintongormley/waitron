@@ -523,10 +523,17 @@ unfiltered `main` run, not a wrong hook.
   there: the root project does not typecheck (§2), and a module tested only from there must be in the
   root `coverage.include` and excluded from its package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **A browser test using fake timers must advance an awaited animation frame or restore real timers
+  first.** The printer modal close test stalled on its own paused `requestAnimationFrame`; asserting
+  the native dialog's closed state avoids mixing that clock with the browser's queued close event
+  (`apps/dashboard/src/screens/printers-screen.test.ts`, “closing Add printer…”).
 - **Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
   empty path, so a missing-action test can pass at the input-type guard without reaching the branch it
   claims to check. Exercise the event from the real input and prove the target guard by deletion.
   Receipt: `packages/ui/src/submit-on-enter.test.ts` (UI keyboard review, 2026-09-06).
+- **Position a native popover before its first paint.** In Chromium, positioning from the asynchronous
+  `toggle` event left the row menu at `(0, 0)` for its first frame. Open it synchronously, then measure
+  and position it; the first-frame regression is in `apps/dashboard/src/widgets/row-actions.test.ts`.
 - **Vitest's default coverage excludes swallow every dot-prefixed path** (`**/[.]**`), and
   `include`/`exclude` replace rather than merge. The root config's first version measured
   `All files | 0 | 0 | 0 | 0`, wrote `"Unknown"` percentages and **exited 0** with the thresholds

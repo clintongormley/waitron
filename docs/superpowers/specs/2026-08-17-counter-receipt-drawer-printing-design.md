@@ -1,5 +1,8 @@
 # Counter printing — customer receipt + cash drawer
 
+_Update 2026-09-11: the configuration controls described on the printer screen below now live on
+Printing rules; see [Printer settings tables](2026-09-11-printer-settings-tables.md)._
+
 **Date:** 2026-08-17. **Status:** design (approved with the owner); plan alongside. **Track:** a consumer
 of the [printing subsystem](2026-08-17-printing-subsystem-design.md) (Slice A) — the counter-POS output
 half the deli-hardware design specified. **Runs SUPERVISED**. **Fiscal-adjacent** (the receipt is a legal

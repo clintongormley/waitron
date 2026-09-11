@@ -24,7 +24,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     {
       name: "print_agents",
       locationColumns: ["location_id"],
-      omit: ["token_hash", "last_seen_at"],
+      omit: ["token_hash", "last_seen_at", "host"],
       reconnect: true,
     },
     {

@@ -2,24 +2,9 @@ import { boolean, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-
 import { locations, tenants } from "./tenants.js";
 
 /**
- * A local PRINT AGENT (printing subsystem, §2a) — a process on a local box (the on-prem server, or a
- * separate box a USB printer is plugged into) that enrols ONCE via join-and-accept (the box knocks
- * with a `join_requests` row an admin accepts) and authenticates itself thereafter with a
- * scrypt-hashed bearer token. Modelled on the device-identity design (`devices` — its own tables, its
- * `hashSecret`/`verifySecret` scrypt token), because a print agent is the same "enrol a trusted local
- * box centrally, revoke it centrally" problem — except it binds to PRINTERS (a `printers.agent_id`
- * composite FK points back at it), not to a station, so it carries no `station_id` (nor any
- * device-kind binding — a device's kind is derived from its profile's form factor, not a column).
- *
- * Tenant + location scoped (spec §2a) — separate `tenant_id` and `location_id` FKs, both
- * `onDelete restrict`, the `shifts`/`devices` shape.
- *
- * `token_hash` is the scrypt hash of the agent token (`hashSecret`, packages/identity secret-hash.ts):
- * the plaintext lives ONLY in the agent's own store, never at rest here. Revoke by flipping
- * `active = false` (instant — `requireAgent` rejects it, a later task), NEVER a hard DELETE, because
- * a `print_jobs` history and `printers` bindings reference an agent — so `app_user` holds
- * SELECT/INSERT/UPDATE and no DELETE, exactly the `devices` shape, granted in the paired --custom
- * migration. `enrolled_at` is the creation stamp (there is no separate `created_at`, matching §2a).
+ * An approved local print worker. Its bearer secret stays in the worker; the database holds only a
+ * scrypt hash. Revocation retains the identity referenced by print-job claims while denying further
+ * authentication. The app role has SELECT/INSERT/UPDATE only (0001_db_baseline_sql.sql).
  */
 export const printAgents = pgTable(
   "print_agents",
@@ -39,6 +24,8 @@ export const printAgents = pgTable(
       .references(() => locations.id, { onDelete: "restrict" }),
     // The human label ("Cocina USB"), shown in the Impresoras management surface.
     name: text("name").notNull(),
+    // Reported by the agent after authentication; independent of its editable display name.
+    host: text("host"),
     // The node that enrolled this agent over loopback (on-node auto-enrolment design §3), or NULL when
     // a human enrolled it through knock-and-accept (a till, a Pi). NO FK to `nodes`: the primary holds
     // no `nodes` row for a mirror (it endorses the mirror's key and stores nothing — mirror-bundle.ts),
@@ -47,7 +34,7 @@ export const printAgents = pgTable(
     nodeId: uuid("node_id"),
     // scrypt hash of the agent token (hashSecret, secret-hash.ts). Never the plaintext token.
     tokenHash: text("token_hash").notNull(),
-    // Revoke = active := false, checked in requireAgent (a later task) for instant revocation. No hard delete.
+    // Authentication refuses revoked agents.
     active: boolean("active").notNull().default(true),
     // Touched by requireAgent on each authenticated pull/report. NULL until the agent is first seen.
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true, mode: "string" }),
@@ -56,8 +43,7 @@ export const printAgents = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // Composite (tenant_id, id) UNIQUE — the target `printers.agent_id`'s tenant-consistent
-    // (tenant_id, agent_id) FK points at (printers.ts), the same role devices_tenant_id_key plays.
+    // Target of the tenant-consistent print_jobs.claimed_by foreign key.
     unique("print_agents_tenant_id_key").on(t.tenantId, t.id),
     // At most one self-enrolled agent per node. Postgres treats NULLs as DISTINCT by default, so the
     // many manual (NULL) agents are unconstrained; only non-NULL node_ids are deduplicated.

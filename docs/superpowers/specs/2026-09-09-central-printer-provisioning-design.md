@@ -273,6 +273,12 @@ on local hardware and is outside the outbound-only server link.
 
 ## 10. Dashboard create flow (`apps/dashboard/src/screens/printers-screen.ts`)
 
+_Update 2026-09-11: [Printer settings tables](2026-09-11-printer-settings-tables.md) replaces the
+transport-specific and manual forms below with one scan modal and Add per result. Names come from
+discovery and are editable afterwards. Registered devices stay hidden and retain their last-seen
+information in the printers table. Station/ticket and receipt/drawer settings move to Printing rules.
+The Bluetooth setup-page pairing pointer remains in the scan modal._
+
 The single form with the **agent dropdown is replaced** (the dropdown is gone for every transport):
 
 - **Add IP printer** — name + address + port; a **Discover** button opens the window and offers found

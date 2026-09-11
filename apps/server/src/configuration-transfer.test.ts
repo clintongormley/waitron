@@ -286,10 +286,10 @@ describe("configuration transfer database path", () => {
            '33333333-aaaa-aaaa-aaaa-333333333333')`);
       await tx.execute(sql`
         insert into print_agents
-          (id, tenant_id, location_id, name, token_hash, active)
+          (id, tenant_id, location_id, name, token_hash, active, host)
         values
           ('44444444-aaaa-aaaa-aaaa-444444444444', ${source.tenantId}, ${source.locationId},
-           'Kitchen agent', 'source-agent-token', true)`);
+           'Kitchen agent', 'source-agent-token', true, 'source-box.local')`);
       await tx.execute(sql`
         insert into printers
           (id, tenant_id, location_id, name, transport, local_key, active)
@@ -324,6 +324,8 @@ describe("configuration transfer database path", () => {
       expect(person).not.toHaveProperty("password_hash");
     }
     expect(transferred.tables).not.toHaveProperty("sales");
+    expect(transferred.tables.print_agents).toHaveLength(1);
+    expect(transferred.tables.print_agents![0]).not.toHaveProperty("host");
 
     const target = await applyVenue(planVenue(venue("B87654321"), ALL_MODULES), {
       db: suite.db,

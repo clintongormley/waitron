@@ -159,10 +159,11 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The devices screen the nav mounts loads this on connect (listStations is already stubbed above);
     // resolve it so navigating to it leaves no stray rejection.
     listDevices: vi.fn().mockResolvedValue([]),
-    // The printers screen the nav mounts loads these three on connect; resolve them so navigating to it
+    // The printers screen the nav mounts loads these on connect; resolve them so navigating to it
     // leaves no stray rejection.
     listAgents: vi.fn().mockResolvedValue([]),
     listPrinters: vi.fn().mockResolvedValue([]),
+    listTills: vi.fn().mockResolvedValue([]),
     listRecentJobs: vi.fn().mockResolvedValue([]),
     // The canvas-editor screen the nav mounts loads this on connect; resolve it so navigating to it
     // leaves no stray rejection.
@@ -306,7 +307,7 @@ const navItem = (el: DashboardApp, screen: string) =>
 
 /** The faces the grouped sidebar switches between for a manager/admin session (`diagnostics` is
  * manager-gated), every one keeping its `data-test` id — used to assert each item is present and to
- * pin the count. Eighteen are CORE faces; `bookings` is the bookings MODULE face, always enabled by
+ * pin the count. `bookings` is the bookings module face, always enabled by
  * this suite's default stub (`modules: ["bookings"]` + `booking.manage`), so it is folded into the
  * fixture. A module face renders AFTER its group's core items, so `bookings` sorts to the END of the
  * Service group (after kitchen), which this order mirrors — pinned overview+sales, then Menu /
@@ -329,6 +330,7 @@ const NAV_SCREENS = [
   "receipt",
   "devices",
   "printers",
+  "printing-rules",
   "canvas-editor",
   "diagnostics",
   "backup",
@@ -367,6 +369,7 @@ const SCREEN_TAGS = [
   "dashboard-kitchen-screen",
   "dashboard-devices-screen",
   "dashboard-printers-screen",
+  "dashboard-printing-rules-screen",
   "dashboard-canvas-editor-screen",
   "dashboard-diagnostics-screen",
   "dashboard-email-screen",
@@ -1162,6 +1165,16 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
+  it("navigates to printing rules beside printers", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navItem(el, "printing-rules")!.click();
+    await flush(el);
+    expect(mountedScreens(el)).toEqual(["dashboard-printing-rules-screen"]);
+    expect(countH1(el)).toBe(1);
+  });
+
   it("navigates to the printers screen", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -1264,7 +1277,7 @@ describe("dashboard-app", () => {
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
     // …and every manager face is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(NAV_SCREENS).toHaveLength(20);
+    expect(NAV_SCREENS).toHaveLength(21);
     expect(navItem(el, "location-menus")).toBeNull();
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
   });

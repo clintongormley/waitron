@@ -259,7 +259,12 @@ export function createAgent(opts: AgentOptions): Agent {
         });
       }
     }
-    const pulled = await client.pullJobs(current, token, { visible, scanned });
+    const hostname = host.hostname?.();
+    const pulled = await client.pullJobs(current, token, {
+      visible,
+      scanned,
+      ...(hostname === undefined ? {} : { host: hostname }),
+    });
     if (!pulled.ok) {
       if (pulled.failure.kind === "unauthorized") {
         await halt(config, current);

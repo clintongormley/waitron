@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import {
   BluetoothTransport,
   NetworkTcpTransport,
@@ -58,6 +59,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
   });
   const devices = opts.devices ?? createLinuxDevices();
   return {
+    hostname,
     config: async (): Promise<AgentConfig | null> => {
       // Env wins over the file: a compose-supplied address is never overridden by the setup page.
       // The saved name and environment still ride along — env pins only the url.

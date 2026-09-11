@@ -13,7 +13,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   asAppUser,
@@ -37,6 +37,7 @@ import {
   enqueuePrintJob,
   esc,
   listPrinters,
+  MAX_DELIVERY_ATTEMPTS,
   reportPrintJob,
   updatePrinter,
   type CreatePrinterInput,
@@ -60,6 +61,7 @@ import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { previewPrintJob } from "./print-job-preview.js";
 
 /**
  * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` is the FULL
@@ -141,6 +143,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_full": 429,
   "device.join_rate_limited": 429,
   "printer.not_found": 404,
+  "print_job.not_found": 404,
   "printer.invalid_config": 422,
   // A second registration of a physical device already registered in this venue — the partial UNIQUE
   // (tenant_id, location_id, local_key), mapped friendly by `createPrinter`/`updatePrinter` (§9).
@@ -398,7 +401,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db, cfg: deps.cfg }, c);
-      const body = await readJsonBody<{ visible?: unknown; scanned?: unknown }>(c);
+      const body = await readJsonBody<{ visible?: unknown; scanned?: unknown; host?: unknown }>(c);
+      const reportedHost = optionalString(body.host, "host");
+      const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
       const visible = screenVisible(body.visible);
       const scanned = screenScanned(body.scanned);
 
@@ -432,6 +437,18 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // `print_agents.location_id` instead of the server's.
       const claimed = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
+        if (host !== undefined) {
+          await tx
+            .update(printAgents)
+            .set({ host })
+            .where(
+              and(
+                eq(printAgents.tenantId, deps.cfg.tenantId),
+                eq(printAgents.id, agentId),
+                sql`${printAgents.host} is distinct from ${host}`,
+              ),
+            );
+        }
         return claimPrintJobs(tx, deps.cfg, agentId, {
           locationId: deps.cfg.locationId,
           visibleKeys,
@@ -502,6 +519,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .select({
             id: printAgents.id,
             name: printAgents.name,
+            host: printAgents.host,
             active: printAgents.active,
             // Which node self-enrolled this agent over loopback, or NULL when a human enrolled it via
             // knock-and-accept (on-node auto-enrolment design §3) — the provenance the dashboard shows.
@@ -517,13 +535,32 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
+  app.patch("/management-api/print-agents/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrintAgentId");
+      const body = await readJsonBody<{ name?: unknown }>(c);
+      const name = requireString(body.name, "name").trim();
+      if (name === "") throw new AppError("management.request_invalid", { field: "name" });
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .update(printAgents)
+          .set({ name })
+          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .returning({ id: printAgents.id }),
+      );
+      if (rows.length === 0) throw new AppError("agent.not_found", { id });
+      return c.body(null, 204);
+    }),
+  );
+
   // ── Revoke a print agent (printer.manage) ────────────────────────────────────────────────────────
   app.post("/management-api/print-agents/:id/revoke", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrintAgentId");
       // Revoke = flip `active = false` (instant — `requireAgent` rejects it), NEVER a hard
-      // DELETE: an agent is a durable identity referenced by printers/jobs and `app_user` holds
+      // DELETE: an agent is a durable identity referenced by job claims and `app_user` holds
       // no DELETE. 0 rows (unknown id) → `agent.not_found`.
       const updated = await gated(sessionId, (tx) =>
         tx
@@ -668,7 +705,31 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listPrinters(tx, deps.cfg));
+      const rows = await gated(sessionId, async (tx) => {
+        const configured = await listPrinters(tx, deps.cfg);
+        // Aggregate the full tenant history: the recent-jobs page is capped and cannot supply totals.
+        const summaries = await tx.execute<{
+          printer_id: string;
+          pending_jobs: number;
+          last_print_at: string | null;
+        }>(sql`
+          select printer_id,
+            count(*) filter (where status in ('queued', 'printing')
+              or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))::int as pending_jobs,
+            max(delivered_at)::text as last_print_at
+          from print_jobs where tenant_id = ${deps.cfg.tenantId}
+          group by printer_id`);
+        const byPrinter = new Map(summaries.rows.map((row) => [row.printer_id, row]));
+        return configured.map((printer) => {
+          const summary = byPrinter.get(printer.id);
+          return {
+            ...printer,
+            pendingJobs: summary?.pending_jobs ?? 0,
+            lastPrintAt:
+              summary?.last_print_at == null ? null : new Date(summary.last_print_at).toISOString(),
+          };
+        });
+      });
       return c.json(rows);
     }),
   );
@@ -756,10 +817,26 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             deliveredAt: printJobs.deliveredAt,
           })
           .from(printJobs)
+          .where(eq(printJobs.tenantId, deps.cfg.tenantId))
           .orderBy(desc(printJobs.createdAt))
           .limit(RECENT_JOBS_LIMIT),
       );
       return c.json(rows);
+    }),
+  );
+
+  app.get("/management-api/print-jobs/:id/preview", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrintJobId");
+      const [job] = await gated(sessionId, (tx) =>
+        tx
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.id, id))),
+      );
+      if (job === undefined) throw new AppError("print_job.not_found", { id });
+      return c.json(previewPrintJob(job.payload));
     }),
   );
 

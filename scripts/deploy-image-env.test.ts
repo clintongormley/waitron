@@ -185,6 +185,15 @@ describe("the print-agent image and its compose wiring", () => {
     expect(DOCKERFILE).toContain("WAITRON_STATE_DIR=/var/lib/waitron-print-agent");
   });
 
+  it("keeps the print-agent service on the host network", () => {
+    const agent = only(
+      COMPOSE,
+      /\n {2}print-agent:([\s\S]*?)(?=\n(?: {2}[a-zA-Z][\w-]*:|[a-zA-Z])|$)/,
+      "print-agent service",
+    );
+    expect(agent).toMatch(/^ {4}network_mode: host$/m);
+  });
+
   it("has retired the standalone agent Dockerfile", () => {
     // One image definition. A resurrected file would build a second, drifting image.
     expect(() => read("apps/print-agent/Dockerfile")).toThrow();

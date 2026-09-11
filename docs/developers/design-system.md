@@ -130,6 +130,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label` | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`); default slot (body), `footer` slot | `wt-close` |
+| `wt-modal` | `open`, `heading`, `aria-label`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors` | — |
 | `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
@@ -147,6 +148,26 @@ canvases. Define columns and cell content in the consuming screen so domain acti
 primitive. Always supply `aria-label`; use its loading, empty and error properties instead of
 replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
+
+Use `wt-modal` for an add or edit form. Its portrait panel fills the viewport height with 24px
+top and bottom margins. The body scrolls independently, so your footer actions stay visible.
+It uses the raised surface and shadow tokens: white in the light theme, with the matching dark
+surface in the dark theme. Put `wt-form-actions` in its `footer` slot to keep Cancel on the left
+and Save on the right:
+
+```html
+<wt-modal heading="Add printer">
+  <wt-input name="printer-name" label="Printer name"></wt-input>
+  <wt-form-actions slot="footer">
+    <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+    <wt-button variant="primary">Save</wt-button>
+  </wt-form-actions>
+</wt-modal>
+```
+
+Set `open` to show or close the modal. Handle button clicks in your form and listen for `wt-close`
+to handle dismissal, including Escape. The native dialog keeps focus inside while open and
+returns focus to its trigger on close. Use `wt-dialog` for a compact confirmation.
 
 Variant- and state-like properties (`variant`, `size`, `name`, `raised`, `disabled`, `loading`,
 `decorative`, `checked`, `invalid`, `open`) all reflect to attributes, which is what makes `:host([variant="..."])`-style

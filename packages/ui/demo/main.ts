@@ -2,6 +2,8 @@ import { applyTokens, registerIcons } from "../src/index.js";
 import "../src/components/wt-button.js";
 import "../src/components/wt-card.js";
 import "../src/components/wt-dialog.js";
+import "../src/components/wt-modal.js";
+import "../src/components/wt-form-actions.js";
 import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
@@ -44,11 +46,24 @@ const panel = (theme: "light" | "dark") => `
     <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
     <div class="row" style="margin-top:16px">
       <wt-button class="open-dialog">Abrir diálogo</wt-button>
+      <wt-button class="open-modal">Open form modal</wt-button>
     </div>
     <wt-dialog heading="Anular venta">
       Esto generará un registro rectificativo.
       <wt-button slot="footer" variant="danger">Anular</wt-button>
     </wt-dialog>
+    <wt-modal heading="Add printer">
+      <wt-input name="printer-name" label="Printer name" value="Kitchen"></wt-input>
+      <p>Connect a printer to send orders to your kitchen or print receipts.</p>
+      <details>
+        <summary>Preview a long form</summary>
+        ${Array.from({ length: 16 }, (_, i) => `<p>Additional printer setting ${i + 1}</p>`).join("")}
+      </details>
+      <wt-form-actions slot="footer">
+        <wt-button slot="cancel" variant="secondary" class="close-modal">Cancel</wt-button>
+        <wt-button variant="primary" class="close-modal">Save</wt-button>
+      </wt-form-actions>
+    </wt-modal>
   </div>
 `;
 
@@ -78,4 +93,16 @@ for (const trigger of app.querySelectorAll<HTMLElement>(".open-dialog")) {
     };
     dialog.open = true;
   });
+}
+
+for (const panel of app.querySelectorAll(".panel")) {
+  const modal = panel.querySelector("wt-modal")!;
+  panel.querySelector(".open-modal")!.addEventListener("click", () => {
+    modal.open = true;
+  });
+  for (const button of modal.querySelectorAll(".close-modal")) {
+    button.addEventListener("click", () => {
+      modal.open = false;
+    });
+  }
 }

@@ -7,32 +7,19 @@ import type { PrintersScreen } from "./printers-screen.js";
 import type {
   DashboardApi,
   JoinRequestRow,
-  LocationSummary,
   PrintAgentRow,
   PrintJobRow,
   Printer,
-  Station,
-  StationPrinter,
   Till,
 } from "../api/client.js";
 
-/**
- * The Impresoras screen scanned by axe in both themes, in three states: the default agents + printers +
- * jobs lists with their forms and a print agent waiting to join (the pairing window shut), the pairing
- * window OPEN, and the accept dialog with its three number buttons. Mounted by ASSIGNING the `api` STUB
- * as a property (never bare markup), exactly as the sibling screen a11y suites do: `connectedCallback`
- * fires `void this.#load()` → the list verbs plus `pairingMode()` + `joinRequests("print_agent")`, so
- * the stub must resolve them all or a stray rejection pollutes the run (a rejection is a finding).
- *
- * The last block is not about theme: it pins that each number button carries a real accessible NAME
- * ("Number 47", never a bare "47" — design §1.2 wants the comparison to be a deliberate act), and that
- * the dialog can be both reached and operated from the keyboard alone.
- */
+// Exercise the tables, add/edit dialogs, and numeric pairing in both themes.
 const agents: PrintAgentRow[] = [
   {
     id: "a1",
     name: "Cocina agent",
     active: true,
+    host: null,
     nodeId: null,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -41,6 +28,7 @@ const agents: PrintAgentRow[] = [
     id: "a2",
     name: "Barra agent",
     active: false,
+    host: null,
     nodeId: "n1", // self-enrolled + revoked: axe scans the provenance marker and the allow-again control
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
@@ -57,6 +45,8 @@ const printers: Printer[] = [
     localKey: null,
     pollId: null,
     ticketScope: "station",
+    pendingJobs: 0,
+    lastPrintAt: null,
     active: true,
   },
   {
@@ -68,6 +58,8 @@ const printers: Printer[] = [
     localKey: null,
     pollId: "poll-1",
     ticketScope: "order",
+    pendingJobs: 0,
+    lastPrintAt: null,
     active: false,
   },
   {
@@ -79,6 +71,8 @@ const printers: Printer[] = [
     localKey: "SN-2",
     pollId: null,
     ticketScope: "station",
+    pendingJobs: 0,
+    lastPrintAt: null,
     active: false,
   },
 ];
@@ -95,41 +89,12 @@ const jobs: PrintJobRow[] = [
   },
 ];
 
-// Two live stations so the per-printer "stations this printer serves" section renders under axe (a
-// group with a labelled toggle each). `p1` is attached to `s1`, so both a checked and an unchecked
-// toggle sit in the a11y tree.
-const stations: Station[] = [
-  {
-    id: "s1",
-    name: "Cocina",
-    displayOrder: 0,
-    isDefault: true,
-    active: true,
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
-  },
-  {
-    id: "s2",
-    name: "Barra",
-    displayOrder: 1,
-    isDefault: false,
-    active: true,
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
-  },
-];
-
-// Two tills (one with a printer set, one without) + a location, so the receipt-printer picker + the
-// per-location print-mode toggle both render under axe (a labelled <select> each, a segmented control).
 const tills: Till[] = [
   { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
   { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
 ];
-const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
 
-// Two discovered USB devices — one unregistered (its name field + Register action render) and one
+// Two discovered USB devices — one unregistered (its Add action render) and one
 // already-registered (hidden from the list; its seen-status renders on printer p3's row) — so the
 // usb/bluetooth create surface is in the a11y tree. Typed loosely (the stub is cast to DashboardApi), the shape matching DiscoveredPrinter.
 const discovered = [
@@ -188,24 +153,41 @@ function stubApi(pairingOpen = false): DashboardApi {
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
-    listStations: vi.fn().mockResolvedValue(stations),
-    listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
-      printerId === "p1" ? [{ stationId: "s1", printerId: "p1" }] : [],
-    ),
-    attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
-    detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
     listTills: vi.fn().mockResolvedValue(tills),
-    getLocations: vi.fn().mockResolvedValue(locations),
-    setTillReceiptPrinter: vi.fn().mockResolvedValue(undefined),
-    setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
-    setDrawerOpenPolicy: vi.fn().mockResolvedValue(undefined),
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight load and the follow-up render. */
+async function settleTree(root: ShadowRoot | HTMLElement): Promise<void> {
+  for (const node of root.querySelectorAll<HTMLElement>("*")) {
+    if ("updateComplete" in node)
+      await (node as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    if (node.shadowRoot) await settleTree(node.shadowRoot);
+  }
+}
 async function flush(el: PrintersScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
+  await settleTree(el.shadowRoot!);
+}
+function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | null {
+  const found = root.querySelector<HTMLElement>(sel);
+  if (found) return found;
+  for (const node of root.querySelectorAll<HTMLElement>("*")) {
+    if (node.shadowRoot) {
+      const nested = deepQuery(node.shadowRoot, sel);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
+async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {
+  q(el, `[data-test="edit-printer-${id}"]`)!.click();
+  await flush(el);
+}
+async function openDiscovery(el: PrintersScreen): Promise<void> {
+  q(el, "[data-test=open-add-printer]")!.click();
+  await flush(el);
 }
 
 afterEach(cleanupWidgets);
@@ -228,6 +210,8 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
     await expectNoA11yViolations(host);
   });
 
@@ -238,37 +222,47 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
     // Open the waiting row so the modal dialog and its three number buttons are in the a11y tree.
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
+    q(el, "[data-test=join-review-j1]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });
 
-  it("renders the usb + bluetooth discovered-device create surfaces accessibly", async () => {
+  it("renders all discovered printers accessibly in the add modal", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
       { api: stubApi() },
       theme,
     );
     await flush(el);
-
-    // USB: the discovered list is in the a11y tree — an unregistered row's name field + Register
-    // button (a labelled control pair); the already-registered device is hidden from the list and
-    // its seen-status sits on the registered printer's row instead.
-    const transport = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=new-transport]")!;
-    transport.value = "usb";
-    transport.dispatchEvent(new Event("change"));
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=register-SN-1]")).toBeTruthy();
-    expect(el.shadowRoot!.querySelector("[data-test=discovered-row-SN-2]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=printer-last-seen-p3]")).toBeTruthy();
+    await openDiscovery(el);
+    expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
+    expect(q(el, "[data-test=discovered-row-SN-2]")).toBeNull();
+    expect(q(el, "[data-test=printer-last-seen-p3]")).toBeTruthy();
+    expect(q(el, "[data-test=new-transport]")).toBeNull();
     await expectNoA11yViolations(host);
-
-    // Bluetooth: the pairing note + Refresh action + the (filtered-empty) discovered placeholder.
-    transport.value = "bluetooth";
-    transport.dispatchEvent(new Event("change"));
+  });
+  it("renders printer editing accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=bluetooth-pair-note]")).toBeTruthy();
+    await openPrinter(el);
+    await expectNoA11yViolations(host);
+  });
+  it("renders agent editing accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
     await expectNoA11yViolations(host);
   });
 });
@@ -282,7 +276,9 @@ describe("printers-screen a11y — the numeric match", () => {
       api: stubApi(true),
     });
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
     await flush(el);
 
     const names = Array.from(el.shadowRoot!.querySelectorAll("[data-choice]")).map((b) =>
@@ -299,13 +295,15 @@ describe("printers-screen a11y — the numeric match", () => {
     const api = stubApi(true);
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
 
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.focus();
+    q(el, "[data-test=join-review-j1]")!.focus();
     await userEvent.keyboard("{Enter}");
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=join-dialog]")).toBeTruthy();
 
-    el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.focus();
+    q(el, '[data-choice="47"]')!.focus();
     await userEvent.keyboard("{Enter}");
     await flush(el);
 

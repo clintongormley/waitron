@@ -272,6 +272,38 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(untouched.rows[0]!.status).toBe("queued");
   });
 
+  it("persists the agent host and edits names under the app role without touching another tenant", async () => {
+    const app = mountApp(tenantA);
+    const { agentId, token } = await joinAndAccept(app, "Name before edit");
+    const pulled = await send(app, "POST", "/print-api/agent/jobs", {
+      bearer: token,
+      body: { visible: [], scanned: [], host: "kitchen.local" },
+    });
+    expect(pulled.status).toBe(200);
+    const edited = await send(app, "PATCH", `/management-api/print-agents/${agentId}`, {
+      cookie: managerCookie,
+      body: { name: "Kitchen" },
+    });
+    expect(edited.status).toBe(204);
+    const listed = await send(app, "GET", "/management-api/print-agents", {
+      cookie: managerCookie,
+    });
+    expect(await listed.json()).toContainEqual(
+      expect.objectContaining({ id: agentId, name: "Kitchen", host: "kitchen.local" }),
+    );
+    const tenantB = await seedTenantWithLocation();
+    const foreignId = await seedNodeAgent(tenantB, randomUUID());
+    const foreignEdit = await send(app, "PATCH", `/management-api/print-agents/${foreignId}`, {
+      cookie: managerCookie,
+      body: { name: "Not allowed" },
+    });
+    expect(foreignEdit.status).toBe(404);
+    const row = await suite.admin.execute<{ name: string }>(
+      sql`select name from print_agents where id = ${foreignId}`,
+    );
+    expect(row.rows[0]!.name).not.toBe("Not allowed");
+  });
+
   it("discovered-printers reads registered keys + agent names as the app role (grants)", async () => {
     // The two new management routes run their reads through the same `gated` (asAppUser) transaction as
     // the sibling list routes. This proves the discovered-printers merge — a SELECT on `printers` +

@@ -2163,6 +2163,18 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     },
   ];
 
+  it("updateAgent PATCHes the display name with management credentials", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updateAgent("a1", { name: "Kitchen" })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-agents/a1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Kitchen" }),
+    });
+  });
+
   it("listAgents GETs /management-api/print-agents with credentials", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(agents));
     const api = new DashboardApi("", fetchImpl);
@@ -2312,6 +2324,23 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     await expect(api.deactivatePrinter("p1")).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/deactivate", {
       method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("getPrintJobPreview GETs the selected job preview", async () => {
+    const preview = {
+      text: "Receipt",
+      qrData: [],
+      omittedGraphics: false,
+      truncated: false,
+      unsupported: false,
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(preview));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getPrintJobPreview("j1")).toEqual(preview);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-jobs/j1/preview", {
+      method: "GET",
       credentials: "include",
     });
   });

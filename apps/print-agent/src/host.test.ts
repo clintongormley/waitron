@@ -1,5 +1,5 @@
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentStatus } from "@waitron/print-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,6 +23,15 @@ afterEach(async () => {
 });
 
 describe("createContainerHost — config()", () => {
+  it("reports the machine hostname", () => {
+    const host = createContainerHost({
+      env: baseEnv,
+      state: new FileState(dir),
+      onStatus: () => {},
+    });
+    expect(host.hostname?.()).toBe(hostname());
+  });
+
   it("returns the file config verbatim when env pins no server url", async () => {
     const state = new FileState(dir);
     await state.writeConfig({
