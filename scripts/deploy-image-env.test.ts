@@ -232,7 +232,7 @@ describe("the waitron.sh box command", () => {
 
   it("refuses a reset on a production box unless forced", () => {
     expect(WAITRON_SH).toMatch(/--force-production/);
-    expect(WAITRON_SH).toMatch(/stamped PRODUCTION/);
+    expect(WAITRON_SH).toMatch(/refusing to reset:[^\n]*PRODUCTION/);
   });
 });
 

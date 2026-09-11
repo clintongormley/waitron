@@ -287,7 +287,7 @@ cmd_reset() {
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
 
   if is_production; then
-    [ "$force_prod" -eq 1 ] || die "this box is stamped PRODUCTION and holds real fiscal records that cannot be recreated — a reset would cut the AEAT chain. Recover a broken production box from a backup. To wipe anyway, re-run with --force-production."
+    [ "$force_prod" -eq 1 ] || die "refusing to reset: this box is PRODUCTION, or its environment could not be read and is treated the same way for safety. It may hold real fiscal records that cannot be recreated, and a reset would cut the AEAT chain. Recover a broken production box from a backup. If you are sure this box is not production, re-run with --force-production."
     if [ -t 0 ]; then
       printf 'waitron.sh: type "production" to wipe this PRODUCTION box: ' >&2
       read -r ans; [ "$ans" = "production" ] || die "not confirmed — nothing wiped"
