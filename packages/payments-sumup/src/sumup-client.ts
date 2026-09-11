@@ -1,5 +1,5 @@
 import type { Decimal } from "@waitron/shared";
-import { fromMajorUnits, toMajorUnits, toMinorUnits } from "./client.js";
+import { fromMajorUnits, toMinorUnits } from "./client.js";
 import type {
   CreateCheckoutOutcome,
   SumUpClient,
@@ -113,7 +113,10 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       const r = await call(
         "POST",
         `/v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds`,
-        p.amount === undefined ? {} : { amount: toMajorUnits(p.amount) },
+        // `amount` is in MINOR units (integer cents), like the checkout `value` — NOT euros. Euros
+        // truncate to 0 cents and SumUp silently refunds €0.00 with a 201 (runbook §4b). Omitting
+        // `amount` (a full refund) refunds the whole transaction.
+        p.amount === undefined ? {} : { amount: toMinorUnits(p.amount) },
       );
       return { status: r.status >= 400 ? "refused" : "accepted" } as const;
     },

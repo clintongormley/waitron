@@ -14,7 +14,6 @@ describe("the public surface", () => {
       "SumUpCloudProvider",
       "fromMajorUnits",
       "sumupClient",
-      "toMajorUnits",
       "toMinorUnits",
     ]);
   });
