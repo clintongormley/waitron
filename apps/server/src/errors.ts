@@ -257,19 +257,6 @@ declare module "@waitron/shared" {
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
     /**
-     * A tenant's Stripe key belongs to the other environment. A test key on a production
-     * deployment takes payments that never settle, and `reconcile` then sweeps a test-mode account
-     * against live rows and reports every one as missing upstream.
-     *
-     * Carries the key's ENVIRONMENT, never the key or any prefix of it — the same rule
-     * `credentials.invalid_payload` follows by reporting a count rather than field values.
-     */
-    "payment.credential_environment_mismatch": {
-      tenantId: string;
-      keyEnvironment: string;
-      hostEnvironment: string;
-    };
-    /**
      * An inbound hosted-payment webhook failed signature verification for the tenant named in the
      * path. The signature is the sole gate (design §2): the path tenant is attacker-controllable,
      * so nothing acts on the event until THAT tenant's own `webhookSecret` verifies the raw bytes.

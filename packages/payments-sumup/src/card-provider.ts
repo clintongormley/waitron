@@ -17,8 +17,9 @@ import type { SumUpClient } from "./client.js";
 import { sumupClient } from "./sumup-client.js";
 import type { SumUpClientOptions } from "./sumup-client.js";
 import { SumUpCloudProvider } from "./provider.js";
-// Registers `payment.provider_credential_rejected` / `payment.provider_merchant_ambiguous` on the
-// shared `ErrorParams` registry — the two codes this seat throws.
+// Registers `payment.provider_merchant_ambiguous` (the one SumUp-specific code this seat throws) on
+// the shared `ErrorParams` registry. `payment.provider_credential_rejected` is the neutral code both
+// provider seats throw, declared in `@waitron/payments` and reachable through the import above.
 import "./errors.js";
 
 const PROVIDER_ID = "sumup";

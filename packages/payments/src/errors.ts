@@ -147,6 +147,12 @@ declare module "@waitron/shared" {
       payments: { paymentRef: string; amount: string; reason: string }[];
       count: number;
     };
+    /** The typed credential did not verify against the provider (a bad API key/secret, or a key
+     * that acts as no merchant). Thrown by a card-provider seat's `connect` before anything is
+     * sealed, and by `build`/`readers.*` when a sealed payload is missing a field it needs. Carries
+     * only the `providerId` — never the rejected key. Lives here (not in an adapter package) because
+     * both the SumUp and Stripe seats throw it. */
+    "payment.provider_credential_rejected": { providerId: string };
     /** Thrown by `selectCardProviders` when two `CardProviderContribution`s in the list declare the
      * same `providerId` — the registry (Task 9) must not silently let one shadow the other. */
     "payment.provider_duplicate": { providerId: string };
