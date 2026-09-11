@@ -426,7 +426,7 @@ design-review section apply.
   At-least-once reclaim accepted for MVP (per-claim token
   later). Security-review item (the authz boundary moves to venue/visible-keys). Replaces the manual
   create form (agent dropdown) with a transport-aware flow + a discovered-printers list.
-  *Printer settings UI (2026-09-11, built; awaiting branch finishing):* agents, printers and the latest
+  *Printer settings UI (2026-09-11, built and reviewed; awaiting landing):* agents, printers and the latest
   100 jobs use tables and modal editors. Add printer scans all supported transports into one results
   table of unregistered devices; each row has Add, with no type selector or manual connection form.
   Registered printers retain the last reported presence beneath their name. Printing rules now owns

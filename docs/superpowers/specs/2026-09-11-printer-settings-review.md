@@ -36,7 +36,7 @@ needed: the fixes preserve the design and API boundaries.
 Verification after corrections: 122 focused dashboard tests, eight shared modal tests, fourteen
 printer accessibility tests, and 93 server API/preview tests passed. The complete repository gate
 passed before these review corrections; affected checks and the unfiltered dependent-package
-pre-push coverage gate validate the final changes.
+pre-push coverage gate then passed on the final code (371 seconds for the hook).
 
 The reviewer did not execute tests or audit every generated snapshot line. Codex ran the actual
 schema migrations through the repository gate. Physical Bluetooth/network discovery and printed
