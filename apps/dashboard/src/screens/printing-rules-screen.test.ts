@@ -113,7 +113,7 @@ function pickSelect(el: PrintingRulesScreen, sel: string, value: string): void {
 
 /** Read the native switch state after the screen settles. */
 const switchChecked = (el: PrintingRulesScreen, sel: string): boolean =>
-  (q(el, sel) as unknown as { checked: boolean }).checked;
+  q(el, sel)!.shadowRoot!.querySelector("input")!.checked;
 
 describe("printing rules", () => {
   it("renders a station toggle per station, checked when this printer is attached", async () => {

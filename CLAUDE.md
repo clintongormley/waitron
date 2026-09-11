@@ -538,6 +538,15 @@ unfiltered `main` run, not a wrong hook.
   there: the root project does not typecheck (§2), and a module tested only from there must be in the
   root `coverage.include` and excluded from its package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **Browser recovery tests read the native control inside a shared component.** A host's `checked`
+  property can report the expected value while its inner checkbox remains visibly wrong. The printer
+  follow-up review reproduced that split by preserving the emitted change while suppressing the host
+  update; the old assertion passed and the inner-input assertion failed. Pointer:
+  `apps/dashboard/src/screens/printing-rules-screen.test.ts` (`switchChecked`).
+- **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates
+  a screenshot directory named after its test file; the vocabulary guard tried to read that directory
+  and failed with `EISDIR` after an intentional TDD failure. `sourceFilesIn` now checks `isFile()`,
+  with a fixture preserving an actual nested source file (`scripts/english-only.test.ts`).
 - **A browser test using fake timers must advance an awaited animation frame or restore real timers
   first.** The printer modal close test stalled on its own paused `requestAnimationFrame`; asserting
   the native dialog's closed state avoids mixing that clock with the browser's queued close event

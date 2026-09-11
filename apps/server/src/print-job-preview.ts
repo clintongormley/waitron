@@ -21,7 +21,8 @@ const MAX_OUTPUT_CHARACTERS = 65_536;
 /**
  * Decode the commands emitted by printing's EscBuilder. Unknown commands stop the preview:
  * skipping an unknown header could expose its binary body as invented receipt text.
- * Preserve printable command order; drawer pulses have no paper representation.
+ * Preserve printable command order within the input, text, bitmap, feed and block caps.
+ * Only model-2 QR and normal raster commands are rendered; drawer pulses have no paper representation.
  */
 export function previewPrintJob(payload: Uint8Array): PrintJobPreview {
   const result: PrintJobPreview = {

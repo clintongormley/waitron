@@ -1565,6 +1565,9 @@ it.each([
       await flush(el);
       const modal = q(el, "[data-test=new-printer-modal]")!;
       const bounds = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      expect(
+        getComputedStyle(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')!).overflowWrap,
+      ).toBe("anywhere");
       const add = q(el, '[data-test="register-10.0.0.77:9100"]')!.getBoundingClientRect();
       expect(add.right).toBeLessThan(bounds.right);
       expect(add.left).toBeGreaterThan(bounds.left);

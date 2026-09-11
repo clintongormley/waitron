@@ -166,13 +166,13 @@ export class PrintingRulesScreen extends LitElement {
             .checked=${live(printer.ticketScope === "order")}
             .disabled=${this.saving}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                const checked = event.detail.checked;
-                void this.#mutate(() =>
-                  this.api.updatePrinter(printer.id, {
-                    ticketScope: checked ? "order" : "station",
-                  }),
-                );
-              }}
+              const checked = event.detail.checked;
+              void this.#mutate(() =>
+                this.api.updatePrinter(printer.id, {
+                  ticketScope: checked ? "order" : "station",
+                }),
+              );
+            }}
           ></wt-switch>
         </div>
         <div class="stations" role="group" aria-label=${t("printers.stations_title")}>
@@ -192,13 +192,13 @@ export class PrintingRulesScreen extends LitElement {
                       .checked=${live((this.printerStations[printer.id] ?? []).includes(station.id))}
                       .disabled=${this.saving}
                       @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                          const checked = event.detail.checked;
-                          void this.#mutate(() =>
-                            checked
-                              ? this.api.attachPrinterToStation(station.id, printer.id)
-                              : this.api.detachPrinterFromStation(station.id, printer.id),
-                          );
-                        }}
+                        const checked = event.detail.checked;
+                        void this.#mutate(() =>
+                          checked
+                            ? this.api.attachPrinterToStation(station.id, printer.id)
+                            : this.api.detachPrinterFromStation(station.id, printer.id),
+                        );
+                      }}
                     ></wt-switch>
                   `,
                 )

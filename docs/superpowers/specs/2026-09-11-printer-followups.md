@@ -23,3 +23,11 @@ of depending on PostgreSQL's text date format.
 
 Physical Bluetooth/network discovery and paper comparison need a reachable configured box
 and attached hardware. Record exactly which checks ran; keep missing hardware receipts open.
+
+
+Preview limits: at most 262,144 input bytes, 65,536 text/QR characters, 2,048 ordered blocks,
+4,096 explicit feed lines, 128 QR symbols and 262,144 decoded bitmap bytes. Each image is at
+most 2,048 dots on either axis. Whichever limit is reached first applies; many small blocks
+can truncate before the character limit. A large image can leave insufficient room for later
+images, which are flagged as omitted while their QR content remains available as text.
+Only the builder's model-2 native QR and normal raster variants are interpreted.
