@@ -62,7 +62,12 @@ describe("device_card_readers", () => {
 
     const stored = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
+      return tx
+        .select()
+        .from(deviceCardReaders)
+        .where(
+          and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
+        );
     });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);
@@ -79,7 +84,12 @@ describe("device_card_readers", () => {
     });
     const afterDelete = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
+      return tx
+        .select()
+        .from(deviceCardReaders)
+        .where(
+          and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
+        );
     });
     expect(afterDelete).toHaveLength(0);
   });
