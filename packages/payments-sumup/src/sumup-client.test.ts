@@ -141,6 +141,35 @@ describe("sumupClient findTransaction card mapping", () => {
     expect(t?.card).toBeUndefined();
   });
 
+  it("drops the card block when last_4_digits is malformed (not exactly four digits)", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      // A 5-char last_4_digits is truthy but would trip `payments_card_last4_ck` (length = 4) and
+      // block the capture write for a SUCCESSFUL charge. Card facts are receipt decoration — the
+      // adapter drops the block so the money still records (CLAUDE.md §5).
+      fetch: respondingWith({
+        id: "txn_bad",
+        status: "SUCCESSFUL",
+        amount: 9,
+        card: { last_4_digits: "58380", type: "VISA" },
+        entry_mode: "contactless",
+        auth_code: "328600",
+      }),
+    });
+
+    const t = await client.findTransaction({ id: "txn_bad" });
+
+    expect(t?.card).toBeUndefined();
+    expect(t).toEqual({
+      id: "txn_bad",
+      status: "SUCCESSFUL",
+      amount: decimal("9.00"),
+      entryMode: "contactless",
+      authCode: "328600",
+    });
+  });
+
   it("carries no card fields at all when SumUp returns none", async () => {
     const client = sumupClient({
       apiKey: "k",

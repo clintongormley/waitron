@@ -114,13 +114,21 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         entry_mode?: string;
         auth_code?: string | null;
       };
+      // Card facts are best-effort receipt decoration: emit the `card` block only when it is
+      // well-formed enough to PERSIST — `last_4_digits` exactly four digits (matching the
+      // `payments_card_last4_ck` CHECK) plus a `type`. A malformed value drops the whole block so a
+      // real capture still records; the DB CHECK stays the backstop (CLAUDE.md §5).
+      const card =
+        t.card?.last_4_digits !== undefined &&
+        /^\d{4}$/.test(t.card.last_4_digits) &&
+        t.card.type !== undefined
+          ? { last4: t.card.last_4_digits, type: t.card.type }
+          : undefined;
       return {
         id: t.id,
         status: t.status,
         amount: fromMajorUnits(t.amount),
-        ...(t.card?.last_4_digits && t.card.type
-          ? { card: { last4: t.card.last_4_digits, type: t.card.type } }
-          : {}),
+        ...(card === undefined ? {} : { card }),
         ...(t.entry_mode === undefined ? {} : { entryMode: t.entry_mode }),
         ...(t.auth_code === undefined ? {} : { authCode: t.auth_code }),
       };

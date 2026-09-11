@@ -40,6 +40,17 @@ describe("SumUp card details mapping", () => {
     ).toBeUndefined();
   });
 
+  it("returns undefined for a malformed last4 (not exactly four digits) so it never reaches the store", () => {
+    expect(
+      cardFromTransaction({
+        id: "t2b",
+        status: "SUCCESSFUL",
+        amount: decimal("1.00"),
+        card: { last4: "58380", type: "VISA" },
+      }),
+    ).toBeUndefined();
+  });
+
   it("still builds a block when auth_code is missing (null), never throwing", () => {
     expect(
       cardFromTransaction({
@@ -164,6 +175,27 @@ describe("SumUpCloudProvider.collect", () => {
     const result = await provider.collect(params);
     expect(result.state).toBe("captured");
     expect(result.card).toBeUndefined();
+  });
+
+  it("a SUCCESSFUL transaction with a malformed last4 still captures — the card block is dropped, never the charge", async () => {
+    // The run-it reviewer's money-safety case: a 5-char last_4_digits passed the old truthy guard,
+    // was built into the card block, then `payments_card_last4_ck` REJECTED the capture write
+    // (23514) — a real charge stuck `attempting`. The adapter must drop malformed card facts so the
+    // capture persists with card columns null (CLAUDE.md §5); the DB CHECK stays the backstop.
+    const { provider, params, row } = await setup(suite, (f) =>
+      f.cardNext({
+        card: { last4: "58380", type: "VISA" },
+        entryMode: "contactless",
+        authCode: "328600",
+      }),
+    );
+    const result = await provider.collect(params);
+    expect(result.state).toBe("captured");
+    expect(result.card).toBeUndefined();
+    const r = await row(result.paymentRef);
+    expect(r.state).toBe("captured");
+    expect(r.cardLast4).toBeNull();
+    expect(r.cardScheme).toBeNull();
   });
 });
 

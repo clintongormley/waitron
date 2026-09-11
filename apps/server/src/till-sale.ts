@@ -213,7 +213,11 @@ function cardFromPaymentRow(row: {
 /**
  * Read the tender block for a filed sale back from its committed rows — the `tenders` row (tender
  * method, the whole charge, and the tip) and, for a card, the captured `payments` row (provider, card
- * facts, operator reference). Tenant-scoped on every read (one-tenant-per-database is NOT the query's
+ * facts, operator reference). It reads the persisted rows back rather than reusing values already in
+ * memory SO THAT the first print and every reprint build the block through this identical path — a
+ * reprint is byte-identical to the first print by construction (the regression property the owner
+ * named).
+ * Tenant-scoped on every read (one-tenant-per-database is NOT the query's
  * isolation boundary — CLAUDE.md §3). DEGRADES, never throws: a card tender whose payment row is
  * absent, or whose card columns are unset, presents `card: null` rather than failing a sale that is
  * already filed and immutable (§5). `opts.cashChange` is the change a cash tender hands back (the

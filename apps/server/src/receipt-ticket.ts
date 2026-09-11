@@ -50,6 +50,7 @@
 import { esc } from "@waitron/printing";
 import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 
+import type { CardDetails } from "@waitron/payments";
 import type { TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
@@ -111,7 +112,7 @@ const LEGEND = "VERI*FACTU";
  * entry for `"unknown"` — that line drops the entry-mode fragment entirely rather than printing a
  * placeholder (`ENTRY_MODE_LABEL[t.card.entryMode]` reads `undefined` for it).
  */
-const ENTRY_MODE_LABEL: Record<string, string> = {
+const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
   contactless: "Sin contacto",
   chip: "Chip",
   swipe: "Banda",

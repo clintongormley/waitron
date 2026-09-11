@@ -72,11 +72,13 @@ export function mapEntryMode(raw: string | undefined): CardDetails["entryMode"] 
 }
 
 /** Build the receipt's `CardDetails` from a transaction that carries a card object. A transaction
- * with none returns `undefined` — SumUp omits card facts on some successful sales, and a missing
- * sub-field yields a partial/absent block, NEVER a failed capture: the money has moved. `scheme` is
- * the network as SumUp names it, underscores turned to spaces; `authCode` is null when absent. */
+ * with none — or with a MALFORMED `last4` (not exactly four digits) — returns `undefined`: SumUp
+ * omits card facts on some successful sales, and a bad sub-field yields an absent block, NEVER a
+ * failed capture. The money has moved, and a value that would trip the `payments_card_last4_ck`
+ * CHECK must be dropped here rather than block the capture write (CLAUDE.md §5). `scheme` is the
+ * network as SumUp names it, underscores turned to spaces; `authCode` is null when absent. */
 export function cardFromTransaction(t: SumUpTransaction): CardDetails | undefined {
-  if (t.card === undefined) return undefined;
+  if (t.card === undefined || !/^\d{4}$/.test(t.card.last4)) return undefined;
   return {
     scheme: t.card.type.replaceAll("_", " "),
     last4: t.card.last4,

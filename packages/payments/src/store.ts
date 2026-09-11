@@ -353,13 +353,26 @@ export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
   key: { tenantId: string; provider: string; workingOrderId: string },
 ): Promise<CapturedPaymentForOrder | undefined> {
+  return selectCapturedForWorkingOrder(tx, key);
+}
+
+/** The shared body of both captured-payment reads: the most-recent captured/accepted-offline payment
+ * for a working order, tenant-scoped, optionally narrowed to ONE provider. `provider` omitted selects
+ * across every provider — Drizzle's `and()` drops an `undefined` clause, so the same query serves the
+ * provider-filtered §4 pre-check and the ticket path's any-provider read. The `desc nulls last`
+ * ordering and the at-most-one-per-order invariant are documented on
+ * `findCapturedPaymentForWorkingOrder`. */
+async function selectCapturedForWorkingOrder(
+  tx: Transaction,
+  key: { tenantId: string; workingOrderId: string; provider?: string },
+): Promise<CapturedPaymentForOrder | undefined> {
   const [row] = await tx
     .select(CAPTURED_FOR_ORDER_COLUMNS)
     .from(payments)
     .where(
       and(
         eq(payments.tenantId, key.tenantId),
-        eq(payments.provider, key.provider),
+        key.provider === undefined ? undefined : eq(payments.provider, key.provider),
         eq(payments.workingOrderId, key.workingOrderId),
         inArray(payments.state, ["captured", "accepted_offline"]),
       ),
@@ -371,27 +384,16 @@ export async function findCapturedPaymentForWorkingOrder(
 
 /** The captured/accepted-offline payment for a working order, WITHOUT filtering by provider — the
  * ticket/reprint path (readTenderBlock) knows the working order but not which provider settled it.
- * Returns null when none (a cash sale, or a card sale whose payment row is absent). Tenant-scoped
- * explicitly, like every read here (CLAUDE.md §3): one-tenant-per-database is not the query's
- * isolation boundary. Models on `findCapturedPaymentForWorkingOrder`, dropping only its provider
- * clause. */
+ * Returns null when none (a cash sale, or a card sale whose payment row is absent). Shares
+ * `selectCapturedForWorkingOrder` with the provider-filtered read above, passing no `provider` so the
+ * query spans every provider; the only difference is the null (not undefined) empty return this
+ * caller wants. Tenant-scoped explicitly, like every read here (CLAUDE.md §3): one-tenant-per-database
+ * is not the query's isolation boundary. */
 export async function findCapturedPaymentForWorkingOrderAnyProvider(
   tx: Transaction,
   key: { tenantId: string; workingOrderId: string },
 ): Promise<CapturedPaymentForOrder | null> {
-  const [row] = await tx
-    .select(CAPTURED_FOR_ORDER_COLUMNS)
-    .from(payments)
-    .where(
-      and(
-        eq(payments.tenantId, key.tenantId),
-        eq(payments.workingOrderId, key.workingOrderId),
-        inArray(payments.state, ["captured", "accepted_offline"]),
-      ),
-    )
-    .orderBy(sql`${payments.settledAt} desc nulls last`)
-    .limit(1);
-  return (row as CapturedPaymentForOrder | undefined) ?? null;
+  return (await selectCapturedForWorkingOrder(tx, key)) ?? null;
 }
 
 /** A payment row plus its tenant, looked up by (provider, paymentRef) WITHOUT a tenant filter — the
