@@ -631,26 +631,31 @@ a PARTIAL refund; the spec's status handling assumes `REFUNDED` means all the mo
 partial refund may leave the status at `SUCCESSFUL` with a `REFUND` event, which the sweep would
 then have to read from the events, not the status.
 
-**Result (4b, run 2026-09-11): the adapter's PARTIAL-refund route SILENTLY NO-OPS — a shipped bug.**
-`POST /v1.0/merchants/MY2NPHDW/payments/e0b4869c-…/refunds` with `{"amount":0.40}` (euros, exactly
-what the adapter sends — `toMajorUnits(0.40) = 0.40`, `packages/payments-sumup/src/client.ts:66`)
-returned **`HTTP 201 {}`** and refunded NOTHING: no `REFUND` event, `refunded_amount` null, and the
-transaction's advertised refund link still read `max_amount: 1.0` a minute later. Confirmed absent in
-the SumUp dashboard by the owner. A second `{"amount":0.80}` on the same route also returned `201` and
-also did nothing — so nothing over-refunded (the €1.20 of attempts were all no-ops), but only because
-the route ignores the amount body.
+**Result (4b, run 2026-09-11, CORRECTED): the adapter sends the refund amount in the WRONG UNIT —
+`v1.0` is fine.** The `v1.0` refund endpoint takes `amount` in MINOR units (integer cents), exactly
+like the checkout's `value`, NOT euros. Three calls settle it:
 
-**The partial DID work on the route the transaction advertises in its own `links`:**
-`POST /v0.2/refund/e0b4869c-…?merchant_code=MY2NPHDW` with `{"amount":0.40}` → **`HTTP 204`**, a
-`REFUND` event of `0.40`, and `max_amount` dropped `1.0 → 0.60`. So partial refunds ARE supported on
-the Solo; the `/v1.0/.../payments/{id}/refunds` path honours a full refund (empty body) but silently
-discards an `amount`.
+- `POST /v1.0/.../payments/{id}/refunds` `{"amount":0.40}` (euros — what the adapter sends via
+  `toMajorUnits`) → `HTTP 201 {}`, refunded NOTHING (no REFUND event, `max_amount` unchanged). The
+  float `0.40` truncates to `0` cents, so SumUp refunds €0.00 and honestly reports success.
+- The DECISIVE control, a fresh €1 capture (`54a5a753-…`): `{"amount":40}` (integer cents) →
+  `HTTP 201`, a `REFUND` event of `0.40`, `max_amount` `1.0 → 0.60`. So `40` = 40 cents = €0.40: the
+  endpoint is minor-unit, and it does partial refunds correctly.
+- (`{"amount":0.40}` also worked earlier on the undocumented `POST /v0.2/refund/{id}` route, which
+  reads euros. That route is NOT in SumUp's OpenAPI file — older, presumably deprecated — so it is
+  NOT the fix.)
 
-**Consequence for shipped code (#309):** `SumUpClient.refund` posts `{amount}` to the `/v1.0` path
-and reports `accepted` on any non-4xx (`sumup-client.ts:112-118`), so `reverseViaSumUp`'s PARTIAL
-path records a refund that never happened. Full reversals are fine. Fix is an endpoint/route change
-on the partial path, plus a regression test that asserts the balance actually moved (reading the
-`REFUND` event or `max_amount`, not the HTTP code). Logged to the backlog SumUp debt.
+**Correction of the earlier draft of this note, which claimed "the `v1.0` partial silently no-ops,
+use `v0.2`" — that was WRONG** (a false claim born while diagnosing the first, CLAUDE.md §1). `v1.0`
+is the documented, current endpoint and works; our adapter simply sends the wrong unit.
+
+**Consequence for shipped code (#309):** `SumUpClient.refund` builds the body with
+`toMajorUnits(p.amount)` (`packages/payments-sumup/src/sumup-client.ts:116`); a partial refund thus
+sends euros to a minor-unit endpoint and silently refunds €0.00 while `refund()` reports `accepted`
+(it reads only the HTTP code). Fix: send `toMinorUnits(p.amount)` — stay on `v1.0`, no route change —
+and add a regression test that asserts the amount SENT is minor units (and, in the sandbox/Virtual-Solo
+contract test, that the balance actually moved). A FULL refund sends no amount (empty body) and was
+never affected. Logged to the backlog SumUp debt.
 
 ### 4c. What the customer and the fee report see (a few days later)
 

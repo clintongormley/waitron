@@ -1731,16 +1731,18 @@ genuinely-decision-bearing.
 
 **SumUp:**
 
-- **BUG (found 2026-09-11, live): the SumUp adapter's PARTIAL refund silently no-ops.**
-  `SumUpClient.refund` posts `{amount}` to `POST /v1.0/merchants/{mc}/payments/{id}/refunds`
-  (`packages/payments-sumup/src/sumup-client.ts:112`), which returns `HTTP 201` and refunds nothing
-  (no `REFUND` event, `max_amount` unchanged; confirmed in API + dashboard). A FULL refund (empty
-  body) on that route works. The partial works on the route the transaction advertises in its
-  `links`: `POST /v0.2/refund/{id}?merchant_code=` → `HTTP 204` + a `REFUND` event. Because `refund()`
-  reports `accepted` on any non-4xx, `reverseViaSumUp`'s partial path records a refund that never
-  happened. Fix: move the partial path to the `v0.2/refund` route (or find the correct `v1.0` body)
-  and add a regression test that asserts the balance moved (the `REFUND` event / `max_amount`), never
-  the HTTP code. Evidence: [research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md) §4b.
+- **BUG (found 2026-09-11, live): the SumUp adapter sends the refund amount in the WRONG UNIT.**
+  `SumUpClient.refund` builds the body with `toMajorUnits(p.amount)`
+  (`packages/payments-sumup/src/sumup-client.ts:116`), i.e. euros, but the documented `v1.0` refund
+  endpoint takes `amount` in MINOR units (integer cents) like the checkout `value`. A partial refund
+  therefore sends `0.40`, which truncates to `0` cents, so SumUp refunds €0.00 and returns `HTTP 201`;
+  `refund()` reports `accepted` (HTTP-only), so `reverseViaSumUp`'s partial path records a refund that
+  never happened. Proven decisively: `{amount:40}` (integer) refunds €0.40 on `v1.0`. FULL refunds
+  send no amount (empty body) and are unaffected. Fix: send `toMinorUnits(p.amount)` — stay on the
+  documented `v1.0` endpoint, no route change — plus a regression test on the sent unit and (in the
+  contract test) that the balance actually moved. Evidence + the corrected diagnosis (an earlier
+  "use v0.2" reading was a false claim):
+  [research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md) §4b.
 - **Also from the 4a run: a refund is a SEPARATE `type: REFUND` transaction** (its own id, linked to
   the original by `transaction_code`; what the dashboard lists as a *Rimborso*), AND a `REFUND` event
   on the original. The original payment's top-level `status` never flips — it stays `SUCCESSFUL`,
