@@ -360,7 +360,13 @@ design-review section apply.
   `local_key` (USB **serial** / BT **MAC**, survives reboot/replug), the agent resolves key→device
   path/channel at print time; the report is authorised by a new `print_jobs.claimed_by`. **All three
   local transports are discoverable** (IP via mDNS + a 9100 sweep, pre-filling manual host:port entry —
-  MAC-keyed IP deferred), and **active discovery runs only inside a dashboard-opened window** (cheap
+  MAC-keyed IP deferred; #304 shipped the mDNS pass alone and the backlog wrongly recorded the sweep
+  as landed — the owner's Epson TM-T88III answers on 9100 and announces nothing over mDNS (observed from a Mac on
+  the owner's other VLAN — provisioning spec §7, 2026-09-11 addendum), so the
+  sweep landed separately in `feat/print-agent-9100-sweep`, 2026-09-11: every address on the box's own
+  IPv4 subnets up to a /22, connect-only, no bytes sent. *Follow-up:* a printer on ANOTHER subnet than
+  the box — the owner's home VLANs, not the deli's flat LAN — is reached by neither pass; a configurable
+  extra-subnet list or a dashboard "probe this address" button would cover it), and **active discovery runs only inside a dashboard-opened window** (cheap
   presence-of-registered-devices stays always-on for serving); the discovered inventory + window are
   IN-MEMORY on the server (no new tables). **Bluetooth is IN SCOPE now** (was parked) as a third live
   transport with box-local pairing on the agent setup page. No printer drivers (raw ESC/POS; page
@@ -388,7 +394,9 @@ design-review section apply.
   /dev/usb/lp0` + `group_add 7` as the unprivileged `node` user (spec §7). The run-it review caught a
   production device-path bug (`/sys/dev/...` → `/dev/...`) the direct-write receipt had missed — fixed
   with a regression test. Bluetooth + live mDNS receipts DEFERRED (the box has no BT adapter and no
-  network printer on the LAN); the seams + parsers ship fixture-tested, gated for a later receipt.
+  network printer on the BOX's LAN; the 2026-09-11 Epson observation above was taken from a Mac on the
+  owner's other VLAN, and the sweep has not yet been run on the box); the seams + parsers ship
+  fixture-tested, gated for a later receipt.
   *Deferred follow-ups (surfaced at finish-branch, not taken):* extract an in-memory `createDiscoveredStore`
   from `mountPrintApi` (altitude); dedupe the `VisibleDeviceWire`/`DiscoveredDeviceWire` types against
   `@waitron/print-agent` via a type-only import IF `module-seams` permits; fold `#registerDiscovered` into
