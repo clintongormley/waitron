@@ -71,6 +71,14 @@ export const payments = pgTable(
      * standalone bank card terminal for an unintegrated (manual) tender. Nullable: only manual
      * mode, and some integrated adapters, populate it. A reconciliation hook, never validated. */
     externalRef: text("external_ref"),
+    /** Card-present facts for the customer receipt's card block — written once at capture by the
+     * provider that supplies them (SumUp), null for cash/manual/offline/failed. Plain text + CHECK,
+     * not a pgEnum: adding an entry-mode value later must not hit the one-transaction ALTER TYPE
+     * trap (CLAUDE.md §2). */
+    cardScheme: text("card_scheme"),
+    cardLast4: text("card_last4"),
+    cardEntryMode: text("card_entry_mode"),
+    cardAuthCode: text("card_auth_code"),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
     state: paymentState("state").notNull(),
     /** Set on `captured` and `accepted_offline` (the acceptance time), null otherwise. Feeds
@@ -123,5 +131,10 @@ export const payments = pgTable(
     // window. Plain and non-unique — it constrains nothing, so it cannot collide with any writer.
     index("payments_reconcile_idx").on(t.tenantId, t.provider, t.settledAt),
     check("payments_amount_ck", sql`${t.amount} > 0`),
+    check("payments_card_last4_ck", sql`${t.cardLast4} is null or length(${t.cardLast4}) = 4`),
+    check(
+      "payments_card_entry_mode_ck",
+      sql`${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
+    ),
   ],
 );

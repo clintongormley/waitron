@@ -26,6 +26,7 @@ export {
   expireInitiated,
   failAttempting,
   findCapturedPaymentForWorkingOrder,
+  findCapturedPaymentForWorkingOrderAnyProvider,
   findPaymentByRef,
   getPaymentByRef,
   insertAcceptedOffline,

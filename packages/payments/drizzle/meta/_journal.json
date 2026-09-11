@@ -15,6 +15,13 @@
       "when": 1788692497098,
       "tag": "0001_payments_baseline_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789133649957,
+      "tag": "0002_card_details",
+      "breakpoints": true
     }
   ]
 }
