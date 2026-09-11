@@ -265,6 +265,7 @@ describe("Management API staff + session routes over real Postgres", () => {
       { headers: { cookie: startLogin.headers.get("set-cookie")!.split(";")[0]! } },
     );
     expect(signedIn.status).toBe(302);
+    expect(signedIn.headers.get("location")).toBe("http://localhost/manage/?login=google");
     expect(signedIn.headers.get("set-cookie")).toContain("waitron_management_session=");
     expect(exchange).toHaveBeenCalledTimes(2);
     expect(exchange.mock.calls[0]![1]).toMatchObject({
@@ -557,6 +558,36 @@ describe("Management API staff + session routes over real Postgres", () => {
     await expect(login(app, STAFF_EMAIL, "a replacement password")).resolves.toMatch(
       /^waitron_management_session=/,
     );
+  });
+
+  it("uses the same recovery acknowledgement for pending and unknown accounts", async () => {
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const { tenantId, staffId } = await setupTenant();
+    await suite.admin.execute(
+      sql`update persons set status = 'pending', password_hash = null, pin_hash = null where id = ${staffId}`,
+    );
+    const app = mountApp(tenantId, async (message) => {
+      sent.push(message);
+    });
+    const request = (email: string) =>
+      app.request("/management-api/password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    const unknown = await request("unknown@x.com");
+    const pending = await request(STAFF_EMAIL);
+    expect(pending.status).toBe(202);
+    expect(unknown.status).toBe(202);
+    expect(await pending.text()).toBe(await unknown.text());
+    expect(pending.headers.get("set-cookie")).toBeNull();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ purpose: "invitation", email: STAFF_EMAIL });
+    expect(sent[0]!.code).toBeUndefined();
+    expect(new URL(sent[0]!.actionUrl).searchParams.get("purpose")).toBe("invitation");
+    const repeated = await request(` ${STAFF_EMAIL.toUpperCase()} `);
+    expect(repeated.status).toBe(202);
+    expect(sent).toHaveLength(1);
   });
 
   it("inspects an invitation without consuming it and resends only for a pending account", async () => {

@@ -12,7 +12,7 @@ import {
   inspectAccountActionByCode,
   issueAccountAction,
   requestInvitationAction,
-  requestPasswordResetAction,
+  requestAccountRecoveryAction,
 } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
@@ -313,11 +313,58 @@ describe("management account actions", () => {
     const personId = await seedManager(suite.db, tenantId, { email: "known@x.com" });
     await suite.db.execute(sql`update persons set email = 'Known@X.com' where id = ${personId}`);
     await expect(
-      run((tx) => requestPasswordResetAction(tx, { tenantId, email: "  KNOWN@X.COM  " })),
-    ).resolves.toMatchObject({ personId, email: "Known@X.com" });
+      run((tx) => requestAccountRecoveryAction(tx, { tenantId, email: "  KNOWN@X.COM  " })),
+    ).resolves.toMatchObject({ personId, email: "Known@X.com", purpose: "password_reset" });
     await expect(
-      run((tx) => requestPasswordResetAction(tx, { tenantId, email: "unknown@x.com" })),
+      run((tx) => requestAccountRecoveryAction(tx, { tenantId, email: "unknown@x.com" })),
     ).resolves.toBeNull();
+  });
+
+  it("uses the recovery entry to issue a setup link for a pending account", async () => {
+    const personId = await seedManager(suite.db, tenantId, { email: "recovery-pending@x.com" });
+    await makePending(personId);
+    const now = new Date("2026-09-11T12:00:00Z");
+    const issued = await run((tx) =>
+      requestAccountRecoveryAction(tx, { tenantId, email: " RECOVERY-PENDING@X.COM ", now }),
+    );
+    expect(issued).toMatchObject({ personId, purpose: "invitation" });
+    expect(issued?.code).toBeUndefined();
+    expect(Date.parse(issued!.expiresAt) - now.getTime()).toBe(ACCOUNT_ACTION_TTL_MS.invitation);
+    await expect(
+      run((tx) =>
+        completeAccountAction(tx, {
+          tenantId,
+          token: issued!.token,
+          purpose: "password_reset",
+          password: "a replacement password",
+          now,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "account_action.invalid" });
+    await expect(
+      run((tx) =>
+        completeAccountAction(tx, {
+          tenantId,
+          token: issued!.token,
+          purpose: "invitation",
+          password: "a replacement password",
+          pin: "1234",
+          now,
+        }),
+      ),
+    ).resolves.toMatchObject({ personId, session: { personId } });
+  });
+
+  it("does not issue recovery actions for suspended, malformed, or another tenant's accounts", async () => {
+    const personId = await seedManager(suite.db, tenantId, { email: "recovery-suspended@x.com" });
+    await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
+    const otherTenantId = await seedTenant(suite.db);
+    await seedManager(suite.db, otherTenantId, { email: "recovery-other@x.com" });
+    for (const email of ["recovery-suspended@x.com", "recovery-other@x.com", "malformed"]) {
+      await expect(
+        run((tx) => requestAccountRecoveryAction(tx, { tenantId, email })),
+      ).resolves.toBeNull();
+    }
   });
 
   it("changes the password without opening a session that bypasses an enrolled authenticator", async () => {

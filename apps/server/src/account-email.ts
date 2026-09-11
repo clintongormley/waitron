@@ -47,8 +47,6 @@ const COPY = {
     emailChangeAction: "confirm your new email address",
     emailChangeLink: "Open your Waitron profile",
     expires: (expiry: string) => `This single-use link expires at ${expiry}.`,
-    code: (code: string, expiry: string) =>
-      `At the restaurant, enter ${code} on the Waitron login screen. This code expires at ${expiry}.`,
     emailChangeCode: (code: string, expiry: string) =>
       `Enter ${code} in your Waitron profile. This code expires at ${expiry}.`,
     ignore: "If you did not expect this email, you can ignore it.",
@@ -66,8 +64,6 @@ const COPY = {
     emailChangeAction: "confirmar tu nueva dirección de correo",
     emailChangeLink: "Abre tu perfil de Waitron",
     expires: (expiry: string) => `Este enlace de un solo uso caduca el ${expiry}.`,
-    code: (code: string, expiry: string) =>
-      `En el restaurante, introduce ${code} en la pantalla de inicio de sesión de Waitron. Este código caduca el ${expiry}.`,
     emailChangeCode: (code: string, expiry: string) =>
       `Introduce ${code} en tu perfil de Waitron. Este código caduca el ${expiry}.`,
     ignore: "Si no esperabas este correo, puedes ignorarlo.",
@@ -77,7 +73,7 @@ const COPY = {
 
 /** Build an SMTP-backed sender. The optional transport is the unit-test seam. */
 export function createAccountEmailSender(
-  config: { url: string; from: string },
+  config: { url: string; from: string; timeZone: string },
   transport: MailTransport = nodemailer.createTransport(config.url),
 ): AccountEmailSender {
   return async (message) => {
@@ -100,15 +96,14 @@ export function createAccountEmailSender(
         : message.purpose === "password_reset"
           ? copy.resetLink
           : copy.emailChangeLink;
-    // Accounts are tenant-wide and a tenant may span time zones, so expiry is explicit UTC while its
-    // words and date order follow the recipient's UI locale.
+    // Use the deployment location's zone and the recipient's language, including daylight saving.
     const expiry = new Intl.DateTimeFormat(message.locale, {
       year: "numeric",
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: "UTC",
+      timeZone: config.timeZone,
       timeZoneName: "short",
     }).format(new Date(message.expiresAt));
     const codeExpiry = new Intl.DateTimeFormat(message.locale, {
@@ -117,15 +112,13 @@ export function createAccountEmailSender(
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: "UTC",
+      timeZone: config.timeZone,
       timeZoneName: "short",
     }).format(new Date(message.codeExpiresAt ?? message.expiresAt));
     const codeCopy =
-      message.code === undefined
-        ? undefined
-        : message.purpose === "email_change"
-          ? copy.emailChangeCode(message.code, codeExpiry)
-          : copy.code(message.code, codeExpiry);
+      message.code !== undefined && message.purpose === "email_change"
+        ? copy.emailChangeCode(message.code, codeExpiry)
+        : undefined;
     const text = [
       copy.hello(message.displayName),
       "",

@@ -28,6 +28,7 @@ export const webauthnCredentials = pgTable(
      * resolves exactly one credential; the (tenant_id, credential_id) composite is the seam the
      * verifier keys on. */
     credentialId: text("credential_id").notNull(),
+    name: text("name"),
     /** base64url of the COSE public key — used to verify the authentication assertion's signature. */
     publicKey: text("public_key").notNull(),
     /** The authenticator's signature counter, bumped on each successful assertion to detect a cloned

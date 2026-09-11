@@ -72,7 +72,7 @@ export {
   inspectAccountActionByCode,
   issueAccountAction,
   requestInvitationAction,
-  requestPasswordResetAction,
+  requestAccountRecoveryAction,
 } from "./account-action.js";
 export type {
   AccountActionCompletion,

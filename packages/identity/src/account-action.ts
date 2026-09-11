@@ -1,6 +1,6 @@
 import "./errors.js";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { isUniqueViolation, uniqueViolationConstraint, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
@@ -407,21 +407,21 @@ async function finishClaimedAction(
   };
 }
 
-/** Find and lock an active account before replacing its reset action; unknown states remain silent. */
-export async function requestPasswordResetAction(
+/** Lock the account before replacing its setup or reset action; unavailable accounts remain silent. */
+export async function requestAccountRecoveryAction(
   tx: Transaction,
   input: { tenantId: string; email: string; now?: Date },
 ): Promise<IssuedAccountAction | null> {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return null;
   const [person] = await tx
-    .select({ id: persons.id })
+    .select({ id: persons.id, status: persons.status })
     .from(persons)
     .where(
       and(
         eq(persons.tenantId, input.tenantId),
         eq(sql`lower(${persons.email})`, email),
-        eq(persons.status, "active"),
+        inArray(persons.status, ["active", "pending"]),
       ),
     )
     .for("update");
@@ -429,7 +429,7 @@ export async function requestPasswordResetAction(
   return issueAccountAction(tx, {
     tenantId: input.tenantId,
     personId: person.id,
-    purpose: "password_reset",
+    purpose: person.status === "pending" ? "invitation" : "password_reset",
     now: input.now,
   });
 }

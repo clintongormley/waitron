@@ -1,5 +1,11 @@
 # Dashboard account activation and recovery — design
 
+2026-09-11 owner update: [login-flow refinements](2026-09-11-login-flow-refinements-design.md)
+supersede the sign-in choices below where they conflict. Email entry opens password without an
+automatic passkey prompt; only opted-in email/method preferences persist, changing accounts clears
+them, and recovery uses one emailed-link entry for setup and reset. Manual invitation-code entry is
+removed. This document records the earlier design.
+
 Status: approved for implementation (2026-09-08).
 
 2026-09-09 owner update: the Dashboard flow below is superseded where it conflicts with the

@@ -215,14 +215,15 @@ unfiltered `main` run, not a wrong hook.
   session expiry uses the last browser match, or the venue default until that match is available.
   Guard late locale responses so they cannot overwrite a newly authenticated person's language
   or an explicit choice on sign-in (`apps/dashboard/src/dashboard-app.test.ts`).
-- **Dashboard login is passkey-first without account enumeration.** On the initial email screen,
-  offer passive browser passkey autofill when supported. After any syntactically valid email, start
-  the same explicit passkey ceremony. If it is cancelled, open the password form and show passkey
-  and recovery alongside it without an error. Never select that public next step from server-side
-  passkey enrolment, because the different UI outcome would reveal whether the account has a passkey.
-  A remembered account may skip email entry, but the preference is written only after authenticated
-  identity is known and an explicit logout never opens a modal prompt
-  (`apps/dashboard/src/screens/login-screen.ts`).
+- **Dashboard login offers methods without revealing account enrolment.** Offer passive browser
+  passkey autofill on email entry, then open the password form after Continue unless an opted-in
+  local preference selects another method. A modal passkey prompt requires an explicit action;
+  navigation, refresh, logout and session expiry never open one. Do not query account status or
+  passkey enrolment to choose the public screen. Save the authenticated email and successful method
+  only with Remember selected, never in tab storage. The change-account icon clears the saved
+  shortcut and current attempt. Recovery uses one public entry for pending-account setup and
+  active-account reset, with the same acknowledgement for every address. Owner decision:
+  `docs/superpowers/specs/2026-09-11-login-flow-refinements-design.md`.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
   `db.series_not_found` (design note atop `packages/shared/src/errors.ts`). Codes are **never renamed
   once shipped**; deprecate and add a sibling. `server.*` is reserved for facts about the process

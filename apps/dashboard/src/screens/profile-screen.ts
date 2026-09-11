@@ -42,7 +42,8 @@ type Field =
   | "pin"
   | "confirmPin"
   | "totp"
-  | "setupCode";
+  | "setupCode"
+  | "passkeyName";
 const emptyFields = (): Record<Field, string> => ({
   displayName: "",
   firstNames: "",
@@ -57,6 +58,7 @@ const emptyFields = (): Record<Field, string> => ({
   confirmPin: "",
   totp: "",
   setupCode: "",
+  passkeyName: "",
 });
 
 @customElement("dashboard-profile-screen")
@@ -258,6 +260,8 @@ export class ProfileScreen extends LitElement {
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
         errors.email = codeMessage("person.email_invalid");
     }
+    if (this.mode === "passkey" && f.passkeyName.trim().length > 80)
+      errors.passkeyName = t("profile.passkey_name_too_long");
     if (this.needsCredentials) {
       if (!f.currentPassword) errors.currentPassword = t("form.password_required");
       if (this.profile!.hasTotp && !f.totp) errors.totp = t("profile.code_required");
@@ -376,7 +380,11 @@ export class ProfileScreen extends LitElement {
     const response = await startRegistration({
       optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
     });
-    await this.api.passkeyRegisterVerify({ challengeHandle, response });
+    await this.api.passkeyRegisterVerify({
+      challengeHandle,
+      response,
+      name: this.fields.passkeyName.trim(),
+    });
   }
   override render() {
     const p = this.profile;
@@ -454,10 +462,10 @@ export class ProfileScreen extends LitElement {
                           (key, index) =>
                             html`<div class="passkey">
                               <span
-                                >${t("profile.passkey_number").replace("{number}", String(index + 1))}
+                                >${key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1))}
                                 · ${new Date(key.createdAt).toLocaleDateString()}</span
                               >
-                              ${p.hasPassword ? html`<wt-button data-test="remove-passkey" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_number").replace("{number}", String(index + 1))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
+                              ${p.hasPassword ? html`<wt-button data-test="remove-passkey" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_name").replace("{name}", key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1)))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
                             </div>`,
                         )
                   }
@@ -577,6 +585,7 @@ export class ProfileScreen extends LitElement {
                           ${this.#input("currentPassword", "profile.current_password", "password", "current-password")}${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
                       : nothing
                   }
+                  ${this.mode === "passkey" ? this.#input("passkeyName", "profile.passkey_name", "text", "off", false) : nothing}
                   ${this.mode === "password" ? html`${this.#input("password", "account.new_password", "password", "new-password")}${this.#input("confirmPassword", "account.confirm_password", "password", "new-password")}` : nothing}
                   ${this.mode === "pin" ? html`${this.#input("pin", "account.new_pin", "password", "off")}${this.#input("confirmPin", "account.confirm_pin", "password", "off")}` : nothing}
                   ${

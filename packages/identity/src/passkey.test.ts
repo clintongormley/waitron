@@ -105,13 +105,14 @@ const begin = (sessionId: string) =>
     }),
   );
 
-const finish = (sessionId: string, challengeHandle: string) =>
+const finish = (sessionId: string, challengeHandle: string, name?: unknown) =>
   run((tx) =>
     finishPasskeyRegistration(tx, {
       managementSessionId: sessionId,
       tenantId,
       challengeHandle,
       response: {} as never,
+      name,
       rpId: "localhost",
       origin: "http://localhost",
     }),
@@ -199,6 +200,36 @@ describe("passkey registration", () => {
       userVerification: "required",
     });
   });
+
+  it.each([
+    ["  Work laptop  ", "Work laptop"],
+    ["   ", null],
+    [undefined, null],
+    ["x".repeat(80), "x".repeat(80)],
+  ])("stores the optional passkey name %j", async (name, expected) => {
+    const { personId, sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    mockVerify.mockResolvedValue(verified("cred-named"));
+    const begun = await begin(sessionId);
+    await finish(sessionId, begun.challengeHandle, name);
+    const [credential] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
+    );
+    expect(credential).toHaveProperty("name", expected);
+  });
+
+  it.each(["x".repeat(81), 123, null])(
+    "refuses an invalid passkey name %j before registering",
+    async (name) => {
+      const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+      mockVerify.mockResolvedValue(verified("cred-invalid-name"));
+      const begun = await begin(sessionId);
+      await expect(finish(sessionId, begun.challengeHandle, name)).rejects.toMatchObject({
+        code: "profile.invalid",
+        params: { field: "passkeyName" },
+      });
+      expect(mockVerify).not.toHaveBeenCalled();
+    },
+  );
 
   it("requires user verification on the registration verify (requireUserVerification: true)", async () => {
     const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");

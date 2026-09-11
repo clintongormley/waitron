@@ -48,7 +48,7 @@ import {
   reactivatePersonForInvitation,
   resolveManagementSession,
   resetPersonLogin,
-  requestPasswordResetAction,
+  requestAccountRecoveryAction,
   requestInvitationAction,
   readOwnProfile,
   updatePersonDetails,
@@ -605,15 +605,17 @@ function parseInactivityTimeoutSeconds(value: unknown): number | null {
  */
 async function parsePasskeyVerifyBody(
   c: Context,
-): Promise<{ challengeHandle: string; response: object }> {
-  const body = await readJsonBody<{ challengeHandle?: string; response?: unknown }>(c);
+): Promise<{ challengeHandle: string; response: object; name?: unknown }> {
+  const body = await readJsonBody<{ challengeHandle?: string; response?: unknown; name?: unknown }>(
+    c,
+  );
   if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
     throw new AppError("management.request_invalid", { field: "challengeHandle" });
   }
   if (typeof body.response !== "object" || body.response === null) {
     throw new AppError("management.request_invalid", { field: "response" });
   }
-  return { challengeHandle: body.challengeHandle, response: body.response };
+  return { challengeHandle: body.challengeHandle, response: body.response, name: body.name };
 }
 
 /**
@@ -760,7 +762,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return loginWithGoogle(tx, { tenantId: deps.cfg.tenantId, subject });
       });
       setManagementCookie(c, completion.id, deps.secureCookies);
-      return c.redirect(`${deps.origin}/manage/`);
+      return c.redirect(`${deps.origin}/manage/?login=google`);
     }),
   );
   // The deployment holds one tenant per database. Roster of active persons. Deliberately
@@ -860,8 +862,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Password recovery always answers 202, whether the address is malformed, unknown, unconfigured
-  // for mail, or accepted. That keeps account membership out of this public response.
+  // Recovery delivers setup links to pending accounts and reset links to active accounts. The
+  // same 202 response keeps account membership and status out of this public response.
   app.post("/management-api/password-reset", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<{ email?: unknown }>(c);
@@ -874,7 +876,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (typeof body.email === "string") {
         const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
           await asAppUser(tx);
-          return requestPasswordResetAction(tx, {
+          return requestAccountRecoveryAction(tx, {
             tenantId: deps.cfg.tenantId,
             email: body.email as string,
           });
@@ -2598,7 +2600,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/passkey/register/verify", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
+      const { challengeHandle, response, name } = await parsePasskeyVerifyBody(c);
       const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId: sessionId });
@@ -2607,6 +2609,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           tenantId: deps.cfg.tenantId,
           challengeHandle,
           response: response as never,
+          name,
           rpId: deps.rpId,
           origin: deps.origin,
         });

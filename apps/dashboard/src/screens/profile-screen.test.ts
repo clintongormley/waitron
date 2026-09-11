@@ -43,7 +43,7 @@ function apiStub(overrides: Record<string, unknown> = {}) {
       hasPassword: true,
       hasTotp: false,
       hasGoogle: false,
-      passkeys: [{ id: "credential", createdAt: "2026-09-09T12:00:00Z" }],
+      passkeys: [{ id: "credential", name: null, createdAt: "2026-09-09T12:00:00Z" }],
     }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [
@@ -116,6 +116,33 @@ describe("your profile", () => {
       el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="privacy-notice"]')!.href,
     ).toBe("https://restaurant.example/privacy");
     await expectNoA11yViolations(host);
+  });
+  it("shows a passkey's name and keeps a numbered fallback for unnamed keys", async () => {
+    const { el, api } = await mount();
+    expect(el.shadowRoot!.textContent).toContain("Passkey 1");
+    const profile = await api.getProfile();
+    Object.assign(el, {
+      profile: { ...profile, passkeys: [{ ...profile.passkeys[0], name: "Work laptop" }] },
+    });
+    await flush(el);
+    expect(el.shadowRoot!.textContent).toContain("Work laptop");
+    expect(
+      el.shadowRoot!.querySelector("[data-test=remove-passkey]")!.getAttribute("aria-label"),
+    ).toBe(t("profile.remove_passkey_name").replace("{name}", "Work laptop"));
+  });
+  it("explains an overlong passkey name before starting registration", async () => {
+    const { el, api } = await mount();
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    input(el, "passkeyName", "x".repeat(81));
+    await click(el, "save");
+    expect(api.passkeyRegisterOptions).not.toHaveBeenCalled();
+    expect(
+      el.shadowRoot!.querySelector("wt-input[name=passkeyName]")!.getAttribute("error"),
+    ).toContain("80");
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toEqual([
+      t("profile.passkey_name_too_long"),
+    ]);
   });
   it("starts Google linking when the installation is configured", async () => {
     const { el, api } = await mount();
@@ -231,6 +258,7 @@ describe("your profile", () => {
     const warn = vi.spyOn(console, "warn");
     const { el, api } = await mount();
     await click(el, "add-passkey");
+    input(el, "passkeyName", "  Work laptop  ");
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({ currentPassword: "current" });
@@ -247,6 +275,7 @@ describe("your profile", () => {
     });
     expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
       challengeHandle: "handle",
+      name: "Work laptop",
       response: {
         id: "new-credential",
         rawId: "AQ",

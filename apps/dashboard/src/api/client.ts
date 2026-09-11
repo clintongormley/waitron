@@ -36,7 +36,7 @@ export interface OwnProfile {
   hasPassword: boolean;
   hasTotp: boolean;
   hasGoogle: boolean;
-  passkeys: Array<{ id: string; createdAt: string }>;
+  passkeys: Array<{ id: string; name: string | null; createdAt: string }>;
 }
 export interface ProfileCredentials {
   currentPassword?: string;
@@ -1623,7 +1623,9 @@ export class DashboardApi {
    * `POST /management-api/passkey/register/verify` — finish enrolling a passkey: the signed response
    * from `startRegistration` plus the handle from `passkeyRegisterOptions`. Answers `{ credentialId }`.
    */
-  passkeyRegisterVerify(body: PasskeyVerification): Promise<{ credentialId: string }> {
+  passkeyRegisterVerify(
+    body: PasskeyVerification & { name?: string },
+  ): Promise<{ credentialId: string }> {
     return this.#request<{ credentialId: string }>(
       "/management-api/passkey/register/verify",
       "POST",

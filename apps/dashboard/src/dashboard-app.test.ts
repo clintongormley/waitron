@@ -847,14 +847,115 @@ describe("dashboard-app", () => {
       }),
     );
     await flush(el);
-    expect(JSON.parse(sessionStorage.getItem("waitron-login-preference")!)).toEqual({
+    expect(JSON.parse(localStorage.getItem("waitron-login-preference")!)).toEqual({
       email: "actual@example.com",
       method: "passkey",
     });
-    expect(localStorage.getItem("waitron-login-preference")).toBe(
-      sessionStorage.getItem("waitron-login-preference"),
-    );
+    expect(sessionStorage.getItem("waitron-login-preference")).toBeNull();
   });
+
+  it("does not carry a remembered account's consent to a different passkey identity", async () => {
+    localStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "saved@example.com", method: "passkey" }),
+    );
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "other",
+          role: "manager",
+          email: "other@example.com",
+          locale: null,
+          venueLocale: "es-ES",
+          venueName: "Deli Test SL",
+          permissions: [],
+          modules: [],
+        }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    emit(login(el)!, "logged-in", {
+      loginMethod: "passkey",
+      rememberEmail: true,
+      rememberedEmail: "saved@example.com",
+    });
+    await flush(el);
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+  });
+
+  it("remembers an opted-in Google callback only after its identity probe succeeds", async () => {
+    history.replaceState(null, "", "/manage/?login=google");
+    sessionStorage.setItem(
+      "waitron-google-login-preference",
+      JSON.stringify({ expiresAt: Date.now() + 60000 }),
+    );
+    let resolve!: (value: unknown) => void;
+    const api = stubApi({
+      getMe: vi.fn().mockImplementation(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+    expect(sessionStorage.getItem("waitron-google-login-preference")).toBeNull();
+    expect(location.search).not.toContain("login=google");
+    resolve({
+      personId: "google-person",
+      role: "manager",
+      email: "google@example.com",
+      locale: null,
+      venueLocale: "es-ES",
+      venueName: "Deli Test SL",
+      permissions: [],
+      modules: [],
+    });
+    await flush(el);
+    expect(JSON.parse(localStorage.getItem("waitron-login-preference")!)).toEqual({
+      email: "google@example.com",
+      method: "google",
+    });
+  });
+
+  it.each(["failed", "different-account", "not-callback", "unchecked"])(
+    "does not save Google preference for %s",
+    async (scenario) => {
+      history.replaceState(
+        null,
+        "",
+        scenario === "not-callback" ? "/manage/" : "/manage/?login=google",
+      );
+      if (scenario !== "unchecked")
+        sessionStorage.setItem(
+          "waitron-google-login-preference",
+          JSON.stringify({ expiresAt: Date.now() + 60000, rememberedEmail: "saved@example.com" }),
+        );
+      const api = stubApi({
+        getMe:
+          scenario === "failed"
+            ? vi.fn().mockRejectedValue({ code: "management_session.required" })
+            : vi.fn().mockResolvedValue({
+                personId: "other",
+                role: "manager",
+                email: "other@example.com",
+                locale: null,
+                venueLocale: "es-ES",
+                venueName: "Deli Test SL",
+                permissions: [],
+                modules: [],
+              }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+      expect(sessionStorage.getItem("waitron-google-login-preference")).toBeNull();
+    },
+  );
 
   it("does not show the logout control on the login screen", async () => {
     const api = stubApi({
@@ -1749,8 +1850,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
   it("applies the supplied login default in nested controls", async () => {
     // No session → stays on `login`; the boot seed reads getLocales and applies its loginDefault (en-GB,
-    // which differs from the es-ES module default so the switch is observable). The login screen is
-    // recreated by the `keyed(currentLocale(), …)` wrapper, so a DEEP child of its own shadow renders English.
+    // which differs from the es-ES module default so the switch is observable). The login controller
+    // repaints its translated content without recreating the current attempt.
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
       getLocales: vi.fn().mockResolvedValue({
@@ -1765,8 +1866,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("en-GB");
     // The email/password field labels live inside the wt-input primitive's own shadow root, so a
     // localised string that renders in the login screen's OWN shadow is the observable proxy: the
-    // first-step button's slotted text. It differs across locales, so it proves the keyed re-render
-    // reached this deep child in the seeded venue default (en-GB), not the module default (es-ES).
+    // first-step button's slotted text differs across locales and exercises the login controller's
+    // response to the server's language default.
     const submit = login(el)!.shadowRoot!.querySelector("[data-test=continue]")!;
     expect(submit.textContent).toContain(t("action.continue", "en-GB")); // "Continue"
     expect(submit.textContent).not.toContain(t("action.continue", "es-ES")); // not "Continuar"
@@ -1863,6 +1964,38 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("en-GB"); // switched
     expect(api.putLocale).not.toHaveBeenCalled(); // but NOT persisted
   });
+
+  it.each(["password", "setup-passkey"] as const)(
+    "keeps the %s attempt when its language changes",
+    async (step) => {
+      const api = stubApi({
+        getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      const screen = login(el)!;
+      Object.assign(screen, {
+        step,
+        email: "typed@example.com",
+        password: "current secret",
+        passkeyName: "Work laptop",
+      });
+      await flush(el);
+      emit(loginChooser(el)!, "locale-selected", { code: "en-GB" });
+      await flush(el);
+      expect(login(el)).toBe(screen);
+      expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
+        t(step === "password" ? "login.password_heading" : "account.offer_passkey", "en-GB"),
+      );
+      expect(screen.shadowRoot!.textContent).toContain("typed@example.com");
+      expect(screen).toMatchObject({
+        step,
+        password: "current secret",
+        passkeyName: "Work laptop",
+      });
+      expect(api.putLocale).not.toHaveBeenCalled();
+    },
+  );
 
   it("renders the chooser in the logged-in shell, and a pick there persists (putLocale) then switches (setLocale)", async () => {
     const putLocale = vi.fn().mockResolvedValue(undefined);

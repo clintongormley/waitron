@@ -310,32 +310,43 @@ locales) edge. Do not show Logout before authentication.
 
 ### Dashboard authentication
 
-Offer passive passkey autofill on the initial email screen when the browser supports it. After a
-syntactically valid email address is submitted, start an explicit passkey prompt as the primary
-method. Render the same passkey-first step for every valid address: choosing the next screen from
-server-side passkey enrolment would reveal whether an account has a passkey. If the device prompt is
-cancelled, open the password form without an error and show passkey and recovery actions alongside
-it. A remembered account skips email entry but waits for an explicit passkey click or focuses the
-password field; logout never opens a modal device prompt.
+Show **Please log in to continue** above the initial Email field and offer passive passkey autofill
+when the browser supports it. Continue opens the password form for an email without a saved method.
+An opted-in preference can select the returning method, but a modal passkey prompt still needs an
+explicit action. Navigation, refresh, logout and session expiry must leave that prompt closed.
+Never use server-side account status or passkey enrolment to select a public screen, because the
+difference would reveal whether the account exists or has a passkey.
 
-On login, put **Try another way** below the Cancel and primary action buttons. **Cancel** ends the
-whole sign-in attempt and returns to an empty email form, clearing credentials and errors. Password
-recovery opens a separate **Check your email** screen with the address, delivery guidance, and a
-one-minute resend countdown. Keep the same confirmation for known and unknown addresses.
+On method screens, use **Login with password** or **Login with passkey** as the heading. Show an
+Email label and the address as text, with an accessible change-account icon on the right. That icon
+clears both the current attempt and the saved email/method, then returns to blank email entry.
+Keep the hidden semantic username input for password managers. Ordinary login has no separate
+Cancel or Forget button.
 
-Offer **Remember my email on this device** on credential screens. It stores only the successfully
-authenticated email and method. **Use another account** clears the current tab shortcut while
-retaining an opted-in device preference; **Forget this account** removes the matching account from
-both. Turning the checkbox off removes that account's device preference immediately.
+Show alternative methods as a persistent bulleted list of links. Put **I've forgotten my password**
+directly below the password field. Recovery opens **Check your email** with the address, delivery
+guidance and a one-minute resend countdown. Use the same public acknowledgement for every address:
+pending accounts receive a setup link and active accounts receive a reset link. Invitation emails
+use links; the login screen has no manual invitation-code entry.
+
+Offer **Remember my email on this device** only on initial email entry. Save the authenticated email
+and successful method in localStorage only when selected; unchecked Remember writes neither local
+nor session storage. Keep the current email in component memory while you change methods. Saving a
+shortcut neither stores credentials nor extends the authenticated session, and one account's consent
+must not carry over to a different account selected by a passkey or Google.
 
 Keep an authenticator or recovery code off the password form. Request it on a separate screen only
 after the server accepts the password and says the account requires a second factor. Keep the
 password in component memory for the second request, and issue no session before both checks pass.
 
-Invitation links validate their action before showing new credentials. An invalid or expired
-invitation can request a replacement with the same acknowledgement for every account state. The
-authenticator setup screen presents the enrolment URI as a QR code, keeps the setup key behind a
-manual fallback, and enables the factor only after the server accepts a current six-digit code.
+Account setup and password-reset links validate their action before showing new credentials. Show
+the language chooser and the server-confirmed email on these forms. An invalid or expired action
+can request a replacement with the same acknowledgement for every account state. After setting a
+password, offer optional passkey creation with a recognizable name. A password reset still requires
+normal sign-in, including any enrolled second factor, before that offer.
+
+The authenticator setup screen presents the enrolment URI as a QR code, keeps the setup key behind
+a manual fallback, and enables the factor only after the server accepts a current six-digit code.
 
 Every authenticated dashboard banner includes **Your profile**, including for staff without a
 sidebar. Profile edits cannot expose role or suspension controls.

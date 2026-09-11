@@ -51,7 +51,12 @@ import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
 import "./screens/email-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
-import { rememberSuccessfulLogin, type LoginMethod } from "./login-preference.js";
+import {
+  consumeGoogleLoginPreference,
+  rememberSuccessfulLogin,
+  type LoginMethod,
+  type PendingLoginPreference,
+} from "./login-preference.js";
 
 /**
  * The faces of the management dashboard: sign in, view your own self-service schedule, manage staff,
@@ -414,7 +419,6 @@ export class DashboardApp extends LitElement {
   /** The logged-in person's id, threaded to the staff self-service screen (its colleague picker filters
    * this out, and it names a swap's counterparty). Empty until a probe/login resolves. */
   @state() private myPersonId = "";
-  private pendingLoginPreference?: { method: LoginMethod; persistent: boolean };
 
   @state() private sessionNoticeCode: string | null = null;
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
@@ -468,9 +472,8 @@ export class DashboardApp extends LitElement {
 
   constructor() {
     super();
-    // Follow a locale switch made anywhere (seed/login/the chooser's setLocale): on a locale change the
-    // controller calls requestUpdate(), re-running render() so `keyed(currentLocale(), …)` re-keys and the
-    // screen repaints. The screens read `t()` at render time, so recreating them applies the switch.
+    // Repaint the shell on language changes; authenticated screens are recreated by their locale key.
+    // Login observes the locale itself so its current attempt survives the switch.
     new LocaleChangeController(this);
   }
 
@@ -507,11 +510,18 @@ export class DashboardApp extends LitElement {
   /** Account-action links open their form even with an existing session. Otherwise probe first,
    * then seed the login language only when signed out, preserving a signed-in person's preference. */
   async #boot(): Promise<void> {
-    if (new URLSearchParams(window.location.search).has("token")) {
+    const url = new URL(window.location.href);
+    const googleCallback = url.searchParams.get("login") === "google";
+    const preference = consumeGoogleLoginPreference(googleCallback);
+    if (googleCallback) {
+      url.searchParams.delete("login");
+      history.replaceState(history.state, "", url);
+    }
+    if (url.searchParams.has("token")) {
       await this.#seedLocale();
       return;
     }
-    await this.#probeSession();
+    await this.#probeSession(preference);
     if (this.screen === "login") await this.#seedLocale();
   }
 
@@ -543,13 +553,13 @@ export class DashboardApp extends LitElement {
    * an unhandled promise rejection (the `apps/till` `#boot` follow-up, `docs/backlog.md`), and dropping
    * to login is the safe default for every failure anyway.
    */
-  async #probeSession(): Promise<void> {
+  async #probeSession(preference?: PendingLoginPreference): Promise<void> {
     const generation = this.sessionGeneration;
     const wasAuthenticated = this.sessionRole !== undefined;
     try {
       const me = await this.api.getMe();
       if (!this.isConnected || generation !== this.sessionGeneration) return;
-      this.#applyMe(me);
+      this.#applyMe(me, preference);
     } catch (error) {
       if (!this.isConnected || generation !== this.sessionGeneration) return;
       const code = codeOf(error);
@@ -569,30 +579,33 @@ export class DashboardApp extends LitElement {
 
   /** Restore a permitted URL destination after authentication and apply the person's language.
    * The disconnect guard protects both browser history and the shared locale from a late response. */
-  #applyMe(me: {
-    personId: string;
-    role: PersonRole;
-    email: string | null;
-    locale: string | null;
-    venueLocale: string;
-    permissions: string[];
-    modules: string[];
-    venueName: string;
-    onboardingIntent?: "demo" | "prepare" | "live";
-    sessionExpiresInSeconds?: number;
-    sessionIdleTimeoutSeconds?: number;
-  }): void {
+  #applyMe(
+    me: {
+      personId: string;
+      role: PersonRole;
+      email: string | null;
+      locale: string | null;
+      venueLocale: string;
+      permissions: string[];
+      modules: string[];
+      venueName: string;
+      onboardingIntent?: "demo" | "prepare" | "live";
+      sessionExpiresInSeconds?: number;
+      sessionIdleTimeoutSeconds?: number;
+    },
+    preference?: PendingLoginPreference,
+  ): void {
     if (!this.isConnected) return;
     this.sessionNoticeCode = null;
     this.myPersonId = me.personId;
-    if (this.pendingLoginPreference !== undefined && typeof me.email === "string") {
+    if (preference !== undefined && typeof me.email === "string") {
       rememberSuccessfulLogin(
         me.email,
-        this.pendingLoginPreference.method,
-        this.pendingLoginPreference.persistent,
+        preference.method,
+        preference.persistent,
+        preference.rememberedEmail,
       );
     }
-    this.pendingLoginPreference = undefined;
     this.sessionRole = me.role;
     this.#sessionPermissions = me.permissions;
     // Activate ONLY the enabled modules (`me.modules`) before resolving the permitted screen, so a URL
@@ -699,15 +712,16 @@ export class DashboardApp extends LitElement {
         accountSetup?: boolean;
         loginMethod?: LoginMethod;
         rememberEmail?: boolean;
+        rememberedEmail?: string;
       }>
     ).detail;
     const accountSetup = detail?.accountSetup === true;
-    this.pendingLoginPreference = {
+    const preference: PendingLoginPreference = {
       method: detail?.loginMethod ?? "password",
       persistent: detail?.rememberEmail === true,
+      rememberedEmail: detail?.rememberedEmail,
     };
-    await this.#probeSession();
-    this.pendingLoginPreference = undefined;
+    await this.#probeSession(preference);
     if (accountSetup && this.sessionRole !== undefined && this.isConnected) {
       this.#selectScreen("profile");
     }
@@ -759,23 +773,19 @@ export class DashboardApp extends LitElement {
 
   override render(): TemplateResult {
     if (this.screen === "login") {
-      // The login screen's own chooser bubbles its composed `locale-selected` up to this `<div>`, where
-      // `#onLocaleSelected` turns a pre-login pick into a transient switch. `keyed(currentLocale(), …)`
-      // recreates the login screen on a locale change so it repaints in the new language (it holds no controller).
+      // The login controller repaints translated text without discarding credentials or account setup.
+      // Its chooser bubbles here so the shell can apply the transient pre-login language choice.
       return html`
         ${this.#banner(false, false)}
         <div
           class="body"
           @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         >
-          ${keyed(
-            currentLocale(),
-            html`<dashboard-login-screen
-              .api=${this.api}
-              .noticeCode=${this.sessionNoticeCode}
-              @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
-            ></dashboard-login-screen>`,
-          )}
+          <dashboard-login-screen
+            .api=${this.api}
+            .noticeCode=${this.sessionNoticeCode}
+            @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
+          ></dashboard-login-screen>
         </div>
       `;
     }
