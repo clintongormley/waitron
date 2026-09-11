@@ -288,8 +288,9 @@ Unit and real-Postgres coverage:
 - **The loopback gate, proven by deletion.** Remove the loopback check and a non-loopback caller succeeds
   — record the RED/GREEN. A negative control from a non-loopback address must be refused with
   `node.enrol_not_local` for the reason claimed, not incidentally.
-- **The primary predicate.** A standby refuses self-enrol with `node.enrol_unavailable`; a primary
-  succeeds. Real Postgres, because the write and the role matter.
+- **The primary predicate.** A non-primary node refuses self-enrol at the route with `node.enrol_unavailable`
+  (the isolated route test has no read-only gate); a primary succeeds. Real Postgres, because the write
+  and the role matter.
 - **Idempotency (real Postgres).** Two self-enrols from the same node produce one row with a refreshed
   token, not two rows; the row id is stable so a bound printer stays bound.
 - **The sticking revoke and the way back.** A revoked node's self-enrol is refused with

@@ -139,7 +139,7 @@ declare module "@waitron/shared" {
      * Mapped to HTTP 403 by node-enrol-api.ts's local STATUS map, not here. */
     "node.enrol_not_local": Record<string, never>;
     /** This node cannot self-enrol a print agent because it is not the primary — only the primary can
-     * write `print_agents` (a mirror's DB is a read-only subscriber). The mirror-today case (spec §7).
+     * write `print_agents` (a mirror's DB is a read-only subscriber). The defensive refusal for a non-primary node the read-only gate does not cover — a real mirror's POST is refused earlier with `node.read_only` (spec §5).
      * Mapped to HTTP 409 by node-enrol-api.ts's local STATUS map, not here. */
     "node.enrol_unavailable": Record<string, never>;
     /**
