@@ -2,7 +2,7 @@
 # node keeps lives in the named volumes below, so `docker volume` is the whole of a box's life.
 #
 # Operating this file — including which CLI invocation bypasses the entrypoint and which does not —
-# is deploy/README.md. `deploy/prepare.sh` installs this once per box; the restaurant never runs it.
+# is deploy/README.md. `deploy/waitron.sh install` installs this once per box; the restaurant never runs it.
 name: waitron
 
 services:
@@ -98,7 +98,7 @@ services:
         "max_slot_wal_keep_size=4GB",
       ]
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?deploy/.env must set POSTGRES_PASSWORD — prepare.sh generates it}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?deploy/.env must set POSTGRES_PASSWORD — waitron.sh install generates it}
     networks:
       - internal
     # Loopback only. The cluster is never LAN-reachable, which is what lets pg_hba stay the image's

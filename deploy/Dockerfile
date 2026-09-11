@@ -148,7 +148,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/med
 # These are the ON-PREM default, not a fixed fact: they are right only for a box reached at
 # waitron.local, so compose.yml passes both from the box's .env with these as the fallback (the
 # image's ENV beats trading.env, box-env.ts, so .env is the only override an operator has). They are
-# copies of boot.ts's BOX_HOSTNAME, pinned to it — along with compose's defaults and prepare.sh's
+# copies of boot.ts's BOX_HOSTNAME, pinned to it — along with compose's defaults and waitron.sh's
 # QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one of the four
 # fail rather than ship a box whose certificate, QR and relying party disagree.
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \

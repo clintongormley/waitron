@@ -288,7 +288,7 @@ const BACKUP_ENV_KEYS = [
  *
  * Three copies of this string live outside this process, where no import can reach them: the
  * image's `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`, compose's defaults for the
- * same, and `prepare.sh`'s QR URL. `scripts/deploy-image-env.test.ts` reads this line as text and
+ * same, and `waitron.sh`'s QR URL. `scripts/deploy-image-env.test.ts` reads this line as text and
  * pins all three to it.
  */
 const BOX_HOSTNAME = "waitron.local";

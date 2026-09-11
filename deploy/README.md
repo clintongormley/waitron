@@ -14,35 +14,36 @@ a box's life — back those up and you have backed up the box.
 | `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)               |
 | `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                    |
 
-## Preparing a box
+## Setting up a box
 
-Once per box, by whoever prepares it — never by the restaurant. On a box that already has this
-directory, run the script directly:
-
-```bash
-sudo ./prepare.sh
-```
-
-Or, from nothing but a fresh Debian/Ubuntu box with internet, fetch and run in one line:
+Once per box, by whoever prepares it — never by the restaurant. From nothing but a fresh
+Debian/Ubuntu box with internet, fetch and run one script in one line:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/waitron.sh -o waitron.sh
+sudo bash waitron.sh install
 ```
 
-`install.sh` downloads `prepare.sh` and the files it needs, then hands off to it — everything below
-is unchanged. Pin a revision instead of tracking `main` with `WAITRON_REF`, and every `prepare.sh`
-variable still passes through: `curl … | sudo WAITRON_REF=<tag-or-sha> WAITRON_DIR=/srv/waitron bash`.
-
-`prepare.sh` installs Docker Engine and the compose plugin if they are missing (Debian and Ubuntu only; on
-anything else it says so and exits 2), enables the daemon at boot, copies `compose.yml` and
-`.env.example` into `/opt/waitron`, generates the box's `POSTGRES_PASSWORD` into `/opt/waitron/.env`,
-pulls the images and starts them. It is non-interactive and idempotent: running it twice does
-nothing the second time, and in particular it never mints a second `POSTGRES_PASSWORD` — the cluster
-keeps the first one, so a regenerated `.env` would lock the app out of its own database.
+`install` installs Docker Engine and the compose plugin if they are missing (Debian and Ubuntu only;
+on anything else it says so and exits 2), enables the daemon at boot, fetches `compose.yml` and
+`.env.example` from the ref you are installing — overwriting any local copy of those two files, and
+printing a line to say so, because the compose file and the image running against it must always come
+from the same commit — generates the box's `POSTGRES_PASSWORD` into `.env` the first time, pulls the
+published image, and starts the containers. It is non-interactive and idempotent: running it again
+later (to update, say) does nothing destructive, and in particular it never mints a second
+`POSTGRES_PASSWORD` — the cluster keeps the first one, so a regenerated `.env` would lock the app out
+of its own database.
 
 It finishes by printing — and, when a monitor is attached, showing on the console — a QR of
 `https://waitron.local`. That URL resolves only once the app is serving, so the whole instruction to
 the restaurant is: open it on your phone, and if it does not load, wait a minute.
+
+On a box that already has a checkout of this repository, run the script directly instead of piping it
+through `bash`:
+
+```bash
+sudo deploy/waitron.sh install
+```
 
 Set `WAITRON_DIR` to install somewhere other than `/opt/waitron` (that is how the script is
 exercised on a developer machine without touching `/opt`).
@@ -85,30 +86,28 @@ fresh image starts a new container and the previous boot's output goes with the 
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to
-GHCR), so there is no PR image to `pull`. `try-branch.sh` builds one on the box — Docker fetches the
-branch itself, so no checkout or `pnpm` is needed — and runs it, leaving `.env` untouched. The box
-must already be prepared (Docker installed and `/opt/waitron/compose.yml` in place from `prepare.sh`);
-this only swaps the image, it does not set a box up.
+GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
+instead of relying on the default `main`, and it builds that ref's image on the box instead of
+pulling: Docker fetches the ref itself, so no checkout or `pnpm` is needed.
 
 ```bash
-deploy/try-branch.sh <branch-or-ref> [extra docker build args…]
-# on a box that has no checkout (already prepared):
-curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/try-branch.sh | sudo bash -s -- <branch-or-ref>
+sudo bash waitron.sh install <branch-or-ref> [extra docker build args…]
 ```
 
 It tags the image after the ref (`waitron:<ref>`, with unsafe characters dashed and the name capped
-to a valid length) and sets `WAITRON_IMAGE` inline for that one `docker compose up`. A plain
-`docker compose up -d` afterwards drops back to whatever the box's `.env` selects — the published
-`:main` unless you have set `WAITRON_IMAGE` there. `<ref>` is any ref on the public repo — a PR
-branch, or a commit SHA to pin exactly what you build. Add `sudo` if your user is not in the `docker`
-group; the first build takes several minutes (it builds the whole app).
+to a valid length) and writes that tag into `.env` as `WAITRON_IMAGE` (and the print agent's
+equivalent as `WAITRON_PRINT_AGENT_IMAGE`), so the box STAYS on that build across reboots and a bare
+`docker compose up -d` — not just for the one run that installed it. Run `install` with no ref to go
+back to the published `main` image; that removes those two lines from `.env` again. Add `sudo` if
+your user is not in the `docker` group; the first build takes several minutes (it builds the whole
+app).
 
-**It migrates the box's database one way.** If the branch carries a database migration, running it
-changes the box's database, and there is no backward migration — a plain `docker compose up -d` back
-to `:main` afterwards can fail to boot with `provisioning.database_ahead`, whose only fix is
-restoring from a backup or reinstalling. The script cannot tell whether a given ref carries one (the
-branch's files are not on the box until the build fetches them), so it warns every time. Safe on a
-demo box; take a backup first on a box holding a real venue's records.
+**It can migrate the box's database one way.** If the ref you install carries a database migration,
+running it changes the box's database, and there is no backward migration — installing an older ref
+afterwards (a plain `install` back to `main` included) can then fail to boot with
+`provisioning.database_ahead`. On a box you use for testing, `waitron.sh reset` (below) clears this
+by wiping the database; on a box holding a real venue's records, take a backup first and install a
+newer ref instead of resetting.
 
 ### The health check accepts either endpoint
 
@@ -116,6 +115,38 @@ demo box; take a backup first on a box holding a real venue's records.
 not trading-healthy — and `GET /setup-api/status` exists **only** in setup mode. The compose
 healthcheck therefore passes when EITHER returns 200. A probe on one alone would restart-loop one of
 the two modes forever, so do not "simplify" it.
+
+## Resetting a box
+
+`reset` wipes a box back to a clean state — the database, the wizard's settings, and the box's local
+backups — then brings it straight back up, so the next thing anyone opens is the setup wizard, as if
+the box had just been installed. Use it to get a demo or test box back to a known state. It is not a
+recovery tool for a box holding real trading data — see the refusal below.
+
+```bash
+sudo bash waitron.sh reset          # wipe the database and settings, keep the box's certificate
+sudo bash waitron.sh reset --all    # also wipe the certificate, so a new one is minted on next boot
+```
+
+Both forms wipe the database and every other volume except one folder: plain `reset` keeps `tls/`
+inside the box's `state` volume, which holds the certificate authority the phone already trusts and
+the box's own certificate signed by it. Because that folder survives, a phone that has already been
+told to trust this box does not need to trust it again after a plain `reset`. `reset --all` throws
+`tls/` away too, so the box mints a brand-new certificate authority on its next boot and every phone
+has to go through the trust step again. Neither form touches `.env`, so the box's Postgres password
+and whichever image `install` last selected both survive a reset — only the data inside the
+containers is wiped.
+
+At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
+without a terminal (an unattended script) it needs `--yes` instead.
+
+**`reset` refuses on a box stamped for production.** A box that has gone live holds real records
+filed with the Spanish tax agency that cannot be recreated, and `reset` would destroy them — see
+`CLAUDE.md` §5 on why that data is unrecoverable. A box that has never been set up, or is still in
+demo/test mode, is not stamped and resets freely with no extra flag; that is the normal demo
+workflow. The only way past the refusal on a genuinely production box is deliberate: pass
+`--force-production`, and, when run at a terminal, also type the word `production` when asked.
+Full design: `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §4.
 
 ## The operator CLIs — two different invocation forms
 
@@ -155,7 +186,7 @@ middle of a cold restore, so it is worth reading twice:
 
 **`POSTGRES_PASSWORD`** is the one secret a box needs before anything runs: the `db` container
 consumes it at first start, and compose derives the app's `WAITRON_BOOTSTRAP_DATABASE_URL` from it.
-`prepare.sh` generates it and never prints it. Everything else the box holds — the vault key ring,
+`waitron.sh install` generates it and never prints it. Everything else the box holds — the vault key ring,
 the CA and leaf certificates, the node's own secrets — is minted on the first setup boot into the
 `state` volume.
 

@@ -102,11 +102,14 @@ steps take owner sign-off at land):
 
 1. **A node as containers, and a from-scratch primary. Container packaging LANDED #285** — the
    two containers + `deploy/compose.yml` + named volumes,
-   `deploy/prepare.sh` (with `deploy/install.sh`, a `curl … | sudo bash` run-from-web wrapper that
-   fetches `prepare.sh` and the files it needs, then hands off — tracks `main`, pinnable via
-   `WAITRON_REF`; distinct from the bootable-USB installer below — and `deploy/try-branch.sh`, a
-   dev/operator helper that builds and runs an unmerged PR branch's image on a prepared box before
-   merge, overriding `WAITRON_IMAGE` inline without touching `.env`), the entrypoint that ensures the database shape on every boot, the
+   `deploy/waitron.sh`'s `install` command (installs Docker, mints the box's database password once,
+   fetches `compose.yml`, and starts the containers — run with no argument it tracks the published
+   `main` image; given a branch or commit instead, it builds and runs that ref's image on the box
+   before merge, recording the choice in `.env`; distinct from the bootable-USB installer below —
+   this replaced three separate scripts, `prepare.sh`/`install.sh`/`try-branch.sh`, on 2026-09-11,
+   which is also when the box gained a `reset` command for wiping it back to a clean state; see
+   `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md`), the entrypoint that ensures
+   the database shape on every boot, the
    recovery-supervisor half (an escalating failure counter that serves a page over the box's own leaf
    when boot fails), the box serving its own leaf over HTTPS in ALL modes (setup, recovery AND
    trading — a trading-mode plain-HTTP bug the run-it proof caught, design §11), and the CI `image`
@@ -199,7 +202,8 @@ design-review section apply.
   [plan](superpowers/plans/2026-09-10-boot-failure-diagnosability.md):
   the recovery page renders curated operator text keyed by error code instead of `unknown` — the
   operator's only window is that page; an explicit `provisioning.database_ahead` check for a
-  database migrated by a different image (the 2026-09-10 `try-branch` → `install.sh` bricking, whose
+  database migrated by a different image (the 2026-09-10 `try-branch.sh` → `install.sh` bricking —
+  both since retired into `deploy/waitron.sh`'s `install` command, 2026-09-11 — whose
   schema artefact is now CONFIRMED and reproduced: the core set's `0013` adds the `bluetooth` label
   to `print_transport` and `0014` names it in a `CHECK`, and drizzle applies a set's pending
   migrations in ONE transaction, so every existing box aborted with `55P04` and applied nothing while
@@ -218,7 +222,9 @@ design-review section apply.
   created since #304) will be refused by that branch's `provisioning.database_ahead` check once it
   merges — the remedy is `wa-wt reset demo`); the scrubbed real
   error to `docker logs` for the installer; and a
-  one-way-migration warning in `try-branch.sh`). **Left open by #310, deliberately:** the leak fix masks URL credentials on
+  one-way-migration warning in `try-branch.sh` — since retired: `deploy/waitron.sh install <ref>`'s
+  equivalent advice shows only when the box actually fails to come up, and is withheld on a
+  production box, 2026-09-11). **Left open by #310, deliberately:** the leak fix masks URL credentials on
   every line the rotating log sink writes, which is the connection-string shape and nothing else — an
   error message carrying a secret in any OTHER shape still reaches the unauthenticated recovery page
   through the log tail, and what bounds that is the convention that an `AppError`'s params carry no
@@ -229,12 +235,13 @@ design-review section apply.
   taken. And every dev or demo database created before #307 now fails the ahead check, because #307
   changed `0014`'s drizzle hash: the remedy is `wa-wt reset demo`. All of that is written on the branch — the
   classifier, the ahead check with its real-Postgres proof, `migrations.incomplete`, the curated
-  page, the scrubbed stdout and the `try-branch` warning — and design §9 records what the §6
+  page, the scrubbed stdout and the one-way-migration warning (then `try-branch.sh`'s, now
+  `waitron.sh install`'s) — and design §9 records what the §6
   experiment settled, including that §6's own sketch of the proof-by-deletion was wrong: an
   unguarded ahead database boots CLEANLY rather than erroring, so the check is the only thing that
   names the case. Then **the recovery spec** (a degraded-but-trading mode + the
   module-contract field it needs — design §9.1/§12, Track C's files) and **the bootable USB
-  installer** (it runs `prepare.sh` unattended — design §12; open questions it owns: whether the stick
+  installer** (it runs `waitron.sh install` unattended — design §12; open questions it owns: whether the stick
   carries the images so install needs no internet, unattended updates for a box we did not sell,
   AP-mode WiFi onboarding). **Guided node onboarding is implemented in `waitron-node-onboarding`**:
   [design](superpowers/specs/2026-09-09-node-onboarding-design.md) and
@@ -299,9 +306,11 @@ design-review section apply.
   it's gated on a separate cross-box print-agent-TLS effort; the vouch (signed dormant key + endorsement
   chain) slots into the same route later (spec §7). Deferred minor from the branch: no test pins the
   `undefined`-remote-address→403 branch of the enrol route (the handler covers it).*
-  *Op note: `try-branch.sh` swaps images against the box's INSTALLED compose, so testing a compose change
-  (like this one) on a box prepared from older `main` needs its `compose.yml` refreshed first; out of
-  scope for try-branch's image-swap contract.*
+  *Op note: at the time, `try-branch.sh` swapped only the image against the box's already-installed
+  compose file, so testing a compose change (like this one) on a box set up from an older `main`
+  needed its `compose.yml` refreshed by hand first. Resolved by its 2026-09-11 replacement,
+  `deploy/waitron.sh install <ref>`, which always fetches `compose.yml` fresh from the ref being
+  installed — see `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §3 step 3.*
 - **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, `packages/print-agent` +
   `apps/print-agent` (new), `packages/payments*`, the printer/payment routes in `apps/server`. Work, in
   order: **1.** the print agent process — spec
