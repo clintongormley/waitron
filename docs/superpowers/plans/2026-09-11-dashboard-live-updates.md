@@ -19,3 +19,7 @@ each feature change.
    existing behavioral assertions. Handle time-based changes separately from database mutations.
 7. Run package coverage checks and the repository gate, inspect the complete change for stale
    descriptions of refresh behavior, and update the backlog. Announce readiness for `finish-branch`.
+
+Implementation and the manual repository gate completed on 2026-09-11. The independent run-it
+review and its fixes are recorded in the [review decisions](../specs/2026-09-11-dashboard-live-updates-review.md).
+The push hook supplies the final affected-package coverage check before PR CI and landing.
