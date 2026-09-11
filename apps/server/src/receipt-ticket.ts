@@ -42,7 +42,7 @@
  * the screen uses, kept in lock-step deliberately.
  *
  * NO emphasis/bold — the `@waitron/printing` builder has no bold/emphasis verb (verified against
- * packages/printing/src/escpos.ts), so the layout leans on plain text plus `feed`/`cut`, with
+ * packages/printing/src/escpos.ts), so the layout leans on plain text plus `feedAndCut`, with
  * `twoColumn` giving a label-left / value-right column feel. Exact column fit and QR
  * millimetres are verified MANUALLY on the real printer (design §5); the guarantee here is only that
  * the bytes are DETERMINISTIC and carry every mandated element, which `receipt-ticket.test.ts` pins.

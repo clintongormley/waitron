@@ -125,7 +125,7 @@ this floor — removing the `min-width` regresses that guard.
 | --- | --- | --- |
 | `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `disabled`, `loading`, `aria-label` | native `click` |
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
-| `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name) | — |
+| `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label` | `wt-change` — `detail: { checked: boolean }` |
@@ -448,7 +448,7 @@ have caught the defect it's named after.
 **Colour contrast** is checked as part of the same default ruleset, per theme, via `mountThemed`'s
 `theme` argument — see the `describe.each(["light", "dark"])` pattern above, used throughout the
 `*.a11y.test.ts` files. As of this writing axe reports zero contrast violations for any `--wt-color-*`
-pairing actually used by the six primitives, in either theme, across every documented state (`wt-input`
+pairing actually used by every primitive in the table above, in either theme, across every documented state (`wt-input`
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
 disabled and loading states; `wt-spinner` as a status region and decorative, 2026-09-11). No token
 values needed changing. (axe does flag two unrelated `incomplete` — not

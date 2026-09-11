@@ -103,7 +103,8 @@ export class EscBuilder {
     return this;
   }
 
-  /** Feed {@link FEED_BEFORE_CUT} blank lines, then full cut — how every ticket ends. */
+  /** Feed {@link FEED_BEFORE_CUT} blank lines, then full cut — `ESC d 5` then `GS V 0`; how every
+   * ticket formatter and the test print end. */
   feedAndCut(): this {
     return this.feed(FEED_BEFORE_CUT).cut();
   }

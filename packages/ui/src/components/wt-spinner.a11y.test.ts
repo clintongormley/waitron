@@ -6,20 +6,17 @@ import "./wt-spinner.js";
 afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-spinner a11y (%s theme)", (theme) => {
-  test.each(["sm", "md", "lg"] as const)(
-    "%s status spinner with its default name",
-    async (size) => {
-      await mountThemed(`<wt-spinner size="${size}"></wt-spinner>`, theme);
-      await expectNoA11yViolations(host);
-    },
-  );
+  test.each(["sm", "md", "lg"] as const)("%s status spinner", async (size) => {
+    await mountThemed(`<wt-spinner size="${size}"></wt-spinner>`, theme);
+    await expectNoA11yViolations(host);
+  });
 
-  test("a localized label names the status region", async () => {
+  test("status spinner with a localized label", async () => {
     await mountThemed('<wt-spinner label="Buscando"></wt-spinner>', theme);
     await expectNoA11yViolations(host);
   });
 
-  test("decorative spinner (inside a busy control) is hidden from assistive tech", async () => {
+  test("decorative spinner (as inside a busy control)", async () => {
     await mountThemed("<wt-spinner decorative></wt-spinner>", theme);
     await expectNoA11yViolations(host);
   });

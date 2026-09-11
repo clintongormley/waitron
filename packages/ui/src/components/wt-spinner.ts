@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 
@@ -72,7 +72,7 @@ export class WtSpinner extends LitElement {
   override render() {
     return this.decorative
       ? html`<span class="ring" aria-hidden="true"></span>`
-      : html`<span class="ring" role="status" aria-label=${this.label ?? nothing}></span>`;
+      : html`<span class="ring" role="status" aria-label=${this.label}></span>`;
   }
 }
 

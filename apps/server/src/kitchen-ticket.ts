@@ -13,8 +13,8 @@
  *   - `order` — the expediter's "pass" copy: a single ticket that groups every fired item BY station,
  *     each station's lines under its own sub-header, so the pass reads the whole order at a glance.
  *
- * NO emphasis/bold (ruling R-G). The ESC/POS builder — `@waitron/printing`'s `esc()` — exposes only
- * `init`/`text`/`line`/`feed`/`cut`/`kick` (verified against packages/printing/src/escpos.ts:37-91);
+ * NO emphasis/bold (ruling R-G). The ESC/POS builder — `@waitron/printing`'s `esc()` — exposes
+ * `init`/`text`/`line`/`feed`/`cut`/`feedAndCut`/`kick`/`qr`/`qrRaster` (packages/printing/src/escpos.ts);
  * there is no bold verb. The plan's "bold the table/order" is therefore DEFERRED until the builder
  * gains emphasis, and adding a bold command to packages/printing is out of this task's scope. The
  * layout below uses only the existing verbs.

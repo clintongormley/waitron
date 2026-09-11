@@ -828,6 +828,55 @@ describe("printers-screen", () => {
     }
   });
 
+  it("leaving the page while the first read is in flight starts no listen", async () => {
+    vi.useFakeTimers();
+    try {
+      let deliver!: (v: DiscoveredPrinter[]) => void;
+      const api = stubApi({
+        listDiscoveredPrinters: vi.fn(() => new Promise<DiscoveredPrinter[]>((r) => (deliver = r))),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      q(el, "[data-test=scan-printers]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(1);
+
+      el.remove();
+      deliver(discoveredNetwork);
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a slow read still outstanding at the next tick is not overlapped by another", async () => {
+    vi.useFakeTimers();
+    try {
+      let deliver!: (v: DiscoveredPrinter[]) => void;
+      const api = stubApi({
+        listDiscoveredPrinters: vi
+          .fn()
+          .mockResolvedValueOnce(discoveredNetwork)
+          .mockImplementationOnce(() => new Promise<DiscoveredPrinter[]>((r) => (deliver = r)))
+          .mockResolvedValue(discoveredNetwork),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      q(el, "[data-test=scan-printers]")!.click();
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(2); // the slow one is outstanding
+
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(2); // tick skipped, not overlapped
+      deliver(discoveredNetwork);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // ── Printers: register a discovered USB / Bluetooth device (design §10) ─────────────────────────────
 
   it("registers a discovered USB printer by picking it and naming it", async () => {

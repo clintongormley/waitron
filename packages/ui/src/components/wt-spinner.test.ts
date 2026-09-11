@@ -31,7 +31,11 @@ test("the ring paints in the surrounding text colour (currentColor)", async () =
   host.style.color = "rgb(12, 34, 56)";
   const ring = el.shadowRoot!.querySelector(".ring")!;
   expect(getComputedStyle(ring).borderTopColor).toBe("rgb(12, 34, 56)");
-  expect(getComputedStyle(ring).opacity).toBe("1");
+});
+
+test("the ring is not dimmed — inside a disabled busy button the disabled opacity must not compound", async () => {
+  const el = await mount("<wt-spinner></wt-spinner>");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".ring")!).opacity).toBe("1");
 });
 
 test("defaults to the md size and reflects it", async () => {

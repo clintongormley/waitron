@@ -301,10 +301,13 @@ export class PrintersScreen extends LitElement {
   /** A Scan press is listening for results — the button is busy and a second press is ignored. Its
    * own gate, not `submitting`: the listen runs for seconds and must not block Add/Register. */
   @state() private scanning = false;
-  // The listen's re-read timer, cleared in `disconnectedCallback` so a leaked interval never keeps
-  // fetching against a detached screen (the diagnostics screen's `#timer` shape).
-  #scanTimer: ReturnType<typeof setInterval> | undefined;
-  #scanTicks = 0;
+  // The listen's re-read timer, cleared in `disconnectedCallback` and never started on a detached
+  // screen (the diagnostics screen's `#timer` shape); `#scanUntil` is the wall-clock end of the listen
+  // (five ticks are not ten seconds in a throttled background tab); `#scanInFlight` keeps a slow read
+  // from being overlapped by the next tick, whose older reply could overwrite `discovered`.
+  #scanTimer?: ReturnType<typeof setInterval>;
+  #scanUntil = 0;
+  #scanInFlight = false;
   @state() private registerNames: Record<string, string> = {};
 
   @state() private errorKey: string | null = null;
@@ -640,38 +643,42 @@ export class PrintersScreen extends LitElement {
   }
 
   /** Open the venue discovery window (the expensive LAN sweep / Bluetooth inquiry the agents run), then
-   * keep re-reading what turned up — once at once, then every {@link SCAN_POLL_MS} until
-   * {@link SCAN_LISTEN_MS} has passed — so the network_tcp form can offer a found IP printer to pre-fill
-   * as soon as an agent reports it. A rejection becomes the `errorKey` banner and ends the listen.
-   * Leaving the page ends it too: `disconnectedCallback` clears the timer, and a window that opens
-   * after the page was left is never read. */
+   * keep re-reading what turned up — at once, then every {@link SCAN_POLL_MS} until
+   * {@link SCAN_LISTEN_MS} has passed on the clock — so the network_tcp form can offer a found IP
+   * printer to pre-fill as soon as an agent reports it. A rejection becomes the `errorKey` banner and
+   * ends the listen. Leaving the page ends it too: `disconnectedCallback` clears the timer, and the
+   * timer is never started once the screen is detached (checked after each await). `scanning` is set
+   * false in exactly one place, `#endScan`, so every path that does not start the timer calls it. */
   async #scan(): Promise<void> {
     if (this.scanning) return;
     this.errorKey = null;
     this.scanning = true;
     try {
       await this.api.startPrinterDiscovery();
-      if (!this.isConnected) return;
+      if (!this.isConnected) return this.#endScan();
       await this.#loadDiscovered();
-      this.#scanTicks = 0;
+      if (!this.isConnected) return this.#endScan();
+      this.#scanUntil = Date.now() + SCAN_LISTEN_MS;
       this.#scanTimer = setInterval(() => void this.#scanTick(), SCAN_POLL_MS);
     } catch (error) {
       this.errorKey = codeOf(error);
       this.#endScan();
-    } finally {
-      if (this.#scanTimer === undefined) this.scanning = false;
     }
   }
 
   async #scanTick(): Promise<void> {
+    if (this.#scanInFlight) return;
+    this.#scanInFlight = true;
     try {
       await this.#loadDiscovered();
     } catch (error) {
       this.errorKey = codeOf(error);
       this.#endScan();
       return;
+    } finally {
+      this.#scanInFlight = false;
     }
-    if (++this.#scanTicks >= SCAN_LISTEN_MS / SCAN_POLL_MS) this.#endScan();
+    if (Date.now() >= this.#scanUntil) this.#endScan();
   }
 
   #endScan(): void {
