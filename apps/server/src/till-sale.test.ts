@@ -265,7 +265,7 @@ describe("recordTillSale", () => {
     });
 
     expect(result.total).toBe("3.00");
-    expect(result.change).toBe("2.00"); // 5.00 tendered − 3.00
+    expect(result.tender).toEqual({ method: "cash", change: "2.00" }); // 5.00 tendered − 3.00
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
     expect(result.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
     expect(result.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
@@ -303,7 +303,7 @@ describe("recordTillSale", () => {
     });
 
     expect(result.total).toBe("1.50"); // 1 × 1.50 gross, NOT the browser's 0.01
-    expect(result.change).toBe("0.00");
+    expect(result.tender).toEqual({ method: "cash", change: "0.00" });
   });
 
   it("rejects an empty basket, an unknown product, an unsupported tender, and a shortfall", async () => {
@@ -775,7 +775,7 @@ describe("ordering modifiers — parent + child lines", () => {
 
     // 9.00 dish + 0.50 bacon + 0.75 queso = 10.25 gross.
     expect(result.total).toBe("10.25");
-    expect(result.change).toBe("9.75");
+    expect(result.tender).toEqual({ method: "cash", change: "9.75" });
     // The receipt line list is parent + both children.
     expect(result.lines).toHaveLength(3);
     expect(result.lines.map((l) => l.descriptions["es-ES"])).toEqual([

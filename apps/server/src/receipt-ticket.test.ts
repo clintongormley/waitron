@@ -48,7 +48,6 @@ const FILED_SALE: TillSaleResult = {
       gross: "8.80",
     },
   ],
-  change: "9.10",
   tender: { method: "cash", change: "9.10" },
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1&fecha=17-08-2026&importe=20.90",
 };
@@ -236,7 +235,6 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         { descriptions: { "es-ES": "Extra queso" }, quantity: "1", gross: "0.50", parentLineNo: 1 },
         { descriptions: { "es-ES": "Sin cebolla" }, quantity: "1", gross: "0.00", parentLineNo: 1 },
       ],
-      change: "0.00",
       tender: { method: "cash", change: "0.00" },
       qr: FILED_SALE.qr,
     };
@@ -290,7 +288,6 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         // badge, rendered exactly as an unbadged option always was.
         { descriptions: { "es-ES": "Sin cebolla" }, quantity: "3", gross: "0.00", parentLineNo: 1 },
       ],
-      change: "0.00",
       tender: { method: "cash", change: "0.00" },
       qr: FILED_SALE.qr,
     };

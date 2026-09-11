@@ -20,7 +20,6 @@ const result: TillSaleResult = {
     { descriptions: { "es-ES": "Jamón" }, quantity: "0.32", gross: "6.40", parentLineNo: null },
     { descriptions: { "es-ES": "Extra queso" }, quantity: "1", gross: "0.50", parentLineNo: 2 },
   ],
-  change: "0.60",
   tender: { method: "cash", change: "0.60" },
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1",
 };

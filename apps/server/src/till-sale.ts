@@ -178,12 +178,9 @@ export interface TillSaleResult {
   /** The FILED line list (goods identification, art. 7.1.e) — the priced/locked composition, so the
    *  receipt prints what was invoiced rather than the mutable client basket (Finding 2). */
   lines: TillSaleLine[];
-  /** Cash to hand back. `cash`: `tendered − total`, ≥ 0 (an under-tender is refused before this is
-   * read). `card`: always "0.00" — a card is charged the exact total, so there is nothing to hand
-   * back. */
-  change: string;
-  /** How the sale was paid, read back from the committed tender (+ payment) rows. Carried alongside
-   * `change` for now; the renderers move onto it in a later task and `change` is then removed. */
+  /** How the sale was paid, read back from the committed tender (+ payment) rows. A `cash` block
+   * carries the change handed back (`tendered − total`, ≥ 0); a `card` block carries the whole
+   * instrument charge — see {@link TenderBlock}. */
   tender: TenderBlock;
   /** Where a customer can verify the record, or "" when the regime offers none. */
   qr: string;
@@ -620,7 +617,6 @@ async function readSettledTicket(
     total: issued.total,
     vatBreakdown: toVatBreakdown(filed.vatBreakdown),
     lines: ticketLines,
-    change,
     tender,
     qr: filed.verificationUrl,
   };
@@ -798,7 +794,6 @@ async function fileImmediateSale(
     // The FILED line list (art. 7.1.e) straight from the price just filed, so the receipt's line list
     // is the invoiced composition rather than the client basket (Finding 2).
     lines: ticketLinesFrom(priced),
-    change,
     tender: tenderBlock,
     qr: fiscal.verificationUrl ?? "",
   };
@@ -1165,7 +1160,6 @@ async function finalizeCapture(
         total: priced.total,
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
         lines: ticketLinesFrom(priced),
-        change: "0.00",
         tender: tenderBlock,
         qr: fiscal.verificationUrl ?? "",
       };
@@ -1343,7 +1337,6 @@ async function finalizeRecovery(
       total: priced.total,
       vatBreakdown: toVatBreakdown(priced.vatBreakdown),
       lines: ticketLinesFrom(priced),
-      change: "0.00",
       tender: tenderBlock,
       qr: fiscal.verificationUrl ?? "",
     };

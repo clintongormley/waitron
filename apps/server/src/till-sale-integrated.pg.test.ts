@@ -500,7 +500,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       if (out.outcome !== "captured") throw new Error("unreachable");
       expect(out.ticket.invoiceNumber).toBe("A/1");
       expect(out.ticket.total).toBe("1.50");
-      expect(out.ticket.change).toBe("0.00"); // a card is charged the exact total — nothing to hand back
+      expect(out.ticket.tender.method).toBe("card"); // a card is charged the exact total — no cash change block
 
       // Settled, exactly one sale + registro; one card tender at the total; one captured stripe
       // payment carrying the PaymentIntent id and linked to the filed sale.
@@ -813,7 +813,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       // Replayed the winner's CASH ticket (total 1.50; a replay's `change` is the "0.00" default — the
       // drawer was settled at the winner's own sale). STILL exactly one sale + registro, one CASH tender.
       expect(out.ticket.total).toBe("1.50");
-      expect(out.ticket.change).toBe("0.00");
+      expect(out.ticket.tender).toEqual({ method: "cash", change: "0.00" });
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50", tipAmount: "0.00" }]);
@@ -1192,7 +1192,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       if (out.outcome !== "captured") throw new Error("unreachable");
       expect(out.ticket.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
       expect(out.ticket.total).toBe("1.50");
-      expect(out.ticket.change).toBe("0.00");
+      expect(out.ticket.tender.method).toBe("card");
       // NO second sale/registro — the invoice was SETTLED, not re-filed. The card charged the exact
       // invoice total; the captured stripe payment links to the ISSUED sale; the order is now settled
       // and no longer outstanding.

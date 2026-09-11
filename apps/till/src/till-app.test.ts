@@ -122,7 +122,6 @@ const saleResult: TillSaleResult = {
   vatBreakdown: [{ rate: "21", base: "2.48", tax: "0.52" }],
   // The FILED line list the ticket renders (server's composition), never the client basket.
   lines: [{ descriptions: { "es-ES": "Café" }, quantity: "2", gross: "3.00" }],
-  change: "2.00",
   tender: { method: "cash", change: "2.00" },
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=05-08-2026&total=3.00",
 };

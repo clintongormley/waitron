@@ -271,7 +271,9 @@ async function main(): Promise<void> {
     console.log(`  invoiceNumber: ${ticket.invoiceNumber}`);
     console.log(`  issuedAt:      ${ticket.issuedAt}`);
     console.log(`  total:         ${ticket.total}`);
-    console.log(`  change:        ${ticket.change}`);
+    console.log(
+      `  change:        ${ticket.tender.method === "cash" ? ticket.tender.change : "0.00"}`,
+    );
     console.log("  desglose (VAT breakdown):");
     for (const line of ticket.vatBreakdown) {
       console.log(`    rate ${line.rate}%  base ${line.base}  tax ${line.tax}`);
@@ -349,7 +351,9 @@ async function main(): Promise<void> {
     console.log(`  invoiceNumber: ${cardTicket.invoiceNumber}`);
     console.log(`  issuedAt:      ${cardTicket.issuedAt}`);
     console.log(`  total:         ${cardTicket.total}`);
-    console.log(`  change:        ${cardTicket.change}`); // "0.00" — a card charges the exact total
+    console.log(
+      `  change:        ${cardTicket.tender.method === "cash" ? cardTicket.tender.change : "0.00"}`,
+    ); // "0.00" — a card charges the exact total
     console.log("  desglose (VAT breakdown):");
     for (const line of cardTicket.vatBreakdown) {
       console.log(`    rate ${line.rate}%  base ${line.base}  tax ${line.tax}`);

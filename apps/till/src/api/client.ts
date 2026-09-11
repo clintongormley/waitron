@@ -609,9 +609,9 @@ export interface TillSaleResult {
   vatBreakdown: VatBreakdownEntry[];
   /** The filed line list (goods identification), rendered by the receipt instead of the client basket. */
   lines: TillSaleLine[];
-  change: string;
-  /** How the sale was paid, read back from the committed tender (+ payment) rows. Carried alongside
-   * `change` for now; the receipt view moves onto it in a later task and `change` is then removed. */
+  /** How the sale was paid, read back from the committed tender (+ payment) rows. A `cash` block
+   * carries the change handed back; a `card` block carries the whole instrument charge — see
+   * {@link TenderBlock}. */
   tender: TenderBlock;
   qr: string;
 }
