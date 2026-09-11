@@ -572,11 +572,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   );
 
   // ── The merged discovered-printer list (printer.manage) ──────────────────────────────────────────
-  // The dashboard's create flow (design §6/§10): every device the agents currently report, each marked
-  // whether it is ALREADY a registered printer (its `local_key` matches one). Stale entries (a device
-  // the box stopped reporting) are pruned by the TTL first. Two tenant-scoped reads back the merge —
-  // registered printers' `local_key`s and the agents' names — both under an explicit `tenant_id`
-  // predicate (CLAUDE.md §3: a list read carries its own, one-tenant-per-db is not the query boundary).
+  // The dashboard's create flow (design §6/§10): every device the agents currently report, each carrying
+  // the registered printer it matches (`printerId` — a usb/bluetooth device on its `local_key`, a network
+  // device on host:port) and the time of the report that last carried it (`lastSeenAt`). Stale entries
+  // (a device the box stopped reporting) are pruned by the TTL first. Two tenant-scoped reads back the
+  // merge — the registered printers' ids and connection columns, and the agents' names — both under an
+  // explicit `tenant_id` predicate (CLAUDE.md §3: a list read carries its own, one-tenant-per-db is not
+  // the query boundary).
   app.get("/management-api/discovered-printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -604,15 +606,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // already registered matches on that pair — same host on another port is a different printer.
       const byKey = new Map<string, string>();
       const byHostPort = new Map<string, string>();
+      // A null port (a PATCH may clear the column's 9100 default) prints on 9100 — the transport's
+      // default — so it matches a scan on 9100 too.
       for (const r of registered) {
         if (r.localKey !== null) byKey.set(r.localKey, r.id);
-        if (r.host !== null && r.port !== null) byHostPort.set(`${r.host}:${r.port}`, r.id);
+        if (r.host !== null) byHostPort.set(`${r.host}:${r.port ?? 9100}`, r.id);
       }
       const printerIdOf = (e: DiscoveredEntry): string | null =>
         (e.localKey !== undefined ? byKey.get(e.localKey) : undefined) ??
-        (e.host !== undefined && e.port !== undefined
-          ? byHostPort.get(`${e.host}:${e.port}`)
-          : undefined) ??
+        (e.host !== undefined ? byHostPort.get(`${e.host}:${e.port ?? 9100}`) : undefined) ??
         null;
       return c.json(
         [...discovered.values()].map((e) => {
@@ -629,7 +631,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             name: e.name,
             alreadyRegistered: printerId !== null,
             printerId,
-            lastSeenAt: e.lastSeenAt,
+            lastSeenAt: new Date(e.lastSeenAt).toISOString(),
           };
         }),
       );

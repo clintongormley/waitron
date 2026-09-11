@@ -404,7 +404,6 @@ export const en = {
   "printers.no_discovered": "No printers found yet — click Scan, or check the printer is on.",
   "printers.discovered_seen_on": "Seen on {agent}",
   "printers.register": "Register",
-  "printers.registered": "Registered",
   "printers.add_result": "Add",
   "printers.seen_at": "Seen on {agent} at {time}",
   "printers.bluetooth_pair_note":
@@ -1239,7 +1238,6 @@ export const es: Record<StringKey, string> = {
     "Aún no se ha detectado ninguna impresora — pulsa Buscar o comprueba que esté encendida.",
   "printers.discovered_seen_on": "Detectada en {agent}",
   "printers.register": "Dar de alta",
-  "printers.registered": "Dada de alta",
   "printers.add_result": "Añadir",
   "printers.seen_at": "Detectada en {agent} a las {time}",
   "printers.bluetooth_pair_note":

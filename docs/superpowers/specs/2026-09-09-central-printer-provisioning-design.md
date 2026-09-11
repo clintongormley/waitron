@@ -265,7 +265,7 @@ New:
 | Route | Auth | Does |
 | --- | --- | --- |
 | `POST /management-api/printer-discovery/start` | `printer.manage` | opens the venue discovery window (sets `discoveryUntil` in memory); returns the window end. |
-| `GET /management-api/discovered-printers` | `printer.manage` | the merged in-memory discovered list — `{ agentId, agentName, transport, localKey, make, model, alreadyRegistered }` — unregistered devices first. |
+| `GET /management-api/discovered-printers` | `printer.manage` | the merged in-memory discovered list — `{ agentId, agentName, transport, localKey, make, model, alreadyRegistered }` (2026-09-11: plus `host`, `port`, `name`, `printerId`, `lastSeenAt`) — unregistered devices first. |
 
 The pairing/setup-page Bluetooth **Scan/Pair** lives in `apps/print-agent` (the box), not here — it acts
 on local hardware and is outside the outbound-only server link.
@@ -275,7 +275,9 @@ on local hardware and is outside the outbound-only server link.
 The single form with the **agent dropdown is replaced** (the dropdown is gone for every transport):
 
 - **Add IP printer** — name + address + port; a **Discover** button opens the window and offers found
-  IP printers to pre-fill the address. No agent picker.
+  IP printers to pre-fill the address. No agent picker. _(2026-09-11: the button is "Scan for printers";
+  a found, unregistered IP printer is added in one click, and registered ones are hidden from every
+  discovered list, their seen-status shown against their own row.)_
 - **Add USB / Bluetooth printer** — a **"discovered printers"** list (from
   `GET /management-api/discovered-printers`): each row shows make/model, which box sees it, and its
   stable ID, with a **Register** action that asks only for a name. Already-registered devices are

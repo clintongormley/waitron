@@ -63,6 +63,17 @@ const printers: Printer[] = [
     ticketScope: "station",
     active: false,
   },
+  {
+    id: "p3",
+    name: "Barra USB",
+    transport: "usb",
+    host: null,
+    port: null,
+    localKey: "SN-2",
+    pollId: null,
+    ticketScope: "station",
+    active: false, // keeps the till receipt-printer picker (active printers only) unchanged
+  },
 ];
 
 // The discovered inventory the create surface reads for usb/bluetooth: one unregistered USB device an
@@ -78,7 +89,7 @@ const discovered: DiscoveredPrinter[] = [
     name: "EPSON TM-T20",
     alreadyRegistered: false,
     printerId: null,
-    lastSeenAt: 1_700_000_000_000,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
   },
   {
     agentId: "a1",
@@ -89,12 +100,12 @@ const discovered: DiscoveredPrinter[] = [
     model: "TSP143",
     name: null,
     alreadyRegistered: true,
-    printerId: "p2",
-    lastSeenAt: 1_700_000_000_000,
+    printerId: "p3",
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
   },
 ];
 
-// A discovered network_tcp printer a Scan turns up — offered to pre-fill the IP form's host+port.
+// A discovered network_tcp printer a Scan turns up — offered for a one-click Add.
 const discoveredNetwork: DiscoveredPrinter[] = [
   {
     agentId: "a1",
@@ -107,7 +118,7 @@ const discoveredNetwork: DiscoveredPrinter[] = [
     name: "Kitchen IP",
     alreadyRegistered: false,
     printerId: null,
-    lastSeenAt: 1_700_000_000_000,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
   },
 ];
 
@@ -123,7 +134,7 @@ const discoveredRegisteredNetwork: DiscoveredPrinter[] = [
     name: "Counter",
     alreadyRegistered: true,
     printerId: "p1",
-    lastSeenAt: 1_700_000_000_000,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
   },
 ];
 
@@ -753,7 +764,7 @@ describe("printers-screen", () => {
     expect(banner!.textContent).not.toContain("printer.invalid_config");
   });
 
-  it("Scan opens a discovery window and offers a found IP printer to pre-fill host+port", async () => {
+  it("Scan opens a discovery window and adds a found IP printer in one click", async () => {
     const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -784,12 +795,14 @@ describe("printers-screen", () => {
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    // The registered list carries the status from the very first load, not only after a Scan.
-    const seen = q(el, "[data-test=printer-seen-p1]");
-    expect(seen).toBeTruthy();
-    expect(seen!.textContent).toContain("Cocina agent");
-    expect(seen!.textContent).toMatch(/\d{1,2}:\d{2}/);
-    expect(q(el, "[data-test=printer-seen-p2]")).toBeNull();
+    // The registered list carries the status from the very first load, not only after a Scan — the
+    // instant formatted to the minute (UTC) like every other last-seen on this screen.
+    expect(text(el, "[data-test=printer-last-seen-p1]")).toBe(
+      t("printers.seen_at")
+        .replace("{agent}", "Cocina agent")
+        .replace("{time}", "2023-11-14 22:13"),
+    );
+    expect(q(el, "[data-test=printer-last-seen-p2]")).toBeNull();
 
     q(el, "[data-test=scan-printers]")!.click();
     await flush(el);
@@ -927,6 +940,17 @@ describe("printers-screen", () => {
     }
   });
 
+  it("shows no seen-status when the reporting agent's row is gone", async () => {
+    const api = stubApi({
+      listDiscoveredPrinters: vi
+        .fn()
+        .mockResolvedValue([{ ...discoveredRegisteredNetwork[0]!, agentName: null }]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=printer-last-seen-p1]")).toBeNull();
+  });
+
   // ── Printers: register a discovered USB / Bluetooth device (design §10) ─────────────────────────────
 
   it("registers a discovered USB printer by picking it and naming it", async () => {
@@ -971,7 +995,7 @@ describe("printers-screen", () => {
     expect(api.createPrinter).not.toHaveBeenCalled();
   });
 
-  it("shows already-registered discovered devices as registered, with no Register action", async () => {
+  it("hides an already-registered discovered USB device and shows when it was seen against its printer", async () => {
     const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -979,13 +1003,16 @@ describe("printers-screen", () => {
     pickSelect(el, "[data-test=new-transport]", "usb");
     await flush(el);
 
-    // SN-2 is already a registered printer: the row shows a "registered" marker and no Register button.
-    expect(q(el, "[data-test=discovered-row-SN-2]")).toBeTruthy();
-    expect(text(el, "[data-test=discovered-registered-SN-2]")).toBe(
-      t("printers.registered", "es-ES"),
-    );
+    // SN-2 is already the registered printer p3: no row in the discovered list (owner decision
+    // 2026-09-11 — a registered printer's presence shows against its own row), no Register action.
+    expect(q(el, "[data-test=discovered-row-SN-2]")).toBeNull();
     expect(q(el, "[data-test=register-SN-2]")).toBeNull();
     expect(q(el, "[data-test=register-name-SN-2]")).toBeNull();
+    expect(text(el, "[data-test=printer-last-seen-p3]")).toBe(
+      t("printers.seen_at")
+        .replace("{agent}", "Cocina agent")
+        .replace("{time}", "2023-11-14 22:13"),
+    );
     // The unregistered SN-1, by contrast, DOES offer the Register action.
     expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
     expect(q(el, "[data-test=discovered-registered-SN-1]")).toBeNull();

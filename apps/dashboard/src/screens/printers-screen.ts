@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { drawerPolicyName, jobStatusName, printModeName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -293,10 +293,11 @@ export class PrintersScreen extends LitElement {
   @state() private newHost = "";
   @state() private newPort = "";
 
-  // The discovered-devices inventory the usb/bluetooth create surface offers, and the network_tcp Scan
-  // pre-fill offers (filtered to the current transport). Loaded on switching to a discovered transport,
-  // on Scan, and on Refresh — never at connect (discovery is on-demand). `registerNames` holds the name
-  // typed against each unregistered row, keyed by the device's `localKey`.
+  // The discovered-devices inventory: the usb/bluetooth create surface and the network Scan results list
+  // its UNMATCHED entries, and each registered printer's row shows its seen-status from the matched one.
+  // Loaded with the list (so the status is there from the first render) and re-read on Scan/Refresh; the
+  // active scan itself stays window-gated on the server (discovery is on-demand). `registerNames` holds
+  // the name typed against each unregistered row, keyed by the device's `localKey`.
   @state() private discovered: DiscoveredPrinter[] = [];
   /** A Scan press is listening for results — the button is busy and a second press is ignored. Its
    * own gate, not `submitting`: the listen runs for seconds and must not block Add/Register. */
@@ -392,7 +393,8 @@ export class PrintersScreen extends LitElement {
         this.api.pairingMode(),
         this.api.joinRequests("print_agent"),
         // The discovered inventory also feeds the "seen on … at …" status against each registered
-        // printer, so it loads with the list — not only when a discovered transport is picked.
+        // printer, so it loads with the list — and re-reads on every mutation's reload, so the status
+        // stays current after an edit (two cheap selects on an in-memory map; not worth a second path).
         this.api.listDiscoveredPrinters(),
       ]);
       // Pair each printer id with its OWN station set at fetch time, so the correlation cannot drift on
@@ -657,8 +659,8 @@ export class PrintersScreen extends LitElement {
 
   /** Open the venue discovery window (the expensive LAN sweep / Bluetooth inquiry the agents run), then
    * keep re-reading what turned up — at once, then every {@link SCAN_POLL_MS} until
-   * {@link SCAN_LISTEN_MS} has passed on the clock — so the network_tcp form can offer a found IP
-   * printer to pre-fill as soon as an agent reports it. A rejection becomes the `errorKey` banner and
+   * {@link SCAN_LISTEN_MS} has passed on the clock — so the results can offer a found IP printer for a
+   * one-click Add as soon as an agent reports it. A rejection becomes the `errorKey` banner and
    * ends the listen. Leaving the page ends it too: `disconnectedCallback` clears the timer, and the
    * timer is never started once the screen is detached (checked after each await). `scanning` is set
    * false in exactly one place, `#endScan`, so every path that does not start the timer calls it. */
@@ -706,40 +708,46 @@ export class PrintersScreen extends LitElement {
   }
 
   /** Register a scanned network_tcp result in one click, named from what the scan announced (the
-   * label the row shows — editable afterwards in the list), then reload the list and the results so the
-   * row leaves the results and gains its seen-status. Shares the `submitting` gate with the other
-   * form submissions; a rejection becomes the `errorKey` banner. */
+   * label the row shows — editable afterwards in the list). The shared `#submit` gate reloads the
+   * screen, so the row leaves the results and gains its seen-status; a rejection becomes the
+   * `errorKey` banner. The button says "Add" (owner wording, 2026-09-11); the usb/bluetooth rows keep
+   * "Register" because they also ask for a name. */
   async #addResult(result: DiscoveredPrinter): Promise<void> {
-    if (this.submitting || result.host == null) return;
-    this.errorKey = null;
-    this.submitting = true;
-    try {
-      await this.api.createPrinter({
+    if (result.host == null) return;
+    const host = result.host;
+    await this.#submit(() =>
+      this.api.createPrinter({
         name: this.#discoveredLabel(result),
         transport: result.transport,
-        host: result.host,
+        host,
         ...(result.port == null ? {} : { port: result.port }),
-      });
-      await this.#load();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    } finally {
-      this.submitting = false;
-    }
+      }),
+    );
   }
 
-  /** "Seen on {agent} at {time}" for a registered printer an agent has reported (usb/bluetooth on every
-   * poll; network only while a Scan is listening), or nothing. The server matched it (`printerId`). */
-  #seenStatus(printerId: string): TemplateResult | typeof nothing {
-    const seen = this.discovered.find((d) => d.printerId === printerId);
-    if (seen === undefined) return nothing;
-    const time = new Intl.DateTimeFormat(currentLocale(), { timeStyle: "short" }).format(
-      new Date(seen.lastSeenAt),
-    );
-    return html`<span data-test="printer-seen-${printerId}"
+  /** The matched discovered entry per registered printer id — built once per render for the rows
+   * (the `printerStations` shape), never a scan of the array per row. */
+  #seenByPrinter(): Map<string, DiscoveredPrinter> {
+    const seen = new Map<string, DiscoveredPrinter>();
+    for (const d of this.discovered) if (d.printerId !== null) seen.set(d.printerId, d);
+    return seen;
+  }
+
+  /** "Seen on {agent} at {time}" for a registered printer an agent has reported — usb/bluetooth on
+   * every poll, network while the SERVER's discovery window is open (3 min from a Scan, not only the
+   * screen's 10 s listen) — or nothing, also when the reporting agent's row is gone. It is as of the
+   * last read of the discovered list (load, Scan, Refresh): the server ages an entry out after 15 s,
+   * so this is when the printer was last read as seen, not a live presence light. Formatted to the
+   * minute (UTC) like every other last-seen on this screen. */
+  #seenStatus(
+    printerId: string,
+    seen: DiscoveredPrinter | undefined,
+  ): TemplateResult | typeof nothing {
+    if (seen === undefined || seen.agentName === null) return nothing;
+    return html`<span data-test="printer-last-seen-${printerId}"
       >${t("printers.seen_at")
-        .replace("{agent}", seen.agentName ?? "")
-        .replace("{time}", time)}</span
+        .replace("{agent}", seen.agentName)
+        .replace("{time}", formatIsoMinute(seen.lastSeenAt))}</span
     >`;
   }
 
@@ -780,8 +788,7 @@ export class PrintersScreen extends LitElement {
     try {
       await this.api.createPrinter({ name, transport: device.transport, localKey });
       this.registerNames = { ...this.registerNames, [localKey]: "" };
-      // Independent reads — the printers list and the discovered list — run concurrently.
-      await Promise.all([this.#load(), this.#loadDiscovered()]);
+      await this.#load(); // also re-reads the discovered list, so the row leaves it
     } catch (error) {
       this.errorKey = codeOf(error);
     } finally {
@@ -1105,13 +1112,13 @@ export class PrintersScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  #renderPrinter(p: EditablePrinter): TemplateResult {
+  #renderPrinter(p: EditablePrinter, seen: DiscoveredPrinter | undefined): TemplateResult {
     return html`<li data-test="printer-row-${p.id}">
       <wt-card>
         <div class="details" style="margin-bottom: var(--wt-space-3)">
           <span class="meta">
             <span data-test="printer-transport-${p.id}">${transportName(p.transport)}</span>
-            ${this.#seenStatus(p.id)}
+            ${this.#seenStatus(p.id, seen)}
           </span>
         </div>
         <div class="row">
@@ -1296,7 +1303,7 @@ export class PrintersScreen extends LitElement {
   }
 
   /** The manual IP (network_tcp) add form: name + host + port + Add, plus a Scan that opens the
-   * discovery window and offers any found IP printer to pre-fill host + port. */
+   * discovery window and offers a one-click Add for any found IP printer not already registered. */
   #renderNetworkForm(): TemplateResult {
     // Only what is NOT yet registered: a registered printer's presence shows against its own row.
     const found = this.discovered.filter(
@@ -1374,8 +1381,8 @@ export class PrintersScreen extends LitElement {
     `;
   }
 
-  /** One discovered usb/bluetooth device row — its identity + stable id, and either a "registered"
-   * marker (an existing printer already keys on it) or a name field + Register action. */
+  /** One discovered usb/bluetooth device row — its identity + stable id, a name field and a Register
+   * action (registered devices never reach this row: the section lists only the unmatched ones). */
   #renderDiscoveredRow(device: DiscoveredPrinter): TemplateResult {
     const localKey = device.localKey ?? "";
     return html`<li data-test="discovered-row-${localKey}">
@@ -1394,28 +1401,22 @@ export class PrintersScreen extends LitElement {
               }
             </span>
           </div>
-          ${
-            device.alreadyRegistered
-              ? html`<span class="label" data-test="discovered-registered-${localKey}"
-                  >${t("printers.registered")}</span
-                >`
-              : html`<wt-input
-                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="register-${localKey}"]`))}
-                    label=${t("printers.name")}
-                    data-test="register-name-${localKey}"
-                    .value=${this.registerNames[localKey] ?? ""}
-                    @wt-change=${(e: CustomEvent<{ value: string }>) =>
-                      this.#onNewField(e, (v) => this.#onRegisterName(localKey, v))}
-                  ></wt-input>
-                  <wt-button
-                    variant="primary"
-                    size="sm"
-                    data-test="register-${localKey}"
-                    ?disabled=${this.submitting}
-                    @click=${() => void this.#registerDiscovered(device)}
-                    >${t("printers.register")}</wt-button
-                  >`
-          }
+          ${html`<wt-input
+              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="register-${localKey}"]`))}
+              label=${t("printers.name")}
+              data-test="register-name-${localKey}"
+              .value=${this.registerNames[localKey] ?? ""}
+              @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                this.#onNewField(e, (v) => this.#onRegisterName(localKey, v))}
+            ></wt-input>
+            <wt-button
+              variant="primary"
+              size="sm"
+              data-test="register-${localKey}"
+              ?disabled=${this.submitting}
+              @click=${() => void this.#registerDiscovered(device)}
+              >${t("printers.register")}</wt-button
+            >`}
         </div>
       </wt-card>
     </li>`;
@@ -1424,7 +1425,11 @@ export class PrintersScreen extends LitElement {
   /** The usb/bluetooth register surface: the discovered inventory (filtered to the current transport)
    * with a per-row Register, a Refresh, and — for bluetooth — a one-line note to pair on the box first. */
   #renderDiscoveredSection(): TemplateResult {
-    const found = this.discovered.filter((d) => d.transport === this.newTransport);
+    // Only what is NOT yet registered (owner decision 2026-09-11): a registered device's presence
+    // shows against its own row in the list above.
+    const found = this.discovered.filter(
+      (d) => d.transport === this.newTransport && !d.alreadyRegistered,
+    );
     return html`
       ${
         this.newTransport === "bluetooth"
@@ -1452,6 +1457,7 @@ export class PrintersScreen extends LitElement {
   }
 
   #renderPrintersSection(): TemplateResult {
+    const seen = this.#seenByPrinter();
     return html`
       <section>
         <h2 class="panel-title">${t("printers.list_title")}</h2>
@@ -1459,7 +1465,7 @@ export class PrintersScreen extends LitElement {
           this.printers.length === 0
             ? html`<p class="empty" data-test="no-printers">${t("printers.no_printers")}</p>`
             : html`<ol>
-                ${this.printers.map((p) => this.#renderPrinter(p))}
+                ${this.printers.map((p) => this.#renderPrinter(p, seen.get(p.id)))}
               </ol>`
         }
         <h3 class="panel-title">${t("printers.new_printer")}</h3>
