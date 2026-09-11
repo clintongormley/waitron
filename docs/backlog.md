@@ -106,9 +106,15 @@ steps take owner sign-off at land):
    fetches `compose.yml`, and starts the containers — run with no argument it tracks the published
    `main` image; given a branch or commit instead, it builds and runs that ref's image on the box
    before merge, recording the choice in `.env`; distinct from the bootable-USB installer below —
-   this replaced three separate scripts, `prepare.sh`/`install.sh`/`try-branch.sh`, on 2026-09-11,
-   which is also when the box gained a `reset` command for wiping it back to a clean state; see
-   `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md`), the entrypoint that ensures
+   this replaced three separate scripts, `prepare.sh`/`install.sh`/`try-branch.sh`, on 2026-09-11
+   (PR #314), which is also when the box gained a `reset` command for wiping it back to a clean state
+   — `reset` refuses on a box marked for production, because a wipe destroys the fiscal records and
+   starts a fresh chain; see `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md`.
+   The run-it review of #314 found and fixed four real bugs reading had missed, including the
+   production refusal failing open when its checks could not be read. Left deferred, not blocking:
+   a handful of shell-quality tidy-ups the simplify review suggested (a wrapper for the repeated
+   `docker compose -f` flag, a shared confirm helper, and the fact that installing a branch fetches
+   the repo twice, once per image build) — quality only, no behaviour change), the entrypoint that ensures
    the database shape on every boot, the
    recovery-supervisor half (an escalating failure counter that serves a page over the box's own leaf
    when boot fails), the box serving its own leaf over HTTPS in ALL modes (setup, recovery AND
