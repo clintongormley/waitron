@@ -123,8 +123,9 @@ this floor — removing the `min-width` regresses that guard.
 
 | Element | Properties | Events |
 | --- | --- | --- |
-| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `disabled`, `aria-label` | native `click` |
+| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `disabled`, `loading`, `aria-label` | native `click` |
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
+| `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name) | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label` | `wt-change` — `detail: { checked: boolean }` |
@@ -134,7 +135,11 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label` | native events from consumer-provided cells |
 
-`wt-button` has no `type` property — see "Forms" below.
+`wt-button` has no `type` property — see "Forms" below. `wt-button loading` is the one way to show an
+action in progress on a button: it disables the button, sets `aria-busy`, and leads the label with a
+`wt-spinner` while keeping the label readable — swap the label to what is happening ("Scanning…"), and
+never leave a control silently disabled while work runs. `wt-spinner` on its own is for a region that
+is loading; it is a `role="status"` live region, so give `label` the localized text.
 
 Use `wt-data-table` for sortable administrative collections such as people, devices, printers and
 canvases. Define columns and cell content in the consuming screen so domain actions stay outside the
