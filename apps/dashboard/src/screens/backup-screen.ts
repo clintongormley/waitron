@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -179,6 +180,13 @@ export class BackupScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   // The loaded running status. Undefined until the first load settles; the body renders off it.
   @state() private status?: BackupStatusView;
@@ -246,9 +254,10 @@ export class BackupScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const status = await this.api.getBackupStatus();
-      this.status = status;
-      if (status.isPrimary && !status.managedByEnvironment) await this.#mint();
+      await this.#queries.watch("getBackupStatus", [], (value) => {
+        this.status = value;
+      });
+      if (this.status!.isPrimary && !this.status!.managedByEnvironment) await this.#mint();
     } catch (error) {
       this.errorKey = codeOf(error);
     }

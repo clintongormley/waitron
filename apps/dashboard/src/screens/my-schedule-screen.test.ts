@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { MyScheduleScreen, scheduleWindow } from "./my-schedule-screen.js";
@@ -296,4 +297,19 @@ describe("my-schedule-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=swaps-empty]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=absences-empty]")).not.toBeNull();
   });
+});
+
+it("refreshes displayed shifts when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-my-schedule-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["shifts"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listMyShifts).mockResolvedValue([]);
+  liveData.invalidate([{ type: "shifts", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listMyShifts).toHaveBeenCalledTimes(2);
 });

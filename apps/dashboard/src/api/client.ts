@@ -20,7 +20,12 @@
  * dependency, exactly the precedent `apps/till/src/api/client.ts` sets for the same type.
  */
 import type { TimingBand } from "@waitron/shared";
-import { createRequest, type DashboardRequest, type FetchLike } from "@waitron/dashboard-kit";
+import {
+  createRequest,
+  LiveData,
+  type DashboardRequest,
+  type FetchLike,
+} from "@waitron/dashboard-kit";
 
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
@@ -1355,6 +1360,19 @@ export interface BackupApplyBody {
 }
 
 export class DashboardApi {
+  readonly liveData = new LiveData();
+  #background?: DashboardApi;
+  #onError?: (code: string) => void;
+
+  get background(): DashboardApi {
+    return (this.#background ??= new DashboardApi(
+      this.#baseUrl,
+      this.#fetch,
+      this.#onError,
+      undefined,
+      true,
+    ));
+  }
   /** The one request primitive every method funnels through (see @waitron/dashboard-kit's
    * createRequest for the credentials/JSON/FormData/empty-body/`{ code }` rules). */
   readonly #request: DashboardRequest;
@@ -1378,10 +1396,12 @@ export class DashboardApi {
     fetchImpl: FetchLike = fetch,
     onError?: (code: string) => void,
     onSuccess?: (path: string) => void,
+    passive = false,
   ) {
     this.#baseUrl = baseUrl;
     this.#fetch = fetchImpl;
-    this.#request = createRequest({ baseUrl, fetchImpl, onError, onSuccess });
+    this.#onError = onError;
+    this.#request = createRequest({ baseUrl, fetchImpl, onError, onSuccess, passive });
   }
 
   /** `GET /management-api/staff-roster` — the staff self-service colleague picker in

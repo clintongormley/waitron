@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -251,4 +252,19 @@ describe("purchases-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
   });
+});
+
+it("refreshes displayed invoices when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-purchases-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["invoices"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listPurchaseInvoices).mockResolvedValue([]);
+  liveData.invalidate([{ type: "purchase_invoices", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listPurchaseInvoices).toHaveBeenCalledTimes(2);
 });

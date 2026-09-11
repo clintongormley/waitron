@@ -131,7 +131,7 @@ export class DiagnosticsScreen extends LitElement {
     super.connectedCallback();
     void this.#refresh();
     this.#timer = setInterval(() => {
-      if (!this.paused) void this.#refresh();
+      if (!this.paused) void this.#refresh(true);
     }, POLL_MS);
   }
 
@@ -145,16 +145,14 @@ export class DiagnosticsScreen extends LitElement {
 
   /** Pull the recent log ring + current verbosity in one round trip pair. A rejection becomes the
    * `errorKey` banner rather than an unhandled rejection (called via `void`). */
-  async #refresh(): Promise<void> {
+  async #refresh(passive = false): Promise<void> {
     // Single-flight (see #inFlight): skip if a refresh is already running so an older, slower response
     // can never land after a newer one and overwrite the tail with stale data.
     if (this.#inFlight) return;
     this.#inFlight = true;
     try {
-      const [recent, verbosity] = await Promise.all([
-        this.api.getRecentLogs(200),
-        this.api.getVerbosity(),
-      ]);
+      const api = passive ? (this.api.background ?? this.api) : this.api;
+      const [recent, verbosity] = await Promise.all([api.getRecentLogs(200), api.getVerbosity()]);
       this.lines = recent.lines;
       this.verbosity = verbosity;
       this.errorKey = null;

@@ -61,6 +61,12 @@ action menus and modal editors split Status, Departments, Menus, Service zones a
 Preparation routing. [Design](superpowers/specs/2026-09-11-venue-tabs-design.md) and
 [plan](superpowers/plans/2026-09-11-venue-tabs.md).
 
+**Dashboard live updates — implemented on `live-updates`, awaiting branch review and CI**
+(2026-09-11). Committed database changes invalidate subscribed dashboard queries through one
+identity-event stream per tab. Printers, queue counts, reports, administration lists and Bookings
+refresh while editing drafts remain separate. Timers cover discovery, pairing and time-based
+queries. See the [design](superpowers/specs/2026-09-11-dashboard-live-updates-design.md).
+
 **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
 bypass, so a docs-only change is pushed straight to `main` — no PR, no CI wait. Branch, `commit -s`,
 fast-forward `main`, push. Feature/code still goes through a PR.
@@ -313,7 +319,7 @@ design-review section apply.
   `/dev/usb/lp0` as the `node` user, and a dashboard "test print" prints a physical slip end-to-end.*
   *Two dashboard join-UI follow-ups surfaced during that live test (both `apps/dashboard`, pre-existing
   from the #289/#304 join flow, NOT the box-wiring branch): the "print agents waiting to join" list does
-  not live-update (a knock only appears after a manual page refresh), and the pairing window's "Open
+  not live-update (addressed on `live-updates`, awaiting landing), and the pairing window's "Open
   until …" timestamp renders in UTC instead of the venue's local time zone.*
   *On-node agent auto-enrolment — LANDED #311, box-verified 2026-09-11 (spec
   [2026-09-11-on-node-agent-auto-enrolment-design.md](superpowers/specs/2026-09-11-on-node-agent-auto-enrolment-design.md)):

@@ -1,4 +1,5 @@
 import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import type { ChangeSource } from "@waitron/shared";
 
 // Shared reason strings for the common case; a table with a more specific "why" states it inline.
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
@@ -87,3 +88,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("node_membership", "local", "this node's membership record; not copied"),
   classify("join_requests", "local", "this node's pending joins, device and agent; not copied"),
 ];
+
+export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_CLASSIFICATION.map(
+  ({ table }) => ({
+    table,
+    type: table,
+    related: table === "print_jobs" ? [{ type: "printers", column: "printer_id" }] : [],
+  }),
+);

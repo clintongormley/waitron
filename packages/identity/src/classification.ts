@@ -1,4 +1,5 @@
 import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import type { ChangeSource } from "@waitron/shared";
 
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
 
@@ -37,4 +38,14 @@ export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("totp_enrollments", "local", "short-lived authenticator setup challenges"),
   classify("google_oidc_states", "local", "short-lived Google sign-in and linking ceremonies"),
+];
+
+// Authentication challenges and session activity do not invalidate displayed profile data.
+export const IDENTITY_CHANGE_SOURCES: readonly ChangeSource[] = [
+  { table: "persons", type: "persons" },
+  {
+    table: "webauthn_credentials",
+    type: "webauthn_credentials",
+    related: [{ type: "persons", column: "person_id" }],
+  },
 ];

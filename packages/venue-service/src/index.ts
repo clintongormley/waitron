@@ -9,3 +9,4 @@ export { VENUE_SERVICE } from "./service.js";
 export { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 export { VENUE_SERVICE_ROUTES } from "./routes.js";
 export { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
+export { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";

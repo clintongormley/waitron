@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -623,4 +624,31 @@ describe("recipe-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
   });
+});
+
+it("refreshes displayed ingredients when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>("dashboard-recipe-screen", {
+    api,
+  });
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["ingredients"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listIngredients).mockResolvedValue([]);
+  liveData.invalidate([{ type: "ingredients", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listIngredients).toHaveBeenCalledTimes(2);
+});
+
+it("refreshes the selected catalogue's products on an external product change", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+  await flush(el);
+  selectValue(el, "recipe-catalogue-select", "cat-a");
+  await flush(el);
+  expect((el as unknown as { products: unknown[] }).products.length).toBeGreaterThan(0);
+  vi.mocked(api.listProducts).mockResolvedValue([]);
+  liveData.invalidate([{ type: "products", id: "p1" }]);
+  await vi.waitFor(() => expect((el as unknown as { products: unknown[] }).products).toEqual([]));
 });

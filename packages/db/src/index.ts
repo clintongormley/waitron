@@ -146,3 +146,6 @@ export { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
 // `import.meta.dirname` is `undefined` and the top-level `join(undefined, "..", "..")` throws
 // immediately, breaking `drizzle-kit generate` for that package. Verified live: adding this
 // export broke `pnpm --filter @waitron/fiscal-verifactu exec drizzle-kit generate` outright.
+export { installChangeFeed } from "./change-feed.js";
+export { CORE_CHANGE_SOURCES } from "./classification.js";
+export { startChangeListener } from "./change-listener.js";

@@ -1,10 +1,10 @@
+import type { LiveData } from "./live-data.js";
 import type { TemplateResult } from "lit";
 import type { DashboardRequest } from "./request.js";
 
 // The contract a dashboard module UI fills to contribute a screen. A module hands the app one
 // DashboardContribution; the app validates its nav group, registers its strings, and mounts its screen.
-// No module is consumed yet — this seat is declared here so later tasks (and the app) share the exact
-// shape. It names no concrete module.
+// It names no concrete module.
 
 /** A dashboard nav-group id; the app validates a contribution's group against its own known ids. */
 export type NavGroupId = string;
@@ -12,6 +12,7 @@ export type NavGroupId = string;
 /** What a contributed screen is handed at construction — the API request primitive, so far. */
 export interface DashboardModuleContext {
   request: DashboardRequest;
+  liveData?: LiveData;
 }
 
 /** A mounted screen instance: the app calls render() to paint it. */

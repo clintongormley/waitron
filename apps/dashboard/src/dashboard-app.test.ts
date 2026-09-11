@@ -2471,3 +2471,15 @@ it("leaves long dashboard content clear of the bottom-right language chooser on 
     window.scrollTo(0, 0);
   }
 });
+
+it("starts live updates after authentication and stops them on logout and disconnect", async () => {
+  const liveUpdates = { start: vi.fn(), stop: vi.fn() };
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi(), liveUpdates });
+  await flush(el);
+  expect(liveUpdates.start).toHaveBeenCalledOnce();
+  logoutBtn(el)!.click();
+  await flush(el);
+  expect(liveUpdates.stop).toHaveBeenCalledOnce();
+  el.remove();
+  expect(liveUpdates.stop).toHaveBeenCalledTimes(2);
+});

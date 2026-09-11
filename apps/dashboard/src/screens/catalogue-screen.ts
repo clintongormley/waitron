@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -94,6 +95,13 @@ export class CatalogueScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   @state() private catalogues: CatalogueSummary[] = [];
   @state() private categories: CategorySummary[] = [];
@@ -146,15 +154,20 @@ export class CatalogueScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [catalogues, categories, courses, optionGroups] = await Promise.all([
-        this.api.listCatalogues(),
-        this.api.listCategories(),
-        this.api.listCourses(),
-        this.api.listOptionGroups(),
+      await Promise.all([
+        this.#queries.watch("listCategories", [], (value) => {
+          this.categories = value;
+        }),
+        this.#queries.watch("listCourses", [], (value) => {
+          this.courses = value;
+        }),
+        this.#queries.watch("listOptionGroups", [], (value) => {
+          this.optionGroups = value;
+        }),
+        this.#queries.watch("listCatalogues", [], (value) =>
+          this.#applyCatalogues(value, this.categories),
+        ),
       ]);
-      this.courses = courses;
-      this.optionGroups = optionGroups;
-      await this.#applyCatalogues(catalogues, categories);
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -174,23 +187,24 @@ export class CatalogueScreen extends LitElement {
     if (catalogues.length === 0) {
       this.selectedCatalogueId = "";
       this.products = [];
+      this.#queries.release("listProducts");
       return;
     }
     if (!catalogues.some((c) => c.id === this.selectedCatalogueId)) {
       this.selectedCatalogueId = catalogues[0]!.id;
     }
-    const lists = await Promise.all(
-      catalogues.map((catalogue) => this.api.listProducts(catalogue.id)),
-    );
-    this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
+    await this.#reloadProducts();
   }
 
   /** Reload every reusable product across the current menus after a create or update. */
   async #reloadProducts(): Promise<void> {
-    const lists = await Promise.all(
-      this.catalogues.map((catalogue) => this.api.listProducts(catalogue.id)),
+    await this.#queries.watchGroup(
+      "listProducts",
+      this.catalogues.map((catalogue) => [catalogue.id]),
+      (lists) => {
+        this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
+      },
     );
-    this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
   }
 
   /** Open the create form. The first menu remains a temporary storage detail until the legacy product
@@ -401,6 +415,7 @@ export class CatalogueScreen extends LitElement {
     const { groupId } = event.detail;
     if (this.expandedGroupId === groupId) {
       this.expandedGroupId = null;
+      this.#queries.release("listOptionGroupItems");
       this.optionGroupItems = [];
       return;
     }
@@ -408,7 +423,9 @@ export class CatalogueScreen extends LitElement {
     this.optionGroupItems = [];
     this.errorKey = null;
     try {
-      this.optionGroupItems = await this.api.listOptionGroupItems(groupId);
+      await this.#queries.watch("listOptionGroupItems", [groupId], (value) => {
+        this.optionGroupItems = value;
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -426,7 +443,9 @@ export class CatalogueScreen extends LitElement {
     this.optionGroupItemError = null;
     try {
       await this.api.createOptionGroupItem(groupId, input);
-      this.optionGroupItems = await this.api.listOptionGroupItems(groupId);
+      await this.#queries.watch("listOptionGroupItems", [groupId], (value) => {
+        this.optionGroupItems = value;
+      });
     } catch (error) {
       this.optionGroupItemError = codeOf(error);
     } finally {
@@ -447,7 +466,9 @@ export class CatalogueScreen extends LitElement {
         event.detail.itemId,
         event.detail.patch,
       );
-      this.optionGroupItems = await this.api.listOptionGroupItems(event.detail.groupId);
+      await this.#queries.watch("listOptionGroupItems", [event.detail.groupId], (value) => {
+        this.optionGroupItems = value;
+      });
     } catch (error) {
       this.optionGroupItemError = codeOf(error);
     }

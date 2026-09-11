@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -75,6 +76,13 @@ export class PrintingRulesScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
   @state() private printers: Printer[] = [];
   @state() private stations: Station[] = [];
   @state() private printerStations: Record<string, string[]> = {};
@@ -105,26 +113,32 @@ export class PrintingRulesScreen extends LitElement {
     // Stations and locations use till.configure and schedule.manage; all three permissions currently
     // share manager/admin membership (packages/identity/src/permissions.ts). Keep this read usable if
     // printer.manage is ever assigned independently.
-    const [printers, stations, tills, locations] = await Promise.all([
-      this.api.listPrinters(),
-      this.api.listStations(),
-      this.api.listTills(),
-      this.api.getLocations(),
+    await Promise.all([
+      this.#queries.watch("listPrinters", [], async (printers) => {
+        this.printers = printers;
+        await this.#queries.watchGroup(
+          "listPrinterStations",
+          printers.map((printer) => [printer.id]),
+          (lists) => {
+            this.printerStations = Object.fromEntries(
+              printers.map((printer, index) => [
+                printer.id,
+                lists[index]!.map((item) => item.stationId),
+              ]),
+            );
+          },
+        );
+      }),
+      this.#queries.watch("listStations", [], (value) => {
+        this.stations = value;
+      }),
+      this.#queries.watch("listTills", [], (value) => {
+        this.tills = value;
+      }),
+      this.#queries.watch("getLocations", [], (value) => {
+        this.locations = value;
+      }),
     ]);
-    const pairs = await Promise.all(
-      printers.map(
-        async (printer) =>
-          [
-            printer.id,
-            (await this.api.listPrinterStations(printer.id)).map((item) => item.stationId),
-          ] as const,
-      ),
-    );
-    this.printers = printers;
-    this.stations = stations;
-    this.tills = tills;
-    this.locations = locations;
-    this.printerStations = Object.fromEntries(pairs);
   }
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     if (this.saving) return;

@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -754,3 +755,17 @@ it.each([
     );
   },
 );
+
+it("refreshes displayed tables when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>("dashboard-floor-screen", {
+    api,
+  });
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["tables"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listTables).mockResolvedValue([]);
+  liveData.invalidate([{ type: "dining_tables", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listTables).toHaveBeenCalledTimes(2);
+});

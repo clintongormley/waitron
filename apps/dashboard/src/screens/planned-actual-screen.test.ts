@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, PersonSummary, PlannedVsActualRow } from "../api/client.js";
@@ -251,4 +252,19 @@ describe("planned-actual-screen", () => {
     const reselect = locationSelect(el);
     expect(reselect.value).toBe("loc-2");
   });
+});
+
+it("refreshes displayed rows when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-planned-actual-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["rows"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.getPlannedVsActual).mockResolvedValue([]);
+  liveData.invalidate([{ type: "shifts", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.getPlannedVsActual).toHaveBeenCalledTimes(2);
 });

@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -64,6 +65,13 @@ export class PurchasesScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   @state() private invoices: PurchaseInvoice[] = [];
   @state() private formOpen = false;
@@ -85,7 +93,9 @@ export class PurchasesScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      this.invoices = await this.api.listPurchaseInvoices();
+      await this.#queries.watch("listPurchaseInvoices", [], (value) => {
+        this.invoices = value;
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -93,7 +103,9 @@ export class PurchasesScreen extends LitElement {
 
   /** Reload after a mutation. Throws to its caller's catch (so a reload failure surfaces the banner). */
   async #reload(): Promise<void> {
-    this.invoices = await this.api.listPurchaseInvoices();
+    await this.#queries.watch("listPurchaseInvoices", [], (value) => {
+      this.invoices = value;
+    });
   }
 
   /** Open the create form. Clears any prior error and the edit target. */

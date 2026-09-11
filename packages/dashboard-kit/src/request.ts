@@ -2,7 +2,12 @@
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 /** The one request primitive every dashboard API method funnels through — path-first: `(path, method, body?)`. */
-export type DashboardRequest = <T>(path: string, method: string, body?: unknown) => Promise<T>;
+export type DashboardRequest = <T>(
+  path: string,
+  method: string,
+  body?: unknown,
+  options?: { passive?: boolean },
+) => Promise<T>;
 
 /**
  * Build the dashboard's request primitive. Lifted verbatim from apps/dashboard/src/api/client.ts's
@@ -21,11 +26,17 @@ export function createRequest(
     fetchImpl?: FetchLike;
     onError?: (code: string) => void;
     onSuccess?: (path: string) => void;
+    passive?: boolean;
   } = {},
 ): DashboardRequest {
   const baseUrl = opts.baseUrl ?? "";
   const fetchImpl = opts.fetchImpl ?? fetch;
-  return async <T>(path: string, method: string, body?: unknown): Promise<T> => {
+  return async <T>(
+    path: string,
+    method: string,
+    body?: unknown,
+    options?: { passive?: boolean },
+  ): Promise<T> => {
     const init: RequestInit =
       body === undefined
         ? { method, credentials: "include" }
@@ -37,6 +48,12 @@ export function createRequest(
               headers: { "content-type": "application/json" },
               body: JSON.stringify(body),
             };
+    const passive = method === "GET" && (options?.passive ?? opts.passive) === true;
+    if (passive) {
+      const headers = new Headers(init.headers);
+      headers.set("x-waitron-live", "1");
+      init.headers = headers;
+    }
     const res = await fetchImpl(baseUrl + path, init);
     if (!res.ok) {
       const envelope = (await res.json()) as { error?: { code?: string } };
@@ -45,7 +62,7 @@ export function createRequest(
       throw { code };
     }
     const text = await res.text();
-    opts.onSuccess?.(path);
+    if (!passive) opts.onSuccess?.(path);
     return (text === "" ? undefined : JSON.parse(text)) as T;
   };
 }

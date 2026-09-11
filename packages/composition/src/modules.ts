@@ -1,10 +1,11 @@
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
 import {
   CATALOGUE_CLASSIFICATION,
+  CATALOGUE_CHANGE_SOURCES,
   CATALOGUE_CONFIGURATION_TRANSFER,
   CATALOGUE_PROVISIONING,
 } from "@waitron/catalogue";
-import { CORE_CLASSIFICATION, CORE_CONFIGURATION_TRANSFER } from "@waitron/db";
+import { CORE_CLASSIFICATION, CORE_CONFIGURATION_TRANSFER, CORE_CHANGE_SOURCES } from "@waitron/db";
 import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
   FISCAL_CLASSIFICATION,
@@ -15,18 +16,32 @@ import {
 } from "@waitron/fiscal-verifactu";
 import {
   BOOKINGS_CLASSIFICATION,
+  BOOKINGS_CHANGE_SOURCES,
   BOOKINGS_FLOOR_ANNOTATIONS,
   BOOKINGS_PERMISSIONS,
   BOOKINGS_ROUTES,
 } from "@waitron/bookings";
-import { IDENTITY_CLASSIFICATION, IDENTITY_CONFIGURATION_TRANSFER } from "@waitron/identity";
+import {
+  IDENTITY_CLASSIFICATION,
+  IDENTITY_CONFIGURATION_TRANSFER,
+  IDENTITY_CHANGE_SOURCES,
+} from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
-import { PAYMENTS_CLASSIFICATION, PAYMENTS_CONFIGURATION_TRANSFER } from "@waitron/payments";
+import {
+  PAYMENTS_CLASSIFICATION,
+  PAYMENTS_CONFIGURATION_TRANSFER,
+  PAYMENTS_CHANGE_SOURCES,
+} from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
-import { WORKFORCE_CLASSIFICATION, WORKFORCE_CONFIGURATION_TRANSFER } from "@waitron/workforce";
+import {
+  WORKFORCE_CLASSIFICATION,
+  WORKFORCE_CONFIGURATION_TRANSFER,
+  WORKFORCE_CHANGE_SOURCES,
+} from "@waitron/workforce";
 import {
   VENUE_SERVICE,
   VENUE_SERVICE_CLASSIFICATION,
+  VENUE_SERVICE_CHANGE_SOURCES,
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
   VENUE_SERVICE_PERMISSIONS,
   VENUE_SERVICE_PROVISIONING,
@@ -66,6 +81,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     tier: "mandatory",
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
     classification: CORE_CLASSIFICATION,
+    changes: CORE_CHANGE_SOURCES,
     // The content-addressed media store is core's non-DB state; a backup must capture it
     // alongside the DB.
     backup: { nonDbState: [{ kind: "content-addressed-dir", source: "media" }] },
@@ -82,6 +98,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../catalogue/drizzle",
     },
     classification: CATALOGUE_CLASSIFICATION,
+    changes: CATALOGUE_CHANGE_SOURCES,
     configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
     provisioning: CATALOGUE_PROVISIONING,
   },
@@ -96,6 +113,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../venue-service/drizzle",
     },
     classification: VENUE_SERVICE_CLASSIFICATION,
+    changes: VENUE_SERVICE_CHANGE_SOURCES,
     venueService: VENUE_SERVICE,
     configurationTransfer: VENUE_SERVICE_CONFIGURATION_TRANSFER,
     provisioning: VENUE_SERVICE_PROVISIONING,
@@ -113,6 +131,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../identity/drizzle",
     },
     classification: IDENTITY_CLASSIFICATION,
+    changes: IDENTITY_CHANGE_SOURCES,
     configurationTransfer: IDENTITY_CONFIGURATION_TRANSFER,
   },
   {
@@ -126,6 +145,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../workforce/drizzle",
     },
     classification: WORKFORCE_CLASSIFICATION,
+    changes: WORKFORCE_CHANGE_SOURCES,
     configurationTransfer: WORKFORCE_CONFIGURATION_TRANSFER,
   },
   {
@@ -153,6 +173,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../payments/drizzle",
     },
     classification: PAYMENTS_CLASSIFICATION,
+    changes: PAYMENTS_CHANGE_SOURCES,
     configurationTransfer: PAYMENTS_CONFIGURATION_TRANSFER,
   },
   {
@@ -229,6 +250,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../bookings/drizzle",
     },
     classification: BOOKINGS_CLASSIFICATION,
+    changes: BOOKINGS_CHANGE_SOURCES,
     routes: BOOKINGS_ROUTES,
     permissions: BOOKINGS_PERMISSIONS,
     floorAnnotations: BOOKINGS_FLOOR_ANNOTATIONS,

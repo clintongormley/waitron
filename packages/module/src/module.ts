@@ -2,6 +2,7 @@ import semver from "semver";
 import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import type { LocationId, TenantId } from "@waitron/shared";
+import type { ChangeSource } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { MigrationSet } from "@waitron/migrations";
@@ -297,6 +298,7 @@ export interface WaitronModule {
    * publication table-lists derive from it and the root completeness guard checks it covers each
    * module's `CREATE TABLE`s exactly once. */
   readonly classification?: readonly ClassifiedTable[];
+  readonly changes?: readonly ChangeSource[];
   readonly cards?: unknown; // SP-4
   /** SP-3b: the domain terms this module OWNS — legitimate inside its own package (derived from
    * `migrations.from`, `../<pkg>/drizzle`), forbidden in every generic package. Tokens, not words:

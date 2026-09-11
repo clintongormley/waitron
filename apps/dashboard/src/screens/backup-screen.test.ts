@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -425,4 +426,18 @@ describe("backup-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.textContent).toContain(t("backup.status.stale"));
   });
+});
+
+it("refreshes backup status without minting another recovery key", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  await flush(el);
+  expect(api.mintBackupKey).toHaveBeenCalledOnce();
+  vi.mocked(api.getBackupStatus).mockResolvedValue(ENABLED);
+  liveData.invalidate([{ type: "backup_status" }]);
+  await vi.waitFor(() =>
+    expect((el as unknown as { status: BackupStatusView }).status).toEqual(ENABLED),
+  );
+  expect(api.mintBackupKey).toHaveBeenCalledOnce();
 });

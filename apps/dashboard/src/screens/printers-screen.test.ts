@@ -14,6 +14,7 @@ import type {
   Till,
 } from "../api/client.js";
 import { PrintersScreen, SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
+import { LiveData } from "@waitron/dashboard-kit";
 
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
@@ -276,6 +277,39 @@ function toggleSwitch(el: PrintersScreen, sel: string, checked: boolean): void {
 }
 
 describe("printers-screen", () => {
+  it("updates a printer and its recent jobs after a data event while preserving an editing draft", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el);
+    typeField(el, "[data-test=printer-name-p1]", "Unsaved name");
+    vi.mocked(api.listPrinters).mockResolvedValue(
+      printers.map((printer) =>
+        printer.id === "p1"
+          ? { ...printer, pendingJobs: 7, lastPrintAt: "2026-09-11T12:34:00.000Z" }
+          : printer,
+      ),
+    );
+    vi.mocked(api.listRecentJobs).mockResolvedValue([]);
+
+    liveData.invalidate([
+      { type: "printers", id: "p1" },
+      { type: "print_jobs", id: "j1" },
+    ]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    const row = q(el, "[data-test=printer-row-p1]")!.closest("tr")!;
+    expect(
+      row.querySelector('[data-column="pending"]')?.textContent?.trim() ?? row.textContent,
+    ).toContain("7");
+    expect(row.textContent).toContain("2026");
+    expect(q(el, "[data-test=job-row-j1]")).toBeNull();
+    expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput).value).toBe(
+      "Unsaved name",
+    );
+    expect(api.listTills).toHaveBeenCalledTimes(1);
+  });
   it("loads agents, printers and jobs on connect and renders a row for each", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

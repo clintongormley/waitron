@@ -1,12 +1,15 @@
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as liveRetryDelay } from "node:timers/promises";
 import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   asAppUser,
   createPostgresDb,
+  installChangeFeed,
+  startChangeListener,
   persistNodeMembershipIfNewer,
   readDeploymentAxes,
   readFenceLsn,
@@ -19,7 +22,8 @@ import {
   type Database,
 } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
-import { registerModulePermissions } from "@waitron/identity";
+import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
+import { LiveEvents, mountLiveApi } from "./live-api.js";
 import { runDue } from "@waitron/scheduler";
 import {
   StripeOnDeviceProvider,
@@ -886,6 +890,11 @@ export async function startServer(
   // left unwrapped: a liveness probe needs no request correlation and should not fill the request log
   // with probe noise. The request log is `debug`, dropped by the default verbosity until raised.
   app.use("*", requestIdMiddleware(log, now));
+  app.use("*", async (c, next) => {
+    if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
+      await withPassiveManagementRead(next);
+    } else await next();
+  });
 
   if (config.till === undefined) {
     // SETUP MODE (slice 1b/2a/2b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID
@@ -1662,6 +1671,35 @@ export async function startServer(
     await Promise.allSettled([replicationDb.close(), db.close()]);
     throw error;
   }
+
+  const liveEvents = new LiveEvents();
+  const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
+  try {
+    await installChangeFeed(replicationDb, changeSources);
+  } catch (error) {
+    await Promise.allSettled([replicationDb.close(), db.close()]);
+    throw error;
+  }
+  mountLiveApi(
+    app,
+    {
+      db,
+      tenantId: config.till.tenantId,
+      bus: liveEvents,
+      resourceTypes: [
+        ...changeSources.flatMap((source) => [
+          source.type,
+          ...(source.related ?? []).map((related) => related.type),
+        ]),
+        "pairing",
+        "printer_discovery",
+        "email_inbox",
+        "backup_status",
+        "google_config",
+      ],
+    },
+    log,
+  );
 
   const reconciler = new StripeReconciler({
     db,
@@ -2451,6 +2489,24 @@ export async function startServer(
   // minted leaf via the shared fallback (see `startTradingListener`), HTTPS like setup and recovery.
   const server = startTradingListener(config, app, now, log);
 
+  const liveController = new AbortController();
+  let liveListener: Awaited<ReturnType<typeof startChangeListener>> | undefined;
+  const liveStartup = (async () => {
+    while (!liveController.signal.aborted) {
+      try {
+        liveListener = await startChangeListener(config.databaseUrl, {
+          onChange: (change) => liveEvents.publish(change),
+          onReset: () => liveEvents.reset(),
+          onError: (error) => log("warn", "live.listener_failed", { errorCode: codeOf(error) }),
+        });
+        return;
+      } catch (error) {
+        log("warn", "live.listener_failed", { errorCode: codeOf(error) });
+        await liveRetryDelay(1000, undefined, { signal: liveController.signal }).catch(() => {});
+      }
+    }
+  })();
+
   const controller = new AbortController();
   const loop = runLoop({
     // The fiscal/settlement duties (drain/reconcile) run ONLY when this node holds the singletons
@@ -2551,6 +2607,10 @@ export async function startServer(
     {
       stopWork: async () => {
         controller.abort();
+        liveController.abort();
+        liveEvents.close();
+        await liveStartup;
+        await liveListener?.close();
         // Stop the outbound tunnel client — its own controller, aborted here so close() never leaves it
         // dialing; runTunnelClient resolves promptly on abort (it destroys every live socket and
         // cancels every pending backoff nap). Aborted alongside the others, awaited below.

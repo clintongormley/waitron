@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -69,6 +70,13 @@ export class ApprovalsScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   @state() private swaps: PendingSwap[] = [];
   @state() private absences: PendingAbsence[] = [];
@@ -89,23 +97,26 @@ export class ApprovalsScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      this.#names = personNameMap(await this.api.listStaff());
+      await this.#queries.watch("listStaff", [], (value) => {
+        this.#names = personNameMap(value);
+        this.requestUpdate();
+      });
       await this.#loadQueues();
     } catch (error) {
       this.#fail(error);
     }
   }
 
-  /** Reload just the two pending queues. A decide moves a row out of a queue but cannot change the
-   * staff roster, so the staff list is fetched once (in `#load`) and never refetched here. Throws to
-   * its caller's catch. */
+  /** Observe both queues independently of the staff-name lookup. Throws on an initial failure. */
   async #loadQueues(): Promise<void> {
-    const [swaps, absences] = await Promise.all([
-      this.api.listPendingSwaps(),
-      this.api.listPendingAbsences(),
+    await Promise.all([
+      this.#queries.watch("listPendingSwaps", [], (value) => {
+        this.swaps = value;
+      }),
+      this.#queries.watch("listPendingAbsences", [], (value) => {
+        this.absences = value;
+      }),
     ]);
-    this.swaps = swaps;
-    this.absences = absences;
   }
 
   /** Surface a rejection as the `errorKey` banner — the thrown domain `{ code }`, or `server.internal`

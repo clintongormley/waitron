@@ -9,6 +9,7 @@ import {
   endManagementSession,
   resolveManagementSession,
   startManagementSession,
+  withPassiveManagementRead,
 } from "./management-session.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
@@ -29,6 +30,24 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
   withTenant(suite.db, tenantId, fn);
 
 describe("management session lifecycle", () => {
+  it("does not extend a passive refresh's session, while an ordinary read still extends it", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "manager");
+    const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
+    await run((tx) =>
+      tx.execute(
+        sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${session.id}`,
+      ),
+    );
+    const before = await run((tx) => resolveManagementSession(tx, session.id, { touch: false }));
+    const passive = await withPassiveManagementRead(() =>
+      run((tx) => resolveManagementSession(tx, session.id)),
+    );
+    expect(passive.expiresAt).toBe(before.expiresAt);
+    const ordinary = await run((tx) => resolveManagementSession(tx, session.id));
+    expect(Date.parse(ordinary.expiresAt)).toBeGreaterThan(
+      Date.parse(before.expiresAt) + 9 * 60_000,
+    );
+  });
   it("starts and resolves a session, returning the person's role and locale", async () => {
     const personId = await seedPerson(suite.db, tenantId, "manager");
     const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));

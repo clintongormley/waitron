@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -231,6 +232,13 @@ export class CanvasEditorScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   /** Which mode is showing. `list` is the canvas gallery; `editor` is the draft grid editor. */
   @state() private mode: "list" | "editor" = "list";
@@ -320,7 +328,9 @@ export class CanvasEditorScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      this.canvases = await this.api.listCanvases();
+      await this.#queries.watch("listCanvases", [], (value) => {
+        this.canvases = value;
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }

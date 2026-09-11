@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -691,4 +692,18 @@ describe("staff-screen — row edit", () => {
     expect(editForm(el).open).toBe(true);
     expect(editForm(el).person).toEqual(people[1]);
   });
+});
+
+it("refreshes displayed people when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>("dashboard-staff-screen", {
+    api,
+  });
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["people"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listStaff).mockResolvedValue([]);
+  liveData.invalidate([{ type: "persons", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listStaff).toHaveBeenCalledTimes(2);
 });

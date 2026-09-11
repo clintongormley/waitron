@@ -1,3 +1,5 @@
+import { DraftRows } from "@waitron/dashboard-kit";
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
@@ -80,6 +82,14 @@ export class ServiceStatusScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #statusesDrafts = new DraftRows<EditableStatus>();
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   // The configured statuses as editable rows, loaded on connect and re-synced after every mutation.
   @state() private submitting = false;
@@ -99,14 +109,18 @@ export class ServiceStatusScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const rows = await this.api.listStatuses();
-      this.statuses = rows.map((s: ServiceStatus) => ({
-        id: s.id,
-        label: s.label,
-        color: s.color,
-        displayOrder: s.displayOrder,
-        active: s.active,
-      }));
+      await this.#queries.watch("listStatuses", [], (rows) => {
+        this.statuses = this.#statusesDrafts.merge(
+          this.statuses,
+          rows.map((s: ServiceStatus) => ({
+            id: s.id,
+            label: s.label,
+            color: s.color,
+            displayOrder: s.displayOrder,
+            active: s.active,
+          })),
+        );
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }

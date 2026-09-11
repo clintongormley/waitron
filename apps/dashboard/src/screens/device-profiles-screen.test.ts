@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
@@ -467,3 +468,18 @@ it.each(["create", "edit-p1"])(
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
   },
 );
+
+it("refreshes displayed profiles when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-device-profiles-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["profiles"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listDeviceProfiles).mockResolvedValue([]);
+  liveData.invalidate([{ type: "device_profiles", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);
+});

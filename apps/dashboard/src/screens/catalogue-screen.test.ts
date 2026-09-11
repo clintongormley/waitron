@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -814,4 +815,32 @@ it("Enter guards pending option-item creation and allows retry after rejection",
     (manager.shadowRoot!.querySelector("[data-test=create-item]") as import("@waitron/ui").WtButton)
       .disabled,
   ).toBe(false);
+});
+
+it("refreshes displayed optionGroups when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-catalogue-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["optionGroups"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listOptionGroups).mockResolvedValue([]);
+  liveData.invalidate([{ type: "option_groups", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listOptionGroups).toHaveBeenCalledTimes(2);
+});
+
+it("refreshes an expanded group's item list after an external change", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  await flush(el);
+  emit(optionGroupManager(el), "toggle-option-group-items", { groupId: "og1" });
+  await flush(el);
+  expect(optionGroupManager(el).items).toEqual(optionGroupItems);
+  vi.mocked(api.listOptionGroupItems).mockResolvedValue([]);
+  liveData.invalidate([{ type: "option_group_items", id: "oi1" }]);
+  await vi.waitFor(() => expect(optionGroupManager(el).items).toEqual([]));
 });

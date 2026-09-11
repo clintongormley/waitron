@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -75,6 +76,13 @@ export class EmailScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
   @state() private inbox?: EmailInbox;
   @state() private message?: TestEmail;
   @state() private errorKey: string | null = null;
@@ -86,8 +94,10 @@ export class EmailScreen extends LitElement {
 
   async #load(): Promise<void> {
     try {
-      this.inbox = await this.api.getEmailInbox();
-      this.errorKey = null;
+      await this.#queries.watch("getEmailInbox", [], (value) => {
+        this.inbox = value;
+        this.errorKey = null;
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }

@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "@waitron/dashboard-kit";
@@ -424,4 +425,15 @@ describe("bookings-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
   });
+});
+
+it("refreshes the selected day's bookings after an external change", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+  await flush(el);
+  expect((el as unknown as { bookings: Booking[] }).bookings).toHaveLength(2);
+  vi.mocked(api.listBookings).mockResolvedValue([]);
+  liveData.invalidate([{ type: "bookings", id: "booking" }]);
+  await vi.waitFor(() => expect((el as unknown as { bookings: Booking[] }).bookings).toEqual([]));
 });

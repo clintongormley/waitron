@@ -19,7 +19,7 @@ export const BOOKINGS_DASHBOARD: DashboardContribution = {
   },
   strings: BOOKINGS_STRINGS,
   create(ctx) {
-    const api = new BookingApi(ctx.request);
+    const api = new BookingApi(ctx.request, ctx.liveData);
     return {
       render: () => html`<dashboard-bookings-screen .api=${api}></dashboard-bookings-screen>`,
     };

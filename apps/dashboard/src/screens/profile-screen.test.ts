@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
@@ -351,4 +352,21 @@ describe("your profile", () => {
     await click(el, "save");
     expect(api.unlinkGoogle).toHaveBeenCalledWith({ currentPassword: "current", totp: "123456" });
   });
+});
+
+it("refreshes displayed profile data after an external change", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(apiStub(), { liveData });
+  const { el } = await mountWidget<ProfileScreen>("dashboard-profile-screen", {
+    api: api as unknown as DashboardApi,
+  });
+  await vi.waitFor(() => expect((el as unknown as { profile: unknown }).profile).not.toBeNull());
+  const value = await api.getProfile();
+  api.getProfile.mockResolvedValue({ ...value, displayName: "Elsewhere" });
+  liveData.invalidate([{ type: "persons", id: "person" }]);
+  await vi.waitFor(() =>
+    expect((el as unknown as { profile: { displayName: string } }).profile.displayName).toBe(
+      "Elsewhere",
+    ),
+  );
 });

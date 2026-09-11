@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, PendingAbsence, PendingSwap, PersonSummary } from "../api/client.js";
@@ -148,4 +149,19 @@ describe("approvals-screen", () => {
     expect(api.decideAbsence).toHaveBeenCalledWith("ab1", "rejected");
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("absence.not_found");
   });
+});
+
+it("refreshes displayed absences when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-approvals-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["absences"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listPendingAbsences).mockResolvedValue([]);
+  liveData.invalidate([{ type: "absences", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listPendingAbsences).toHaveBeenCalledTimes(2);
 });

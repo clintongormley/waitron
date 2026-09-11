@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, EmailInbox } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -90,4 +91,14 @@ describe("email-screen", () => {
     expect(q(el, "[role=alert]")).not.toBeNull();
     expect(q(el, "[role=alert]")?.textContent).not.toContain("server.internal");
   });
+});
+
+it("refreshes the inbox without a screen action", async () => {
+  const liveData = new LiveData();
+  const client = Object.assign(api(), { liveData });
+  const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", { api: client });
+  await vi.waitFor(() => expect(q(el, "[data-test=message-mail-1]")).not.toBeNull());
+  vi.mocked(client.getEmailInbox).mockResolvedValue({ ...LOCAL, count: 0, messages: [] });
+  liveData.invalidate([{ type: "email_inbox" }]);
+  await vi.waitFor(() => expect(q(el, "[data-test=message-mail-1]")).toBeNull());
 });

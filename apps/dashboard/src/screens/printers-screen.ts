@@ -23,6 +23,7 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
+import { DashboardQueries } from "../api/query-controller.js";
 import type {
   DashboardApi,
   DiscoveredPrinter,
@@ -168,6 +169,13 @@ export class PrintersScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   // The enrolled agents (server order kept), the registered printers, and the recent jobs — all
   // (re)loaded on connect and after every mutation.
@@ -241,21 +249,29 @@ export class PrintersScreen extends LitElement {
     this.armedAllowId = null;
     this.armedDenyId = null;
     try {
-      const [agents, printers, jobs, tills, pairing, pendingJoins] = await Promise.all([
-        this.api.listAgents(),
-        this.api.listPrinters(),
-        this.api.listRecentJobs(),
-        this.api.listTills(),
-        this.api.pairingMode(),
-        this.api.joinRequests("print_agent"),
+      await Promise.all([
+        this.#queries.watch("listAgents", [], (agents) => {
+          this.agents = agents;
+        }),
+        this.#queries.watch("listPrinters", [], (printers) => {
+          this.printers = printers;
+        }),
+        this.#queries.watch("listRecentJobs", [], (jobs) => {
+          this.jobs = jobs;
+        }),
+        this.#queries.watch("listTills", [], (tills) => {
+          this.tills = tills;
+        }),
+        this.#queries.watch("pairingMode", [], (pairing) => {
+          this.pairing = pairing;
+        }),
+        this.#queries.watch("joinRequests", ["print_agent"], (pendingJoins) => {
+          this.pendingJoins = pendingJoins;
+        }),
       ]);
-      this.agents = agents;
-      this.printers = printers;
-      this.jobs = jobs;
-      this.tills = tills;
-      this.pairing = pairing;
-      this.pendingJoins = pendingJoins;
-      this.#setDiscovered(await this.api.listDiscoveredPrinters());
+      await this.#queries.watch("listDiscoveredPrinters", [], (devices) =>
+        this.#setDiscovered(devices),
+      );
     } catch (error) {
       this.errorKey = codeOf(error);
     } finally {
@@ -440,8 +456,9 @@ export class PrintersScreen extends LitElement {
 
   // ── Printers ───────────────────────────────────────────────────────────────────────────────────
 
-  async #loadDiscovered(epoch = this.#scanEpoch): Promise<void> {
-    const devices = await this.api.listDiscoveredPrinters();
+  async #loadDiscovered(epoch = this.#scanEpoch, passive = false): Promise<void> {
+    const api = passive ? (this.api.background ?? this.api) : this.api;
+    const devices = await api.listDiscoveredPrinters();
     if (epoch !== this.#scanEpoch || !this.addingPrinter || !this.isConnected) return;
     this.#setDiscovered(devices);
   }
@@ -492,7 +509,7 @@ export class PrintersScreen extends LitElement {
     this.#scanInFlight = true;
     const epoch = this.#scanEpoch;
     try {
-      await this.#loadDiscovered(epoch);
+      await this.#loadDiscovered(epoch, true);
     } catch (error) {
       if (epoch !== this.#scanEpoch) return;
       this.errorKey = codeOf(error);

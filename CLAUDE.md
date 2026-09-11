@@ -209,6 +209,11 @@ unfiltered `main` run, not a wrong hook.
   a save error invites a duplicate submission. The Venue operations regression resolves creation,
   rejects the following load and checks the closed modal plus load error
   (`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`, “refreshing the list fails”).
+- **Automatic dashboard reads are passive session activity.** Use the shared query controller or
+  the request primitive's `passive` option for event refreshes and timers. A normal GET touches the
+  management session, so polling it would keep an unattended dashboard signed in. Observer callbacks
+  assign snapshots; they do not rerun loaders that reset drafts or mint recovery keys. See
+  `docs/developers/dashboard-live-updates.md` and the passive-session and backup-screen regressions.
 - **The dashboard banner is persistent identity chrome.** Put it at the very top of the page at full
   width, with the menu and content underneath. Show the canonical Waitron lockup and the deployment
   tenant's legal name on login and every authenticated screen. Put Logout at the trailing edge only
