@@ -111,4 +111,16 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "demo" });
     expect(q(el, "[data-test=backup-nudge]")).toBeNull();
   });
+
+  it("lists the box's reachability links", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { hostname: "waitron.local" });
+    const links = el.shadowRoot!.querySelector("[data-test=links]")!;
+    const hrefs = [...links.querySelectorAll("a")].map((a) =>
+      (a as HTMLAnchorElement).getAttribute("href"),
+    );
+    expect(hrefs).toContain("/");
+    expect(hrefs).toContain("/manage");
+    expect(hrefs).toContain("/manage/email");
+    expect(hrefs).toContain("http://waitron.local:9110");
+  });
 });

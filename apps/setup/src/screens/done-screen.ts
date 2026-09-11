@@ -86,6 +86,9 @@ export class SetupDoneScreen extends LitElement {
         color: var(--wt-color-primary, #1f6feb);
         text-decoration: underline;
       }
+      .links a {
+        color: var(--wt-color-primary, #1f6feb);
+      }
     `,
   ];
 
@@ -106,6 +109,10 @@ export class SetupDoneScreen extends LitElement {
   /** How to reload into the till once trading mode is up. Injectable so a test can assert it without
    * navigating the runner; the default is the real page reload (a bound native, not authored code). */
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
+
+  /** The box's own hostname, used only for the print-agent link (a different port, so an absolute
+   * URL). Injectable so a test does not depend on the runner's location. */
+  @property() hostname: string = location.hostname;
 
   /** Milliseconds before the first status poll — a short pause so the box has begun its restart. */
   @property({ type: Number }) startDelayMs = 800;
@@ -165,6 +172,15 @@ export class SetupDoneScreen extends LitElement {
               </p>`
         }
         <p>The box is restarting into trading mode.</p>
+        <div class="links" data-test="links">
+          <p>Once the box is trading, reach it here:</p>
+          <ul>
+            <li><a href="/">Till</a></li>
+            <li><a href="/manage">Dashboard</a></li>
+            <li><a href="/manage/email">Email inbox</a></li>
+            <li><a href=${`http://${this.hostname}:9110`}>Print agent</a></li>
+          </ul>
+        </div>
         ${
           this.breakGlassSecret !== undefined
             ? html`<div class="break-glass" data-test="break-glass">
