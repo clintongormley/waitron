@@ -397,7 +397,7 @@ export const en = {
   "printers.new_printer": "New printer",
   "printers.add_printer": "Add printer",
   "printers.scan": "Scan for printers",
-  "printers.scanning": "Scanning…",
+  "printers.scan_loading": "Scanning…",
   "printers.refresh": "Refresh",
   "printers.discovered_title": "Discovered printers",
   "printers.no_discovered": "No printers found yet — click Scan, or check the printer is on.",
@@ -1227,7 +1227,7 @@ export const es: Record<StringKey, string> = {
   "printers.new_printer": "Nueva impresora",
   "printers.add_printer": "Añadir impresora",
   "printers.scan": "Buscar impresoras",
-  "printers.scanning": "Buscando…",
+  "printers.scan_loading": "Buscando…",
   "printers.refresh": "Actualizar",
   "printers.discovered_title": "Impresoras detectadas",
   "printers.no_discovered":

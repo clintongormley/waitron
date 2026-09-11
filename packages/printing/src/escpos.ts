@@ -18,14 +18,14 @@ const ESC = 0x1b;
 /** GS — the group-separator lead byte (0x1D) beginning the cut command. */
 const GS = 0x1d;
 /** LF — line feed (0x0A): prints the buffered line and advances one line. */
-
 const LF = 0x0a;
 
 /**
- * Blank lines every ticket feeds before its cut, so the tear-off clears the print head and the
- * holder has something to grip. The cutter sits above the head: five lines is the measured
- * margin — three left the Epson TM-T88III's cut on the last printed line (owner's test print,
- * 2026-09-11). One value for the test print, the kitchen ticket and the receipt.
+ * Blank lines {@link EscBuilder.feedAndCut} feeds before the cut, so the tear-off clears the print
+ * head and the holder has something to grip. The cutter sits above the head: three lines left the
+ * Epson TM-T88III's cut on the last printed line (owner's test print, 2026-09-11); five is the chosen
+ * margin and has not itself been measured on paper yet. The ticket formatters in `apps/server` and
+ * the test print all cut through `feedAndCut()`, so this is the one value.
  */
 export const FEED_BEFORE_CUT = 5;
 
@@ -96,10 +96,16 @@ export class EscBuilder {
     return this;
   }
 
-  /** Full cut — `GS V 0`. Severs the paper completely. Callers feed {@link FEED_BEFORE_CUT} first. */
+  /** Full cut — `GS V 0`. Severs the paper completely, wherever the paper is: a ticket ends with
+   * {@link feedAndCut} so the cut clears what was just printed. */
   cut(): this {
     this.parts.push(GS, 0x56, 0x00);
     return this;
+  }
+
+  /** Feed {@link FEED_BEFORE_CUT} blank lines, then full cut — how every ticket ends. */
+  feedAndCut(): this {
+    return this.feed(FEED_BEFORE_CUT).cut();
   }
 
   /**

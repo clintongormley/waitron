@@ -5,9 +5,9 @@ export { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "./i
 export { WtButton } from "./components/wt-button.js";
 export type { WtButtonVariant, WtButtonSize } from "./components/wt-button.js";
 export { WtIcon, registerIcons } from "./components/wt-icon.js";
+export type { WtIconSize } from "./components/wt-icon.js";
 export { WtSpinner } from "./components/wt-spinner.js";
 export type { WtSpinnerSize } from "./components/wt-spinner.js";
-export type { WtIconSize } from "./components/wt-icon.js";
 export { WtCard } from "./components/wt-card.js";
 export { WtInput } from "./components/wt-input.js";
 export { WtFormActions } from "./components/wt-form-actions.js";

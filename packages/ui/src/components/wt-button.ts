@@ -81,8 +81,9 @@ export class WtButton extends LitElement {
   @property({ reflect: true }) variant: WtButtonVariant = "secondary";
   @property({ reflect: true }) size: WtButtonSize = "md";
   @property({ type: Boolean, reflect: true }) disabled = false;
-  /** An in-progress action: the button is disabled, marked `aria-busy`, and a spinner leads the
-   * label. The label stays visible so the operator can read what is happening ("Scanning…"). */
+  /** An in-progress action: the button is disabled, marked `aria-busy`, and a decorative spinner
+   * leads the label. The label stays visible — and is the one thing announced — so the caller swaps
+   * it for what is happening ("Scanning…" / "Buscando…") in the screen's own language. */
   @property({ type: Boolean, reflect: true }) loading = false;
 
   // Shadows the native ARIAMixin accessor so the value reaches the inner shadow <button> — the
@@ -105,7 +106,7 @@ export class WtButton extends LitElement {
         aria-busy=${this.loading ? "true" : nothing}
         aria-label=${this.ariaLabel ?? nothing}
       >
-        ${this.loading ? html`<wt-spinner size="sm"></wt-spinner>` : nothing}
+        ${this.loading ? html`<wt-spinner size="sm" decorative></wt-spinner>` : nothing}
         <slot></slot>
       </button>
     `;

@@ -47,7 +47,7 @@
  * millimetres are verified MANUALLY on the real printer (design §5); the guarantee here is only that
  * the bytes are DETERMINISTIC and carry every mandated element, which `receipt-ticket.test.ts` pins.
  */
-import { FEED_BEFORE_CUT, esc } from "@waitron/printing";
+import { esc } from "@waitron/printing";
 import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 
 import type { CardDetails } from "@waitron/payments";
@@ -345,5 +345,5 @@ export function formatReceipt({
   // Non-fiscal footer trim, under the legend.
   if (receipt.footerMessage) b.line(receipt.footerMessage);
 
-  return b.feed(FEED_BEFORE_CUT).cut().bytes();
+  return b.feedAndCut().bytes();
 }

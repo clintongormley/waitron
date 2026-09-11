@@ -68,10 +68,12 @@ interface EditablePrinter {
 const TRANSPORTS: readonly PrintTransport[] = ["network_tcp", "usb", "bluetooth"];
 
 /** How long Scan keeps re-reading the discovered list, and how often. The agents learn the window is
- * open on their next poll (every 2 s) and post what they found on the pull after that, so the first
- * results land several seconds after the press; a single read right after opening the window sees
- * nothing (owner, 2026-09-11: several presses before a result). The server's window stays open far
- * longer (3 min); this is only how long the screen listens for a press. */
+ * open on their next poll (`POLL_INTERVAL_MS` in `packages/print-agent/src/agent.ts` — the idle
+ * interval, at most 2 s; a busy agent re-polls sooner) and post what they found on the pull after
+ * that, so the first results land several seconds after the press; a single read right after opening
+ * the window sees nothing (owner, 2026-09-11: several presses before a result). The server's window
+ * stays open far longer (`DISCOVERY_WINDOW_MS`, 3 min, `apps/server/src/print-api.ts`); this is only
+ * how long the screen listens for a press. Exported for the fake-timer test. */
 export const SCAN_LISTEN_MS = 10_000;
 export const SCAN_POLL_MS = 2_000;
 
@@ -296,8 +298,13 @@ export class PrintersScreen extends LitElement {
   // on Scan, and on Refresh — never at connect (discovery is on-demand). `registerNames` holds the name
   // typed against each unregistered row, keyed by the device's `localKey`.
   @state() private discovered: DiscoveredPrinter[] = [];
-  /** A Scan press is listening for results — the button is busy and a second press is ignored. */
+  /** A Scan press is listening for results — the button is busy and a second press is ignored. Its
+   * own gate, not `submitting`: the listen runs for seconds and must not block Add/Register. */
   @state() private scanning = false;
+  // The listen's re-read timer, cleared in `disconnectedCallback` so a leaked interval never keeps
+  // fetching against a detached screen (the diagnostics screen's `#timer` shape).
+  #scanTimer: ReturnType<typeof setInterval> | undefined;
+  #scanTicks = 0;
   @state() private registerNames: Record<string, string> = {};
 
   @state() private errorKey: string | null = null;
@@ -310,6 +317,11 @@ export class PrintersScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+  }
+
+  override disconnectedCallback(): void {
+    this.#endScan();
+    super.disconnectedCallback();
   }
 
   /** Reconcile the create-form transport select's live value to its state after every render, once its
@@ -628,27 +640,44 @@ export class PrintersScreen extends LitElement {
   }
 
   /** Open the venue discovery window (the expensive LAN sweep / Bluetooth inquiry the agents run), then
-   * keep re-reading what turned up for {@link SCAN_LISTEN_MS} so the network_tcp form can offer a found
-   * IP printer to pre-fill as soon as an agent reports it. A rejection becomes the `errorKey` banner and
-   * ends the listen. The screen leaving the page ends it too (`isConnected`). */
+   * keep re-reading what turned up — once at once, then every {@link SCAN_POLL_MS} until
+   * {@link SCAN_LISTEN_MS} has passed — so the network_tcp form can offer a found IP printer to pre-fill
+   * as soon as an agent reports it. A rejection becomes the `errorKey` banner and ends the listen.
+   * Leaving the page ends it too: `disconnectedCallback` clears the timer, and a window that opens
+   * after the page was left is never read. */
   async #scan(): Promise<void> {
     if (this.scanning) return;
     this.errorKey = null;
     this.scanning = true;
     try {
       await this.api.startPrinterDiscovery();
-      const until = Date.now() + SCAN_LISTEN_MS;
-      for (;;) {
-        await this.#loadDiscovered();
-        if (Date.now() >= until) break;
-        await new Promise((resolve) => setTimeout(resolve, SCAN_POLL_MS));
-        if (!this.isConnected) break;
-      }
+      if (!this.isConnected) return;
+      await this.#loadDiscovered();
+      this.#scanTicks = 0;
+      this.#scanTimer = setInterval(() => void this.#scanTick(), SCAN_POLL_MS);
     } catch (error) {
       this.errorKey = codeOf(error);
+      this.#endScan();
     } finally {
-      this.scanning = false;
+      if (this.#scanTimer === undefined) this.scanning = false;
     }
+  }
+
+  async #scanTick(): Promise<void> {
+    try {
+      await this.#loadDiscovered();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+      this.#endScan();
+      return;
+    }
+    if (++this.#scanTicks >= SCAN_LISTEN_MS / SCAN_POLL_MS) this.#endScan();
+  }
+
+  #endScan(): void {
+    if (this.#scanTimer !== undefined) clearInterval(this.#scanTimer);
+    this.#scanTimer = undefined;
+    this.scanning = false;
   }
 
   /** Capture the name typed against one discovered row (keyed by its stable device id). */
@@ -1256,7 +1285,7 @@ export class PrintersScreen extends LitElement {
           data-test="scan-printers"
           ?loading=${this.scanning}
           @click=${() => void this.#scan()}
-          >${this.scanning ? t("printers.scanning") : t("printers.scan")}</wt-button
+          >${this.scanning ? t("printers.scan_loading") : t("printers.scan")}</wt-button
         >
       </div>
       ${

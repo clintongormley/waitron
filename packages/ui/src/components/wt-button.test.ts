@@ -86,6 +86,14 @@ test("loading disables the button, marks it busy and shows a spinner", async () 
   expect(el.getAttribute("loading")).not.toBeNull();
 });
 
+test("the loading spinner is decorative — the button's aria-busy and label carry the state", async () => {
+  const el = await mount("<wt-button loading>Buscando…</wt-button>");
+  const spinner = el.shadowRoot!.querySelector("wt-spinner")!;
+  await (spinner as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(spinner.hasAttribute("decorative")).toBe(true);
+  expect(spinner.shadowRoot!.querySelector("[role=status]")).toBeNull();
+});
+
 test("does not emit click while loading", async () => {
   const el = await mount("<wt-button loading>Scan</wt-button>");
   let clicks = 0;

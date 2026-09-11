@@ -5,6 +5,7 @@ import "../src/components/wt-dialog.js";
 import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
+import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
 
 registerIcons({
@@ -25,6 +26,12 @@ const panel = (theme: "light" | "dark") => `
       <wt-button size="sm">sm</wt-button>
       <wt-button size="md">md</wt-button>
       <wt-button size="lg">lg</wt-button>
+    </div>
+    <div class="row">
+      <wt-button loading>Buscando…</wt-button>
+      <wt-spinner size="sm" label="Cargando"></wt-spinner>
+      <wt-spinner label="Cargando"></wt-spinner>
+      <wt-spinner size="lg" label="Cargando"></wt-spinner>
     </div>
     <wt-card raised>
       <span slot="header">Ticket</span>

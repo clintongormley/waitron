@@ -19,7 +19,7 @@
  * gains emphasis, and adding a bold command to packages/printing is out of this task's scope. The
  * layout below uses only the existing verbs.
  */
-import { FEED_BEFORE_CUT, esc } from "@waitron/printing";
+import { esc } from "@waitron/printing";
 
 /** The pass header for an `order`-scope ticket — the printed VALUE the expediter reads ("pass"). */
 const ORDER_HEADER = "PASE";
@@ -137,7 +137,7 @@ export function formatKitchenTicket(ticket: KitchenTicket): Uint8Array {
     }
   }
 
-  return b.feed(FEED_BEFORE_CUT).cut().bytes();
+  return b.feedAndCut().bytes();
 }
 
 /**
@@ -160,7 +160,7 @@ export interface CorrectionSlip {
 /**
  * Render `slip` to an ESC/POS payload. There is no bold verb (module header note, R-G) so the
  * `*** VOID ***` / `*** RECALLED ***` asterisks stand in for emphasis. Mirrors
- * {@link formatKitchenTicket}'s envelope exactly — same `init()`/`feed(FEED_BEFORE_CUT)`/`cut()` —
+ * {@link formatKitchenTicket}'s envelope exactly — same `init()`/`feedAndCut()` —
  * and reuses {@link emitItem} so the item + modifier lines render byte-for-byte like the original
  * ticket the cook is correcting. `tableLabel` is only printed when non-null (e.g. a bar tab with no
  * table).
@@ -174,5 +174,5 @@ export function formatCorrectionSlip(slip: CorrectionSlip): Uint8Array {
   b.line(slip.orderNumber).line(hhmm(new Date(slip.at)));
   emitItem(b, slip.item);
 
-  return b.feed(FEED_BEFORE_CUT).cut().bytes();
+  return b.feedAndCut().bytes();
 }

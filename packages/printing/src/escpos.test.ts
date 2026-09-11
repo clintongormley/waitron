@@ -35,13 +35,12 @@ describe("esc() ESC/POS builder", () => {
     expect([...esc().cut().bytes()]).toEqual([0x1d, 0x56, 0x00]);
   });
 
-  it("FEED_BEFORE_CUT is five lines — three left the Epson TM-T88III's cut on the last printed line", () => {
-    // The cutter sits above the print head; 3 lines (2026-09-11, owner's test print on the TM-T88III)
-    // cut through the text just printed. Every ticket feeds this many before its cut.
+  it("feedAndCut feeds FEED_BEFORE_CUT lines (five — three measured too short) then cuts", () => {
+    // Three lines left the Epson TM-T88III's cut on the last printed line (owner's test print,
+    // 2026-09-11); five is the chosen margin, to be confirmed on paper. Tickets cut through this verb
+    // so no caller can cut without the margin.
     expect(FEED_BEFORE_CUT).toBe(5);
-    expect([...esc().feed(FEED_BEFORE_CUT).cut().bytes()]).toEqual([
-      0x1b, 0x64, 0x05, 0x1d, 0x56, 0x00,
-    ]);
+    expect([...esc().feedAndCut().bytes()]).toEqual([0x1b, 0x64, 0x05, 0x1d, 0x56, 0x00]);
   });
 
   it("kick emits the cash-drawer pulse ESC p 0 25 250", () => {

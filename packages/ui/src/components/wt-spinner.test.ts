@@ -18,6 +18,22 @@ test("the label property names the status for assistive tech", async () => {
   );
 });
 
+test("decorative drops the status role and hides the ring from assistive tech", async () => {
+  // Inside a wt-button the button's own aria-busy + label carry the state; a second, English
+  // "Loading" live region inside a Spanish "Buscando…" button would be announced too.
+  const el = await mount("<wt-spinner decorative></wt-spinner>");
+  expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".ring")!.getAttribute("aria-hidden")).toBe("true");
+});
+
+test("the ring paints in the surrounding text colour (currentColor)", async () => {
+  const el = await mount("<wt-spinner></wt-spinner>");
+  host.style.color = "rgb(12, 34, 56)";
+  const ring = el.shadowRoot!.querySelector(".ring")!;
+  expect(getComputedStyle(ring).borderTopColor).toBe("rgb(12, 34, 56)");
+  expect(getComputedStyle(ring).opacity).toBe("1");
+});
+
 test("defaults to the md size and reflects it", async () => {
   const el = await mount("<wt-spinner></wt-spinner>");
   expect(el.getAttribute("size")).toBe("md");

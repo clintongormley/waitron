@@ -768,7 +768,7 @@ describe("printers-screen", () => {
       expect(api.startPrinterDiscovery).toHaveBeenCalledTimes(1);
       expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(1);
       expect(button().hasAttribute("loading")).toBe(true);
-      expect(button().textContent?.trim()).toBe(t("printers.scanning"));
+      expect(button().textContent?.trim()).toBe(t("printers.scan_loading"));
 
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(2);
@@ -783,6 +783,46 @@ describe("printers-screen", () => {
       expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(SCAN_LISTEN_MS / SCAN_POLL_MS + 1);
       expect(button().hasAttribute("loading")).toBe(false);
       expect(button().textContent?.trim()).toBe(t("printers.scan"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaving the page while Scan is listening stops the re-reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork) });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      q(el, "[data-test=scan-printers]")!.click();
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(2);
+
+      el.remove();
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a Scan whose window opens after the page was left reads nothing", async () => {
+    vi.useFakeTimers();
+    try {
+      let open!: (v: { discoveryUntil: number }) => void;
+      const api = stubApi({
+        startPrinterDiscovery: vi.fn(
+          () => new Promise<{ discoveryUntil: number }>((r) => (open = r)),
+        ),
+        listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      q(el, "[data-test=scan-printers]")!.click();
+      el.remove();
+      open({ discoveryUntil: Date.now() + 60_000 });
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS);
+      expect(api.listDiscoveredPrinters).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

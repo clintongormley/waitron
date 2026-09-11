@@ -135,11 +135,12 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label` | native events from consumer-provided cells |
 
-`wt-button` has no `type` property — see "Forms" below. `wt-button loading` is the one way to show an
-action in progress on a button: it disables the button, sets `aria-busy`, and leads the label with a
-`wt-spinner` while keeping the label readable — swap the label to what is happening ("Scanning…"), and
-never leave a control silently disabled while work runs. `wt-spinner` on its own is for a region that
-is loading; it is a `role="status"` live region, so give `label` the localized text.
+`wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
+action in progress: it disables the button, sets `aria-busy`, and leads the label with a decorative
+`wt-spinner` while keeping the label readable — swap the label to what is happening ("Scanning…" /
+"Buscando…"), which is then the one thing announced. Existing `?disabled=${busy}` buttons predate
+this and are not yet migrated. `wt-spinner` on its own is for a region that is loading; there it is a
+`role="status"` live region, so give `label` the localized text.
 
 Use `wt-data-table` for sortable administrative collections such as people, devices, printers and
 canvases. Define columns and cell content in the consuming screen so domain actions stay outside the
@@ -147,8 +148,8 @@ primitive. Always supply `aria-label`; use its loading, empty and error properti
 replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
 
-Variant- and state-like properties (`variant`, `size`, `name`, `raised`, `disabled`, `checked`,
-`invalid`, `open`) all reflect to attributes, which is what makes `:host([variant="..."])`-style
+Variant- and state-like properties (`variant`, `size`, `name`, `raised`, `disabled`, `loading`,
+`decorative`, `checked`, `invalid`, `open`) all reflect to attributes, which is what makes `:host([variant="..."])`-style
 styling possible — see "Adding a primitive" below.
 
 Icons are registered by the consuming app, so `packages/ui` depends on no icon library:
@@ -449,7 +450,8 @@ have caught the defect it's named after.
 `*.a11y.test.ts` files. As of this writing axe reports zero contrast violations for any `--wt-color-*`
 pairing actually used by the six primitives, in either theme, across every documented state (`wt-input`
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
-disabled states). No token values needed changing. (axe does flag two unrelated `incomplete` — not
+disabled and loading states; `wt-spinner` as a status region and decorative, 2026-09-11). No token
+values needed changing. (axe does flag two unrelated `incomplete` — not
 violation — results on `wt-dialog`: a `color-contrast` "background partially obscured" reading on the
 `.body` slot, an [axe/shadow-DOM slot-content limitation](https://github.com/dequelabs/axe-core), and
 an `aria-prohibited-attr` note about `aria-label` on the light-DOM `<wt-dialog>` host itself, which axe
