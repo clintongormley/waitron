@@ -157,6 +157,18 @@ describe("POST /api/node/enrol-self", () => {
     expect(await agentRowCount(cfg)).toBe(0);
   });
 
+  it("refuses a request with NO remote address with node.enrol_not_local (fails closed)", async () => {
+    // `getConnInfo` can hand back an undefined address (no socket, a proxy that dropped it); the gate
+    // (`address === undefined || !LOOPBACK.has(address)`) fails CLOSED to the manual path rather than
+    // treating an unknown origin as loopback (spec §2). No test pinned this branch before.
+    const { app, cfg } = buildApp();
+    const res = await post(app, { name: "x" }, undefined);
+    expect(res.status).toBe(403);
+    expect(await errorCodeOf(res)).toBe("node.enrol_not_local");
+    // Refused before any DB work, so no row exists (CLAUDE.md §1 control).
+    expect(await agentRowCount(cfg)).toBe(0);
+  });
+
   it("accepts the IPv6 loopback forms", async () => {
     for (const addr of ["::1", "::ffff:127.0.0.1"]) {
       const { app } = buildApp();
