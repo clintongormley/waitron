@@ -1,3 +1,4 @@
+import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -1686,17 +1687,7 @@ export async function startServer(
       db,
       tenantId: config.till.tenantId,
       bus: liveEvents,
-      resourceTypes: [
-        ...changeSources.flatMap((source) => [
-          source.type,
-          ...(source.related ?? []).map((related) => related.type),
-        ]),
-        "pairing",
-        "printer_discovery",
-        "email_inbox",
-        "backup_status",
-        "google_config",
-      ],
+      resourceTypes: liveResourceTypes(changeSources),
     },
     log,
   );

@@ -10,7 +10,9 @@ Its key includes the method arguments, so changing a filter replaces the old sub
 `watchGroup` when a single displayed list combines the same query for several arguments.
 
 A contributed module receives `liveData` alongside `request` in `DashboardModuleContext`. Use
-`QueryController` with that shared cache and declare the dependencies in your module. Your server
+`QueryController` with that shared cache and export `QUERY_DEPENDENCIES` from your module's
+`src/dashboard/live-queries.ts`. The root subscription guard checks these names against the shipped
+server resources; behavioral tests must still check that your query lists every contributing table. Your server
 module's `changes` declaration identifies its tables and any related objects a write affects. The
 server installs those declarations as the table owner at trading boot, including on mirrors.
 
@@ -23,6 +25,7 @@ Use passive requests for automatic refreshes so leaving a dashboard open does no
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`
 directly passes `{ passive: true }` as its fourth argument for background GETs. An interval is still
 appropriate when time passing or process-local state can change a query without a database event.
+Reusing an already cached query issues no request and therefore does not extend the session.
 
 Test an external identity event with the view already mounted. Check the displayed value and an
 unsaved draft, then disconnect the view and confirm later events stop issuing reads. Query and

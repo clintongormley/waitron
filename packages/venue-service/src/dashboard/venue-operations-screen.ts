@@ -1,3 +1,4 @@
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -139,22 +140,7 @@ export class VenueOperationsScreen extends LitElement {
         "venue",
         {
           key: "venue-service:operations",
-          dependencies: [
-            "departments",
-            "zone_service_policies",
-            "zone_menus",
-            "preparation_routes",
-            "department_hours",
-            "catalogues",
-            "categories",
-            "kitchen_stations",
-            "floor_zones",
-            "products",
-            "menu_sections",
-            "menu_items",
-            "menu_item_option_groups",
-            "menu_item_options",
-          ].map((type) => ({ type })),
+          dependencies: QUERY_DEPENDENCIES.operations.map((type) => ({ type })),
           refreshMs: 60_000,
           read: () => {
             const api = initial ? this.api : (this.api.background ?? this.api);

@@ -1,3 +1,5 @@
+import { hashPin, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 // Real PostgreSQL checks startup through app_user connections and contending backends.
 import { X509Certificate } from "node:crypto";
 import { createServer } from "node:net";
@@ -558,6 +560,59 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
   return found;
 }
 
+async function assertPassiveManagementReads(port: number): Promise<void> {
+  const tenantId = TILL_ENV.WAITRON_TILL_TENANT_ID;
+  const person = await suite.admin.execute<{ id: string }>(
+    sql`insert into persons (tenant_id, display_name, pin_hash, role) values (${tenantId}, 'Passive read probe', ${hashPin("1234")}, 'manager') returning id`,
+  );
+  const personId = person.rows[0]!.id;
+  try {
+    const session = await withTenant(suite.admin, tenantId, (tx) =>
+      startManagementSession(tx, { tenantId, personId }),
+    );
+    const age = async (): Promise<string> =>
+      (
+        await suite.admin.execute<{ seen: string }>(
+          sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${session.id} returning last_seen_at::text as seen`,
+        )
+      ).rows[0]!.seen;
+    const seen = async (): Promise<string> =>
+      (
+        await suite.admin.execute<{ seen: string }>(
+          sql`select last_seen_at::text as seen from management_sessions where id = ${session.id}`,
+        )
+      ).rows[0]!.seen;
+    const cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
+    const before = await age();
+    const passive = await fetch(`http://127.0.0.1:${port}/management-api/printers`, {
+      headers: { cookie, "x-waitron-live": "1" },
+    });
+    expect(passive.status).toBe(200);
+    await passive.text();
+    expect(await seen()).toBe(before);
+    const normal = await fetch(`http://127.0.0.1:${port}/management-api/printers`, {
+      headers: { cookie },
+    });
+    expect(normal.status).toBe(200);
+    await normal.text();
+    expect(await seen()).not.toBe(before);
+    const beforeMutation = await age();
+    const mutation = await fetch(
+      `http://127.0.0.1:${port}/management-api/printer-discovery/start`,
+      {
+        method: "POST",
+        headers: { cookie, "x-waitron-live": "1", origin: "https://dashboard.example.com" },
+      },
+    );
+    expect(mutation.status).toBe(200);
+    await mutation.text();
+    expect(await seen()).not.toBe(beforeMutation);
+  } finally {
+    await suite.admin.execute(sql`delete from management_sessions where person_id = ${personId}`);
+    await suite.admin.execute(sql`delete from persons where id = ${personId}`);
+  }
+}
+
 describe("startServer, against a real container as the deployment role", () => {
   it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
     const port = await freePort();
@@ -640,6 +695,7 @@ describe("startServer, against a real container as the deployment role", () => {
       // matching the safe charset. Proof `requestIdMiddleware` is mounted, not merely importable.
       expect(staff.headers.get("x-request-id")).toMatch(/^[A-Za-z0-9._-]+$/);
       expect(await staff.json()).toEqual([]);
+      await assertPassiveManagementReads(port);
 
       // The catalogue write group is mounted on the same app (`mountCatalogueApi` in `boot.ts`). It is
       // fully gated, so an UNAUTHENTICATED `GET /management-api/catalogues` answers 401

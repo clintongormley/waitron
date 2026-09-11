@@ -2,7 +2,7 @@ import type { ResourceQuery } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "./client.js";
 
 /** Dependencies describe the read model, independently of which operation changes it. */
-const dependencies = {
+export const QUERY_DEPENDENCIES = {
   listPrinters: ["printers", "print_jobs"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
@@ -22,14 +22,33 @@ const dependencies = {
     "locations",
   ],
   getOverdueOrders: [
+    "ticket_items",
     "working_orders",
     "working_order_lines",
     "order_amendments",
     "kitchen_stations",
     "dining_tables",
   ],
-  getDailyClose: ["daily_closes", "sales", "sale_voids", "tenders", "sale_settlements"],
-  getSalesPeriod: ["sales", "sale_lines", "sale_voids", "tenders", "sale_settlements", "products"],
+  getDailyClose: [
+    "sale_substitutions",
+    "sale_lines",
+    "locations",
+    "daily_closes",
+    "sales",
+    "sale_voids",
+    "tenders",
+    "sale_settlements",
+  ],
+  getSalesPeriod: [
+    "sale_substitutions",
+    "locations",
+    "sales",
+    "sale_lines",
+    "sale_voids",
+    "tenders",
+    "sale_settlements",
+    "products",
+  ],
   listStaff: ["persons", "webauthn_credentials"],
   getStaffRoster: ["persons"],
   listPendingAbsences: ["absences"],
@@ -62,7 +81,7 @@ const dependencies = {
   listMyShifts: ["shifts", "employments", "locations"],
   listMySwaps: ["shift_swaps", "shifts"],
   getLocations: ["locations"],
-  getPlannedVsActual: ["shifts", "time_entries", "employments"],
+  getPlannedVsActual: ["roster_versions", "locations", "shifts", "time_entries", "employments"],
   getRoster: ["shifts", "roster_versions", "employments", "absences"],
   listPrinterStations: ["station_printers"],
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
@@ -76,7 +95,7 @@ const dependencies = {
   getBackupStatus: ["backup_status"],
 } as const;
 
-export type DashboardQueryName = keyof typeof dependencies;
+export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
 type Arguments<N extends DashboardQueryName> = Parameters<DashboardApi[N]>;
 type Result<N extends DashboardQueryName> = Awaited<ReturnType<DashboardApi[N]>>;
 
@@ -88,7 +107,7 @@ export function dashboardQuery<N extends DashboardQueryName>(
   let initial = true;
   return {
     key: JSON.stringify([name, args]),
-    dependencies: dependencies[name].map((type) => ({ type })),
+    dependencies: QUERY_DEPENDENCIES[name].map((type) => ({ type })),
     read: () => {
       const client = initial ? api : (api.background ?? api);
       initial = false;

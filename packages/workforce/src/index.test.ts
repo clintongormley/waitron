@@ -6,6 +6,7 @@ describe("the public surface", () => {
   it("exports exactly the intended names", () => {
     expect(Object.keys(api).sort()).toEqual(
       [
+        "WORKFORCE_CHANGE_SOURCES",
         "WORKFORCE_CLASSIFICATION",
         "WORKFORCE_CONFIGURATION_TRANSFER",
         "WORKFORCE_MIGRATIONS",

@@ -1,3 +1,4 @@
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -158,7 +159,7 @@ export class BookingsScreen extends LitElement {
         "tables",
         {
           key: "bookings:tables",
-          dependencies: [{ type: "dining_tables" }],
+          dependencies: QUERY_DEPENDENCIES.tables.map((type) => ({ type })),
           refreshMs: 60_000,
           read: () => {
             const api = initial ? this.api : (this.api.background ?? this.api);
@@ -197,7 +198,7 @@ export class BookingsScreen extends LitElement {
       "bookings",
       {
         key: `bookings:${date}`,
-        dependencies: [{ type: "bookings" }],
+        dependencies: QUERY_DEPENDENCIES.bookings.map((type) => ({ type })),
         refreshMs: 60_000,
         read: () => {
           const api = initial ? this.api : (this.api.background ?? this.api);

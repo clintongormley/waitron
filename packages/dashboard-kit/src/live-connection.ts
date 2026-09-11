@@ -2,6 +2,7 @@ import type { LiveData } from "./live-data.js";
 import type { ResourceIdentity } from "@waitron/shared";
 
 interface EventStream extends EventTarget {
+  readonly readyState?: number;
   close(): void;
 }
 interface Options {
@@ -15,6 +16,8 @@ export class LiveConnection {
   #stream?: EventStream;
   #key = "";
   #unsubscribe?: () => void;
+  #retry?: ReturnType<typeof setTimeout>;
+  #retryMs = 1000;
 
   constructor(
     private readonly data: LiveData,
@@ -37,6 +40,8 @@ export class LiveConnection {
   }
 
   #close(): void {
+    clearTimeout(this.#retry);
+    this.#retry = undefined;
     this.#stream?.close();
     this.#stream = undefined;
     this.#key = "";
@@ -63,7 +68,21 @@ export class LiveConnection {
           if (this.#active && this.#stream === stream) action(event);
         });
       };
-      listen("open", () => this.data.refresh());
+      listen("open", () => {
+        this.#retryMs = 1000;
+        this.data.refresh();
+      });
+      listen("error", () => {
+        this.data.refresh();
+        // EventSource retries transport interruptions itself, but HTTP failures can leave it CLOSED.
+        if (stream.readyState !== 2) return;
+        this.#close();
+        this.#retry = setTimeout(() => {
+          this.#retry = undefined;
+          this.#schedule();
+        }, this.#retryMs);
+        this.#retryMs = Math.min(this.#retryMs * 2, 30_000);
+      });
       listen("reset", () => this.data.refresh());
       listen("change", (event) => {
         try {

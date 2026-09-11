@@ -59,3 +59,39 @@ describe("live connection", () => {
     observed.unsubscribe();
   });
 });
+
+it("reopens a permanently closed stream with backoff and cancels retries on logout", async () => {
+  vi.useFakeTimers();
+  const data = new LiveData();
+  const streams: (Stream & { readyState: number })[] = [];
+  const open = vi.fn(() => {
+    const stream = Object.assign(new Stream(), { readyState: 2 });
+    streams.push(stream);
+    return stream;
+  });
+  const connection = new LiveConnection(data, { open });
+  const read = vi.fn(async () => 1);
+  data.observe({ key: "printers", dependencies: [{ type: "printers" }], read }, () => {});
+  connection.start();
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    streams[0]!.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(streams[0]!.close).toHaveBeenCalledOnce();
+    streams[1]!.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(open).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(open).toHaveBeenCalledTimes(3);
+    streams[2]!.dispatchEvent(new Event("error"));
+    connection.stop();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(open).toHaveBeenCalledTimes(3);
+  } finally {
+    connection.stop();
+    vi.useRealTimers();
+  }
+});

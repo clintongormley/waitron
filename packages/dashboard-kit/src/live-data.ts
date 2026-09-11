@@ -30,7 +30,8 @@ interface Entry {
   timer?: ReturnType<typeof setInterval>;
 }
 
-/** Session-owned snapshots shared by mounted observers. Query keys include all request parameters. */
+/** Session-owned snapshots shared by mounted observers. A key identifies one read contract, including
+ * its parameters, dependencies and refresh interval; every observer of that key shares its first read. */
 export class LiveData {
   #entries = new Map<string, Entry>();
   #interestListeners = new Set<() => void>();

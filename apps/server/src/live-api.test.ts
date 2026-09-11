@@ -174,3 +174,23 @@ it("revalidates idle streams on the heartbeat without extending their session", 
     vi.useRealTimers();
   }
 });
+
+it("collection subscriptions exclude foreign identities before batching", async () => {
+  const { app, cookie, bus, tenantId } = await fixture();
+  const path = `/management-api/events?resources=${encodeURIComponent('[{"type":"printers"}]')}`;
+  const response = await app.request(path, { headers: { cookie } });
+  const reader = response.body!.getReader();
+  try {
+    await reader.read();
+    bus.publish({
+      tenantId: "foreign-tenant",
+      resources: [{ type: "printers", id: "foreign-p9" }],
+    });
+    bus.publish({ tenantId, resources: [{ type: "printers", id: "local-p1" }] });
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+      'event: change\ndata: [{"type":"printers","id":"local-p1"}]\n\n',
+    );
+  } finally {
+    await reader.cancel();
+  }
+});

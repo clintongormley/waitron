@@ -22,7 +22,9 @@ that cache entry and its timer. A late response cannot populate a released entry
 
 The core dashboard declares dependencies in `apps/dashboard/src/api/live-queries.ts`. Contributed
 screens receive the same tab-owned cache through `DashboardModuleContext`; Bookings and Venue
-Operations own their query definitions inside their packages. Server module descriptors declare their own `changes` sources.
+Operations own their query definitions inside their packages. Server module descriptors declare their
+own `changes` sources. The root subscription guard checks declared query names against all shipped
+server resources; it does not infer missing dependencies from SQL or validate enabled-module subsets.
 
 ## Changes come from committed writes
 
@@ -42,7 +44,13 @@ filters by tenant and requested identities, checks the session before each deliv
 fifteen seconds while idle, and closes on expiry, revocation or shutdown. Signed-in venue members
 can receive identity hints for declared resources; each API read still applies its own permissions.
 A stream holds at most 256 pending identities, replacing an overflowing burst with a reset hint.
-The stream is a freshness hint, not durable history or database replication.
+The stream is a freshness hint, not durable history or database replication. A browser stream error
+refreshes active queries, which also exposes session expiry through the normal API error path. If
+the stream is permanently closed, the client retries with exponential delays capped at thirty
+seconds; a successful open resets the delay and refreshes missed changes.
+
+The boot-installed generic trigger is outside the migration-text graph guard's scope. Its replicated
+behavior is exercised by the two-node change-feed test. Sale-path trigger overhead has not been benchmarked.
 
 ## The view stays mounted
 
@@ -68,7 +76,8 @@ scheduled reads use the passive request path too.
 
 Automatic reads send `x-waitron-live: 1`. The browser does not count them as human activity, and the
 server's request-local context prevents them from touching the management session. Initial screen
-reads and explicit mutations retain their normal activity behavior. Logout, expiry and suspension
+requests and explicit mutations retain their normal activity behavior. Mounting a view onto a cached
+query issues no request and does not extend the session. Logout, expiry and suspension
 stop the connection and clear cached values.
 
 ## Verification receipts
@@ -76,7 +85,8 @@ stop the connection and clear cached values.
 - `packages/db/src/change-feed.pg.test.ts` checks commit, rollback, related identities and writes
   under a non-superuser `app_user`, with no business values in the notification.
 - `packages/db/src/change-feed-replication.pg.test.ts` copies a row between two real PostgreSQL
-  nodes and observes the notification from the receiving node. Without installing the trigger,
+  nodes over LAN and WireGuard and observes insert, update and delete notifications from the receiving node, including
+  tenant and old/new related printer identities. Without installing the trigger,
   the row arrived but the event assertion failed.
 - `packages/db/src/change-listener.test.ts` and `change-feed.pg.test.ts` exercise reconnect,
   malformed messages, failed connections and shutdown races, including terminating a real listener.
@@ -89,9 +99,11 @@ stop the connection and clear cached values.
   tests cover preservation of edited fields. Bookings uses the shared module context.
 - `apps/server/src/live-api.test.ts` checks authentication, subscription validation, tenant and id
   filters, expiry during idle and active streams, reset, bounded bursts and cleanup.
+  Removing the tenant filter fails the collection-subscription test with a distinct foreign row id.
 - `packages/identity/src/management-session.test.ts` and dashboard request tests check passive reads
-  separately from ordinary session activity. `apps/server/src/boot.test.ts` exercises normal startup
-  and shutdown with the production installation and listener wiring.
+  separately from ordinary session activity. `apps/server/src/boot.test.ts` checks a passive GET,
+  an ordinary GET and a POST carrying the passive header through real startup. Disabling the header
+  middleware fails the unchanged-session timestamp assertion.
 
 ## External provenance
 

@@ -1,4 +1,5 @@
-/** Keep edited scalar fields while replacing clean fields with the latest server values. */
+/** Seed from the initial server snapshot before editing. Rows are created server-first; missing rows
+ * leave the list. Later snapshots replace clean scalar fields while retaining locally edited fields. */
 export class DraftRows<T extends { id: string }> {
   #saved = new Map<string, T>();
 
