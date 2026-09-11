@@ -249,6 +249,28 @@ design-review section apply.
   use (a Tailscale/link-local-only box no longer advertises an `https://<ip>/` its cert can't cover).
   *Still parked:* the IPv6-LAN-SAN / public-address self-sign residuals (the #290 leaf-SAN filter
   drops out-of-set addresses rather than invalidating the whole cert, so nothing is broken today).
+  ***OPEN — onboarding must surface the CA-trust step (owner, 2026-09-11).*** After a box is
+  re-imaged/re-provisioned it serves a NEW self-signed CA; a browser silently keeps trusting the OLD
+  one, so the HTTPS setup page loads (click-through) but its `fetch()` to "provision now" fails at TLS
+  with NO in-page remedy — the page shows only "Provisioning failed. You can try again." and the
+  server logs nothing (the request never arrives). The plain-HTTP landing page (:80) serves and links
+  `/ca.crt`, but the onboarding flow never routes the operator through trusting it, so the CA is hidden
+  exactly when needed. Cost: a full box-setup dead-end on 2026-09-11 (operator "not offered the cert
+  anywhere"). Fix (own spec/branch): the onboarding/setup flow must make downloading + trusting the
+  box's CURRENT CA an explicit, unmissable step — and the provision failure path must point at it (a
+  "can't reach the box — download and trust its certificate here" surface), since a `fetch()` TLS
+  failure is indistinguishable from other network faults to the page. **The escape hatch cannot assume
+  a browser will honour a plain-HTTP URL:** modern browsers auto-upgrade a typed `http://<host>` to
+  `https://` (Chrome/Safari default; NOT our HSTS — the box sends none), so telling an operator to open
+  `http://<host>/ca.crt` in a browser silently lands them on the HTTPS app (CA is at `/setup-api/ca.crt`
+  there) → 404 + untrusted cert. `curl http://<host>/ca.crt` works (no auto-upgrade); a browser flow
+  needs another route (the trust page reached before any HTTPS visit, a QR/`file:`/data-URL hand-off,
+  or explicit "clear HTTPS-only for this host" guidance). And re-imaging leaves the OLD box CA trusted
+  in the operator's OS keychain: the recovery on 2026-09-11 required manually DELETING the stale
+  keychain entry AND fully quitting Chrome (a running Chrome caches cert validation + keychain state
+  for its process life; a reload is not enough) before `http://waitron.local` would show the trust
+  page — none of which any box screen tells the operator to do. Cost: the 2026-09-11 dead-end, escaped
+  only by hand. Not #311's scope (that is print-agent enrolment).
   Owed to Track H: **DONE 2026-09-10** — the box's compose runs the print-agent container beside the
   server by default (`WAITRON_SERVER_URL=https://127.0.0.1`, the agent fetches and pins the box CA from
   the landing listener), with a hot-plug-safe `/dev:/dev:ro` + major-180 device mount. Spec
