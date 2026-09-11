@@ -159,6 +159,29 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(pgErrorCode(e)).toBe("42P01");
   });
 
+  it("allows many NULL node_id agents but at most one per (tenant, node_id)", async () => {
+    // Two manual agents (node_id NULL) coexist — NULLS DISTINCT is the Postgres default.
+    await seedAgent(TENANT_A, "till A");
+    await seedAgent(TENANT_A, "till B");
+
+    const node = "cccccccc-0000-4000-8000-000000000001";
+    await asApp(TENANT_A, (tx) =>
+      tx.execute(
+        sql`insert into print_agents (tenant_id, location_id, name, token_hash, node_id)
+            values (${TENANT_A}, ${LOCATION_A}, 'box', ${TOKEN_HASH}, ${node})`,
+      ),
+    );
+    const err = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`insert into print_agents (tenant_id, location_id, name, token_hash, node_id)
+              values (${TENANT_A}, ${LOCATION_A}, 'box dup', ${TOKEN_HASH}, ${node})`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(err)).toBe("23505"); // unique_violation on print_agents_tenant_node_key
+  });
+
   // ---- printers -----------------------------------------------------------------------------
 
   it("printers: exposes every column through the Drizzle export, with the port and ticket_scope defaults", async () => {
