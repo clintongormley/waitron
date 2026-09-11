@@ -75,10 +75,19 @@ afterEach(() => {
 });
 
 // A sandbox: a fresh WAITRON_DIR, a bin/ of stub executables placed first on PATH, and a log file
-// every stub appends its argv to. `docker` answers `compose version` (so Docker looks installed),
-// prints `healthy` for `compose ps`, and returns empty for everything else. `curl`/`wget` write a
-// marker to their -o/-O target so fetched files exist. `qrencode` is a no-op.
-function sandbox({ tradingEnv = "", dockerPs = "healthy" } = {}) {
+// every stub appends its argv to. The docker stub inspects the WHOLE arg string ($*) rather than
+// shifting, so a change to flag order cannot silently break it:
+//   - `compose version` exits 0, so Docker looks installed and ensure_docker skips the apt block.
+//   - `compose ps`   -> prints dockerPs ("healthy" by default, so wait_healthy returns first try).
+//   - `compose logs` -> prints the database_ahead line when aheadLogs is set.
+//   - `compose exec … psql … -d waitron …` -> prints dbStamp, but ONLY when `-d waitron` is present,
+//     so a stamp query that forgot the app-db name (the wrong-db bug) reads empty and its test fails.
+//   - `run … cat …/trading.env` -> prints tradingEnv; `run … find …` (reset) prints nothing.
+// `curl`/`wget` write a marker to their -o target so fetched files exist. `qrencode` is a no-op.
+// `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
+// no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
+// which has no systemctl).
+function sandbox({ tradingEnv = "", dbStamp = "", aheadLogs = false, dockerPs = "healthy" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
   dirs.push(root);
   const boxDir = join(root, "box");
@@ -91,21 +100,25 @@ function sandbox({ tradingEnv = "", dockerPs = "healthy" } = {}) {
     writeFileSync(p, `#!/usr/bin/env bash\nprintf '%s ' "${name}" >> "${log}"; printf '%s\\n' "$*" >> "${log}"\n${body}\n`);
     chmodSync(p, 0o755);
   };
+  const aheadEcho = aheadLogs ? 'echo "provisioning.database_ahead: the database is newer"' : ":";
   stub("docker", `
-case "$1 $2" in
-  "compose version") exit 0 ;;
+args="$*"
+case "$args" in
+  "compose version"*) exit 0 ;;
 esac
-if [ "$1" = "compose" ]; then
-  shift
-  # find the subcommand after the -f <file> pair
-  while [ "$1" = "-f" ]; do shift 2; done
-  case "$1" in
-    ps) echo "${dockerPs}" ;;
-    logs) echo "${tradingEnv:+}" ;;
-  esac
-  exit 0
-fi
-if [ "$1" = "run" ]; then echo "${tradingEnv}"; exit 0; fi
+case "$1" in
+  compose)
+    case "$args" in
+      *" ps "*|*" ps") echo "${dockerPs}" ;;
+      *" logs "*) ${aheadEcho} ;;
+      *" exec "*)
+        case "$args" in
+          *psql*) case "$args" in *"-d waitron"*) echo "${dbStamp}" ;; esac ;;
+        esac ;;
+    esac ;;
+  run)
+    case "$args" in *trading.env*) echo "${tradingEnv}" ;; esac ;;
+esac
 exit 0
 `);
   stub("curl", `
@@ -114,6 +127,9 @@ out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; e
 exit 0
 `);
   stub("qrencode", "exit 0");
+  stub("systemctl", "exit 0");
+  // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
+  stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
   return { boxDir, bin, log, root };
 }
 
@@ -164,9 +180,9 @@ Expected: FAIL — `deploy/waitron.sh` does not exist yet.
 set -euo pipefail
 
 WAITRON_DIR="${WAITRON_DIR:-/opt/waitron}"
-REPO="clintongormley/waitron"
-RAW_BASE="https://raw.githubusercontent.com/${REPO}"
-GIT_URL="https://github.com/${REPO}.git"
+# The public repo, written out in full (not via a variable) so scripts/deploy-image-env.test.ts can
+# pin the literal URL as text — a typo in the org/repo then fails the guard loudly.
+RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
 # One copy of boot.ts's BOX_HOSTNAME, pinned by scripts/deploy-image-env.test.ts to the image env,
 # compose's defaults and the QR the restaurant scans.
 BOX_URL="https://waitron.local"
@@ -275,8 +291,10 @@ select_image() {
     local safe tag agent_tag
     safe="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9._-' '-')"; safe="${safe:0:100}"
     tag="waitron:${safe}"; agent_tag="waitron-print-agent:${safe}"
-    docker build -t "$tag" -f deploy/Dockerfile "${GIT_URL}#${ref}"
-    docker build -t "$agent_tag" -f deploy/Dockerfile --target print-agent "${GIT_URL}#${ref}"
+    # Full git URL inline (not via a variable) so the guard can pin `waitron.git#<ref>` as text.
+    # Docker fetches the ref itself; -f is relative to the fetched repo root, as try-branch.sh did.
+    docker build -t "$tag" -f deploy/Dockerfile "https://github.com/clintongormley/waitron.git#${ref}"
+    docker build -t "$agent_tag" -f deploy/Dockerfile --target print-agent "https://github.com/clintongormley/waitron.git#${ref}"
     env_set WAITRON_IMAGE "$tag"
     env_set WAITRON_PRINT_AGENT_IMAGE "$agent_tag"
   fi
@@ -306,7 +324,9 @@ is_production() {
   local env_line stamp
   env_line="$(docker run --rm -v waitron_state:/s "$HELPER_IMAGE" cat /s/trading.env 2>/dev/null | grep '^WAITRON_ENV=' || true)"
   case "$env_line" in *=production) return 0 ;; esac
-  stamp="$(docker compose -f "$WAITRON_DIR/compose.yml" exec -T db psql -U postgres -tAc \
+  # The deployment stamp lives in the app database, named `waitron` (node-entry.ts DATABASE), NOT the
+  # default `postgres` db — so `-d waitron` is required or the query errors and this signal goes dead.
+  stamp="$(docker compose -f "$WAITRON_DIR/compose.yml" exec -T db psql -U postgres -d waitron -tAc \
     'select environment from deployment where id = 1' 2>/dev/null | tr -d '[:space:]' || true)"
   [ "$stamp" = "production" ]
 }
@@ -452,17 +472,18 @@ describe("waitron.sh install <ref>", () => {
 });
 
 describe("waitron.sh database_ahead advice", () => {
-  // A box that never goes healthy and whose logs carry database_ahead: on a non-production box the
-  // advice is to reset; the stub docker returns the ahead log line and never-healthy ps.
+  // A box that never goes healthy (dockerPs "starting") whose logs carry database_ahead. The
+  // sandbox already models aheadLogs and tradingEnv; only the health loop needs bounding, via the
+  // WAITRON_SH_MAX_HEALTH_TRIES override so the test does not wait three minutes.
   it("tells a non-production box to reset", () => {
-    const sb = sandbox({ dockerPs: "starting", aheadLogs: true, healthTries: 1 });
+    const sb = sandbox({ dockerPs: "starting", aheadLogs: true });
     const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/reset.*then install/i);
   });
 
   it("never tells a production box to reset", () => {
-    const sb = sandbox({ dockerPs: "starting", aheadLogs: true, tradingEnv: "WAITRON_ENV=production", healthTries: 1 });
+    const sb = sandbox({ dockerPs: "starting", aheadLogs: true, tradingEnv: "WAITRON_ENV=production" });
     const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/newer ref/i);
@@ -471,7 +492,7 @@ describe("waitron.sh database_ahead advice", () => {
 });
 ```
 
-Extend the `sandbox()` stub so `docker compose logs` prints the ahead line when `aheadLogs` is set, and `docker run ... cat /s/trading.env` prints `tradingEnv`. Add a `WAITRON_SH_MAX_HEALTH_TRIES` env override so the health loop does not take three minutes in the test (read it in `wait_healthy`).
+The `sandbox()` from Task 1 already prints the ahead line for `aheadLogs` and answers the trading.env read, so no stub change is needed here. The only script change is adding a `WAITRON_SH_MAX_HEALTH_TRIES` env override so the health loop is test-bounded (read it in `wait_healthy`, Step 3).
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -601,8 +622,20 @@ describe("waitron.sh reset", () => {
     expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_state\b/);
   });
 
-  it("refuses on a production box and removes no volume", () => {
+  it("refuses on a production box (trading.env signal) and removes no volume", () => {
     const sb = sandbox({ tradingEnv: "WAITRON_ENV=production" });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
+  });
+
+  // Spec §8: refusal must also fire on the DB-stamp signal alone (trading.env empty). Because the
+  // stub only returns the stamp when `-d waitron` is present, this test also fails if the query
+  // targets the wrong database — the wrong-db bug cannot pass unnoticed.
+  it("refuses on a production box (db-stamp signal) and removes no volume", () => {
+    const sb = sandbox({ tradingEnv: "", dbStamp: "production" });
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).not.toBe(0);
@@ -794,10 +827,10 @@ address, so the operator has the same links the console banner prints."
 
 ## Task 5: Docs and comments
 
-Updates the README, the comments naming the deleted scripts, `CLAUDE.md`, and the backlog. Docs-only, no test cycle; committed as one change.
+Updates the README, the comments naming the deleted scripts, `CLAUDE.md`, and the backlog. Mostly prose, but it touches two code-file comments (`apps/server/src/boot.ts` and `.github/workflows/image-smoke.yml`), which pulls `@waitron/server` and the workflow suite into pre-push scope — both pass, since only comments change. Committed as one change.
 
 **Files:**
-- Modify: `deploy/README.md`, `deploy/compose.yml`, `deploy/.env.example`, `deploy/Dockerfile`, `apps/server/src/boot.ts`, `scripts/changed-scope.mjs`, `CLAUDE.md`, `docs/backlog.md`
+- Modify: `deploy/README.md`, `deploy/compose.yml`, `deploy/.env.example`, `deploy/Dockerfile`, `apps/server/src/boot.ts`, `scripts/changed-scope.mjs`, `.github/workflows/image-smoke.yml`, `CLAUDE.md`, `docs/backlog.md`
 
 - [ ] **Step 1: README**
 
@@ -810,6 +843,7 @@ In `deploy/README.md`: replace the setup one-liner and the "Trying a branch befo
 - `deploy/Dockerfile:151`: the `prepare.sh` hostname-copy mention → `waitron.sh`.
 - `apps/server/src/boot.ts:291`: the hostname-copy list mentions `prepare.sh`'s QR URL → `waitron.sh`.
 - `scripts/changed-scope.mjs:79`: the image-input comment lists `prepare.sh` → `waitron.sh`.
+- `.github/workflows/image-smoke.yml:28`: the comment "where `prepare.sh` puts a real box's" → `waitron.sh`.
 
 - [ ] **Step 3: CLAUDE.md**
 
@@ -817,7 +851,7 @@ Reword the §2 entry at `CLAUDE.md:388-390` ("`deploy/try-branch.sh` is a one-wa
 
 - [ ] **Step 4: Backlog**
 
-In `docs/backlog.md`, update the rows that name the three scripts (around lines 105-107, 202, 221, 232, 302-304) to name `waitron.sh` and its two verbs. Add a one-line pointer to the spec.
+In `docs/backlog.md`, update the rows that name the three scripts (lines 105-107, 202, 221, 232, 237, 302, 304) to name `waitron.sh` and its two verbs. Add a one-line pointer to the spec.
 
 - [ ] **Step 5: Verify docs lint clean, then commit**
 
@@ -848,4 +882,6 @@ git commit -s -m "docs(deploy): describe waitron.sh install and reset; retire th
 
 **Type/name consistency:** `is_production`, `select_image`, `report_unhealthy`, `wait_healthy`, `print_links`, `env_set`/`env_unset`, `HELPER_IMAGE`, `cmd_install`/`cmd_reset` are defined in Task 1 and reused by name in Tasks 2-3. The volume set `db logs media backups mailpit print_agent` matches the spec and compose. `WAITRON_SH_MAX_HEALTH_TRIES` is introduced in Task 2 and used only there and in the reset path.
 
-**Note for the executor:** the run-it test's stub `docker` must be extended in Task 2 (ahead logs, trading.env read) and its coverage of `volume rm`/`run` relied on in Task 3 — grow the single `sandbox()` helper rather than forking it.
+**Note for the executor:** the `sandbox()` helper is written complete in Task 1 (knobs `tradingEnv`, `dbStamp`, `aheadLogs`, `dockerPs`; stubs for `docker`, `curl`, `qrencode`, `systemctl`, `sudo`). Tasks 2 and 3 only pass different knob values — do not fork or re-declare it. The docker stub returns the DB stamp only when `-d waitron` is in the args, which is what makes the Task 3 stamp-signal test fail if `is_production`'s query targets the wrong database.
+
+**Plan-review fixes applied (2026-09-11):** the fresh-context plan-vs-spec review found five defects, all fixed above before any code was written: (1) the guard's literal-URL text pins could not match a `${REPO}` variable — the script now writes the raw and git URLs out in full; (2) `is_production`'s stamp query hit the default `postgres` db, not the app db — now `-d waitron`; (3) spec §8's DB-stamp refusal test was missing — added, and the stub guards the `-d waitron` fix; (4) Task 5 missed the stale `image-smoke.yml` reference and mis-stated its scope — both corrected; (5) the run-it suite was not hermetic against `systemctl`/`sudo` — both are now stubbed.
