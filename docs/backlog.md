@@ -1782,6 +1782,26 @@ genuinely-decision-bearing.
 
 **SumUp:**
 
+- **Card-payment proof on the receipt — LANDED #315.** A card sale now prints the card block (scheme,
+  masked PAN `**** NNNN`, entry mode, auth code, and a `Propina`/`Cobrado` pair when a tip rode on the
+  card) below `TOTAL`, replacing the bogus `Efectivo`/`Cambio 0,00` a card sale printed before. Optional
+  `CardDetails` on the `PaymentResult` contract; SumUp fills it from the transaction it already fetches;
+  four nullable `payments` columns + CHECKs; a `readTenderBlock` helper feeds a tagged `tender` block on
+  `TillSaleResult` (the old `change` field removed), rendered by both the paper and on-screen receipts; a
+  reprint is byte-identical by construction. Fiscal body untouched. The whole-branch run-it review caught
+  a money-safety bug BY RUNNING: a malformed 5-char `last_4_digits` passed the adapter's old truthy guard
+  and the DB CHECK then rejected the whole capture (a real charge would fail to record) — fixed to a
+  `/^\d{4}$/` guard at both adapter boundaries so a capture always records and card facts degrade to
+  none. Deferred minor: `insertCapturedPayment`'s card path is branch-uncovered (no caller passes card
+  facts through it — SumUp uses `captureAttempting`; above the coverage floor); add a round-trip test if a
+  single-message card-capture caller is ever wired. Spec/plan:
+  `superpowers/specs/2026-09-11-card-receipt-tender-details-design.md`,
+  `superpowers/plans/2026-09-11-card-receipt-tender-details.md`.
+- **Follow-up (from #315): Stripe does not fill `CardDetails`.** The contract field is optional and
+  Stripe leaves it undefined, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/auth. Filling it
+  needs an extra charge read (`payment_method_details`) on the device/hosted adapters — gated on the deli
+  actually having a Stripe account (it does not). Low priority.
+
 - **Refund unit bug — LANDED #312.** The SumUp adapter sent the refund `amount` in euros
   (`toMajorUnits`) to an endpoint that reads MINOR units (integer cents), so a partial refund sent
   `0.40`, truncated to `0` cents, and refunded €0.00 while reporting `accepted` — `reverseViaSumUp`'s
