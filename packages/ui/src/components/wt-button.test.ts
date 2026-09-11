@@ -76,3 +76,35 @@ test("primary variant paints from the primary token", async () => {
   const inner = el.shadowRoot!.querySelector("button")!;
   expect(getComputedStyle(inner).backgroundColor).toBe("rgb(1, 2, 3)");
 });
+
+test("loading disables the button, marks it busy and shows a spinner", async () => {
+  const el = await mount("<wt-button loading>Scan</wt-button>");
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(inner.disabled).toBe(true);
+  expect(inner.getAttribute("aria-busy")).toBe("true");
+  expect(el.shadowRoot!.querySelector("wt-spinner")).toBeTruthy();
+  expect(el.getAttribute("loading")).not.toBeNull();
+});
+
+test("the loading spinner is decorative — the button's aria-busy and label carry the state", async () => {
+  const el = await mount("<wt-button loading>Buscando…</wt-button>");
+  const spinner = el.shadowRoot!.querySelector("wt-spinner")!;
+  await (spinner as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(spinner.hasAttribute("decorative")).toBe(true);
+  expect(spinner.shadowRoot!.querySelector("[role=status]")).toBeNull();
+});
+
+test("does not emit click while loading", async () => {
+  const el = await mount("<wt-button loading>Scan</wt-button>");
+  let clicks = 0;
+  el.addEventListener("click", () => clicks++);
+  (el.shadowRoot!.querySelector("button") as HTMLButtonElement).click();
+  expect(clicks).toBe(0);
+});
+
+test("shows no spinner and is not busy when not loading", async () => {
+  const el = await mount("<wt-button>Scan</wt-button>");
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(inner.getAttribute("aria-busy")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull();
+});

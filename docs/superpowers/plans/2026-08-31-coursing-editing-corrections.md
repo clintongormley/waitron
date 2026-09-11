@@ -326,7 +326,7 @@ await fireLines(tx, cfg, tabId, withHold);
 - Consumes: `esc()` (`@waitron/printing`), `itemLine`, `emitItem`, `hhmm` (kitchen-ticket.ts internals).
 - Produces: `formatCorrectionSlip(slip: CorrectionSlip): Uint8Array`, with `interface CorrectionSlip { kind: "VOID" | "RECALLED"; stationName: string; tableLabel: string | null; orderNumber: string; at: string; item: KitchenTicketItem }`.
 
-**Behaviour:** A single-item slip whose header line is `*** VOID ***` / `*** RECALLED ***` (ESC/POS has no bold — `kitchen-ticket.ts` header note), then `stationName`, `tableLabel`, `orderNumber`, `hhmm(at)`, then the item via the existing `emitItem` (so `2 x Steak` + `  + <modifier>` render identically to the kitchen ticket the cook already has). Reuse the `esc().init()…feed(3).cut().bytes()` envelope.
+**Behaviour:** A single-item slip whose header line is `*** VOID ***` / `*** RECALLED ***` (ESC/POS has no bold — `kitchen-ticket.ts` header note), then `stationName`, `tableLabel`, `orderNumber`, `hhmm(at)`, then the item via the existing `emitItem` (so `2 x Steak` + `  + <modifier>` render identically to the kitchen ticket the cook already has). Reuse the `esc().init()…feed(3).cut().bytes()` envelope (since 2026-09-11 the envelope ends in `feedAndCut()`, the shared margin).
 
 - [ ] **Step 1: Write failing test** — `formatCorrectionSlip({ kind: "VOID", stationName: "Cocina", tableLabel: "Mesa 6", orderNumber: "A-12", at: "...", item: { qty: 2, name: "Tiramisu", modifiers: ["extra nata x2"] } })` → decode bytes and assert the string contains `VOID`, `Tiramisu`, `2 x Tiramisu`, `+ extra nata x2`, `Mesa 6`, `A-12`. (Mirror the existing `formatKitchenTicket` tests' decode approach.)
 - [ ] **Step 2: Run, verify fail.**

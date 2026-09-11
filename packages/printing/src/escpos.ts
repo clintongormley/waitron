@@ -21,6 +21,15 @@ const GS = 0x1d;
 const LF = 0x0a;
 
 /**
+ * Blank lines {@link EscBuilder.feedAndCut} feeds before the cut, so the tear-off clears the print
+ * head and the holder has something to grip. The cutter sits above the head: three lines left the
+ * Epson TM-T88III's cut on the last printed line (owner's test print, 2026-09-11); five is the chosen
+ * margin and has not itself been measured on paper yet. The ticket formatters in `apps/server` and
+ * the test print all cut through `feedAndCut()`, so this is the one value.
+ */
+export const FEED_BEFORE_CUT = 5;
+
+/**
  * Text encoding: ONE byte per character via Latin-1 (ISO-8859-1), so every code point 0x00-0xFF maps
  * to its own byte. ESC/POS printers are byte-oriented and interpret bytes through a selected code
  * page; picking that code page (CP437/CP858/…) is a CONSUMER concern, not the builder's, so the
@@ -87,10 +96,17 @@ export class EscBuilder {
     return this;
   }
 
-  /** Full cut — `GS V 0`. Severs the paper completely. */
+  /** Full cut — `GS V 0`. Severs the paper completely, wherever the paper is: a ticket ends with
+   * {@link feedAndCut} so the cut clears what was just printed. */
   cut(): this {
     this.parts.push(GS, 0x56, 0x00);
     return this;
+  }
+
+  /** Feed {@link FEED_BEFORE_CUT} blank lines, then full cut — `ESC d 5` then `GS V 0`; how every
+   * ticket formatter and the test print end. */
+  feedAndCut(): this {
+    return this.feed(FEED_BEFORE_CUT).cut();
   }
 
   /**

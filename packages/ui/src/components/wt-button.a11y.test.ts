@@ -32,4 +32,11 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
     await mountThemed("<wt-button disabled>Cobrar</wt-button>", theme);
     await expectNoA11yViolations(host);
   });
+
+  // The loading state nests a wt-spinner; it must be decorative so the button's accessible name stays
+  // its own (localized) label and aria-busy carries the state.
+  test("loading button", async () => {
+    await mountThemed("<wt-button loading>Buscando…</wt-button>", theme);
+    await expectNoA11yViolations(host);
+  });
 });

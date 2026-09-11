@@ -42,7 +42,7 @@
  * the screen uses, kept in lock-step deliberately.
  *
  * NO emphasis/bold — the `@waitron/printing` builder has no bold/emphasis verb (verified against
- * packages/printing/src/escpos.ts), so the layout leans on plain text plus `feed`/`cut`, with
+ * packages/printing/src/escpos.ts), so the layout leans on plain text plus `feedAndCut`, with
  * `twoColumn` giving a label-left / value-right column feel. Exact column fit and QR
  * millimetres are verified MANUALLY on the real printer (design §5); the guarantee here is only that
  * the bytes are DETERMINISTIC and carry every mandated element, which `receipt-ticket.test.ts` pins.
@@ -133,12 +133,6 @@ const QTY_BADGE = "×";
  * the width simply run together with one space rather than wrapping.
  */
 const RECEIPT_WIDTH = 42;
-
-/**
- * Blank lines fed before the cut, so the tear-off clears the print head and the customer has something
- * to grip. Matches `formatKitchenTicket`'s `feed(3)` and the test-print payload in print-api.ts.
- */
-const FEED_BEFORE_CUT = 3;
 
 /**
  * Format a money amount for the paper — the EDGE where a `Decimal` string becomes human-readable text.
@@ -351,5 +345,5 @@ export function formatReceipt({
   // Non-fiscal footer trim, under the legend.
   if (receipt.footerMessage) b.line(receipt.footerMessage);
 
-  return b.feed(FEED_BEFORE_CUT).cut().bytes();
+  return b.feedAndCut().bytes();
 }

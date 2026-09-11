@@ -13,8 +13,8 @@
  *   - `order` — the expediter's "pass" copy: a single ticket that groups every fired item BY station,
  *     each station's lines under its own sub-header, so the pass reads the whole order at a glance.
  *
- * NO emphasis/bold (ruling R-G). The ESC/POS builder — `@waitron/printing`'s `esc()` — exposes only
- * `init`/`text`/`line`/`feed`/`cut`/`kick` (verified against packages/printing/src/escpos.ts:37-91);
+ * NO emphasis/bold (ruling R-G). The ESC/POS builder — `@waitron/printing`'s `esc()` — exposes
+ * `init`/`text`/`line`/`feed`/`cut`/`feedAndCut`/`kick`/`qr`/`qrRaster` (packages/printing/src/escpos.ts);
  * there is no bold verb. The plan's "bold the table/order" is therefore DEFERRED until the builder
  * gains emphasis, and adding a bold command to packages/printing is out of this task's scope. The
  * layout below uses only the existing verbs.
@@ -23,12 +23,6 @@ import { esc } from "@waitron/printing";
 
 /** The pass header for an `order`-scope ticket — the printed VALUE the expediter reads ("pass"). */
 const ORDER_HEADER = "PASE";
-
-/**
- * Blank lines fed before the cut, so the tear-off clears the print head and the operator has
- * something to grip. Matches the test-print payload's `feed(3)` in print-api.ts.
- */
-const FEED_BEFORE_CUT = 3;
 
 /** One fired line: a quantity and the product name, snapshotted at fire time by the caller.
  *  `modifiers` are the parent dish's selected options (ordering modifiers) — each a snapshotted option
@@ -143,7 +137,7 @@ export function formatKitchenTicket(ticket: KitchenTicket): Uint8Array {
     }
   }
 
-  return b.feed(FEED_BEFORE_CUT).cut().bytes();
+  return b.feedAndCut().bytes();
 }
 
 /**
@@ -166,7 +160,7 @@ export interface CorrectionSlip {
 /**
  * Render `slip` to an ESC/POS payload. There is no bold verb (module header note, R-G) so the
  * `*** VOID ***` / `*** RECALLED ***` asterisks stand in for emphasis. Mirrors
- * {@link formatKitchenTicket}'s envelope exactly — same `init()`/`feed(FEED_BEFORE_CUT)`/`cut()` —
+ * {@link formatKitchenTicket}'s envelope exactly — same `init()`/`feedAndCut()` —
  * and reuses {@link emitItem} so the item + modifier lines render byte-for-byte like the original
  * ticket the cook is correcting. `tableLabel` is only printed when non-null (e.g. a bar tab with no
  * table).
@@ -180,5 +174,5 @@ export function formatCorrectionSlip(slip: CorrectionSlip): Uint8Array {
   b.line(slip.orderNumber).line(hhmm(new Date(slip.at)));
   emitItem(b, slip.item);
 
-  return b.feed(FEED_BEFORE_CUT).cut().bytes();
+  return b.feedAndCut().bytes();
 }

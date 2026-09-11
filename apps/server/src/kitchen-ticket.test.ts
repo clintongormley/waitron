@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { FEED_BEFORE_CUT } from "@waitron/printing";
 import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 
@@ -9,6 +10,8 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 // tail. GS V 0 (full cut) is 0x1D 0x56 0x00 (escpos.ts / escpos.test.ts); feed precedes it, so the
 // final three bytes are always the cut.
 const CUT_BYTES = [0x1d, 0x56, 0x00];
+/** ESC d n — the shared feed before every cut, so the tear-off clears the print head. */
+const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
 
 describe("formatKitchenTicket", () => {
   describe("station scope", () => {
@@ -33,8 +36,8 @@ describe("formatKitchenTicket", () => {
       expect(text).toContain("2 x Steak");
       expect(text).toContain("1 x Chips");
 
-      // Ends with the full-cut command.
-      expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
+      // Ends with the shared feed then the full-cut command.
+      expect([...bytes.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
     });
 
     it("zero-pads a single-digit hour and minute to local HH:MM", () => {

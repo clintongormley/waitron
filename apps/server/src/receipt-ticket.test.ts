@@ -1,4 +1,4 @@
-import { esc } from "@waitron/printing";
+import { FEED_BEFORE_CUT, esc } from "@waitron/printing";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
@@ -20,6 +20,8 @@ import type { TillSaleResult } from "./till-sale.js";
 
 /** GS V 0 (full cut) — the final three bytes of every ticket (`escpos.ts` / `escpos.test.ts`). */
 const CUT_BYTES = [0x1d, 0x56, 0x00];
+/** ESC d n — the shared feed before every cut (`FEED_BEFORE_CUT`), so the tear-off clears the head. */
+const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
 /** GS ( k — the lead bytes of the native two-dimensional-symbol (QR) command family (`escpos.ts`). */
 const QR_LEAD_BYTES = Uint8Array.from([0x1d, 0x28, 0x6b]);
 
@@ -318,7 +320,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       receipt: TRIM,
       invoiceLocale: "es-ES",
     });
-    expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
+    expect([...bytes.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
   });
 
   it("normalises the amount/€ separator to an ASCII space (0x20), not NBSP/NNBSP", () => {

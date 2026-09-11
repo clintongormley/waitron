@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { esc } from "./escpos.js";
+import { FEED_BEFORE_CUT, esc } from "./escpos.js";
 
 // Byte-level assertions PIN each ESC/POS command's exact sequence (design §3d). The builder is a
 // pure, DB-free byte assembler, so these are ordinary unit tests — no PGlite, no container. Every
@@ -33,6 +33,14 @@ describe("esc() ESC/POS builder", () => {
 
   it("cut emits GS V 0 (full cut)", () => {
     expect([...esc().cut().bytes()]).toEqual([0x1d, 0x56, 0x00]);
+  });
+
+  it("feedAndCut feeds FEED_BEFORE_CUT lines (five — three measured too short) then cuts", () => {
+    // Three lines left the Epson TM-T88III's cut on the last printed line (owner's test print,
+    // 2026-09-11); five is the chosen margin, to be confirmed on paper. Every ticket formatter and the
+    // test print cut through this verb (`cut()` itself stays public for raw payloads).
+    expect(FEED_BEFORE_CUT).toBe(5);
+    expect([...esc().feedAndCut().bytes()]).toEqual([0x1b, 0x64, 0x05, 0x1d, 0x56, 0x00]);
   });
 
   it("kick emits the cash-drawer pulse ESC p 0 25 250", () => {

@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
+import "./wt-spinner.js";
 
 export type WtButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 export type WtButtonSize = "sm" | "md" | "lg";
@@ -80,6 +81,10 @@ export class WtButton extends LitElement {
   @property({ reflect: true }) variant: WtButtonVariant = "secondary";
   @property({ reflect: true }) size: WtButtonSize = "md";
   @property({ type: Boolean, reflect: true }) disabled = false;
+  /** An in-progress action: the button is disabled, marked `aria-busy`, and a decorative spinner
+   * leads the label. The label stays visible — and is the one thing announced — so the caller swaps
+   * it for what is happening ("Scanning…" / "Buscando…") in the screen's own language. */
+  @property({ type: Boolean, reflect: true }) loading = false;
 
   // Shadows the native ARIAMixin accessor so the value reaches the inner shadow <button> — the
   // element that is actually focusable and clickable. The host's own aria-label attribute (which
@@ -95,7 +100,13 @@ export class WtButton extends LitElement {
 
   override render() {
     return html`
-      <button type="button" ?disabled=${this.disabled} aria-label=${this.ariaLabel ?? nothing}>
+      <button
+        type="button"
+        ?disabled=${this.disabled || this.loading}
+        aria-busy=${this.loading ? "true" : nothing}
+        aria-label=${this.ariaLabel ?? nothing}
+      >
+        ${this.loading ? html`<wt-spinner size="sm" decorative></wt-spinner>` : nothing}
         <slot></slot>
       </button>
     `;
