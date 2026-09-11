@@ -31,6 +31,7 @@ import {
   type TotpKeyRing,
 } from "@waitron/identity";
 import { SUPPORTED_LOCALES, AppError, isAppError } from "@waitron/shared";
+import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import "./errors.js";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -381,17 +382,17 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     return venue.venueName;
   };
 
-  // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED
-  // (the dashboard shell fetches it before login to pick its language and label the installation)
-  // and free of secrets — `locales` is the static catalogue, `venueDefault` the geography-derived
-  // boot value (`deps.venueLocale`), and `venueName` the tenant's legal name. NO management-session
-  // gate, the browser twin of the till's `GET /api/locales`.
+  // No session is required: like GET /api/locales, this exposes only public identity and languages.
+  // Only loginDefault depends on the request;
+  // venueDefault remains the fallback for a signed-in person without a saved preference.
   app.get("/management-api/locales", (c) =>
     run(c, log, async () => {
       const venueName = await asStaff(readVenueName);
+      c.header("Vary", "Accept-Language");
       return c.json({
         locales: SUPPORTED_LOCALES,
         venueDefault: deps.venueLocale,
+        loginDefault: resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
         venueName,
         onboardingIntent: deps.onboardingIntent,
       });

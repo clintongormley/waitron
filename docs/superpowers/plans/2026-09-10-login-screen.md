@@ -1,5 +1,11 @@
 # Faster dashboard login
 
+2026-09-11 owner update: [login-flow refinements](../specs/2026-09-11-login-flow-refinements-design.md)
+supersede the sign-in choices below where they conflict. Email entry opens password without an
+automatic passkey prompt; only opted-in email/method preferences persist, changing accounts clears
+them, and recovery uses one emailed-link entry for setup and reset. Manual invitation-code entry is
+removed. This document records the earlier design.
+
 Status: implemented with automated validation on the `login-screen` branch. Native passkey prompts
 and scanning the QR code with a physical authenticator remain device checks before deployment.
 

@@ -1,5 +1,7 @@
 # Per-user language preference — design
 
+> **Dashboard sign-in update, 2026-09-11:** Sign-in now matches `Accept-Language` through the public response's separate `loginDefault`. The venue fallback and saved authenticated preferences retain their meaning. Logout and expiry use the last browser match or the venue default while the request is pending. See `apps/server/src/login-locale.ts` and `apps/dashboard/src/dashboard-app.ts`. The venue-language sign-in instructions below record the earlier design.
+
 > **Superseded placement decision, 2026-09-06:** The [UI navigation and controls plan](../plans/2026-09-06-ui-navigation-and-controls.md) places the language chooser at the bottom right, outside the operator header, and keeps it available on kitchen displays. The header-placement and kiosk-removal instructions below record the earlier design.
 
 **Status:** design, awaiting review.

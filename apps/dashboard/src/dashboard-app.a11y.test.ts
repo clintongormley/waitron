@@ -59,6 +59,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      loginDefault: "es-ES",
       venueName: "Deli Test SL",
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),

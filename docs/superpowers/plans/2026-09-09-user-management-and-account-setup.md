@@ -1,5 +1,11 @@
 # User management and account setup
 
+2026-09-11 owner update: [login-flow refinements](../specs/2026-09-11-login-flow-refinements-design.md)
+supersede the sign-in choices below where they conflict. Email entry opens password without an
+automatic passkey prompt; only opted-in email/method preferences persist, changing accounts clears
+them, and recovery uses one emailed-link entry for setup and reset. Manual invitation-code entry is
+removed. This document records the earlier design.
+
 Implementation plan for the `user-management` branch, agreed in the owner walkthrough on
 2026-09-09 and written before implementation. It extends the
 [first login/profile slice](2026-09-09-dashboard-profile-and-login.md).

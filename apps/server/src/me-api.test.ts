@@ -358,6 +358,34 @@ describe("mountMeApi — profile credentials", () => {
 });
 
 describe("mountMeApi — locales (public)", () => {
+  it.each([
+    ["en-US,en;q=0.9,es;q=0.8", "en-GB"],
+    ["es-MX,es;q=0.9,en;q=0.8", "es-ES"],
+    ["es;q=0.2,en;q=0.9", "en-GB"],
+    ["fr-FR,de;q=0.9,en;q=0.8", "en-GB"],
+    ["EN-us", "en-GB"],
+    ["en;q=0,es;q=0.5", "es-ES"],
+    ["en,es", "en-GB"],
+    ["es,en", "es-ES"],
+    ["*", "es-ES"],
+    ["*;q=0.8,es;q=0", "en-GB"],
+    ["en;q=bogus,es;q=0.5", "es-ES"],
+    ["en;q=2,es;q=0.5", "es-ES"],
+    ["en;q=-1,es;q=0.5", "es-ES"],
+    ["en;q=0.1234,es;q=0.5", "es-ES"],
+    ["es;q=0.2,en;q=1.000", "en-GB"],
+    ["  en-US ; q=0.8 , es;q=0.2 ", "en-GB"],
+    ["fr-FR", "es-ES"],
+    ["", "es-ES"],
+  ])("matches Accept-Language %j for the public login", async (header, expected) => {
+    const res = await mountApp({ venueLocale: "es-ES" }).request("/management-api/locales", {
+      headers: { "Accept-Language": header },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ loginDefault: expected, venueDefault: "es-ES" });
+    expect(res.headers.get("Vary")).toBe("Accept-Language");
+  });
+
   it("GET /management-api/locales returns the supported list, venue default and venue name without a session", async () => {
     // Deliberately unauthenticated — the dashboard shell fetches it before login. No cookie sent.
     const res = await send(mountApp(), "GET", "/management-api/locales", { cookie: null });
@@ -367,6 +395,7 @@ describe("mountMeApi — locales (public)", () => {
     expect(await res.json()).toEqual({
       locales: SUPPORTED_LOCALES,
       venueDefault: VENUE_LOCALE,
+      loginDefault: VENUE_LOCALE,
       venueName: "Test SL",
       onboardingIntent: "prepare",
     });

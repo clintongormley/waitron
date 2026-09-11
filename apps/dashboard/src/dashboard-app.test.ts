@@ -84,7 +84,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
     // Per-user-language-preference (Task 10): getMe now carries the person's stored `locale` + the
     // `venueLocale` fallback (default: no preference at a Spanish venue → the UI stays es-ES); the boot
-    // seed reads `getLocales` (venueDefault es-ES) and the logged-in persist path writes `putLocale`.
+    // seed reads `getLocales` (loginDefault es-ES) and the logged-in persist path writes `putLocale`.
     // Module gating (Task 4): the default probe is a manager HOLDING `booking.manage` with `bookings`
     // enabled — reproducing the prior always-on bookings module for the Task-3 nav/screen tests. A test
     // that gates on the module supplies its own `permissions`/`modules`.
@@ -105,6 +105,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      loginDefault: "es-ES",
       venueName: "Deli Test SL",
       onboardingIntent: "prepare",
     }),
@@ -820,6 +821,42 @@ describe("dashboard-app", () => {
     expect(escaped).not.toHaveBeenCalled();
   });
 
+  it("preserves an existing shortcut when account setup finishes without a Remember choice", async () => {
+    const saved = JSON.stringify({ email: "saved@example.test", method: "password" });
+    localStorage.setItem("waitron-login-preference", saved);
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "new-person",
+          role: "manager",
+          email: "new@example.test",
+          locale: null,
+          venueLocale: "es-ES",
+          venueName: "Deli",
+          permissions: [],
+          modules: [],
+        }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    login(el)!.dispatchEvent(
+      new CustomEvent("logged-in", {
+        detail: {
+          personId: "new-person",
+          accountSetup: true,
+          loginMethod: "password",
+          rememberEmail: false,
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(localStorage.getItem("waitron-login-preference")).toBe(saved);
+  });
+
   it("remembers the authenticated email and method only after login succeeds", async () => {
     const api = stubApi({
       getMe: vi
@@ -846,14 +883,115 @@ describe("dashboard-app", () => {
       }),
     );
     await flush(el);
-    expect(JSON.parse(sessionStorage.getItem("waitron-login-preference")!)).toEqual({
+    expect(JSON.parse(localStorage.getItem("waitron-login-preference")!)).toEqual({
       email: "actual@example.com",
       method: "passkey",
     });
-    expect(localStorage.getItem("waitron-login-preference")).toBe(
-      sessionStorage.getItem("waitron-login-preference"),
-    );
+    expect(sessionStorage.getItem("waitron-login-preference")).toBeNull();
   });
+
+  it("does not carry a remembered account's consent to a different passkey identity", async () => {
+    localStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "saved@example.com", method: "passkey" }),
+    );
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "other",
+          role: "manager",
+          email: "other@example.com",
+          locale: null,
+          venueLocale: "es-ES",
+          venueName: "Deli Test SL",
+          permissions: [],
+          modules: [],
+        }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    emit(login(el)!, "logged-in", {
+      loginMethod: "passkey",
+      rememberEmail: true,
+      rememberedEmail: "saved@example.com",
+    });
+    await flush(el);
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+  });
+
+  it("remembers an opted-in Google callback only after its identity probe succeeds", async () => {
+    history.replaceState(null, "", "/manage/?login=google");
+    sessionStorage.setItem(
+      "waitron-google-login-preference",
+      JSON.stringify({ expiresAt: Date.now() + 60000 }),
+    );
+    let resolve!: (value: unknown) => void;
+    const api = stubApi({
+      getMe: vi.fn().mockImplementation(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+    expect(sessionStorage.getItem("waitron-google-login-preference")).toBeNull();
+    expect(location.search).not.toContain("login=google");
+    resolve({
+      personId: "google-person",
+      role: "manager",
+      email: "google@example.com",
+      locale: null,
+      venueLocale: "es-ES",
+      venueName: "Deli Test SL",
+      permissions: [],
+      modules: [],
+    });
+    await flush(el);
+    expect(JSON.parse(localStorage.getItem("waitron-login-preference")!)).toEqual({
+      email: "google@example.com",
+      method: "google",
+    });
+  });
+
+  it.each(["failed", "different-account", "not-callback", "no-intent"])(
+    "does not save Google preference for %s",
+    async (scenario) => {
+      history.replaceState(
+        null,
+        "",
+        scenario === "not-callback" ? "/manage/" : "/manage/?login=google",
+      );
+      if (scenario !== "no-intent")
+        sessionStorage.setItem(
+          "waitron-google-login-preference",
+          JSON.stringify({ expiresAt: Date.now() + 60000, rememberedEmail: "saved@example.com" }),
+        );
+      const api = stubApi({
+        getMe:
+          scenario === "failed"
+            ? vi.fn().mockRejectedValue({ code: "management_session.required" })
+            : vi.fn().mockResolvedValue({
+                personId: "other",
+                role: "manager",
+                email: "other@example.com",
+                locale: null,
+                venueLocale: "es-ES",
+                venueName: "Deli Test SL",
+                permissions: [],
+                modules: [],
+              }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+      expect(sessionStorage.getItem("waitron-google-login-preference")).toBeNull();
+    },
+  );
 
   it("does not show the logout control on the login screen", async () => {
     const api = stubApi({
@@ -1573,6 +1711,7 @@ describe("dashboard-app", () => {
 type LocalesResponse = {
   locales: { code: string; label: string }[];
   venueDefault: string;
+  loginDefault: string;
   venueName: string;
 };
 /** The resolved shape the widened `getMe` answers with. */
@@ -1587,15 +1726,174 @@ type MeResponse = {
 };
 
 describe("dashboard-app — per-user locale (Task 10)", () => {
-  it("seeds the login screen to the venue default when there is no session (deep child via keyed)", async () => {
-    // No session → stays on `login`; the boot seed reads getLocales and applies its venueDefault (en-GB,
-    // which differs from the es-ES module default so the switch is observable). The login screen is
-    // recreated by the `keyed(currentLocale(), …)` wrapper, so a DEEP child of its own shadow renders English.
+  it("uses the browser-matched login language at a Spanish venue", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "en-GB",
+        venueName: "Test SL",
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+    expect(login(el)!.shadowRoot!.querySelector("[data-test=continue]")!.textContent).toContain(
+      t("action.continue", "en-GB"),
+    );
+  });
+
+  it("keeps the authenticated language when a login-language response arrives late", async () => {
+    let resolveLocales!: (value: LocalesResponse) => void;
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: "es-ES",
+          venueLocale: "en-GB",
+          venueName: "Test SL",
+          permissions: [],
+          modules: [],
+        }),
+      getLocales: vi.fn(
+        () =>
+          new Promise<LocalesResponse>((resolve) => {
+            resolveLocales = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    emitLoggedIn(login(el)!);
+    await flush(el);
+    expect(overview(el)).toBeTruthy();
+    resolveLocales({
+      locales: [],
+      venueDefault: "en-GB",
+      loginDefault: "en-GB",
+      venueName: "Test SL",
+    });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+  });
+
+  it("restores the venue language when logout and the language request both fail", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p1",
+        role: "manager",
+        locale: "en-GB",
+        venueLocale: "es-ES",
+        venueName: "Test SL",
+        permissions: [],
+        modules: [],
+      }),
+      logout: vi.fn().mockRejectedValue(new Error("offline")),
+      getLocales: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+    logoutBtn(el)!.click();
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+    expect(currentLocale()).toBe("es-ES");
+  });
+
+  it("preserves an explicit login language choice while the browser default is pending", async () => {
+    let resolveLocales!: (value: LocalesResponse) => void;
+    const api = stubApi({
+      getLocales: vi.fn(
+        () =>
+          new Promise<LocalesResponse>((resolve) => {
+            resolveLocales = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    logoutBtn(el)!.click();
+    await flush(el);
+    emit(login(el)!, "locale-selected", { code: "es-ES" });
+    await flush(el);
+    resolveLocales({
+      locales: [],
+      venueDefault: "es-ES",
+      loginDefault: "en-GB",
+      venueName: "Test SL",
+    });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    expect(api.putLocale).not.toHaveBeenCalled();
+  });
+
+  it("restores a known browser default immediately when logout completes", async () => {
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: "es-ES",
+          venueLocale: "es-ES",
+          venueName: "Test SL",
+          permissions: [],
+          modules: [],
+        }),
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "en-GB",
+        venueName: "Test SL",
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+    emitLoggedIn(login(el)!);
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    logoutBtn(el)!.click();
+    // Let logout finish, but observe the language before the seed's awaited read resumes.
+    await Promise.resolve();
+    expect(currentLocale()).toBe("en-GB");
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+  });
+
+  it("returns to the browser-matched language after logout", async () => {
+    const api = stubApi({
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "en-GB",
+        venueName: "Test SL",
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    logoutBtn(el)!.click();
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+    expect(currentLocale()).toBe("en-GB");
+  });
+
+  it("applies the supplied login default in nested controls", async () => {
+    // No session → stays on `login`; the boot seed reads getLocales and applies its loginDefault (en-GB,
+    // which differs from the es-ES module default so the switch is observable). The login controller
+    // repaints its translated content without recreating the current attempt.
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
       getLocales: vi.fn().mockResolvedValue({
         locales: [{ code: "en-GB", label: "English" }],
         venueDefault: "en-GB",
+        loginDefault: "en-GB",
       }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -1604,8 +1902,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("en-GB");
     // The email/password field labels live inside the wt-input primitive's own shadow root, so a
     // localised string that renders in the login screen's OWN shadow is the observable proxy: the
-    // first-step button's slotted text. It differs across locales, so it proves the keyed re-render
-    // reached this deep child in the seeded venue default (en-GB), not the module default (es-ES).
+    // first-step button's slotted text differs across locales and exercises the login controller's
+    // response to the server's language default.
     const submit = login(el)!.shadowRoot!.querySelector("[data-test=continue]")!;
     expect(submit.textContent).toContain(t("action.continue", "en-GB")); // "Continue"
     expect(submit.textContent).not.toContain(t("action.continue", "es-ES")); // not "Continuar"
@@ -1613,10 +1911,12 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
   it("applies the person's stored locale on a logged-in boot — the seed never clobbers it, and never runs", async () => {
     // Pins the race fix. Venue default es-ES; the signed-in person's stored locale is en-GB. Because a
-    // session is found, the venue-default seed is SKIPPED entirely (serialized: probe first, seed only
+    // session is found, the login-language seed is SKIPPED entirely (serialized: probe first, seed only
     // when still on `login`), so the UI ends on the PERSON's en-GB — never the venue default — and
     // getLocales is never called (one WHOAMI round trip). A DEEP child (the my-schedule <h1>) renders it.
-    const getLocales = vi.fn().mockResolvedValue({ locales: [], venueDefault: "es-ES" });
+    const getLocales = vi
+      .fn()
+      .mockResolvedValue({ locales: [], venueDefault: "es-ES", loginDefault: "es-ES" });
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
@@ -1701,6 +2001,38 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(api.putLocale).not.toHaveBeenCalled(); // but NOT persisted
   });
 
+  it.each(["password", "setup-passkey"] as const)(
+    "keeps the %s attempt when its language changes",
+    async (step) => {
+      const api = stubApi({
+        getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      const screen = login(el)!;
+      Object.assign(screen, {
+        step,
+        email: "typed@example.com",
+        password: "current secret",
+        passkeyName: "Work laptop",
+      });
+      await flush(el);
+      emit(loginChooser(el)!, "locale-selected", { code: "en-GB" });
+      await flush(el);
+      expect(login(el)).toBe(screen);
+      expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
+        t(step === "password" ? "login.password_heading" : "account.offer_passkey", "en-GB"),
+      );
+      expect(screen.shadowRoot!.textContent).toContain("typed@example.com");
+      expect(screen).toMatchObject({
+        step,
+        password: "current secret",
+        passkeyName: "Work laptop",
+      });
+      expect(api.putLocale).not.toHaveBeenCalled();
+    },
+  );
+
   it("renders the chooser in the logged-in shell, and a pick there persists (putLocale) then switches (setLocale)", async () => {
     const putLocale = vi.fn().mockResolvedValue(undefined);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -1733,9 +2065,9 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("es-ES"); // unchanged — the failed write never switched the UI
   });
 
-  it("logout reverts the UI to the venue default", async () => {
-    // Log in as an en-GB manager (UI → English), then log out: the UI must return to the venue default
-    // (es-ES) so the next person meets the venue language, not the previous operator's choice.
+  it("logout replaces a saved preference with the supplied login default", async () => {
+    // With no browser match, the server supplies the venue default as loginDefault.
+    // Logging out must apply that default instead of retaining the manager's saved English.
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
@@ -1756,10 +2088,10 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("es-ES"); // reverted to the venue default
   });
 
-  // ── Disconnect guards: each post-await setLocale is skipped on a detached app (proven by deletion) ──
+  // ── Pending responses must not repaint a detached app ──
 
-  it("does not seed the venue default if the app disconnects mid-getLocales", async () => {
-    // The seed's setLocale(venueDefault) runs AFTER `await getLocales()`. Start with no session so the
+  it("does not seed the login default if the app disconnects mid-getLocales", async () => {
+    // The seed's setLocale(loginDefault) runs AFTER `await getLocales()`. Start with no session so the
     // seed runs; make getLocales pending, detach, then resolve: the seed must be SKIPPED. Deleting the
     // `if (!this.isConnected) return` after getLocales makes the seed fire and this fail.
     let resolveLocales!: (v: LocalesResponse) => void;
@@ -1772,7 +2104,12 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el); // probe rejected → on login; the seed's getLocales is now pending
     expect(currentLocale()).toBe("es-ES"); // module default, not yet seeded
     host.remove(); // torn down before getLocales resolves
-    resolveLocales({ locales: [], venueDefault: "en-GB", venueName: "Deli Test SL" });
+    resolveLocales({
+      locales: [],
+      venueDefault: "en-GB",
+      loginDefault: "en-GB",
+      venueName: "Deli Test SL",
+    });
     await flush(el);
     expect(getLocales).toHaveBeenCalledOnce();
     expect(currentLocale()).toBe("es-ES"); // the seed to en-GB was skipped on the detached app
@@ -1824,9 +2161,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("does not revert the locale if the app disconnects mid-logout", async () => {
-    // #onLogout's venue-default revert runs AFTER `await logout()`. Log in as en-GB, start logout with
-    // logout() pending, detach, then resolve: the revert to es-ES must be SKIPPED. Deleting the
-    // `if (!this.isConnected) return` before the revert makes it fire and this fail.
+    // Completing logout after teardown must not start a language read or change the shared locale.
     let resolveLogout!: () => void;
     const logout = vi.fn(() => new Promise<void>((r) => (resolveLogout = r)));
     const api = stubApi({
@@ -1850,6 +2185,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     resolveLogout();
     await flush(el);
     expect(currentLocale()).toBe("en-GB"); // the revert to es-ES was skipped on the detached app
+    expect(api.getLocales).not.toHaveBeenCalled();
   });
 });
 

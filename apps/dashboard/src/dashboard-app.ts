@@ -51,7 +51,12 @@ import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
 import "./screens/email-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
-import { rememberSuccessfulLogin, type LoginMethod } from "./login-preference.js";
+import {
+  consumeGoogleLoginPreference,
+  rememberSuccessfulLogin,
+  type LoginMethod,
+  type PendingLoginPreference,
+} from "./login-preference.js";
 
 /**
  * The faces of the management dashboard: sign in, view your own self-service schedule, manage staff,
@@ -414,7 +419,6 @@ export class DashboardApp extends LitElement {
   /** The logged-in person's id, threaded to the staff self-service screen (its colleague picker filters
    * this out, and it names a swap's counterparty). Empty until a probe/login resolves. */
   @state() private myPersonId = "";
-  private pendingLoginPreference?: { method: LoginMethod; persistent: boolean };
 
   @state() private sessionNoticeCode: string | null = null;
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
@@ -461,20 +465,15 @@ export class DashboardApp extends LitElement {
   @state() private venueName = "";
   @state() private onboardingIntent?: "demo" | "prepare" | "live";
 
-  /**
-   * The venue's DERIVED default UI locale (per-user-language-preference), read from
-   * `GET /management-api/locales` on boot ({@link #seedLocale}) — the dashboard has no venue locale until
-   * this task, so it SEEDS the login screen in the venue's language. It is also the fallback
-   * `resolveActiveLocale(personLocale, this.#venueLocale)` falls back to on login ({@link #applyMe}) when
-   * the signed-in person has no stored preference. Defaults to the deli's es-ES until boot resolves.
-   */
+  // Returning to sign-in must have a language even when the server is unreachable.
   #venueLocale = "es-ES";
+  #loginLocale?: string;
+  #loginLocaleChoice = 0;
 
   constructor() {
     super();
-    // Follow a locale switch made anywhere (seed/login/the chooser's setLocale): on a locale change the
-    // controller calls requestUpdate(), re-running render() so `keyed(currentLocale(), …)` re-keys and the
-    // screen repaints. The screens read `t()` at render time, so recreating them applies the switch.
+    // Repaint the shell on language changes; authenticated screens are recreated by their locale key.
+    // Login observes the locale itself so its current attempt survives the switch.
     new LocaleChangeController(this);
   }
 
@@ -508,47 +507,39 @@ export class DashboardApp extends LitElement {
     void this.#boot();
   }
 
-  /**
-   * Boot: an account-action link takes precedence over an existing session, so a person opening an
-   * invitation or reset link on a shared dashboard reaches their own action form. Otherwise probe for
-   * a session, THEN — only when none was found (still on `login`) — seed the login
-   * screen in the venue's language. The two are serialized deliberately, not raced:
-   *  - a LOGGED-IN probe's {@link #applyMe} already sets the UI locale from the WHOAMI (`me.locale`
-   *    resolved against `me.venueLocale`) and remembers `venueLocale`, so a venue-default seed
-   *    afterwards would both fire a REDUNDANT `getLocales` and risk CLOBBERING the person's applied
-   *    locale. Gating the seed on `screen === "login"` removes both — the logged-in path makes exactly
-   *    one WHOAMI round trip;
-   *  - a NO-SESSION probe leaves `screen === "login"`, so the seed runs and localises the sign-in screen.
-   * `#probeSession` swallows its own rejection (→ `login`), so this never throws.
-   */
+  /** Account-action links open their form even with an existing session. Otherwise probe first,
+   * then seed the login language only when signed out, preserving a signed-in person's preference. */
   async #boot(): Promise<void> {
-    if (new URLSearchParams(window.location.search).has("token")) {
+    const url = new URL(window.location.href);
+    const googleCallback = url.searchParams.get("login") === "google";
+    const preference = consumeGoogleLoginPreference(googleCallback);
+    if (googleCallback) {
+      url.searchParams.delete("login");
+      history.replaceState(history.state, "", url);
+    }
+    if (url.searchParams.has("token")) {
       await this.#seedLocale();
       return;
     }
-    await this.#probeSession();
+    await this.#probeSession(preference);
     if (this.screen === "login") await this.#seedLocale();
   }
 
-  /**
-   * Read the venue's offered languages and SEED the UI to the venue default, so the pre-auth login
-   * screen renders in the venue's language rather than the module default. Reached only from {@link #boot}
-   * on the no-session path. A failure (server unreachable, a non-2xx `{ code }`) is swallowed — the UI
-   * simply stays on the module default; this is cosmetic pre-auth polish, never a reason to block sign-in.
-   */
+  /** The server matches Accept-Language against the installed UI languages. A late response must
+   * not overwrite a person's explicit language choice or repaint a disconnected app. */
   async #seedLocale(): Promise<void> {
+    const choice = this.#loginLocaleChoice;
     try {
-      const { venueDefault, venueName, onboardingIntent } = await this.api.getLocales();
-      // Guard the post-await module-global `setLocale`: a teardown during the fetch must not repaint a
-      // live sibling's locale (the DISCONNECT SAFETY note). The `#venueLocale` write below the guard is
-      // harmless to skip on a detached element — nothing reads it after teardown.
-      if (!this.isConnected) return;
+      const { loginDefault, venueDefault, venueName, onboardingIntent } =
+        await this.api.getLocales();
+      if (!this.isConnected || this.screen !== "login") return;
       this.#venueLocale = venueDefault;
+      this.#loginLocale = loginDefault;
       this.venueName = venueName;
       this.onboardingIntent = onboardingIntent;
-      setLocale(venueDefault);
+      if (choice === this.#loginLocaleChoice) setLocale(loginDefault);
     } catch {
-      // Stay on the module default — a failed locale read must never block sign-in.
+      // A failed language read must never block sign-in.
     }
   }
 
@@ -562,13 +553,13 @@ export class DashboardApp extends LitElement {
    * an unhandled promise rejection (the `apps/till` `#boot` follow-up, `docs/backlog.md`), and dropping
    * to login is the safe default for every failure anyway.
    */
-  async #probeSession(): Promise<void> {
+  async #probeSession(preference?: PendingLoginPreference): Promise<void> {
     const generation = this.sessionGeneration;
     const wasAuthenticated = this.sessionRole !== undefined;
     try {
       const me = await this.api.getMe();
       if (!this.isConnected || generation !== this.sessionGeneration) return;
-      this.#applyMe(me);
+      this.#applyMe(me, preference);
     } catch (error) {
       if (!this.isConnected || generation !== this.sessionGeneration) return;
       const code = codeOf(error);
@@ -588,30 +579,33 @@ export class DashboardApp extends LitElement {
 
   /** Restore a permitted URL destination after authentication and apply the person's language.
    * The disconnect guard protects both browser history and the shared locale from a late response. */
-  #applyMe(me: {
-    personId: string;
-    role: PersonRole;
-    email: string | null;
-    locale: string | null;
-    venueLocale: string;
-    permissions: string[];
-    modules: string[];
-    venueName: string;
-    onboardingIntent?: "demo" | "prepare" | "live";
-    sessionExpiresInSeconds?: number;
-    sessionIdleTimeoutSeconds?: number;
-  }): void {
+  #applyMe(
+    me: {
+      personId: string;
+      role: PersonRole;
+      email: string | null;
+      locale: string | null;
+      venueLocale: string;
+      permissions: string[];
+      modules: string[];
+      venueName: string;
+      onboardingIntent?: "demo" | "prepare" | "live";
+      sessionExpiresInSeconds?: number;
+      sessionIdleTimeoutSeconds?: number;
+    },
+    preference?: PendingLoginPreference,
+  ): void {
     if (!this.isConnected) return;
     this.sessionNoticeCode = null;
     this.myPersonId = me.personId;
-    if (this.pendingLoginPreference !== undefined && typeof me.email === "string") {
+    if (preference !== undefined && typeof me.email === "string") {
       rememberSuccessfulLogin(
         me.email,
-        this.pendingLoginPreference.method,
-        this.pendingLoginPreference.persistent,
+        preference.method,
+        preference.persistent,
+        preference.rememberedEmail,
       );
     }
-    this.pendingLoginPreference = undefined;
     this.sessionRole = me.role;
     this.#sessionPermissions = me.permissions;
     // Activate ONLY the enabled modules (`me.modules`) before resolving the permitted screen, so a URL
@@ -663,7 +657,10 @@ export class DashboardApp extends LitElement {
       { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
       true,
     );
-    if (this.isConnected) setLocale(this.#venueLocale);
+    if (this.isConnected) {
+      setLocale(this.#loginLocale ?? this.#venueLocale);
+      void this.#seedLocale();
+    }
   }
 
   /**
@@ -715,15 +712,19 @@ export class DashboardApp extends LitElement {
         accountSetup?: boolean;
         loginMethod?: LoginMethod;
         rememberEmail?: boolean;
+        rememberedEmail?: string;
       }>
     ).detail;
     const accountSetup = detail?.accountSetup === true;
-    this.pendingLoginPreference = {
-      method: detail?.loginMethod ?? "password",
-      persistent: detail?.rememberEmail === true,
-    };
-    await this.#probeSession();
-    this.pendingLoginPreference = undefined;
+    // Account activation has no Remember choice, so it does not change another saved shortcut.
+    const preference: PendingLoginPreference | undefined = accountSetup
+      ? undefined
+      : {
+          method: detail?.loginMethod ?? "password",
+          persistent: detail?.rememberEmail === true,
+          rememberedEmail: detail?.rememberedEmail,
+        };
+    await this.#probeSession(preference);
     if (accountSetup && this.sessionRole !== undefined && this.isConnected) {
       this.#selectScreen("profile");
     }
@@ -742,12 +743,6 @@ export class DashboardApp extends LitElement {
       // A failed logout must still drop to login; the reason it failed is not actionable here.
     }
     this.#returnToLogin(null);
-    // Revert the UI to the venue default (per-user-language-preference): the previous operator's chosen
-    // language must not linger into the login screen the next person meets — their own login re-applies
-    // their stored preference. Guard the post-await module-global `setLocale` (the DISCONNECT SAFETY
-    // note): a teardown during the logout round trip must not repaint a live sibling's locale.
-    if (!this.isConnected) return;
-    setLocale(this.#venueLocale);
   }
 
   /**
@@ -766,6 +761,7 @@ export class DashboardApp extends LitElement {
   async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
     const { code } = event.detail;
     if (this.screen === "login") {
+      this.#loginLocaleChoice += 1;
       setLocale(code);
       return;
     }
@@ -780,23 +776,19 @@ export class DashboardApp extends LitElement {
 
   override render(): TemplateResult {
     if (this.screen === "login") {
-      // The login screen's own chooser bubbles its composed `locale-selected` up to this `<div>`, where
-      // `#onLocaleSelected` turns a pre-login pick into a transient switch. `keyed(currentLocale(), …)`
-      // recreates the login screen on a locale change so it repaints in the new language (it holds no controller).
+      // The login controller repaints translated text without discarding credentials or account setup.
+      // Its chooser bubbles here so the shell can apply the transient pre-login language choice.
       return html`
         ${this.#banner(false, false)}
         <div
           class="body"
           @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         >
-          ${keyed(
-            currentLocale(),
-            html`<dashboard-login-screen
-              .api=${this.api}
-              .noticeCode=${this.sessionNoticeCode}
-              @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
-            ></dashboard-login-screen>`,
-          )}
+          <dashboard-login-screen
+            .api=${this.api}
+            .noticeCode=${this.sessionNoticeCode}
+            @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
+          ></dashboard-login-screen>
         </div>
       `;
     }

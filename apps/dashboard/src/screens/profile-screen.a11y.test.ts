@@ -16,7 +16,7 @@ function stubApi(): DashboardApi {
       hasPassword: true,
       hasTotp: false,
       hasGoogle: false,
-      passkeys: [{ id: "credential", createdAt: "2026-09-09T12:00:00Z" }],
+      passkeys: [{ id: "credential", name: null, createdAt: "2026-09-09T12:00:00Z" }],
     }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [{ code: "en-GB", label: "English" }],

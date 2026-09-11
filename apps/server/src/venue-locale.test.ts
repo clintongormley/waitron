@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as countryPacks from "@waitron/country-packs";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -36,6 +37,25 @@ describe("readVenueLocale", () => {
     // Barcelona → ca-ES unavailable in this build → country ES → es-ES.
     const got = await readVenueLocale(suite.db, { tenantId, locationId, override: undefined });
     expect(got).toBe("es-ES");
+  });
+
+  it("does not pass another tenant's province to the locale resolver", async () => {
+    const otherTenantId = await seedTenant(suite.db);
+    const resolver = vi.spyOn(countryPacks, "resolveInstalledCountryLocale");
+    try {
+      expect(await readVenueLocale(suite.db, { tenantId: otherTenantId, locationId })).toBe(
+        "es-ES",
+      );
+      // Catalan is unavailable, so the UI result alone cannot distinguish a leaked Barcelona row.
+      expect(resolver).toHaveBeenLastCalledWith(expect.any(Array), {
+        override: undefined,
+        area: null,
+        country: "ES",
+        fallback: "en-GB",
+      });
+    } finally {
+      resolver.mockRestore();
+    }
   });
 
   it("honours a supported override", async () => {

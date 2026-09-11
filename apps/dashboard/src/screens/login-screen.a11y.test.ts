@@ -1,14 +1,22 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./login-screen.js";
 import type { LoginScreen } from "./login-screen.js";
 import type { DashboardApi } from "../api/client.js";
 
-vi.mock("@simplewebauthn/browser", () => ({
-  browserSupportsWebAuthnAutofill: vi.fn().mockResolvedValue(false),
-  startAuthentication: vi.fn(() => new Promise(() => undefined)),
-  WebAuthnAbortService: { cancelCeremony: vi.fn() },
-}));
+beforeEach(() => {
+  vi.stubGlobal(
+    "PublicKeyCredential",
+    class {
+      static isConditionalMediationAvailable = vi.fn().mockResolvedValue(false);
+    },
+  );
+  vi.spyOn(navigator.credentials, "get").mockImplementation(() => new Promise(() => undefined));
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 /**
  * Mounts the screen with an `api` STUB assigned as a property, never from bare markup. The screen
@@ -62,11 +70,12 @@ describe.each(["light", "dark"] as const)("login-screen a11y (%s theme)", (theme
     await el.updateComplete;
     await expectNoA11yViolations(host);
 
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=try-another-way]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
 
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
+    // Change account remains available to cancel a pending device ceremony.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=change-account]")!.click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
@@ -97,6 +106,10 @@ describe.each(["light", "dark"] as const)("login-screen a11y (%s theme)", (theme
       password: "correct horse",
       step: "factor",
     });
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+
+    Object.assign(el as unknown as Record<string, string>, { step: "setup-passkey" });
     await el.updateComplete;
     await expectNoA11yViolations(host);
 

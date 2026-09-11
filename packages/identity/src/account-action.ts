@@ -1,6 +1,6 @@
 import "./errors.js";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { isUniqueViolation, uniqueViolationConstraint, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
@@ -103,7 +103,9 @@ export async function issueAccountAction(
 
   const token = randomBytes(32).toString("base64url");
   const code =
-    input.codeKey === undefined ? undefined : String(randomInt(1_000_000)).padStart(6, "0");
+    input.purpose !== "email_change" || input.codeKey === undefined
+      ? undefined
+      : String(randomInt(1_000_000)).padStart(6, "0");
   const expiresAt = new Date(now.getTime() + ACCOUNT_ACTION_TTL_MS[input.purpose]).toISOString();
   const codeExpiresAt =
     code === undefined
@@ -287,77 +289,6 @@ export async function inspectAccountAction(
   return { email: action.email, purpose: input.purpose };
 }
 
-/** Validate an emailed short code without consuming it. A wrong guess is still counted. */
-export async function inspectAccountActionByCode(
-  tx: Transaction,
-  input: {
-    tenantId: string;
-    email: string;
-    code: string;
-    purpose: CredentialActionPurpose;
-    codeKey: Buffer;
-    now?: Date;
-  },
-): Promise<AccountActionInspection | null> {
-  const nowIso = (input.now ?? new Date()).toISOString();
-  const email = normalizeEmail(input.email);
-  const [action] = await tx
-    .select({
-      id: managementAccountActions.id,
-      codeHash: managementAccountActions.codeHash,
-      status: persons.status,
-      email: persons.email,
-    })
-    .from(managementAccountActions)
-    .innerJoin(
-      persons,
-      and(
-        eq(persons.id, managementAccountActions.personId),
-        eq(persons.tenantId, managementAccountActions.tenantId),
-      ),
-    )
-    .where(
-      and(
-        eq(managementAccountActions.tenantId, input.tenantId),
-        eq(managementAccountActions.purpose, input.purpose),
-        eq(sql`lower(${persons.email})`, email),
-        isNull(managementAccountActions.usedAt),
-        gt(managementAccountActions.expiresAt, nowIso),
-        gt(managementAccountActions.codeExpiresAt, nowIso),
-        lt(managementAccountActions.codeAttempts, ACCOUNT_ACTION_CODE_ATTEMPTS),
-      ),
-    )
-    .orderBy(sql`${managementAccountActions.createdAt} desc`)
-    .limit(1)
-    .for("update");
-  if (
-    action === undefined ||
-    action.codeHash === null ||
-    action.email === null ||
-    !statusAcceptsPurpose(action.status, input.purpose)
-  ) {
-    return null;
-  }
-  const supplied = Buffer.from(
-    hashCode(input.codeKey, input.tenantId, email, input.purpose, input.code),
-    "hex",
-  );
-  const stored = Buffer.from(action.codeHash, "hex");
-  if (stored.length !== supplied.length || !timingSafeEqual(stored, supplied)) {
-    await tx
-      .update(managementAccountActions)
-      .set({ codeAttempts: sql`${managementAccountActions.codeAttempts} + 1` })
-      .where(
-        and(
-          eq(managementAccountActions.tenantId, input.tenantId),
-          eq(managementAccountActions.id, action.id),
-        ),
-      );
-    return null;
-  }
-  return { email: action.email, purpose: input.purpose };
-}
-
 async function finishClaimedAction(
   tx: Transaction,
   input: CompletionInput,
@@ -407,21 +338,21 @@ async function finishClaimedAction(
   };
 }
 
-/** Find and lock an active account before replacing its reset action; unknown states remain silent. */
-export async function requestPasswordResetAction(
+/** Lock the account before replacing its setup or reset action; unavailable accounts remain silent. */
+export async function requestAccountRecoveryAction(
   tx: Transaction,
   input: { tenantId: string; email: string; now?: Date },
 ): Promise<IssuedAccountAction | null> {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return null;
   const [person] = await tx
-    .select({ id: persons.id })
+    .select({ id: persons.id, status: persons.status })
     .from(persons)
     .where(
       and(
         eq(persons.tenantId, input.tenantId),
         eq(sql`lower(${persons.email})`, email),
-        eq(persons.status, "active"),
+        inArray(persons.status, ["active", "pending"]),
       ),
     )
     .for("update");
@@ -429,35 +360,7 @@ export async function requestPasswordResetAction(
   return issueAccountAction(tx, {
     tenantId: input.tenantId,
     personId: person.id,
-    purpose: "password_reset",
-    now: input.now,
-  });
-}
-
-/** Find and lock a pending account before replacing its invitation; unknown states remain silent. */
-export async function requestInvitationAction(
-  tx: Transaction,
-  input: { tenantId: string; email: string; codeKey: Buffer; now?: Date },
-): Promise<IssuedAccountAction | null> {
-  const email = normalizeEmail(input.email);
-  if (!isValidEmail(email)) return null;
-  const [person] = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(
-      and(
-        eq(persons.tenantId, input.tenantId),
-        eq(sql`lower(${persons.email})`, email),
-        eq(persons.status, "pending"),
-      ),
-    )
-    .for("update");
-  if (person === undefined) return null;
-  return issueAccountAction(tx, {
-    tenantId: input.tenantId,
-    personId: person.id,
-    purpose: "invitation",
-    codeKey: input.codeKey,
+    purpose: person.status === "pending" ? "invitation" : "password_reset",
     now: input.now,
   });
 }
@@ -488,69 +391,4 @@ export async function completeAccountAction(
   if (claimed.length !== 1) throw new AppError("account_action.invalid", {});
   const personId = claimed[0]!.personId;
   return finishClaimedAction(tx, input, personId, nowIso);
-}
-
-export async function completeAccountActionByCode(
-  tx: Transaction,
-  input: CompletionInput & { email: string; code: string; codeKey: Buffer },
-): Promise<AccountActionCompletion | null> {
-  assertPasswordLength(input.password);
-  if (input.purpose === "invitation") assertPinLength(input.pin ?? "");
-  const nowIso = (input.now ?? new Date()).toISOString();
-  const email = normalizeEmail(input.email);
-  const [action] = await tx
-    .select({
-      id: managementAccountActions.id,
-      personId: managementAccountActions.personId,
-      codeHash: managementAccountActions.codeHash,
-    })
-    .from(managementAccountActions)
-    .innerJoin(persons, eq(persons.id, managementAccountActions.personId))
-    .where(
-      and(
-        eq(managementAccountActions.tenantId, input.tenantId),
-        eq(managementAccountActions.purpose, input.purpose),
-        eq(sql`lower(${persons.email})`, email),
-        isNull(managementAccountActions.usedAt),
-        gt(managementAccountActions.expiresAt, nowIso),
-        gt(managementAccountActions.codeExpiresAt, nowIso),
-        lt(managementAccountActions.codeAttempts, ACCOUNT_ACTION_CODE_ATTEMPTS),
-      ),
-    )
-    .orderBy(sql`${managementAccountActions.createdAt} desc`)
-    .limit(1)
-    .for("update");
-  if (action === undefined || action.codeHash === null) {
-    return null;
-  }
-  const supplied = Buffer.from(
-    hashCode(input.codeKey, input.tenantId, email, input.purpose, input.code),
-    "hex",
-  );
-  const stored = Buffer.from(action.codeHash, "hex");
-  if (stored.length !== supplied.length || !timingSafeEqual(stored, supplied)) {
-    await tx
-      .update(managementAccountActions)
-      .set({ codeAttempts: sql`${managementAccountActions.codeAttempts} + 1` })
-      .where(
-        and(
-          eq(managementAccountActions.tenantId, input.tenantId),
-          eq(managementAccountActions.id, action.id),
-        ),
-      );
-    return null;
-  }
-  const claimed = await tx
-    .update(managementAccountActions)
-    .set({ usedAt: nowIso })
-    .where(
-      and(
-        eq(managementAccountActions.tenantId, input.tenantId),
-        eq(managementAccountActions.id, action.id),
-        isNull(managementAccountActions.usedAt),
-      ),
-    )
-    .returning({ id: managementAccountActions.id });
-  if (claimed.length !== 1) throw new AppError("account_action.invalid", {});
-  return finishClaimedAction(tx, input, action.personId, nowIso);
 }

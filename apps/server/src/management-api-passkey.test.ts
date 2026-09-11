@@ -205,12 +205,15 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
  * tenant-scoped credential landed, not merely that a route returned 200. */
 async function readCredentials(
   tenantId: string,
-): Promise<{ credential_id: string; person_id: string; counter: string }[]> {
+): Promise<{ credential_id: string; person_id: string; counter: string; name: string | null }[]> {
   return withTenant(suite.admin, tenantId, async (tx) => {
     await asAppUser(tx);
-    const r = await tx.execute<{ credential_id: string; person_id: string; counter: string }>(
-      sql`select credential_id, person_id, counter from webauthn_credentials`,
-    );
+    const r = await tx.execute<{
+      credential_id: string;
+      person_id: string;
+      counter: string;
+      name: string | null;
+    }>(sql`select credential_id, person_id, counter, name from webauthn_credentials`);
     return r.rows;
   });
 }
@@ -284,7 +287,7 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     const verify = await app.request("/management-api/passkey/register/verify", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ challengeHandle, response: {} }),
+      body: JSON.stringify({ challengeHandle, response: {}, name: "  Work laptop  " }),
     });
     expect(verify.status).toBe(200);
     expect((await verify.json()) as { credentialId: string }).toEqual({ credentialId: "cred-abc" });
@@ -293,7 +296,11 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     // this tenant — a genuine tenant-scoped write, not merely a 200.
     const creds = await readCredentials(tenantId);
     expect(creds).toHaveLength(1);
-    expect(creds[0]).toMatchObject({ credential_id: "cred-abc", person_id: managerId });
+    expect(creds[0]).toMatchObject({
+      credential_id: "cred-abc",
+      person_id: managerId,
+      name: "Work laptop",
+    });
   });
 
   it("register/verify surfaces a duplicate credential as 409, not an opaque 500", async () => {

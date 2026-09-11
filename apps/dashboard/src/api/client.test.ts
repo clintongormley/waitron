@@ -224,42 +224,16 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("inspects account actions and requests a replacement invitation", async () => {
+  it("inspects account actions by token", async () => {
     const inspected = { email: "bea@x.com", purpose: "invitation" as const };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(inspected))
-      .mockResolvedValueOnce(jsonResponse(inspected))
-      .mockResolvedValueOnce(new Response(null, { status: 202 }));
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(inspected));
     const api = new DashboardApi("", fetchImpl);
-
     await expect(api.inspectAccountAction("token-1", "invitation")).resolves.toEqual(inspected);
-    await expect(
-      api.inspectAccountActionByCode("bea@x.com", "123456", "invitation"),
-    ).resolves.toEqual(inspected);
-    await api.requestInvitation("bea@x.com");
-
-    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/management-api/account-actions/inspect", {
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/account-actions/inspect", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token: "token-1", purpose: "invitation" }),
-    });
-    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/management-api/account-actions/inspect", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        email: "bea@x.com",
-        code: "123456",
-        purpose: "invitation",
-      }),
-    });
-    expect(fetchImpl).toHaveBeenNthCalledWith(3, "/management-api/invitation-resend", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "bea@x.com" }),
     });
   });
 
@@ -2044,6 +2018,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      loginDefault: "es-ES",
       venueName: "Deli Test SL",
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));

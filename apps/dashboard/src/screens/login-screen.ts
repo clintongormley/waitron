@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   browserSupportsWebAuthnAutofill,
   startAuthentication,
+  startRegistration,
+  type PublicKeyCredentialCreationOptionsJSON,
   WebAuthnAbortService,
 } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
@@ -12,17 +14,25 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi } from "../api/client.js";
 import {
-  clearTabLoginPreference,
-  disablePersistentLoginPreference,
   forgetLoginPreference,
   readLoginPreference,
+  prepareGoogleLoginPreference,
 } from "../login-preference.js";
 // The pre-login language chooser (per-user-language-preference). It emits a composed `locale-selected`;
 // `dashboard-app` turns a pre-login pick into a transient `setLocale` (nothing is persisted).
 import "../widgets/language-chooser.js";
+
+interface CompletedLogin {
+  personId: string;
+  accountSetup: boolean;
+  loginMethod: "password";
+  rememberEmail: boolean;
+  rememberedEmail?: string;
+}
 
 type AccountActionPurpose = "invitation" | "password_reset";
 
@@ -37,7 +47,7 @@ function actionEmailFromUrl(): string {
 
 /**
  * The dashboard's pre-session login screen. It asks for the account email first, then presents the
- * passkey step. A cancelled device prompt opens the password form with the remaining methods.
+ * password step. Device prompts require an explicit passkey action; cancellation returns to password.
  *
  * It talks to the world through one injected `api` (`@property({ attribute: false })`) and one
  * event: after a successful login it dispatches `logged-in` with the authenticated person and the
@@ -68,8 +78,25 @@ export class LoginScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      .login-context {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-block: var(--wt-space-4);
+      }
       .login-context strong {
+        display: block;
         color: var(--wt-color-text);
+        overflow-wrap: anywhere;
+      }
+      a {
+        color: var(--wt-color-text);
+      }
+      a[aria-disabled="true"] {
+        opacity: 0.6;
+      }
+      wt-form-actions {
+        margin-top: var(--wt-space-4);
       }
 
       .notice {
@@ -96,24 +123,11 @@ export class LoginScreen extends LitElement {
       }
 
       .alternative-list {
-        margin-bottom: var(--wt-space-4);
+        margin-block: var(--wt-space-4);
+        padding-inline-start: var(--wt-space-6);
       }
-
-      .alternative-list,
-      .alternative-choice {
-        display: grid;
-      }
-
-      .alternative-list {
-        gap: var(--wt-space-4);
-      }
-
-      .alternative-choice {
-        gap: var(--wt-space-1);
-      }
-
-      .alternative-choice wt-button {
-        width: 100%;
+      .alternative-list li {
+        margin-block: var(--wt-space-2);
       }
 
       .alternative-hint {
@@ -148,16 +162,16 @@ export class LoginScreen extends LitElement {
   @state() private factorMode: "totp" | "recovery" = "totp";
   @state() private pin = "";
   @state() private confirmPin = "";
-  @state() private invitationCode = "";
   @state() private step:
-    "email" | "passkey" | "password" | "factor" | "other-ways" | "reset-sent" | "code" =
-    this.rememberedLogin?.method === "password"
-      ? "password"
-      : this.rememberedLogin === null
-        ? "email"
-        : "passkey";
+    "email" | "passkey" | "password" | "google" | "factor" | "reset-sent" | "setup-passkey" =
+    this.rememberedLogin?.method ?? "email";
+  private rememberedEmail = this.rememberedLogin?.email;
+  private offerAfterLogin = false;
+  private completedLogin: CompletedLogin | null = null;
+  @state() private passkeyName = "";
+  @state() private passkeyNameError = "";
+  @state() private passkeyFactorRequired = false;
   @state() private rememberEmail = this.rememberedLogin?.persistent ?? false;
-  @state() private hasRememberedAccount = this.rememberedLogin !== null;
   @state() private passwordVisible = false;
   @state() private newPasswordVisible = false;
   @state() private pinVisible = false;
@@ -165,7 +179,7 @@ export class LoginScreen extends LitElement {
   @state() private token: string | null = new URLSearchParams(window.location.search).get("token");
   @state() private actionPurpose: AccountActionPurpose | null = actionPurposeFromUrl();
   @state() private actionValidated = false;
-  @state() private invitationResent = false;
+  @state() private actionResent = false;
   @state() private resetSeconds = 0;
   private readonly resetDeadlines = new Map<string, number>();
   private resetTimer?: ReturnType<typeof setInterval>;
@@ -176,9 +190,13 @@ export class LoginScreen extends LitElement {
   @state() private secondFactorError = "";
   @state() private pinError = "";
   @state() private confirmPinError = "";
-  @state() private invitationCodeError = "";
   @state() private googleConfigured = false;
   @state() private privacyNoticeUrl = "";
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -190,6 +208,7 @@ export class LoginScreen extends LitElement {
       .then(({ configured, privacyNoticeUrl }) => {
         if (this.isConnected) {
           this.googleConfigured = configured;
+          if (!configured && this.step === "google") this.#showPasswordStep();
           this.privacyNoticeUrl = privacyNoticeUrl ?? "";
         }
       })
@@ -200,6 +219,8 @@ export class LoginScreen extends LitElement {
     super.disconnectedCallback();
     clearInterval(this.resetTimer);
     this.#cancelPasskeyCeremony();
+    this.#clearSecrets();
+    this.completedLogin = null;
   }
 
   #focusField(name: string): void {
@@ -229,7 +250,7 @@ export class LoginScreen extends LitElement {
           this.secondFactorError,
           this.pinError,
           this.confirmPinError,
-          this.invitationCodeError,
+          this.passkeyNameError,
           this.errorKey === null ? "" : codeMessage(this.errorKey),
         ].filter(Boolean),
       ),
@@ -276,12 +297,6 @@ export class LoginScreen extends LitElement {
     this.confirmPinError = "";
   }
 
-  #onInvitationCodeChange(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.invitationCode = event.detail.value.replace(/\D/g, "").slice(0, 6);
-    this.invitationCodeError = "";
-  }
-
   #clearSecrets(): void {
     this.password = "";
     this.secondFactor = "";
@@ -296,27 +311,15 @@ export class LoginScreen extends LitElement {
     this.secondFactorError = "";
     this.pinError = "";
     this.confirmPinError = "";
-  }
-
-  #showInvitationCode(): void {
-    this.#cancelPasskeyCeremony();
-    this.#clearSecrets();
-    this.actionPurpose = "invitation";
-    this.errorKey = null;
-    this.actionValidated = false;
-    this.invitationResent = false;
-    this.step = "code";
-    this.#focusField("invitation-code");
+    this.passkeyName = "";
+    this.passkeyNameError = "";
+    this.passkeyFactorRequired = false;
   }
 
   #submitAccountOnEnter(event: KeyboardEvent): void {
     submitOnEnter(
       event,
-      this.shadowRoot!.querySelector<HTMLElement>(
-        this.actionValidated
-          ? "[data-test=complete-account]"
-          : "[data-test=validate-account-action]",
-      ),
+      this.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]"),
     );
   }
 
@@ -330,17 +333,8 @@ export class LoginScreen extends LitElement {
     this.email = email;
     this.errorKey = null;
     this.passwordVisible = false;
-    // Keep this public transition identical for every valid address. Choosing a screen from
-    // server-side passkey enrolment would expose whether that account has a passkey.
-    this.step = "passkey";
-    void this.#passkeyLogin();
-  }
-
-  #showOtherWays(): void {
-    this.#cancelPasskeyCeremony();
-    this.#clearSecrets();
-    this.errorKey = null;
-    this.step = "other-ways";
+    // Public method selection never depends on server-side account enrolment.
+    this.#showPasswordStep();
   }
 
   #showPasswordStep(): void {
@@ -352,75 +346,62 @@ export class LoginScreen extends LitElement {
   }
 
   #cancelLogin(): void {
+    forgetLoginPreference();
+    this.#resetLoginForm();
+  }
+
+  #resetLoginForm(): void {
     this.#cancelPasskeyCeremony();
-    clearTabLoginPreference();
     this.email = "";
+    this.rememberedEmail = undefined;
+    this.offerAfterLogin = false;
+    this.completedLogin = null;
     this.#clearSecrets();
-    this.invitationCode = "";
     this.errorKey = null;
     this.emailError = "";
-    this.invitationCodeError = "";
-    this.hasRememberedAccount = false;
     this.rememberEmail = false;
     this.step = "email";
     this.#focusField("email");
-  }
-
-  #forgetAccount(): void {
-    forgetLoginPreference(this.email);
-    this.#cancelLogin();
+    void this.#conditionalPasskeyLogin();
   }
 
   #cancelAccountAction(): void {
     this.token = null;
     this.actionPurpose = null;
     this.actionValidated = false;
-    this.invitationResent = false;
+    this.actionResent = false;
     if (new URLSearchParams(window.location.search).has("token")) {
       history.replaceState(null, "", "/manage/");
     }
-    this.#cancelLogin();
+    this.#resetLoginForm();
   }
 
   async #inspectAccountAction(): Promise<void> {
-    if (this.busy || this.actionPurpose === null) return;
-    if (this.token === null && this.invitationCode.length !== 6) {
-      this.invitationCodeError = t("account.code_required");
-      return;
-    }
+    if (this.busy || this.actionPurpose === null || this.token === null) return;
     this.busy = true;
     this.errorKey = null;
-    this.invitationCodeError = "";
     try {
-      const inspection =
-        this.token === null
-          ? await this.api.inspectAccountActionByCode(
-              this.email,
-              this.invitationCode,
-              this.actionPurpose,
-            )
-          : await this.api.inspectAccountAction(this.token, this.actionPurpose);
+      const inspection = await this.api.inspectAccountAction(this.token, this.actionPurpose);
       if (!this.isConnected) return;
       this.email = inspection.email;
       this.actionPurpose = inspection.purpose;
       this.actionValidated = true;
-      this.invitationResent = false;
+      this.actionResent = false;
       this.#focusField("new-password");
     } catch (error) {
       this.errorKey = codeOf(error);
-      if (this.token === null) this.invitationCodeError = codeMessage(this.errorKey);
     } finally {
       this.busy = false;
     }
   }
 
-  async #requestInvitation(): Promise<void> {
+  async #requestAccountLink(): Promise<void> {
     if (this.busy) return;
     this.busy = true;
     this.errorKey = null;
     try {
-      await this.api.requestInvitation(this.email);
-      if (this.isConnected) this.invitationResent = true;
+      await this.api.requestPasswordReset(this.email);
+      if (this.isConnected) this.actionResent = true;
     } catch (error) {
       this.errorKey = codeOf(error);
     } finally {
@@ -451,18 +432,15 @@ export class LoginScreen extends LitElement {
             ? { totp: this.secondFactor }
             : { recoveryCode: this.secondFactor }),
       });
-      this.dispatchEvent(
-        new CustomEvent("logged-in", {
-          detail: {
-            ...out,
-            accountSetup: this.actionPurpose === "invitation",
-            loginMethod: "password",
-            rememberEmail: this.rememberEmail,
-          },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      if (!this.isConnected) return;
+      const detail: CompletedLogin = {
+        ...out,
+        accountSetup: false,
+        loginMethod: "password",
+        ...this.#preferenceDetail(),
+      };
+      if (this.offerAfterLogin) this.#offerPasskey(detail);
+      else this.#announceLogin(detail);
     } catch (error) {
       this.errorKey = codeOf(error);
       if (this.errorKey === "password.invalid") this.passwordError = codeMessage(this.errorKey);
@@ -502,7 +480,7 @@ export class LoginScreen extends LitElement {
   }
 
   async #completeAccount(): Promise<void> {
-    if (this.busy || !this.actionValidated || (this.token === null && this.step !== "code")) return;
+    if (this.busy || !this.actionValidated || this.token === null) return;
     if (this.actionPurpose === null) {
       this.errorKey = "account_action.invalid";
       return;
@@ -527,51 +505,35 @@ export class LoginScreen extends LitElement {
             ? t("account.pin_mismatch")
             : "";
     }
-    if (
-      this.passwordError !== "" ||
-      this.pinError !== "" ||
-      this.confirmPinError !== "" ||
-      this.invitationCodeError !== ""
-    )
-      return;
+    if (this.passwordError !== "" || this.pinError !== "" || this.confirmPinError !== "") return;
     this.busy = true;
     this.errorKey = null;
     try {
       const out =
-        this.token === null
-          ? await this.api.completeAccountActionByCode(
-              this.email,
-              this.invitationCode,
+        this.actionPurpose === "invitation"
+          ? await this.api.completeAccountAction(
+              this.token,
               this.actionPurpose,
               this.password,
               this.pin,
             )
-          : this.actionPurpose === "invitation"
-            ? await this.api.completeAccountAction(
-                this.token,
-                this.actionPurpose,
-                this.password,
-                this.pin,
-              )
-            : await this.api.completeAccountAction(this.token, this.actionPurpose, this.password);
+          : await this.api.completeAccountAction(this.token, this.actionPurpose, this.password);
+      if (!this.isConnected) return;
       const accountSetup = this.actionPurpose === "invitation";
       const completedEmail = this.email;
+      const completedPassword = this.password;
       this.#cancelAccountAction();
+      this.email = completedEmail;
       if (out.authenticated) {
-        this.dispatchEvent(
-          new CustomEvent("logged-in", {
-            detail: {
-              personId: out.personId,
-              accountSetup,
-              loginMethod: "password",
-              rememberEmail: false,
-            },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        this.password = completedPassword;
+        this.#offerPasskey({
+          personId: out.personId,
+          accountSetup,
+          loginMethod: "password",
+          rememberEmail: false,
+        });
       } else {
-        this.email = completedEmail;
+        this.offerAfterLogin = true;
         this.noticeCode = "password.reset_complete";
         this.#focusField("email");
       }
@@ -583,29 +545,78 @@ export class LoginScreen extends LitElement {
     }
   }
 
-  /**
-   * Log in with a passkey — the password-free parallel of `#submit`, driving the WebAuthn assertion
-   * ceremony: `passkeyAuthOptions()` (UNGATED — this IS the login) returns the request options plus a
-   * challenge handle; `startAuthentication` runs the browser ceremony against the operator's
-   * authenticator; `passkeyAuthVerify` echoes the handle with the signed assertion and, on success,
-   * the server sets the session cookie and answers who is now logged in — dispatched as the same
-   * `logged-in` event a password login emits, so the app shell above the shadow boundary is agnostic
-   * to which credential was used.
-   *
-   * `startAuthentication` takes `{ optionsJSON }` in `@simplewebauthn/browser` v13 — the options blob
-   * is nested under that key, not passed bare. The blob is the server's
-   * `PublicKeyCredentialRequestOptionsJSON`; the client types it as an opaque `PasskeyOptions`
-   * (`Record<string, unknown>`), which has no structural overlap with the concrete interface, so the
-   * cast re-narrows it via `unknown` at this one call site — validated there, exactly as the
-   * `PasskeyOptions` note in `api/client.ts` intends.
-   *
-   * A user-cancelled browser ceremony opens the other methods without an error. Other failures use
-   * the form-error summary, falling back to `passkey.verification_failed` when no code is supplied.
-   */
+  #announceLogin(detail: CompletedLogin): void {
+    this.#clearSecrets();
+    this.errorKey = null;
+    this.step = "password";
+    this.completedLogin = null;
+    this.offerAfterLogin = false;
+    this.dispatchEvent(new CustomEvent("logged-in", { detail, bubbles: true, composed: true }));
+  }
+
+  #offerPasskey(detail: CompletedLogin): void {
+    this.completedLogin = detail;
+    this.step = "setup-passkey";
+    this.noticeCode = null;
+    this.pin = "";
+    this.confirmPin = "";
+    this.passkeyFactorRequired = this.factorMode === "recovery";
+    if (this.passkeyFactorRequired) this.secondFactor = "";
+    this.passkeyName = "";
+    this.passkeyNameError = "";
+  }
+
+  async #setupPasskey(): Promise<void> {
+    if (this.busy || this.completedLogin === null) return;
+    this.passkeyNameError =
+      this.passkeyName.trim().length > 80 ? t("profile.passkey_name_too_long") : "";
+    this.secondFactorError =
+      this.passkeyFactorRequired && this.secondFactor === "" ? t("form.factor_required") : "";
+    if (this.passkeyNameError || this.secondFactorError) return;
+    this.busy = true;
+    this.errorKey = null;
+    const attempt = ++this.passkeyAttempt;
+    try {
+      const { challengeHandle, options } = await this.api.passkeyRegisterOptions({
+        currentPassword: this.password,
+        ...(this.secondFactor === "" ? {} : { totp: this.secondFactor }),
+      });
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      const response = await startRegistration({
+        optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
+      });
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      await this.api.passkeyRegisterVerify({
+        challengeHandle,
+        response,
+        name: this.passkeyName.trim(),
+      });
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      this.#announceLogin(this.completedLogin);
+    } catch (error) {
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      if (
+        error instanceof Error &&
+        (error.name === "NotAllowedError" || error.name === "AbortError")
+      )
+        return;
+      this.errorKey = codeOf(error, "passkey.verification_failed");
+      if (this.errorKey === "totp.invalid") {
+        this.passkeyFactorRequired = true;
+        this.secondFactor = "";
+        this.secondFactorError = codeMessage(this.errorKey);
+      }
+    } finally {
+      if (attempt === this.passkeyAttempt) this.busy = false;
+    }
+  }
+
+  /** Device cancellation returns to password entry without reporting an authentication error. */
   async #passkeyLogin(): Promise<void> {
     if (this.busy) return;
     this.#cancelPasskeyCeremony();
     if (this.step === "password" || this.step === "factor") this.#clearSecrets();
+    this.step = "passkey";
     const attempt = ++this.passkeyAttempt;
     this.busy = true;
     this.errorKey = null;
@@ -623,7 +634,7 @@ export class LoginScreen extends LitElement {
           detail: {
             ...out,
             loginMethod: "passkey",
-            rememberEmail: this.rememberEmail,
+            ...this.#preferenceDetail(),
           },
           bubbles: true,
           composed: true,
@@ -670,7 +681,7 @@ export class LoginScreen extends LitElement {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
       this.dispatchEvent(
         new CustomEvent("logged-in", {
-          detail: { ...out, loginMethod: "passkey", rememberEmail: this.rememberEmail },
+          detail: { ...out, loginMethod: "passkey", ...this.#preferenceDetail() },
           bubbles: true,
           composed: true,
         }),
@@ -692,6 +703,8 @@ export class LoginScreen extends LitElement {
     this.errorKey = null;
     try {
       const { authorizationUrl } = await this.api.beginGoogleLogin();
+      if (!this.isConnected) return;
+      prepareGoogleLoginPreference(this.rememberEmail, this.rememberedEmail);
       this.navigate(authorizationUrl);
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -700,10 +713,63 @@ export class LoginScreen extends LitElement {
     }
   }
 
-  #renderLoginContext() {
-    return html`<p class="login-context" data-test="login-context">
-      ${t("login.logging_in_as")} <strong>${this.email}</strong>
-    </p>`;
+  #preferenceDetail() {
+    return {
+      rememberEmail: this.rememberEmail,
+      ...(this.rememberedEmail === undefined ? {} : { rememberedEmail: this.rememberedEmail }),
+    };
+  }
+
+  #renderLoginContext(changeable = true) {
+    return html`<div class="login-context" data-test="login-context">
+      <div><span>${t("login.email")}</span><strong>${this.email}</strong></div>
+      ${
+        changeable
+          ? html`<wt-button
+              variant="ghost"
+              data-test="change-account"
+              aria-label=${t("login.use_another_account")}
+              ?disabled=${this.busy}
+              @click=${() => {
+                if (!this.busy) this.#cancelLogin();
+              }}
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path d="m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5" />
+              </svg>
+            </wt-button>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  #methodLink(id: string, label: string, action: () => void) {
+    return html`<a
+      href=${`#${id}`}
+      data-test=${id}
+      aria-disabled=${this.busy}
+      @click=${(event: Event) => {
+        event.preventDefault();
+        if (!this.busy) action();
+      }}
+      >${label}</a
+    >`;
+  }
+
+  #alternatives() {
+    return html`<ul class="alternative-list">
+      ${this.step !== "password" ? html`<li>${this.#methodLink("use-password", t("login.use_password"), () => this.#showPasswordStep())}</li>` : nothing}
+      ${this.step !== "passkey" ? html`<li>${this.#methodLink("passkey-login", t("login.with_passkey"), () => void this.#passkeyLogin())}</li>` : nothing}
+      ${this.step !== "password" ? html`<li>${this.#methodLink("reset-by-email", t("login.reset_by_email"), () => void this.#requestPasswordReset())}</li>` : nothing}
+      ${this.googleConfigured && this.step !== "google" ? html`<li>${this.#methodLink("google-login", t("login.with_google"), () => void this.#googleLogin())}</li>` : nothing}
+    </ul>`;
   }
 
   #privacyLink() {
@@ -734,29 +800,24 @@ export class LoginScreen extends LitElement {
         .checked=${this.rememberEmail}
         @change=${(event: Event) => {
           this.rememberEmail = (event.currentTarget as HTMLInputElement).checked;
-          if (!this.rememberEmail) disablePersistentLoginPreference(this.email);
+          if (!this.rememberEmail) forgetLoginPreference();
         }}
       />
       ${t("login.remember_email")}
     </label>`;
   }
 
-  #forgetAction() {
-    return this.hasRememberedAccount
-      ? html`<wt-button
-          variant="ghost"
-          data-test="forget-account"
-          @click=${() => this.#forgetAccount()}
-          >${t("login.forget_account")}</wt-button
-        >`
-      : nothing;
-  }
-
   override render() {
-    if (this.token !== null || this.step === "code") {
+    if (this.token !== null) {
       return html`
         <div class="screen">
-          <h1>${t("account.setup_title")}</h1>
+          <dashboard-language-chooser
+            .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+          ></dashboard-language-chooser>
+          <h1>
+            ${this.actionPurpose === "password_reset" ? t("account.reset_title") : t("account.setup_title")}
+          </h1>
+          ${this.actionValidated ? this.#renderLoginContext(false) : nothing}
           <input
             class="autofill-username"
             data-autofill-username
@@ -775,23 +836,8 @@ export class LoginScreen extends LitElement {
           ${
             !this.actionValidated
               ? html`
-                  ${
-                    this.token === null
-                      ? html`<p class="login-context"><strong>${this.email}</strong></p>
-                          <wt-input
-                            class="field"
-                            name="invitation-code"
-                            autocomplete="one-time-code"
-                            required
-                            label=${t("account.invitation_code")}
-                            error=${this.invitationCodeError}
-                            .value=${this.invitationCode}
-                            @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
-                            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInvitationCodeChange(e)}
-                          ></wt-input>`
-                      : html`<p role="status">${t("account.validating_link")}</p>`
-                  }
-                  ${this.invitationResent ? html`<p role="status">${t("account.invitation_resent")}</p>` : nothing}
+                  <p role="status">${t("account.validating_link")}</p>
+                  ${this.actionResent ? html`<p role="status">${t("account.link_resent")}</p>` : nothing}
                   <wt-form-actions>
                     <wt-button
                       slot="cancel"
@@ -801,27 +847,15 @@ export class LoginScreen extends LitElement {
                       @click=${() => this.#cancelAccountAction()}
                       >${t("action.cancel")}</wt-button
                     >
-                    ${
-                      this.token === null
-                        ? html`<wt-button
-                            variant="primary"
-                            data-test="validate-account-action"
-                            ?disabled=${this.busy}
-                            @click=${() => void this.#inspectAccountAction()}
-                            >${t("action.continue")}</wt-button
-                          >`
-                        : nothing
-                    }
                   </wt-form-actions>
                   ${
-                    this.actionPurpose === "invitation" &&
-                    (this.errorKey === "account_action.invalid" || this.invitationResent)
+                    this.errorKey === "account_action.invalid" || this.actionResent
                       ? html`<wt-button
                           variant="ghost"
-                          data-test="resend-invitation"
+                          data-test="resend-account-link"
                           ?disabled=${this.busy}
-                          @click=${() => void this.#requestInvitation()}
-                          >${t("account.resend_invitation")}</wt-button
+                          @click=${() => void this.#requestAccountLink()}
+                          >${t("account.resend_link")}</wt-button
                         >`
                       : nothing
                   }
@@ -932,307 +966,265 @@ export class LoginScreen extends LitElement {
         <dashboard-language-chooser
           .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
         ></dashboard-language-chooser>
-        ${this.noticeCode ? html`<p class="notice" role="status">${codeMessage(this.noticeCode)}</p>` : nothing}
+        ${this.noticeCode && this.noticeCode !== "management_session.required" ? html`<p class="notice" role="status">${codeMessage(this.noticeCode)}</p>` : nothing}
         <wt-form-error-summary
           heading=${t("form.error_heading")}
           .errors=${this.formErrors}
         ></wt-form-error-summary>
         ${
-          this.step === "email"
+          this.step === "setup-passkey"
             ? html`
+                <h1>${t("account.offer_passkey")}</h1>
+                ${this.#renderLoginContext(false)}
+                <p>${t("account.passkey_optional")}</p>
                 <wt-input
-                  @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
                   class="field"
-                  name="email"
-                  autocomplete="username webauthn"
-                  required
-                  label=${t("login.email")}
-                  type="email"
-                  error=${this.emailError}
-                  .value=${this.email}
-                  @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
+                  name="passkey-name"
+                  autocomplete="off"
+                  label=${t("profile.passkey_name")}
+                  .value=${this.passkeyName}
+                  error=${this.passkeyNameError}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    this.passkeyName = event.detail.value;
+                    this.passkeyNameError = "";
+                  }}
+                  @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
                 ></wt-input>
-                ${this.#rememberChoice()}
-                <wt-form-actions>
-                  <wt-button variant="primary" data-test="continue" @click=${() => this.#continue()}
-                    >${t("action.continue")}</wt-button
-                  >
-                </wt-form-actions>
-              `
-            : this.step === "passkey"
-              ? html`
-                  ${this.#renderLoginContext()}
-                  <h1>${t("login.use_passkey_heading")}</h1>
-                  <p class="alternative-hint">${t("login.passkey_hint")}</p>
-                  ${this.#rememberChoice()}
-                  <wt-form-actions>
-                    <wt-button
-                      slot="cancel"
-                      variant="secondary"
-                      data-test="back"
-                      ?disabled=${this.busy}
-                      @click=${() => this.#cancelLogin()}
-                      >${this.hasRememberedAccount ? t("login.use_another_account") : t("action.cancel")}</wt-button
-                    >
-                    <wt-button
-                      variant="primary"
-                      data-test="passkey-login"
-                      ?disabled=${this.busy}
-                      @click=${() => void this.#passkeyLogin()}
-                      >${t("login.with_passkey")}</wt-button
-                    >
-                  </wt-form-actions>
-                  <wt-button
-                    class="other-way"
-                    variant="ghost"
-                    data-test="try-another-way"
-                    ?disabled=${this.busy}
-                    @click=${() => this.#showOtherWays()}
-                    >${t("login.try_another_way")}</wt-button
-                  >
-                  ${this.#forgetAction()}
-                `
-              : this.step === "password"
-                ? html`
-                    ${this.#renderLoginContext()}
-                    <input
-                      class="autofill-username"
-                      data-autofill-username
-                      name="email"
-                      type="email"
-                      autocomplete="username"
-                      .value=${this.email}
-                      tabindex="-1"
-                      aria-hidden="true"
-                      readonly
-                    />
-                    <wt-input
-                      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
-                      class="field"
-                      name="password"
-                      autocomplete="current-password"
-                      required
-                      label=${t("login.password")}
-                      type=${this.passwordVisible ? "text" : "password"}
-                      error=${this.passwordError}
-                      .value=${this.password}
-                      @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
-                    >
-                      <wt-button
-                        class="password-toggle"
-                        slot="end"
-                        variant="ghost"
-                        data-test="toggle-password"
-                        aria-label=${
-                          this.passwordVisible ? t("login.hide_password") : t("login.show_password")
-                        }
-                        ?disabled=${this.busy}
-                        @click=${() => (this.passwordVisible = !this.passwordVisible)}
-                        >${this.#renderPasswordIcon(this.passwordVisible)}</wt-button
-                      >
-                    </wt-input>
-                    ${this.#rememberChoice()}
-                    <wt-form-actions>
-                      <wt-button
-                        slot="cancel"
-                        variant="secondary"
-                        data-test="back"
-                        ?disabled=${this.busy}
-                        @click=${() => this.#cancelLogin()}
-                        >${this.hasRememberedAccount ? t("login.use_another_account") : t("action.cancel")}</wt-button
-                      >
-                      <wt-button
-                        variant="primary"
-                        data-test="submit"
-                        ?disabled=${this.busy}
-                        @click=${() => void this.#submit()}
-                        >${t("action.login")}</wt-button
-                      >
-                    </wt-form-actions>
-                    <div class="alternative-list other-way">
-                      <wt-button
-                        variant="ghost"
-                        data-test="passkey-login"
-                        ?disabled=${this.busy}
-                        @click=${() => void this.#passkeyLogin()}
-                        >${t("login.with_passkey")}</wt-button
-                      >
-                      <wt-button
-                        variant="ghost"
-                        data-test="reset-by-email"
-                        ?disabled=${this.busy}
-                        @click=${() => void this.#requestPasswordReset()}
-                        >${t("login.reset_by_email")}</wt-button
-                      >
-                      <wt-button
-                        variant="ghost"
-                        data-test="use-invitation-code"
-                        ?disabled=${this.busy}
-                        @click=${() => this.#showInvitationCode()}
-                        >${t("login.use_invitation_code")}</wt-button
-                      >
-                      ${
-                        this.googleConfigured
-                          ? html`<wt-button
-                              variant="ghost"
-                              data-test="google-login"
-                              ?disabled=${this.busy}
-                              @click=${() => void this.#googleLogin()}
-                              >${t("login.with_google")}</wt-button
-                            >`
-                          : nothing
-                      }
-                    </div>
-                    ${this.#forgetAction()}
-                  `
-                : this.step === "factor"
-                  ? html`
-                      ${this.#renderLoginContext()}
-                      <h1>${t("login.factor_heading")}</h1>
-                      <input
-                        class="autofill-username"
-                        data-autofill-username
-                        name="email"
-                        type="email"
-                        autocomplete="username"
-                        .value=${this.email}
-                        tabindex="-1"
-                        aria-hidden="true"
-                        readonly
-                      />
-                      <wt-input
+                ${
+                  this.passkeyFactorRequired
+                    ? html`<wt-input
                         class="field"
                         name="one-time-code"
                         autocomplete="one-time-code"
                         required
-                        label=${
-                          this.factorMode === "totp"
-                            ? t("login.authenticator_code")
-                            : t("login.recovery_code")
-                        }
-                        error=${this.secondFactorError}
+                        label=${t("login.authenticator_code")}
                         .value=${this.secondFactor}
-                        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]"))}
-                        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(e)}
-                      ></wt-input>
+                        error=${this.secondFactorError}
+                        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(event)}
+                        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
+                      ></wt-input>`
+                    : nothing
+                }
+                <wt-form-actions>
+                  <wt-button
+                    slot="cancel"
+                    variant="secondary"
+                    data-test="skip-passkey"
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      if (!this.busy && this.completedLogin !== null)
+                        this.#announceLogin(this.completedLogin);
+                    }}
+                    >${t("account.skip_passkey")}</wt-button
+                  >
+                  <wt-button
+                    variant="primary"
+                    data-test="setup-passkey"
+                    ?disabled=${this.busy}
+                    @click=${() => void this.#setupPasskey()}
+                    >${t("staff.add_passkey")}</wt-button
+                  >
+                </wt-form-actions>
+              `
+            : this.step === "email"
+              ? html`
+                  <h1>${t("login.heading")}</h1>
+                  <wt-input
+                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
+                    class="field"
+                    name="email"
+                    autocomplete="username webauthn"
+                    required
+                    label=${t("login.email")}
+                    type="email"
+                    error=${this.emailError}
+                    .value=${this.email}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
+                  ></wt-input>
+                  ${this.#rememberChoice()}
+                  <wt-form-actions>
+                    <wt-button
+                      variant="primary"
+                      data-test="continue"
+                      @click=${() => this.#continue()}
+                      >${t("action.continue")}</wt-button
+                    >
+                  </wt-form-actions>
+                `
+              : this.step === "google"
+                ? html`
+                    <h1>${t("login.google_heading")}</h1>
+                    ${this.#renderLoginContext()}
+                    <p class="alternative-hint">${t("login.google_hint")}</p>
+                    <wt-form-actions
+                      ><wt-button
+                        variant="primary"
+                        data-test="google-login"
+                        ?disabled=${this.busy || !this.googleConfigured}
+                        @click=${() => void this.#googleLogin()}
+                        >${t("login.with_google")}</wt-button
+                      ></wt-form-actions
+                    >
+                    ${this.#alternatives()}
+                  `
+                : this.step === "passkey"
+                  ? html`
+                      <h1>${t("login.use_passkey_heading")}</h1>
+                      ${this.#renderLoginContext()}
+                      <p class="alternative-hint">${t("login.passkey_hint")}</p>
                       <wt-form-actions>
                         <wt-button
-                          slot="cancel"
-                          variant="secondary"
-                          data-test="back-to-password"
-                          ?disabled=${this.busy}
-                          @click=${() => {
-                            this.secondFactor = "";
-                            this.secondFactorError = "";
-                            this.step = "password";
-                          }}
-                          >${t("action.back")}</wt-button
-                        >
-                        <wt-button
                           variant="primary"
-                          data-test="submit-factor"
+                          data-test="passkey-login"
                           ?disabled=${this.busy}
-                          @click=${() => void this.#submit()}
-                          >${t("action.login")}</wt-button
+                          @click=${() => void this.#passkeyLogin()}
+                          >${t("login.with_passkey")}</wt-button
                         >
                       </wt-form-actions>
-                      <wt-button
-                        class="other-way"
-                        variant="ghost"
-                        data-test="switch-factor"
-                        ?disabled=${this.busy}
-                        @click=${() => {
-                          this.factorMode = this.factorMode === "totp" ? "recovery" : "totp";
-                          this.secondFactor = "";
-                          this.secondFactorError = "";
-                        }}
-                        >${this.factorMode === "totp" ? t("login.use_recovery_code") : t("login.use_authenticator_code")}</wt-button
-                      >
+                      ${this.#alternatives()}
                     `
-                  : this.step === "reset-sent"
+                  : this.step === "password"
                     ? html`
-                        <h1>${t("login.check_email")}</h1>
-                        <p data-test="reset-sent" role="status">
-                          ${t("login.reset_sent").replace("{email}", this.email)}
-                        </p>
-                        <p class="alternative-hint">${t("login.reset_delivery_hint")}</p>
-                        <wt-form-actions>
+                        <h1>${t("login.password_heading")}</h1>
+                        ${this.#renderLoginContext()}
+                        <input
+                          class="autofill-username"
+                          data-autofill-username
+                          name="email"
+                          type="email"
+                          autocomplete="username"
+                          .value=${this.email}
+                          tabindex="-1"
+                          aria-hidden="true"
+                          readonly
+                        />
+                        <wt-input
+                          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
+                          class="field"
+                          name="password"
+                          autocomplete="current-password"
+                          required
+                          label=${t("login.password")}
+                          type=${this.passwordVisible ? "text" : "password"}
+                          error=${this.passwordError}
+                          .value=${this.password}
+                          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
+                        >
                           <wt-button
-                            slot="cancel"
-                            variant="secondary"
-                            data-test="cancel-reset"
+                            class="password-toggle"
+                            slot="end"
+                            variant="ghost"
+                            data-test="toggle-password"
+                            aria-label=${
+                              this.passwordVisible
+                                ? t("login.hide_password")
+                                : t("login.show_password")
+                            }
                             ?disabled=${this.busy}
-                            @click=${() => this.#cancelLogin()}
-                            >${t("action.cancel")}</wt-button
+                            @click=${() => (this.passwordVisible = !this.passwordVisible)}
+                            >${this.#renderPasswordIcon(this.passwordVisible)}</wt-button
                           >
+                        </wt-input>
+                        ${this.#methodLink("reset-by-email", t("login.reset_by_email"), () => void this.#requestPasswordReset())}
+                        <wt-form-actions>
                           <wt-button
                             variant="primary"
-                            data-test="resend-reset"
-                            ?disabled=${this.busy || this.resetSeconds > 0}
-                            @click=${() => void this.#requestPasswordReset()}
-                            >${this.resetSeconds > 0 ? t("login.resend_countdown").replace("{seconds}", String(this.resetSeconds)) : t("login.resend_link")}</wt-button
-                          >
-                        </wt-form-actions>
-                      `
-                    : html`
-                        ${this.#renderLoginContext()}
-                        <h1>${t("login.other_ways_heading")}</h1>
-                        <div class="alternative-list">
-                          <div class="alternative-choice">
-                            <wt-button
-                              variant="secondary"
-                              data-test="use-password"
-                              ?disabled=${this.busy}
-                              @click=${() => this.#showPasswordStep()}
-                              >${t("login.use_password")}</wt-button
-                            >
-                          </div>
-                          <div class="alternative-choice">
-                            <wt-button
-                              variant="secondary"
-                              data-test="reset-by-email"
-                              ?disabled=${this.busy}
-                              @click=${() => void this.#requestPasswordReset()}
-                              >${t("login.reset_by_email")}</wt-button
-                            >
-                            <p class="alternative-hint">${t("login.reset_by_email_hint")}</p>
-                          </div>
-                          <div class="alternative-choice">
-                            <wt-button
-                              variant="secondary"
-                              data-test="use-invitation-code"
-                              ?disabled=${this.busy}
-                              @click=${() => this.#showInvitationCode()}
-                              >${t("login.use_invitation_code")}</wt-button
-                            >
-                            <p class="alternative-hint">${t("login.invitation_code_hint")}</p>
-                          </div>
-                          ${
-                            this.googleConfigured
-                              ? html`<div class="alternative-choice">
-                                  <wt-button
-                                    variant="secondary"
-                                    data-test="google-login"
-                                    ?disabled=${this.busy}
-                                    @click=${() => void this.#googleLogin()}
-                                    >${t("login.with_google")}</wt-button
-                                  >
-                                  <p class="alternative-hint">${t("login.google_hint")}</p>
-                                </div>`
-                              : nothing
-                          }
-                        </div>
-                        <wt-form-actions>
-                          <wt-button
-                            slot="cancel"
-                            variant="secondary"
-                            data-test="back-to-passkey"
+                            data-test="submit"
                             ?disabled=${this.busy}
-                            @click=${() => this.#cancelLogin()}
-                            >${t("action.cancel")}</wt-button
+                            @click=${() => void this.#submit()}
+                            >${t("action.login")}</wt-button
                           >
                         </wt-form-actions>
+                        ${this.#alternatives()}
                       `
+                    : this.step === "factor"
+                      ? html`
+                          ${this.#renderLoginContext()}
+                          <h1>${t("login.factor_heading")}</h1>
+                          <input
+                            class="autofill-username"
+                            data-autofill-username
+                            name="email"
+                            type="email"
+                            autocomplete="username"
+                            .value=${this.email}
+                            tabindex="-1"
+                            aria-hidden="true"
+                            readonly
+                          />
+                          <wt-input
+                            class="field"
+                            name="one-time-code"
+                            autocomplete="one-time-code"
+                            required
+                            label=${
+                              this.factorMode === "totp"
+                                ? t("login.authenticator_code")
+                                : t("login.recovery_code")
+                            }
+                            error=${this.secondFactorError}
+                            .value=${this.secondFactor}
+                            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]"))}
+                            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(e)}
+                          ></wt-input>
+                          <wt-form-actions>
+                            <wt-button
+                              slot="cancel"
+                              variant="secondary"
+                              data-test="back-to-password"
+                              ?disabled=${this.busy}
+                              @click=${() => {
+                                this.secondFactor = "";
+                                this.secondFactorError = "";
+                                this.step = "password";
+                              }}
+                              >${t("action.back")}</wt-button
+                            >
+                            <wt-button
+                              variant="primary"
+                              data-test="submit-factor"
+                              ?disabled=${this.busy}
+                              @click=${() => void this.#submit()}
+                              >${t("action.login")}</wt-button
+                            >
+                          </wt-form-actions>
+                          <ul class="alternative-list">
+                            <li>
+                              ${this.#methodLink(
+                                "switch-factor",
+                                this.factorMode === "totp"
+                                  ? t("login.use_recovery_code")
+                                  : t("login.use_authenticator_code"),
+                                () => {
+                                  this.factorMode =
+                                    this.factorMode === "totp" ? "recovery" : "totp";
+                                  this.secondFactor = "";
+                                  this.secondFactorError = "";
+                                },
+                              )}
+                            </li>
+                          </ul>
+                        `
+                      : this.step === "reset-sent"
+                        ? html`
+                            <h1>${t("login.check_email")}</h1>
+                            ${this.#renderLoginContext()}
+                            <p data-test="reset-sent" role="status">
+                              ${t("login.reset_sent").replace("{email}", this.email)}
+                            </p>
+                            <p class="alternative-hint">${t("login.reset_delivery_hint")}</p>
+                            <wt-form-actions>
+                              <wt-button
+                                variant="primary"
+                                data-test="resend-reset"
+                                ?disabled=${this.busy || this.resetSeconds > 0}
+                                @click=${() => void this.#requestPasswordReset()}
+                                >${this.resetSeconds > 0 ? t("login.resend_countdown").replace("{seconds}", String(this.resetSeconds)) : t("login.resend_link")}</wt-button
+                              >
+                            </wt-form-actions>
+                          `
+                        : nothing
         }
         ${this.#privacyLink()}
       </div>

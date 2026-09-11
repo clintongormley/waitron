@@ -231,11 +231,11 @@ describe("your profile", () => {
     const credentialId = randomUUID();
     const otherId = randomUUID();
     await suite.db.execute(
-      sql`insert into webauthn_credentials (id,tenant_id,person_id,credential_id,public_key) values (${credentialId},${f.tenantId},${f.personId},'own','public'),(${otherId},${f.tenantId},${colleague},'other','public')`,
+      sql`insert into webauthn_credentials (id,tenant_id,person_id,credential_id,public_key,name) values (${credentialId},${f.tenantId},${f.personId},'own','public','Work laptop'),(${otherId},${f.tenantId},${colleague},'other','public','Colleague laptop')`,
     );
     expect(
       (await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).passkeys,
-    ).toEqual([{ id: credentialId, createdAt: expect.any(String) }]);
+    ).toEqual([{ id: credentialId, name: "Work laptop", createdAt: expect.any(String) }]);
     await expect(
       withTenant(suite.db, f.tenantId, (tx) =>
         removeOwnPasskey(tx, { ...f, id: otherId, currentPassword: "correct horse" }),

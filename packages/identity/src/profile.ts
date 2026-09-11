@@ -210,7 +210,11 @@ async function invalidateLinks(tx: Transaction, tenantId: string, personId: stri
 export async function readOwnProfile(tx: Transaction, input: Owner) {
   const person = await ownPerson(tx, input);
   const passkeys = await tx
-    .select({ id: webauthnCredentials.id, createdAt: webauthnCredentials.createdAt })
+    .select({
+      id: webauthnCredentials.id,
+      name: webauthnCredentials.name,
+      createdAt: webauthnCredentials.createdAt,
+    })
     .from(webauthnCredentials)
     .where(
       and(

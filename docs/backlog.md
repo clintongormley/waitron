@@ -28,7 +28,7 @@ the reusable table, searchable/filterable admin list, invitation setup, account 
 self-service profile, verified email changes, authenticator/recovery codes, Google login, password
 backoff, login/recovery polish and automatic return to login at session expiry are implemented under
 the [account setup and user management plan](superpowers/plans/2026-09-09-user-management-and-account-setup.md).
-Still open: named passkeys and passkey-based reauthentication for an account with no password; an
+Still open: passkey-based reauthentication for an account with no password; an
 operator screen that stores Google provider credentials in the vault. Turnstile and SMS verification
 belong to the later optional cloud/remote offering.
 
@@ -39,6 +39,11 @@ email/method shortcuts with opt-in persistence on shared devices, and QR authent
 server confirmation. Public outcomes remain independent of account status and passkey enrolment.
 Still open (device checks before deployment): native passkey prompts on real hardware, and a
 physical authenticator QR scan.
+
+**Dashboard sign-in refinements — IN PROGRESS #317** (owner, 2026-09-11). The
+[refinement design](superpowers/specs/2026-09-11-login-flow-refinements-design.md) covers browser-language
+matching, opt-in email/method storage, explicit passkey prompts, consistent sign-in forms, one recovery
+entry, venue-zone email expiry, named passkeys and the offer to add one after password setup.
 
 **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
 bypass, so a docs-only change is pushed straight to `main` — no PR, no CI wait. Branch, `commit -s`,
@@ -1652,7 +1657,7 @@ genuinely-decision-bearing.
   short-lived code; the original address remains the login until then. The
   deployment-configured privacy-notice link now appears in invitations, account setup and Your
   profile; the restaurant still owns the notice content and contact. Add passkey-backed
-  reauthentication and names/removal for passkeys on passwordless accounts before treating profile
+  reauthentication and removal for passkeys on passwordless accounts before treating profile
   login-method management as complete for passwordless-only users.
 - **Remote-access bot protection (owner, 2026-09-09).** Add Cloudflare Turnstile as part of the
   optional remote-access offering. Protect internet-facing login and recovery, validate tokens on
@@ -1709,6 +1714,9 @@ genuinely-decision-bearing.
   `docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md`. Also: the country
   pack now supplies **province → language derivation**, but the apps ship only Spanish and English
   catalogues, so a Catalan preference currently falls back to Spanish; add the regional catalogues.
+  **2026-09-11, `login-flow`:** dashboard sign-in now matches `Accept-Language` in
+  `apps/server/src/login-locale.ts`. This matcher is specific to the supported UI languages;
+  the shared resolver for product names, receipts and catalogues remains future work.
   The **venue
   default is derive-only, not admin-editable** yet; and the **dashboard's `es-ES` module default**
   (`apps/dashboard/src/i18n/t.ts` + `#venueLocale`) still needs the same flip the till got in #170

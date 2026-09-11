@@ -6,7 +6,14 @@ export interface LoginPreference {
   persistent: boolean;
 }
 
+export interface PendingLoginPreference {
+  method: LoginMethod;
+  persistent: boolean;
+  rememberedEmail?: string;
+}
+
 const KEY = "waitron-login-preference";
+const GOOGLE_INTENT_KEY = "waitron-google-login-preference";
 
 function parse(value: string | null): Omit<LoginPreference, "persistent"> | null {
   if (value === null) return null;
@@ -47,67 +54,90 @@ function read(storage: Storage | null): Omit<LoginPreference, "persistent"> | nu
 }
 
 export function readLoginPreference(): LoginPreference | null {
-  const tab = read(getStorage("sessionStorage"));
   const saved = read(getStorage("localStorage"));
-  const preference = tab ?? saved;
-  if (preference === null) return null;
-  return {
-    ...preference,
-    persistent: saved?.email === preference.email,
-  };
+  return saved === null ? null : { ...saved, persistent: true };
 }
 
 export function rememberSuccessfulLogin(
   emailValue: string,
   method: LoginMethod,
   persistent: boolean,
+  rememberedEmail?: string,
 ): void {
+  if (
+    !persistent ||
+    (rememberedEmail !== undefined &&
+      rememberedEmail.trim().toLowerCase() !== emailValue.trim().toLowerCase())
+  ) {
+    forgetLoginPreference();
+    return;
+  }
   const email = emailValue.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
-  const serialized = JSON.stringify({ email, method });
-  const tab = getStorage("sessionStorage");
-  const saved = getStorage("localStorage");
   try {
-    tab?.setItem(KEY, serialized);
+    getStorage("localStorage")?.setItem(KEY, JSON.stringify({ email, method }));
   } catch {
     // The shortcut is optional; authentication does not depend on browser storage.
   }
-  try {
-    if (persistent) {
-      saved?.setItem(KEY, serialized);
-    } else if (read(saved)?.email === email) {
-      saved?.removeItem(KEY);
-    }
-  } catch {
-    // The current-tab shortcut above remains useful when persistent storage is unavailable.
-  }
 }
 
-function removeMatching(storage: Storage | null, email?: string): void {
-  if (storage === null) return;
-  try {
-    if (email === undefined || read(storage)?.email === email.trim().toLowerCase()) {
-      storage.removeItem(KEY);
-    }
-  } catch {
-    // A denied store is already equivalent to forgetting it for this page.
-  }
-}
-
-export function clearTabLoginPreference(): void {
-  removeMatching(getStorage("sessionStorage"));
-}
-
-export function disablePersistentLoginPreference(email: string): void {
-  removeMatching(getStorage("localStorage"), email);
-}
-
-export function forgetLoginPreference(email?: string): void {
+/** Forget the whole shortcut, including any tab-scoped value already present in this browser. */
+export function forgetLoginPreference(): void {
+  consumeGoogleLoginPreference(false);
   for (const name of ["sessionStorage", "localStorage"] as const) {
     try {
-      removeMatching(getStorage(name), email);
+      getStorage(name)?.removeItem(KEY);
     } catch {
-      // A denied store is already equivalent to forgetting it for this page.
+      // Failure in one store must not prevent clearing the other.
     }
+  }
+}
+
+/** Carry explicit consent across Google's navigation, without saving a login identity yet. */
+export function prepareGoogleLoginPreference(remember: boolean, rememberedEmail?: string): void {
+  consumeGoogleLoginPreference(false);
+  if (!remember) {
+    forgetLoginPreference();
+    return;
+  }
+  try {
+    getStorage("sessionStorage")?.setItem(
+      GOOGLE_INTENT_KEY,
+      JSON.stringify({
+        expiresAt: Date.now() + 10 * 60 * 1000,
+        ...(rememberedEmail === undefined ? {} : { rememberedEmail }),
+      }),
+    );
+  } catch {
+    // A missing preference must not prevent authentication.
+  }
+}
+
+/** Consume once, even after cancellation; only a successful callback may use the intent. */
+export function consumeGoogleLoginPreference(
+  isGoogleCallback: boolean,
+): PendingLoginPreference | undefined {
+  try {
+    const storage = getStorage("sessionStorage");
+    const value = storage?.getItem(GOOGLE_INTENT_KEY);
+    storage?.removeItem(GOOGLE_INTENT_KEY);
+    if (!isGoogleCallback || !value) return undefined;
+    const intent = JSON.parse(value) as { expiresAt?: unknown; rememberedEmail?: unknown };
+    if (
+      typeof intent.expiresAt !== "number" ||
+      !Number.isFinite(intent.expiresAt) ||
+      intent.expiresAt <= Date.now() ||
+      (intent.rememberedEmail !== undefined && typeof intent.rememberedEmail !== "string")
+    )
+      return undefined;
+    return {
+      method: "google",
+      persistent: true,
+      ...(typeof intent.rememberedEmail === "string"
+        ? { rememberedEmail: intent.rememberedEmail }
+        : {}),
+    };
+  } catch {
+    return undefined;
   }
 }

@@ -30,14 +30,12 @@ import {
   clearPersonPin,
   claimGoogleState,
   completeAccountAction,
-  completeAccountActionByCode,
   completeGoogleLink,
   deactivatePerson,
   endManagementSession,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
   inspectAccountAction,
-  inspectAccountActionByCode,
   listActiveStaff,
   listPersons,
   loginManager,
@@ -48,8 +46,7 @@ import {
   reactivatePersonForInvitation,
   resolveManagementSession,
   resetPersonLogin,
-  requestPasswordResetAction,
-  requestInvitationAction,
+  requestAccountRecoveryAction,
   readOwnProfile,
   updatePersonDetails,
   verifyOwnCredentials,
@@ -173,7 +170,6 @@ export interface ManagementApiDeps {
   passwordThrottle?: PasswordThrottle;
   accountActionRateLimiters?: {
     passwordReset: AccountActionRateLimiter;
-    invitation: AccountActionRateLimiter;
     completion: AccountActionRateLimiter;
   };
   accountActionCodeKey?: Buffer;
@@ -592,28 +588,21 @@ function parseInactivityTimeoutSeconds(value: unknown): number | null {
   return value;
 }
 
-/**
- * Parse and screen a passkey VERIFY route's body, returning the narrowed `{ challengeHandle, response }`
- * pair both `register/verify` and `auth/verify` need — the shared shape those two routes had inline.
- * The body is coerced to `{}` (via `readJsonBody`, see the login route for why a `null`/non-object body must not
- * TypeError → 500). `challengeHandle` is screened to a UUID (load-bearing, not cosmetic: it flows into
- * `eq(webauthnChallenges.id, …)` against a `uuid` PK, so a non-UUID would `22P02` → opaque 500) and
- * `response` to a non-null object before it reaches the verifier; either failure is
- * `management.request_invalid` naming the FIELD, the same code and shape as the sibling write routes.
- * Called AFTER each route's own gating — `register/verify` runs `requireManagementSession` first,
- * `auth/verify` is unauthenticated (it IS the login) — so this helper screens body shape only.
- */
+/** Screen the UUID challenge handle and object response shared by registration and authentication.
+ * Registration's optional name is passed unchanged to the domain validator. */
 async function parsePasskeyVerifyBody(
   c: Context,
-): Promise<{ challengeHandle: string; response: object }> {
-  const body = await readJsonBody<{ challengeHandle?: string; response?: unknown }>(c);
+): Promise<{ challengeHandle: string; response: object; name?: unknown }> {
+  const body = await readJsonBody<{ challengeHandle?: string; response?: unknown; name?: unknown }>(
+    c,
+  );
   if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
     throw new AppError("management.request_invalid", { field: "challengeHandle" });
   }
   if (typeof body.response !== "object" || body.response === null) {
     throw new AppError("management.request_invalid", { field: "response" });
   }
-  return { challengeHandle: body.challengeHandle, response: body.response };
+  return { challengeHandle: body.challengeHandle, response: body.response, name: body.name };
 }
 
 /**
@@ -632,12 +621,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();
-  const acceptPublicInvitation = createPasswordResetCooldown();
   const acceptInvitation = createPasswordResetCooldown();
   const passwordResetRateLimiter =
     deps.accountActionRateLimiters?.passwordReset ?? createAccountActionRateLimiter();
-  const invitationRateLimiter =
-    deps.accountActionRateLimiters?.invitation ?? createAccountActionRateLimiter();
   const completionRateLimiter =
     deps.accountActionRateLimiters?.completion ?? createAccountActionRateLimiter();
   const googleCodeExchange = deps.googleCodeExchange ?? exchangeGoogleCode;
@@ -760,7 +746,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return loginWithGoogle(tx, { tenantId: deps.cfg.tenantId, subject });
       });
       setManagementCookie(c, completion.id, deps.secureCookies);
-      return c.redirect(`${deps.origin}/manage/`);
+      return c.redirect(`${deps.origin}/manage/?login=google`);
     }),
   );
   // The deployment holds one tenant per database. Roster of active persons. Deliberately
@@ -860,8 +846,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Password recovery always answers 202, whether the address is malformed, unknown, unconfigured
-  // for mail, or accepted. That keeps account membership out of this public response.
+  // Recovery delivers setup links to pending accounts and reset links to active accounts. The
+  // same 202 response keeps account membership and status out of this public response.
   app.post("/management-api/password-reset", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<{ email?: unknown }>(c);
@@ -874,7 +860,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (typeof body.email === "string") {
         const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
           await asAppUser(tx);
-          return requestPasswordResetAction(tx, {
+          return requestAccountRecoveryAction(tx, {
             tenantId: deps.cfg.tenantId,
             email: body.email as string,
           });
@@ -888,49 +874,17 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Public invitation replacement is deliberately indistinguishable for pending, active, unknown,
-  // malformed, and mail-unavailable addresses. Only a pending account can receive a new action.
-  app.post("/management-api/invitation-resend", (c) =>
-    run(c, log, async () => {
-      const body = await readJsonBody<{ email?: unknown }>(c);
-      const key =
-        typeof body.email === "string" ? body.email.trim().toLowerCase() : "invalid-email";
-      invitationRateLimiter.check(key);
-      if (typeof body.email === "string" && acceptPublicInvitation(body.email)) {
-        const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-          await asAppUser(tx);
-          return requestInvitationAction(tx, {
-            tenantId: deps.cfg.tenantId,
-            email: body.email as string,
-            codeKey: accountActionCodeKey,
-          });
-        });
-        if (issued !== null) void deliverAccountAction(deps, log, issued);
-      }
-      return c.body(null, 202);
-    }),
-  );
-
-  // Inspection validates the emailed bearer token or short code without consuming it. Completion
+  // Inspection validates the emailed bearer token without consuming it. Completion
   // repeats the check and performs the credential change atomically.
   app.post("/management-api/account-actions/inspect", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<{
         token?: unknown;
-        email?: unknown;
-        code?: unknown;
         purpose?: unknown;
       }>(c);
-      completionRateLimiter.check(
-        typeof body.token === "string"
-          ? body.token
-          : typeof body.email === "string"
-            ? body.email
-            : "invalid-token",
-      );
+      completionRateLimiter.check(typeof body.token === "string" ? body.token : "invalid-token");
       if (
-        (typeof body.token !== "string" &&
-          (typeof body.email !== "string" || typeof body.code !== "string")) ||
+        typeof body.token !== "string" ||
         (body.purpose !== "invitation" && body.purpose !== "password_reset")
       ) {
         throw new AppError("account_action.invalid", {});
@@ -938,22 +892,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const purpose = body.purpose;
       const inspection = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        if (typeof body.token === "string") {
-          return inspectAccountAction(tx, {
-            tenantId: deps.cfg.tenantId,
-            token: body.token,
-            purpose,
-          });
-        }
-        return inspectAccountActionByCode(tx, {
+        return inspectAccountAction(tx, {
           tenantId: deps.cfg.tenantId,
-          email: body.email as string,
-          code: body.code as string,
+          token: body.token as string,
           purpose,
-          codeKey: accountActionCodeKey,
         });
       });
-      if (inspection === null) throw new AppError("account_action.invalid", {});
       return c.json(inspection);
     }),
   );
@@ -963,22 +907,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const body = await readJsonBody<{
         token?: unknown;
-        email?: unknown;
-        code?: unknown;
         purpose?: unknown;
         password?: unknown;
         pin?: unknown;
       }>(c);
-      completionRateLimiter.check(
-        typeof body.token === "string"
-          ? body.token
-          : typeof body.email === "string"
-            ? body.email
-            : "invalid-token",
-      );
+      completionRateLimiter.check(typeof body.token === "string" ? body.token : "invalid-token");
       if (
-        (typeof body.token !== "string" &&
-          (typeof body.email !== "string" || typeof body.code !== "string")) ||
+        typeof body.token !== "string" ||
         (body.purpose !== "invitation" && body.purpose !== "password_reset") ||
         typeof body.password !== "string" ||
         (body.purpose === "invitation" && typeof body.pin !== "string")
@@ -995,17 +930,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           password,
           ...(purpose === "invitation" ? { pin: body.pin as string } : {}),
         };
-        if (typeof body.token === "string") {
-          return completeAccountAction(tx, { ...common, token: body.token });
-        }
-        return completeAccountActionByCode(tx, {
-          ...common,
-          email: body.email as string,
-          code: body.code as string,
-          codeKey: accountActionCodeKey,
-        });
+        return completeAccountAction(tx, { ...common, token: body.token as string });
       });
-      if (completion === null) throw new AppError("account_action.invalid", {});
       if (completion.session === null) clearManagementCookie(c);
       else setManagementCookie(c, completion.session.id, deps.secureCookies);
       return c.json({ personId: completion.personId, authenticated: completion.session !== null });
@@ -1152,7 +1078,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           tenantId: deps.cfg.tenantId,
           personId: created.id,
           purpose: "invitation",
-          codeKey: accountActionCodeKey,
         });
         return { created, issued };
       });
@@ -1181,7 +1106,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
-          codeKey: accountActionCodeKey,
         });
       });
       return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
@@ -1276,7 +1200,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
-          codeKey: accountActionCodeKey,
         });
       });
       return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
@@ -1304,7 +1227,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
-          codeKey: accountActionCodeKey,
         });
       });
       return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
@@ -2598,7 +2520,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/passkey/register/verify", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
+      const { challengeHandle, response, name } = await parsePasskeyVerifyBody(c);
       const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId: sessionId });
@@ -2607,6 +2529,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           tenantId: deps.cfg.tenantId,
           challengeHandle,
           response: response as never,
+          name,
           rpId: deps.rpId,
           origin: deps.origin,
         });

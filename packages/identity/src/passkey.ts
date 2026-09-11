@@ -196,11 +196,19 @@ export async function finishPasskeyRegistration(
     tenantId: string;
     challengeHandle: string;
     response: RegistrationResponseJSON;
+    name?: unknown;
     rpId: string;
     origin: string;
   },
 ): Promise<{ credentialId: string }> {
   const { personId, tenantId } = await resolveManagementSession(tx, input.managementSessionId);
+  if (
+    input.name !== undefined &&
+    (typeof input.name !== "string" || input.name.trim().length > 80)
+  ) {
+    throw new AppError("profile.invalid", { field: "passkeyName" });
+  }
+  const name = typeof input.name === "string" ? input.name.trim() || null : null;
   // Consume the challenge up front: a locking DELETE that also enforces single-use (see
   // `consumeChallenge`). A verify failure below rolls the whole transaction back, undoing this delete.
   const expectedChallenge = await consumeChallenge(tx, tenantId, input.challengeHandle);
@@ -233,6 +241,7 @@ export async function finishPasskeyRegistration(
       tenantId,
       personId,
       credentialId: cred.id,
+      name,
       publicKey: b64url(cred.publicKey),
       counter: cred.counter,
       transports: serializeTransports(cred.transports),

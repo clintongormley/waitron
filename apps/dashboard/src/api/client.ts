@@ -36,7 +36,7 @@ export interface OwnProfile {
   hasPassword: boolean;
   hasTotp: boolean;
   hasGoogle: boolean;
-  passkeys: Array<{ id: string; createdAt: string }>;
+  passkeys: Array<{ id: string; name: string | null; createdAt: string }>;
 }
 export interface ProfileCredentials {
   currentPassword?: string;
@@ -1337,6 +1337,7 @@ export class DashboardApi {
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
+    loginDefault: string;
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
   }>;
@@ -1367,21 +1368,24 @@ export class DashboardApi {
   /**
    * `GET /management-api/locales` — the venue's offered languages (per-user-language-preference,
    * Task 4). PUBLIC and read pre-login by the login screen's language chooser: each `{ code, label }` is a
-   * `SUPPORTED_LOCALES` entry, `venueDefault` the tenant's fallback locale, and `venueName` its public
+   * `SUPPORTED_LOCALES` entry, `venueDefault` the tenant's fallback locale, `loginDefault` the
+   * Accept-Language match for this browser, and `venueName` its public
    * legal name for the pre-login banner. The language chooser reads the list; the app decides what to
    * do with a pick, so the client only surfaces the shape.
    */
   getLocales(): Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
+    loginDefault: string;
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
   }> {
-    // The list + venue default are immutable for this client's lifetime; fetch once and share.
+    // Share the catalogue and language defaults for this page's lifetime.
     // Cache the promise ONLY on success — clear it on rejection so a transient failure retries.
     this.#localesPromise ??= this.#request<{
       locales: Array<{ code: string; label: string }>;
       venueDefault: string;
+      loginDefault: string;
       venueName: string;
       onboardingIntent?: "demo" | "prepare" | "live";
     }>("/management-api/locales", "GET").catch((err) => {
@@ -1408,27 +1412,11 @@ export class DashboardApi {
     return this.#request<void>("/management-api/password-reset", "POST", { email });
   }
 
-  requestInvitation(email: string): Promise<void> {
-    return this.#request<void>("/management-api/invitation-resend", "POST", { email });
-  }
-
   inspectAccountAction(
     token: string,
     purpose: "invitation" | "password_reset",
   ): Promise<{ email: string; purpose: "invitation" | "password_reset" }> {
     return this.#request("/management-api/account-actions/inspect", "POST", { token, purpose });
-  }
-
-  inspectAccountActionByCode(
-    email: string,
-    code: string,
-    purpose: "invitation" | "password_reset",
-  ): Promise<{ email: string; purpose: "invitation" | "password_reset" }> {
-    return this.#request("/management-api/account-actions/inspect", "POST", {
-      email,
-      code,
-      purpose,
-    });
   }
 
   getProfile(): Promise<OwnProfile> {
@@ -1504,26 +1492,6 @@ export class DashboardApi {
       "POST",
       {
         token,
-        purpose,
-        password,
-        ...(pin === undefined ? {} : { pin }),
-      },
-    );
-  }
-
-  completeAccountActionByCode(
-    email: string,
-    code: string,
-    purpose: "invitation" | "password_reset",
-    password: string,
-    pin?: string,
-  ): Promise<{ personId: string; authenticated: boolean }> {
-    return this.#request<{ personId: string; authenticated: boolean }>(
-      "/management-api/account-actions/complete",
-      "POST",
-      {
-        email,
-        code,
         purpose,
         password,
         ...(pin === undefined ? {} : { pin }),
@@ -1619,7 +1587,9 @@ export class DashboardApi {
    * `POST /management-api/passkey/register/verify` — finish enrolling a passkey: the signed response
    * from `startRegistration` plus the handle from `passkeyRegisterOptions`. Answers `{ credentialId }`.
    */
-  passkeyRegisterVerify(body: PasskeyVerification): Promise<{ credentialId: string }> {
+  passkeyRegisterVerify(
+    body: PasskeyVerification & { name?: string },
+  ): Promise<{ credentialId: string }> {
     return this.#request<{ credentialId: string }>(
       "/management-api/passkey/register/verify",
       "POST",

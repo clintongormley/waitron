@@ -180,6 +180,7 @@ import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule, readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueLocale } from "./venue-locale.js";
+import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions } from "./tls.js";
 import "./errors.js";
@@ -1758,6 +1759,10 @@ export async function startServer(
     locationId: till.locationId,
     override: till.localeOverride,
   });
+  const venueTimeZone = await readVenueTimeZone(db, {
+    tenantId: till.tenantId,
+    locationId: till.locationId,
+  });
   // Demo and the default Prepare target use the local simulator. Live and the explicit Prepare
   // integration target build from the tenant's Stripe credential. `makeStripe` is
   // `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses.
@@ -1936,7 +1941,7 @@ export async function startServer(
       sendAccountEmail: async (message) => {
         const delivery = await resolveAccountEmail();
         if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
-        await createAccountEmailSender(delivery.smtp)(message);
+        await createAccountEmailSender({ ...delivery.smtp, timeZone: venueTimeZone })(message);
       },
     },
     log,
@@ -2072,7 +2077,7 @@ export async function startServer(
       sendAccountEmail: async (message) => {
         const delivery = await resolveAccountEmail();
         if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
-        await createAccountEmailSender(delivery.smtp)(message);
+        await createAccountEmailSender({ ...delivery.smtp, timeZone: venueTimeZone })(message);
       },
     },
     log,
