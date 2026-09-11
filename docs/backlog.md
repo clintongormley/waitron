@@ -63,7 +63,7 @@ Preparation routing. [Design](superpowers/specs/2026-09-11-venue-tabs-design.md)
 
 **Dashboard live updates — implemented on `live-updates`, awaiting branch review and CI**
 (2026-09-11). Committed database changes invalidate subscribed dashboard queries through one
-identity-event stream per tab. Printers, queue counts, reports, administration lists and Bookings
+identity-event stream per tab. Printers, queue counts, reports, administration lists, Bookings and Venue Operations
 refresh while editing drafts remain separate. Timers cover discovery, pairing and time-based
 queries. See the [design](superpowers/specs/2026-09-11-dashboard-live-updates-design.md).
 

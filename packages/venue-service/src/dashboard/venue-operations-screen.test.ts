@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setLocale } from "@waitron/dashboard-kit";
+import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
@@ -721,4 +721,19 @@ it("explains why a department with active zones cannot be deactivated", async ()
   await action(el, "save-editor");
   expect(summary(el)).toContain("Move its active service zones");
   expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+});
+
+it("updates venue rows from external changes without replacing a modal draft", async () => {
+  const liveData = new LiveData();
+  const load = vi.fn().mockResolvedValue(structuredClone(model));
+  const el = await mount({ load, liveData } as unknown as VenueServiceApi);
+  await selectTab(el, "departments");
+  await action(el, "edit-department-d2");
+  field(el, "department-name").value = "Unsaved";
+  const updated = structuredClone(model);
+  updated.departments[0]!.name = "Updated elsewhere";
+  load.mockResolvedValue(updated);
+  liveData.invalidate([{ type: "departments", id: "d1" }]);
+  await vi.waitFor(() => expect(tableText(el, "departments")).toContain("Updated elsewhere"));
+  expect(field(el, "department-name").value).toBe("Unsaved");
 });

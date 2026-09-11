@@ -1,3 +1,4 @@
+import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -98,6 +99,14 @@ export class VenueOperationsScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: VenueServiceApi;
+  readonly #queries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {
+      this.error = t("venue.load_error");
+    },
+  );
+  #loaded = false;
   @state() private model?: VenueServiceView;
   @state() private error?: string;
   @state() private fieldErrors: Record<string, string> = {};
@@ -124,8 +133,40 @@ export class VenueOperationsScreen extends LitElement {
   }
   async #load(): Promise<void> {
     try {
-      this.model = await this.api.load();
-      this.error = undefined;
+      let initial = !this.#loaded;
+      this.#loaded = true;
+      await this.#queries.watch(
+        "venue",
+        {
+          key: "venue-service:operations",
+          dependencies: [
+            "departments",
+            "zone_service_policies",
+            "zone_menus",
+            "preparation_routes",
+            "department_hours",
+            "catalogues",
+            "categories",
+            "kitchen_stations",
+            "floor_zones",
+            "products",
+            "menu_sections",
+            "menu_items",
+            "menu_item_option_groups",
+            "menu_item_options",
+          ].map((type) => ({ type })),
+          refreshMs: 60_000,
+          read: () => {
+            const api = initial ? this.api : (this.api.background ?? this.api);
+            initial = false;
+            return api.load();
+          },
+        },
+        (value) => {
+          this.model = value;
+          this.error = undefined;
+        },
+      );
     } catch {
       this.error = t("venue.load_error");
     }

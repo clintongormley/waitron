@@ -21,8 +21,8 @@ an event during a read schedules another read afterward. The last observer disco
 that cache entry and its timer. A late response cannot populate a released entry.
 
 The core dashboard declares dependencies in `apps/dashboard/src/api/live-queries.ts`. Contributed
-screens receive the same tab-owned cache through `DashboardModuleContext`; Bookings owns its query
-definitions inside its package. Server module descriptors declare their own `changes` sources.
+screens receive the same tab-owned cache through `DashboardModuleContext`; Bookings and Venue
+Operations own their query definitions inside their packages. Server module descriptors declare their own `changes` sources.
 
 ## Changes come from committed writes
 
