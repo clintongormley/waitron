@@ -23,6 +23,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
   return {
     probeNode: vi.fn(async () => okR(primary)),
     join: vi.fn(async () => okR({ token: "a1.s", verificationNumber: "07" })),
+    enrolSelf: vi.fn(async () => okR({ token: "self.tok" })),
     joinStatus: vi.fn(async () => okR<JoinStatus>("approved")),
     pullJobs: vi.fn(async () =>
       okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),

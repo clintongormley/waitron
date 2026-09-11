@@ -8,6 +8,12 @@ function reply(status: number, body?: unknown): Response {
   });
 }
 
+/** A `fetch` stub that resolves one canned {@link reply}, mirroring the `vi.fn().mockResolvedValue`
+ * shape the other suites use. */
+function stub(status: number, body?: unknown): typeof fetch {
+  return vi.fn().mockResolvedValue(reply(status, body)) as unknown as typeof fetch;
+}
+
 const URL_A = "http://a.test";
 
 describe("createClient — probeNode", () => {
@@ -192,6 +198,44 @@ describe("createClient — join", () => {
       ok: false,
       failure: { kind: "bad_reply" },
     });
+  });
+});
+
+describe("createClient — enrolSelf", () => {
+  it("enrolSelf returns the token on 201", async () => {
+    const client = createClient({ fetch: stub(201, { token: "id.secret" }) });
+    const r = await client.enrolSelf("https://127.0.0.1", "box");
+    expect(r).toEqual({ ok: true, value: { token: "id.secret" } });
+  });
+
+  it("enrolSelf POSTs { name } to /api/node/enrol-self", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(reply(201, { token: "id.secret" }));
+    const client = createClient({ fetch: fetchImpl });
+    await client.enrolSelf("https://127.0.0.1", "box");
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe("https://127.0.0.1/api/node/enrol-self");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ name: "box" });
+    expect(init.headers["content-type"]).toBe("application/json");
+  });
+
+  it("enrolSelf folds any non-2xx into a refusal, not a throw", async () => {
+    for (const [status, code] of [
+      [409, "node.enrol_unavailable"],
+      [403, "node.enrol_not_local"],
+    ] as const) {
+      const client = createClient({ fetch: stub(status, { code }) });
+      const r = await client.enrolSelf("https://127.0.0.1", "box");
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.failure.kind).toBe("refused"); // the loop only checks r.ok; kind is diagnostic
+    }
+  });
+
+  it("enrolSelf folds a network error into a Failure", async () => {
+    const client = createClient({ fetch: () => Promise.reject(new Error("ECONNREFUSED")) });
+    const r = await client.enrolSelf("https://127.0.0.1", "box");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.failure.kind).toBe("unreachable");
   });
 });
 
