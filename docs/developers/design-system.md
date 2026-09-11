@@ -608,7 +608,7 @@ html`<wt-tabs
 ```
 
 Your selection handler receives `event.detail.value`. Ignore events whose `target` differs from
-`currentTarget`, because inputs inside the panels also emit `wt-change`. The component updates its
+`currentTarget` if your panels contain controls that also emit `wt-change`. The component updates its
 own selection, while your screen records it with `UrlStateController`. An unknown or omitted value
 shows the first tab. Arrow keys wrap between tabs; Home and End select the first and last tab.
 The tab strip scrolls on narrow screens. Hidden panels remain mounted, so switching tabs retains

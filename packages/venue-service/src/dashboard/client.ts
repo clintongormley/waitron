@@ -226,7 +226,7 @@ export class VenueServiceApi {
   updateRoute(
     routeId: string,
     input: {
-      zoneId?: string | null;
+      zoneId: string | null;
       categoryId?: string | null;
       productId?: string | null;
       stationId?: string | null;

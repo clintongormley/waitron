@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
+import { codeOf } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   selectStyles,
@@ -150,7 +151,7 @@ export class VenueOperationsScreen extends LitElement {
     });
   }
   #selectView(event: CustomEvent<{ value: View }>): void {
-    // Form fields also emit wt-change; only the tab strip owns navigation.
+    // Panel content may emit its own change events; only the strip owns navigation.
     if (event.target !== event.currentTarget) return;
     this.view = event.detail.value;
     this.#url.write({ dashboard: "venue-operations", view: this.view });
@@ -164,8 +165,14 @@ export class VenueOperationsScreen extends LitElement {
       await action();
       if (this.editor === editor) this.#close();
       await this.#load();
-    } catch {
-      this.error = t("venue.save_error");
+    } catch (error) {
+      const code = codeOf(error ?? {});
+      this.error =
+        code === "route.duplicate"
+          ? t("venue.route_duplicate")
+          : code === "department.has_active_zones"
+            ? t("venue.department_has_zones")
+            : t("venue.save_error");
     } finally {
       this.busy = false;
     }

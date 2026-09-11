@@ -679,3 +679,46 @@ it("closes a successfully saved editor when refreshing the list fails", async ()
     "could not be loaded",
   );
 });
+
+it("ignores change events from controls inside a tab panel", async () => {
+  const el = await mount({ load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi);
+  await selectTab(el, "menus");
+  const url = location.href;
+  const input = document.createElement("wt-input");
+  input.name = "panel-filter";
+  input.label = "Filter menus";
+  el.shadowRoot!.querySelector('[slot="menus"]')!.append(input);
+  await input.updateComplete;
+  const native = input.shadowRoot!.querySelector("input")!;
+  native.value = "search text";
+  native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await settle(el);
+  expect(location.href).toBe(url);
+  expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("menus");
+});
+
+it("explains a duplicate route and keeps the edit open", async () => {
+  const api = {
+    load: vi.fn().mockResolvedValue(model),
+    updateRoute: vi.fn().mockRejectedValue({ code: "route.duplicate" }),
+  } as unknown as VenueServiceApi;
+  const el = await mount(api);
+  await selectTab(el, "routing");
+  await action(el, "edit-route-r1");
+  await action(el, "save-editor");
+  expect(summary(el)).toContain("A route already exists");
+  expect(field(el, "route-subject").value).toBe("category:c1");
+});
+
+it("explains why a department with active zones cannot be deactivated", async () => {
+  const api = {
+    load: vi.fn().mockResolvedValue(model),
+    deactivateDepartment: vi.fn().mockRejectedValue({ code: "department.has_active_zones" }),
+  } as unknown as VenueServiceApi;
+  const el = await mount(api);
+  await selectTab(el, "departments");
+  await action(el, "deactivate-department-d1");
+  await action(el, "save-editor");
+  expect(summary(el)).toContain("Move its active service zones");
+  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+});

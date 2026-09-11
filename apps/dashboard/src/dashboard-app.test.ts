@@ -2203,6 +2203,36 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 });
 
 describe("dashboard URL navigation", () => {
+  it.each([
+    { modules: ["venue-service"], permissions: [] },
+    { modules: [], permissions: ["venue_service.manage"] },
+  ])(
+    "denies a saved venue tab unless both module and permission are present: %j",
+    async ({ modules, permissions }) => {
+      const url = new URL(location.href);
+      url.pathname = "/manage/venue-operations/view/menus";
+      history.replaceState(null, "", url);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({
+            personId: "p1",
+            role: "manager",
+            locale: "en",
+            venueLocale: "en",
+            modules,
+            permissions,
+          }),
+        }),
+        request: stubRequest,
+      });
+      await flush(el);
+      expect(navItem(el, "venue-operations")).toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-venue-operations-screen")).toBeNull();
+      expect(overview(el)).toBeTruthy();
+      expect(location.pathname).toBe("/manage/overview");
+    },
+  );
+
   it("preserves a module-owned tab through refresh and Back from another section", async () => {
     const url = new URL(location.href);
     url.pathname = "/manage/venue-operations/view/menus";

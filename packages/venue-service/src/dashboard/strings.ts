@@ -1,6 +1,10 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "venue.route_duplicate":
+    "A route already exists for this product or category in that service zone. Edit the existing route instead.",
+  "venue.department_has_zones":
+    "Move its active service zones to another department before deactivating this department.",
   "venue.status": "Status",
   "venue.active": "Active",
   "venue.inactive": "Inactive",
@@ -93,6 +97,10 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "venue.route_duplicate":
+    "Ya existe una ruta para este producto o categoría en esa zona de servicio. Edita la ruta existente.",
+  "venue.department_has_zones":
+    "Mueve sus zonas de servicio activas a otro departamento antes de desactivar este departamento.",
   "venue.status": "Estado",
   "venue.active": "Activo",
   "venue.inactive": "Inactivo",

@@ -542,7 +542,7 @@ unfiltered `main` run, not a wrong hook.
   Receipt: `packages/ui/src/submit-on-enter.test.ts` (UI keyboard review, 2026-09-06).
 - **Position a native popover before its first paint.** In Chromium, positioning from the asynchronous
   `toggle` event left the row menu at `(0, 0)` for its first frame. Open it synchronously, then measure
-  and position it; the first-frame regression is in `apps/dashboard/src/widgets/row-actions.test.ts`.
+  and position it; the first-frame regression is in `packages/ui/src/components/wt-row-actions.test.ts`; the dashboard wrapper retains its compatibility tests.
 - **Vitest's default coverage excludes swallow every dot-prefixed path** (`**/[.]**`), and
   `include`/`exclude` replace rather than merge. The root config's first version measured
   `All files | 0 | 0 | 0 | 0`, wrote `"Unknown"` percentages and **exited 0** with the thresholds

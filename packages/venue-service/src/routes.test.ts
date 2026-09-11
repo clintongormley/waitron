@@ -127,6 +127,80 @@ async function send(
 }
 
 describe("venue service management routes", () => {
+  it("requires an explicit zone when replacing a route and keeps its scope on invalid input", async () => {
+    const fx = await fixture();
+    const departmentResponse = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/departments",
+      fx.managerCookie,
+      { name: "Dining", defaultServiceMode: "table_tab" },
+    );
+    const department = (await departmentResponse.json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/zones/${fx.zoneId}`,
+          fx.managerCookie,
+          { departmentId: department.id },
+        )
+      ).status,
+    ).toBe(204);
+    const original = { zoneId: fx.zoneId, categoryId: fx.categoryId, stationId: fx.stationId };
+    const created = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/routes",
+      fx.managerCookie,
+      original,
+    );
+    expect(created.status).toBe(201);
+    const route = (await created.json()) as { id: string };
+    const rejected = await send(
+      fx.app,
+      "PUT",
+      `/management-api/venue-service/routes/${route.id}`,
+      fx.managerCookie,
+      { categoryId: fx.categoryId, noPreparation: true },
+    );
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "zoneId" } },
+    });
+    const unchanged = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as { routes: unknown[] };
+    expect(unchanged.routes).toEqual([
+      { id: route.id, ...original, productId: null, noPreparation: false },
+    ]);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/routes/${route.id}`,
+          fx.managerCookie,
+          { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
+        )
+      ).status,
+    ).toBe(204);
+    const updated = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as { routes: unknown[] };
+    expect(updated.routes).toEqual([
+      {
+        id: route.id,
+        zoneId: null,
+        categoryId: fx.categoryId,
+        productId: null,
+        stationId: null,
+        noPreparation: true,
+      },
+    ]);
+  });
+
   it("edits departments and preparation routes in place", async () => {
     const fx = await fixture();
     const created = await send(
@@ -167,7 +241,7 @@ describe("venue service management routes", () => {
       },
     );
     const route = (await createdRoute.json()) as { id: string };
-    const routeInput = { categoryId: fx.categoryId, noPreparation: true };
+    const routeInput = { zoneId: null, categoryId: fx.categoryId, noPreparation: true };
     expect(
       (
         await send(
@@ -200,7 +274,7 @@ describe("venue service management routes", () => {
           "PUT",
           `/management-api/venue-service/routes/${route.id}`,
           fx.managerCookie,
-          { categoryId: fx.categoryId, stationId: fx.stationId },
+          { zoneId: null, categoryId: fx.categoryId, stationId: fx.stationId },
         )
       ).status,
     ).toBe(204);
@@ -229,7 +303,7 @@ describe("venue service management routes", () => {
       {
         method: "PUT" as const,
         path: `/management-api/venue-service/routes/${route.id}`,
-        body: { categoryId: fx.categoryId, stationId: fx.stationId },
+        body: { zoneId: null, categoryId: fx.categoryId, stationId: fx.stationId },
       },
     ];
     for (const { method, path, body } of paths) {
@@ -250,9 +324,14 @@ describe("venue service management routes", () => {
         400,
       );
     for (const body of [
-      { categoryId: fx.categoryId },
-      { categoryId: fx.categoryId, productId: crypto.randomUUID(), noPreparation: true },
-      { categoryId: fx.categoryId, stationId: fx.stationId, noPreparation: true },
+      { zoneId: null, categoryId: fx.categoryId },
+      {
+        zoneId: null,
+        categoryId: fx.categoryId,
+        productId: crypto.randomUUID(),
+        noPreparation: true,
+      },
+      { zoneId: null, categoryId: fx.categoryId, stationId: fx.stationId, noPreparation: true },
     ])
       expect((await send(fx.app, "PUT", paths[1]!.path, fx.managerCookie, body)).status).toBe(400);
     expect(
@@ -299,7 +378,7 @@ describe("venue service management routes", () => {
             "PUT",
             `/management-api/venue-service/routes/${route.id}`,
             fx.managerCookie,
-            { categoryId: fx.categoryId, noPreparation: true },
+            { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
           )
         ).status,
       ).toBe(404);
@@ -316,7 +395,7 @@ describe("venue service management routes", () => {
             "PUT",
             `/management-api/venue-service/routes/${own.id}`,
             fx.managerCookie,
-            { categoryId: fx.categoryId, stationId: other.stationId },
+            { zoneId: null, categoryId: fx.categoryId, stationId: other.stationId },
           )
         ).status,
       ).toBe(409);
@@ -339,7 +418,7 @@ describe("venue service management routes", () => {
               "PUT",
               `/management-api/venue-service/routes/${own.id}`,
               fx.managerCookie,
-              { categoryId: other.categoryId, noPreparation: true },
+              { zoneId: null, categoryId: other.categoryId, noPreparation: true },
             )
           ).status,
         ).toBe(404);
@@ -384,7 +463,7 @@ describe("venue service management routes", () => {
           "PUT",
           `/management-api/venue-service/routes/${route.id}`,
           fx.managerCookie,
-          { categoryId: fx.categoryId, noPreparation: true },
+          { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
         )
       ).status,
     ).toBe(409);

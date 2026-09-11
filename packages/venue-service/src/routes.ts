@@ -272,6 +272,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const routeId = requireUuidParam(c.req.param("routeId"), "PreparationRouteId");
         const body = await readJsonBody<Record<string, unknown>>(c);
+        if (body.zoneId === undefined) {
+          throw new AppError("management.request_invalid", { field: "zoneId" });
+        }
         const input = requirePreparationRouteInput(body);
         await gated(sessionId, (tx) => updatePreparationRoute(tx, ctx.cfg, routeId, input));
         return c.body(null, 204);
