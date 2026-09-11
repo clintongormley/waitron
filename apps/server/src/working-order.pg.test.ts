@@ -918,6 +918,9 @@ describe("card tender (manual / datáfono)", () => {
     // A card charges the exact amount on the terminal — nothing is handed back.
     expect(res.total).toBe("1.50");
     expect(res.tender.method).toBe("card");
+    // The operator's hand-keyed acquirer reference rides through end to end onto the ticket's tender
+    // block (a manual tender carries `reference`, `card: null`).
+    expect(res.tender).toMatchObject({ method: "card", reference: "OP-12345" });
     expect(res.invoiceNumber).toBe("A/1");
 
     // One sale + one chained registro, exactly as the cash path.

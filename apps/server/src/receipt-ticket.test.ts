@@ -358,9 +358,63 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     });
     const s = decodeTicket(bytes);
     expect(s).toContain("Tarjeta VISA **** 5838");
-    expect(s).toContain("Sin contacto");
-    expect(s).toContain("Aut 328600");
+    // Assert the JOINED second line as ONE string: the entry-mode label and the auth code are joined
+    // by " · " (U+00B7 middle dot). Asserting the whole line proves the `·` survives the ESC/POS
+    // Latin-1 encode/decode round-trip — a regression to `•` (U+2022, not a Latin-1 code point) would
+    // corrupt on real thermal output, and this is the ONLY place that is caught on paper.
+    expect(s).toContain("Sin contacto · Aut 328600");
     expect(s).not.toContain("Efectivo");
+  });
+
+  it("prints a chip card's entry mode joined to the auth code on one line", () => {
+    const bytes = formatReceipt({
+      result: {
+        ...FILED_SALE,
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "MASTERCARD", last4: "4291", entryMode: "chip", authCode: "911234" },
+          reference: null,
+        },
+      },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+    });
+    const s = decodeTicket(bytes);
+    expect(s).toContain("Tarjeta MASTERCARD **** 4291");
+    // Same joined-line invariant for the `chip` entry mode ("Chip") — the `·` must survive Latin-1.
+    expect(s).toContain("Chip · Aut 911234");
+  });
+
+  it("prints no entry-mode/auth second line — and no stray middle dot — when neither fact is known", () => {
+    // Entry mode `unknown` (no label) and a null auth code: the second card line has nothing to carry,
+    // so it is dropped entirely rather than printed empty or as a bare separator glyph. Both the middle
+    // dot and the empty line are absent — a regression that always emitted the joined line would print a
+    // stray `·` (both fragments absent) or an empty line right after the masked-PAN line.
+    const bytes = formatReceipt({
+      result: {
+        ...FILED_SALE,
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
+          reference: null,
+        },
+      },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+    });
+    const s = decodeTicket(bytes);
+    expect(s).toContain("Tarjeta VISA **** 5838");
+    // No stray middle dot anywhere (this fixture carries `·` in no other field).
+    expect(s).not.toContain("·");
+    // No empty second line: the masked-PAN line is followed by exactly the one block-separator blank
+    // line, never two consecutive blanks (which an always-emitted empty second line would produce).
+    expect(s).not.toContain("5838\n\n\n");
   });
 
   it("prints the tip and charged lines only when a tip rode on the card", () => {

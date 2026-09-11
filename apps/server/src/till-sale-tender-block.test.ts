@@ -302,4 +302,27 @@ describe("readTenderBlock", () => {
     });
     expect(block).toMatchObject({ method: "card", card: null, reference: null });
   });
+
+  it("degrades to card:null when the card tender's payment row is absent entirely", async () => {
+    // A settled CARD sale with its `tenders` row but NO `payments` row at all (seedSale omits the
+    // payment insert when no payment arg is passed) — the `payment === null` branch of readTenderBlock,
+    // which every other case misses. A filed, immutable sale must PRESENT, never throw (CLAUDE.md §5),
+    // so this degrades to a bare card block rather than failing.
+    const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { saleId, workingOrderId } = await seedSale(tx, {
+        method: "card",
+        amount: "1.00",
+        tipAmount: "0.00",
+      });
+      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+    });
+    expect(block).toEqual({
+      method: "card",
+      charged: "1.00",
+      tip: "0.00",
+      card: null,
+      reference: null,
+    });
+  });
 });
