@@ -14,6 +14,7 @@ export { WtFormActions } from "./components/wt-form-actions.js";
 export { WtFormErrorSummary } from "./components/wt-form-error-summary.js";
 export { WtHelpTooltip } from "./components/wt-help-tooltip.js";
 export { WtDialog } from "./components/wt-dialog.js";
+export { WtModal } from "./components/wt-modal.js";
 export { WtSwitch } from "./components/wt-switch.js";
 export { WtTableToken } from "./components/wt-table-token.js";
 export type { TableTokenLabels } from "./components/wt-table-token.js";
