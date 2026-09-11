@@ -40,10 +40,21 @@ server confirmation. Public outcomes remain independent of account status and pa
 Still open (device checks before deployment): native passkey prompts on real hardware, and a
 physical authenticator QR scan.
 
-**Dashboard sign-in refinements — IN PROGRESS #317** (owner, 2026-09-11). The
+**Dashboard sign-in refinements — LANDED #317** (owner, 2026-09-11). The
 [refinement design](superpowers/specs/2026-09-11-login-flow-refinements-design.md) covers browser-language
-matching, opt-in email/method storage, explicit passkey prompts, consistent sign-in forms, one recovery
-entry, venue-zone email expiry, named passkeys and the offer to add one after password setup.
+matching (`apps/server/src/login-locale.ts`), opt-in email/method storage cleared on account change,
+explicit passkey prompts, consistent sign-in forms, one recovery entry (a pending account gets a setup
+link, an active one a reset link, same public reply), email expiry times in the venue's stored time
+zone with labelled UTC when the zone is missing or invalid, named passkeys (Identity migration
+`0015_passkey_name`) and the offer to add one after activation or a post-reset sign-in. The unused
+public invitation-code API and hidden invitation code issuance were removed; email-change codes stay.
+Still open: (a) device checks before deployment — physical authenticator ceremonies, live SMTP through
+`startServer`, and whether a deployment's intermediary cache honours the login route's
+`Vary: Accept-Language` (no cache hardening was added); (b) two review findings kept on purpose — the
+passkey offer after a recovery-code sign-in asks for an authenticator code with no recovery-code
+switch (Skip avoids a dead end), and a fresh Remember tick binds to whichever identity the person then
+authenticates as, so the typed email and the saved one can differ; (c) the alternatives list renders
+only on the password, passkey and Google screens (design-system doc narrowed to match).
 
 **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
 bypass, so a docs-only change is pushed straight to `main` — no PR, no CI wait. Branch, `commit -s`,
