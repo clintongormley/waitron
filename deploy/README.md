@@ -58,7 +58,7 @@ collision cannot arise.
 
 ```bash
 cd /opt/waitron
-docker compose pull && docker compose up -d   # update to the current :main image
+docker compose pull && docker compose up -d   # updates to whatever .env selects — the published :main, unless you installed a branch (run `waitron.sh install` with no ref to return to :main)
 docker compose ps                             # all the services, with health
 docker compose logs -f app                    # the server's JSON lines
 ```

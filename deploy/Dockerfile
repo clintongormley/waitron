@@ -62,8 +62,9 @@ FROM node:26-slim AS runtime
 
 ARG WAITRON_BUILD_ID
 
-# The Postgres CLIENT major, which MUST track the SERVER major in deploy/compose.yml
-# (postgres:18-alpine). Bumping one without the other reintroduces the failure this repo comes from:
+# The Postgres CLIENT major, which MUST track the SERVER major hardcoded in TWO other places:
+# deploy/compose.yml's db (postgres:18-alpine) and deploy/waitron.sh's HELPER_IMAGE (a third
+# postgres:18-alpine). Bumping one without the others reintroduces the failure this repo comes from:
 # pg_dump 17 refuses an 18 server ("aborting because of server version mismatch"), which breaks the
 # backup duty while everything else keeps working.
 ARG PG_MAJOR=18

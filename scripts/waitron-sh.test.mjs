@@ -21,12 +21,28 @@ afterEach(() => {
 //   - `compose logs` -> prints the database_ahead line when aheadLogs is set.
 //   - `compose exec … psql … -d waitron …` -> prints dbStamp, but ONLY when `-d waitron` is present,
 //     so a stamp query that forgot the app-db name (the wrong-db bug) reads empty and its test fails.
-//   - `run … cat …/trading.env` -> prints tradingEnv; `run … find …` (reset) prints nothing.
+//   - `run … <trading.env read>` -> prints tradingEnv (pass "__ABSENT__" to model an unprovisioned
+//     box whose state volume has no trading.env); `run … find …` (reset) prints nothing.
+//   - `volume inspect` -> exit 0 (the volume exists); `volume rm` -> exit 0 unless rmFail names a
+//     volume ("db" makes `docker volume rm waitron_db` fail, to test the abort-on-failure path).
+// Three failure knobs model the read/write faults the production-safety fixes must survive:
+//   - readError: BOTH is_production reads (trading.env cat and the db-stamp psql) exit non-zero, so
+//     the environment cannot be established — reset must then fail CLOSED.
+//   - rmFail: the named volume's `docker volume rm` exits non-zero.
+//   - envWriteFail: `mv` exits non-zero, so the atomic .env rewrite's final rename fails.
 // `curl`/`wget` write a marker to their -o target so fetched files exist. `qrencode` is a no-op.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
 // which has no systemctl).
-function sandbox({ tradingEnv = "", dbStamp = "", aheadLogs = false, dockerPs = "healthy" } = {}) {
+function sandbox({
+  tradingEnv = "",
+  dbStamp = "",
+  aheadLogs = false,
+  dockerPs = "healthy",
+  readError = false,
+  rmFail = "",
+  envWriteFail = false,
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
   dirs.push(root);
   const boxDir = join(root, "box");
@@ -43,6 +59,7 @@ function sandbox({ tradingEnv = "", dbStamp = "", aheadLogs = false, dockerPs = 
     chmodSync(p, 0o755);
   };
   const aheadEcho = aheadLogs ? 'echo "provisioning.database_ahead: the database is newer"' : ":";
+  const readErr = readError ? "1" : "0";
   stub(
     "docker",
     `
@@ -57,15 +74,31 @@ case "$1" in
       *" logs "*) ${aheadEcho} ;;
       *" exec "*)
         case "$args" in
-          *psql*) case "$args" in *"-d waitron"*) echo "${dbStamp}" ;; esac ;;
+          *psql*)
+            [ "${readErr}" = "1" ] && exit 1
+            case "$args" in *"-d waitron"*) echo "${dbStamp}" ;; esac ;;
         esac ;;
     esac ;;
+  volume)
+    case "$2" in
+      inspect) exit 0 ;;
+      rm)
+        if [ -n "${rmFail}" ]; then
+          case "$args" in *"waitron_${rmFail}"*) exit 1 ;; esac
+        fi
+        exit 0 ;;
+    esac ;;
   run)
-    case "$args" in *trading.env*) echo "${tradingEnv}" ;; esac ;;
+    case "$args" in
+      *trading.env*)
+        [ "${readErr}" = "1" ] && exit 1
+        echo "${tradingEnv}" ;;
+    esac ;;
 esac
 exit 0
 `,
   );
+  if (envWriteFail) stub("mv", "exit 1");
   stub(
     "curl",
     `
@@ -123,6 +156,35 @@ describe("waitron.sh install <ref>", () => {
     const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
     expect(env).toMatch(/^WAITRON_IMAGE=waitron:my-branch$/m);
     expect(env).toMatch(/^WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:my-branch$/m);
+  });
+});
+
+describe("waitron.sh health check", () => {
+  // `grep -q healthy` also matched "unhealthy" (the word contains it), so a container reporting
+  // unhealthy was treated as ready. The whole health value must match, not a substring.
+  it("does not report an unhealthy container as ready", () => {
+    const sb = sandbox({ dockerPs: "unhealthy" });
+    const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/did not come up healthy/);
+  });
+});
+
+describe("waitron.sh install preserves .env on a failed write", () => {
+  // The .env rewrite truncated the file in place, so a failed write left it empty and lost
+  // POSTGRES_PASSWORD — the next install would mint a different one and lock the app out of its
+  // cluster. The rewrite must be atomic: write beside .env, rename only on success.
+  it("leaves .env unchanged (password kept) when the atomic rename fails", () => {
+    const sb = sandbox({ envWriteFail: true });
+    // A box whose password was minted by an earlier install.
+    writeFileSync(join(sb.boxDir, ".env"), "POSTGRES_PASSWORD=original-secret\n");
+    // A branch install rewrites .env (env_set WAITRON_IMAGE); the rename fails.
+    const r = run(sb, ["install", "my-branch"]);
+    expect(r.status).not.toBe(0);
+    const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
+    // The password survives, so a retry (ensure_env_password returns early) reuses the same one.
+    expect(env).toContain("POSTGRES_PASSWORD=original-secret");
+    expect(env.length).toBeGreaterThan(0);
   });
 });
 
@@ -215,5 +277,41 @@ describe("waitron.sh reset", () => {
     const r = run(sb, ["reset", "--force-production", "--yes"]);
     expect(r.status).toBe(0);
     expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_db\b/);
+  });
+
+  // C1 (fiscal §5): when neither signal can be read (both error), the environment cannot be
+  // established. An irreversible wipe must fail CLOSED — treat it as production and refuse — rather
+  // than assume "unreadable means empty".
+  it("refuses when production status cannot be established (both reads error), removing no volume", () => {
+    const sb = sandbox({ readError: true });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
+  });
+
+  // The other side of C1: a genuinely unprovisioned box (trading.env ABSENT, db stamp empty) is a
+  // successful read of "nothing there", NOT an error — the demo/reset workflow must still proceed.
+  it("proceeds on an unprovisioned box (trading.env absent, empty stamp)", () => {
+    const sb = sandbox({ tradingEnv: "__ABSENT__", dbStamp: "" });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).toBe(0);
+    expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_db\b/);
+  });
+
+  // I3: a failed removal of the db volume must abort the reset BEFORE it removes backups or empties
+  // state — otherwise the box restarts against the surviving database with its secrets already gone.
+  it("aborts when a volume removal fails, before touching backups or state", () => {
+    const sb = sandbox({ rmFail: "db" });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).not.toBe(0);
+    const calls = readFileSync(sb.log, "utf8");
+    // It tried the db volume (first) but never reached backups or the state-emptying find.
+    expect(calls).toMatch(/docker volume rm .*waitron_db\b/);
+    expect(calls).not.toMatch(/docker volume rm .*waitron_backups\b/);
+    expect(calls).not.toMatch(/find \/s .*! -name tls/);
   });
 });

@@ -18,8 +18,10 @@ RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
 # One copy of boot.ts's BOX_HOSTNAME, pinned by scripts/deploy-image-env.test.ts to the image env,
 # compose's defaults and the QR the restaurant scans.
 BOX_URL="https://waitron.local"
-# The db image compose runs, present on any installed box; used for the throwaway containers that
-# read and edit the state volume without a network pull. Kept in step with deploy/compose.yml's db.
+# The image for the throwaway containers that read and edit the state volume (cat trading.env, find,
+# rm) — none of which cares about the Postgres version. It reuses the db image only so it is ALREADY
+# PRESENT on an installed box and needs no network pull; any pre-pulled image would do. The literal
+# postgres major is coupled across three files (see deploy/Dockerfile's PG_MAJOR note).
 HELPER_IMAGE="postgres:18-alpine"
 
 die() { echo "waitron.sh: $1" >&2; exit "${2:-1}"; }
@@ -88,18 +90,26 @@ ensure_env_password() {
 }
 
 # .env line editing: set/replace or remove a KEY, preserving 0600 and never touching other lines.
-# `grep -v` exits 1 when it removes every line, which `set -e` would abort on — hence `|| true`.
-env_set() {
-  local key="$1" value="$2" file="$WAITRON_DIR/.env" tmp; tmp="$(mktemp)"
-  [ -f "$file" ] && { grep -v "^${key}=" "$file" > "$tmp" || true; }
-  printf '%s=%s\n' "$key" "$value" >> "$tmp"
-  ( umask 077; cat "$tmp" > "$file" ); rm -f "$tmp"
-}
-env_unset() {
+# The rewrite is ATOMIC — the new content is built in a temp file BESIDE .env and renamed onto it only
+# after the write fully succeeds. It never truncates .env in place: a write that failed mid-way there
+# would empty the file and lose POSTGRES_PASSWORD, and the next install would mint a different one,
+# locking the app out of its own cluster. `grep -v` exits 1 when it drops every line, which `set -e`
+# would abort on — hence `|| true`.
+#
+# Shared by env_set and env_unset: drop every `KEY=` line from .env, then (env_set only, when a value
+# is passed) append `KEY=value`. env_unset passes no value, so nothing is appended.
+_env_rewrite() {
   local key="$1" file="$WAITRON_DIR/.env" tmp
-  [ -f "$file" ] || return 0
-  tmp="$(mktemp)"; grep -v "^${key}=" "$file" > "$tmp" || true
-  ( umask 077; cat "$tmp" > "$file" ); rm -f "$tmp"
+  tmp="$(mktemp "${file}.XXXXXX")" || die "could not create a temp file next to .env"
+  chmod 600 "$tmp"
+  [ -f "$file" ] && { grep -v "^${key}=" "$file" > "$tmp" || true; }
+  [ "$#" -ge 2 ] && printf '%s=%s\n' "$key" "$2" >> "$tmp"
+  mv "$tmp" "$file" || { rm -f "$tmp"; die "could not update .env — left unchanged so the password is not lost"; }
+}
+env_set() { _env_rewrite "$1" "$2"; }
+env_unset() {
+  [ -f "$WAITRON_DIR/.env" ] || return 0
+  _env_rewrite "$1"
 }
 
 # 3. compose.yml + .env.example always from the INSTALLED ref, so compose and the image share a
@@ -149,21 +159,68 @@ EOF
   if command -v qrencode >/dev/null 2>&1; then qrencode -t ANSIUTF8 "$BOX_URL"; echo; fi
 }
 
+# Show the ready banner on stdout, and — on a headless box wired to a monitor — also on the physical
+# console (/dev/tty1), so whoever is standing at the box sees the setup QR without a keyboard or SSH.
+# Guarded on writability so a box with no tty1 (a container, a serial console) stays silent there.
+announce_ready() {
+  print_links
+  if [ -w /dev/tty1 ]; then print_links >/dev/tty1 2>/dev/null || true; fi
+}
+
 # Is this box stamped production? Two signals, production from EITHER. trading.env is read from the
 # state volume with a throwaway container so no database need be up; the db stamp is the box's own
-# authority when the cluster is reachable. A never-provisioned box has neither and is safe to wipe.
+# authority when the cluster is reachable.
+#
+# Fiscal safety (CLAUDE.md §5): a reset is irreversible, so an environment we CANNOT establish is
+# treated as production and refused. Each signal ends in one of three states — a VALUE, "nothing
+# there" (a read that succeeded and found the box unprovisioned — safe to wipe), or ERRORED (the
+# read itself failed). We fail CLOSED only when a read ERRORED and no signal returned a value; a
+# genuinely unprovisioned box (trading.env absent, stamp empty) reads cleanly and stays resettable,
+# which keeps the demo workflow working. The operator overrides a false refusal with --force-production.
 is_production() {
-  local env_line stamp
-  # Both reads swallow their own failure (`|| true`): if the state volume is gone or the db is down,
-  # neither signal can be read, and the box is treated as non-production — deliberately fail-open,
-  # because a box with no readable state has no fiscal data to protect.
-  env_line="$(docker run --rm -v waitron_state:/s "$HELPER_IMAGE" cat /s/trading.env 2>/dev/null | grep '^WAITRON_ENV=' || true)"
-  case "$env_line" in *=production) return 0 ;; esac
+  local env_out env_rc stamp_out stamp_rc env_value="" stamp_value="" errored=0
+  # trading.env from the state volume via a throwaway container. The __ABSENT__ sentinel separates an
+  # absent file (an unprovisioned box — the read SUCCEEDED and found nothing) from a read that failed
+  # (container/volume error — a non-zero exit): only the latter counts as "cannot establish".
+  if env_out="$(docker run --rm -v waitron_state:/s "$HELPER_IMAGE" \
+    sh -c '[ -e /s/trading.env ] && cat /s/trading.env || echo __ABSENT__' 2>/dev/null)"; then
+    env_rc=0
+  else
+    env_rc=$?
+  fi
+  if [ "$env_rc" -ne 0 ]; then
+    errored=1
+  elif [ "$env_out" != "__ABSENT__" ]; then
+    # A line WAITRON_ENV=<value>, parsed without a pipeline so pipefail/set -e cannot trip on it.
+    local line
+    while IFS= read -r line; do
+      case "$line" in WAITRON_ENV=*) env_value="${line#WAITRON_ENV=}"; break ;; esac
+    done <<<"$env_out"
+  fi
+  [ "$env_value" = "production" ] && return 0
+
   # The deployment stamp lives in the app database, named `waitron` (node-entry.ts DATABASE), NOT the
-  # default `postgres` db — so `-d waitron` is required or the query errors and this signal goes dead.
-  stamp="$(docker compose -f "$WAITRON_DIR/compose.yml" exec -T db psql -U postgres -d waitron -tAc \
-    'select environment from deployment where id = 1' 2>/dev/null | tr -d '[:space:]' || true)"
-  [ "$stamp" = "production" ]
+  # default `postgres` db — so `-d waitron` is required or the query errors. pipefail makes the
+  # pipeline's exit the psql exit, so a db that is down is a non-zero rc here, not a silent empty read.
+  if stamp_out="$(docker compose -f "$WAITRON_DIR/compose.yml" exec -T db psql -U postgres -d waitron -tAc \
+    'select environment from deployment where id = 1' 2>/dev/null | tr -d '[:space:]')"; then
+    stamp_rc=0
+  else
+    stamp_rc=$?
+  fi
+  if [ "$stamp_rc" -ne 0 ]; then
+    errored=1
+  else
+    stamp_value="$stamp_out"
+  fi
+  [ "$stamp_value" = "production" ] && return 0
+
+  # Cannot establish the environment: a read errored AND nothing positively returned a value. Fail
+  # closed — refuse as if production.
+  if [ "$errored" -eq 1 ] && [ -z "$env_value" ] && [ -z "$stamp_value" ]; then
+    return 0
+  fi
+  return 1
 }
 
 # ~3 minutes for the app container to report healthy (setup mode is healthy on /setup-api/status).
@@ -171,7 +228,9 @@ is_production() {
 wait_healthy() {
   local tries="${WAITRON_SH_MAX_HEALTH_TRIES:-36}"
   while [ "$tries" -gt 0 ]; do
-    if docker compose -f "$WAITRON_DIR/compose.yml" ps --format '{{.Health}}' app 2>/dev/null | grep -q healthy; then
+    # -qx matches the WHOLE line: `.Health` prints one status word, and a bare `grep healthy` would
+    # also match "unhealthy" (it contains the substring) and report a failed container as ready.
+    if docker compose -f "$WAITRON_DIR/compose.yml" ps --format '{{.Health}}' app 2>/dev/null | grep -qx healthy; then
       return 0
     fi
     tries=$((tries - 1)); [ "$tries" -gt 0 ] && sleep 5
@@ -203,7 +262,16 @@ cmd_install() {
   select_image "$ref"
   cd "$WAITRON_DIR"
   docker compose up -d
-  if wait_healthy; then print_links; else report_unhealthy; fi
+  if wait_healthy; then announce_ready; else report_unhealthy; fi
+}
+
+# Remove a named volume only if it exists; a removal that FAILS aborts the whole reset (see the loop
+# below) rather than silently continuing. A volume that is already absent is a no-op, not a failure.
+rm_volume() {
+  local name="$1"
+  docker volume inspect "$name" >/dev/null 2>&1 || return 0
+  docker volume rm -f "$name" >/dev/null 2>&1 \
+    || die "could not remove volume $name — stopping the reset so the box is not left half-wiped"
 }
 
 cmd_reset() {
@@ -232,19 +300,22 @@ cmd_reset() {
 
   cd "$WAITRON_DIR"
   docker compose down
+  # db is removed FIRST and a failed removal ABORTS the reset before backups or state are touched, so
+  # a box whose database cannot be wiped is never left half-wiped and restarted against surviving data
+  # with its secrets already gone. A volume that is already absent is not a failure.
   local v
   for v in db logs media backups mailpit print_agent; do
-    docker volume rm -f "waitron_${v}" >/dev/null 2>&1 || true
+    rm_volume "waitron_${v}"
   done
   if [ "$all" -eq 1 ]; then
-    docker volume rm -f waitron_state >/dev/null 2>&1 || true
+    rm_volume waitron_state
   else
     # Empty state except tls/, keeping the CA + leaf so an already-trusting phone needs no new step.
     docker run --rm -v waitron_state:/s "$HELPER_IMAGE" \
       find /s -mindepth 1 -maxdepth 1 ! -name tls -exec rm -rf {} +
   fi
   docker compose up -d
-  if wait_healthy; then print_links; else report_unhealthy; fi
+  if wait_healthy; then announce_ready; else report_unhealthy; fi
 }
 
 main() {
