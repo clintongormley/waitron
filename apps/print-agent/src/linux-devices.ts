@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import dgram from "node:dgram";
+import net from "node:net";
+import { networkInterfaces } from "node:os";
 import type {
   DiscoveredDevice,
   Host,
@@ -10,14 +12,14 @@ import type {
 } from "@waitron/print-agent";
 import { type BluetoothHost, createBluetoothctlHost } from "./bluetooth.js";
 import { PDL_SERVICE, parsePdlResponse } from "./network.js";
-import { liveSweep, mergeDiscovered } from "./sweep.js";
+import { SWEEP_PORT, mergeDiscovered, sweepCandidates, sweepPort } from "./sweep.js";
 import { type UsbPrinter, readUsbPrinters } from "./usb.js";
 
 /**
  * The Linux implementation of the {@link Host} device seam (design §7) — USB from sysfs, network over
  * mDNS plus a port-9100 sweep, Bluetooth over BlueZ — composed from the transport-specific parsers. Every parser is pure and
- * tested; only the live I/O (spawning `bluetoothctl`, opening the mDNS multicast socket, binding an
- * RFCOMM node) sits behind an injectable seam, so this composition is exercised end to end with fakes
+ * tested; only the live I/O (spawning `bluetoothctl`, opening the mDNS multicast socket, opening a TCP
+ * socket to each swept address, binding an RFCOMM node) sits behind an injectable seam, so this composition is exercised end to end with fakes
  * and the untested surface is the thin process/socket wiring alone.
  */
 export interface LinuxDeviceOptions {
@@ -186,6 +188,26 @@ function liveBtDevicePath(mac: string): string {
 async function liveNetworkScan(): Promise<DiscoveredDevice[]> {
   const [announced, swept] = await Promise.all([liveMdnsScan(), liveSweep()]);
   return mergeDiscovered(announced, swept);
+}
+
+/** One TCP connect: accepted within `timeoutMs` → `true`; refused, unreachable or silent → `false`. */
+function liveTcpConnect(host: string, port: number, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const finish = (ok: boolean): void => {
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(timeoutMs, () => finish(false));
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+  });
+}
+
+/** The port-9100 sweep over the box's own subnets (`sweep.ts` decides the addresses and the fan-out). */
+function liveSweep(): Promise<DiscoveredDevice[]> {
+  const hosts = sweepCandidates({ interfaces: networkInterfaces });
+  return sweepPort({ hosts, port: SWEEP_PORT, connect: liveTcpConnect });
 }
 
 /** One mDNS `_pdl-datastream._tcp` query, collecting responses for a short window and decoding each

@@ -105,6 +105,7 @@ print-agent:
   image: ${WAITRON_PRINT_AGENT_IMAGE:-ghcr.io/clintongormley/waitron-print-agent:main}
   restart: unless-stopped
   network_mode: host                      # mDNS discovery on the LAN; the setup page binds 9110 directly
+                                          # (2026-09-11: the port-9100 sweep needs it too — see compose.yml)
   depends_on:
     app:
       condition: service_started          # not service_healthy: /health is 503 on a setup box

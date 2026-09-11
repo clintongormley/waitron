@@ -224,6 +224,12 @@ Verified on the real box with the arriving ESC/POS printer:
 - **Deferred, honestly:** the live Bluetooth path (the box has no adapter — no `hci`, nothing under
   `/sys/class/bluetooth`) and live mDNS discovery (no network printer on the LAN). Both seams and their
   parsers ship and are fixture-tested; the live radios/sockets are gated for a later receipt.
+  - _2026-09-11 (`feat/print-agent-9100-sweep`):_ the owner's Epson TM-T88III at 192.168.20.247
+    answered the ESC/POS `GS I 66`/`GS I 67` identity queries on TCP 9100 and appeared under no mDNS
+    service type (`dns-sd -B _services._dns-sd._udp` from a Mac that listed the HP on the same subnet),
+    so the §2c port-9100 sweep was built; a sweep of 192.168.20.0/24 from that Mac with the real connect
+    seam returned exactly the HP and the Epson. The sweep has not yet run on the box, which sits on
+    another VLAN and cannot reach either printer's subnet.
 
 ## 8. The agent loop and wire protocol
 

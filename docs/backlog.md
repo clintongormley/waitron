@@ -393,7 +393,9 @@ design-review section apply.
   /dev/usb/lp0` + `group_add 7` as the unprivileged `node` user (spec §7). The run-it review caught a
   production device-path bug (`/sys/dev/...` → `/dev/...`) the direct-write receipt had missed — fixed
   with a regression test. Bluetooth + live mDNS receipts DEFERRED (the box has no BT adapter and no
-  network printer on the LAN); the seams + parsers ship fixture-tested, gated for a later receipt.
+  network printer on the BOX's LAN; the 2026-09-11 Epson observation above was taken from a Mac on the
+  owner's other VLAN, and the sweep has not yet been run on the box); the seams + parsers ship
+  fixture-tested, gated for a later receipt.
   *Deferred follow-ups (surfaced at finish-branch, not taken):* extract an in-memory `createDiscoveredStore`
   from `mountPrintApi` (altitude); dedupe the `VisibleDeviceWire`/`DiscoveredDeviceWire` types against
   `@waitron/print-agent` via a type-only import IF `module-seams` permits; fold `#registerDiscovered` into

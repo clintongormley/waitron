@@ -1,16 +1,18 @@
-import net from "node:net";
-import { networkInterfaces } from "node:os";
+import type { networkInterfaces } from "node:os";
 import type { DiscoveredDevice } from "@waitron/print-agent";
 
 /**
  * The port-9100 sweep — the discovery fallback for IP printers that announce nothing over mDNS
- * (provisioning design §2c). A receipt printer's network card typically runs a raw ESC/POS listener on
- * TCP 9100 and no mDNS responder at all (an Epson TM-T88III on the owner's LAN, 2026-09-11), so the
- * mDNS pass alone never lists it. The sweep opens a TCP connection to every address on the box's own
- * IPv4 subnets and reports each one that accepts; it sends NO bytes, because a page printer on 9100
- * prints whatever it receives. It runs only inside a dashboard-opened discovery window, like the mDNS
- * pass. The pure pieces (subnet enumeration, the bounded fan-out, the merge) are unit-tested; only the
- * `net.connect` seam is live.
+ * (provisioning design §2c). Receipt, 2026-09-11, the owner's Epson TM-T88III at 192.168.20.247: the
+ * ESC/POS identity queries `GS I 66` / `GS I 67` over TCP 9100 answered `_EPSON` / `_TM-T88III`; a
+ * `dns-sd -B` over every advertised service type, from a Mac that lists the HP LaserJet on the same
+ * subnet, showed nothing for that address; and the box's own `_pdl-datastream._tcp` query got exactly one
+ * reply, the HP's. So the mDNS pass alone cannot list that printer. The sweep tries a TCP connection
+ * to every address on the box's own IPv4 subnets and reports each one that accepts; it sends NO bytes,
+ * because a page printer on 9100 prints whatever it receives. It runs only inside a dashboard-opened
+ * discovery window, like the mDNS pass. This module is pure — subnet enumeration, the bounded
+ * fan-out, the merge — like its siblings `network.ts` / `usb.ts`; the sockets live in
+ * `linux-devices.ts`'s gated block (`liveTcpConnect`, `liveSweep`).
  */
 
 /** The widest network the sweep will cover — a /22. Anything wider (a Docker bridge's /16, a wide
@@ -57,16 +59,37 @@ export function hostsInSubnet(cidr: string): string[] {
   return hosts;
 }
 
-/** The cidr of each non-internal IPv4 interface. Docker's bridges are NOT filtered by name here: their
- * /16 falls to {@link hostsInSubnet}'s cap, and a venue legitimately on a 172.x /24 is kept. */
-export function subnetsToSweep(interfaces: typeof networkInterfaces = networkInterfaces): string[] {
-  const out: string[] = [];
-  for (const entries of Object.values(interfaces())) {
+export interface SweepCandidateDeps {
+  /** Injected for tests; the live sweep passes `os.networkInterfaces`. */
+  interfaces: typeof networkInterfaces;
+}
+
+/** The addresses to probe: every non-internal IPv4 interface's subnet, each address once, with every
+ * one of the box's own addresses removed (two NICs on one subnet would otherwise probe each other and
+ * every host twice). Docker's bridges are not filtered by name — their /16 falls to
+ * {@link hostsInSubnet}'s cap, and a venue legitimately on a 172.x /24 is kept. Unlike the server's
+ * `listBoxIpv4` this does not read the default route: the agent imports nothing from `apps/server`,
+ * and the cap already bounds a bridge. */
+export function sweepCandidates(deps: SweepCandidateDeps): string[] {
+  const own = new Set<string>();
+  const cidrs: string[] = [];
+  for (const entries of Object.values(deps.interfaces())) {
     for (const e of entries ?? []) {
-      if (e.family === "IPv4" && !e.internal && e.cidr !== null) out.push(e.cidr);
+      if (e.family !== "IPv4" || e.internal) continue;
+      own.add(e.address);
+      if (e.cidr !== null) cidrs.push(e.cidr);
     }
   }
-  return out;
+  const seen = new Set<string>();
+  const hosts: string[] = [];
+  for (const cidr of cidrs) {
+    for (const h of hostsInSubnet(cidr)) {
+      if (own.has(h) || seen.has(h)) continue;
+      seen.add(h);
+      hosts.push(h);
+    }
+  }
+  return hosts;
 }
 
 export interface SweepOptions {
@@ -111,25 +134,3 @@ export function mergeDiscovered(
   const seen = new Set(announced.map((d) => `${d.host}:${d.port}`));
   return [...announced, ...swept.filter((d) => !seen.has(`${d.host}:${d.port}`))];
 }
-
-/* v8 ignore start -- opens real sockets; covered by the box receipt, not unit tests. */
-/** The live connect seam: accepted within `timeoutMs` → `true`; refused, unreachable or silent → `false`. */
-export function tcpConnectProbe(host: string, port: number, timeoutMs: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = net.connect({ host, port });
-    const finish = (ok: boolean): void => {
-      socket.destroy();
-      resolve(ok);
-    };
-    socket.setTimeout(timeoutMs, () => finish(false));
-    socket.once("connect", () => finish(true));
-    socket.once("error", () => finish(false));
-  });
-}
-
-/** The live sweep over every subnet the box sits on. */
-export async function liveSweep(): Promise<DiscoveredDevice[]> {
-  const hosts = subnetsToSweep().flatMap(hostsInSubnet);
-  return sweepPort({ hosts, port: SWEEP_PORT, connect: tcpConnectProbe });
-}
-/* v8 ignore stop */
