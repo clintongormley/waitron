@@ -1,0 +1,2 @@
+ALTER TABLE "payments" ADD COLUMN "reader_id" uuid;--> statement-breakpoint
+ALTER TABLE "payments" ADD CONSTRAINT "payments_reader_fk" FOREIGN KEY ("tenant_id","reader_id") REFERENCES "public"."card_readers"("tenant_id","id") ON DELETE restrict ON UPDATE no action;

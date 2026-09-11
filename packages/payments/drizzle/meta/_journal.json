@@ -50,6 +50,13 @@
       "when": 1789156085778,
       "tag": "0006_device_card_readers_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789156734501,
+      "tag": "0007_payment_reader_id",
+      "breakpoints": true
     }
   ]
 }
