@@ -2275,6 +2275,8 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
         model: "TM-T20",
         name: "EPSON TM-T20",
         alreadyRegistered: false,
+        printerId: null,
+        lastSeenAt: "2023-11-14T22:13:20.000Z",
       },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));

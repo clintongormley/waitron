@@ -390,7 +390,7 @@ design-review section apply.
   the venue, USB/Bluetooth by the box currently reporting the device's stable key; printers keyed on
   `local_key` (USB **serial** / BT **MAC**, survives reboot/replug), the agent resolves key→device
   path/channel at print time; the report is authorised by a new `print_jobs.claimed_by`. **All three
-  local transports are discoverable** (IP via mDNS + a 9100 sweep, pre-filling manual host:port entry —
+  local transports are discoverable** (IP via mDNS + a 9100 sweep, offering a one-click Add since 2026-09-11 — the manual host:port form is for printers the scan cannot see —
   MAC-keyed IP deferred; #304 shipped the mDNS pass alone and the backlog wrongly recorded the sweep
   as landed — the owner's Epson TM-T88III answers on 9100 and announces nothing over mDNS (observed from a Mac on
   the owner's other VLAN — provisioning spec §7, 2026-09-11 addendum), so the

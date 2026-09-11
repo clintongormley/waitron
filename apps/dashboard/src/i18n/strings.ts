@@ -404,8 +404,8 @@ export const en = {
   "printers.no_discovered": "No printers found yet — click Scan, or check the printer is on.",
   "printers.discovered_seen_on": "Seen on {agent}",
   "printers.register": "Register",
-  "printers.registered": "Registered",
-  "printers.use_result": "Use this",
+  "printers.add_result": "Add",
+  "printers.seen_at": "Seen on {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Pair a Bluetooth printer first on the box's setup page (port 9110); it then appears below.",
   "printers.test_print": "Test print",
@@ -1238,8 +1238,8 @@ export const es: Record<StringKey, string> = {
     "Aún no se ha detectado ninguna impresora — pulsa Buscar o comprueba que esté encendida.",
   "printers.discovered_seen_on": "Detectada en {agent}",
   "printers.register": "Dar de alta",
-  "printers.registered": "Dada de alta",
-  "printers.use_result": "Usar esta",
+  "printers.add_result": "Añadir",
+  "printers.seen_at": "Detectada en {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Empareja primero una impresora Bluetooth en la página de configuración del equipo (puerto 9110); después aparecerá abajo.",
   "printers.test_print": "Imprimir prueba",

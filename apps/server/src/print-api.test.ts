@@ -203,6 +203,21 @@ async function createUsbPrinter(app: Hono, localKey: string, name = "USB"): Prom
   return ((await res.json()) as { id: string }).id;
 }
 
+/** Create a network_tcp printer on host:port via the management route, returning its id. */
+async function createNetworkPrinter(
+  app: Hono,
+  host: string,
+  port: number,
+  name = "Network",
+): Promise<string> {
+  const res = await send(app, "POST", "/management-api/printers", {
+    cookie: managerCookie,
+    body: { name, transport: "network_tcp", host, port },
+  });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
 interface PullJob {
   id: string;
   printerId: string;
@@ -672,7 +687,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       scanned: [],
     });
     // Register only the first.
-    await createUsbPrinter(app, registeredSerial, "Registered USB");
+    const registeredId = await createUsbPrinter(app, registeredSerial, "Registered USB");
 
     const res = await send(app, "GET", "/management-api/discovered-printers", {
       cookie: managerCookie,
@@ -685,6 +700,8 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       localKey?: string;
       make?: string;
       alreadyRegistered: boolean;
+      printerId: string | null;
+      lastSeenAt: string;
     }[];
     const one = rows.find((r) => r.localKey === registeredSerial)!;
     const two = rows.find((r) => r.localKey === unregisteredSerial)!;
@@ -694,13 +711,80 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       transport: "usb",
       make: "Epson",
       alreadyRegistered: true,
+      printerId: registeredId,
     });
     expect(two).toMatchObject({
       agentId,
       agentName: "Inventory agent",
       transport: "usb",
       alreadyRegistered: false,
+      printerId: null,
     });
+    expect(one.lastSeenAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("GET /management-api/discovered-printers marks a scanned network printer registered by host+port", async () => {
+    // A network printer has no local key — it is keyed on host:port — so the scan result of one that is
+    // already registered carries that printer's id (the dashboard hides it from the results and shows
+    // "seen" against the registered row). Same host on another port is a different printer.
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Inventory agent");
+    // Each `it` mounts its own app and tenant; the random octets only keep two rows apart in the log.
+    const [a, b] = randomUUID().split("-")[0]!.match(/../g)!;
+    const host = `10.9.${parseInt(a!, 16) % 250}.${parseInt(b!, 16) % 250}`;
+    const printerId = await createNetworkPrinter(app, host, 9100, "Counter");
+    const before = Date.now();
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        { transport: "network_tcp", host, port: 9100, name: "Epson" },
+        { transport: "network_tcp", host, port: 9101 },
+      ],
+    });
+
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as {
+      host?: string;
+      port?: number;
+      alreadyRegistered: boolean;
+      printerId: string | null;
+      lastSeenAt: string;
+    }[];
+    const matched = rows.find((r) => r.host === host && r.port === 9100)!;
+    expect(matched).toMatchObject({ alreadyRegistered: true, printerId });
+    // The report time travels as an ISO instant, like every other timestamp on the management wire.
+    expect(Date.parse(matched.lastSeenAt)).toBeGreaterThanOrEqual(before);
+    expect(rows.find((r) => r.host === host && r.port === 9101)).toMatchObject({
+      alreadyRegistered: false,
+      printerId: null,
+    });
+  });
+
+  it("GET /management-api/discovered-printers matches a registered printer whose port is null on 9100", async () => {
+    // A cleared port is stored as null and printing treats it as 9100 (the transport's default), so a
+    // scan on 9100 must still match it — otherwise a working printer reappears as unregistered.
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Inventory agent");
+    const host = "10.9.250.1";
+    const printerId = await createNetworkPrinter(app, host, 9100, "Counter");
+    const cleared = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+      cookie: managerCookie,
+      body: { port: null },
+    });
+    expect(cleared.status).toBe(204);
+    await pull(app, token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, port: 9100 }],
+    });
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { host?: string; printerId: string | null }[];
+    expect(rows.find((r) => r.host === host)).toMatchObject({ printerId });
   });
 
   it("POST /management-api/printers with a duplicate local_key → 409 printer.already_registered", async () => {

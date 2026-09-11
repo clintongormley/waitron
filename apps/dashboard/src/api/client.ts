@@ -1055,8 +1055,9 @@ export interface PrinterInput {
  * scan (central printer provisioning §9). `usb`/`bluetooth` devices carry a stable `localKey`; a freshly
  * scanned `network_tcp` printer carries `host`/`port` and may have no `localKey`. `agentName` is the box
  * that reported it (null if it since went away), `make`/`model`/`name` its self-reported identity when
- * known, and `alreadyRegistered` is true when its `localKey` already names a registered printer — those
- * rows are shown marked, with no Register action. Unregistered devices come first (server order). */
+ * known, and `alreadyRegistered` is true when it matches a registered printer — a usb/bluetooth device
+ * on its `localKey`, a network device on host:port — with `printerId` saying which; both discovered lists
+ * hide those rows and the registered printer's own row shows when it was seen. */
 export interface DiscoveredPrinter {
   agentId: string;
   agentName: string | null;
@@ -1068,6 +1069,10 @@ export interface DiscoveredPrinter {
   model?: string | null;
   name?: string | null;
   alreadyRegistered: boolean;
+  /** The registered printer this device matches (usb/bluetooth on `localKey`, network on host:port), or null. */
+  printerId: string | null;
+  /** ISO instant of the agent report that last carried this device. */
+  lastSeenAt: string;
 }
 
 /** The `PATCH /management-api/printers/:id` body — mirrors `@waitron/printing`'s `UpdatePrinterInput`.
@@ -2359,9 +2364,10 @@ export class DashboardApi {
   }
 
   /** `GET /management-api/discovered-printers` — the merged in-memory list of devices the agents
-   * currently see (always-on USB/BT presence) or found in an open discovery window, unregistered first.
-   * Each carries whether its stable id already names a registered printer, so the create surface can
-   * offer a Register action on the new ones and mark the rest. */
+   * currently see (always-on USB/BT presence) or found in an open discovery window.
+   * Each carries the registered printer it matches (`printerId`, on the local key or on host:port) and
+   * when it was last reported (`lastSeenAt`): the create surfaces list only the unmatched ones, and the
+   * registered list shows the seen-status against the matched printer. */
   listDiscoveredPrinters(): Promise<DiscoveredPrinter[]> {
     return this.#request<DiscoveredPrinter[]>("/management-api/discovered-printers", "GET");
   }
