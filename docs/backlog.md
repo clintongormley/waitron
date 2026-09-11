@@ -1753,18 +1753,24 @@ genuinely-decision-bearing.
 
 **SumUp:**
 
-- **BUG (found 2026-09-11, live): the SumUp adapter sends the refund amount in the WRONG UNIT.**
-  `SumUpClient.refund` builds the body with `toMajorUnits(p.amount)`
-  (`packages/payments-sumup/src/sumup-client.ts:116`), i.e. euros, but the documented `v1.0` refund
-  endpoint takes `amount` in MINOR units (integer cents) like the checkout `value`. A partial refund
-  therefore sends `0.40`, which truncates to `0` cents, so SumUp refunds €0.00 and returns `HTTP 201`;
-  `refund()` reports `accepted` (HTTP-only), so `reverseViaSumUp`'s partial path records a refund that
-  never happened. Proven decisively: `{amount:40}` (integer) refunds €0.40 on `v1.0`. FULL refunds
-  send no amount (empty body) and are unaffected. Fix: send `toMinorUnits(p.amount)` — stay on the
-  documented `v1.0` endpoint, no route change — plus a regression test on the sent unit and (in the
-  contract test) that the balance actually moved. Evidence + the corrected diagnosis (an earlier
-  "use v0.2" reading was a false claim):
+- **Refund unit bug — LANDED #312.** The SumUp adapter sent the refund `amount` in euros
+  (`toMajorUnits`) to an endpoint that reads MINOR units (integer cents), so a partial refund sent
+  `0.40`, truncated to `0` cents, and refunded €0.00 while reporting `accepted` — `reverseViaSumUp`'s
+  partial path recorded a refund that never happened. Fixed to `toMinorUnits` on the documented `v1.0`
+  endpoint; `toMajorUnits` (orphaned by the fix) removed. Proven on the live reader: `{amount:40}`
+  refunds €0.40, `{amount:0.40}` nothing. (An in-flight diagnosis — "the v1.0 route is broken, switch
+  to v0.2" — was a false claim, corrected before the fix; the older `/v0.2/refund` route reads euros
+  and is undocumented.) Evidence:
   [research/2026-09-10-sumup-solo-experiments.md](research/2026-09-10-sumup-solo-experiments.md) §4b.
+- **Follow-up (from the #312 work): a SumUp API drift-detection test suite.** Every reader flow can
+  be exercised WITHOUT a physical reader or real funds via SumUp's **Virtual Solo** paired to a
+  **sandbox merchant account** — it auto-approves payments, so a CI job can pair, checkout, capture,
+  read the transaction (asserting the fields the adapter depends on: `card.last_4_digits`,
+  `card.type`, `entry_mode`, `auth_code`, `status`) and refund, catching API drift. Blind spot: the
+  Virtual Solo auto-approves, so failure paths (decline, wrong PIN) stay in the human sandbox suite
+  against the physical reader. Pair it with a static shape-pin of SumUp's published OpenAPI file for
+  the routes/enums the Virtual Solo can't drive. Needs a sandbox account + a CI secret. Would have
+  caught the #312 refund-unit surprise.
 - **Also from the 4a run: a refund is a SEPARATE `type: REFUND` transaction** (its own id, linked to
   the original by `transaction_code`; what the dashboard lists as a *Rimborso*), AND a `REFUND` event
   on the original. The original payment's top-level `status` never flips — it stays `SUCCESSFUL`,

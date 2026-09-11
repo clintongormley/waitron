@@ -657,6 +657,11 @@ and add a regression test that asserts the amount SENT is minor units (and, in t
 contract test, that the balance actually moved). A FULL refund sends no amount (empty body) and was
 never affected. Logged to the backlog SumUp debt.
 
+**Fixed 2026-09-11 (#312):** the adapter now sends `toMinorUnits(p.amount)` on the `v1.0` endpoint,
+and the orphaned `toMajorUnits` helper was removed. The paragraph above records what shipped BEFORE
+that fix; it is left unedited as the experiment log, per CLAUDE.md §6 (historical docs get a dated
+pointer, not a rewrite).
+
 ### 4c. What the customer and the fee report see (a few days later)
 
 Open the card's statement or banking app on 2026-09-14 or later, and the SumUp dashboard's
