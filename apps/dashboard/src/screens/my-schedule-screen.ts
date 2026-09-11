@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
@@ -144,6 +145,13 @@ export class MyScheduleScreen extends LitElement {
 
   /** The HTTP face of the dashboard. Set before the element connects (its lifecycle loads the schedule). */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.loadFailed = true;
+    },
+  );
   /** The logged-in person's id (from the shell's `getMe`) — filtered out of the colleague picker (you
    * cannot offer to yourself) and used to name a swap's OTHER party. */
   @property() myPersonId = "";
@@ -189,7 +197,9 @@ export class MyScheduleScreen extends LitElement {
    */
   async #load(): Promise<void> {
     try {
-      this.roster = await this.api.getStaffRoster();
+      await this.#queries.watch("getStaffRoster", [], (value) => {
+        this.roster = value;
+      });
       await this.#loadLists();
       this.loadFailed = false;
     } catch {
@@ -204,14 +214,17 @@ export class MyScheduleScreen extends LitElement {
   /** Reload just the three lists (not the roster). Throws to its caller's catch. */
   async #loadLists(): Promise<void> {
     const { from, to } = this.#window();
-    const [shifts, swaps, absences] = await Promise.all([
-      this.api.listMyShifts(from, to),
-      this.api.listMySwaps(),
-      this.api.listMyAbsences(),
+    await Promise.all([
+      this.#queries.watch("listMyShifts", [from, to], (value) => {
+        this.shifts = value;
+      }),
+      this.#queries.watch("listMySwaps", [], (value) => {
+        this.swaps = value;
+      }),
+      this.#queries.watch("listMyAbsences", [], (value) => {
+        this.absences = value;
+      }),
     ]);
-    this.shifts = shifts;
-    this.swaps = swaps;
-    this.absences = absences;
   }
 
   /** Run an action guarded by `busy`, surfacing a rejected `{ code }` as a non-fatal banner (never the

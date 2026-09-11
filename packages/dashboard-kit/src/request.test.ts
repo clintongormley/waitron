@@ -12,6 +12,18 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+it("marks automatic reads as passive without reporting session activity", async () => {
+  const fetchImpl = vi.fn<FetchLike>().mockImplementation(async () => jsonResponse({ count: 2 }));
+  const onSuccess = vi.fn();
+  const request = createRequest({ fetchImpl, onSuccess });
+  await request("/management-api/print-jobs", "GET", undefined, { passive: true });
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
+  expect(onSuccess).not.toHaveBeenCalled();
+  await request("/management-api/printers", "POST", { name: "Kitchen" }, { passive: true });
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).has("x-waitron-live")).toBe(false);
+  expect(onSuccess).toHaveBeenCalledOnce();
+});
+
 it("prefixes baseUrl, sends credentials, and resolves the parsed JSON body of a 200", async () => {
   const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({ ok: true }));
   const request = createRequest({ baseUrl: "https://api.test", fetchImpl });

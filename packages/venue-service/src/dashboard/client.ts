@@ -1,4 +1,4 @@
-import type { DashboardRequest } from "@waitron/dashboard-kit";
+import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 
 export type ServiceMode = "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
 export interface Department {
@@ -95,25 +95,37 @@ export interface MenuOffer {
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
 export class VenueServiceApi {
-  constructor(private readonly request: DashboardRequest) {}
+  constructor(
+    private readonly request: DashboardRequest,
+    readonly liveData?: LiveData,
+    private readonly passive = false,
+  ) {}
+
+  get background(): VenueServiceApi {
+    return new VenueServiceApi(this.request, this.liveData, true);
+  }
+
+  #read<T>(path: string): Promise<T> {
+    return this.request<T>(path, "GET", undefined, { passive: this.passive });
+  }
 
   async load(): Promise<VenueServiceView> {
     const [model, menus, categories, stations, floorZones] = await Promise.all([
-      this.request<VenueServiceModel>("/management-api/venue-service", "GET"),
-      this.request<VenueServiceChoices["menus"]>("/management-api/catalogues", "GET"),
-      this.request<NamedRow[]>("/management-api/categories", "GET"),
-      this.request<VenueServiceChoices["stations"]>("/management-api/stations", "GET"),
-      this.request<FloorZone[]>("/management-api/zones", "GET"),
+      this.#read<VenueServiceModel>("/management-api/venue-service"),
+      this.#read<VenueServiceChoices["menus"]>("/management-api/catalogues"),
+      this.#read<NamedRow[]>("/management-api/categories"),
+      this.#read<VenueServiceChoices["stations"]>("/management-api/stations"),
+      this.#read<FloorZone[]>("/management-api/zones"),
     ]);
     const [productLists, offerLists] = await Promise.all([
       Promise.all(
         menus.map((menu) =>
-          this.request<Product[]>(`/management-api/catalogues/${menu.id}/products`, "GET"),
+          this.#read<Product[]>(`/management-api/catalogues/${menu.id}/products`),
         ),
       ),
       Promise.all(
         menus.map((menu) =>
-          this.request<MenuOffer[]>(`/management-api/catalogues/${menu.id}/offers`, "GET"),
+          this.#read<MenuOffer[]>(`/management-api/catalogues/${menu.id}/offers`),
         ),
       ),
     ]);

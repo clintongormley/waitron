@@ -1,4 +1,5 @@
 import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import type { ChangeSource } from "@waitron/shared";
 
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
@@ -28,3 +29,7 @@ export const WORKFORCE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("availability", "state", STATE),
   classify("roster_versions", "state", STATE),
 ];
+
+export const WORKFORCE_CHANGE_SOURCES: readonly ChangeSource[] = WORKFORCE_CLASSIFICATION.map(
+  ({ table }) => ({ table, type: table }),
+);

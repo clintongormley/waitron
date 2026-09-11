@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, OverdueOrder, SalesOverview } from "../api/client.js";
@@ -284,6 +285,8 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
         getOverdueOrders: vi.fn().mockResolvedValue({ orders: overdueOrders }),
       });
       const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
       const root = el.shadowRoot!;
       const state = () =>
         el as unknown as { overviewErrorKey: string | null; overdueErrorKey: string | null };
@@ -379,4 +382,20 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
       host.remove();
     }
   });
+});
+
+it("updates today's sales cards after a sale elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
+  await vi.waitFor(() => expect(api.getSalesOverview).toHaveBeenCalledOnce());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  vi.mocked(api.getSalesOverview).mockResolvedValue({
+    ...overview,
+    counts: { ...overview.counts, sales: 101 },
+  });
+  liveData.invalidate([{ type: "sales", id: "new-sale" }]);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=count-sales]")?.textContent).toContain("101"),
+  );
 });

@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DailyCloseDto, DashboardApi, SalesPeriodDto } from "../api/client.js";
@@ -240,4 +241,17 @@ describe("dashboard-sales-screen", () => {
     expect(api.getDailyClose).toHaveBeenCalledTimes(1);
     expect(api.getSalesPeriod).not.toHaveBeenCalled();
   });
+});
+
+it("refreshes the selected daily report after a sale", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>("dashboard-sales-screen", {
+    api,
+  });
+  await vi.waitFor(() => expect((el as unknown as { close: unknown }).close).toEqual(close));
+  const updated = { ...close, businessDay: "2030-01-01" };
+  vi.mocked(api.getDailyClose).mockResolvedValue(updated);
+  liveData.invalidate([{ type: "sales", id: "new-sale" }]);
+  await vi.waitFor(() => expect((el as unknown as { close: unknown }).close).toEqual(updated));
 });

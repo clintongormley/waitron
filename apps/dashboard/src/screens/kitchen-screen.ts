@@ -1,3 +1,5 @@
+import { DraftRows } from "@waitron/dashboard-kit";
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
@@ -151,6 +153,15 @@ export class KitchenScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #stationsDrafts = new DraftRows<EditableStation>();
+  readonly #coursesDrafts = new DraftRows<EditableCourse>();
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   // The configured stations as editable rows, loaded on connect and re-synced after every mutation.
   @state() private submitting = false;
@@ -180,30 +191,31 @@ export class KitchenScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [stations, courses, fire] = await Promise.all([
-        this.api.listStations(),
-        this.api.listCourses(),
-        this.api.getFireControl(),
+      await Promise.all([
+        this.#queries.watch("listStations", [], (rows) => {
+          this.stations = this.#stationsDrafts.merge(
+            this.stations,
+            rows.map((s: Station) => ({
+              id: s.id,
+              name: s.name,
+              displayOrder: s.displayOrder,
+              isDefault: s.isDefault,
+              warmAfterMinutes: s.warmAfterMinutes ?? 5,
+              overdueAfterMinutes: s.overdueAfterMinutes ?? 10,
+              forgottenAfterMinutes: s.forgottenAfterMinutes ?? 15,
+            })),
+          );
+        }),
+        this.#queries.watch("listCourses", [], (rows) => {
+          this.courses = this.#coursesDrafts.merge(
+            this.courses,
+            rows.map((c: Course) => ({ id: c.id, name: c.name, displayOrder: c.displayOrder })),
+          );
+        }),
+        this.#queries.watch("getFireControl", [], (fire) => {
+          this.fireControl = fire.mode;
+        }),
       ]);
-      this.stations = stations.map((s: Station) => ({
-        id: s.id,
-        name: s.name,
-        displayOrder: s.displayOrder,
-        isDefault: s.isDefault,
-        // The `??` fallbacks are defensive, not the normal path — the server's `listStations` always
-        // selects these columns (they carry NOT NULL defaults 5/10/15), but a runtime payload crossing
-        // the wire is never actually type-checked, so a stale/partial response still seeds a sane form
-        // rather than `undefined` inputs.
-        warmAfterMinutes: s.warmAfterMinutes ?? 5,
-        overdueAfterMinutes: s.overdueAfterMinutes ?? 10,
-        forgottenAfterMinutes: s.forgottenAfterMinutes ?? 15,
-      }));
-      this.courses = courses.map((c: Course) => ({
-        id: c.id,
-        name: c.name,
-        displayOrder: c.displayOrder,
-      }));
-      this.fireControl = fire.mode;
     } catch (error) {
       this.errorKey = codeOf(error);
     }

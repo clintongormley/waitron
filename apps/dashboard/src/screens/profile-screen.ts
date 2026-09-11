@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -124,6 +125,13 @@ export class ProfileScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.error = codeMessage(codeOf(error));
+    },
+  );
   @property({ attribute: false }) navigate: (url: string) => void = (url) =>
     window.location.assign(url);
   @state() private profile: OwnProfile | null = null;
@@ -149,17 +157,20 @@ export class ProfileScreen extends LitElement {
   }
   async #load(): Promise<void> {
     try {
-      const [profile, locales, google] = await Promise.all([
-        this.api.getProfile(),
-        this.api.getLocales(),
-        this.api.getGoogleConfig(),
+      await Promise.all([
+        this.#queries.watch("getProfile", [], (value) => {
+          this.profile = value;
+        }),
+        this.#queries.watch("getGoogleConfig", [], (value) => {
+          this.googleConfigured = value.configured;
+          this.privacyNoticeUrl = value.privacyNoticeUrl ?? "";
+        }),
+        this.api.getLocales().then((locales) => {
+          if (!this.isConnected) return;
+          this.locales = locales.locales;
+          this.venueLocale = locales.venueDefault;
+        }),
       ]);
-      if (!this.isConnected) return;
-      this.profile = profile;
-      this.locales = locales.locales;
-      this.venueLocale = locales.venueDefault;
-      this.googleConfigured = google.configured;
-      this.privacyNoticeUrl = google.privacyNoticeUrl ?? "";
     } catch (error) {
       this.error = codeMessage(codeOf(error));
     }

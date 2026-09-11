@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
@@ -120,6 +121,13 @@ export class StaffScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
   @property({ attribute: false }) currentPersonId: string | null = null;
   @state() private people: PersonSummary[] = [];
   @state() private formOpen = false;
@@ -179,7 +187,9 @@ export class StaffScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      this.people = await this.api.listStaff();
+      await this.#queries.watch("listStaff", [], (value) => {
+        this.people = value;
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }

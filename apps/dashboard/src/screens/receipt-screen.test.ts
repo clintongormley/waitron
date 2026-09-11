@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -256,3 +257,27 @@ it.each([
     );
   },
 );
+
+it("refreshes clean receipt fields while preserving an unsaved header", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi({}, { headerSubtitle: "Before", footerMessage: "Before" }), {
+    liveData,
+  });
+  const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+  await flush(el);
+  el.shadowRoot!.querySelector("[data-test=header-subtitle]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Unsaved" } }),
+  );
+  vi.mocked(api.getReceipt).mockResolvedValue({
+    receipt: { headerSubtitle: "Elsewhere", footerMessage: "Updated" },
+  });
+  liveData.invalidate([{ type: "tenant_receipts" }]);
+  await vi.waitFor(() =>
+    expect(
+      (el.shadowRoot!.querySelector("[data-test=footer-message]") as HTMLTextAreaElement).value,
+    ).toBe("Updated"),
+  );
+  expect(
+    (el.shadowRoot!.querySelector("[data-test=header-subtitle]") as HTMLInputElement).value,
+  ).toBe("Unsaved");
+});

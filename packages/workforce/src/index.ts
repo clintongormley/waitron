@@ -98,3 +98,4 @@ export { WORKFORCE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 // from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
 // See errors.reachability.test.ts.
 import "./errors.js";
+export { WORKFORCE_CHANGE_SOURCES } from "./classification.js";

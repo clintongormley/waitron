@@ -1,3 +1,4 @@
+import type { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 
 // The bookings dashboard sub-path's HTTP face. These are LOCAL copies of the server's booking JSON
@@ -81,14 +82,24 @@ export interface DashboardTable {
 export class BookingApi {
   readonly #request: DashboardRequest;
 
-  constructor(request: DashboardRequest) {
+  constructor(
+    request: DashboardRequest,
+    readonly liveData?: LiveData,
+    private readonly passive = false,
+  ) {
     this.#request = request;
+  }
+
+  get background(): BookingApi {
+    return new BookingApi(this.#request, this.liveData, true);
   }
 
   /** `GET /management-api/bookings?date=YYYY-MM-DD` — the location's reservations for that wall-clock
    * day, ordered by time (all statuses; the screen filters/labels them). */
   listBookings(date: string): Promise<Booking[]> {
-    return this.#request<Booking[]>(`/management-api/bookings?date=${date}`, "GET");
+    return this.#request<Booking[]>(`/management-api/bookings?date=${date}`, "GET", undefined, {
+      passive: this.passive,
+    });
   }
 
   /** `POST /management-api/bookings` — create a `booked` reservation from its plain local date+time and
@@ -128,6 +139,8 @@ export class BookingApi {
   /** `GET /management-api/tables` — the venue's ACTIVE dining tables, by label. Populates the form's
    * table picker + the seat prompt (bookings-screen.ts calls it on connect). */
   listTables(): Promise<DashboardTable[]> {
-    return this.#request<DashboardTable[]>("/management-api/tables", "GET");
+    return this.#request<DashboardTable[]>("/management-api/tables", "GET", undefined, {
+      passive: this.passive,
+    });
   }
 }

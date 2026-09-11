@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -494,3 +495,18 @@ it.each([
     );
   },
 );
+
+it("refreshes displayed stations when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-kitchen-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["stations"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listStations).mockResolvedValue([]);
+  liveData.invalidate([{ type: "kitchen_stations", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listStations).toHaveBeenCalledTimes(2);
+});

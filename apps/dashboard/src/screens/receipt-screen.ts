@@ -1,3 +1,5 @@
+import { DraftRows } from "@waitron/dashboard-kit";
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
@@ -81,6 +83,14 @@ export class ReceiptScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #draft = new DraftRows<{ id: string; headerSubtitle: string; footerMessage: string }>();
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   // The two authored trim strings, loaded from the receipt config on connect and composed back on
   // Guardar. Held as plain strings (never `undefined`) so the fields bind cleanly; a blank one is
@@ -103,9 +113,26 @@ export class ReceiptScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const { receipt } = await this.api.getReceipt();
-      this.headerSubtitle = receipt.headerSubtitle ?? "";
-      this.footerMessage = receipt.footerMessage ?? "";
+      await this.#queries.watch("getReceipt", [], ({ receipt }) => {
+        const [merged] = this.#draft.merge(
+          [
+            {
+              id: "receipt",
+              headerSubtitle: this.headerSubtitle,
+              footerMessage: this.footerMessage,
+            },
+          ],
+          [
+            {
+              id: "receipt",
+              headerSubtitle: receipt.headerSubtitle ?? "",
+              footerMessage: receipt.footerMessage ?? "",
+            },
+          ],
+        );
+        this.headerSubtitle = merged!.headerSubtitle;
+        this.footerMessage = merged!.footerMessage;
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }

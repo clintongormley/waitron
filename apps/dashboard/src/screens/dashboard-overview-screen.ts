@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -8,35 +9,11 @@ import { metricStyles, renderMetric } from "../widgets/metric-row.js";
 import { renderTopSellers, type TopSellersLabels } from "../widgets/top-sellers-table.js";
 import type { DashboardApi, OverdueOrder, SalesOverview } from "../api/client.js";
 
-/** How often the overdue-orders tile refetches while this screen is connected (KDS order-timing
- * alerts, design §7.4): this is the ONE dashboard screen that polls — a passive monitoring board, not
- * a push subscriber. 30s balances staleness against load; the ticket ages it reports move in minutes,
- * so sub-30s freshness buys nothing. */
+/** Clock fallback for hosts that do not provide the shared observed-query cache. */
 const OVERDUE_REFRESH_MS = 30_000;
 
-/**
- * The management dashboard's BUSINESS-OVERVIEW HOME SCREEN (design §3 — "today at a glance"): the
- * post-login landing for non-staff roles (registered in Task 9). It reads this node's TODAY figures
- * once via `api.getSalesOverview()` and lays them out as `wt-card`s — takings, record counts, open
- * tables, and a top-sellers list. It also surfaces the KDS order-timing alerts' "orders taking too
- * long" count tile + list (design §7.4), fetched alongside the rest on connect and then RE-POLLED
- * every {@link OVERDUE_REFRESH_MS} — the only field on this screen that goes stale between visits, so
- * it is the only one that refetches on a timer rather than only on connect. Otherwise read-only: it
- * authors nothing.
- *
- * Money fields arrive pre-formatted as decimal strings from the server and are rendered verbatim
- * (there is no client-side currency formatter in this app; §Task-7 brief). Top-seller names come from
- * a per-locale `descriptions` map resolved through the shared {@link localizedName} helper.
- *
- * The two data sources have INDEPENDENT error state (fix round 2) — `overviewErrorKey` for
- * `getSalesOverview()` (rendered as the top banner) and `overdueErrorKey` for `getOverdueOrders()`
- * (rendered inline on the overdue tile) — rather than one shared `errorKey`. A shared field was tried
- * first and reverted: `overview` has no retry/poll of its own, so once it failed, the very next
- * successful overdue poll tick (near-certain within ~30s) would clear the ONE shared field and make
- * the banner vanish while the overview cards stayed blank forever with no error indication at all —
- * worse than the stuck-banner bug the shared field was fixing. Splitting the field removes that
- * interaction entirely: neither source's success or failure can touch the other's error state.
- */
+/** Sales and overdue orders have independent snapshots and error states: recovery of one read must
+ * not hide a failure in the other. Server values refresh through their own query dependencies. */
 @customElement("dashboard-overview-screen")
 export class OverviewScreen extends LitElement {
   static override styles = [
@@ -100,6 +77,20 @@ export class OverviewScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
 
+  readonly #overviewQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.overviewErrorKey = codeOf(error);
+    },
+  );
+  readonly #overdueQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.overdueErrorKey = codeOf(error);
+    },
+  );
   @state() private overview: SalesOverview | null = null;
   @state() private overdueOrders: OverdueOrder[] | null = null;
   @state() private overviewErrorKey: string | null = null;
@@ -119,10 +110,11 @@ export class OverviewScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
-    this.#overdueTimer = setInterval(() => {
-      if (this.#overdueInFlight) return;
-      void this.#loadOverdue();
-    }, OVERDUE_REFRESH_MS);
+    if (this.api.liveData === undefined)
+      this.#overdueTimer = setInterval(() => {
+        if (this.#overdueInFlight) return;
+        void this.#loadOverdue();
+      }, OVERDUE_REFRESH_MS);
   }
 
   override disconnectedCallback(): void {
@@ -147,32 +139,23 @@ export class OverviewScreen extends LitElement {
    * `overdueErrorKey` (fix round 2: the two fields are fully independent, see the class doc). */
   async #loadOverview(): Promise<void> {
     try {
-      this.overview = await this.api.getSalesOverview();
-      this.overviewErrorKey = null;
+      await this.#overviewQuery.watch("getSalesOverview", [], (value) => {
+        this.overview = value;
+        this.overviewErrorKey = null;
+      });
     } catch (error) {
       this.overviewErrorKey = codeOf(error);
     }
   }
 
-  /**
-   * Fetch the overdue-orders snapshot and store it. Sets/clears ONLY `overdueErrorKey` — never
-   * `overviewErrorKey` (fix round 2, see the class doc for why a shared field was wrong). Used both
-   * by the initial `#load()` (concurrently with `#loadOverview`) and, alone, by the ~30s poll tick
-   * started in `connectedCallback` — a success SELF-HEALS a stale `overdueErrorKey` either way (fix
-   * round 1, Important-1: without this, the first failed tick in a multi-hour session left the note
-   * permanently stuck, since nothing else ever reset it). This is now safe in BOTH call sites because,
-   * unlike round 1's shared `errorKey`, clearing `overdueErrorKey` can never erase a genuine
-   * `overviewErrorKey` failure — they are different fields.
-   *
-   * The sales overview is not re-fetched on the poll tick — it is "today so far", not a live queue,
-   * so it does not go stale the way the overdue snapshot does.
-   */
+  /** Orders can cross an age threshold without a database write, so their query also observes time. */
   async #loadOverdue(): Promise<void> {
     this.#overdueInFlight = true;
     try {
-      const { orders } = await this.api.getOverdueOrders();
-      this.overdueOrders = orders;
-      this.overdueErrorKey = null;
+      await this.#overdueQuery.watch("getOverdueOrders", [], ({ orders }) => {
+        this.overdueOrders = orders;
+        this.overdueErrorKey = null;
+      });
     } catch (error) {
       this.overdueErrorKey = codeOf(error);
     } finally {

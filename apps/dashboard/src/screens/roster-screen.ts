@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -134,6 +135,13 @@ export class RosterScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   @state() private locations: LocationSummary[] = [];
   @state() private locationId = "";
@@ -174,17 +182,28 @@ export class RosterScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     this.breaches = [];
+    let initial = true;
     try {
-      const [locations, staff] = await Promise.all([this.api.getLocations(), this.api.listStaff()]);
-      this.locations = locations;
-      this.staff = staff;
-      if (locations.length === 0) {
-        this.locationId = "";
-        this.snapshot = { version: null, shifts: [] };
-        return;
-      }
-      this.locationId = resolveLocationSelection(locations, this.locationId);
-      await this.#loadRoster();
+      await Promise.all([
+        this.#queries.watch("listStaff", [], (value) => {
+          this.staff = value;
+        }),
+        this.#queries.watch("getLocations", [], async (locations) => {
+          this.locations = locations;
+          if (locations.length === 0) {
+            this.locationId = "";
+            this.#queries.release("getRoster");
+            this.snapshot = { version: null, shifts: [] };
+            return;
+          }
+          const selected = resolveLocationSelection(locations, this.locationId);
+          if (initial || selected !== this.locationId) {
+            initial = false;
+            this.locationId = selected;
+            await this.#loadRoster();
+          }
+        }),
+      ]);
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -192,7 +211,9 @@ export class RosterScreen extends LitElement {
 
   /** Load the selected location + week's roster snapshot. Throws to its caller's catch. */
   async #loadRoster(): Promise<void> {
-    this.snapshot = await this.api.getRoster(this.locationId, this.weekMonday);
+    await this.#queries.watch("getRoster", [this.locationId, this.weekMonday], (value) => {
+      this.snapshot = value;
+    });
   }
 
   /** The location picker emitted `location-changed`. `stopPropagation` keeps the composed event inside

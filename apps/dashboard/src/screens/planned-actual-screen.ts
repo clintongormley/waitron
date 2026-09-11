@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -82,6 +83,13 @@ export class PlannedActualScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   @state() private locations: LocationSummary[] = [];
   @state() private locationId = "";
@@ -101,17 +109,29 @@ export class PlannedActualScreen extends LitElement {
    * the selected location + week's rows. A rejection anywhere becomes the error banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
+    let initial = true;
     try {
-      const [locations, staff] = await Promise.all([this.api.getLocations(), this.api.listStaff()]);
-      this.locations = locations;
-      this.#names = personNameMap(staff);
-      if (locations.length === 0) {
-        this.locationId = "";
-        this.rows = [];
-        return;
-      }
-      this.locationId = resolveLocationSelection(locations, this.locationId);
-      await this.#loadRows();
+      await Promise.all([
+        this.#queries.watch("listStaff", [], (value) => {
+          this.#names = personNameMap(value);
+          this.requestUpdate();
+        }),
+        this.#queries.watch("getLocations", [], async (locations) => {
+          this.locations = locations;
+          if (locations.length === 0) {
+            this.locationId = "";
+            this.#queries.release("getPlannedVsActual");
+            this.rows = [];
+            return;
+          }
+          const selected = resolveLocationSelection(locations, this.locationId);
+          if (initial || selected !== this.locationId) {
+            initial = false;
+            this.locationId = selected;
+            await this.#loadRows();
+          }
+        }),
+      ]);
     } catch (error) {
       this.#fail(error);
     }
@@ -119,10 +139,12 @@ export class PlannedActualScreen extends LitElement {
 
   /** Load the selected location + week's comparison rows. Throws to its caller's catch. */
   async #loadRows(): Promise<void> {
-    this.rows = await this.api.getPlannedVsActual(
-      this.locationId,
-      this.weekMonday,
-      weekEnd(this.weekMonday),
+    await this.#queries.watch(
+      "getPlannedVsActual",
+      [this.locationId, this.weekMonday, weekEnd(this.weekMonday)],
+      (value) => {
+        this.rows = value;
+      },
     );
   }
 

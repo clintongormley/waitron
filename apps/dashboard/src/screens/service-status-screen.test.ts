@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -304,3 +305,18 @@ it.each([
     );
   },
 );
+
+it("refreshes displayed statuses when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-service-status-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["statuses"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listStatuses).mockResolvedValue([]);
+  liveData.invalidate([{ type: "table_service_statuses", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listStatuses).toHaveBeenCalledTimes(2);
+});

@@ -362,6 +362,7 @@ export class DashboardApp extends LitElement {
    * typed client on it). `main.ts` injects one built from the SAME instrumented fetch as `api`; a test
    * injects a stub. Assigned as a property (`attribute: false`) — it cannot travel through an attribute. */
   @property({ attribute: false }) request!: DashboardRequest;
+  @property({ attribute: false }) liveUpdates?: { start(): void; stop(): void };
 
   /** Which screen is showing. Defaults to `login`, so a cold load never flashes a logged-in face
    * before the probe confirms a session (see the class doc). A CoreScreen literal or an active module's
@@ -495,6 +496,7 @@ export class DashboardApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.liveUpdates?.stop();
     this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
     this.#breakpoint = undefined;
     window.removeEventListener("waitron-session-invalid", this.#onSessionInvalid);
@@ -610,6 +612,7 @@ export class DashboardApp extends LitElement {
       );
     }
     this.sessionRole = me.role;
+    this.liveUpdates?.start();
     this.#sessionPermissions = me.permissions;
     // Activate ONLY the enabled modules (`me.modules`) before resolving the permitted screen, so a URL
     // naming an enabled module's own screen id is recognised while a disabled module's is not.
@@ -644,6 +647,7 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null): void {
+    this.liveUpdates?.stop();
     this.sessionGeneration += 1;
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
@@ -690,7 +694,7 @@ export class DashboardApp extends LitElement {
       registerCatalogue(c.strings);
       this.#activeScreens.set(c.screen.id, {
         contribution: c,
-        handle: c.create({ request: this.request }),
+        handle: c.create({ request: this.request, liveData: this.api.liveData }),
       });
       if (this.#sessionPermissions.includes(c.screen.requiresPermission)) {
         const group = this.#navGroups.get(c.screen.group) ?? [];

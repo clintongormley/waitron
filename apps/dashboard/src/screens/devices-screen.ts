@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
@@ -201,6 +202,13 @@ export class DevicesScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   // Whether an accept is in flight — a second tap on a number while the first is unanswered would
   // race a request the server may already have consumed, so the choices disable until it settles.
@@ -292,33 +300,29 @@ export class DevicesScreen extends LitElement {
     this.armedRevokeId = null;
     this.armedDenyId = null;
     try {
-      const [devices, stations, deviceProfiles, printers, tills, pairing, pendingJoins] =
-        await Promise.all([
-          this.api.listDevices(),
-          this.api.listStations(),
-          // This screen is `device.manage`-gated, but four of these feeds are not: `listStations` and
-          // `listDeviceProfiles` are `till.configure`-gated (apps/server/src/management-api.ts, the
-          // `withVenueAuth` helper and the device-profiles list route), and `listPrinters` /
-          // `listTills` are `printer.manage`-gated (apps/server/src/print-api.ts's `gated` helper).
-          // The mismatch is unreachable today: all four permissions sit in the {manager, admin} set
-          // (`MANAGER` in packages/identity/src/permissions.ts carries `till.configure`,
-          // `device.manage` and `printer.manage`; admin holds ALL), so every user who reaches this
-          // screen holds them. That is a claim about the ROLE MAP, not about the permissions — if a
-          // custom role ever holds `device.manage` alone, these four reject and this screen needs
-          // `device.manage`-gated variants of them.
-          this.api.listDeviceProfiles(),
-          this.api.listPrinters(),
-          this.api.listTills(),
-          this.api.pairingMode(),
-          this.api.joinRequests("device"),
-        ]);
-      this.devices = devices;
-      this.stations = stations;
-      this.deviceProfiles = deviceProfiles;
-      this.printers = printers;
-      this.tills = tills;
-      this.pairing = pairing;
-      this.pendingJoins = pendingJoins;
+      await Promise.all([
+        this.#queries.watch("listDevices", [], (value) => {
+          this.devices = value;
+        }),
+        this.#queries.watch("listStations", [], (value) => {
+          this.stations = value;
+        }),
+        this.#queries.watch("listDeviceProfiles", [], (value) => {
+          this.deviceProfiles = value;
+        }),
+        this.#queries.watch("listPrinters", [], (value) => {
+          this.printers = value;
+        }),
+        this.#queries.watch("listTills", [], (value) => {
+          this.tills = value;
+        }),
+        this.#queries.watch("pairingMode", [], (value) => {
+          this.pairing = value;
+        }),
+        this.#queries.watch("joinRequests", ["device"], (value) => {
+          this.pendingJoins = value;
+        }),
+      ]);
     } catch (error) {
       this.errorKey = codeOf(error);
     }

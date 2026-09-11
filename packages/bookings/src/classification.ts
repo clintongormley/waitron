@@ -13,3 +13,8 @@ export const BOOKINGS_CLASSIFICATION: readonly ClassifiedTable[] = [
   // state (1) — a table reservation; copied to a standby, never drained back.
   classify("bookings", "state", STATE),
 ];
+import type { ChangeSource } from "@waitron/shared";
+
+export const BOOKINGS_CHANGE_SOURCES: readonly ChangeSource[] = [
+  { table: "bookings", type: "bookings" },
+];

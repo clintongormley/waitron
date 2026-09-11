@@ -1,4 +1,5 @@
 import "./errors.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -16,6 +17,13 @@ import type { PersonRoleValue } from "./permissions.js";
  * suspension loses access immediately rather than at the next login.
  */
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes, sliding
+
+const passiveRead = new AsyncLocalStorage<boolean>();
+
+/** An automatic HTTP read verifies the session without counting as human activity. */
+export function withPassiveManagementRead<T>(read: () => T): T {
+  return passiveRead.run(true, read);
+}
 
 export interface ManagementSession {
   id: string;
@@ -75,7 +83,8 @@ export async function resolveManagementSession(
     throw new AppError("person.suspended", { personId: row.personId });
   }
   if (row.status !== "active") throw new AppError("management_session.required", {});
-  if (options.touch !== false) {
+  const touch = options.touch !== false && passiveRead.getStore() !== true;
+  if (touch) {
     await tx
       .update(managementSessions)
       .set({ lastSeenAt: sql`now()` })
@@ -88,7 +97,7 @@ export async function resolveManagementSession(
     email: row.email,
     locale: row.locale,
     expiresAt: new Date(
-      (options.touch === false ? Date.parse(row.lastSeenAt) : Date.now()) + IDLE_TIMEOUT_MS,
+      (touch ? Date.now() : Date.parse(row.lastSeenAt)) + IDLE_TIMEOUT_MS,
     ).toISOString(),
   };
 }

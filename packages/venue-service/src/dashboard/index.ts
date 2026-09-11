@@ -14,7 +14,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   },
   strings: VENUE_SERVICE_STRINGS,
   create(ctx) {
-    const api = new VenueServiceApi(ctx.request);
+    const api = new VenueServiceApi(ctx.request, ctx.liveData);
     return {
       render: () =>
         html`<dashboard-venue-operations-screen .api=${api}></dashboard-venue-operations-screen>`,

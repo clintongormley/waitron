@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -1120,4 +1121,19 @@ it("makes persisted tabs navigable while retaining edits made during their save"
   tabs[2]!.click();
   await el.updateComplete;
   expect(location.pathname).toBe(`/manage/canvas-editor/canvas/c1/tab/${savedKey}`);
+});
+
+it("refreshes displayed canvases when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-canvas-editor-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["canvases"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listCanvases).mockResolvedValue([]);
+  liveData.invalidate([{ type: "canvases", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listCanvases).toHaveBeenCalledTimes(2);
 });

@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
@@ -97,6 +98,13 @@ export class RecipeScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   @state() private ingredients: Ingredient[] = [];
   @state() private catalogues: CatalogueSummary[] = [];
@@ -131,12 +139,14 @@ export class RecipeScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [ingredients, catalogues] = await Promise.all([
-        this.api.listIngredients(),
-        this.api.listCatalogues(),
+      await Promise.all([
+        this.#queries.watch("listIngredients", [], (value) => {
+          this.ingredients = value;
+        }),
+        this.#queries.watch("listCatalogues", [], (value) => {
+          this.catalogues = value;
+        }),
       ]);
-      this.ingredients = ingredients;
-      this.catalogues = catalogues;
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -210,14 +220,19 @@ export class RecipeScreen extends LitElement {
     this.recipe = [];
     this.recipeLoading = false;
     this.products = [];
-    if (this.selectedCatalogueId === "") return;
+    if (this.selectedCatalogueId === "") {
+      this.#queries.release("listProducts");
+      return;
+    }
     void this.#loadProducts();
   }
 
   async #loadProducts(): Promise<void> {
     this.errorKey = null;
     try {
-      this.products = await this.api.listProducts(this.selectedCatalogueId);
+      await this.#queries.watch("listProducts", [this.selectedCatalogueId], (value) => {
+        this.products = value;
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }

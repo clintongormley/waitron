@@ -1,3 +1,5 @@
+import { DraftRows } from "@waitron/dashboard-kit";
+import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -161,6 +163,15 @@ export class FloorScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #zonesDrafts = new DraftRows<EditableZone>();
+  readonly #tablesDrafts = new DraftRows<EditableTable>();
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   // The configured zones + tables as editable rows, loaded on connect and re-synced after every mutation.
   @state() private submitting = false;
@@ -224,13 +235,17 @@ export class FloorScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [zones, tables] = await Promise.all([this.api.listZones(), this.api.listTables()]);
-      this.zones = zones.map((z: FloorZone) => ({
-        id: z.id,
-        name: z.name,
-        displayOrder: z.displayOrder,
-      }));
-      this.tables = this.#toEditableTables(tables);
+      await Promise.all([
+        this.#queries.watch("listZones", [], (rows) => {
+          this.zones = this.#zonesDrafts.merge(
+            this.zones,
+            rows.map((z: FloorZone) => ({ id: z.id, name: z.name, displayOrder: z.displayOrder })),
+          );
+        }),
+        this.#queries.watch("listTables", [], (rows) => {
+          this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));
+        }),
+      ]);
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -244,7 +259,9 @@ export class FloorScreen extends LitElement {
   async #loadTables(): Promise<void> {
     this.errorKey = null;
     try {
-      this.tables = this.#toEditableTables(await this.api.listTables());
+      await this.#queries.watch("listTables", [], (rows) => {
+        this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));
+      });
     } catch (error) {
       this.errorKey = codeOf(error);
     }

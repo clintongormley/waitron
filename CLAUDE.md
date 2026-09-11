@@ -209,6 +209,16 @@ unfiltered `main` run, not a wrong hook.
   a save error invites a duplicate submission. The Venue operations regression resolves creation,
   rejects the following load and checks the closed modal plus load error
   (`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`, “refreshing the list fails”).
+- **Automatic dashboard reads are passive session activity.** Use the shared query controller or
+  the request primitive's `passive` option for event refreshes and timers. A normal GET touches the
+  management session, so polling it would keep an unattended dashboard signed in. Observer callbacks
+  assign snapshots; they do not rerun loaders that reset drafts or mint recovery keys. See
+  `docs/developers/dashboard-live-updates.md` and the passive-session and backup-screen regressions.
+- **Dashboard subscription names travel with their server sources.** Core and contributed screens
+  export `QUERY_DEPENDENCIES`; `scripts/live-subscriptions.test.ts` checks those names against shipped
+  resources. A rejected subscription closes the whole tab's stream, so a misspelled name affects
+  other screens too. The guard catches unknown names, not missing SQL dependencies or disabled-module
+  combinations. Cost: the live-updates run-it review found this unguarded coupling.
 - **The dashboard banner is persistent identity chrome.** Put it at the very top of the page at full
   width, with the menu and content underneath. Show the canonical Waitron lockup and the deployment
   tenant's legal name on login and every authenticated screen. Put Logout at the trailing edge only
@@ -333,7 +343,9 @@ unfiltered `main` run, not a wrong hook.
   `CREATE [CONSTRAINT] TRIGGER … EXECUTE FUNCTION <f>` where `<f>` is owned by a DIFFERENT migration
   set. Today NO module creates such a cross-set trigger — the outbox's capture triggers, which
   enrolled other modules' tables, were deleted with the application outbox (swap S5) — so every
-  surviving cross-set edge is an ordinary FK. `scripts/module-graph-honesty.test.ts` still derives the
+  surviving migration cross-set edge is an ordinary FK. The generic live-update trigger is installed
+  at boot and sits outside this migration-text guard; its behavior is exercised by
+  `packages/db/src/change-feed-replication.pg.test.ts`. `scripts/module-graph-honesty.test.ts` still derives the
   trigger edge (reads text and says so), so a future one is caught.
 - **An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything.** Measured on
   PostgreSQL 18.4 from a non-owning `createdb createrole` admin: no privilege held → `42501`; some

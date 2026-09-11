@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "@vitest/browser/context";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -426,4 +427,15 @@ describe("roster-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("shift.invalid");
     expect((el as unknown as { busy: boolean }).busy).toBe(false);
   });
+});
+
+it("restores the selected roster subscription when reattached", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el, host } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+  await vi.waitFor(() => expect(api.getRoster).toHaveBeenCalledOnce());
+  el.remove();
+  expect(liveData.interests).toEqual([]);
+  host.appendChild(el);
+  await vi.waitFor(() => expect(api.getRoster).toHaveBeenCalledTimes(2));
 });

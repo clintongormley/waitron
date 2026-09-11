@@ -1,8 +1,15 @@
+import { LiveEvents, mountLiveApi } from "./live-api.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  asAppUser,
+  withTenant,
+  installChangeFeed,
+  startChangeListener,
+  CORE_CHANGE_SOURCES,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
@@ -874,4 +881,68 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
       ).status,
     ).toBe(204);
   });
+});
+
+it("delivers enqueue and agent completion events with fresh printer aggregates", async () => {
+  const app = mountApp(tenantA);
+  const bus = new LiveEvents();
+  mountLiveApi(
+    app,
+    { db: suite.admin, tenantId: tenantA.tenantId, bus, resourceTypes: ["printers", "print_jobs"] },
+    noopLog,
+  );
+  const { agentId, token } = await joinAndAccept(app, "Live agent");
+  const printerId = await createPrinter(app, agentId, "Live printer");
+  await installChangeFeed(suite.admin, CORE_CHANGE_SOURCES);
+  const listener = await startChangeListener(suite.pg.uri, {
+    onChange: (event) => bus.publish(event),
+    onReset: () => bus.reset(),
+  });
+  const url = `/management-api/events?resources=${encodeURIComponent(JSON.stringify([{ type: "printers", id: printerId }]))}`;
+  const response = await send(app, "GET", url, { cookie: managerCookie });
+  const reader = response.body!.getReader();
+  const changes: string[] = [];
+  const reading = (async () => {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) return;
+      const text = new TextDecoder().decode(next.value);
+      if (text.includes("event: change")) changes.push(text);
+    }
+  })();
+  const printer = async (): Promise<{ pendingJobs: number; lastPrintAt: string | null }> => {
+    const response = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+    const rows = (await response.json()) as {
+      id: string;
+      pendingJobs: number;
+      lastPrintAt: string | null;
+    }[];
+    return rows.find((row) => row.id === printerId)!;
+  };
+  try {
+    expect(await printer()).toMatchObject({ pendingJobs: 0, lastPrintAt: null });
+    const jobId = await enqueue(tenantA, printerId, new Uint8Array([65]));
+    await vi.waitFor(() => expect(changes.length).toBeGreaterThan(0));
+    expect(changes[0]).toContain(printerId);
+    expect(changes[0]).not.toContain("payload");
+    expect(await printer()).toMatchObject({ pendingJobs: 1, lastPrintAt: null });
+    expect((await send(app, "POST", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
+    await vi.waitFor(() => expect(changes.length).toBeGreaterThan(1));
+    const count = changes.length;
+    expect(
+      (
+        await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
+          bearer: token,
+          body: { status: "done" },
+        })
+      ).status,
+    ).toBe(204);
+    await vi.waitFor(() => expect(changes.length).toBeGreaterThan(count));
+    expect(await printer()).toMatchObject({ pendingJobs: 0, lastPrintAt: expect.any(String) });
+  } finally {
+    await reader.cancel();
+    await reading;
+    await listener.close();
+    bus.close();
+  }
 });

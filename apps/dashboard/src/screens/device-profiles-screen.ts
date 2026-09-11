@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
@@ -138,6 +139,13 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   /** Which mode is showing. `list` is the profile gallery; `editor` is the flat editor form. */
   @state() private mode: "list" | "editor" = "list";
@@ -180,12 +188,14 @@ export class DeviceProfilesScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [profiles, canvases] = await Promise.all([
-        this.api.listDeviceProfiles(),
-        this.api.listCanvases(),
+      await Promise.all([
+        this.#queries.watch("listDeviceProfiles", [], (value) => {
+          this.profiles = value;
+        }),
+        this.#queries.watch("listCanvases", [], (value) => {
+          this.canvases = value;
+        }),
       ]);
-      this.profiles = profiles;
-      this.canvases = canvases;
     } catch (error) {
       this.errorKey = codeOf(error);
     }

@@ -1,3 +1,4 @@
+import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -108,6 +109,13 @@ export class SalesScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   @state() private from = today();
   @state() private to = today();
@@ -131,9 +139,15 @@ export class SalesScreen extends LitElement {
     this.period = null;
     try {
       if (this.from === this.to) {
-        this.close = await this.api.getDailyClose(this.from);
+        this.#queries.release("getSalesPeriod");
+        await this.#queries.watch("getDailyClose", [this.from], (value) => {
+          this.close = value;
+        });
       } else {
-        this.period = await this.api.getSalesPeriod(this.from, this.to);
+        this.#queries.release("getDailyClose");
+        await this.#queries.watch("getSalesPeriod", [this.from, this.to], (value) => {
+          this.period = value;
+        });
       }
     } catch (error) {
       this.errorKey = codeOf(error);

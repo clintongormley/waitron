@@ -1,7 +1,7 @@
 import { html, render } from "lit";
 import { applyTokens } from "@waitron/ui";
 import { createInstrumentedFetch, installErrorCapture } from "@waitron/diagnostics";
-import { createRequest } from "@waitron/dashboard-kit";
+import { createRequest, LiveConnection } from "@waitron/dashboard-kit";
 import { DashboardApi } from "./api/client.js";
 import { diag } from "./diagnostics.js";
 import "./dashboard-app.js";
@@ -34,9 +34,12 @@ const reportSessionError = (code: string): void => {
 const reportSessionActivity = (): void => {
   window.dispatchEvent(new Event("waitron-session-active"));
 };
+const api = new DashboardApi("", instrumentedFetch, reportSessionError, reportSessionActivity);
+const liveUpdates = new LiveConnection(api.liveData, { onSessionInvalid: reportSessionError });
 render(
   html`<dashboard-app
-    .api=${new DashboardApi("", instrumentedFetch, reportSessionError, reportSessionActivity)}
+    .api=${api}
+    .liveUpdates=${liveUpdates}
     .request=${createRequest({
       fetchImpl: instrumentedFetch,
       onError: reportSessionError,

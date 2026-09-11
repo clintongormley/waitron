@@ -1,3 +1,5 @@
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
@@ -118,6 +120,13 @@ export class BookingsScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: BookingApi;
+  readonly #queries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => {
+      this.errorKey = codeOf(error);
+    },
+  );
 
   @state() private bookings: Booking[] = [];
   @state() private tables: DashboardTable[] = [];
@@ -145,7 +154,23 @@ export class BookingsScreen extends LitElement {
   async #init(): Promise<void> {
     await this.#load();
     try {
-      this.tables = await this.api.listTables();
+      let initial = true;
+      await this.#queries.watch(
+        "tables",
+        {
+          key: "bookings:tables",
+          dependencies: QUERY_DEPENDENCIES.tables.map((type) => ({ type })),
+          refreshMs: 60_000,
+          read: () => {
+            const api = initial ? this.api : (this.api.background ?? this.api);
+            initial = false;
+            return api.listTables();
+          },
+        },
+        (value) => {
+          this.tables = value;
+        },
+      );
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -155,7 +180,7 @@ export class BookingsScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      this.bookings = await this.api.listBookings(this.date);
+      await this.#observeBookings();
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -163,7 +188,28 @@ export class BookingsScreen extends LitElement {
 
   /** Reload after a mutation. Throws to its caller's catch (so a reload failure surfaces the banner). */
   async #reload(): Promise<void> {
-    this.bookings = await this.api.listBookings(this.date);
+    await this.#observeBookings();
+  }
+
+  async #observeBookings(): Promise<void> {
+    const date = this.date;
+    let initial = true;
+    await this.#queries.watch(
+      "bookings",
+      {
+        key: `bookings:${date}`,
+        dependencies: QUERY_DEPENDENCIES.bookings.map((type) => ({ type })),
+        refreshMs: 60_000,
+        read: () => {
+          const api = initial ? this.api : (this.api.background ?? this.api);
+          initial = false;
+          return api.listBookings(date);
+        },
+      },
+      (value) => {
+        this.bookings = value;
+      },
+    );
   }
 
   #onDateChange(event: CustomEvent<{ value: string }>): void {

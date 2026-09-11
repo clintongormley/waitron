@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -528,4 +529,19 @@ it("uses named shared switches for ticket scope and station routing", async () =
     expect(control.tagName).toBe("WT-SWITCH");
     expect(control.shadowRoot!.querySelector("input")!.name).toBe(name);
   }
+});
+
+it("refreshes displayed printers when their data changes elsewhere", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
+    "dashboard-printing-rules-screen",
+    { api },
+  );
+  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["printers"]!;
+  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
+  vi.mocked(api.listPrinters).mockResolvedValue([]);
+  liveData.invalidate([{ type: "printers", id: "changed-elsewhere" }]);
+  await vi.waitFor(() => expect(rows()).toEqual([]));
+  expect(api.listPrinters).toHaveBeenCalledTimes(2);
 });
