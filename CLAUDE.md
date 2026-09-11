@@ -209,6 +209,11 @@ unfiltered `main` run, not a wrong hook.
   tenant's legal name on login and every authenticated screen. Put Logout at the trailing edge only
   when a session exists. Use the tenant name, not a location: a deployment database has one tenant
   and that tenant can contain several locations (`packages/db/src/schema/tenants.ts`).
+- **Dashboard sign-in matches the browser's `Accept-Language` preferences.** The public locale
+  response carries a separate `loginDefault`; `venueDefault` still describes the venue and remains
+  the fallback for signed-in people without a saved language. Returning to login after logout or
+  session expiry uses the browser match too. Guard late locale responses so they cannot overwrite
+  a newly authenticated person's language (`apps/dashboard/src/dashboard-app.test.ts`).
 - **Dashboard login is passkey-first without account enumeration.** On the initial email screen,
   offer passive browser passkey autofill when supported. After any syntactically valid email, start
   the same explicit passkey ceremony. If it is cancelled, open the password form and show passkey

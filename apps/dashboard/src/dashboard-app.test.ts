@@ -105,6 +105,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      loginDefault: "es-ES",
       venueName: "Deli Test SL",
       onboardingIntent: "prepare",
     }),
@@ -1573,6 +1574,7 @@ describe("dashboard-app", () => {
 type LocalesResponse = {
   locales: { code: string; label: string }[];
   venueDefault: string;
+  loginDefault: string;
   venueName: string;
 };
 /** The resolved shape the widened `getMe` answers with. */
@@ -1587,8 +1589,81 @@ type MeResponse = {
 };
 
 describe("dashboard-app — per-user locale (Task 10)", () => {
-  it("seeds the login screen to the venue default when there is no session (deep child via keyed)", async () => {
-    // No session → stays on `login`; the boot seed reads getLocales and applies its venueDefault (en-GB,
+  it("uses the browser-matched login language at a Spanish venue", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "en-GB",
+        venueName: "Test SL",
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+    expect(login(el)!.shadowRoot!.querySelector("[data-test=continue]")!.textContent).toContain(
+      t("action.continue", "en-GB"),
+    );
+  });
+
+  it("keeps the authenticated language when a login-language response arrives late", async () => {
+    let resolveLocales!: (value: LocalesResponse) => void;
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: "es-ES",
+          venueLocale: "en-GB",
+          venueName: "Test SL",
+          permissions: [],
+          modules: [],
+        }),
+      getLocales: vi.fn(
+        () =>
+          new Promise<LocalesResponse>((resolve) => {
+            resolveLocales = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    emitLoggedIn(login(el)!);
+    await flush(el);
+    expect(overview(el)).toBeTruthy();
+    resolveLocales({
+      locales: [],
+      venueDefault: "en-GB",
+      loginDefault: "en-GB",
+      venueName: "Test SL",
+    });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+  });
+
+  it("returns to the browser-matched language after logout", async () => {
+    const api = stubApi({
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "en-GB",
+        venueName: "Test SL",
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    logoutBtn(el)!.click();
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+    expect(currentLocale()).toBe("en-GB");
+  });
+
+  it("uses the venue fallback when no browser language matches (deep child via keyed)", async () => {
+    // No session → stays on `login`; the boot seed reads getLocales and applies its loginDefault (en-GB,
     // which differs from the es-ES module default so the switch is observable). The login screen is
     // recreated by the `keyed(currentLocale(), …)` wrapper, so a DEEP child of its own shadow renders English.
     const api = stubApi({
@@ -1596,6 +1671,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
       getLocales: vi.fn().mockResolvedValue({
         locales: [{ code: "en-GB", label: "English" }],
         venueDefault: "en-GB",
+        loginDefault: "en-GB",
       }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -1613,10 +1689,12 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
   it("applies the person's stored locale on a logged-in boot — the seed never clobbers it, and never runs", async () => {
     // Pins the race fix. Venue default es-ES; the signed-in person's stored locale is en-GB. Because a
-    // session is found, the venue-default seed is SKIPPED entirely (serialized: probe first, seed only
+    // session is found, the login-language seed is SKIPPED entirely (serialized: probe first, seed only
     // when still on `login`), so the UI ends on the PERSON's en-GB — never the venue default — and
     // getLocales is never called (one WHOAMI round trip). A DEEP child (the my-schedule <h1>) renders it.
-    const getLocales = vi.fn().mockResolvedValue({ locales: [], venueDefault: "es-ES" });
+    const getLocales = vi
+      .fn()
+      .mockResolvedValue({ locales: [], venueDefault: "es-ES", loginDefault: "es-ES" });
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
@@ -1733,9 +1811,9 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("es-ES"); // unchanged — the failed write never switched the UI
   });
 
-  it("logout reverts the UI to the venue default", async () => {
-    // Log in as an en-GB manager (UI → English), then log out: the UI must return to the venue default
-    // (es-ES) so the next person meets the venue language, not the previous operator's choice.
+  it("logout uses the venue fallback when no browser language matches", async () => {
+    // With no browser match, the server supplies the venue default as loginDefault.
+    // Logging out must apply that default instead of retaining the manager's saved English.
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
@@ -1756,10 +1834,10 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(currentLocale()).toBe("es-ES"); // reverted to the venue default
   });
 
-  // ── Disconnect guards: each post-await setLocale is skipped on a detached app (proven by deletion) ──
+  // ── Pending responses must not repaint a detached app ──
 
   it("does not seed the venue default if the app disconnects mid-getLocales", async () => {
-    // The seed's setLocale(venueDefault) runs AFTER `await getLocales()`. Start with no session so the
+    // The seed's setLocale(loginDefault) runs AFTER `await getLocales()`. Start with no session so the
     // seed runs; make getLocales pending, detach, then resolve: the seed must be SKIPPED. Deleting the
     // `if (!this.isConnected) return` after getLocales makes the seed fire and this fail.
     let resolveLocales!: (v: LocalesResponse) => void;
@@ -1772,7 +1850,12 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el); // probe rejected → on login; the seed's getLocales is now pending
     expect(currentLocale()).toBe("es-ES"); // module default, not yet seeded
     host.remove(); // torn down before getLocales resolves
-    resolveLocales({ locales: [], venueDefault: "en-GB", venueName: "Deli Test SL" });
+    resolveLocales({
+      locales: [],
+      venueDefault: "en-GB",
+      loginDefault: "en-GB",
+      venueName: "Deli Test SL",
+    });
     await flush(el);
     expect(getLocales).toHaveBeenCalledOnce();
     expect(currentLocale()).toBe("es-ES"); // the seed to en-GB was skipped on the detached app
@@ -1824,9 +1907,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("does not revert the locale if the app disconnects mid-logout", async () => {
-    // #onLogout's venue-default revert runs AFTER `await logout()`. Log in as en-GB, start logout with
-    // logout() pending, detach, then resolve: the revert to es-ES must be SKIPPED. Deleting the
-    // `if (!this.isConnected) return` before the revert makes it fire and this fail.
+    // Completing logout after teardown must not start a language read or change the shared locale.
     let resolveLogout!: () => void;
     const logout = vi.fn(() => new Promise<void>((r) => (resolveLogout = r)));
     const api = stubApi({

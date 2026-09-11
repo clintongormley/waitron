@@ -2044,6 +2044,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      loginDefault: "es-ES",
       venueName: "Deli Test SL",
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));

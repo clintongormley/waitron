@@ -461,15 +461,6 @@ export class DashboardApp extends LitElement {
   @state() private venueName = "";
   @state() private onboardingIntent?: "demo" | "prepare" | "live";
 
-  /**
-   * The venue's DERIVED default UI locale (per-user-language-preference), read from
-   * `GET /management-api/locales` on boot ({@link #seedLocale}) — the dashboard has no venue locale until
-   * this task, so it SEEDS the login screen in the venue's language. It is also the fallback
-   * `resolveActiveLocale(personLocale, this.#venueLocale)` falls back to on login ({@link #applyMe}) when
-   * the signed-in person has no stored preference. Defaults to the deli's es-ES until boot resolves.
-   */
-  #venueLocale = "es-ES";
-
   constructor() {
     super();
     // Follow a locale switch made anywhere (seed/login/the chooser's setLocale): on a locale change the
@@ -508,19 +499,8 @@ export class DashboardApp extends LitElement {
     void this.#boot();
   }
 
-  /**
-   * Boot: an account-action link takes precedence over an existing session, so a person opening an
-   * invitation or reset link on a shared dashboard reaches their own action form. Otherwise probe for
-   * a session, THEN — only when none was found (still on `login`) — seed the login
-   * screen in the venue's language. The two are serialized deliberately, not raced:
-   *  - a LOGGED-IN probe's {@link #applyMe} already sets the UI locale from the WHOAMI (`me.locale`
-   *    resolved against `me.venueLocale`) and remembers `venueLocale`, so a venue-default seed
-   *    afterwards would both fire a REDUNDANT `getLocales` and risk CLOBBERING the person's applied
-   *    locale. Gating the seed on `screen === "login"` removes both — the logged-in path makes exactly
-   *    one WHOAMI round trip;
-   *  - a NO-SESSION probe leaves `screen === "login"`, so the seed runs and localises the sign-in screen.
-   * `#probeSession` swallows its own rejection (→ `login`), so this never throws.
-   */
+  /** Account-action links open their form even with an existing session. Otherwise probe first,
+   * then seed the login language only when signed out, preserving a signed-in person's preference. */
   async #boot(): Promise<void> {
     if (new URLSearchParams(window.location.search).has("token")) {
       await this.#seedLocale();
@@ -530,25 +510,19 @@ export class DashboardApp extends LitElement {
     if (this.screen === "login") await this.#seedLocale();
   }
 
-  /**
-   * Read the venue's offered languages and SEED the UI to the venue default, so the pre-auth login
-   * screen renders in the venue's language rather than the module default. Reached only from {@link #boot}
-   * on the no-session path. A failure (server unreachable, a non-2xx `{ code }`) is swallowed — the UI
-   * simply stays on the module default; this is cosmetic pre-auth polish, never a reason to block sign-in.
-   */
+  /** The server matches Accept-Language against the installed UI languages. A late response must
+   * not overwrite an authenticated user's preference or repaint a disconnected app. */
   async #seedLocale(): Promise<void> {
+    const generation = this.sessionGeneration;
     try {
-      const { venueDefault, venueName, onboardingIntent } = await this.api.getLocales();
-      // Guard the post-await module-global `setLocale`: a teardown during the fetch must not repaint a
-      // live sibling's locale (the DISCONNECT SAFETY note). The `#venueLocale` write below the guard is
-      // harmless to skip on a detached element — nothing reads it after teardown.
-      if (!this.isConnected) return;
-      this.#venueLocale = venueDefault;
+      const { loginDefault, venueName, onboardingIntent } = await this.api.getLocales();
+      if (!this.isConnected || this.screen !== "login" || generation !== this.sessionGeneration)
+        return;
       this.venueName = venueName;
       this.onboardingIntent = onboardingIntent;
-      setLocale(venueDefault);
+      setLocale(loginDefault);
     } catch {
-      // Stay on the module default — a failed locale read must never block sign-in.
+      // A failed language read must never block sign-in.
     }
   }
 
@@ -619,7 +593,6 @@ export class DashboardApp extends LitElement {
     // The per-permission gate is applied on top, in `#nav` and `#permittedScreen`.
     this.#activate(me.modules);
     this.screen = this.#permittedScreen(this.#url.read("dashboard"));
-    this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
     this.onboardingIntent = me.onboardingIntent;
     const remainingSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
@@ -663,7 +636,7 @@ export class DashboardApp extends LitElement {
       { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
       true,
     );
-    if (this.isConnected) setLocale(this.#venueLocale);
+    if (this.isConnected) void this.#seedLocale();
   }
 
   /**
@@ -742,12 +715,6 @@ export class DashboardApp extends LitElement {
       // A failed logout must still drop to login; the reason it failed is not actionable here.
     }
     this.#returnToLogin(null);
-    // Revert the UI to the venue default (per-user-language-preference): the previous operator's chosen
-    // language must not linger into the login screen the next person meets — their own login re-applies
-    // their stored preference. Guard the post-await module-global `setLocale` (the DISCONNECT SAFETY
-    // note): a teardown during the logout round trip must not repaint a live sibling's locale.
-    if (!this.isConnected) return;
-    setLocale(this.#venueLocale);
   }
 
   /**

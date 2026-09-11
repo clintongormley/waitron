@@ -1337,6 +1337,7 @@ export class DashboardApi {
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
+    loginDefault: string;
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
   }>;
@@ -1367,21 +1368,24 @@ export class DashboardApi {
   /**
    * `GET /management-api/locales` — the venue's offered languages (per-user-language-preference,
    * Task 4). PUBLIC and read pre-login by the login screen's language chooser: each `{ code, label }` is a
-   * `SUPPORTED_LOCALES` entry, `venueDefault` the tenant's fallback locale, and `venueName` its public
+   * `SUPPORTED_LOCALES` entry, `venueDefault` the tenant's fallback locale, `loginDefault` the
+   * Accept-Language match for this browser, and `venueName` its public
    * legal name for the pre-login banner. The language chooser reads the list; the app decides what to
    * do with a pick, so the client only surfaces the shape.
    */
   getLocales(): Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
+    loginDefault: string;
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
   }> {
-    // The list + venue default are immutable for this client's lifetime; fetch once and share.
+    // Share the catalogue and language defaults for this page's lifetime.
     // Cache the promise ONLY on success — clear it on rejection so a transient failure retries.
     this.#localesPromise ??= this.#request<{
       locales: Array<{ code: string; label: string }>;
       venueDefault: string;
+      loginDefault: string;
       venueName: string;
       onboardingIntent?: "demo" | "prepare" | "live";
     }>("/management-api/locales", "GET").catch((err) => {
