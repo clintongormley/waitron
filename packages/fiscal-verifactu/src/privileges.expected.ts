@@ -27,6 +27,7 @@ export const PRIVILEGES: Record<string, string> = {
   department_hours: "SIUD",
   departments: "SIU",
   deployment: "S",
+  device_card_readers: "SIUD",
   device_profiles: "SIUD",
   device_zone_defaults: "SIUD",
   devices: "SIU",

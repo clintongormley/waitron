@@ -36,6 +36,20 @@
       "when": 1789154167518,
       "tag": "0004_card_readers_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789156077019,
+      "tag": "0005_device_card_readers",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789156085778,
+      "tag": "0006_device_card_readers_sql",
+      "breakpoints": true
     }
   ]
 }

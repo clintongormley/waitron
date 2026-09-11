@@ -8,3 +8,4 @@ export { paymentState, payments } from "./payments.js";
 export { paymentRefundState, paymentRefunds } from "./payment-refunds.js";
 export { paymentPolicy } from "./payment-policy.js";
 export { cardReaders } from "./card-readers.js";
+export { deviceCardReaders } from "./device-card-readers.js";
