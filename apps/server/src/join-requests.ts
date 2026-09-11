@@ -505,16 +505,19 @@ export async function selfEnrolNodeAgent(
   cfg: TillConfig,
   input: { nodeId: string; name: string },
 ): Promise<{ agentId: string; token: string }> {
-  const secret = randomBytes(32).toString("base64url");
-  const tokenHash = hashSecret(secret);
-
   const [existing] = await tx
     .select({ id: printAgents.id, active: printAgents.active })
     .from(printAgents)
     .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.nodeId, input.nodeId)));
 
+  // A revoked row (`active = false`) is refused, never silently reactivated (spec §4) — checked BEFORE
+  // minting the token so a refused re-enrol does not spend a scrypt (`hashSecret`) it will throw away.
+  if (existing !== undefined && !existing.active) throw new AppError("device.join_revoked", {});
+
+  const secret = randomBytes(32).toString("base64url");
+  const tokenHash = hashSecret(secret);
+
   if (existing !== undefined) {
-    if (!existing.active) throw new AppError("device.join_revoked", {});
     await tx
       .update(printAgents)
       .set({ tokenHash })
