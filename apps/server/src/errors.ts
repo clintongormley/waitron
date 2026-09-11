@@ -1155,6 +1155,13 @@ declare module "@waitron/shared" {
      */
     "device.join_mismatch": Record<string, never>;
     /**
+     * A node's own print agent asked to self-enrol against a row that was deliberately REVOKED
+     * (`active = false`); self-enrol refuses rather than silently reactivating it, so a revoke sticks
+     * until an admin re-allows the node (on-node auto-enrolment design §4). NO params: the fact is the
+     * refusal, not the node — nothing non-secret worth echoing. The enrol route maps it to HTTP 403.
+     */
+    "device.join_revoked": Record<string, never>;
+    /**
      * No pending join request with that id in this tenant — never existed, already accepted or denied,
      * or lapsed past its TTL. All fold into one code: the admin's recovery is the same in every case,
      * and the joiner must knock again.
