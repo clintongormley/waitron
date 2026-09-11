@@ -76,7 +76,7 @@ export function isRootScopePath(path) {
 
 /**
  * True when `path` is one of the box image's build/runtime inputs — everything under `deploy/`: the
- * Dockerfile compose builds, `compose.yml` itself, the operator `prepare.sh`, the `.env.example`
+ * Dockerfile compose builds, `compose.yml` itself, the operator script `waitron.sh`, the `.env.example`
  * template.
  *
  * This is the ONE thing ci.yml's `image` smoke actually exercises — it builds `deploy/Dockerfile`

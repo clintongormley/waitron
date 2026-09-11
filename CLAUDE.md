@@ -385,10 +385,14 @@ unfiltered `main` run, not a wrong hook.
   schema surfaced later as an unclassified driver failure. Pointer:
   `packages/migrations/src/apply-complete.pg.test.ts`.
 - **The box's BOOT path carries an ahead-of-image check; no other migrating path does, and
-  `deploy/try-branch.sh` is a one-way door.** `assertNotAhead` (`@waitron/provisioning`) compares the
-  database's journal hashes against the image's files and throws `provisioning.database_ahead`; there
-  is no backward migration, so the only remedy is restore or reinstall, and `try-branch.sh` warns on
-  every run because it cannot tell whether a ref carries a migration. Its only caller anywhere is
+  `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` (`@waitron/provisioning`) compares
+  the database's journal hashes against the image's files and throws `provisioning.database_ahead`;
+  there is no backward migration, so installing an older ref after a newer one has already migrated
+  the database can fail to boot with this error. `waitron.sh`'s advice on that failure depends on the
+  box: on one that is not stamped production, `waitron.sh reset` wipes the database and is the clean
+  way back to a working box; on a production box the script refuses to suggest that (a reset there
+  would destroy the fiscal chain) and says to install a newer ref instead
+  (`docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §3 step 6, §4.1). Its only caller anywhere is
   `apps/server/src/node-entry.ts`, which runs it after `ensureInstance` and before `startServer`
   (`grep -rn assertNotAhead` before believing otherwise). The GAP, stated so nobody assumes coverage:
   `waitron-provision instance` (`packages/provisioning/src/instance-apply.ts`), the cold restore

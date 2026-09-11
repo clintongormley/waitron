@@ -25,7 +25,7 @@ const read = (path: string): string => readFileSync(`${ROOT}${path}`, "utf8");
 
 const DOCKERFILE = read("deploy/Dockerfile");
 const COMPOSE = read("deploy/compose.yml");
-const PREPARE = read("deploy/prepare.sh");
+const WAITRON_SH = read("deploy/waitron.sh");
 const CI = read(".github/workflows/ci.yml");
 const IMAGE_SMOKE = read(".github/workflows/image-smoke.yml");
 const CONFIG_SOURCE = read("apps/server/src/config.ts");
@@ -195,96 +195,44 @@ describe("the print-agent image and its compose wiring", () => {
   });
 });
 
-describe("the run-from-web installer", () => {
-  // Read tolerantly: before install.sh exists this is "" so the assertions below go red (the content
-  // checks fail; the only()-based ones throw) rather than the file read throwing at import.
-  let INSTALL = "";
-  try {
-    INSTALL = read("deploy/install.sh");
-  } catch {
-    /* not created yet */
-  }
-
+describe("the waitron.sh box command", () => {
   it("is a bash script", () => {
-    expect(INSTALL).toMatch(/^#!.*\bbash\b/);
+    expect(WAITRON_SH).toMatch(/^#!.*\bbash\b/);
   });
 
-  it("fetches from the repository's public raw endpoint", () => {
-    expect(INSTALL).toContain("raw.githubusercontent.com/clintongormley/waitron");
+  it("fetches the box files from the repository's public raw endpoint", () => {
+    expect(WAITRON_SH).toContain("raw.githubusercontent.com/clintongormley/waitron");
   });
 
-  it("defaults to main and lets WAITRON_REF override it", () => {
-    // The honest default today — the repo has no release tags — kept overridable so a real box can
-    // pin a revision rather than track whatever last landed on main.
-    expect(only(INSTALL, /\$\{WAITRON_REF:-([\w.-]+)\}/, "install.sh default ref")).toBe("main");
+  it("defaults the install ref to main", () => {
+    expect(WAITRON_SH).toMatch(/ref="\$\{1:-main\}"/);
   });
 
-  it("downloads exactly the files prepare.sh copies from its own directory, plus prepare.sh", () => {
-    // Set-equality between the installer's FILES array and prepare.sh's own copy targets, so the two
-    // cannot drift in EITHER direction: a file prepare.sh starts copying that the installer forgets
-    // fails this, and so does a file the installer fetches that nothing needs. Parsing the array (not
-    // a substring search) is deliberate — "prepare.sh" appears on other lines, so a toContain() over
-    // the whole file would pass even with it dropped from the download list.
-    const required = new Set([
-      ...[...PREPARE.matchAll(/\$SOURCE_DIR\/([\w.-]+)/g)].map((m) => m[1]),
-      "prepare.sh",
-    ]);
-    expect(required).toContain("compose.yml");
-    const listed = only(INSTALL, /FILES=\(([^)]*)\)/, "install.sh FILES array")
-      .split(/\s+/)
-      .filter(Boolean);
-    expect(new Set(listed)).toEqual(required);
+  it("honours WAITRON_DIR, defaulting to /opt/waitron", () => {
+    expect(WAITRON_SH).toMatch(/WAITRON_DIR:-\/opt\/waitron/);
   });
 
-  it("delegates to prepare.sh rather than doing its work itself", () => {
-    // A thin fetch-and-hand-off wrapper: it runs prepare.sh via bash and does NOT reimplement what
-    // prepare.sh owns — installing Docker (`docker compose`) or minting the password (`openssl`).
-    expect(INSTALL).toMatch(/\bbash\b[^\n]*prepare\.sh/);
-    expect(INSTALL).not.toMatch(/docker\s+compose/);
-    expect(INSTALL).not.toMatch(/openssl/);
-  });
-});
-
-describe("the try-a-branch helper", () => {
-  // Read tolerantly (as the installer block does) so the assertions go red before the file exists
-  // rather than the read throwing at import.
-  let TRY = "";
-  try {
-    TRY = read("deploy/try-branch.sh");
-  } catch {
-    /* not created yet */
-  }
-
-  it("is a bash script", () => {
-    expect(TRY).toMatch(/^#!.*\bbash\b/);
+  it("reports a script-prefixed error to stderr when misused", () => {
+    expect(WAITRON_SH).toMatch(/echo "waitron\.sh: [^\n]*>&2/);
   });
 
-  it("builds the image from the repo git context with deploy/Dockerfile", () => {
-    // Docker fetches the branch itself — no clone, no pnpm — so the git URL and the Dockerfile path
-    // must both appear on the build.
-    expect(TRY).toMatch(/docker\s+build/);
-    expect(TRY).toMatch(/-f\s+deploy\/Dockerfile/);
-    expect(TRY).toContain("github.com/clintongormley/waitron.git");
+  it("builds a branch image from the repo git context with deploy/Dockerfile", () => {
+    expect(WAITRON_SH).toMatch(/docker build[^\n]*-f deploy\/Dockerfile/);
+    expect(WAITRON_SH).toContain("github.com/clintongormley/waitron.git");
+    expect(WAITRON_SH).toMatch(/waitron\.git#\$\{?\w+\}?/);
   });
 
-  it("selects the branch via the git #-fragment from an argument, not a hardcoded ref", () => {
-    // `…waitron.git#<ref>` where <ref> is a variable (the branch arg), so any branch can be built.
-    expect(TRY).toMatch(/waitron\.git#\$\{?\w+\}?/);
+  it("records the branch image in .env rather than only inline on compose up", () => {
+    expect(WAITRON_SH).toMatch(/env_set WAITRON_IMAGE/);
   });
 
-  it("overrides the image inline on compose up rather than editing .env", () => {
-    // WAITRON_IMAGE set on the same command as `docker compose … up` — the whole point is to leave
-    // the box's .env untouched.
-    expect(TRY).toMatch(/WAITRON_IMAGE=\S*[^\n]*docker\s+compose[^\n]*\bup\b/);
+  it("keeps the tls certificate when it empties the state volume on a plain reset", () => {
+    expect(WAITRON_SH).toMatch(/find \/s .*! -name tls/);
   });
 
-  it("honours WAITRON_DIR, defaulting to /opt/waitron like prepare.sh", () => {
-    expect(TRY).toMatch(/WAITRON_DIR:-\/opt\/waitron/);
-  });
-
-  it("reports a script-prefixed error when misused, like its siblings", () => {
-    // prepare.sh and install.sh both write `<script>.sh: … >&2`; a required branch arg needs the same.
-    expect(TRY).toMatch(/try-branch\.sh:[^\n]*>&2/);
+  it("refuses a reset on a production box unless forced", () => {
+    expect(WAITRON_SH).toMatch(/--force-production/);
+    expect(WAITRON_SH).toMatch(/refusing to reset:[^\n]*PRODUCTION/);
   });
 });
 
@@ -308,6 +256,6 @@ describe("every copy of the box's hostname", () => {
       ),
     ).toBe(`https://${HOSTNAME}`);
     // The URL in the QR code the restaurant actually scans.
-    expect(only(PREPARE, /BOX_URL="([^"]+)"/, "prepare.sh BOX_URL")).toBe(`https://${HOSTNAME}`);
+    expect(only(WAITRON_SH, /BOX_URL="([^"]+)"/, "waitron.sh BOX_URL")).toBe(`https://${HOSTNAME}`);
   });
 });

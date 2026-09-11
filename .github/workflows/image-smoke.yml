@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: read
     # Every compose invocation below reads these, so none of them can drift onto the wrong file or
-    # the wrong project. The env file is deploy/.env — where prepare.sh puts a real box's, and
+    # the wrong project. The env file is deploy/.env — where waitron.sh puts a real box's, and
     # gitignored — so compose picks it up with no flag and interpolation cannot fail on a later
     # `ps` or `down`.
     env:
