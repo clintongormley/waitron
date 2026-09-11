@@ -4,8 +4,9 @@ import type { DiscoveredDevice } from "@waitron/print-agent";
 import { hostsInSubnet, mergeDiscovered, sweepCandidates, sweepPort } from "./sweep.js";
 
 // The `os.networkInterfaces()` shape is synthesised from Node's documented entry fields, NOT captured
-// from the box: the sweep reads only `family`, `internal` and `cidr`, so `netmask` is derived from the
-// cidr prefix here purely to keep the fixture self-consistent. A real capture from the box (host
+// from the box: the sweep reads only `family`, `internal`, `address` and `cidr`, so `netmask` is
+// derived from the cidr prefix here (a /24 stand-in for the cidr-less entry) purely to keep the
+// fixture consistent. A real capture from the box (host
 // networking, so the container sees the host's NICs and Docker bridges) is the network receipt.
 type Ifaces = ReturnType<typeof networkInterfaces>;
 type IfaceEntry = NonNullable<Ifaces[string]>[number];

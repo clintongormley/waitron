@@ -6,13 +6,16 @@ import type { DiscoveredDevice } from "@waitron/print-agent";
  * (provisioning design §2c). Receipt, 2026-09-11, the owner's Epson TM-T88III at 192.168.20.247: the
  * ESC/POS identity queries `GS I 66` / `GS I 67` over TCP 9100 answered `_EPSON` / `_TM-T88III`; a
  * `dns-sd -B` over every advertised service type, from a Mac that lists the HP LaserJet on the same
- * subnet, showed nothing for that address; and the box's own `_pdl-datastream._tcp` query got exactly one
- * reply, the HP's. So the mDNS pass alone cannot list that printer. The sweep tries a TCP connection
- * to every address on the box's own IPv4 subnets and reports each one that accepts; it sends NO bytes,
- * because a page printer on 9100 prints whatever it receives. It runs only inside a dashboard-opened
- * discovery window, like the mDNS pass. This module is pure — subnet enumeration, the bounded
- * fan-out, the merge — like its siblings `network.ts` / `usb.ts`; the sockets live in
- * `linux-devices.ts`'s gated block (`liveTcpConnect`, `liveSweep`).
+ * subnet, showed nothing for that address; and a `_pdl-datastream._tcp` query sent from the box got
+ * exactly one reply, from the router's mDNS relay at 192.168.10.1 (not decoded; the HP is the only
+ * device that browse listed under the service). So the mDNS pass alone cannot list that printer. The
+ * sweep tries a TCP connection to every address on the box's own IPv4 subnets and reports each one
+ * that accepts; it sends NO bytes, because a page printer on 9100 prints whatever it receives. It
+ * runs only inside a dashboard-opened discovery window, like the mDNS pass. This module is pure —
+ * subnet enumeration, the bounded fan-out, the merge — like its sibling `network.ts`; the sockets
+ * live in `linux-devices.ts`'s gated block (`liveTcpConnect`, `liveSweep`). The sweep itself has not
+ * yet run on the box (provisioning design §7, 2026-09-11 addendum): the live seams are gated for the
+ * network receipt.
  */
 
 /** The widest network the sweep will cover — a /22. Anything wider (a Docker bridge's /16, a wide

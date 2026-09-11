@@ -191,7 +191,8 @@ interface Host {
 - The #289 container is handed one device (`--device /dev/usb/lp0`). Enumerating *all* USB printers and
   their serials needs broader USB access (`/dev/bus/usb` + sysfs). A packaging change, not a design one.
 - Network scanning (mDNS/sweep) needs the container to share the host LAN (host networking); Docker's
-  default bridge does not pass LAN multicast through. Packaging.
+  default bridge does not pass LAN multicast through (and, 2026-09-11, the sweep enumerates the
+  container's own interfaces, so under a bridge it sees only Docker's /16). Packaging.
 - Containerised Bluetooth (BlueZ over DBus) is the least certain — likely a DBus socket mount plus host
   access. If it cannot be given cleanly, that is a packaging fix; the seam and the model are unchanged.
 - **Real unknown for the arriving printer:** does the USB printer enumerate as a standard printer-class
@@ -229,7 +230,8 @@ Verified on the real box with the arriving ESC/POS printer:
     service type (`dns-sd -B _services._dns-sd._udp` from a Mac that listed the HP on the same subnet),
     so the §2c port-9100 sweep was built; a sweep of 192.168.20.0/24 from that Mac with the real connect
     seam returned exactly the HP and the Epson. The sweep has not yet run on the box, which sits on
-    another VLAN and cannot reach either printer's subnet.
+    another VLAN: it routes to both printers (ping and TCP 9100 from the box, 2026-09-11), so a print
+    by address reaches them, but the sweep covers only the box's own subnets and would list neither.
 
 ## 8. The agent loop and wire protocol
 
@@ -371,4 +373,5 @@ superseded un-pin follow-on — [2026-08-26-failover-printing-design.md](2026-08
 **External (to verify on hardware, per CLAUDE.md §1 — not asserted):** network ESC/POS printers
 announcing over mDNS `_pdl-datastream._tcp`; a printer-class USB device binding `usblp` →
 `/dev/usb/lpN`; the container capabilities each scan/pair needs (broader USB, host networking, BlueZ
-DBus). Receipts taken 2026-09-10 with the arriving USB/Bluetooth printer.
+DBus). Receipts taken 2026-09-10 with the arriving USB/Bluetooth printer; the mDNS row's first
+evidence (2026-09-11, §7 addendum) is negative — the Epson TM-T88III announces nothing.

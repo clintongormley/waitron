@@ -151,8 +151,8 @@ services:
     image: ${WAITRON_PRINT_AGENT_IMAGE:-ghcr.io/clintongormley/waitron-print-agent:main}
     restart: unless-stopped
     # Host networking so mDNS printer discovery and the port-9100 sweep see the venue LAN (under a
-    # bridge the sweep would enumerate the container's own subnet and scan the wrong network) and the
-    # setup page binds 9110 on the box directly — same profile as the app service.
+    # bridge the sweep would see only the container's /16, which its /22 cap skips — it would find
+    # nothing) and the setup page binds 9110 on the box directly — same profile as the app service.
     network_mode: host
     # service_started, NOT service_healthy: the app is 503 on /health until provisioned, and the agent
     # follows the primary on its own once the server is up, so it need not wait for health.

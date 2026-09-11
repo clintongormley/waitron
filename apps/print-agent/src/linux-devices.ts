@@ -17,10 +17,11 @@ import { type UsbPrinter, readUsbPrinters } from "./usb.js";
 
 /**
  * The Linux implementation of the {@link Host} device seam (design §7) — USB from sysfs, network over
- * mDNS plus a port-9100 sweep, Bluetooth over BlueZ — composed from the transport-specific parsers. Every parser is pure and
- * tested; only the live I/O (spawning `bluetoothctl`, opening the mDNS multicast socket, opening a TCP
- * socket to each swept address, binding an RFCOMM node) sits behind an injectable seam, so this composition is exercised end to end with fakes
- * and the untested surface is the thin process/socket wiring alone.
+ * mDNS plus a port-9100 sweep, Bluetooth over BlueZ — composed from the transport-specific parsers.
+ * Every parser is pure and tested; only the live I/O (spawning `bluetoothctl`, opening the mDNS
+ * multicast socket, opening a TCP socket to each swept address, binding an RFCOMM node) sits behind
+ * an injectable seam, so this composition is exercised end to end with fakes and the untested surface
+ * is the thin process/socket wiring alone.
  */
 export interface LinuxDeviceOptions {
   /** sysfs root — `/sys` in production; a fixture tmpdir in tests. */
@@ -162,7 +163,8 @@ export function buildPdlQuery(): Buffer {
 
 // --- Live I/O seams: real process/socket work (no branching logic), exercised only at the receipt. ---
 
-/* v8 ignore start -- spawns bluetoothctl; covered by the receipt, not unit tests (no radio in CI). */
+/* v8 ignore start -- spawns bluetoothctl, opens the mDNS and port-9100 sockets; covered by the
+   receipts, not unit tests (no radio or LAN in CI). */
 function runBluetoothctl(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("bluetoothctl", args, { stdio: ["ignore", "pipe", "ignore"] });
@@ -204,7 +206,8 @@ function liveTcpConnect(host: string, port: number, timeoutMs: number): Promise<
   });
 }
 
-/** The port-9100 sweep over the box's own subnets (`sweep.ts` decides the addresses and the fan-out). */
+/** The port-9100 sweep over the box's own subnets (`sweep.ts` decides the addresses and the fan-out).
+ * Not yet run on the box — the network receipt (provisioning design §7, 2026-09-11 addendum). */
 function liveSweep(): Promise<DiscoveredDevice[]> {
   const hosts = sweepCandidates({ interfaces: networkInterfaces });
   return sweepPort({ hosts, port: SWEEP_PORT, connect: liveTcpConnect });

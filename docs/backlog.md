@@ -361,7 +361,8 @@ design-review section apply.
   path/channel at print time; the report is authorised by a new `print_jobs.claimed_by`. **All three
   local transports are discoverable** (IP via mDNS + a 9100 sweep, pre-filling manual host:port entry —
   MAC-keyed IP deferred; #304 shipped the mDNS pass alone and the backlog wrongly recorded the sweep
-  as landed — the owner's Epson TM-T88III answers on 9100 and announces nothing over mDNS, so the
+  as landed — the owner's Epson TM-T88III answers on 9100 and announces nothing over mDNS (observed from a Mac on
+  the owner's other VLAN — provisioning spec §7, 2026-09-11 addendum), so the
   sweep landed separately in `feat/print-agent-9100-sweep`, 2026-09-11: every address on the box's own
   IPv4 subnets up to a /22, connect-only, no bytes sent. *Follow-up:* a printer on ANOTHER subnet than
   the box — the owner's home VLANs, not the deli's flat LAN — is reached by neither pass; a configurable
