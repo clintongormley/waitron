@@ -24,6 +24,8 @@
     "@waitron/identity": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/payments": "workspace:*",
+    "@waitron/payments-stripe": "workspace:*",
+    "@waitron/payments-sumup": "workspace:*",
     "@waitron/scheduler": "workspace:*",
     "@waitron/sync": "workspace:*",
     "@waitron/venue-service": "workspace:*",

@@ -558,6 +558,12 @@ importers:
       '@waitron/payments':
         specifier: workspace:*
         version: link:../payments
+      '@waitron/payments-stripe':
+        specifier: workspace:*
+        version: link:../payments-stripe
+      '@waitron/payments-sumup':
+        specifier: workspace:*
+        version: link:../payments-sumup
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../scheduler

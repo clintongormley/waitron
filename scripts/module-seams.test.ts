@@ -156,6 +156,60 @@ describe("apps/dashboard reaches UI modules only via the registry, never a modul
   });
 });
 
+/**
+ * The card-provider seam (Task 9): `packages/composition/src/card-providers.ts` is the registry
+ * (the server twin of `ALL_MODULES`) — new code that needs a card-payment provider goes through
+ * `CARD_PROVIDERS`, not a direct import of a provider package. Unlike the regime allowlist above,
+ * this one is ADVISORY, not exhaustive: a later slice (Task 12) empties `boot.ts` from the map as
+ * its wiring migrates behind the seat, so this guard only refuses a NEW, non-allowlisted import —
+ * it does not assert that every allowlisted file still needs to be there.
+ */
+const PROVIDER_PACKAGES = ["@waitron/payments-sumup", "@waitron/payments-stripe"];
+
+const PROVIDER_DEFERRED = new Map<string, string>([
+  [
+    "apps/server/src/boot.ts",
+    "env-path buildCardProvider + hosted/webhook wiring; migrates behind the seat later (Task 12)",
+  ],
+  [
+    "apps/server/src/stripe-account.ts",
+    "Stripe account-connect route reads the client/report helpers directly; migrates behind the seat later",
+  ],
+  [
+    "apps/server/src/sumup-account.ts",
+    "SumUp account-connect route reads the client helpers directly; migrates behind the seat later",
+  ],
+  [
+    "apps/server/src/webhook.ts",
+    "Stripe hosted-payment webhook wiring; migrates behind the seat later",
+  ],
+]);
+
+describe("apps/server reaches a card-provider package only via the registry or the deferred allowlist", () => {
+  const files = sourceFiles(join(REPO_ROOT, "apps/server/src"));
+  it("scans the host (not vacuous)", () => {
+    expect(files.some((f) => f.endsWith("boot.ts"))).toBe(true);
+  });
+  it.each(files.map((f) => [relative(REPO_ROOT, f), f]))("%s", (rel, file) => {
+    if (PROVIDER_DEFERRED.has(rel)) return;
+    expect(imports(file, PROVIDER_PACKAGES)).toEqual([]);
+  });
+  it("packages/composition/src/card-providers.ts is the registry and may import both providers", () => {
+    const file = join(REPO_ROOT, "packages/composition/src/card-providers.ts");
+    expect(imports(file, PROVIDER_PACKAGES).sort()).toEqual([...PROVIDER_PACKAGES].sort());
+  });
+  it("finds a planted provider-package import (positive control)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
+    try {
+      const bad = join(dir, "bad.ts");
+      writeFileSync(bad, 'import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";\n');
+      expect(imports(bad, PROVIDER_PACKAGES)).toEqual(["@waitron/payments-sumup"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the detector itself", () => {
   it("finds a regime import in a synthetic source (positive control)", () => {
     const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
