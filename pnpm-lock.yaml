@@ -1184,6 +1184,9 @@ importers:
 
   packages/payments:
     dependencies:
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db

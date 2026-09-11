@@ -81,3 +81,14 @@ export type {
 export { PAYMENTS_CLASSIFICATION } from "./classification.js";
 export { PAYMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { PAYMENTS_CHANGE_SOURCES } from "./classification.js";
+export type {
+  AddReaderResult,
+  CardProviderBuildDeps,
+  CardProviderContribution,
+  CardProviderRuntimeDeps,
+  ConnectResult,
+  ProviderCredentialField,
+  ReaderAddMode,
+  ReaderStatus,
+} from "./card-provider.js";
+export { cardProviderById, selectCardProviders } from "./card-provider.js";

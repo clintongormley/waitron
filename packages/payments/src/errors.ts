@@ -147,5 +147,10 @@ declare module "@waitron/shared" {
       payments: { paymentRef: string; amount: string; reason: string }[];
       count: number;
     };
+    /** Thrown by `selectCardProviders` when two `CardProviderContribution`s in the list declare the
+     * same `providerId` — the registry (Task 9) must not silently let one shadow the other. */
+    "payment.provider_duplicate": { providerId: string };
+    /** Thrown by `cardProviderById` when no contribution in the list declares the requested id. */
+    "payment.provider_unknown": { providerId: string };
   }
 }
