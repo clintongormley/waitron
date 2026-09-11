@@ -425,6 +425,22 @@ describe("Print API over real Postgres (as the app role)", () => {
     const rows = (await res.json()) as Array<{ id: string; nodeId: string | null }>;
     expect(rows.find((r) => r.id === id)?.nodeId).toBe(someNode);
   });
+
+  it("the agents list is tenant-scoped — tenant A's manager never sees tenant B's agents (CLAUDE.md §3)", async () => {
+    // Since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so the list route must carry
+    // its own `tenantId` predicate; without it tenant A's manager reads EVERY tenant's agents in a
+    // multi-tenant DB. Proven by DELETION: drop the `.where(eq(printAgents.tenantId, …))` from the list
+    // route and tenant B's row appears in tenant A's list below. Both agents seeded directly (owner SQL).
+    const app = mountApp(tenantA);
+    const mineId = await seedNodeAgent(tenantA, randomUUID());
+    const tenantB = await seedTenantWithLocation();
+    const theirsId = await seedNodeAgent(tenantB, randomUUID());
+    const res = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });
+    expect(res.status).toBe(200);
+    const ids = ((await res.json()) as Array<{ id: string }>).map((r) => r.id);
+    expect(ids).toContain(mineId);
+    expect(ids).not.toContain(theirsId);
+  });
 });
 
 describe("Station ↔ printer mapping routes over real Postgres (printer.manage)", () => {

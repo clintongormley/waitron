@@ -493,8 +493,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/print-agents", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // The deployment holds one tenant per database. This read has no tenant filter. Newest
-      // enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
+      // Tenant-scoped like every other read (§3): since RLS was dropped (#255) `withTenant` no longer
+      // isolates SELECTs, so without the explicit `tenantId` predicate a manager would see every
+      // tenant's agents in a multi-tenant DB (mirrors the revoke/allow routes below and device-api.ts).
+      // Newest enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
@@ -508,6 +510,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             enrolledAt: printAgents.enrolledAt,
           })
           .from(printAgents)
+          .where(eq(printAgents.tenantId, deps.cfg.tenantId))
           .orderBy(desc(printAgents.enrolledAt)),
       );
       return c.json(rows);
