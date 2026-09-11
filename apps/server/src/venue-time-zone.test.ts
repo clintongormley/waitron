@@ -27,14 +27,29 @@ it("reads the location's stored time zone instead of inferring it from language"
   expect(await readVenueTimeZone(suite.db, { tenantId, locationId })).toBe("Atlantic/Canary");
 });
 
-it("refuses a location belonging to a different tenant", async () => {
-  await expect(
-    readVenueTimeZone(suite.db, { tenantId: otherTenantId, locationId }),
-  ).rejects.toMatchObject({ code: "server.config_invalid" });
+it("uses UTC for a location belonging to a different tenant", async () => {
+  await expect(readVenueTimeZone(suite.db, { tenantId: otherTenantId, locationId })).resolves.toBe(
+    "UTC",
+  );
 });
 
-it("refuses a missing location", async () => {
-  await expect(
-    readVenueTimeZone(suite.db, { tenantId, locationId: randomUUID() }),
-  ).rejects.toMatchObject({ code: "server.config_invalid" });
+it("uses UTC when the location is missing", async () => {
+  await expect(readVenueTimeZone(suite.db, { tenantId, locationId: randomUUID() })).resolves.toBe(
+    "UTC",
+  );
+});
+
+it.each(["", "Not/AZone"])("uses UTC for an invalid stored zone %j", async (timeZone) => {
+  const result = await suite.db.execute<{ id: string }>(sql`
+    insert into locations (tenant_id, name, invoice_locales, operation_description, time_zone)
+    values (${tenantId}, 'Invalid zone venue', array['es-ES'], 'Retail', ${timeZone}) returning id
+  `);
+  const invalidLocationId = result.rows[0]!.id;
+  try {
+    expect(await readVenueTimeZone(suite.db, { tenantId, locationId: invalidLocationId })).toBe(
+      "UTC",
+    );
+  } finally {
+    await suite.db.execute(sql`delete from locations where id = ${invalidLocationId}`);
+  }
 });

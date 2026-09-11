@@ -67,11 +67,8 @@ export {
   ACCOUNT_ACTION_CODE_ATTEMPTS,
   ACCOUNT_ACTION_CODE_TTL_MS,
   completeAccountAction,
-  completeAccountActionByCode,
   inspectAccountAction,
-  inspectAccountActionByCode,
   issueAccountAction,
-  requestInvitationAction,
   requestAccountRecoveryAction,
 } from "./account-action.js";
 export type {

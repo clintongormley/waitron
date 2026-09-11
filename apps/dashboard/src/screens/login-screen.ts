@@ -346,8 +346,12 @@ export class LoginScreen extends LitElement {
   }
 
   #cancelLogin(): void {
-    this.#cancelPasskeyCeremony();
     forgetLoginPreference();
+    this.#resetLoginForm();
+  }
+
+  #resetLoginForm(): void {
+    this.#cancelPasskeyCeremony();
     this.email = "";
     this.rememberedEmail = undefined;
     this.offerAfterLogin = false;
@@ -358,6 +362,7 @@ export class LoginScreen extends LitElement {
     this.rememberEmail = false;
     this.step = "email";
     this.#focusField("email");
+    void this.#conditionalPasskeyLogin();
   }
 
   #cancelAccountAction(): void {
@@ -368,7 +373,7 @@ export class LoginScreen extends LitElement {
     if (new URLSearchParams(window.location.search).has("token")) {
       history.replaceState(null, "", "/manage/");
     }
-    this.#cancelLogin();
+    this.#resetLoginForm();
   }
 
   async #inspectAccountAction(): Promise<void> {
@@ -809,7 +814,9 @@ export class LoginScreen extends LitElement {
           <dashboard-language-chooser
             .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
           ></dashboard-language-chooser>
-          <h1>${t("account.setup_title")}</h1>
+          <h1>
+            ${this.actionPurpose === "password_reset" ? t("account.reset_title") : t("account.setup_title")}
+          </h1>
           ${this.actionValidated ? this.#renderLoginContext(false) : nothing}
           <input
             class="autofill-username"

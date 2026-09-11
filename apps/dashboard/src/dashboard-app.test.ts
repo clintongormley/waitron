@@ -821,6 +821,42 @@ describe("dashboard-app", () => {
     expect(escaped).not.toHaveBeenCalled();
   });
 
+  it("preserves an existing shortcut when account setup finishes without a Remember choice", async () => {
+    const saved = JSON.stringify({ email: "saved@example.test", method: "password" });
+    localStorage.setItem("waitron-login-preference", saved);
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({
+          personId: "new-person",
+          role: "manager",
+          email: "new@example.test",
+          locale: null,
+          venueLocale: "es-ES",
+          venueName: "Deli",
+          permissions: [],
+          modules: [],
+        }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    login(el)!.dispatchEvent(
+      new CustomEvent("logged-in", {
+        detail: {
+          personId: "new-person",
+          accountSetup: true,
+          loginMethod: "password",
+          rememberEmail: false,
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(localStorage.getItem("waitron-login-preference")).toBe(saved);
+  });
+
   it("remembers the authenticated email and method only after login succeeds", async () => {
     const api = stubApi({
       getMe: vi
@@ -922,7 +958,7 @@ describe("dashboard-app", () => {
     });
   });
 
-  it.each(["failed", "different-account", "not-callback", "unchecked"])(
+  it.each(["failed", "different-account", "not-callback", "no-intent"])(
     "does not save Google preference for %s",
     async (scenario) => {
       history.replaceState(
@@ -930,7 +966,7 @@ describe("dashboard-app", () => {
         "",
         scenario === "not-callback" ? "/manage/" : "/manage/?login=google",
       );
-      if (scenario !== "unchecked")
+      if (scenario !== "no-intent")
         sessionStorage.setItem(
           "waitron-google-login-preference",
           JSON.stringify({ expiresAt: Date.now() + 60000, rememberedEmail: "saved@example.com" }),

@@ -317,13 +317,13 @@ explicit action. Navigation, refresh, logout and session expiry must leave that 
 Never use server-side account status or passkey enrolment to select a public screen, because the
 difference would reveal whether the account exists or has a passkey.
 
-On method screens, use **Login with password** or **Login with passkey** as the heading. Show an
+On method screens, use **Login with password**, **Login with passkey** or **Login with Google** as the heading. Show an
 Email label and the address as text, with an accessible change-account icon on the right. That icon
 clears both the current attempt and the saved email/method, then returns to blank email entry.
 Keep the hidden semantic username input for password managers. Ordinary login has no separate
 Cancel or Forget button.
 
-Show alternative methods as a persistent bulleted list of links. Put **I've forgotten my password**
+On password, passkey and Google screens, show alternative methods as a persistent bulleted list of links. Put **I've forgotten my password**
 directly below the password field. Recovery opens **Check your email** with the address, delivery
 guidance and a one-minute resend countdown. Use the same public acknowledgement for every address:
 pending accounts receive a setup link and active accounts receive a reset link. Invitation emails
@@ -333,7 +333,7 @@ Offer **Remember my email on this device** only on initial email entry. Save the
 and successful method in localStorage only when selected; unchecked Remember writes neither local
 nor session storage. Keep the current email in component memory while you change methods. Saving a
 shortcut neither stores credentials nor extends the authenticated session, and one account's consent
-must not carry over to a different account selected by a passkey or Google.
+must not carry over to a different account selected by a passkey or Google. Cancelling or completing an account-activation link leaves an unrelated saved shortcut alone; that flow has no Remember choice.
 
 Keep an authenticator or recovery code off the password form. Request it on a separate screen only
 after the server accepts the password and says the account requires a second factor. Keep the

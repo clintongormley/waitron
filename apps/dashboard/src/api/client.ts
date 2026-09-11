@@ -1412,27 +1412,11 @@ export class DashboardApi {
     return this.#request<void>("/management-api/password-reset", "POST", { email });
   }
 
-  requestInvitation(email: string): Promise<void> {
-    return this.#request<void>("/management-api/invitation-resend", "POST", { email });
-  }
-
   inspectAccountAction(
     token: string,
     purpose: "invitation" | "password_reset",
   ): Promise<{ email: string; purpose: "invitation" | "password_reset" }> {
     return this.#request("/management-api/account-actions/inspect", "POST", { token, purpose });
-  }
-
-  inspectAccountActionByCode(
-    email: string,
-    code: string,
-    purpose: "invitation" | "password_reset",
-  ): Promise<{ email: string; purpose: "invitation" | "password_reset" }> {
-    return this.#request("/management-api/account-actions/inspect", "POST", {
-      email,
-      code,
-      purpose,
-    });
   }
 
   getProfile(): Promise<OwnProfile> {
@@ -1508,26 +1492,6 @@ export class DashboardApi {
       "POST",
       {
         token,
-        purpose,
-        password,
-        ...(pin === undefined ? {} : { pin }),
-      },
-    );
-  }
-
-  completeAccountActionByCode(
-    email: string,
-    code: string,
-    purpose: "invitation" | "password_reset",
-    password: string,
-    pin?: string,
-  ): Promise<{ personId: string; authenticated: boolean }> {
-    return this.#request<{ personId: string; authenticated: boolean }>(
-      "/management-api/account-actions/complete",
-      "POST",
-      {
-        email,
-        code,
         purpose,
         password,
         ...(pin === undefined ? {} : { pin }),

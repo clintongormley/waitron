@@ -590,7 +590,46 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("inspects an invitation without consuming it and resends only for a pending account", async () => {
+  it("removes public invitation replacement and rejects code-only account actions", async () => {
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId, async (message) => {
+      sent.push(message);
+    });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const created = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(invitationBody("Code retirement", "retired-code@x.com")),
+    });
+    expect(created.status).toBe(201);
+    const codeBody = {
+      email: "retired-code@x.com",
+      code: sent[0]!.code ?? "123456",
+      purpose: "invitation",
+      password: "a secure password",
+      pin: "1234",
+    };
+    for (const action of ["inspect", "complete"]) {
+      const result = await app.request(`/management-api/account-actions/${action}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(codeBody),
+      });
+      expect(result.status).toBe(400);
+      expect(await result.json()).toEqual({
+        error: { code: "account_action.invalid", params: {} },
+      });
+    }
+    const removed = await app.request("/management-api/invitation-resend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "retired-code@x.com" }),
+    });
+    expect(removed.status).toBe(404);
+  });
+
+  it("inspects an invitation token without consuming it and allows manager resends for pending accounts", async () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId, async (message) => {
@@ -604,6 +643,8 @@ describe("Management API staff + session routes over real Postgres", () => {
     });
     expect(created.status).toBe(201);
     const original = sent[0]!;
+    expect(original.code).toBeUndefined();
+    expect(original.codeExpiresAt).toBeUndefined();
     const token = new URL(original.actionUrl).searchParams.get("token")!;
 
     const inspected = await app.request("/management-api/account-actions/inspect", {
@@ -631,40 +672,26 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(completed.status).toBe(200);
     expect(completed.headers.get("set-cookie")).toContain("waitron_management_session=");
 
-    const actionsBeforeIneligibleResends = await suite.admin.execute<{ count: string }>(sql`
-      select count(*) as count from management_account_actions where tenant_id = ${tenantId}`);
-
-    const unknown = await app.request("/management-api/invitation-resend", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "unknown@x.com" }),
-    });
-    const active = await app.request("/management-api/invitation-resend", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: MANAGER_EMAIL }),
-    });
-    expect([unknown.status, active.status]).toEqual([202, 202]);
-    const actionsAfterIneligibleResends = await suite.admin.execute<{ count: string }>(sql`
-      select count(*) as count from management_account_actions where tenant_id = ${tenantId}`);
-    expect(actionsAfterIneligibleResends.rows[0]!.count).toBe(
-      actionsBeforeIneligibleResends.rows[0]!.count,
-    );
-
     const secondCreated = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(invitationBody("Pending Again", "pending-resend@x.com")),
     });
     expect(secondCreated.status).toBe(201);
-    const resent = await app.request("/management-api/invitation-resend", {
+    const secondId = ((await secondCreated.json()) as { id: string }).id;
+    const resent = await app.request(`/management-api/staff/${secondId}/invitation`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "  PENDING-RESEND@X.COM  " }),
+      headers: { cookie },
     });
-    expect(resent.status).toBe(202);
-    await vi.waitFor(() => expect(sent).toHaveLength(3));
+    expect(resent.status).toBe(200);
+    expect(await resent.json()).toEqual({ invitationSent: true });
+    expect(sent).toHaveLength(3);
     expect(sent[2]!.email).toBe("pending-resend@x.com");
+    expect(sent[2]!.code).toBeUndefined();
+    const hiddenCodes = await suite.admin.execute<{ count: string }>(
+      sql`select count(*) as count from management_account_actions where tenant_id=${tenantId} and purpose='invitation' and (code_hash is not null or code_expires_at is not null)`,
+    );
+    expect(hiddenCodes.rows[0]!.count).toBe("0");
   });
 
   it("creates a person with an email and lists it back", async () => {

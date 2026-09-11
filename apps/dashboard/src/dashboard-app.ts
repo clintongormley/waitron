@@ -716,11 +716,14 @@ export class DashboardApp extends LitElement {
       }>
     ).detail;
     const accountSetup = detail?.accountSetup === true;
-    const preference: PendingLoginPreference = {
-      method: detail?.loginMethod ?? "password",
-      persistent: detail?.rememberEmail === true,
-      rememberedEmail: detail?.rememberedEmail,
-    };
+    // Account activation has no Remember choice, so it does not change another saved shortcut.
+    const preference: PendingLoginPreference | undefined = accountSetup
+      ? undefined
+      : {
+          method: detail?.loginMethod ?? "password",
+          persistent: detail?.rememberEmail === true,
+          rememberedEmail: detail?.rememberedEmail,
+        };
     await this.#probeSession(preference);
     if (accountSetup && this.sessionRole !== undefined && this.isConnected) {
       this.#selectScreen("profile");

@@ -54,15 +54,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     requestPasswordReset: vi.fn().mockResolvedValue(undefined),
-    requestInvitation: vi.fn().mockResolvedValue(undefined),
     inspectAccountAction: vi.fn((_token, purpose) =>
       Promise.resolve({ email: "new@example.test", purpose }),
     ),
-    inspectAccountActionByCode: vi.fn((_email, _code, purpose) =>
-      Promise.resolve({ email: "new@example.test", purpose }),
-    ),
     completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1", authenticated: true }),
-    completeAccountActionByCode: vi.fn().mockResolvedValue({ personId: "p1", authenticated: true }),
     passkeyAuthOptions: vi
       .fn()
       .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "AQID" } }),
@@ -125,7 +120,54 @@ async function mountPasskeyOffer(overrides: Partial<DashboardApi> = {}) {
 }
 
 describe("login-screen", () => {
-  it("leaves a usable sign-in form if the shell cannot confirm the new session", async () => {
+  it("keeps an opted-in account when cancelling someone else's setup link", async () => {
+    const saved = JSON.stringify({ email: "saved@example.test", method: "password" });
+    localStorage.setItem("waitron-login-preference", saved);
+    history.replaceState(null, "", "/manage/account?token=setup&purpose=invitation");
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-account-action]")!.click();
+    await flush(el);
+    expect(localStorage.getItem("waitron-login-preference")).toBe(saved);
+  });
+
+  it("keeps an opted-in account while completing someone else's setup link", async () => {
+    const saved = JSON.stringify({ email: "saved@example.test", method: "password" });
+    localStorage.setItem("waitron-login-preference", saved);
+    const { el } = await mountPasskeyOffer();
+    expect(localStorage.getItem("waitron-login-preference")).toBe(saved);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
+    await flush(el);
+    expect(localStorage.getItem("waitron-login-preference")).toBe(saved);
+  });
+
+  it("restarts passive passkey autofill after changing away from a remembered account", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    vi.mocked(navigator.credentials.get).mockImplementation(() => new Promise(() => undefined));
+    localStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "saved@example.test", method: "password" }),
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=change-account]")!.click();
+    await flush(el);
+    expect(navigator.credentials.get).toHaveBeenCalledWith(
+      expect.objectContaining({ mediation: "conditional" }),
+    );
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+  });
+
+  it("uses a reset heading and unified Spanish replacement confirmation for a reset link", async () => {
+    expect(t("account.link_resent", "es-ES")).toContain("restablecer");
+    history.replaceState(null, "", "/manage/account?token=reset&purpose=password_reset");
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("h1")?.textContent?.trim()).toBe(t("account.reset_title"));
+  });
+
+  it("clears enrollment errors and returns to password entry after Skip", async () => {
     const { el } = await mountPasskeyOffer();
     input(el, "passkey-name", "x".repeat(81));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
@@ -215,7 +257,7 @@ describe("login-screen", () => {
     expect(loggedIn).toHaveBeenCalledTimes(1);
   });
 
-  it("requests a fresh authenticator code if registration reauthentication rejects an old code", async () => {
+  it("requests an authenticator code when registration reauthentication requires it", async () => {
     const { el, api } = await mountPasskeyOffer({
       passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
     });
