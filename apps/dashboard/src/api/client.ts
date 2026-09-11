@@ -1057,8 +1057,7 @@ export interface PrinterInput {
  * that reported it (null if it since went away), `make`/`model`/`name` its self-reported identity when
  * known, and `alreadyRegistered` is true when it matches a registered printer — a usb/bluetooth device
  * on its `localKey`, a network device on host:port — with `printerId` saying which; both discovered lists
- * hide those rows and the registered printer's own row shows when it was seen. Unregistered devices come
- * first (server order). */
+ * hide those rows and the registered printer's own row shows when it was seen. */
 export interface DiscoveredPrinter {
   agentId: string;
   agentName: string | null;
@@ -2365,7 +2364,7 @@ export class DashboardApi {
   }
 
   /** `GET /management-api/discovered-printers` — the merged in-memory list of devices the agents
-   * currently see (always-on USB/BT presence) or found in an open discovery window, unregistered first.
+   * currently see (always-on USB/BT presence) or found in an open discovery window.
    * Each carries the registered printer it matches (`printerId`, on the local key or on host:port) and
    * when it was last reported (`lastSeenAt`): the create surfaces list only the unmatched ones, and the
    * registered list shows the seen-status against the matched printer. */

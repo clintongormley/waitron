@@ -203,6 +203,7 @@ async function createUsbPrinter(app: Hono, localKey: string, name = "USB"): Prom
   return ((await res.json()) as { id: string }).id;
 }
 
+/** Create a network_tcp printer on host:port via the management route, returning its id. */
 async function createNetworkPrinter(
   app: Hono,
   host: string,

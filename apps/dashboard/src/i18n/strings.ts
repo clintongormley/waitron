@@ -405,7 +405,7 @@ export const en = {
   "printers.discovered_seen_on": "Seen on {agent}",
   "printers.register": "Register",
   "printers.add_result": "Add",
-  "printers.seen_at": "Seen on {agent} at {time}",
+  "printers.seen_at": "Seen on {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Pair a Bluetooth printer first on the box's setup page (port 9110); it then appears below.",
   "printers.test_print": "Test print",
@@ -1239,7 +1239,7 @@ export const es: Record<StringKey, string> = {
   "printers.discovered_seen_on": "Detectada en {agent}",
   "printers.register": "Dar de alta",
   "printers.add_result": "Añadir",
-  "printers.seen_at": "Detectada en {agent} a las {time}",
+  "printers.seen_at": "Detectada en {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Empareja primero una impresora Bluetooth en la página de configuración del equipo (puerto 9110); después aparecerá abajo.",
   "printers.test_print": "Imprimir prueba",

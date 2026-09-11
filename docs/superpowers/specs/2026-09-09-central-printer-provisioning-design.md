@@ -37,7 +37,8 @@ device paths.
   with a name (discovery ≠ exposure). The key is the USB **serial** or the Bluetooth **MAC** — stable
   across reboot/replug — never a raw device path.
 - **(c) IP printers are discoverable too** (mDNS, port-9100 sweep fallback), which pre-fills — does not
-  replace — manual address entry. For v1 an IP printer is addressed by **host:port** (recommend a DHCP
+  replace — manual address entry _(2026-09-11: a found unregistered printer is added in one click; the
+  manual form is for printers the scan cannot see)_. For v1 an IP printer is addressed by **host:port** (recommend a DHCP
   reservation); MAC-keyed IP resolution is a noted follow-up (§13).
 - **(d) Bluetooth is in scope now** as a third live transport, with a **box-local pairing** step.
 - **(e) Active discovery is on-demand, opened from the dashboard** (a venue-wide window), never
@@ -265,7 +266,7 @@ New:
 | Route | Auth | Does |
 | --- | --- | --- |
 | `POST /management-api/printer-discovery/start` | `printer.manage` | opens the venue discovery window (sets `discoveryUntil` in memory); returns the window end. |
-| `GET /management-api/discovered-printers` | `printer.manage` | the merged in-memory discovered list — `{ agentId, agentName, transport, localKey, make, model, alreadyRegistered }` (2026-09-11: plus `host`, `port`, `name`, `printerId`, `lastSeenAt`) — unregistered devices first. |
+| `GET /management-api/discovered-printers` | `printer.manage` | the merged in-memory discovered list — `{ agentId, agentName, transport, localKey, make, model, alreadyRegistered }` (2026-09-11: plus `host`, `port`, `name`, `printerId`, `lastSeenAt`). |
 
 The pairing/setup-page Bluetooth **Scan/Pair** lives in `apps/print-agent` (the box), not here — it acts
 on local hardware and is outside the outbound-only server link.
@@ -281,7 +282,8 @@ The single form with the **agent dropdown is replaced** (the dropdown is gone fo
 - **Add USB / Bluetooth printer** — a **"discovered printers"** list (from
   `GET /management-api/discovered-printers`): each row shows make/model, which box sees it, and its
   stable ID, with a **Register** action that asks only for a name. Already-registered devices are
-  marked.
+  marked _(2026-09-11: hidden from the list instead; their seen-status shows against the registered
+  printer's row)_.
 - **Bluetooth, first time** — a one-line pointer to the box's setup page to **pair** the printer, after
   which it appears in the discovered list.
 

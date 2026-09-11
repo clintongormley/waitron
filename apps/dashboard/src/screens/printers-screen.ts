@@ -394,7 +394,7 @@ export class PrintersScreen extends LitElement {
         this.api.joinRequests("print_agent"),
         // The discovered inventory also feeds the "seen on … at …" status against each registered
         // printer, so it loads with the list — and re-reads on every mutation's reload, so the status
-        // stays current after an edit (two cheap selects on an in-memory map; not worth a second path).
+        // stays current after an edit (two tenant-scoped selects plus an in-memory merge; cheap).
         this.api.listDiscoveredPrinters(),
       ]);
       // Pair each printer id with its OWN station set at fetch time, so the correlation cannot drift on
@@ -725,8 +725,8 @@ export class PrintersScreen extends LitElement {
     );
   }
 
-  /** The matched discovered entry per registered printer id — built once per render for the rows
-   * (the `printerStations` shape), never a scan of the array per row. */
+  /** The matched discovered entry per registered printer id — built once per render for the rows,
+   * never a scan of the array per row. */
   #seenByPrinter(): Map<string, DiscoveredPrinter> {
     const seen = new Map<string, DiscoveredPrinter>();
     for (const d of this.discovered) if (d.printerId !== null) seen.set(d.printerId, d);
@@ -773,27 +773,19 @@ export class PrintersScreen extends LitElement {
 
   /** Register a discovered usb/bluetooth device as a printer: create it with the row's transport + its
    * stable `localKey` and the name typed against the row. A blank name is a no-op. On success the row's
-   * typed name clears and both the printer list and the discovered inventory reload (so the row flips to
-   * "registered"); a rejection (a device already registered → `printer.already_registered`) becomes the
-   * `errorKey` banner, and the discovered list is NOT reloaded so the banner survives. Shares the
-   * `submitting` gate with the other form submissions. */
+   * typed name clears and the screen reloads (the list and the discovered inventory, so the row leaves
+   * the discovered list); a rejection (a device already registered → `printer.already_registered`)
+   * becomes the `errorKey` banner and nothing reloads, so the banner survives. Shares the `submitting`
+   * gate with the other form submissions through `#submit`. */
   async #registerDiscovered(device: DiscoveredPrinter): Promise<void> {
-    if (this.submitting) return;
     const localKey = device.localKey;
     if (localKey === undefined) return;
     const name = (this.registerNames[localKey] ?? "").trim();
     if (name === "") return;
-    this.errorKey = null;
-    this.submitting = true;
-    try {
+    await this.#submit(async () => {
       await this.api.createPrinter({ name, transport: device.transport, localKey });
       this.registerNames = { ...this.registerNames, [localKey]: "" };
-      await this.#load(); // also re-reads the discovered list, so the row leaves it
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    } finally {
-      this.submitting = false;
-    }
+    });
   }
 
   /** Apply a partial edit to the printer row `id` holds, replacing it in state with a fresh object (so a
@@ -1401,22 +1393,22 @@ export class PrintersScreen extends LitElement {
               }
             </span>
           </div>
-          ${html`<wt-input
-              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="register-${localKey}"]`))}
-              label=${t("printers.name")}
-              data-test="register-name-${localKey}"
-              .value=${this.registerNames[localKey] ?? ""}
-              @wt-change=${(e: CustomEvent<{ value: string }>) =>
-                this.#onNewField(e, (v) => this.#onRegisterName(localKey, v))}
-            ></wt-input>
-            <wt-button
-              variant="primary"
-              size="sm"
-              data-test="register-${localKey}"
-              ?disabled=${this.submitting}
-              @click=${() => void this.#registerDiscovered(device)}
-              >${t("printers.register")}</wt-button
-            >`}
+          <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="register-${localKey}"]`))}
+            label=${t("printers.name")}
+            data-test="register-name-${localKey}"
+            .value=${this.registerNames[localKey] ?? ""}
+            @wt-change=${(e: CustomEvent<{ value: string }>) =>
+              this.#onNewField(e, (v) => this.#onRegisterName(localKey, v))}
+          ></wt-input>
+          <wt-button
+            variant="primary"
+            size="sm"
+            data-test="register-${localKey}"
+            ?disabled=${this.submitting}
+            @click=${() => void this.#registerDiscovered(device)}
+            >${t("printers.register")}</wt-button
+          >
         </div>
       </wt-card>
     </li>`;

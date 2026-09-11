@@ -77,7 +77,8 @@ const printers: Printer[] = [
 ];
 
 // The discovered inventory the create surface reads for usb/bluetooth: one unregistered USB device an
-// agent currently sees, and one already-registered one (shown marked, no Register action).
+// agent currently sees, and one already-registered one (hidden from the list; its seen-status shows on
+// p3's row).
 const discovered: DiscoveredPrinter[] = [
   {
     agentId: "a1",
@@ -1015,7 +1016,6 @@ describe("printers-screen", () => {
     );
     // The unregistered SN-1, by contrast, DOES offer the Register action.
     expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
-    expect(q(el, "[data-test=discovered-registered-SN-1]")).toBeNull();
   });
 
   it("shows the empty placeholder when no USB/Bluetooth devices are discovered", async () => {

@@ -70,6 +70,17 @@ const printers: Printer[] = [
     ticketScope: "order",
     active: false,
   },
+  {
+    id: "p3",
+    name: "Barra USB",
+    transport: "usb",
+    host: null,
+    port: null,
+    localKey: "SN-2",
+    pollId: null,
+    ticketScope: "station",
+    active: false,
+  },
 ];
 
 const jobs: PrintJobRow[] = [
@@ -119,8 +130,8 @@ const tills: Till[] = [
 const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
 
 // Two discovered USB devices — one unregistered (its name field + Register action render) and one
-// already-registered (its "Registered" marker renders) — so the usb/bluetooth create surface is in the
-// a11y tree. Typed loosely (the stub is cast to DashboardApi), the shape matching DiscoveredPrinter.
+// already-registered (hidden from the list; its seen-status renders on printer p3's row) — so the
+// usb/bluetooth create surface is in the a11y tree. Typed loosely (the stub is cast to DashboardApi), the shape matching DiscoveredPrinter.
 const discovered = [
   {
     agentId: "a1",
@@ -143,7 +154,7 @@ const discovered = [
     model: "TSP143",
     name: null,
     alreadyRegistered: true,
-    printerId: "p1",
+    printerId: "p3",
     lastSeenAt: "2026-08-25T14:30:00.000Z",
   },
 ];
@@ -250,7 +261,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=register-SN-1]")).toBeTruthy();
     expect(el.shadowRoot!.querySelector("[data-test=discovered-row-SN-2]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=printer-last-seen-p1]")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("[data-test=printer-last-seen-p3]")).toBeTruthy();
     await expectNoA11yViolations(host);
 
     // Bluetooth: the pairing note + Refresh action + the (filtered-empty) discovered placeholder.
