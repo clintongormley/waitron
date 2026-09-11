@@ -124,7 +124,7 @@ select_image() {
     safe="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9._-' '-')"; safe="${safe:0:100}"
     tag="waitron:${safe}"; agent_tag="waitron-print-agent:${safe}"
     # Full git URL inline (not via a variable) so the guard can pin `waitron.git#<ref>` as text.
-    # Docker fetches the ref itself; -f is relative to the fetched repo root, as try-branch.sh did.
+    # Docker fetches the ref itself; -f is relative to the fetched repo root, not the local checkout.
     docker build -t "$tag" -f deploy/Dockerfile "https://github.com/clintongormley/waitron.git#${ref}"
     docker build -t "$agent_tag" -f deploy/Dockerfile --target print-agent "https://github.com/clintongormley/waitron.git#${ref}"
     env_set WAITRON_IMAGE "$tag"
@@ -154,6 +154,9 @@ EOF
 # authority when the cluster is reachable. A never-provisioned box has neither and is safe to wipe.
 is_production() {
   local env_line stamp
+  # Both reads swallow their own failure (`|| true`): if the state volume is gone or the db is down,
+  # neither signal can be read, and the box is treated as non-production — deliberately fail-open,
+  # because a box with no readable state has no fiscal data to protect.
   env_line="$(docker run --rm -v waitron_state:/s "$HELPER_IMAGE" cat /s/trading.env 2>/dev/null | grep '^WAITRON_ENV=' || true)"
   case "$env_line" in *=production) return 0 ;; esac
   # The deployment stamp lives in the app database, named `waitron` (node-entry.ts DATABASE), NOT the

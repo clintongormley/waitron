@@ -91,7 +91,7 @@ instead of relying on the default `main`, and it builds that ref's image on the 
 pulling: Docker fetches the ref itself, so no checkout or `pnpm` is needed.
 
 ```bash
-sudo bash waitron.sh install <branch-or-ref> [extra docker build args…]
+sudo bash waitron.sh install <branch-or-ref>
 ```
 
 It tags the image after the ref (`waitron:<ref>`, with unsafe characters dashed and the name capped
