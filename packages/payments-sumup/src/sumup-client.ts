@@ -106,8 +106,24 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       const r = await call("GET", `/v2.1/merchants/${mc}/transactions?${param}`);
       if (r.status === 404) return null;
       if (r.status >= 400) throw new Error(`sumup GET transactions: HTTP ${r.status}`);
-      const t = r.json as { id: string; status: string; amount: number };
-      return { id: t.id, status: t.status, amount: fromMajorUnits(t.amount) };
+      const t = r.json as {
+        id: string;
+        status: string;
+        amount: number;
+        card?: { last_4_digits?: string; type?: string };
+        entry_mode?: string;
+        auth_code?: string | null;
+      };
+      return {
+        id: t.id,
+        status: t.status,
+        amount: fromMajorUnits(t.amount),
+        ...(t.card?.last_4_digits && t.card.type
+          ? { card: { last4: t.card.last_4_digits, type: t.card.type } }
+          : {}),
+        ...(t.entry_mode === undefined ? {} : { entryMode: t.entry_mode }),
+        ...(t.auth_code === undefined ? {} : { authCode: t.auth_code }),
+      };
     },
     async refund(p: { transactionId: string; amount?: Decimal }) {
       const r = await call(

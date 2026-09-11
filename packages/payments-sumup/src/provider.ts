@@ -4,6 +4,7 @@ import type { Decimal, TenantId, TillId } from "@waitron/shared";
 import { withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
+  CardDetails,
   CollectParams,
   ForwardResult,
   IncidentSink,
@@ -53,11 +54,43 @@ export interface SumUpCloudProviderOptions {
   now?: () => Date;
 }
 
+/** SumUp's `entry_mode` normalised to the receipt's four values. Its input vocabulary is
+ * unverified — only `contactless` and `chip` are measured against the live reader — so anything
+ * unrecognised (and an absent value) maps to `unknown` rather than being trusted through. */
+export function mapEntryMode(raw: string | undefined): CardDetails["entryMode"] {
+  switch (raw) {
+    case "contactless":
+      return "contactless";
+    case "chip":
+      return "chip";
+    case "magstripe":
+    case "swipe":
+      return "swipe";
+    default:
+      return "unknown";
+  }
+}
+
+/** Build the receipt's `CardDetails` from a transaction that carries a card object. A transaction
+ * with none returns `undefined` — SumUp omits card facts on some successful sales, and a missing
+ * sub-field yields a partial/absent block, NEVER a failed capture: the money has moved. `scheme` is
+ * the network as SumUp names it, underscores turned to spaces; `authCode` is null when absent. */
+export function cardFromTransaction(t: SumUpTransaction): CardDetails | undefined {
+  if (t.card === undefined) return undefined;
+  return {
+    scheme: t.card.type.replaceAll("_", " "),
+    last4: t.card.last4,
+    entryMode: mapEntryMode(t.entryMode),
+    authCode: t.authCode ?? null,
+  };
+}
+
 /** One SumUp status mapped onto a T2 decision, as DATA. `pending` = keep polling; `deferred` = a
  * status this adapter is not entitled to act on (`REFUNDED`, unknown) — the loop stops, the row
- * stays `attempting`, and `resolvePending` decides (spec §2/§3). */
+ * stays `attempting`, and `resolvePending` decides (spec §2/§3). `card` rides the `captured`
+ * variant so both capture paths persist it without re-fetching the transaction. */
 type PollOutcome =
-  | { kind: "captured"; transactionId: string; settledAt: Date }
+  | { kind: "captured"; transactionId: string; settledAt: Date; card?: CardDetails }
   | { kind: "failed" }
   | { kind: "pending" }
   | { kind: "deferred" };
@@ -151,12 +184,14 @@ export class SumUpCloudProvider implements PaymentProvider {
     if (outcome.kind === "pending" || outcome.kind === "deferred") {
       return this.pendingResult(paymentRef, params.amount);
     }
+    const card = outcome.kind === "captured" ? outcome.card : undefined;
     const row = await this.inTenant((tx) =>
       outcome.kind === "captured"
         ? captureAttempting(tx, {
             ...key,
             settledAt: outcome.settledAt,
             externalRef: outcome.transactionId,
+            card,
           })
         : failAttempting(tx, key),
     );
@@ -166,6 +201,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       state: row.state,
       amount: params.amount,
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
+      card,
     };
   }
 
@@ -178,7 +214,13 @@ export class SumUpCloudProvider implements PaymentProvider {
    * the reader has not started the checkout) is `pending`. */
   static classify(t: SumUpTransaction | null, now: Date): PollOutcome {
     if (t === null || t.status === "PENDING") return { kind: "pending" };
-    if (t.status === "SUCCESSFUL") return { kind: "captured", transactionId: t.id, settledAt: now };
+    if (t.status === "SUCCESSFUL")
+      return {
+        kind: "captured",
+        transactionId: t.id,
+        settledAt: now,
+        card: cardFromTransaction(t),
+      };
     if (t.status === "FAILED" || t.status === "CANCELLED") return { kind: "failed" };
     return { kind: "deferred" };
   }
@@ -314,6 +356,7 @@ export class SumUpCloudProvider implements PaymentProvider {
             ...key,
             settledAt: outcome.settledAt,
             externalRef: outcome.transactionId,
+            card: outcome.card,
           }),
         );
         forwarded++;

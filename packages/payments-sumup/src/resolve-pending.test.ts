@@ -85,6 +85,18 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(row.settledAt).not.toBeNull();
   });
 
+  it("carries the card block onto the payments row it captures", async () => {
+    const { provider, attempting, state } = await setup();
+    await attempting("card", { status: "SUCCESSFUL" });
+    expect((await provider.resolvePending(T0)).forwarded).toBe(1);
+    const row = await state("card");
+    expect(row.state).toBe("captured");
+    expect(row.cardScheme).toBe("VISA");
+    expect(row.cardLast4).toBe("5838");
+    expect(row.cardEntryMode).toBe("contactless");
+    expect(row.cardAuthCode).toBe("328600");
+  });
+
   it("fails a row SumUp reports FAILED or CANCELLED, no incident", async () => {
     const { provider, attempting, state } = await setup();
     await attempting("f", { status: "FAILED" });
