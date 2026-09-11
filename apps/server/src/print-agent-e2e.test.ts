@@ -74,7 +74,6 @@ const suite = usePgliteDb({
       locationId: brandLocationId(locationId),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
-      cardProvider: "none",
       tipsEnabled: false,
       orderFlow: "ticket_then_pay",
     };

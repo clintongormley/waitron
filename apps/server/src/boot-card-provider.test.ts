@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type Stripe from "stripe";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
+import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -11,42 +10,25 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
-import { StripeOnDeviceProvider, StripeTerminalProvider } from "@waitron/payments-stripe";
 import { SimulatorPaymentProvider } from "@waitron/payments";
-import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { buildCardProvider } from "./boot.js";
-import type { CardProvider, TillConfig } from "./till-config.js";
+import type { TillConfig } from "./till-config.js";
 
-// buildCardProvider only reads the tenant's `payments.stripe` credential and constructs a provider —
-// no reader/network call — so PGlite (superuser, one backend) is the right target here: nothing on
-// this path depends on the deployment role or on concurrency (what the providers themselves do
-// against a real database, as a non-superuser member of `app_user`, is proven in
-// `packages/payments-stripe`'s `device.test.ts`, `hosted.test.ts` and `stripe.test.ts`). The simulator
-// and two Stripe branches are the ones `boot.test.ts` — which boots against a real container with
-// `cardProvider=none` — cannot reach; the live `none` branch is covered there.
-const KEY_ENV = {
-  // Task 3: keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
-  // privileged, and a root CI container would otherwise stand up a live service on it. Its own
-  // behaviour is proven directly in landing-listener.test.ts.
-  WAITRON_HTTP_LANDING_PORT: "0",
-  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
-  WAITRON_CREDENTIALS_KEY_VERSION: "1",
-};
-
+// Since the Task 12 cutover `buildCardProvider` builds only the DEMO/PREPARE local simulator; every
+// other card sale routes to its reader's own provider through the pool at collect time, so a
+// live/integration till returns `undefined` here. The simulator needs only `db` + `tenantId`, so
+// PGlite (superuser, one backend) is the right target — nothing on this path depends on the
+// deployment role or on concurrency. `boot.test.ts` boots against a real container in a non-demo mode,
+// exercising only the `undefined` branch; this file reaches the simulator branch directly.
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 60_000,
 });
-const ring = loadKeyRing(KEY_ENV);
 
-/** A TillConfig for `tenantId` with the given card fields — the fiscal ids are fresh brands the card
- * path never reads, so they carry throwaway uuids. `orderFlow` is irrelevant to `buildCardProvider`. */
-function cfgFor(
-  tenantId: TenantId,
-  cardProvider: CardProvider,
-  readerIds: { stripeReaderId?: string; sumupReaderId?: string } = {},
-): TillConfig {
+/** A TillConfig for `tenantId` — only `tenantId` is read by `buildCardProvider`; the rest are fresh
+ * throwaway brands so the object is a well-formed `TillConfig`. */
+function cfgFor(tenantId: TenantId): TillConfig {
   return {
     tenantId,
     tillId: brandTillId(randomUUID()),
@@ -55,160 +37,30 @@ function cfgFor(
     locationId: brandLocationId(randomUUID()),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
-    cardProvider,
-    ...(readerIds.stripeReaderId === undefined ? {} : { stripeReaderId: readerIds.stripeReaderId }),
-    ...(readerIds.sumupReaderId === undefined ? {} : { sumupReaderId: readerIds.sumupReaderId }),
     tipsEnabled: false,
     orderFlow: "prepay",
   };
 }
 
-/** Seeds a `payments.stripe` credential for a fresh tenant and returns its id. */
-async function seedTenantWithStripeKey(secretKey: string): Promise<TenantId> {
-  const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, (tx) =>
-    putCredential(tx, ring, {
-      tenantId,
-      purpose: "payments.stripe",
-      value: {
-        secretKey,
-        webhookSecret: "whsec_x",
-        successUrl: "https://example.test/ok",
-        cancelUrl: "https://example.test/no",
-      },
-    }),
-  );
-  return tenantId;
-}
-
-function deps() {
-  // The injected `makeStripe` never constructs a real SDK client — a `{}` cast is enough because
-  // buildCardProvider builds the wrapper and the provider without ever CALLING a Stripe method.
-  return {
-    db: suite.db,
-    ring,
-    environment: "preproduction" as const,
-    makeStripe: () => ({}) as Stripe,
-  };
-}
-
-/** The SumUp resolver deps — same vault handle + ring; no injected `fetch` (the client is built but
- * never called on this path, so it never reaches the network). */
-function sumupDeps() {
-  return { db: suite.db, ring };
-}
-
-/** Seeds a `payments.sumup` credential (no affiliate key) for a fresh tenant and returns its id. */
-async function seedTenantWithSumUpKey(): Promise<TenantId> {
-  const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, (tx) =>
-    putCredential(tx, ring, {
-      tenantId,
-      purpose: "payments.sumup",
-      value: {
-        apiKey: "sup_sk_x",
-        merchantCode: "MABC123",
-        affiliateAppId: "-",
-        affiliateKey: "-",
-      },
-    }),
-  );
-  return tenantId;
-}
-
 describe("buildCardProvider", () => {
-  it.each(["demo", "prepare"] as const)(
-    "builds the local simulator for %s without reading Stripe credentials",
-    async (intent) => {
-      const tenantId = await seedTenant(suite.db);
-      const provider = await buildCardProvider(
-        cfgFor(tenantId, "none"),
-        deps(),
-        sumupDeps(),
-        intent,
-      );
-      expect(provider).toBeInstanceOf(SimulatorPaymentProvider);
-      expect(provider?.provider).toBe("simulator");
-    },
-  );
-
-  it("returns undefined for cardProvider 'none' (no credential read at all)", async () => {
-    // A tenant with NO Stripe credential: proof the `none` branch short-circuits before any read —
-    // a credential lookup here would throw `credentials.missing` instead of returning undefined.
+  it.each(["demo", "prepare"] as const)("builds the local simulator for %s", async (intent) => {
     const tenantId = await seedTenant(suite.db);
-    const provider = await buildCardProvider(cfgFor(tenantId, "none"), deps(), sumupDeps());
+    const provider = await buildCardProvider(cfgFor(tenantId), suite.db, intent);
+    expect(provider).toBeInstanceOf(SimulatorPaymentProvider);
+    expect(provider?.provider).toBe("simulator");
+  });
+
+  it("returns undefined with no onboarding intent (a live till uses the pool, not a per-till provider)", async () => {
+    const tenantId = await seedTenant(suite.db);
+    const provider = await buildCardProvider(cfgFor(tenantId), suite.db);
     expect(provider).toBeUndefined();
   });
 
-  it("builds a StripeTerminalProvider for cardProvider 'stripe_terminal'", async () => {
-    const tenantId = await seedTenantWithStripeKey("sk_test_terminal");
-    const provider = await buildCardProvider(
-      cfgFor(tenantId, "stripe_terminal", { stripeReaderId: "tmr_1" }),
-      deps(),
-      sumupDeps(),
-    );
-    expect(provider).toBeInstanceOf(StripeTerminalProvider);
-    expect(provider?.provider).toBe("stripe");
-  });
-
-  it("uses an explicitly configured Stripe test provider on a Prepare node", async () => {
-    const tenantId = await seedTenantWithStripeKey("sk_test_prepare");
-    const provider = await buildCardProvider(
-      cfgFor(tenantId, "stripe_terminal", { stripeReaderId: "tmr_1" }),
-      deps(),
-      sumupDeps(),
-      "prepare",
-      true,
-    );
-    expect(provider).toBeInstanceOf(StripeTerminalProvider);
-  });
-
-  it("builds a StripeOnDeviceProvider for cardProvider 'stripe_on_device'", async () => {
-    const tenantId = await seedTenantWithStripeKey("sk_test_device");
-    const provider = await buildCardProvider(
-      cfgFor(tenantId, "stripe_on_device"),
-      deps(),
-      sumupDeps(),
-    );
-    expect(provider).toBeInstanceOf(StripeOnDeviceProvider);
-    expect(provider?.provider).toBe("stripe");
-  });
-
-  it("fails loudly (does not build a provider) when the till's tenant has no Stripe credential", async () => {
-    // The boot-time guard: a terminal cfg whose tenant carries no `payments.stripe` credential must
-    // fail the boot here, not on the first card sale — buildCardProvider surfaces the vault's own
-    // `credentials.missing` rather than returning a half-built provider.
+  it("returns undefined for Prepare with test providers enabled (real readers via the pool)", async () => {
+    // Prepare that explicitly opts into real test providers uses real readers through the pool, so
+    // there is no per-till simulator to build here.
     const tenantId = await seedTenant(suite.db);
-    await expect(
-      buildCardProvider(
-        cfgFor(tenantId, "stripe_terminal", { stripeReaderId: "tmr_1" }),
-        deps(),
-        sumupDeps(),
-      ),
-    ).rejects.toMatchObject({ code: "credentials.missing" });
-  });
-
-  it("builds a SumUpCloudProvider for cardProvider 'sumup_cloud'", async () => {
-    const tenantId = await seedTenantWithSumUpKey();
-    const provider = await buildCardProvider(
-      cfgFor(tenantId, "sumup_cloud", { sumupReaderId: "rdr_1" }),
-      deps(),
-      sumupDeps(),
-    );
-    expect(provider).toBeInstanceOf(SumUpCloudProvider);
-    expect(provider?.provider).toBe("sumup");
-  });
-
-  it("fails loudly (does not build a provider) when a sumup_cloud tenant has no SumUp credential", async () => {
-    // The same boot-time guard the Stripe path keeps: a sumup_cloud cfg whose tenant carries no
-    // `payments.sumup` credential must fail the boot here, not on the first card sale.
-    const tenantId = await seedTenant(suite.db);
-    await expect(
-      buildCardProvider(
-        cfgFor(tenantId, "sumup_cloud", { sumupReaderId: "rdr_1" }),
-        deps(),
-        sumupDeps(),
-      ),
-    ).rejects.toMatchObject({ code: "credentials.missing" });
+    const provider = await buildCardProvider(cfgFor(tenantId), suite.db, "prepare", true);
+    expect(provider).toBeUndefined();
   });
 });

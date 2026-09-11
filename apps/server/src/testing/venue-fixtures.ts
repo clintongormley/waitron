@@ -49,7 +49,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    cardProvider: "none",
     tipsEnabled: false,
     // ticket_then_pay so `placeOrder` FIRES the lines to the kitchen (open → placed) without filing a
     // fiscal doc — the lightest fire path that puts real ticket items on the station queue.

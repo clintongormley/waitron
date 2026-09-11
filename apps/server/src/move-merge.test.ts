@@ -73,7 +73,6 @@ async function setupVenue(): Promise<Seeded> {
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };

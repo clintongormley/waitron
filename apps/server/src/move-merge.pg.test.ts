@@ -86,7 +86,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     // No integrated card terminal for these move/merge PostgreSQL suites.
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };

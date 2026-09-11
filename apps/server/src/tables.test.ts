@@ -80,7 +80,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig>
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };
@@ -523,7 +522,6 @@ async function setupTabVenue(): Promise<{
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };

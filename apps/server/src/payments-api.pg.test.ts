@@ -169,7 +169,6 @@ function cfgOf(venue: Venue): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "ticket_then_pay",
   };

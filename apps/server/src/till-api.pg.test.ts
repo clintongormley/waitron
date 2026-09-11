@@ -27,15 +27,17 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import { MANUAL_PROVIDER } from "@waitron/payments";
+import { MANUAL_PROVIDER, SimulatorPaymentProvider } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
+import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createStation } from "./kitchen.js";
@@ -116,8 +118,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these API suites.
-    cardProvider: "none",
     tipsEnabled: false,
     // These API tests exercise routes that do not dispatch on the mode; the venue defaults to prepay.
     orderFlow: "prepay",
@@ -267,27 +267,41 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
   };
 }
 
+/** The vault key ring the seeded `payments.*` credentials are sealed under (a fixed test key). */
+const RING = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
 /**
- * `apiDeps` plus a built `StripeTerminalProvider` over `FakeStripe`, for Task 7's `POST /api/pay`
- * tests — `deps.db` stays `suite.admin` (the routes' own DB ops all run through `withTenant` +
- * `asAppUser`, exactly as `apiDeps` above), but the provider is given its OWN `providerDb` handle
- * (a `PROBE_ROLE` connection the test opens and closes itself), since the provider's writes run at
- * whatever role THAT handle carries (see `PROBE_ROLE`'s doc comment above).
+ * A FAKE `CardProviderPool` that returns a `StripeTerminalProvider` over `FakeStripe` for any provider
+ * id, resolving the reader ref the pay path passes it (`() => providerRef`). The provider is given its
+ * OWN `providerDb` handle (a `PROBE_ROLE` connection the test opens/closes), since the provider's
+ * `payments`-ledger writes run at whatever role THAT handle carries (see `PROBE_ROLE` above) — the
+ * routes' own DB ops still run through `withTenant` + `asAppUser` off `suite.admin`. This stands in for
+ * the boot pool (which would build the real seat from a sealed credential) so a capture/decline
+ * genuinely round-trips the adapter without a network.
  */
-function apiDepsWithCardProvider(
-  cfg: TillConfig,
-  providerDb: Database,
-  client: FakeStripe,
-): TillApiDeps {
-  const cardProvider = new StripeTerminalProvider({
-    client,
-    db: providerDb,
-    tenantId: cfg.tenantId,
-    nodeId: cfg.nodeId,
-    resolveReader: () => Promise.resolve("reader_1"),
-    // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
-    poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
-  });
+function fakePool(cfg: TillConfig, providerDb: Database, client: FakeStripe): CardProviderPool {
+  return {
+    get: (_providerId, resolveReader) =>
+      Promise.resolve(
+        new StripeTerminalProvider({
+          client,
+          db: providerDb,
+          tenantId: cfg.tenantId,
+          nodeId: cfg.nodeId,
+          resolveReader,
+          // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
+          poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
+        }),
+      ),
+    evict: () => {},
+  };
+}
+
+/** `apiDeps` plus a `CardProviderPool`, for the `POST /api/pay` reader-routing tests. */
+function apiDepsWithPool(cfg: TillConfig, pool: CardProviderPool): TillApiDeps {
   return {
     db: suite.admin,
     backend,
@@ -295,8 +309,62 @@ function apiDepsWithCardProvider(
     cfg,
     secureCookies: false,
     venueLocale: cfg.locale,
-    cardProvider,
+    pool,
   };
+}
+
+/** Seed an ACTIVE `card_readers` row (default provider `stripe`) and return its id + `providerRef`.
+ * `tenantId` can be overridden to seed ANOTHER tenant's reader (the by-id isolation probe). */
+async function seedReader(
+  cfg: TillConfig,
+  opts: { provider?: string; providerRef?: string; tenantId?: string; name?: string } = {},
+): Promise<{ id: string; providerRef: string }> {
+  const providerRef = opts.providerRef ?? `reader_${randomUUID()}`;
+  const r = await suite.admin.execute<{ id: string }>(sql`
+    insert into card_readers (tenant_id, provider, provider_ref, name)
+    values (${opts.tenantId ?? cfg.tenantId}, ${opts.provider ?? "stripe"}, ${providerRef}, ${opts.name ?? "Front counter"})
+    returning id`);
+  return { id: r.rows[0]!.id, providerRef };
+}
+
+/** Point a device at its DEFAULT reader (`device_card_readers`). */
+async function setDefaultReader(
+  cfg: TillConfig,
+  deviceId: string,
+  readerId: string,
+): Promise<void> {
+  await suite.admin.execute(sql`
+    insert into device_card_readers (tenant_id, device_id, reader_id)
+    values (${cfg.tenantId}, ${deviceId}, ${readerId})`);
+}
+
+/** Seal this tenant's `payments.stripe` credential so the provider counts as CONNECTED (the pay
+ * path's pre-check reads only its presence). */
+async function connectStripe(cfg: TillConfig): Promise<void> {
+  await withTenant(suite.admin, cfg.tenantId, (tx) =>
+    putCredential(tx, RING, {
+      tenantId: cfg.tenantId,
+      purpose: "payments.stripe",
+      value: {
+        secretKey: "sk_test_x",
+        webhookSecret: "whsec_x",
+        successUrl: "https://example.test/ok",
+        cancelUrl: "https://example.test/no",
+      },
+    }),
+  );
+}
+
+/** The `deviceId` embedded in a `waitron_device=<id>.<token>` cookie. */
+function deviceIdOf(cookie: string): string {
+  return cookie.split("=")[1]!.split(".")[0]!;
+}
+
+/** The stamped `payments.reader_id` for a working order (NULL when none), read as app_user. */
+async function readerIdOnPayment(cfg: TillConfig, workingOrderId: string): Promise<string | null> {
+  const rows = await suite.admin.execute<{ reader_id: string | null }>(sql`
+    select reader_id from payments where tenant_id = ${cfg.tenantId} and working_order_id = ${workingOrderId}`);
+  return rows.rows[0]?.reader_id ?? null;
 }
 
 /**
@@ -777,29 +845,28 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
   });
 });
 
-// POST /api/pay (Task 7): the integrated-card-terminal pay route, driven through the SAME real venue
-// + real `payWorkingOrderIntegrated` split-transaction flow (P1 commit → network collect → P3
-// file/settle) the login/pay routes above exercise for cash/manual card — but over a `FakeStripe`-backed
-// `StripeTerminalProvider`, so a capture/decline genuinely round-trips the reader adapter rather than
-// being stubbed. Real Postgres for the same reason every suite in this file is: the split flow's
-// separate P1/P3 transactions and the provider's own FK-before-attempting ordering need a real
-// multi-backend Postgres, which a single-backend, superuser-only PGlite would misrepresent (CLAUDE.md
-// §4). The 401-without-session and no-provider-configured guards are hermetic, in `till-api.test.ts`.
+// POST /api/pay (Task 12 cutover): the integrated-card-terminal pay route now RESOLVES the reader
+// (request `readerId`, else the paying device's default in `device_card_readers`), loads the reader
+// row tenant-scoped by id, PRE-CHECKS the provider is connected, then drives the reader's provider
+// (from the pool) through the real `payWorkingOrderIntegrated` split-transaction flow (P1 commit →
+// network collect → P3 file/settle) over a `FakeStripe`-backed `StripeTerminalProvider` — so a
+// capture/decline genuinely round-trips the adapter rather than being stubbed. Real Postgres for the
+// same reason every suite here is (the split flow + the provider's FK-before-attempting ordering +
+// the by-id tenant-isolation probe need a real multi-backend, non-superuser Postgres, CLAUDE.md §4);
+// the cookieless refusal is hermetic, in `till-api.test.ts`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
-  it("captures over the reader and returns 200 { outcome: 'captured', ticket }", async () => {
+  it("routes to the device's DEFAULT reader, captures, and STAMPS payments.reader_id", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
     const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const app = new Hono();
-      mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, new FakeStripe()), noopLog);
-
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-
-      // SP-A.2 cutover: /api/pay resolves its till from the enrolled device AND runs the
-      // integrated-card-payment capability firewall, so this device carries the venue's own till (so the
-      // filed record is unchanged) AND a stored `till` canvas declaring that capability.
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      await connectStripe(cfg);
+      const reader = await seedReader(cfg);
+      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -815,24 +882,137 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const outcome = (await payRes.json()) as { outcome: string; ticket?: { total: string } };
       expect(outcome.outcome).toBe("captured");
       expect(outcome.ticket?.total).toBe("1.50");
+      // The payment records the reader it settled on (Task 12) — proof the pay routed to the default.
+      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(reader.id);
+    } finally {
+      await providerDb.close();
+    }
+  });
 
-      // A genuine chained fiscal record was filed and the order settled — the capture is real, not a
-      // stub reporting success with nothing behind it.
-      const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return {
-          registros: await tx
-            .select()
-            .from(registrosFacturacion)
-            .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
-          wo: await tx
-            .select({ status: workingOrders.status })
-            .from(workingOrders)
-            .where(eq(workingOrders.id, workingOrderId)),
-        };
+  it("a request readerId OVERRIDES the device default, and stamps that reader", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
+      const cookie = await loginSession(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      await connectStripe(cfg);
+      const dflt = await seedReader(cfg, { name: "Default" });
+      const other = await seedReader(cfg, { name: "Other" });
+      await setDefaultReader(cfg, deviceIdOf(deviceCookie), dflt.id);
+
+      const workingOrderId = randomUUID();
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          id: workingOrderId,
+          readerId: other.id,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        }),
       });
-      expect(after.registros).toHaveLength(1);
-      expect(after.wo).toEqual([{ status: "settled" }]);
+
+      expect(payRes.status).toBe(200);
+      expect((await payRes.json()).outcome).toBe("captured");
+      // The OVERRIDE reader was charged and stamped, not the default.
+      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(other.id);
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("naming ANOTHER tenant's reader is reader.not_found (by-id isolation, never chargeable)", async () => {
+    // The by-id read scopes to the till's tenant (CLAUDE.md §3), so a reader id that belongs to a
+    // different tenant is not readable here — refused `reader.not_found`, never charged. Proven by
+    // deleting the `eq(card_readers.tenantId, cfg.tenantId)` predicate in `resolvePayReader` locally:
+    // the read then LEAKS the foreign reader and this test goes green-should-be-red (captured), which
+    // restoring the predicate turns back to the 404 asserted here.
+    const { cfg: a, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const { cfg: b } = await setupVenue(); // a SECOND tenant, whose reader tenant A must not reach
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(a, fakePool(a, providerDb, new FakeStripe())), noopLog);
+      const cookie = await loginSession(app, a, operatorId);
+      const deviceCookie = await enrolTillCookie(a, await createTillProfile(a));
+      await connectStripe(a);
+      const foreign = await seedReader(b, { tenantId: b.tenantId });
+
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          id: randomUUID(),
+          readerId: foreign.id,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        }),
+      });
+
+      expect(payRes.status).toBe(404);
+      expect(await payRes.json()).toMatchObject({ error: { code: "reader.not_found" } });
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("a device with no default reader and no request readerId is reader.not_found", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
+      const cookie = await loginSession(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      // No `device_card_readers` row and no `readerId` in the body → nothing resolves.
+
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          id: randomUUID(),
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        }),
+      });
+
+      expect(payRes.status).toBe(404);
+      expect(await payRes.json()).toMatchObject({ error: { code: "reader.not_found" } });
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("a reader whose provider has NO sealed credential is reader.provider_disconnected (not a decline)", async () => {
+    // The provider is NOT connected (no `connectStripe`). Both adapters swallow a deferred
+    // credential-read failure into a DECLINE, so the pay path PRE-CHECKS the credential and answers the
+    // actionable `reader.provider_disconnected` (409) instead of a misleading 200 declined.
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
+      const cookie = await loginSession(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const reader = await seedReader(cfg); // active reader, but provider not connected
+      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          id: randomUUID(),
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        }),
+      });
+
+      expect(payRes.status).toBe(409);
+      expect(await payRes.json()).toMatchObject({
+        error: { code: "reader.provider_disconnected" },
+      });
     } finally {
       await providerDb.close();
     }
@@ -846,12 +1026,12 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const client = new FakeStripe();
       client.declineNext();
       const app = new Hono();
-      mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, client), noopLog);
-
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-
-      // SP-A.2 cutover: an enrolled till device with a capability-bearing canvas (see the capture test).
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      await connectStripe(cfg);
+      const reader = await seedReader(cfg);
+      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -866,8 +1046,6 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(payRes.status).toBe(200);
       expect(await payRes.json()).toEqual({ outcome: "declined" });
 
-      // Nothing filed; the working order stays open (retryable) — a decline is DATA, never a fault
-      // that blocks the sale (CLAUDE.md §5).
       const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return {
@@ -888,18 +1066,60 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     }
   });
 
+  it("demo/prepare drives the local simulator and stamps NO reader", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      // The demo/prepare shape: `deps.cardProvider` is the local simulator (no pool, no reader row).
+      const app = new Hono();
+      mountTillApi(
+        app,
+        {
+          db: suite.admin,
+          backend,
+          clock,
+          cfg,
+          secureCookies: false,
+          venueLocale: cfg.locale,
+          cardProvider: new SimulatorPaymentProvider(providerDb, cfg.tenantId),
+        },
+        noopLog,
+      );
+      const cookie = await loginSession(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+
+      const workingOrderId = randomUUID();
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          id: workingOrderId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+          simulationOutcome: "captured",
+        }),
+      });
+
+      expect(payRes.status).toBe(200);
+      expect((await payRes.json()).outcome).toBe("captured");
+      // A practice sale touches no real reader, so `payments.reader_id` stays NULL.
+      expect(await readerIdOnPayment(cfg, workingOrderId)).toBeNull();
+    } finally {
+      await providerDb.close();
+    }
+  });
+
   it("still 400s an empty walk-up basket — a genuine fault, mapped through run, not a payment outcome", async () => {
     const { cfg, operatorId } = await setupVenue();
     const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const app = new Hono();
-      mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, new FakeStripe()), noopLog);
-
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-
-      // SP-A.2 cutover: the empty-basket fault is a genuine 400 AFTER the device gate + capability
-      // firewall pass, so this device carries the venue's till and a capability-bearing canvas too.
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      await connectStripe(cfg);
+      const reader = await seedReader(cfg);
+      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
       const payRes = await app.request("/api/pay", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -908,6 +1128,83 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
       expect(payRes.status).toBe(400);
       expect(await payRes.json()).toMatchObject({ error: { code: "sale.empty_basket" } });
+    } finally {
+      await providerDb.close();
+    }
+  });
+});
+
+// GET /api/till: the per-device card provider string (Task 12) — the paying device's default reader's
+// provider, mapped to the till's union — and the `activeReaders` list Task 17's picker reads.
+describe("GET /api/till (per-device card provider, over HTTP)", () => {
+  it("maps the device's default reader provider to the till union and lists active readers", async () => {
+    const { cfg } = await setupVenue();
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const reader = await seedReader(cfg); // provider "stripe"
+      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+
+      const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        cardProvider: string;
+        activeReaders: { id: string; name: string; provider: string }[];
+      };
+      // "stripe" → "stripe_terminal" (the till's closed union), never the raw seat id.
+      expect(body.cardProvider).toBe("stripe_terminal");
+      expect(body.activeReaders).toEqual([
+        { id: reader.id, name: "Front counter", provider: "stripe_terminal" },
+      ]);
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("a device with no default reader gets cardProvider 'none'", async () => {
+    const { cfg } = await setupVenue();
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+
+      const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
+      expect(res.status).toBe(200);
+      expect((await res.json()).cardProvider).toBe("none");
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("a demo/prepare till surfaces the simulator regardless of any reader", async () => {
+    const { cfg } = await setupVenue();
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(
+        app,
+        {
+          db: suite.admin,
+          backend,
+          clock,
+          cfg,
+          secureCookies: false,
+          venueLocale: cfg.locale,
+          cardProvider: new SimulatorPaymentProvider(providerDb, cfg.tenantId),
+        },
+        noopLog,
+      );
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const reader = await seedReader(cfg);
+      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+
+      const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
+      expect(res.status).toBe(200);
+      // Practice mode wins over any configured reader.
+      expect((await res.json()).cardProvider).toBe("simulator");
     } finally {
       await providerDb.close();
     }

@@ -275,11 +275,19 @@ export async function recordFailedRefund(
  * `payment.not_found`, a row that already carries a `sale_id` throws `payment.already_associated`. */
 export async function associatePaymentWithSale(
   tx: Transaction,
-  params: Key & { saleId: string },
+  params: Key & { saleId: string; readerId?: string },
 ): Promise<void> {
+  // `readerId` (the `card_readers.id` that took this payment, when known — an integrated card sale
+  // routed to a reader) is stamped in the SAME write-once UPDATE as `sale_id`, so a payment carries
+  // the reader it settled on. Omitted for a manual/cash tender and for the async settlement path
+  // (webhook), where no reader drove the collect.
   const [row] = await tx
     .update(payments)
-    .set({ saleId: params.saleId, updatedAt: sql`now()` })
+    .set({
+      saleId: params.saleId,
+      ...(params.readerId === undefined ? {} : { readerId: params.readerId }),
+      updatedAt: sql`now()`,
+    })
     .where(and(keyWhere(params), isNull(payments.saleId)))
     .returning({ id: payments.id });
   if (row === undefined) {

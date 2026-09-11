@@ -339,6 +339,10 @@ export interface IntegratedPayRequest {
   lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
   /** The selected service zone for a new counter order. Existing orders use their stored context. */
   zoneId?: string;
+  /** The card reader to charge on, when the caller overrides the paying device's default (Task 17's
+   *  picker). Absent → the device's default reader (`device_card_readers`). Resolved and validated in
+   *  `/api/pay` (till-api.ts), never trusted here; the RESOLVED reader rides on {@link IntegratedPayDeps}. */
+  readerId?: string;
   /** The till-entered gross tip. CLAMPED to "0.00" when the till has tips disabled
    *  (`TillConfig.tipsEnabled === false`), so a client cannot add a tip the venue does not take. */
   tip?: string;
@@ -371,6 +375,10 @@ export type IntegratedPayOutcome =
  */
 export type IntegratedPayDeps = TillSaleDeps & {
   provider: PaymentProvider;
+  /** The `card_readers.id` the pay routed to (Task 12), stamped onto the payment when it is associated
+   * with the sale so a payment records the reader it settled on. `undefined` for the demo/prepare
+   * simulator (no reader), which leaves `payments.reader_id` NULL. */
+  readerId?: string;
 };
 
 /**
@@ -1129,6 +1137,7 @@ async function finalizeCapture(
         paymentRef: result.paymentRef,
         saleId,
         tenantId: cfg.tenantId,
+        ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       });
 
       // A newly-paid prepay order enters preparation as part of the same commit as its sale. Do this
@@ -1306,6 +1315,7 @@ async function finalizeRecovery(
       paymentRef: captured.paymentRef,
       saleId,
       tenantId: cfg.tenantId,
+      ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
     // Lost-T2 recovery follows the same prepay fire point as a normal capture. A placed order already
@@ -1452,6 +1462,7 @@ async function finalizeSettle(
         paymentRef: result.paymentRef,
         saleId: outstanding.saleId,
         tenantId: cfg.tenantId,
+        ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       });
 
       // placed → settled. `working_orders_enforce_transition` permits it; the `settled_at` biconditional
@@ -1588,6 +1599,7 @@ async function finalizeSettleRecovery(
       paymentRef: captured.paymentRef,
       saleId: outstanding.saleId,
       tenantId: cfg.tenantId,
+      ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
     // placed → settled, at the ORIGINAL capture instant (the same reading the tender carries). An

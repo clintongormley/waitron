@@ -45,7 +45,6 @@ function toTableCfg(tenantId: string, locationId: string, locale: SeedLocale): T
     // full-tag so the throwaway cfg is a VALID `TillConfig` shape rather than a bare-locale one.
     locale: SEED_INVOICE_LOCALE[locale],
     invoiceLocales: [SEED_INVOICE_LOCALE[locale]],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };

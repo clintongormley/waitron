@@ -56,7 +56,6 @@ async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
       locationId: brandLocationId(locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
-      cardProvider: "none",
       tipsEnabled: false,
       orderFlow: "prepay",
     };

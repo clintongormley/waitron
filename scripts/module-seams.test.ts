@@ -160,16 +160,18 @@ describe("apps/dashboard reaches UI modules only via the registry, never a modul
  * The card-provider seam (Task 9): `packages/composition/src/card-providers.ts` is the registry
  * (the server twin of `ALL_MODULES`) — new code that needs a card-payment provider goes through
  * `CARD_PROVIDERS`, not a direct import of a provider package. Unlike the regime allowlist above,
- * this one is ADVISORY, not exhaustive: a later slice (Task 12) empties `boot.ts` from the map as
- * its wiring migrates behind the seat, so this guard only refuses a NEW, non-allowlisted import —
- * it does not assert that every allowlisted file still needs to be there.
+ * this one is ADVISORY, not exhaustive: it only refuses a NEW, non-allowlisted import — it does not
+ * assert that every allowlisted file still needs to be there. The Task 12 cutover pulled the
+ * reader-collect construction out of `boot.ts` (readers now come from the pool via the seat), but
+ * `boot.ts` still names `@waitron/payments-stripe` for the hosted-payment reconciler + webhook
+ * wiring, so it stays allowlisted.
  */
 const PROVIDER_PACKAGES = ["@waitron/payments-sumup", "@waitron/payments-stripe"];
 
 const PROVIDER_DEFERRED = new Map<string, string>([
   [
     "apps/server/src/boot.ts",
-    "env-path buildCardProvider + hosted/webhook wiring; migrates behind the seat later (Task 12)",
+    "StripeReconciler (hosted-payment settlement) + webhook wiring; the reader-collect path now goes through the pool/seat",
   ],
   [
     "apps/server/src/stripe-account.ts",

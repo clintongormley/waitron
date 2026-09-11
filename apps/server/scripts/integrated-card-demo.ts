@@ -293,8 +293,6 @@ async function main(): Promise<void> {
       locationId: brandLocationId(venue.locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
-      cardProvider: "stripe_terminal",
-      stripeReaderId: READER_ID,
       tipsEnabled: false,
       // The venue's default pay-timing mode (design §3); this demo drives the prepay walk-up path.
       orderFlow: "prepay",

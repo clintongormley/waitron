@@ -26,13 +26,8 @@ import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, mountLiveApi } from "./live-api.js";
 import { runDue } from "@waitron/scheduler";
-import {
-  StripeOnDeviceProvider,
-  StripeReconciler,
-  StripeTerminalProvider,
-} from "@waitron/payments-stripe";
+import { StripeReconciler } from "@waitron/payments-stripe";
 import { SimulatorPaymentProvider, type PaymentProvider } from "@waitron/payments";
-import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { recordIncidentOnce } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
@@ -88,15 +83,7 @@ import { runLoop, realSleep } from "./loop.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
-import {
-  cardClientResolver,
-  cardDeviceClientResolver,
-  stripeAccountResolver,
-  defaultMakeStripe,
-} from "./stripe-account.js";
-import type { StripeAccountDeps } from "./stripe-account.js";
-import { sumupClientResolver } from "./sumup-account.js";
-import type { SumUpAccountDeps } from "./sumup-account.js";
+import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountNodeApi } from "./node-api.js";
@@ -312,68 +299,28 @@ const BOX_HOSTNAME = "waitron.local";
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /**
- * The card-payment provider this till drives. Demo receives the local simulator. Prepare does too
- * unless its explicit integration switch selects the configured test provider. A live till serves
- * one tenant (`cfg.tenantId`), so its provider is built once at boot. Its collect-side client comes
- * from that tenant's encrypted `payments.stripe` credential through the environment-key guard, so
- * bad credentials fail here rather than on the first sale.
+ * The card-payment provider a Demo or default-Prepare till drives: the local simulator, built once at
+ * boot for this till's tenant. Every OTHER card sale routes to its reader's own provider through the
+ * pool at collect time (Task 12 cutover), so a live/integration till returns `undefined` here — there
+ * is no single per-till provider any more. Prepare that explicitly opts into real test providers
+ * (`paymentTestProviders`) also returns `undefined` and uses real readers.
  *
  * Exported, not inlined into `startServer`: `startServer`'s only test subject (`boot.test.ts`) boots
- * against a real container with `cardProvider=none`, so it exercises only the `undefined` branch —
- * unit-testing THIS function directly (`boot-card-provider.test.ts`, PGlite + a seeded credential) is
- * what reaches the simulator, terminal, and on-device branches without a full boot per provider, the same
- * "exported for a direct test subject" reasoning `DEFAULT_MIGRATIONS_ROOT` below carries.
+ * against a real container in a non-demo mode, so it exercises only the `undefined` branch —
+ * unit-testing THIS function directly (`boot-card-provider.test.ts`, PGlite) is what reaches the
+ * simulator branch, the same "exported for a direct test subject" reasoning `DEFAULT_MIGRATIONS_ROOT`
+ * below carries.
  */
 export async function buildCardProvider(
-  cfg: TillConfig,
-  deps: StripeAccountDeps,
-  sumupDeps: SumUpAccountDeps,
+  cfg: Pick<TillConfig, "tenantId">,
+  db: Database,
   onboardingIntent?: OnboardingIntent,
   paymentTestProviders = false,
 ): Promise<PaymentProvider | undefined> {
   if (onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders)) {
-    return new SimulatorPaymentProvider(deps.db, cfg.tenantId);
+    return new SimulatorPaymentProvider(db, cfg.tenantId);
   }
-  if (cfg.cardProvider === "none") return undefined;
-  if (cfg.cardProvider === "stripe_terminal") {
-    const client = await cardClientResolver(deps)(cfg.tenantId);
-    // Present because `cfg.cardProvider === "stripe_terminal"`: `loadTillConfig` `required`s
-    // `WAITRON_TILL_STRIPE_READER_ID` on exactly that branch (till-config.ts's `stripeReaderId`
-    // resolution), so a terminal cfg that reached here always carries one. `resolveReader` ignores
-    // its `(tenantId, tillId)` args — this till drives one fixed, provisioned reader, not one
-    // selected per collect.
-    const readerId = cfg.stripeReaderId!;
-    return new StripeTerminalProvider({
-      client,
-      db: deps.db,
-      tenantId: cfg.tenantId,
-      // The till's own node id, identifying this node on the card-collect record path.
-      nodeId: cfg.nodeId,
-      resolveReader: () => Promise.resolve(readerId),
-    });
-  }
-  if (cfg.cardProvider === "sumup_cloud") {
-    const client = await sumupClientResolver(sumupDeps)(cfg.tenantId);
-    // Present because `loadTillConfig` `required`s WAITRON_TILL_SUMUP_READER_ID on exactly this branch.
-    const readerId = cfg.sumupReaderId!;
-    return new SumUpCloudProvider({
-      client,
-      db: deps.db,
-      tenantId: cfg.tenantId,
-      nodeId: cfg.nodeId,
-      resolveReader: () => Promise.resolve(readerId),
-      incidents: recordIncidentOnce,
-    });
-  }
-  // `stripe_on_device` — the handheld Tap-to-Pay flow, which mints its own connection token and needs
-  // no server-side reader id (till-config.ts requires none for this branch).
-  const client = await cardDeviceClientResolver(deps)(cfg.tenantId);
-  return new StripeOnDeviceProvider({
-    client,
-    db: deps.db,
-    tenantId: cfg.tenantId,
-    nodeId: cfg.nodeId,
-  });
+  return undefined;
 }
 
 /** Run the card provider's own `resolvePending` sweep on every tick, wrapping (not replacing) the
@@ -1795,23 +1742,32 @@ export async function startServer(
     tenantId: till.tenantId,
     locationId: till.locationId,
   });
-  // Demo and the default Prepare target use the local simulator. Live and the explicit Prepare
-  // integration target build from the tenant's Stripe credential. `makeStripe` is
-  // `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses.
+  // Demo and the default Prepare target use the local simulator. Every other card sale routes to its
+  // reader's own provider through `cardPool` below (built once, one live provider per id), so a
+  // live/integration till gets `undefined` here.
   const cardProvider = await buildCardProvider(
     till,
-    {
-      db,
-      ring,
-      environment: config.environment,
-      makeStripe: defaultMakeStripe,
-    },
-    // The SumUp resolver's deps — the same vault handle + ring, reading this tenant's `payments.sumup`
-    // credential. No injected `fetch`: the live host uses the global one; only a test observes calls.
-    { db, ring },
+    db,
     config.onboardingIntent,
     config.paymentTestProviders,
   );
+  // The card-provider POOL, built ONCE for this tenant/node (one live provider per id, rebuilt on a
+  // credential change via `evict`). It reaches a seat only through `CARD_PROVIDERS`, the composition
+  // list, so `boot.ts` names no provider package for this path. Built HERE, before `mountTillApi`, so
+  // the pay route (`POST /api/pay`) can resolve each sale's reader through it; the payments MANAGEMENT
+  // surface below reuses the SAME instance (never a second pool), so a reader added there and a sale
+  // driven here share one cache and one eviction. Cheap and DB-free at construction (just a Map + the
+  // seat closures), so building it on a mirror/fenced boot too costs nothing — those boots never reach
+  // a sale.
+  const cardPool = createCardProviderPool({
+    providers: CARD_PROVIDERS,
+    db,
+    ring,
+    tenantId: till.tenantId,
+    nodeId: till.nodeId,
+    environment: config.environment,
+    incidents: recordIncidentOnce,
+  });
   mountTillApi(
     app,
     {
@@ -1826,6 +1782,7 @@ export async function startServer(
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
       secureCookies,
       cardProvider,
+      pool: cardPool,
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
@@ -1937,20 +1894,10 @@ export async function startServer(
     );
     // The card-payments MANAGEMENT surface on the SAME app (design Phase C): connect/disconnect a
     // provider, add/retire readers, and set a device's default reader — all `payments.manage`-gated.
-    // The pool is built ONCE here (one live provider per id, rebuilt on a credential change via
-    // `evict`) and shared with the routes; it reaches a seat only through `CARD_PROVIDERS`, the
-    // composition list, so `boot.ts` names no provider package for this path (the env `buildCardProvider`
-    // path above stays until Task 12's cutover). `ring` + `recordIncidentOnce` are the same handles the
-    // sibling payment wiring uses. Not mounted under mirror/fenced mode, the sibling operational surfaces' rule.
-    const cardPool = createCardProviderPool({
-      providers: CARD_PROVIDERS,
-      db,
-      ring,
-      tenantId: till.tenantId,
-      nodeId: till.nodeId,
-      environment: config.environment,
-      incidents: recordIncidentOnce,
-    });
+    // It reuses the SAME `cardPool` the pay route received above (built once before `mountTillApi`), so
+    // a reader added or a credential rotated here evicts the exact provider the next sale rebuilds —
+    // never a second pool with its own stale cache. Not mounted under mirror/fenced mode, the sibling
+    // operational surfaces' rule.
     mountPaymentsApi(
       app,
       {

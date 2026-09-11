@@ -68,7 +68,6 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };
