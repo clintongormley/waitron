@@ -1003,6 +1003,10 @@ for the projected remainder.
   suppliers/POs is product depth. See *Open threads → Recipes*.
 - **Distribution / deployment remainder** — appliance image, on-device agent, the cloud standby's
   live link (Track A step 5 / Track B item 2). See *Open threads → Onboarding* and *SIF topology*.
+  [Box maintenance and remote support discussion](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)
+  (2026-09-11) records proposed per-box owner credentials, temporary support access, and
+  WireGuard/SSH connectivity. It is not an approved implementation spec; a shared support endpoint
+  for customers without a cloud instance remains an open decision.
 
 **Later / smaller:** SumUp card provider (gated, *Debt*) · wage-computation engine (build,
 convenio-gated — *Wages / labour cost* above) · D3 payroll export (integrate-not-build) ·
