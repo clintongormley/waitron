@@ -1267,6 +1267,9 @@ importers:
 
   packages/payments-sumup:
     dependencies:
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db

@@ -10,6 +10,7 @@ describe("the public surface", () => {
     expect(Object.keys(api).sort()).toEqual([
       "NOT_FOUND_GRACE_MS",
       "RESOLVE_RETRY_MS",
+      "SUMUP_CARD_PROVIDER",
       "SUMUP_PROVIDER",
       "SumUpCloudProvider",
       "fromMajorUnits",

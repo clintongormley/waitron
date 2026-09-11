@@ -11,3 +11,4 @@ export { SumUpCloudProvider, NOT_FOUND_GRACE_MS, RESOLVE_RETRY_MS } from "./prov
 export type { SumUpCloudProviderOptions } from "./provider.js";
 export { sumupClient } from "./sumup-client.js";
 export type { SumUpClientOptions } from "./sumup-client.js";
+export { SUMUP_CARD_PROVIDER } from "./card-provider.js";
