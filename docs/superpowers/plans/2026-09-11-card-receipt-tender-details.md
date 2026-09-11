@@ -132,7 +132,7 @@ git commit -s -m "feat(payments): add CardDetails to the PaymentResult contract"
 
 **Interfaces:**
 - Consumes: `CardDetails` (Task 1).
-- Produces: `PaymentRow` gains `cardScheme: string | null; cardLast4: string | null; cardEntryMode: string | null; cardAuthCode: string | null`. `captureAttempting` and `insertCapturedPayment` accept an optional `card?: CardDetails` on their params and persist it.
+- Produces: `PaymentRow` AND `CapturedPaymentForOrder` gain `cardScheme: string | null; cardLast4: string | null; cardEntryMode: string | null; cardAuthCode: string | null`; `CapturedPaymentForOrder` also gains `provider: string`. `captureAttempting` and `insertCapturedPayment` accept an optional `card?: CardDetails` and persist it. New store reader `findCapturedPaymentForWorkingOrderAnyProvider(tx, { tenantId, workingOrderId }): Promise<CapturedPaymentForOrder | null>` — like `findCapturedPaymentForWorkingOrder` but WITHOUT the provider filter (the ticket path does not know which provider settled), returning the captured/accepted_offline row for that working order.
 
 - [ ] **Step 1: Write the failing test (real Postgres)**
 
@@ -267,10 +267,44 @@ Add `card?: CardDetails` to `NewPayment`, and write it in `insertPayment`'s `.va
 
 `insertCapturedPayment` already spreads `NewPayment`, so it accepts `card` for free. For `captureAttempting` (which resolves an existing `attempting` row via `resolveAttempting` rather than inserting), add `card?: CardDetails` to its params and set the four columns in the same `.update(...).set({ … })` that stamps `settledAt`/`externalRef`. Locate `resolveAttempting`'s `.set(...)` and thread the card columns through (add `card?: CardDetails` to its `extra` param, set the four columns from it).
 
+Also extend the read side that the ticket path (Task 4) uses. `findCapturedPaymentForWorkingOrder` returns `CapturedPaymentForOrder` (defined near `store.ts:290`) whose projection is `CAPTURED_FOR_ORDER_COLUMNS = { ...PAYMENT_COLUMNS, paymentRef }` — so the four card columns flow in via the `PAYMENT_COLUMNS` spread once added above, BUT the `CapturedPaymentForOrder` interface must DECLARE them, and it also does not yet carry `provider`. So:
+
+- Add to the `CapturedPaymentForOrder` interface the four `card*: string | null` fields AND `provider: string`.
+- Add `provider: payments.provider` to `CAPTURED_FOR_ORDER_COLUMNS`.
+- Add a provider-agnostic reader (the ticket path does not know which provider settled, and the reprint path has no provider in scope):
+
+```typescript
+/** The captured/accepted-offline payment for a working order, WITHOUT filtering by provider — the
+ * ticket/reprint path (readTenderBlock) knows the working order but not which provider settled it.
+ * Returns null when none (a cash sale, or a card sale whose payment row is absent). */
+export async function findCapturedPaymentForWorkingOrderAnyProvider(
+  tx: Transaction,
+  key: { tenantId: string; workingOrderId: string },
+): Promise<CapturedPaymentForOrder | null> {
+  const [row] = await tx
+    .select(CAPTURED_FOR_ORDER_COLUMNS)
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, key.tenantId),
+        eq(payments.workingOrderId, key.workingOrderId),
+        inArray(payments.state, ["captured", "accepted_offline"]),
+      ),
+    );
+  return row ?? null;
+}
+```
+
+(Model it on the existing `findCapturedPaymentForWorkingOrder`; drop only its `eq(payments.provider, …)` clause. `inArray` is already imported in `store.ts`.)
+
+- [ ] **Step 5b: Test the new reader (keeps payments coverage above 98%)**
+
+Add to `store.pg.test.ts`: `findCapturedPaymentForWorkingOrderAnyProvider` returns the captured row (with `provider` and the card columns) for a card working order, and returns `null` for a working order that has only a cash sale (no payment row). Assert the returned `cardScheme`/`provider` fields.
+
 - [ ] **Step 6: Run tests to verify they pass**
 
 Run: `pnpm --filter @waitron/payments test -- store.pg`
-Expected: PASS — round-trip returns the card facts; both CHECK violations reject.
+Expected: PASS — round-trip returns the card facts; both CHECK violations reject; the reader returns the row and null as expected.
 
 - [ ] **Step 7: Run the package's privilege + guard suites (grants receipt) and coverage**
 
@@ -457,17 +491,18 @@ git commit -s -m "feat(payments-sumup): fill CardDetails from the captured trans
 
 ---
 
-### Task 4: `tender` block on `TillSaleResult` + `readTenderBlock`, wired into all three ticket sites
+### Task 4: `tender` block on `TillSaleResult` + `readTenderBlock`, wired into all FOUR ticket sites
 
-This task is additive: it ADDS a `tender` field alongside the existing `change`, so every consumer still compiles. The renderers switch over in Tasks 5–6; `change` is removed in Task 7.
+`tender` is added as a REQUIRED member of `TillSaleResult` and `change` is kept alongside it (removed in Task 7). Because `tender` is required, EVERY object literal typed `TillSaleResult` must gain it in this task or the build breaks — so this task also updates the four production sites AND the explicitly-typed test fixtures (listed in Step 4). The renderers keep reading `change` until Tasks 5–6 switch them to `tender`; the task ends green.
 
 **Files:**
-- Modify: `apps/server/src/till-sale.ts` (`TillSaleResult` gains `tender`; new `readTenderBlock`; populate at `readSettledTicket`, `fileImmediateSale`, `finalizeCapture`)
+- Modify: `apps/server/src/till-sale.ts` (`TillSaleResult` gains `tender`; new `readTenderBlock`; populate at `readSettledTicket`, `fileImmediateSale`, `finalizeCapture`, AND `finalizeRecovery`)
 - Modify: `apps/till/src/api/client.ts` (mirror `TillSaleResult.tender`)
+- Modify: the typed-literal fixtures so they compile (Step 4)
 - Test: `apps/server/src/till-sale-tender-block.test.ts` (new) + existing `till-sale-integrated.test.ts`
 
 **Interfaces:**
-- Consumes: `PaymentRow` card columns (Task 2), `findCapturedPaymentForWorkingOrder` (existing, `store.ts`).
+- Consumes: `CapturedPaymentForOrder` (with `provider` + card columns, Task 2) and `findCapturedPaymentForWorkingOrderAnyProvider` (Task 2). Do NOT use `findCapturedPaymentForWorkingOrder` — it filters by provider, which the ticket path does not have (and the reprint path has no provider in scope at all).
 - Produces:
 
 ```typescript
@@ -528,11 +563,12 @@ Expected: FAIL — `readTenderBlock` is not defined.
 
 - [ ] **Step 3: Implement `readTenderBlock`**
 
-In `apps/server/src/till-sale.ts`:
+In `apps/server/src/till-sale.ts`. First add imports: `tenders` to the existing `@waitron/db` import (the import block currently pulls `sales, invoiceSeries, workingOrders, workingOrderLines` only — `tenders` is exported from the `@waitron/db` barrel), and the payments types/reader:
 
 ```typescript
 import type { CardDetails } from "@waitron/payments";
-import { findCapturedPaymentForWorkingOrder } from "@waitron/payments"; // if not already barrel-exported, import from its module path used elsewhere in this file
+import { findCapturedPaymentForWorkingOrderAnyProvider } from "@waitron/payments"; // add to the module's existing @waitron/payments import
+// and add `tenders` to the existing `import { sales, invoiceSeries, workingOrders, workingOrderLines } from "@waitron/db";`
 
 export type TenderBlock =
   | { method: "cash"; change: string }
@@ -568,7 +604,7 @@ async function readTenderBlock(
   if (tender === undefined || tender.method === "cash") {
     return { method: "cash", change: opts.cashChange ?? "0.00" };
   }
-  const payment = await findCapturedPaymentForWorkingOrder(tx, {
+  const payment = await findCapturedPaymentForWorkingOrderAnyProvider(tx, {
     tenantId: cfg.tenantId,
     workingOrderId,
   });
@@ -582,9 +618,9 @@ async function readTenderBlock(
 }
 ```
 
-Note: `findCapturedPaymentForWorkingOrder` must return the card columns + `provider` + `externalRef`. Confirm its select projects `PAYMENT_COLUMNS` (extended in Task 2) plus `provider`; if it currently omits `provider`, add `provider: payments.provider` to its projection and to `PaymentRow`.
+`cardFromPaymentRow` takes a `CapturedPaymentForOrder` (which Task 2 gave the four `card*` columns + `provider` + `externalRef`). The reader is provider-agnostic (Task 2), so it finds a manual card row (`provider === "manual"`, card columns null → `card: null`, `reference` = the operator ref) exactly as it finds an integrated one.
 
-- [ ] **Step 4: Add `tender` to `TillSaleResult` and populate it at all three sites**
+- [ ] **Step 4: Add `tender` to `TillSaleResult` and populate it at all FOUR sites + the typed fixtures**
 
 Add to the `TillSaleResult` interface (keep `change` for now):
 
@@ -592,9 +628,19 @@ Add to the `TillSaleResult` interface (keep `change` for now):
   tender: TenderBlock;
 ```
 
-- `readSettledTicket` (~line 469): it already takes `change = "0.00"` and has `saleId` (`issued.saleId`) and `workingOrderId`. Before the `return {`, add `const tender = await readTenderBlock(tx, cfg, brandSaleId(issued.saleId), workingOrderId, { cashChange: change });` and include `tender,` in the returned object.
-- `fileImmediateSale` (~line 693): it builds the ticket inline with `change` and has `saleId`, `req.id` (working order), and `tender.method`. Add `const tenderBlock = await readTenderBlock(tx, cfg, saleId, workingOrderId, { cashChange: change });` after the tender row is inserted (the payments row for a manual card is written in this same tx before this point — confirm ordering; if the manual `payments` insert happens after, move the read after it) and include `tender: tenderBlock,`.
-- `finalizeCapture` (~line 1058): the integrated fresh capture; the `payments` row was captured in P2 and associated in this tx, `change` is `"0.00"`. Add `const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id, { cashChange: "0.00" });` before its `return {` and include `tender: tenderBlock,`.
+Populate `tender` (via `readTenderBlock`) at every function that builds a `TillSaleResult` literal — there are FOUR, not three:
+
+- `readSettledTicket` (its `const ticket`/`return {` around `till-sale.ts:494`; it takes `change = "0.00"` and has `issued.saleId` + `workingOrderId`): add `const tender = await readTenderBlock(tx, cfg, brandSaleId(issued.saleId), workingOrderId, { cashChange: change });` before the return and include `tender,`.
+- `fileImmediateSale` (ticket built ~`till-sale.ts:692`; has `saleId`, `workingOrderId`, `change`): the tender row is written by `recordSale` (~636) and, for a manual card, the payment row by `recordManualCardPayment` (~663) — BOTH before the ticket build, so read after them: `const tenderBlock = await readTenderBlock(tx, cfg, saleId, workingOrderId, { cashChange: change });` and include `tender: tenderBlock,`.
+- `finalizeCapture` (ticket ~`till-sale.ts:1056`; integrated fresh capture; the `payments` row was captured in P2 and associated in this tx; `change` is `"0.00"`): `const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id, { cashChange: "0.00" });`, include `tender: tenderBlock,`.
+- **`finalizeRecovery` (ticket ~`till-sale.ts:1229`) — the lost-T2 card-recovery path, a genuine card sale that prints a receipt.** It has the working-order id and the captured payment in scope. Add the same `readTenderBlock` call (`cashChange: "0.00"`) and include `tender: tenderBlock,`. (This is the fourth site the spec's "three sites" undercounted; the plan-review caught it.)
+
+Then update every OTHER object literal explicitly typed `TillSaleResult`, or the build breaks the moment `tender` is required. These are test fixtures (production code has no other `TillSaleResult` literal):
+
+- `apps/server/src/receipt-ticket.test.ts:31` (`FILED_SALE: TillSaleResult`) and `:199` (inline `result: TillSaleResult`) — add a `tender` (a cash block `{ method: "cash", change: <its existing change> }` unless the case is about a card).
+- `apps/server/src/till-sale-integrated.test.ts:14` (`TICKET: TillSaleResult`) — add a `tender`.
+
+Give each fixture a `tender` consistent with its existing `change` (cash fixtures → `{ method: "cash", change }`); the card-specific renderer fixtures come in Tasks 5–6.
 
 - [ ] **Step 5: Mirror the type on the till client**
 
@@ -712,7 +758,7 @@ Replace the unconditional cash block (the `LABEL.cash` / `LABEL.change` lines af
       if (second !== "") b.line(second);
     }
     if (t.reference !== null) b.line(`Ref. ${t.reference}`);
-    if (decimal(t.tip) !== decimal("0.00")) {
+    if (t.tip !== "0.00") {
       b.line(twoColumn(LABEL.tip, formatMoney(t.tip, locale)));
       b.line(twoColumn(LABEL.charged, formatMoney(t.charged, locale)));
     }
@@ -720,7 +766,7 @@ Replace the unconditional cash block (the `LABEL.cash` / `LABEL.change` lines af
   b.line();
 ```
 
-(`·` is `·`, a Latin-1 character — safe. Use `compareDecimal` if `decimal()` values are not directly comparable with `!==`; match how the file already compares decimals.)
+(`·` is U+00B7, a Latin-1 character — safe on paper. Compare the tip as a STRING: `tenders.tip_amount` is `numeric(12,2)`, always canonical `"0.00"`/`"0.50"`, so `t.tip !== "0.00"` is correct — do NOT use `decimal(t.tip) !== decimal("0.00")`, which compares object identity and is always true. Task 6 uses the same string compare.)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -772,20 +818,23 @@ git commit -s -m "feat(till): render the card block on the on-screen receipt"
 ### Task 7: Remove the transitional `change` field; live sandbox assertion; full-workspace gate
 
 **Files:**
-- Modify: `apps/server/src/till-sale.ts` (drop `change` from `TillSaleResult` and the three sites)
+- Modify: `apps/server/src/till-sale.ts` (drop `change` from `TillSaleResult` and the four sites)
 - Modify: `apps/till/src/api/client.ts` (drop `change` from the mirror)
-- Modify: the six wire-pinning test files: `apps/server/src/receipt-ticket.test.ts`, `apps/server/src/till-sale-integrated.test.ts`, `apps/till/src/screens/till-ticket-view.test.ts`, `apps/till/src/screens/till-ticket-view.a11y.test.ts`, `apps/till/src/till-app.test.ts`, `apps/till/src/api/client.test.ts`
+- Modify: EVERY `change` consumer (the plan-review found the original six was an undercount). Grep first: `rg -n '\.change\b' apps/server/src apps/till/src apps/server/scripts` and reconcile against this list before editing —
+  - **Test files that assert `.change` on a `TillSaleResult`:** `apps/server/src/receipt-ticket.test.ts`, `apps/server/src/till-sale-integrated.test.ts`, `apps/server/src/till-api.pg.test.ts` (~422, 525, 716, 766, 1081), `apps/server/src/till-sale-integrated.pg.test.ts` (~503, 816, 1195), `apps/server/src/till-sale.test.ts` (~268, 306, 778), `apps/server/src/working-order.pg.test.ts` (~16 assertions, 518–1776), `apps/till/src/screens/till-ticket-view.test.ts`, `apps/till/src/screens/till-ticket-view.a11y.test.ts`, `apps/till/src/till-app.test.ts`, `apps/till/src/api/client.test.ts`.
+  - **Production/demo scripts that read `ticket.change`** (typechecked — `apps/server/tsconfig.json` includes `scripts`): `apps/server/scripts/park-retrieve-demo.ts:311`, `apps/server/scripts/integrated-card-demo.ts:218`, `apps/server/scripts/till-demo.ts:274` and `:352`.
+  - **Excluded (not the field):** `apps/till/src/widgets/tender-pay.test.ts`'s `.change` is a CSS class / i18n key, not `TillSaleResult.change` — do not touch.
 - Modify: `packages/payments-sumup/src/collect.sandbox.test.ts` (assert card columns after a live capture)
 
 **Interfaces:** none new — this removes the deprecated `change` and finalises the shape.
 
 - [ ] **Step 1: Remove `change`**
 
-Delete `change: string;` from `TillSaleResult` (server) and its mirror (`apps/till/src/api/client.ts`). Remove `change` from the object literals at `readSettledTicket`, `fileImmediateSale`, `finalizeCapture` (the cash-change value now lives only in `readTenderBlock`'s `cashChange` arg). `readSettledTicket`'s `change = "0.00"` parameter stays — it feeds `cashChange`.
+Delete `change: string;` from `TillSaleResult` (server) and its mirror (`apps/till/src/api/client.ts`). Remove `change` from the object literals at all FOUR sites (`readSettledTicket`, `fileImmediateSale`, `finalizeCapture`, `finalizeRecovery`) — the cash-change value now lives only in `readTenderBlock`'s `cashChange` arg. `readSettledTicket`'s `change = "0.00"` parameter stays — it feeds `cashChange`.
 
-- [ ] **Step 2: Update the six wire-pinning tests**
+- [ ] **Step 2: Update every `change` consumer (the full list in this task's Files)**
 
-Each test that constructs or asserts a `TillSaleResult` with `change: "…"` moves that expectation into `tender`. A cash fixture becomes `tender: { method: "cash", change: "…" }`; a card fixture becomes a card `tender`. Run each file and fix the type errors it surfaces — these are the assertions that pin the wire body, so update them to assert the new shape, not to delete the assertion (CLAUDE.md: a rewritten test must keep its behavioural claim).
+Each test that constructs or asserts a `TillSaleResult` with `change: "…"` moves that expectation into `tender`: a cash fixture becomes `tender: { method: "cash", change: "…" }`; a card fixture becomes a card `tender`. Update the assertion to the new shape, never delete it (CLAUDE.md: a rewritten test must keep its behavioural claim). For the demo scripts (`park-retrieve-demo.ts`, `integrated-card-demo.ts`, `till-demo.ts`) that read `ticket.change` for display, switch each to read `ticket.tender.method === "cash" ? ticket.tender.change : "0.00"` (or print the card block — match what the script demonstrates). Grep `rg -n '\.change\b' apps/server/src apps/till/src apps/server/scripts` and confirm zero `TillSaleResult.change` reads remain before moving on.
 
 - [ ] **Step 3: Add the live sandbox assertion**
 
@@ -821,7 +870,7 @@ git commit -s -m "refactor(server,till): finalise TillSaleResult.tender, drop ch
 ## Self-Review
 
 **Spec coverage:**
-- §4.1 provider contract → Task 1. §4.2 SumUp adapter → Task 3. §4.3 storage → Task 2. §4.4 ticket data / `readTenderBlock` / three sites → Task 4 (+ finalised in 7). §4.5 renderers → Tasks 5–6. §5 testing → each task's tests + Task 7's full gate + sandbox. §6 fiscal invariants → Global Constraints (nothing in any task touches the fiscal body). §7 out of scope → not built (Stripe leaves `card` undefined; no second slip; scheme not normalised beyond underscore→space).
+- §4.1 provider contract → Task 1. §4.2 SumUp adapter → Task 3. §4.3 storage → Task 2 (note: the plan uses plain `db:generate` for the CHECKs — verified against `0000_payments_baseline.sql`, which carries a generated CHECK; spec §4.3's "+ db:generate:custom" was the inaccurate one, the plan is right). §4.4 ticket data / `readTenderBlock` → Task 4, wired into FOUR construction sites (`readSettledTicket`, `fileImmediateSale`, `finalizeCapture`, `finalizeRecovery` — the spec/plan's original "three" undercounted; corrected after the plan-review), finalised in Task 7. §4.5 renderers → Tasks 5–6. §5 testing → each task's tests + Task 7's full gate + sandbox. §6 fiscal invariants → Global Constraints (nothing in any task touches the fiscal body). §7 out of scope → not built (Stripe leaves `card` undefined; no second slip; scheme not normalised beyond underscore→space).
 - Stripe: no task fills its `card` — correct, it's optional and out of scope (§7). Logged as a backlog follow-up already.
 
 **Placeholder scan:** all code steps carry real code; test steps that describe DOM/real-PG setup point at the existing harness in the named sibling suites rather than inventing one — acceptable because the exact harness is repo-established and named. No "TBD"/"handle edge cases".
