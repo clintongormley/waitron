@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as liveRetryDelay } from "node:timers/promises";
 import { serve } from "@hono/node-server";
-import { sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   asAppUser,
@@ -22,19 +22,23 @@ import {
   withTenant,
   type Database,
 } from "@waitron/db";
-import { credentialTenants, loadKeyRing } from "@waitron/credentials";
+import { credentialTenants, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, mountLiveApi } from "./live-api.js";
 import { runDue } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
-import { SimulatorPaymentProvider, type PaymentProvider } from "@waitron/payments";
+import {
+  SimulatorPaymentProvider,
+  type CardProviderContribution,
+  type PaymentProvider,
+} from "@waitron/payments";
 import { recordIncidentOnce } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import type { ModuleRouteContext } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, type TenantId } from "@waitron/shared";
 import {
   ALL_MODULES,
   ALL_MODULE_PERMISSIONS,
@@ -94,6 +98,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
+import type { CardProviderPool } from "./card-provider-pool.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
@@ -334,29 +339,99 @@ export async function buildCardProvider(
  * signal, so it does not gate `/health` (the deferred SumUp reconciler is the same tier, likewise
  * off it). The returned `nextDueAt` is logged, not yet used to pace the loop.
  *
+ * Since the reader-provider cutover (Task 12) a live box builds NO single provider at boot — readers
+ * come from the pool per sale — so the set of providers to sweep is enumerated EACH pass
+ * (`sweepProviders`, `connectedCardProviderSweep` below): every card provider this tenant has a sealed
+ * credential for, plus the demo/prepare simulator if one was built. A tenant connected while the host
+ * runs is therefore swept on the next pass, no restart. An empty set is a no-op (no card configured).
+ *
  * Exported for a direct unit test (`boot-pending-sweep.test.ts`) — a stubbed `inner` + a fake
- * provider, no container — the same "exported for a direct test subject" reasoning `buildCardProvider`
+ * enumerator, no container — the same "exported for a direct test subject" reasoning `buildCardProvider`
  * carries; the full loop wiring is exercised only through a real boot. */
 export function withPendingSweep(
   inner: (now: Date) => Promise<PassReport>,
-  provider: PaymentProvider | undefined,
+  sweepProviders: () => Promise<readonly PaymentProvider[]>,
   log: Logger,
 ): (now: Date) => Promise<PassReport> {
-  if (provider === undefined) return inner;
   return async (now) => {
     const report = await inner(now);
-    try {
-      const r = await provider.resolvePending(now);
-      log("info", "resolve_pending.complete", {
-        captured: r.forwarded,
-        failed: r.declined,
-        incidentsRaised: r.incidentsRaised,
-        nextDueAt: r.nextDueAt?.toISOString() ?? null,
-      });
-    } catch (error) {
+    // Enumerating the providers can itself fail (a credential read, a pool build) — that is a sweep
+    // failure, logged like a stuck sweep and never propagated into the pass (the fiscal `report` is
+    // already computed and must be returned whatever the card backstop does).
+    const providers = await sweepProviders().catch((error) => {
       log("warn", "resolve_pending.failed", { error: String(error) });
+      return [] as readonly PaymentProvider[];
+    });
+    for (const provider of providers) {
+      try {
+        const r = await provider.resolvePending(now);
+        log("info", "resolve_pending.complete", {
+          provider: provider.provider,
+          captured: r.forwarded,
+          failed: r.declined,
+          incidentsRaised: r.incidentsRaised,
+          nextDueAt: r.nextDueAt?.toISOString() ?? null,
+        });
+      } catch (error) {
+        log("warn", "resolve_pending.failed", {
+          provider: provider.provider,
+          error: String(error),
+        });
+      }
     }
     return report;
+  };
+}
+
+/** Passed to `pool.get` when a provider is fetched ONLY to sweep its `resolvePending`: that sweep
+ * never collects a sale, so it must never resolve a reader. A throw here surfaces a bug (a sweep that
+ * unexpectedly tried to collect) rather than hiding it behind a silent reader lookup. */
+function sweepNeverResolvesReader(): Promise<string> {
+  throw new Error("resolvePending must never resolve a reader");
+}
+
+/**
+ * The per-pass enumerator `withPendingSweep` calls: the demo/prepare simulator (if one was built),
+ * plus every pooled card provider this tenant has a SEALED CREDENTIAL for — the same
+ * credential-presence signal `payments-api`'s GET providers and `/api/pay`'s connected pre-check use.
+ * Read EACH pass, as the app role under the tenant, so a provider connected mid-run is swept next
+ * pass without a restart. A provider with no sealed credential is NOT swept (its `resolvePending`
+ * would only fail on a missing credential), which is the negative control the test pins.
+ *
+ * Exported for a direct test (`boot-pending-sweep.test.ts`, PGlite + a seeded credential + a fake
+ * pool). */
+export function connectedCardProviderSweep(deps: {
+  db: Database;
+  tenantId: TenantId;
+  pool: CardProviderPool;
+  contributions: readonly Pick<CardProviderContribution, "providerId" | "credentialPurpose">[];
+  simulator: PaymentProvider | undefined;
+}): () => Promise<readonly PaymentProvider[]> {
+  return async () => {
+    const out: PaymentProvider[] = [];
+    if (deps.simulator !== undefined) out.push(deps.simulator);
+    const purposes = [...new Set(deps.contributions.map((c) => c.credentialPurpose))];
+    // No card seats at all → nothing pooled to sweep (only the simulator, already added).
+    if (purposes.length > 0) {
+      const held = await withTenant(deps.db, deps.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const rows = await tx
+          .select({ purpose: tenantCredentials.purpose })
+          .from(tenantCredentials)
+          .where(
+            and(
+              eq(tenantCredentials.tenantId, deps.tenantId),
+              inArray(tenantCredentials.purpose, purposes),
+            ),
+          );
+        return new Set(rows.map((r) => r.purpose));
+      });
+      for (const c of deps.contributions) {
+        if (!held.has(c.credentialPurpose)) continue;
+        out.push(await deps.pool.get(c.providerId, sweepNeverResolvesReader));
+      }
+    }
+    return out;
   };
 }
 
@@ -2492,9 +2567,13 @@ export async function startServer(
     // token) still reports healthy; those surface as `sync.pull_failed` log lines. Real
     // replication-lag monitoring belongs to the hosting slice (like real per-user auth), out of scope
     // for the C2a stand-in.
-    // `withPendingSweep` runs the card provider's `resolvePending` sweep around the singleton fiscal
-    // pass on EVERY trading node with a provider (primary or sell-only secondary), returning the
-    // inner `PassReport` unchanged so the `/health` contract is untouched (see its own header).
+    // `withPendingSweep` runs each connected card provider's `resolvePending` sweep around the
+    // singleton fiscal pass on EVERY trading node (primary or sell-only secondary), returning the
+    // inner `PassReport` unchanged so the `/health` contract is untouched (see its own header). The
+    // providers are enumerated per pass (`connectedCardProviderSweep`): the demo/prepare simulator, if
+    // one was built, plus every pooled provider `till.tenantId` has a sealed credential for — the
+    // money-critical backstop that resolves a SumUp payment whose outcome was lost between the reader
+    // push and the first poll (`payment.pending_outcome_unactionable`).
     pass: withPendingSweep(
       singletonPass(
         () => holders.singletonRole.current,
@@ -2547,7 +2626,13 @@ export async function startServer(
             at,
           ),
       ),
-      cardProvider,
+      connectedCardProviderSweep({
+        db,
+        tenantId: till.tenantId,
+        pool: cardPool,
+        contributions: CARD_PROVIDERS,
+        simulator: cardProvider,
+      }),
       log,
     ),
     now,
