@@ -13,7 +13,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   asAppUser,
@@ -585,29 +585,53 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         if (now - e.lastSeenAt > DISCOVERED_TTL_MS) discovered.delete(k);
       const { registered, agents } = await gated(sessionId, async (tx) => ({
         registered: await tx
-          .select({ localKey: printers.localKey })
+          .select({
+            id: printers.id,
+            localKey: printers.localKey,
+            host: printers.host,
+            port: printers.port,
+          })
           .from(printers)
-          .where(and(eq(printers.tenantId, deps.cfg.tenantId), isNotNull(printers.localKey))),
+          .where(eq(printers.tenantId, deps.cfg.tenantId)), // tenant predicate — CLAUDE.md §3
         agents: await tx
           .select({ id: printAgents.id, name: printAgents.name })
           .from(printAgents)
           .where(eq(printAgents.tenantId, deps.cfg.tenantId)), // tenant predicate — CLAUDE.md §3
       }));
       const names = new Map(agents.map((a) => [a.id, a.name]));
-      const keys = new Set(registered.map((r) => r.localKey));
+      // A usb/bluetooth device matches a registered printer on its stable local key; a network printer
+      // has none and is keyed on host:port (packages/db/src/schema/printers.ts), so a scan result of one
+      // already registered matches on that pair — same host on another port is a different printer.
+      const byKey = new Map<string, string>();
+      const byHostPort = new Map<string, string>();
+      for (const r of registered) {
+        if (r.localKey !== null) byKey.set(r.localKey, r.id);
+        if (r.host !== null && r.port !== null) byHostPort.set(`${r.host}:${r.port}`, r.id);
+      }
+      const printerIdOf = (e: DiscoveredEntry): string | null =>
+        (e.localKey !== undefined ? byKey.get(e.localKey) : undefined) ??
+        (e.host !== undefined && e.port !== undefined
+          ? byHostPort.get(`${e.host}:${e.port}`)
+          : undefined) ??
+        null;
       return c.json(
-        [...discovered.values()].map((e) => ({
-          agentId: e.agentId,
-          agentName: names.get(e.agentId) ?? null,
-          transport: e.transport,
-          localKey: e.localKey,
-          host: e.host,
-          port: e.port,
-          make: e.make,
-          model: e.model,
-          name: e.name,
-          alreadyRegistered: e.localKey !== undefined && keys.has(e.localKey),
-        })),
+        [...discovered.values()].map((e) => {
+          const printerId = printerIdOf(e);
+          return {
+            agentId: e.agentId,
+            agentName: names.get(e.agentId) ?? null,
+            transport: e.transport,
+            localKey: e.localKey,
+            host: e.host,
+            port: e.port,
+            make: e.make,
+            model: e.model,
+            name: e.name,
+            alreadyRegistered: printerId !== null,
+            printerId,
+            lastSeenAt: e.lastSeenAt,
+          };
+        }),
       );
     }),
   );

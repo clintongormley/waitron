@@ -153,6 +153,9 @@ dashboard-opened, venue-wide, time-boxed window pattern
 - `discoveredDevices` — keyed `(agentId, transport, localKey)`, value `{ make, model, name, lastSeenAt }`,
   upserted from each agent's report, entries expiring after a few missed reports. The dashboard reads a
   merged view (§10), marking any whose `local_key` matches a registered printer as already-registered.
+  _(2026-09-11: a `network_tcp` result matches on host:port as well — it has no local key — and each
+  entry carries the matched `printerId` plus `lastSeenAt`; the dashboard hides matched results and shows
+  "seen on … at …" against the registered printer instead.)_
 - `discoveryWindow` — the venue's `discoveryUntil`, set by the start route (§9), read into each poll
   reply. Both are transient; a server restart empties them and the next polls refill them (owner's
   in-memory decision).

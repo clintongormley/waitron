@@ -672,7 +672,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       scanned: [],
     });
     // Register only the first.
-    await createUsbPrinter(app, registeredSerial, "Registered USB");
+    const registeredId = await createUsbPrinter(app, registeredSerial, "Registered USB");
 
     const res = await send(app, "GET", "/management-api/discovered-printers", {
       cookie: managerCookie,
@@ -685,6 +685,8 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       localKey?: string;
       make?: string;
       alreadyRegistered: boolean;
+      printerId: string | null;
+      lastSeenAt: number;
     }[];
     const one = rows.find((r) => r.localKey === registeredSerial)!;
     const two = rows.find((r) => r.localKey === unregisteredSerial)!;
@@ -694,12 +696,55 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       transport: "usb",
       make: "Epson",
       alreadyRegistered: true,
+      printerId: registeredId,
     });
     expect(two).toMatchObject({
       agentId,
       agentName: "Inventory agent",
       transport: "usb",
       alreadyRegistered: false,
+      printerId: null,
+    });
+    expect(typeof one.lastSeenAt).toBe("number");
+  });
+
+  it("GET /management-api/discovered-printers marks a scanned network printer registered by host+port", async () => {
+    // A network printer has no local key — it is keyed on host:port — so the scan result of one that is
+    // already registered carries that printer's id (the dashboard hides it from the results and shows
+    // "seen" against the registered row). Same host on another port is a different printer.
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Inventory agent");
+    const host = `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Counter", transport: "network_tcp", host, port: 9100 },
+    });
+    expect(created.status).toBe(201);
+    const printerId = ((await created.json()) as { id: string }).id;
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        { transport: "network_tcp", host, port: 9100, name: "Epson" },
+        { transport: "network_tcp", host, port: 9101 },
+      ],
+    });
+
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    const rows = (await res.json()) as {
+      host?: string;
+      port?: number;
+      alreadyRegistered: boolean;
+      printerId: string | null;
+    }[];
+    expect(rows.find((r) => r.host === host && r.port === 9100)).toMatchObject({
+      alreadyRegistered: true,
+      printerId,
+    });
+    expect(rows.find((r) => r.host === host && r.port === 9101)).toMatchObject({
+      alreadyRegistered: false,
+      printerId: null,
     });
   });
 
