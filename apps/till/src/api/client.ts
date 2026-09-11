@@ -573,6 +573,34 @@ export interface TillSaleLine {
   parentLineNo?: number | null;
 }
 
+/**
+ * Card-present facts read back from the captured payment — the receipt's card block. Mirrors the
+ * server's `CardDetails` (`packages/payments`): `scheme` as the provider names it, the masked `last4`,
+ * the normalised `entryMode`, and the `authCode` (null when the transaction carried none).
+ */
+export interface CardDetails {
+  scheme: string;
+  last4: string;
+  entryMode: "contactless" | "chip" | "swipe" | "unknown";
+  authCode: string | null;
+}
+
+/**
+ * How a filed sale was paid, read back from the committed rows. Mirrors the server's `TenderBlock`
+ * (`apps/server/src/till-sale.ts`): `cash` carries the change handed back; `card` carries the whole
+ * charge (`charged` = total + tip), the `tip` ("0.00" when none), the `card` facts (null when the
+ * provider supplied none), and the operator `reference` (null for an integrated capture).
+ */
+export type TenderBlock =
+  | { method: "cash"; change: string }
+  | {
+      method: "card";
+      charged: string;
+      tip: string;
+      card: CardDetails | null;
+      reference: string | null;
+    };
+
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
 export interface TillSaleResult {
   invoiceNumber: string;
@@ -582,6 +610,9 @@ export interface TillSaleResult {
   /** The filed line list (goods identification), rendered by the receipt instead of the client basket. */
   lines: TillSaleLine[];
   change: string;
+  /** How the sale was paid, read back from the committed tender (+ payment) rows. Carried alongside
+   * `change` for now; the receipt view moves onto it in a later task and `change` is then removed. */
+  tender: TenderBlock;
   qr: string;
 }
 

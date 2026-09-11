@@ -18,6 +18,7 @@ import {
   invoiceSeries,
   isUniqueViolation,
   sales,
+  tenders,
   withTenant,
   workingOrderLines,
   workingOrders,
@@ -28,9 +29,15 @@ import type { PricedLines } from "@waitron/catalogue";
 import {
   associatePaymentWithSale,
   findCapturedPaymentForWorkingOrder,
+  findCapturedPaymentForWorkingOrderAnyProvider,
   recordManualCardPayment,
 } from "@waitron/payments";
-import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
+import type {
+  CapturedPaymentForOrder,
+  CardDetails,
+  PaymentProvider,
+  PaymentResult,
+} from "@waitron/payments";
 import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
@@ -142,6 +149,24 @@ export interface TillSaleLine {
   parentLineNo?: number | null;
 }
 
+/**
+ * How a filed sale was paid, as facts read back from the committed rows — the receipt's tender block.
+ * `cash` carries only the change handed back. `card` carries the whole instrument charge (`charged`,
+ * `= total + tip`), the `tip` that rode on it (the canonical numeric string "0.00" when none — a
+ * downstream renderer compares `tip !== "0.00"`), the card-present `card` facts (null when the
+ * provider supplied none, e.g. a manual or offline tender), and the operator `reference` (the manual
+ * acquirer/terminal number, null for an integrated capture).
+ */
+export type TenderBlock =
+  | { method: "cash"; change: string }
+  | {
+      method: "card";
+      charged: string;
+      tip: string;
+      card: CardDetails | null;
+      reference: string | null;
+    };
+
 export interface TillSaleResult {
   /** `NumSerieFactura`-shaped "A/1", read back from the sale row + its series after filing. */
   invoiceNumber: string;
@@ -157,8 +182,73 @@ export interface TillSaleResult {
    * read). `card`: always "0.00" — a card is charged the exact total, so there is nothing to hand
    * back. */
   change: string;
+  /** How the sale was paid, read back from the committed tender (+ payment) rows. Carried alongside
+   * `change` for now; the renderers move onto it in a later task and `change` is then removed. */
+  tender: TenderBlock;
   /** Where a customer can verify the record, or "" when the regime offers none. */
   qr: string;
+}
+
+/**
+ * Reconstruct the card-present facts from a captured `payments` row, or null when the provider left
+ * them unset (cash/manual/offline never fill them). A partial row (some card columns set, some NULL)
+ * is treated as "no facts" rather than a half-rendered block — a filed, immutable sale must present,
+ * never throw (CLAUDE.md §5).
+ */
+function cardFromPaymentRow(row: {
+  cardScheme: string | null;
+  cardLast4: string | null;
+  cardEntryMode: string | null;
+  cardAuthCode: string | null;
+}): CardDetails | null {
+  if (row.cardScheme === null || row.cardLast4 === null || row.cardEntryMode === null) {
+    return null;
+  }
+  return {
+    scheme: row.cardScheme,
+    last4: row.cardLast4,
+    // The card-columns CHECK constraint guarantees one of the four entry modes; the cast is safe.
+    entryMode: row.cardEntryMode as CardDetails["entryMode"],
+    authCode: row.cardAuthCode,
+  };
+}
+
+/**
+ * Read the tender block for a filed sale back from its committed rows — the `tenders` row (tender
+ * method, the whole charge, and the tip) and, for a card, the captured `payments` row (provider, card
+ * facts, operator reference). Tenant-scoped on every read (one-tenant-per-database is NOT the query's
+ * isolation boundary — CLAUDE.md §3). DEGRADES, never throws: a card tender whose payment row is
+ * absent, or whose card columns are unset, presents `card: null` rather than failing a sale that is
+ * already filed and immutable (§5). `opts.cashChange` is the change a cash tender hands back (the
+ * caller knows it; it is not a stored column).
+ */
+export async function readTenderBlock(
+  tx: Transaction,
+  cfg: TillConfig,
+  saleId: SaleId,
+  workingOrderId: string,
+  opts: { cashChange?: string } = {},
+): Promise<TenderBlock> {
+  const [tender] = await tx
+    .select({ method: tenders.method, amount: tenders.amount, tip: tenders.tipAmount })
+    .from(tenders)
+    .where(and(eq(tenders.tenantId, cfg.tenantId), eq(tenders.saleId, saleId)));
+  // A settled sale always has exactly one tender; a missing one presents as cash-with-no-change
+  // rather than throwing on a filed, immutable sale (degrade, never throw — §5).
+  if (tender === undefined || tender.method === "cash") {
+    return { method: "cash", change: opts.cashChange ?? "0.00" };
+  }
+  const payment = await findCapturedPaymentForWorkingOrderAnyProvider(tx, {
+    tenantId: cfg.tenantId,
+    workingOrderId,
+  });
+  return {
+    method: "card",
+    charged: tender.amount,
+    tip: tender.tip,
+    card: payment === null ? null : cardFromPaymentRow(payment),
+    reference: payment !== null && payment.provider === "manual" ? payment.externalRef : null,
+  };
 }
 
 /**
@@ -518,6 +608,10 @@ async function readSettledTicket(
   }
   /* v8 ignore stop */
 
+  const tender = await readTenderBlock(tx, cfg, brandSaleId(issued.saleId), workingOrderId, {
+    cashChange: change,
+  });
+
   return {
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
     // Normalise the stored `timestamptz` text back to a canonical ISO-8601 instant, so the replayed
@@ -527,6 +621,7 @@ async function readSettledTicket(
     vatBreakdown: toVatBreakdown(filed.vatBreakdown),
     lines: ticketLines,
     change,
+    tender,
     qr: filed.verificationUrl,
   };
 }
@@ -686,6 +781,12 @@ async function fileImmediateSale(
     // tenant-scoped `.for("update")` lock on this row, so this can only ever match its own order.
     .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.tenantId, cfg.tenantId)));
 
+  // Read the tender block back AFTER the tender row (recordSale) and, for a manual card, the payment
+  // row (recordManualCardPayment) are both written above — so a manual acquirer reference is visible.
+  const tenderBlock = await readTenderBlock(tx, cfg, saleId, workingOrderId, {
+    cashChange: change,
+  });
+
   // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
   // human-facing "A/1" is read back from the sale row and its series (the shared `readInvoiceNumber`
   // reader), in this same transaction.
@@ -698,6 +799,7 @@ async function fileImmediateSale(
     // is the invoiced composition rather than the client basket (Finding 2).
     lines: ticketLinesFrom(priced),
     change,
+    tender: tenderBlock,
     qr: fiscal.verificationUrl ?? "",
   };
 
@@ -1053,6 +1155,10 @@ async function finalizeCapture(
         })
         .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
+      // The card tender row (recordSale) and the captured payment row (associated just above) are
+      // both committed on this tx, so the tender block reads them back; a card hands nothing back.
+      const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id, { cashChange: "0.00" });
+
       const ticket: TillSaleResult = {
         invoiceNumber: await readInvoiceNumber(tx, saleId),
         issuedAt: fiscal.issuedAt.toISOString(),
@@ -1060,6 +1166,7 @@ async function finalizeCapture(
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
         lines: ticketLinesFrom(priced),
         change: "0.00",
+        tender: tenderBlock,
         qr: fiscal.verificationUrl ?? "",
       };
       // Print-on-sale (design §3c) for the integrated (Stripe Terminal) card sale — the P3 sibling of
@@ -1226,6 +1333,10 @@ async function finalizeRecovery(
       })
       .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
+    // The card tender row (recordSale) and the recovered captured payment (associated just above) are
+    // both committed on this tx; read the tender block back. A card hands nothing back.
+    const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id, { cashChange: "0.00" });
+
     const ticket: TillSaleResult = {
       invoiceNumber: await readInvoiceNumber(tx, saleId),
       issuedAt: fiscal.issuedAt.toISOString(),
@@ -1233,6 +1344,7 @@ async function finalizeRecovery(
       vatBreakdown: toVatBreakdown(priced.vatBreakdown),
       lines: ticketLinesFrom(priced),
       change: "0.00",
+      tender: tenderBlock,
       qr: fiscal.verificationUrl ?? "",
     };
     // Print-on-sale (design §3c) for the RECOVERED integrated card sale — POST-filing, INSERT-only on

@@ -18,6 +18,7 @@ const TICKET: TillSaleResult = {
   vatBreakdown: [{ rate: "21.00", base: "1.24", tax: "0.26" }],
   lines: [{ descriptions: { "es-ES": "Café" }, quantity: "1", gross: "1.50" }],
   change: "0.00",
+  tender: { method: "cash", change: "0.00" },
   qr: "https://example.test/verify",
 };
 

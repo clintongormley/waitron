@@ -27,6 +27,7 @@ const result: TillSaleResult = {
     { descriptions: { "es-ES": "Jamón", en: "Ham" }, quantity: "0.32", gross: "6.40" },
   ],
   change: "0.60",
+  tender: { method: "cash", change: "0.60" },
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1&fecha=05-08-2026&importe=9.40",
 };
 
