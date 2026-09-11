@@ -129,7 +129,9 @@ GRANT SELECT, INSERT, UPDATE ON "card_readers" TO app_user;
 ```
 and add a matching assertion in `classification.test.ts` (or rely on the existing completeness assertion — confirm it enumerates the new table).
 
-- [ ] **Step 7: Run tests.** `pnpm --filter @waitron/payments test:coverage`; then the root guard `pnpm test -- classification-complete` (every created table classified once). Expected: PASS.
+- [ ] **Step 6b: Free "reader" as neutral vocabulary (controller ruling, 2026-09-11).** `packages/payments/src/no-provider-vocabulary.test.ts` bans the substrings `"reader"` and `"readerid"` in this neutral package (it keeps provider/SDK names out). This feature makes "card reader" the neutral, provider-agnostic domain concept the payments module owns, so remove `"reader"` and `"readerid"` from that guard's `FORBIDDEN` list and update its teeth: drop the `expect(mentionsTerm("class NFCReader {}", "reader")).toBe(true)` line, and change the "longer word that merely starts with the term" teeth case to use a still-forbidden term (e.g. `mentionsTerm("the terminates soon", "terminal")` → false) instead of `reader`. Leave `stripe`, `adyen`, `sumup`, `paymentintent`, `terminal`, `connectiontoken`, `acquirer` banned — the provider-neutrality boundary is unchanged. This edit is part of Task 1's commit.
+
+- [ ] **Step 7: Run tests.** `pnpm --filter @waitron/payments test:coverage` (the full package suite must be green — the guard above is what kept it red); then the root guard `pnpm test -- classification-complete` (every created table classified once). Expected: PASS.
 
 - [ ] **Step 8: Commit.** `git add -A packages/payments && git commit -s -m "Add the card_readers table for venue-owned card readers"`
 
