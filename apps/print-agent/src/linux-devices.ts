@@ -10,11 +10,12 @@ import type {
 } from "@waitron/print-agent";
 import { type BluetoothHost, createBluetoothctlHost } from "./bluetooth.js";
 import { PDL_SERVICE, parsePdlResponse } from "./network.js";
+import { liveSweep, mergeDiscovered } from "./sweep.js";
 import { type UsbPrinter, readUsbPrinters } from "./usb.js";
 
 /**
  * The Linux implementation of the {@link Host} device seam (design §7) — USB from sysfs, network over
- * mDNS, Bluetooth over BlueZ — composed from the transport-specific parsers. Every parser is pure and
+ * mDNS plus a port-9100 sweep, Bluetooth over BlueZ — composed from the transport-specific parsers. Every parser is pure and
  * tested; only the live I/O (spawning `bluetoothctl`, opening the mDNS multicast socket, binding an
  * RFCOMM node) sits behind an injectable seam, so this composition is exercised end to end with fakes
  * and the untested surface is the thin process/socket wiring alone.
@@ -30,7 +31,8 @@ export interface LinuxDeviceOptions {
   bluetooth?: BluetoothHost;
   /** Maps a paired MAC to its RFCOMM write node; defaults to the live (deferred) binding. */
   btDevicePath?: (mac: string) => string;
-  /** Active network discovery; defaults to a live mDNS `_pdl-datastream._tcp` probe. */
+  /** Active network discovery; defaults to a live mDNS `_pdl-datastream._tcp` probe merged with a
+   * port-9100 sweep of the box's own subnets (`sweep.ts`). */
   scanNetwork?: () => Promise<DiscoveredDevice[]>;
 }
 
@@ -48,7 +50,7 @@ export function createLinuxDevices(opts: LinuxDeviceOptions = {}): LinuxDevices 
   const devRoot = opts.devRoot ?? "/dev";
   const bluetooth = opts.bluetooth ?? createBluetoothctlHost({ run: runBluetoothctl });
   const btDevicePath = opts.btDevicePath ?? liveBtDevicePath;
-  const scanNetwork = opts.scanNetwork ?? liveMdnsScan;
+  const scanNetwork = opts.scanNetwork ?? liveNetworkScan;
 
   const usb = (): Promise<UsbPrinter[]> => readUsbPrinters(sysfsRoot, devRoot);
 
@@ -177,6 +179,13 @@ function runBluetoothctl(args: string[]): Promise<string> {
  * Step 6c receipt replaces this with a real per-MAC bound node. */
 function liveBtDevicePath(mac: string): string {
   throw new Error(`bluetooth device ${mac} resolution not implemented (Step 6c receipt)`);
+}
+
+/** The live network pass: the mDNS query and the port-9100 sweep run together, the announced
+ * entries (which carry the printer's own name) winning over a swept duplicate of the same host:port. */
+async function liveNetworkScan(): Promise<DiscoveredDevice[]> {
+  const [announced, swept] = await Promise.all([liveMdnsScan(), liveSweep()]);
+  return mergeDiscovered(announced, swept);
 }
 
 /** One mDNS `_pdl-datastream._tcp` query, collecting responses for a short window and decoding each
