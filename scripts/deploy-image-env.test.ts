@@ -185,7 +185,7 @@ describe("the print-agent image and its compose wiring", () => {
     expect(DOCKERFILE).toContain("WAITRON_STATE_DIR=/var/lib/waitron-print-agent");
   });
 
-  it("keeps the print agent on the host network for LAN discovery and its reported hostname", () => {
+  it("keeps the print-agent service on the host network", () => {
     const agent = only(
       COMPOSE,
       /\n {2}print-agent:([\s\S]*?)(?=\n(?: {2}[a-zA-Z][\w-]*:|[a-zA-Z])|$)/,

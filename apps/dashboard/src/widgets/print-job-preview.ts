@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import type { PrintJobPreview } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
@@ -60,8 +61,10 @@ export class PrintJobPreviewDialog extends LitElement {
               `
             : nothing
         }
-        <wt-button slot="footer" data-test="preview-close" @click=${this.#close}
-          >${t("action.close")}</wt-button
+        <wt-form-actions slot="footer"
+          ><wt-button slot="cancel" data-test="preview-close" @click=${this.#close}
+            >${t("action.close")}</wt-button
+          ></wt-form-actions
         >
       </wt-modal>
     `;

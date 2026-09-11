@@ -77,7 +77,7 @@ const printers: Printer[] = [
     ticketScope: "station",
     pendingJobs: 0,
     lastPrintAt: null,
-    active: false, // keeps the till receipt-printer picker (active printers only) unchanged
+    active: false,
   },
 ];
 
@@ -229,6 +229,8 @@ async function flush(el: PrintersScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
   await settleTree(el.shadowRoot!);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await el.updateComplete;
 }
 function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | null {
   const found = root.querySelector<HTMLElement>(sel);
@@ -713,7 +715,7 @@ describe("printers-screen", () => {
     expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
   });
 
-  // ── Printers: transport-aware create (central printer provisioning §10) ────────────────────────────
+  // ── Printers: discovered-device registration (central printer provisioning §10) ────────────────────────────
 
   it("registers a discovered IP printer with its name, host and port only", async () => {
     const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork) });
@@ -1358,7 +1360,9 @@ it("closing Add printer while its discovery window opens starts no reads", async
     open({ discoveryUntil: Date.now() + 60_000 });
     await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS);
     expect(api.listDiscoveredPrinters).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=new-printer-modal]")).toBeNull();
+    expect(
+      q(el, "[data-test=new-printer-modal]")?.shadowRoot!.querySelector("dialog")!.open ?? false,
+    ).toBe(false);
   } finally {
     vi.useRealTimers();
   }
@@ -1529,18 +1533,22 @@ it.each([
   "keeps each discovered printer's Add button visible within the portrait modal at %i × %i",
   async (width, height) => {
     await page.viewport(width, height);
-    const api = stubApi({
-      listDiscoveredPrinters: vi.fn().mockResolvedValue([...discovered, ...discoveredNetwork]),
-    });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    q(el, "[data-test=open-add-printer]")!.click();
-    await flush(el);
-    const modal = q(el, "[data-test=new-printer-modal]")!;
-    const bounds = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
-    const add = q(el, '[data-test="register-10.0.0.77:9100"]')!.getBoundingClientRect();
-    expect(add.right).toBeLessThan(bounds.right);
-    expect(add.left).toBeGreaterThan(bounds.left);
+    try {
+      const api = stubApi({
+        listDiscoveredPrinters: vi.fn().mockResolvedValue([...discovered, ...discoveredNetwork]),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      q(el, "[data-test=open-add-printer]")!.click();
+      await flush(el);
+      const modal = q(el, "[data-test=new-printer-modal]")!;
+      const bounds = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      const add = q(el, '[data-test="register-10.0.0.77:9100"]')!.getBoundingClientRect();
+      expect(add.right).toBeLessThan(bounds.right);
+      expect(add.left).toBeGreaterThan(bounds.left);
+    } finally {
+      await page.viewport(1280, 900);
+    }
   },
 );
 
@@ -1572,4 +1580,50 @@ it("shows no seen-status when the reporting agent's row is gone", async () => {
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   expect(q(el, "[data-test=printer-last-seen-p1]")).toBeNull();
+});
+
+it.each([
+  ["open-add-agent", "new-agent-modal", "cancel-new-agent"],
+  ["open-add-printer", "new-printer-modal", "cancel-new-printer"],
+  ["edit-agent-a1", "edit-agent-modal", "cancel-edit-agent"],
+  ["edit-printer-p1", "edit-printer-modal", "cancel-edit-printer"],
+])(
+  "closing %s runs the dialog close event and restores keyboard focus",
+  async (opener, modalId, closer) => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const trigger = document.createElement("button");
+    el.before(trigger);
+    try {
+      trigger.focus();
+      q(el, `[data-test=${opener}]`)!.click();
+      await flush(el);
+      const modal = q(el, `[data-test=${modalId}]`)!;
+      const closed = vi.fn();
+      modal.addEventListener("wt-close", closed);
+      (q(el, `[data-test=${closer}]`) ??
+        modal.querySelector<HTMLElement>("wt-form-actions wt-button"))!.click();
+      await flush(el);
+      await vi.waitFor(() => expect(closed).toHaveBeenCalledOnce());
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      trigger.remove();
+    }
+  },
+);
+
+it("returns keyboard focus to the printer row trigger after editing through its menu", async () => {
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
+  await flush(el);
+  const edit = q(el, "[data-test=edit-printer-p1]")!;
+  const menu = edit.closest("dashboard-row-actions")!;
+  const trigger = menu.shadowRoot!.querySelector("button")!;
+  await userEvent.click(trigger);
+  await userEvent.keyboard("{Tab}{Enter}");
+  await flush(el);
+  q(el, "[data-test=cancel-edit-printer]")!.click();
+  await flush(el);
+  expect(menu.shadowRoot!.activeElement).toBe(trigger);
 });

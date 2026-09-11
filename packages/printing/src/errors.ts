@@ -5,10 +5,8 @@ import "@waitron/shared";
 /**
  * packages/printing's contribution to the shared error registry, by declaration merging — the
  * DOMAIN-CONCEPT, lowercase, dot-namespaced convention, never the package name. The concepts here are
- * the physical PRINTER and the print AGENT (the on-prem daemon that pulls the outbox and drives the
- * hardware), so the prefixes are `printer.*`/`agent.*` — grepped against the registry first: NEVER
- * `printing.*` (the package name). Thrown by the printer/agent CRUD and runtime; every file that
- * throws one imports "./errors.js" so the augmentation is reachable from this package's own barrel.
+ * printers, agents and print jobs: `printer.*`, `agent.*` and `print_job.*`. Each throwing module
+ * imports this registry so the augmentation is reachable from the package barrel.
  * Agent enrolment is join-and-accept (the shared join_requests mechanism, whose codes live in
  * apps/server) — this package owns no enrolment codes.
  *

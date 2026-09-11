@@ -1,5 +1,8 @@
 # KDS-4 — Kitchen printing (station → printer, print-on-fire)
 
+_Update 2026-09-11: the configuration controls described on the printer screen below now live on
+Printing rules; see [Printer settings tables](2026-09-11-printer-settings-tables.md)._
+
 **Date:** 2026-08-17. **Status:** design (approved with the owner); plan alongside. **Track:** the KDS
 track (sub-project 12), **Slice B** of the kitchen-printers ask — the thin routing layer on the
 [printing subsystem](2026-08-17-printing-subsystem-design.md) (Slice A) and

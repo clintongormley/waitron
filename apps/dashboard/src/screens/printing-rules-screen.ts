@@ -116,6 +116,9 @@ export class PrintingRulesScreen extends LitElement {
     }
   }
   async #load(): Promise<void> {
+    // Stations and locations use till.configure and schedule.manage; all three permissions currently
+    // share manager/admin membership (packages/identity/src/permissions.ts). Keep this read usable if
+    // printer.manage is ever assigned independently.
     const [printers, stations, tills, locations] = await Promise.all([
       this.api.listPrinters(),
       this.api.listStations(),

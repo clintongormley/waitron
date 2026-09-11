@@ -1,9 +1,8 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles, type DataTableColumn } from "@waitron/ui";
+import { submitOnEnter, baseStyles, type DataTableColumn, type WtModal } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -25,7 +24,6 @@ import type {
   PrintAgentRow,
   PrintJobRow,
   PrintJobPreview,
-  PrintTicketScope,
   PrintTransport,
   Printer,
   PrinterPatch,
@@ -40,7 +38,6 @@ interface EditablePrinter {
   port: string;
   localKey: string;
   pollId: string;
-  ticketScope: PrintTicketScope;
   active: boolean;
 }
 
@@ -54,15 +51,28 @@ interface EditablePrinter {
 export const SCAN_LISTEN_MS = 10_000;
 export const SCAN_POLL_MS = 2_000;
 
-/** Hardware registration and print-job history; routing policy lives on Printing rules. */
+/** Hardware registration and print-job history; routing policy lives on Printing rules.
+ * The server enforces printer.manage. Failures retain their code in state and render localized text. */
 @customElement("dashboard-printers-screen")
 export class PrintersScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
+      }
+      label:has(input[type="checkbox"]) {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        min-height: var(--wt-tap-min);
+      }
+      input[type="checkbox"] {
+        accent-color: var(--wt-color-primary);
+      }
+      input:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
       }
       .form-fields {
         display: grid;
@@ -115,24 +125,6 @@ export class PrintersScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      .tag {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm, 4px);
-        padding: 0 var(--wt-space-1);
-        color: var(--wt-color-text);
-      }
-      .new {
-        display: flex;
-        gap: var(--wt-space-3);
-        align-items: flex-end;
-        margin-top: var(--wt-space-3);
-        flex-wrap: wrap;
-      }
-      .field {
-        display: block;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
       .hint {
         margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-text-muted);
@@ -156,34 +148,13 @@ export class PrintersScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
-      .stations {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        margin-top: var(--wt-space-3);
-      }
-      .stations-title {
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text);
-        font-size: var(--wt-font-size-sm);
-      }
-      .stations-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-3);
-      }
-      .mode-options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
     `,
   ];
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
 
-  // The enrolled agents (server order kept), the printers as editable rows, and the recent jobs — all
+  // The enrolled agents (server order kept), the registered printers, and the recent jobs — all
   // (re)loaded on connect and after every mutation.
   @state() private submitting = false;
   @state() private agents: PrintAgentRow[] = [];
@@ -232,6 +203,7 @@ export class PrintersScreen extends LitElement {
   #scanInFlight = false;
   #scanEpoch = 0;
   #registeredDevices = new Set<string>();
+  #editTrigger?: HTMLButtonElement;
 
   @state() private errorKey: string | null = null;
 
@@ -273,10 +245,7 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** The shared shape of every mutation: clear the error banner, run `action`, reload on success, and
-   * turn a rejection into the `errorKey` banner (never an unhandled rejection). Each mutation method
-   * supplies only its own `action`; any pre/post state a method owns (a blank-input early return, the
-   * shown-once code panel, the create-form reset) stays in that method around this call. */
+  /** Reload after a mutation; expose failures through the localized error banner. */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     this.errorKey = null;
     try {
@@ -459,6 +428,7 @@ export class PrintersScreen extends LitElement {
     this.#setDiscovered(devices);
   }
 
+  // Keep successful additions hidden even if the subsequent inventory refresh fails.
   #setDiscovered(devices: DiscoveredPrinter[]): void {
     this.discovered = devices.map((device) => ({
       ...device,
@@ -602,7 +572,7 @@ export class PrintersScreen extends LitElement {
     }
     await this.#submit(async () => {
       await this.api.updatePrinter(id, patch);
-      this.editingPrinter = null;
+      await this.#closeModal("edit-printer-modal");
     });
   }
 
@@ -643,7 +613,8 @@ export class PrintersScreen extends LitElement {
     >
       <wt-button
         data-test=${`edit-agent-${agent.id}`}
-        @click=${() => {
+        @click=${(event: Event) => {
+          this.#rememberEditTrigger(event);
           this.formErrors = {};
           this.errorKey = null;
           this.editingAgent = { ...agent };
@@ -835,7 +806,7 @@ export class PrintersScreen extends LitElement {
         cell: (a) =>
           html`<span data-test=${`agent-status-${a.id}`}
               >${a.active ? t("printers.status_active") : t("printers.status_revoked")}</span
-            >${a.nodeId !== null ? html` <span data-test=${`agent-provenance-${a.id}`}>${t("printers.provenance_self")}</span>` : nothing}`,
+            >${a.nodeId !== null ? html` <span style="border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-sm);padding:0 var(--wt-space-2);font-size:var(--wt-font-size-xs)" data-test=${`agent-provenance-${a.id}`}>${t("printers.provenance_self")}</span>` : nothing}`,
       },
       {
         key: "lastSeen",
@@ -857,7 +828,7 @@ export class PrintersScreen extends LitElement {
         .columns=${columns}
         .rowKey=${(a: PrintAgentRow) => a.id}
         .loading=${this.loading}
-        .loadingMessage=${t("printers.pairing_loading")}
+        .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_agents")}
       ></wt-data-table>
       <wt-button
@@ -886,11 +857,12 @@ export class PrintersScreen extends LitElement {
       <section data-test="join-panel">
         <h3 class="panel-title">${t("printers.join_waiting_title")}</h3>
         <p class="hint">
-          ${t("printers.join_hint")} <code data-test="join-origin">${window.location.origin}</code>
+          ${t("printers.join_hint")}
+          <code class="origin" data-test="join-origin">${window.location.origin}</code>
         </p>
         ${
           this.pendingJoins.length === 0
-            ? html`<p data-test="no-join-requests">${t("printers.join_none")}</p>`
+            ? html`<p class="empty" data-test="no-join-requests">${t("printers.join_none")}</p>`
             : html`<ol>
                 ${this.pendingJoins.map((r) => this.#renderJoinRequest(r))}
               </ol>`
@@ -902,7 +874,10 @@ export class PrintersScreen extends LitElement {
         >
       </section>
       <wt-form-actions slot="footer"
-        ><wt-button slot="cancel" @click=${() => (this.addingAgent = false)}
+        ><wt-button
+          slot="cancel"
+          data-test="cancel-new-agent"
+          @click=${() => void this.#closeModal("new-agent-modal")}
           >${t("action.close")}</wt-button
         ></wt-form-actions
       >
@@ -916,7 +891,10 @@ export class PrintersScreen extends LitElement {
       heading=${t("printers.edit_agent")}
       data-test="edit-agent-modal"
       .open=${true}
-      @wt-close=${() => (this.editingAgent = null)}
+      @wt-close=${() => {
+        this.editingAgent = null;
+        this.#restoreEditFocus();
+      }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector("[data-test=save-agent]"))}
     >
       ${this.#renderFeedback()}
@@ -939,7 +917,7 @@ export class PrintersScreen extends LitElement {
         <wt-button
           slot="cancel"
           data-test="cancel-edit-agent"
-          @click=${() => (this.editingAgent = null)}
+          @click=${() => void this.#closeModal("edit-agent-modal")}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
@@ -960,15 +938,19 @@ export class PrintersScreen extends LitElement {
     if (Object.keys(this.formErrors).length) return;
     await this.#submit(async () => {
       await this.api.updateAgent(agent.id, { name: agent.name.trim() });
-      this.editingAgent = null;
+      await this.#closeModal("edit-agent-modal");
     });
   }
 
-  #openPrinter(p: Printer): void {
+  #openPrinter(p: Printer, event: Event): void {
+    this.#rememberEditTrigger(event);
     this.formErrors = {};
     this.errorKey = null;
     this.editingPrinter = {
-      ...p,
+      id: p.id,
+      name: p.name,
+      transport: p.transport,
+      active: p.active,
       host: p.host ?? "",
       port: p.port === null ? "" : String(p.port),
       localKey: p.localKey ?? "",
@@ -980,7 +962,9 @@ export class PrintersScreen extends LitElement {
     return html`<dashboard-row-actions
       .label=${t("printers.row_actions").replace("{name}", p.name)}
     >
-      <wt-button data-test=${`edit-printer-${p.id}`} @click=${() => this.#openPrinter(p)}
+      <wt-button
+        data-test=${`edit-printer-${p.id}`}
+        @click=${(event: Event) => this.#openPrinter(p, event)}
         >${t("action.edit")}</wt-button
       >
       <wt-button data-test=${`test-print-${p.id}`} @click=${() => void this.#testPrint(p.id)}
@@ -1144,7 +1128,7 @@ export class PrintersScreen extends LitElement {
         .columns=${columns}
         .rowKey=${(j: PrintJobRow) => j.id}
         .loading=${this.loading}
-        .loadingMessage=${t("printers.pairing_loading")}
+        .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_jobs")}
       ></wt-data-table>
     </section>`;
@@ -1158,6 +1142,33 @@ export class PrintersScreen extends LitElement {
     } catch (error) {
       this.errorKey = codeOf(error);
     }
+  }
+
+  #rememberEditTrigger(event: Event): void {
+    const menu = (event.currentTarget as HTMLElement).closest("dashboard-row-actions");
+    this.#editTrigger = menu?.shadowRoot
+      ?.querySelector<HTMLElement>("[popover]")
+      ?.matches(":popover-open")
+      ? menu.shadowRoot.querySelector<HTMLButtonElement>("button")!
+      : undefined;
+  }
+
+  #restoreEditFocus(): void {
+    // The action that opened the editor is hidden when its popover closes.
+    this.#editTrigger?.focus();
+    this.#editTrigger = undefined;
+  }
+
+  async #closeModal(id: string): Promise<void> {
+    const modal = this.renderRoot.querySelector<WtModal>(`[data-test="${id}"]`);
+    if (!modal?.open) return;
+    if (id === "new-printer-modal") this.#endScan();
+    // Native close restores focus before wt-close removes the draft and modal from the template.
+    const closed = new Promise<void>((resolve) =>
+      modal.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    modal.open = false;
+    await closed;
   }
 
   #renderError(): TemplateResult | typeof nothing {
@@ -1225,6 +1236,7 @@ export class PrintersScreen extends LitElement {
       .open=${true}
       @wt-close=${() => {
         this.editingPrinter = null;
+        this.#restoreEditFocus();
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(`[data-test="save-printer-${p.id}"]`))}
     >
@@ -1236,7 +1248,9 @@ export class PrintersScreen extends LitElement {
             ? html`${field("host", t("printers.host"), true)}${field("port", t("printers.port"))}`
             : p.transport === "cloud_poll"
               ? html`${field("pollId", t("printers.poll_id"), true)}
-                  <p class="hint">${t("printers.poll_hint")}</p>`
+                  <wt-help-tooltip aria-label=${t("printers.poll_id")}
+                    >${t("printers.poll_hint")}</wt-help-tooltip
+                  >`
               : field("localKey", t("printers.local_key"), true)
         }
         <label
@@ -1254,9 +1268,7 @@ export class PrintersScreen extends LitElement {
         <wt-button
           slot="cancel"
           data-test="cancel-edit-printer"
-          @click=${() => {
-            this.editingPrinter = null;
-          }}
+          @click=${() => void this.#closeModal("edit-printer-modal")}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
@@ -1321,6 +1333,7 @@ export class PrintersScreen extends LitElement {
     >
       ${this.#renderError()}
       <p class="hint">${t("printers.discovery_hint")}</p>
+      <p class="hint">${t("printers.bluetooth_pair_note")}</p>
       <div class="actions">
         <wt-button
           data-test="scan-printers"
@@ -1344,10 +1357,7 @@ export class PrintersScreen extends LitElement {
         <wt-button
           slot="cancel"
           data-test="cancel-new-printer"
-          @click=${() => {
-            this.addingPrinter = false;
-            this.#endScan();
-          }}
+          @click=${() => void this.#closeModal("new-printer-modal")}
           >${t("action.close")}</wt-button
         >
       </wt-form-actions>
@@ -1358,7 +1368,7 @@ export class PrintersScreen extends LitElement {
     return html`<h1 class="title">${t("printers.title")}</h1>
       ${this.#renderAgentsSection()}
       ${this.agents.length > 0 ? this.#renderPrintersSection() : nothing}
-      ${this.#renderJobsSection()}${this.#renderError()}
+      ${this.#renderJobsSection()}${this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter ? nothing : this.#renderError()}
       ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}
       <dashboard-print-job-preview
         .preview=${this.preview}

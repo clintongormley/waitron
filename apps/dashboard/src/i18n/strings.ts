@@ -405,6 +405,7 @@ export const en = {
   "printers.pairing_title": "Allow new print agents",
   "printers.pairing_hint":
     "While this is open, a print agent on the network can ask to join. Keep it shut the rest of the time.",
+  "printers.table_loading": "Loading…",
   "printers.pairing_loading": "Checking…",
   "printers.pairing_open": "Open now",
   "printers.pairing_open_until": "Open until {time}",
@@ -412,7 +413,6 @@ export const en = {
   "printers.pairing_close": "Close now",
   "printers.pairing_refused": "{count} tried to join in the last 10 minutes",
   "printers.join_waiting_title": "Print agents waiting to join",
-  "printers.join_enrolled_title": "Enrolled agents",
   "printers.join_none": "Nothing waiting to join",
   "printers.join_review": "Let in",
   "printers.join_deny": "Deny",
@@ -423,8 +423,6 @@ export const en = {
   "printers.join_choice_label": "Number {number}",
   "printers.join_hint":
     "On the computer the printer is plugged into (or from here, at http://<that computer>:9110), open the print-agent setup page and enter this server address:",
-  "printers.revoke": "Revoke",
-  "printers.revoke_confirm": "Confirm revoke?",
   "printers.allow": "Allow again",
   "printers.allow_confirm": "Confirm allow?",
   "printers.provenance_self": "On this box",
@@ -438,7 +436,6 @@ export const en = {
   "printers.poll_id": "Poll ID",
   "printers.ticket_scope": "One ticket per order",
   "printers.active": "Active",
-  "printers.new_printer": "New printer",
   "printers.add_printer": "Add a printer",
   "printers.scan": "Scan for printers",
   "printers.scan_loading": "Scanning…",
@@ -446,8 +443,6 @@ export const en = {
   "printers.discovered_title": "Discovered printers",
   "printers.no_discovered": "No printers found yet — click Scan, or check the printer is on.",
   "printers.discovered_seen_on": "Seen on {agent}",
-  "printers.register": "Register",
-  "printers.add_result": "Add",
   "printers.seen_at": "Seen on {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Pair a Bluetooth printer first on the box's setup page (port 9110); it then appears below.",
@@ -1283,6 +1278,7 @@ export const es: Record<StringKey, string> = {
   "printers.pairing_title": "Permitir agentes de impresión nuevos",
   "printers.pairing_hint":
     "Mientras esté abierto, un agente de impresión de la red puede pedir darse de alta. Mantenlo cerrado el resto del tiempo.",
+  "printers.table_loading": "Cargando…",
   "printers.pairing_loading": "Comprobando…",
   "printers.pairing_open": "Abrir ahora",
   "printers.pairing_open_until": "Abierto hasta las {time}",
@@ -1290,7 +1286,6 @@ export const es: Record<StringKey, string> = {
   "printers.pairing_close": "Cerrar ahora",
   "printers.pairing_refused": "{count} intentaron darse de alta en los últimos 10 minutos",
   "printers.join_waiting_title": "Agentes de impresión esperando el alta",
-  "printers.join_enrolled_title": "Agentes dados de alta",
   "printers.join_none": "No hay nada esperando",
   "printers.join_review": "Dar de alta",
   "printers.join_deny": "Rechazar",
@@ -1301,8 +1296,6 @@ export const es: Record<StringKey, string> = {
   "printers.join_choice_label": "Número {number}",
   "printers.join_hint":
     "En el ordenador al que está conectada la impresora (o desde aquí, en http://<ese ordenador>:9110), abre la página de configuración del agente de impresión e introduce esta dirección del servidor:",
-  "printers.revoke": "Revocar",
-  "printers.revoke_confirm": "¿Confirmar revocación?",
   "printers.allow": "Volver a permitir",
   "printers.allow_confirm": "¿Confirmar permitir?",
   "printers.provenance_self": "En esta caja",
@@ -1316,7 +1309,6 @@ export const es: Record<StringKey, string> = {
   "printers.poll_id": "ID de sondeo",
   "printers.ticket_scope": "Un ticket por pedido",
   "printers.active": "Activo",
-  "printers.new_printer": "Nueva impresora",
   "printers.add_printer": "Añadir impresora",
   "printers.scan": "Buscar impresoras",
   "printers.scan_loading": "Buscando…",
@@ -1325,8 +1317,6 @@ export const es: Record<StringKey, string> = {
   "printers.no_discovered":
     "Aún no se ha detectado ninguna impresora — pulsa Buscar o comprueba que esté encendida.",
   "printers.discovered_seen_on": "Detectada en {agent}",
-  "printers.register": "Dar de alta",
-  "printers.add_result": "Añadir",
   "printers.seen_at": "Detectada en {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Empareja primero una impresora Bluetooth en la página de configuración del equipo (puerto 9110); después aparecerá abajo.",

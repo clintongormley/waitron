@@ -482,6 +482,25 @@ describe("printing rules", () => {
   });
 });
 describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (theme) => {
+  it.each(["empty", "error"])("renders the %s state accessibly", async (state) => {
+    const api = stubApi({
+      listPrinters:
+        state === "error"
+          ? vi.fn().mockRejectedValue({ code: "server.internal" })
+          : vi.fn().mockResolvedValue([]),
+      listStations: vi.fn().mockResolvedValue([]),
+      listTills: vi.fn().mockResolvedValue([]),
+      getLocations: vi.fn().mockResolvedValue([]),
+    });
+    const { el, host } = await mountWidget<PrintingRulesScreen>(
+      "dashboard-printing-rules-screen",
+      { api },
+      theme,
+    );
+    await flush(el);
+    expect(q(el, state === "error" ? "[role=alert]" : "[data-test=no-printers]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
   it("labels controls and groups accessibly", async () => {
     const { el, host } = await mountWidget<PrintingRulesScreen>(
       "dashboard-printing-rules-screen",

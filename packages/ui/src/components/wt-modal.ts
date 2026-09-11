@@ -4,6 +4,12 @@ import { WtDialog } from "./wt-dialog.js";
 
 @customElement("wt-modal")
 export class WtModal extends WtDialog {
+  override firstUpdated(): void {
+    super.firstUpdated();
+    // A text-only modal still needs a keyboard target inside its scrolling body.
+    this.renderRoot.querySelector<HTMLElement>(".body")!.tabIndex = 0;
+  }
+
   static override styles = [
     ...WtDialog.styles,
     css`

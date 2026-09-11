@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { esc } from "../../../packages/printing/src/escpos.js";
+import { esc } from "@waitron/printing";
 import { previewPrintJob } from "./print-job-preview.js";
 
 describe("print job text preview", () => {

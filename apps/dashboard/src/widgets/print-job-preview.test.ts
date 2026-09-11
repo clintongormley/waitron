@@ -85,3 +85,20 @@ describe("print job preview", () => {
     expect(el.shadowRoot!.querySelector<WtModal>("wt-modal")!.open).toBe(false);
   });
 });
+
+it("lets a keyboard user scroll a long stored receipt while Close remains visible", async () => {
+  const { el, host } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
+    open: true,
+    preview: { ...preview, text: "Kitchen ticket line\n".repeat(100) },
+  });
+  const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal")!;
+  await modal.updateComplete;
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  await expectNoA11yViolations(host);
+  await userEvent.keyboard("{PageDown}");
+  await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+  expect(
+    el.shadowRoot!.querySelector("[data-test=preview-close]")!.getBoundingClientRect().bottom,
+  ).toBeLessThan(window.innerHeight);
+});

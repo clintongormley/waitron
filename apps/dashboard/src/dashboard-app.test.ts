@@ -159,7 +159,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The devices screen the nav mounts loads this on connect (listStations is already stubbed above);
     // resolve it so navigating to it leaves no stray rejection.
     listDevices: vi.fn().mockResolvedValue([]),
-    // The printers screen the nav mounts loads these three on connect; resolve them so navigating to it
+    // The printers screen the nav mounts loads these on connect; resolve them so navigating to it
     // leaves no stray rejection.
     listAgents: vi.fn().mockResolvedValue([]),
     listPrinters: vi.fn().mockResolvedValue([]),

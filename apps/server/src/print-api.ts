@@ -402,7 +402,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db, cfg: deps.cfg }, c);
       const body = await readJsonBody<{ visible?: unknown; scanned?: unknown; host?: unknown }>(c);
-      const host = optionalString(body.host, "host");
+      const reportedHost = optionalString(body.host, "host");
+      const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
       const visible = screenVisible(body.visible);
       const scanned = screenScanned(body.scanned);
 
@@ -440,7 +441,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           await tx
             .update(printAgents)
             .set({ host })
-            .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, agentId)));
+            .where(
+              and(
+                eq(printAgents.tenantId, deps.cfg.tenantId),
+                eq(printAgents.id, agentId),
+                sql`${printAgents.host} is distinct from ${host}`,
+              ),
+            );
         }
         return claimPrintJobs(tx, deps.cfg, agentId, {
           locationId: deps.cfg.locationId,

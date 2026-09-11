@@ -862,6 +862,28 @@ describe("mountPrintApi — management: agents", () => {
     );
   });
 
+  it("normalizes reported hostnames and treats blank reports as not reported", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    for (const [host, expected] of [
+      [" kitchen-box.local ", "kitchen-box.local"],
+      ["   ", null],
+      ["", null],
+    ] as const) {
+      const response = await send(app, "POST", "/print-api/agent/jobs", {
+        bearer: token,
+        body: { host },
+      });
+      expect(response.status).toBe(200);
+      const listed = await send(app, "GET", "/management-api/print-agents", {
+        cookie: managerCookie,
+      });
+      expect(await listed.json()).toContainEqual(
+        expect.objectContaining({ id: agentId, host: expected }),
+      );
+    }
+  });
+
   it("rejects unknown agents and invalid names when editing", async () => {
     const app = mountApp();
     const unknown = await send(app, "PATCH", `/management-api/print-agents/${randomUUID()}`, {
