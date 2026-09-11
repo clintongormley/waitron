@@ -445,7 +445,8 @@ export class PrintersScreen extends LitElement {
   }
 
   /** Reload the AGENTS only (not the option feeds) after an accept — the accepted request becomes an
-   * enrolled agent. Throws like `listAgents` itself; the one caller wraps it. Disarms any armed revoke. */
+   * enrolled agent. Throws like `listAgents` itself; the one caller wraps it. Disarms any armed revoke
+   * or allow. */
   async #reloadAgents(): Promise<void> {
     this.armedRevokeId = null;
     this.armedAllowId = null;

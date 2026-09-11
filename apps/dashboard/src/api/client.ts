@@ -2337,7 +2337,9 @@ export class DashboardApi {
   // deactivates an agent and `allowAgent` reverses that (each 204). A print agent JOINS through the
   // shared join-and-accept mechanism above
   // (`joinRequests("print_agent")` / `joinChallenge` / `denyJoinRequest` / `acceptPrintAgentJoinRequest`),
-  // not a pairing code. Printers: `listPrinters`/`createPrinter`/`updatePrinter`/`deactivatePrinter` are
+  // not a pairing code — though some agents self-enrolled silently on their own node (hence the `nodeId`
+  // provenance the list now carries), a path the dashboard never drives; it only drives the knock.
+  // Printers: `listPrinters`/`createPrinter`/`updatePrinter`/`deactivatePrinter` are
   // the config CRUD (create returns the minted id at 201; patch/deactivate answer an empty 204).
   // `listRecentJobs` is the status read; `testPrint` enqueues a known diagnostic payload (202).
   // Paths/bodies against apps/server/src/print-api.ts.

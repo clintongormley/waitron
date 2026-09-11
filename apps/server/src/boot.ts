@@ -1812,10 +1812,12 @@ export async function startServer(
     },
     log,
   );
-  // On-node print-agent self-enrol (design §1.1). Mounted on EVERY trading boot beside the probe — a
-  // mirror answers it too, refusing `node.enrol_unavailable`, which is what makes the agent fall back
-  // to the manual path there (spec §2). Loopback-gated inside; `isPrimary` is the same predicate the
-  // probe answers as `acceptingSales`.
+  // On-node print-agent self-enrol (design §1.1). Mounted on EVERY trading boot beside the probe —
+  // deliberately OUTSIDE the `!fencedOrMirror` block, so a mirror/fenced node carries the route too. On
+  // such a node the read-only gate refuses the POST with `node.read_only` BEFORE the route's `isPrimary`
+  // check runs; `isPrimary` (false here) is the defensive `node.enrol_unavailable` refusal for a
+  // non-primary node the read-only gate does not cover. Either refusal makes the agent fall back to the
+  // manual path (spec §2). Loopback-gated inside; `isPrimary` is the probe's `acceptingSales` predicate.
   mountNodeEnrolApi(
     app,
     { db, cfg: till, nodeId: till.nodeId, isPrimary: isSingletonPrimary && !fencedOrMirror },

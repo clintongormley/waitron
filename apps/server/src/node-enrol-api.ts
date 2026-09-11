@@ -18,7 +18,9 @@ export interface NodeEnrolApiDeps {
   cfg: TillConfig;
   nodeId: string;
   /** Boot-captured `isSingletonPrimary && !fencedOrMirror` (the `acceptingSales` predicate). Only the
-   * primary can write `print_agents`; a mirror/fenced node refuses `node.enrol_unavailable`. */
+   * primary can write `print_agents`. On a mirror/fenced node the read-only gate refuses the POST with
+   * `node.read_only` before this predicate is read; the `isPrimary` gate below is the defensive refusal
+   * (`node.enrol_unavailable`) for a non-primary node the read-only gate does not cover. */
   isPrimary: boolean;
   enrolRateLimiter?: EnrolRateLimiter;
 }
@@ -36,9 +38,12 @@ const STATUS = {
 /**
  * `POST /api/node/enrol-self` (design §1.1) — the loopback-only self-enrol a print agent running on
  * THIS box calls before it falls back to knock-and-accept. Mounted on every trading boot beside
- * `GET /api/node` (so a mirror answers it too, refusing `node.enrol_unavailable`). Order: rate-limit,
- * then the loopback gate, then the primary gate, then the write — the two gates run before any DB work
- * so a flood or an off-box caller draws no connection from the pool.
+ * `GET /api/node`, so a mirror/fenced node has the route too — but there the read-only gate
+ * (`read-only-gate.ts`) refuses the POST with `node.read_only` BEFORE this route's `isPrimary` check
+ * runs. The `isPrimary`→`node.enrol_unavailable` check is the defensive refusal for a non-primary node
+ * the read-only gate does not cover; either refusal makes the agent fall back to the manual knock.
+ * Order: rate-limit, then the loopback gate, then the primary gate, then the write — the two gates run
+ * before any DB work so a flood or an off-box caller draws no connection from the pool.
  */
 export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "node.failed");

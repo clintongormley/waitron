@@ -102,9 +102,12 @@ This falls out correctly with no per-box configuration:
 - **Till / Pi.** Nothing is listening on the device's own `127.0.0.1:443`; the connection is refused; the
   agent takes the manual path. A human typed the primary's address and a human accepts the agent —
   unchanged.
-- **Mirror box (today).** A server *is* on `127.0.0.1`, but it is a standby, so self-enrol refuses with
-  `node.enrol_unavailable`. The agent falls back to the manual path, which on a mirror box has no
-  configured primary address to knock at, so it idles (§7.1). This is the case the follow-up fixes.
+- **Mirror box (today).** A server *is* on `127.0.0.1`, but it is a standby, so the read-only gate
+  (`read-only-gate.ts`) refuses the self-enrol POST with `node.read_only` before the route's primary
+  check runs (the `isPrimary` gate, which would answer `node.enrol_unavailable`, is the defensive
+  refusal for a non-primary node the read-only gate does not cover). The agent treats either refusal as
+  "refused" and falls back to the manual path, which on a mirror box has no configured primary address
+  to knock at, so it idles (§7.1). This is the case the follow-up fixes.
 
 Two properties make the fallback trustworthy rather than accidental:
 
@@ -184,8 +187,9 @@ Named into the families that already own these concepts, never a new family (CLA
 
 - `node.enrol_not_local` — `POST /api/node/enrol-self` reached from a non-loopback address. `node.*` is
   facts about this node/process (`node-api.ts` siblings).
-- `node.enrol_unavailable` — this node cannot self-enrol an agent: it is not the primary. The mirror-today
-  case, and the follow-up's "not adopted yet" case.
+- `node.enrol_unavailable` — this node cannot self-enrol an agent: it is not the primary. The defensive
+  refusal for a non-primary node the read-only gate does not cover — a real mirror's POST is refused
+  earlier by that gate with `node.read_only`. The follow-up's "not adopted yet" case reaches it.
 - `device.join_revoked` — the node's own agent row is revoked; self-enrol refuses until an admin allows it
   back. `device.*` already owns the cross-surface join vocabulary (`device.pairing_closed` is thrown by
   the print API too).

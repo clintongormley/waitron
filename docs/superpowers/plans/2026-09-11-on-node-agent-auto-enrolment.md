@@ -382,9 +382,12 @@ const STATUS = {
 /**
  * `POST /api/node/enrol-self` (design §1.1) — the loopback-only self-enrol a print agent running on
  * THIS box calls before it falls back to knock-and-accept. Mounted on every trading boot beside
- * `GET /api/node` (so a mirror answers it too, refusing `node.enrol_unavailable`). Order: rate-limit,
- * then the loopback gate, then the primary gate, then the write — the two gates run before any DB work
- * so a flood or an off-box caller draws no connection from the pool.
+ * `GET /api/node`, so a mirror/fenced node has the route too — but there the read-only gate
+ * (`read-only-gate.ts`) refuses the POST with `node.read_only` BEFORE this route's `isPrimary` check
+ * runs. The `isPrimary`->`node.enrol_unavailable` check is the defensive refusal for a non-primary node
+ * the read-only gate does not cover; either refusal makes the agent fall back to the manual knock.
+ * Order: rate-limit, then the loopback gate, then the primary gate, then the write — the two gates run
+ * before any DB work so a flood or an off-box caller draws no connection from the pool.
  */
 export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "node.failed");
@@ -417,10 +420,12 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
 In `apps/server/src/boot.ts`, immediately after the `mountNodeApi(app, { … }, log)` call (which is OUTSIDE the `if (!fencedOrMirror)` block), add:
 
 ```ts
-  // On-node print-agent self-enrol (design §1.1). Mounted on EVERY trading boot beside the probe — a
-  // mirror answers it too, refusing `node.enrol_unavailable`, which is what makes the agent fall back
-  // to the manual path there (spec §2). Loopback-gated inside; `isPrimary` is the same predicate the
-  // probe answers as `acceptingSales`.
+  // On-node print-agent self-enrol (design §1.1). Mounted on EVERY trading boot beside the probe —
+  // deliberately OUTSIDE the `!fencedOrMirror` block, so a mirror/fenced node carries the route too. On
+  // such a node the read-only gate refuses the POST with `node.read_only` BEFORE the route's `isPrimary`
+  // check runs; `isPrimary` (false here) is the defensive `node.enrol_unavailable` refusal for a
+  // non-primary node the read-only gate does not cover. Either refusal makes the agent fall back to the
+  // manual path (spec §2). Loopback-gated inside; `isPrimary` is the probe's `acceptingSales` predicate.
   mountNodeEnrolApi(
     app,
     { db, cfg: till, nodeId: till.nodeId, isPrimary: isSingletonPrimary && !fencedOrMirror },
@@ -654,7 +659,7 @@ In `agent.ts`, place the self-enrol attempt EARLY in `tick()` — after the `con
     // loopback origin — NOT config.serverUrl, which on a till is the primary's LAN address — with the
     // configured port/protocol preserved. On the primary box this succeeds; on a device nothing is on
     // its own loopback, so `enrolSelf` is `unreachable` and we fall through to the probe + knock below;
-    // on a mirror the local server refuses (`node.enrol_unavailable` → `refused`), same fall-through.
+    // on a mirror the local server's read-only gate refuses (`node.read_only` → `refused`), same fall-through.
     if ((await host.token()) === null) {
       const loopback = new URL(config.serverUrl);
       loopback.hostname = "127.0.0.1";
