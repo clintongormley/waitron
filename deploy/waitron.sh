@@ -164,21 +164,30 @@ is_production() {
 }
 
 # ~3 minutes for the app container to report healthy (setup mode is healthy on /setup-api/status).
+# WAITRON_SH_MAX_HEALTH_TRIES overrides the try count for tests, which otherwise wait 3 minutes.
 wait_healthy() {
-  local tries=36
+  local tries="${WAITRON_SH_MAX_HEALTH_TRIES:-36}"
   while [ "$tries" -gt 0 ]; do
     if docker compose -f "$WAITRON_DIR/compose.yml" ps --format '{{.Health}}' app 2>/dev/null | grep -q healthy; then
       return 0
     fi
-    tries=$((tries - 1)); sleep 5
+    tries=$((tries - 1)); [ "$tries" -gt 0 ] && sleep 5
   done
   return 1
 }
 
 # A box that never came up healthy: show the last app log lines. database_ahead advice is scoped to
-# the box — never tell a production box to reset (Task 2 extends this).
+# the box — never tell a production box to reset, since that would destroy the fiscal ledger.
 report_unhealthy() {
-  docker compose -f "$WAITRON_DIR/compose.yml" logs --tail 40 app 2>&1 || true
+  local logs
+  logs="$(docker compose -f "$WAITRON_DIR/compose.yml" logs --tail 40 app 2>&1 || true)"
+  printf '%s\n' "$logs" >&2
+  if printf '%s' "$logs" | grep -q 'provisioning.database_ahead'; then
+    if is_production; then
+      die "the database is newer than this image. On a box with real records install a NEWER ref — do NOT reset, it would destroy the fiscal ledger."
+    fi
+    die "the database is newer than this image (provisioning.database_ahead). Run 'waitron.sh reset' then install again."
+  fi
   die "the box did not come up healthy — see the log lines above"
 }
 

@@ -109,3 +109,43 @@ describe("waitron.sh install (published main)", () => {
     expect(r.stdout).toContain("http://waitron.local:9110");
   });
 });
+
+describe("waitron.sh install <ref>", () => {
+  it("builds both images from the git context and records them in .env", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install", "my-branch"]);
+    expect(r.status).toBe(0);
+    const calls = readFileSync(sb.log, "utf8");
+    expect(calls).toMatch(
+      /docker build .*-f deploy\/Dockerfile .*github\.com\/clintongormley\/waitron\.git#my-branch/,
+    );
+    expect(calls).toMatch(/docker build .*--target print-agent .*waitron\.git#my-branch/);
+    const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
+    expect(env).toMatch(/^WAITRON_IMAGE=waitron:my-branch$/m);
+    expect(env).toMatch(/^WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:my-branch$/m);
+  });
+});
+
+describe("waitron.sh database_ahead advice", () => {
+  // A box that never goes healthy (dockerPs "starting") whose logs carry database_ahead. The
+  // sandbox already models aheadLogs and tradingEnv; only the health loop needs bounding, via the
+  // WAITRON_SH_MAX_HEALTH_TRIES override so the test does not wait three minutes.
+  it("tells a non-production box to reset", () => {
+    const sb = sandbox({ dockerPs: "starting", aheadLogs: true });
+    const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/reset.*then install/i);
+  });
+
+  it("never tells a production box to reset", () => {
+    const sb = sandbox({
+      dockerPs: "starting",
+      aheadLogs: true,
+      tradingEnv: "WAITRON_ENV=production",
+    });
+    const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/newer ref/i);
+    expect(r.stderr).not.toMatch(/run 'waitron\.sh reset'/);
+  });
+});

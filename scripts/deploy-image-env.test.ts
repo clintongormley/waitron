@@ -215,6 +215,16 @@ describe("the waitron.sh box command", () => {
   it("reports a script-prefixed error to stderr when misused", () => {
     expect(WAITRON_SH).toMatch(/echo "waitron\.sh: [^\n]*>&2/);
   });
+
+  it("builds a branch image from the repo git context with deploy/Dockerfile", () => {
+    expect(WAITRON_SH).toMatch(/docker build[^\n]*-f deploy\/Dockerfile/);
+    expect(WAITRON_SH).toContain("github.com/clintongormley/waitron.git");
+    expect(WAITRON_SH).toMatch(/waitron\.git#\$\{?\w+\}?/);
+  });
+
+  it("records the branch image in .env rather than only inline on compose up", () => {
+    expect(WAITRON_SH).toMatch(/env_set WAITRON_IMAGE/);
+  });
 });
 
 describe("every copy of the box's hostname", () => {
