@@ -1,14 +1,18 @@
-import { applyTokens, registerIcons } from "../src/index.js";
+import { html } from "lit";
+import { applyTokens, registerIcons, type WtDataTable } from "../src/index.js";
 import "../src/components/wt-button.js";
 import "../src/components/wt-card.js";
 import "../src/components/wt-dialog.js";
 import "../src/components/wt-modal.js";
 import "../src/components/wt-form-actions.js";
+import "../src/components/wt-form-error-summary.js";
 import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
 import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
+import "../src/components/wt-tabs.js";
+import "../src/components/wt-row-actions.js";
 
 registerIcons({
   check: "M2 8 L6 12 L14 4",
@@ -43,7 +47,18 @@ const panel = (theme: "light" | "dark") => `
         <wt-switch label="Activado" checked></wt-switch>
       </div>
     </wt-card>
-    <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
+    <wt-tabs label="Venue settings">
+      <section slot="status"><p>Choose Team to manage your staff in a table.</p></section>
+      <section slot="team">
+        <div class="row">
+          <h3>Team</h3>
+          <wt-row-actions label="Team actions">
+            <wt-button class="create-member">Create team member</wt-button>
+          </wt-row-actions>
+        </div>
+        <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
+      </section>
+    </wt-tabs>
     <div class="row" style="margin-top:16px">
       <wt-button class="open-dialog">Abrir diálogo</wt-button>
       <wt-button class="open-modal">Open form modal</wt-button>
@@ -64,6 +79,14 @@ const panel = (theme: "light" | "dark") => `
         <wt-button variant="primary" class="close-modal">Save</wt-button>
       </wt-form-actions>
     </wt-modal>
+    <wt-modal class="member-modal" heading="Create team member">
+      <wt-form-error-summary heading="There is a problem with this form"></wt-form-error-summary>
+      <wt-input name="member-name" label="Name" required autocomplete="name"></wt-input>
+      <wt-form-actions slot="footer">
+        <wt-button slot="cancel" variant="secondary" class="cancel-member">Cancel</wt-button>
+        <wt-button variant="primary" class="save-member">Save</wt-button>
+      </wt-form-actions>
+    </wt-modal>
   </div>
 `;
 
@@ -72,10 +95,41 @@ app.innerHTML = `<div class="panels">${panel("light")}${panel("dark")}</div>`;
 
 for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   applyTokens(el);
-  const table = el.querySelector(".demo-table") as HTMLElement & {
-    rows: readonly { name: string; role: string }[];
-    columns: readonly unknown[];
+  const tabs = el.querySelector("wt-tabs")!;
+  tabs.items = [
+    { key: "status", label: "Status" },
+    { key: "team", label: "Team" },
+  ];
+  tabs.value = "team";
+  const table = el.querySelector<WtDataTable<{ name: string; role: string }>>("wt-data-table")!;
+  const memberModal = el.querySelector<HTMLElementTagNameMap["wt-modal"]>(".member-modal")!;
+  const nameInput = memberModal.querySelector("wt-input")!;
+  const memberErrors = memberModal.querySelector("wt-form-error-summary")!;
+  let editing: { name: string; role: string } | undefined;
+  const openMember = (row?: { name: string; role: string }) => {
+    editing = row;
+    memberModal.heading = row ? "Edit team member" : "Create team member";
+    nameInput.value = row?.name ?? "";
+    nameInput.error = "";
+    memberErrors.errors = [];
+    memberModal.open = true;
   };
+  el.querySelector(".create-member")!.addEventListener("click", () => openMember());
+  memberModal.querySelector(".cancel-member")!.addEventListener("click", () => {
+    memberModal.open = false;
+  });
+  memberModal.querySelector(".save-member")!.addEventListener("click", () => {
+    if (!nameInput.value.trim()) {
+      nameInput.error = "Enter a name.";
+      memberErrors.errors = [nameInput.error];
+      return;
+    }
+    const member = { name: nameInput.value.trim(), role: editing?.role ?? "Staff" };
+    table.rows = editing
+      ? table.rows.map((row) => (row === editing ? member : row))
+      : [...table.rows, member];
+    memberModal.open = false;
+  });
   table.rows = [
     { name: "Ada", role: "Manager" },
     { name: "Bea", role: "Staff" },
@@ -83,6 +137,23 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   table.columns = [
     { key: "name", label: "Name", cell: (row: { name: string }) => row.name },
     { key: "role", label: "Role", cell: (row: { role: string }) => row.role },
+    {
+      key: "actions",
+      label: "Actions",
+      align: "end",
+      cell: (row: { name: string; role: string }) => html`
+        <wt-row-actions label=${`Actions for ${row.name}`}>
+          <wt-button @click=${() => openMember(row)}>Edit</wt-button>
+          <wt-button
+            variant="danger"
+            @click=${() => {
+              table.rows = table.rows.filter((member) => member !== row);
+            }}
+            >Delete</wt-button
+          >
+        </wt-row-actions>
+      `,
+    },
   ];
 }
 

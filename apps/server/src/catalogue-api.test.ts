@@ -1768,3 +1768,52 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
     });
   });
 });
+
+describe("menu name edits", () => {
+  it("renames a menu in place and validates name, identity and permission", async () => {
+    const app = mountApp();
+    const id = await createCatalogueVia(app, "Lunch");
+    const path = `/management-api/catalogues/${id}`;
+    expect((await send(app, "PATCH", path, { body: { name: "Dinner" } })).status).toBe(204);
+    const rows = await (await send(app, "GET", "/management-api/catalogues")).json();
+    expect(rows).toEqual(expect.arrayContaining([expect.objectContaining({ id, name: "Dinner" })]));
+    expect((await send(app, "PATCH", path, { body: { name: "Wrong" }, cookie: null })).status).toBe(
+      401,
+    );
+    expect(
+      (await send(app, "PATCH", path, { body: { name: "Wrong" }, cookie: staffCookie })).status,
+    ).toBe(403);
+    for (const name of ["", "  ", 4, null])
+      expect((await send(app, "PATCH", path, { body: { name } })).status).toBe(400);
+    expect(
+      (await send(app, "PATCH", "/management-api/catalogues/bad-id", { body: { name: "Wrong" } }))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/catalogues/${crypto.randomUUID()}`, {
+          body: { name: "Wrong" },
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it("does not rename another tenant's menu", async () => {
+    const otherTenant = await seedTenant(suite.db);
+    const result = await suite.db.execute<{ id: string }>(
+      sql`insert into catalogues (tenant_id, name) values (${otherTenant}, 'Other') returning id`,
+    );
+    const id = result.rows[0]!.id;
+    expect(
+      (
+        await send(mountApp(), "PATCH", `/management-api/catalogues/${id}`, {
+          body: { name: "Wrong" },
+        })
+      ).status,
+    ).toBe(404);
+    const row = await suite.db.execute<{ name: string }>(
+      sql`select name from catalogues where id = ${id}`,
+    );
+    expect(row.rows).toEqual([{ name: "Other" }]);
+  });
+});

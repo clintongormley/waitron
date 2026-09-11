@@ -27,6 +27,9 @@ import {
   listZoneMenuAssignments,
   replaceDepartmentHours,
   setDeviceDefaultZone,
+  updateDepartment,
+  updatePreparationRoute,
+  type PreparationRouteInput,
 } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import "./errors.js";
@@ -67,6 +70,40 @@ function requireDisplayOrder(value: unknown): number {
   return value;
 }
 
+function requireName(value: unknown, field: string): string {
+  const name = requireString(value, field);
+  if (name.trim() === "") throw new AppError("management.request_invalid", { field });
+  return name;
+}
+
+function requirePreparationRouteInput(body: Record<string, unknown>): PreparationRouteInput {
+  const categoryId =
+    body.categoryId === undefined || body.categoryId === null
+      ? null
+      : requireBodyUuid(body.categoryId, "categoryId");
+  const productId =
+    body.productId === undefined || body.productId === null
+      ? null
+      : requireBodyUuid(body.productId, "productId");
+  if ((categoryId === null) === (productId === null))
+    throw new AppError("management.request_invalid", { field: "subject" });
+  const stationId =
+    body.stationId === undefined || body.stationId === null
+      ? null
+      : requireBodyUuid(body.stationId, "stationId");
+  if ((stationId === null) === (body.noPreparation !== true))
+    throw new AppError("management.request_invalid", { field: "target" });
+  return {
+    zoneId:
+      body.zoneId === undefined || body.zoneId === null
+        ? null
+        : requireBodyUuid(body.zoneId, "zoneId"),
+    categoryId,
+    productId,
+    target: stationId === null ? { kind: "no_preparation" } : { kind: "station", stationId },
+  };
+}
+
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
@@ -91,6 +128,22 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           readiness: await listVenueReadiness(tx, ctx.cfg),
         }));
         return c.json(result);
+      }),
+    );
+
+    app.patch("/management-api/venue-service/departments/:departmentId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        await gated(sessionId, (tx) =>
+          updateDepartment(tx, ctx.cfg, departmentId, {
+            name: requireName(body.name, "name"),
+            tradingName: requireName(body.tradingName, "tradingName"),
+            defaultServiceMode: requireMode(body.defaultServiceMode, "defaultServiceMode"),
+          }),
+        );
+        return c.body(null, 204);
       }),
     );
 
@@ -208,37 +261,20 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
-        const categoryId =
-          body.categoryId === undefined || body.categoryId === null
-            ? null
-            : requireBodyUuid(body.categoryId, "categoryId");
-        const productId =
-          body.productId === undefined || body.productId === null
-            ? null
-            : requireBodyUuid(body.productId, "productId");
-        if ((categoryId === null) === (productId === null)) {
-          throw new AppError("management.request_invalid", { field: "subject" });
-        }
-        const stationId =
-          body.stationId === undefined || body.stationId === null
-            ? null
-            : requireBodyUuid(body.stationId, "stationId");
-        if ((stationId === null) === (body.noPreparation !== true)) {
-          throw new AppError("management.request_invalid", { field: "target" });
-        }
-        const id = await gated(sessionId, (tx) =>
-          createPreparationRoute(tx, ctx.cfg, {
-            zoneId:
-              body.zoneId === undefined || body.zoneId === null
-                ? null
-                : requireBodyUuid(body.zoneId, "zoneId"),
-            categoryId,
-            productId,
-            target:
-              stationId === null ? { kind: "no_preparation" } : { kind: "station", stationId },
-          }),
-        );
+        const input = requirePreparationRouteInput(body);
+        const id = await gated(sessionId, (tx) => createPreparationRoute(tx, ctx.cfg, input));
         return c.json({ id }, 201);
+      }),
+    );
+
+    app.put("/management-api/venue-service/routes/:routeId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const routeId = requireUuidParam(c.req.param("routeId"), "PreparationRouteId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const input = requirePreparationRouteInput(body);
+        await gated(sessionId, (tx) => updatePreparationRoute(tx, ctx.cfg, routeId, input));
+        return c.body(null, 204);
       }),
     );
 

@@ -204,6 +204,11 @@ unfiltered `main` run, not a wrong hook.
   explanations use `wt-help-tooltip`, whose button closes on outside click or Escape. Cost: the
   dashboard login exposed `wt-input-N` to password safes and disabled incomplete forms without saying
   what was missing (`ui-login`, owner review 2026-09-09).
+- **A successful write followed by a failed refresh is a load failure, not a failed save.** Close
+  the editor after the write succeeds, then refresh the list separately; retaining a create form with
+  a save error invites a duplicate submission. The Venue operations regression resolves creation,
+  rejects the following load and checks the closed modal plus load error
+  (`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`, “refreshing the list fails”).
 - **The dashboard banner is persistent identity chrome.** Put it at the very top of the page at full
   width, with the menu and content underneath. Show the canonical Waitron lockup and the deployment
   tenant's legal name on login and every authenticated screen. Put Logout at the trailing edge only
@@ -443,6 +448,10 @@ unfiltered `main` run, not a wrong hook.
 
 ## 4. Testing
 
+- **Source scanners check filesystem type as well as the filename suffix.** Vitest stores failure
+  screenshots in directories named `*.test.ts`; treating those directories as TypeScript files made
+  the vocabulary guard throw `EISDIR` after browser failures. Keep real nested source files in scope;
+  regression: `scripts/english-only.test.ts`, “scans real TypeScript files…”.
 - **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.**
   Preloading that library before the old module mocks reproduces `startRegistration is not a spy`
   and `mockClear is not a function`; the credential stubs pass with the same preload. Do not rely

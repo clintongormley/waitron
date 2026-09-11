@@ -134,6 +134,8 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-form-error-summary` | `heading`, `errors` | — |
 | `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
+| `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
+| `wt-row-actions` | `label`; default slot of action buttons | native events from actions |
 | `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label` | native events from consumer-provided cells |
 
 `wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
@@ -588,6 +590,41 @@ filters and controls that persist each edit immediately unbound. If a field edit
 commit with Save, bind it to that Save even when its preview updates as you type.
 
 
+### Tabbed management pages
+
+When one management area contains several lists, use `wt-tabs` to show one concern at a time.
+Give each tab a stable key, a localized label and a matching named slot:
+
+```ts
+html`<wt-tabs
+  label="Venue operations"
+  .items=${[{ key: "status", label: "Status" }, { key: "menus", label: "Menus" }]}
+  .value=${this.view}
+  @wt-change=${this.selectView}
+>
+  <section slot="status">${this.renderStatus()}</section>
+  <section slot="menus">${this.renderMenus()}</section>
+</wt-tabs>`;
+```
+
+Your selection handler receives `event.detail.value`. Ignore events whose `target` differs from
+`currentTarget`, because inputs inside the panels also emit `wt-change`. The component updates its
+own selection, while your screen records it with `UrlStateController`. An unknown or omitted value
+shows the first tab. Arrow keys wrap between tabs; Home and End select the first and last tab.
+The tab strip scrolls on narrow screens. Hidden panels remain mounted, so switching tabs retains
+their input values. Supply unique, nonempty keys and a localized `label` for the tab group.
+
+Put each list in `wt-data-table`. Use `wt-row-actions` for its hamburger menu, with a label that
+identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table heading,
+and Edit, Delete or domain-specific actions in each row's menu. The menu uses a native popover:
+clicking outside or pressing Escape closes it. Its action buttons follow normal Tab navigation.
+
+Open create and edit forms in `wt-modal`, with `wt-form-actions` in its footer. Keep validation
+messages inside the modal, retain entered values after a failed save, and refresh the table after
+success. Use the existing Forms contract for required markers, field errors and keyboard submission.
+Only offer operations your domain supports: department removal deactivates the department; removing
+a product from a menu removes that offer.
+
 ### Navigation and language controls
 
 Your selected tab belongs in the URL. `UrlStateController` reads path segments, updates them without
@@ -595,6 +632,10 @@ removing unrelated query parameters, and restores the screen on browser Back/For
 identifiers against its loaded data and permissions; a URL never establishes authentication. Use
 replacement history for defaults and invalid destinations, and push history for a new selection.
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
+
+Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses `status`,
+`departments`, `menus`, `zones` and `routing`. The dashboard preserves module-owned `view` segments
+while the module validates its keys.
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,
 zones and saved canvas tabs extend those paths, such as `/manage/floor/view/plano/zone/<id>`.

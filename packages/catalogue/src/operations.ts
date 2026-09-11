@@ -811,11 +811,18 @@ export async function catalogueExists(tx: Transaction, catalogueId: string): Pro
   return row !== undefined;
 }
 
-export async function renameCatalogue(tx: Transaction, id: string, name: string): Promise<void> {
-  await tx
+export async function renameCatalogue(
+  tx: Transaction,
+  tenantId: TenantId,
+  catalogueId: string,
+  name: string,
+): Promise<void> {
+  const [row] = await tx
     .update(catalogues)
     .set({ name, updatedAt: sql`now()` })
-    .where(eq(catalogues.id, id));
+    .where(and(eq(catalogues.tenantId, tenantId), eq(catalogues.id, catalogueId)))
+    .returning({ id: catalogues.id });
+  if (row === undefined) throw new AppError("catalogue.not_found", { catalogueId });
 }
 
 export async function deactivateCatalogue(tx: Transaction, id: string): Promise<void> {
