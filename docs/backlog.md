@@ -281,18 +281,24 @@ design-review section apply.
   from the #289/#304 join flow, NOT the box-wiring branch): the "print agents waiting to join" list does
   not live-update (a knock only appears after a manual page refresh), and the pairing window's "Open
   until …" timestamp renders in UTC instead of the venue's local time zone.*
-  *On-node agent auto-enrolment — IN FLIGHT (spec
+  *On-node agent auto-enrolment — LANDED #311, box-verified 2026-09-11 (spec
   [2026-09-11-on-node-agent-auto-enrolment-design.md](superpowers/specs/2026-09-11-on-node-agent-auto-enrolment-design.md)):
   a print agent on the PRIMARY box enrols itself silently over loopback (`POST /api/node/enrol-self`,
   loopback-only) — no pairing window, no number, no human — removing the #308 live-test friction where the
-  box's own agent had to be number-matched by hand. Carries: `print_agents.node_id` (one self-enrolled
+  box's own agent had to be number-matched by hand. Shipped: `print_agents.node_id` (one self-enrolled
   agent per node, refresh-not-duplicate, no FK to `nodes`), a revoke "allow again" action (a sticking
-  revoke would otherwise be a one-way door), and provenance in the agents list. The MIRROR half is
-  designed (§7) but DEFERRED by owner decision: a mirror agent can't reach the primary over TLS today
-  (it trusts only its local box CA) and needs to for job-pull regardless, so it's gated on a separate
-  cross-box print-agent-TLS effort; the vouch (signed dormant key + endorsement chain) slots into the
-  same route later. Must-measure-on-the-box: the server actually sees `127.0.0.1` as the on-box caller's
-  remote address under `network_mode: host` + TLS, with a LAN control reading a different address.*
+  revoke would otherwise be a one-way door), and provenance in the agents list. Verified live on the real
+  box: the box's own agent self-enrolled ("On this box", Active, printing) and a LAN caller was refused
+  `node.enrol_not_local` (403) — the server reads `127.0.0.1` for the on-box agent under
+  `network_mode: host` + TLS reliably, so the must-measure item is settled and no fail-closed fallback
+  was needed. The run-it review caught (reading missed) a cross-tenant leak in the agents list (missing
+  tenant predicate; fixed + isolation test) and a false mirror-refusal claim (a mirror is refused by the
+  read-only gate with `node.read_only`, not `node.enrol_unavailable`; corrected).
+  **The MIRROR half is DEFERRED by owner decision** — its own future branch: a mirror agent can't reach
+  the primary over TLS today (it trusts only its local box CA) and needs to for job-pull regardless, so
+  it's gated on a separate cross-box print-agent-TLS effort; the vouch (signed dormant key + endorsement
+  chain) slots into the same route later (spec §7). Deferred minor from the branch: no test pins the
+  `undefined`-remote-address→403 branch of the enrol route (the handler covers it).*
   *Op note: `try-branch.sh` swaps images against the box's INSTALLED compose, so testing a compose change
   (like this one) on a box prepared from older `main` needs its `compose.yml` refreshed first; out of
   scope for try-branch's image-swap contract.*
@@ -358,7 +364,23 @@ design-review section apply.
   presence-of-registered-devices stays always-on for serving); the discovered inventory + window are
   IN-MEMORY on the server (no new tables). **Bluetooth is IN SCOPE now** (was parked) as a third live
   transport with box-local pairing on the agent setup page. No printer drivers (raw ESC/POS; page
-  printers out of scope → the PDF path). At-least-once reclaim accepted for MVP (per-claim token
+  printers out of scope → the PDF path).
+  *OPEN — printer discovery & Bluetooth model, own spec/branch (owner, 2026-09-11):* two related
+  refinements surfaced reviewing #311. **(1) One surface.** Network/USB discovery is dashboard-driven (a
+  manager opens the discovery window; each box scans and reports in its poll), but Bluetooth scan+pair
+  lives on the agent's own `:9110` setup page — an inconsistency, and a page an operator must find. The
+  scan and the "pair this one" trigger could move into the dashboard reusing the same window+poll
+  mechanism (the box still does the radio work), so all printer setup is one surface; only the physical
+  "put the printer in pairing mode" stays manual. **(2) Honour OS pairing.** Bluetooth is point-to-point
+  (a printer bonds to ONE host), so the agent on that host should just surface its host's already-bonded
+  printers via the existing `paired()` seam (bluetooth.ts) rather than reinvent pairing — the in-app
+  scan+pair is only needed on a headless box with no OS pairing UI. Constraints: the agent needs access
+  to its host's Bluetooth stack (BlueZ/D-Bus passthrough in a container, as USB device access already
+  is); and the agent's device layer is Linux-only today (sysfs/BlueZ), so "pair on a macOS/Windows
+  laptop and the agent sees it" is a bigger lift than a Linux host. Prereq: the box's Bluetooth radio
+  path is still hardware-unconfirmed (bluetooth.ts §7 / the Step 6c receipt) — confirm BT works
+  end-to-end on the box before investing in where its button lives. Not built.
+  At-least-once reclaim accepted for MVP (per-claim token
   later). Security-review item (the authz boundary moves to venue/visible-keys). Replaces the manual
   create form (agent dropdown) with a transport-aware flow + a discovered-printers list.
   *Hardware receipt (2026-09-10, real ESC/POS printer on the box):* USB confirmed end-to-end — the agent
