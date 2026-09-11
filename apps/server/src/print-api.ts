@@ -711,12 +711,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const summaries = await tx.execute<{
           printer_id: string;
           pending_jobs: number;
-          last_print_at: string | null;
+          last_print_at: number | null;
         }>(sql`
           select printer_id,
             count(*) filter (where status in ('queued', 'printing')
               or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))::int as pending_jobs,
-            max(delivered_at)::text as last_print_at
+            (extract(epoch from max(delivered_at)) * 1000)::double precision as last_print_at
           from print_jobs where tenant_id = ${deps.cfg.tenantId}
           group by printer_id`);
         const byPrinter = new Map(summaries.rows.map((row) => [row.printer_id, row]));

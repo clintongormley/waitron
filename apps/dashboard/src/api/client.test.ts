@@ -2332,6 +2332,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     const preview = {
       text: "Receipt",
       qrData: [],
+      blocks: [{ kind: "text", text: "Receipt" }],
       omittedGraphics: false,
       truncated: false,
       unsupported: false,

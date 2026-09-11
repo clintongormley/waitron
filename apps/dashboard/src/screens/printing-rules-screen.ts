@@ -4,6 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { drawerPolicyName, printModeName } from "../i18n/domain.js";
@@ -70,21 +71,6 @@ export class PrintingRulesScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-2);
         margin-top: var(--wt-space-3);
-      }
-      .check {
-        min-height: var(--wt-tap-min);
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-      input[type="checkbox"] {
-        width: var(--wt-font-size-lg);
-        height: var(--wt-font-size-lg);
-        accent-color: var(--wt-color-primary);
-      }
-      input:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
       }
     `,
   ];
@@ -173,24 +159,21 @@ export class PrintingRulesScreen extends LitElement {
       <wt-card>
         <div class="row">
           <span class="details">${printer.name}</span>
-          <label class="check">
-            <input
-              type="checkbox"
-              role="switch"
-              name="ticketScope"
-              data-test="printer-ticket-scope-${printer.id}"
-              .checked=${live(printer.ticketScope === "order")}
-              .disabled=${this.saving}
-              @change=${(event: Event) => {
-                const checked = (event.target as HTMLInputElement).checked;
+          <wt-switch
+            label=${t("printers.ticket_scope")}
+            name="ticketScope"
+            data-test="printer-ticket-scope-${printer.id}"
+            .checked=${live(printer.ticketScope === "order")}
+            .disabled=${this.saving}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                const checked = event.detail.checked;
                 void this.#mutate(() =>
                   this.api.updatePrinter(printer.id, {
                     ticketScope: checked ? "order" : "station",
                   }),
                 );
               }}
-            />${t("printers.ticket_scope")}
-          </label>
+          ></wt-switch>
         </div>
         <div class="stations" role="group" aria-label=${t("printers.stations_title")}>
           <strong>${t("printers.stations_title")}</strong>
@@ -201,26 +184,22 @@ export class PrintingRulesScreen extends LitElement {
                 </p>`
               : this.stations.map(
                   (station) => html`
-                    <label class="check"
-                      ><input
-                        type="checkbox"
-                        role="switch"
-                        name="stationIds"
-                        value=${station.id}
-                        aria-label=${station.name}
-                        data-test="station-toggle-${printer.id}-${station.id}"
-                        .checked=${live((this.printerStations[printer.id] ?? []).includes(station.id))}
-                        .disabled=${this.saving}
-                        @change=${(event: Event) => {
-                          const checked = (event.target as HTMLInputElement).checked;
+                    <wt-switch
+                      label=${station.name}
+                      name="stationIds"
+                      aria-label=${station.name}
+                      data-test="station-toggle-${printer.id}-${station.id}"
+                      .checked=${live((this.printerStations[printer.id] ?? []).includes(station.id))}
+                      .disabled=${this.saving}
+                      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                          const checked = event.detail.checked;
                           void this.#mutate(() =>
                             checked
                               ? this.api.attachPrinterToStation(station.id, printer.id)
                               : this.api.detachPrinterFromStation(station.id, printer.id),
                           );
                         }}
-                      />${station.name}</label
-                    >
+                    ></wt-switch>
                   `,
                 )
           }

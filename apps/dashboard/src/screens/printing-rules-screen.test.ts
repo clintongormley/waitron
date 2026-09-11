@@ -99,7 +99,7 @@ const text = (el: PrintingRulesScreen, sel: string) => q(el, sel)?.textContent?.
 
 /** Exercise the native switch change event after the browser toggles its checked property. */
 function toggleSwitch(el: PrintingRulesScreen, sel: string, checked: boolean): void {
-  const input = q(el, sel) as HTMLInputElement;
+  const input = q(el, sel)!.shadowRoot!.querySelector("input")!;
   input.checked = checked;
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
@@ -513,4 +513,19 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
     );
     await expectNoA11yViolations(host);
   });
+});
+
+it("uses named shared switches for ticket scope and station routing", async () => {
+  const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  for (const [selector, name] of [
+    ["printer-ticket-scope-p1", "ticketScope"],
+    ["station-toggle-p1-s1", "stationIds"],
+  ]) {
+    const control = q(el, `[data-test="${selector}"]`)!;
+    expect(control.tagName).toBe("WT-SWITCH");
+    expect(control.shadowRoot!.querySelector("input")!.name).toBe(name);
+  }
 });

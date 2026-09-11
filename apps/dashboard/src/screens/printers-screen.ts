@@ -1,8 +1,15 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, type DataTableColumn, type WtModal } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  selectStyles,
+  type DataTableColumn,
+  type WtModal,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -57,22 +64,30 @@ export const SCAN_POLL_MS = 2_000;
 export class PrintersScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
       }
-      label:has(input[type="checkbox"]) {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-3);
-        min-height: var(--wt-tap-min);
+      wt-data-table::part(printer-meta) {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
-      input[type="checkbox"] {
-        accent-color: var(--wt-color-primary);
+      wt-data-table::part(printer-provenance) {
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        padding: 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-xs);
       }
-      input:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
+      wt-data-table::part(discovered-details) {
+        max-width: min(28vw, 24dvh);
+        overflow-wrap: anywhere;
+      }
+      .printer-filter {
+        display: grid;
+        gap: var(--wt-space-1);
+        max-width: 16rem;
+        margin-bottom: var(--wt-space-3);
       }
       .form-fields {
         display: grid;
@@ -159,6 +174,7 @@ export class PrintersScreen extends LitElement {
   @state() private submitting = false;
   @state() private agents: PrintAgentRow[] = [];
   @state() private printers: Printer[] = [];
+  @state() private printerStatus = "active";
   @state() private loading = true;
   @state() private addingAgent = false;
   @state() private addingPrinter = false;
@@ -173,6 +189,7 @@ export class PrintersScreen extends LitElement {
 
   // The id of the agent whose Revoke control is ARMED (awaiting a confirming second click), or null.
   @state() private armedRevokeId: string | null = null;
+  @state() private armedDeletePrinterId: string | null = null;
 
   // The id of the agent whose "Allow again" control is ARMED, or null. Its own state (like Deny's) so
   // arming one agent's re-allow does not disarm another agent's revoke.
@@ -220,6 +237,7 @@ export class PrintersScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     this.armedRevokeId = null;
+    this.armedDeletePrinterId = null;
     this.armedAllowId = null;
     this.armedDenyId = null;
     try {
@@ -498,18 +516,27 @@ export class PrintersScreen extends LitElement {
     return device.localKey ?? `${device.host}:${device.port ?? 9100}`;
   }
 
+  #disabledPrinter(device: DiscoveredPrinter): Printer | undefined {
+    return this.printers.find((printer) => printer.id === device.printerId && !printer.active);
+  }
+
+  #canAdd(device: DiscoveredPrinter): boolean {
+    return (
+      !this.#registeredDevices.has(this.#deviceKey(device)) &&
+      (!device.alreadyRegistered || this.#disabledPrinter(device) !== undefined)
+    );
+  }
+
   async #registerDiscovered(device: DiscoveredPrinter): Promise<void> {
-    if (
-      this.submitting ||
-      device.alreadyRegistered ||
-      this.#registeredDevices.has(this.#deviceKey(device))
-    )
-      return;
+    if (this.submitting || !this.#canAdd(device)) return;
     const name = this.#discoveredLabel(device);
     this.submitting = true;
     this.errorKey = null;
     try {
-      if (device.transport === "network_tcp") {
+      const disabled = this.#disabledPrinter(device);
+      if (disabled) {
+        await this.api.updatePrinter(disabled.id, { active: true });
+      } else if (device.transport === "network_tcp") {
         await this.api.createPrinter({
           name,
           transport: device.transport,
@@ -579,6 +606,11 @@ export class PrintersScreen extends LitElement {
   /** Soft-delete (deactivate) the printer `id` holds, then reload. A rejection becomes the `errorKey`
    * banner. */
   async #deactivatePrinter(id: string): Promise<void> {
+    if (this.armedDeletePrinterId !== id) {
+      this.armedDeletePrinterId = id;
+      return;
+    }
+    this.armedDeletePrinterId = null;
     await this.#mutate(() => this.api.deactivatePrinter(id));
   }
 
@@ -806,7 +838,7 @@ export class PrintersScreen extends LitElement {
         cell: (a) =>
           html`<span data-test=${`agent-status-${a.id}`}
               >${a.active ? t("printers.status_active") : t("printers.status_revoked")}</span
-            >${a.nodeId !== null ? html` <span style="border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-sm);padding:0 var(--wt-space-2);font-size:var(--wt-font-size-xs)" data-test=${`agent-provenance-${a.id}`}>${t("printers.provenance_self")}</span>` : nothing}`,
+            >${a.nodeId !== null ? html` <span part="printer-provenance" data-test=${`agent-provenance-${a.id}`}>${t("printers.provenance_self")}</span>` : nothing}`,
       },
       {
         key: "lastSeen",
@@ -973,9 +1005,11 @@ export class PrintersScreen extends LitElement {
       <wt-button
         variant="danger"
         data-test=${`deactivate-printer-${p.id}`}
+        data-keep-open
+        data-armed=${this.armedDeletePrinterId === p.id ? "true" : nothing}
         ?disabled=${!p.active}
         @click=${() => void this.#deactivatePrinter(p.id)}
-        >${t("action.delete")}</wt-button
+        >${this.armedDeletePrinterId === p.id ? t("printers.delete_confirm") : t("action.delete")}</wt-button
       >
     </dashboard-row-actions>`;
   }
@@ -986,10 +1020,7 @@ export class PrintersScreen extends LitElement {
     device: DiscoveredPrinter | undefined,
   ): TemplateResult | typeof nothing {
     if (device === undefined || device.agentName === null) return nothing;
-    return html`<div
-      data-test=${`printer-last-seen-${printerId}`}
-      style="color:var(--wt-color-text-muted);font-size:var(--wt-font-size-sm)"
-    >
+    return html`<div data-test=${`printer-last-seen-${printerId}`} part="printer-meta">
       ${t("printers.seen_at")
         .replace("{agent}", device.agentName)
         .replace("{time}", formatIsoMinute(device.lastSeenAt))}
@@ -1050,10 +1081,24 @@ export class PrintersScreen extends LitElement {
     ];
     return html`<section>
       <h2 class="panel-title">${t("printers.list_title")}</h2>
+      <label class="printer-filter"
+        >${t("printers.status")}
+        <select
+          name="printer-status-filter"
+          .value=${this.printerStatus}
+          @change=${(event: Event) => {
+            this.printerStatus = (event.target as HTMLSelectElement).value;
+          }}
+        >
+          <option value="active">${t("printers.status_active")}</option>
+          <option value="disabled">${t("printers.status_inactive")}</option>
+          <option value="all">${t("printers.filter_all")}</option>
+        </select>
+      </label>
       <wt-data-table
         data-test="printers-table"
         aria-label=${t("printers.list_title")}
-        .rows=${this.printers}
+        .rows=${this.printers.filter((printer) => this.printerStatus === "all" || printer.active === (this.printerStatus === "active"))}
         .columns=${columns}
         .rowKey=${(p: Printer) => p.id}
         .emptyMessage=${t("printers.no_printers")}
@@ -1253,16 +1298,13 @@ export class PrintersScreen extends LitElement {
                   >`
               : field("localKey", t("printers.local_key"), true)
         }
-        <label
-          ><input
-            name="printer-active"
-            type="checkbox"
-            role="switch"
-            data-test=${`printer-active-${p.id}`}
-            .checked=${p.active}
-            @change=${(e: Event) => this.#editPrinter(p.id, { active: (e.target as HTMLInputElement).checked })}
-          />${t("printers.active")}</label
-        >
+        <wt-switch
+          name="printer-active"
+          label=${t("printers.active")}
+          data-test=${`printer-active-${p.id}`}
+          .checked=${p.active}
+          @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#editPrinter(p.id, { active: e.detail.checked })}
+        ></wt-switch>
       </div>
       <wt-form-actions slot="footer">
         <wt-button
@@ -1297,15 +1339,13 @@ export class PrintersScreen extends LitElement {
         key: "name",
         label: t("printers.name"),
         cell: (d) =>
-          html`<div
-            style="max-width:min(28vw,24dvh);overflow-wrap:anywhere"
-            data-test=${`discovered-row-${this.#deviceKey(d)}`}
-          >
+          html`<div part="discovered-details" data-test=${`discovered-row-${this.#deviceKey(d)}`}>
             <strong>${this.#discoveredLabel(d)}</strong>
-            <div style="color:var(--wt-color-text-muted);font-size:var(--wt-font-size-sm)">
+            <div part="printer-meta">
               <div>${transportName(d.transport)}</div>
               <div>${d.host ? `${d.host}:${d.port ?? 9100}` : (d.localKey ?? "—")}</div>
               ${d.agentName ? html`<div>${t("printers.discovered_seen_on").replace("{agent}", d.agentName)}</div>` : nothing}
+              ${this.#disabledPrinter(d) ? html`<div>${t("printers.add_again_hint")}</div>` : nothing}
             </div>
           </div>`,
       },
@@ -1318,7 +1358,7 @@ export class PrintersScreen extends LitElement {
             data-test=${`register-${this.#deviceKey(d)}`}
             ?disabled=${this.submitting}
             @click=${() => void this.#registerDiscovered(d)}
-            >${t("action.add")}</wt-button
+            >${this.#disabledPrinter(d) ? t("printers.add_again") : t("action.add")}</wt-button
           >`,
       },
     ];
@@ -1349,7 +1389,7 @@ export class PrintersScreen extends LitElement {
         data-test="discovered-table"
         aria-label=${t("printers.discovered_title")}
         .columns=${columns}
-        .rows=${this.discovered.filter((d) => !d.alreadyRegistered)}
+        .rows=${this.discovered.filter((d) => this.#canAdd(d))}
         .rowKey=${(d: DiscoveredPrinter) => this.#deviceKey(d)}
         .emptyMessage=${this.scanning ? t("printers.scan_loading") : t("printers.no_discovered")}
       ></wt-data-table>

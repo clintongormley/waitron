@@ -128,7 +128,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
-| `wt-switch` | `checked`, `disabled`, `label` | `wt-change` — `detail: { checked: boolean }` |
+| `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`); default slot (body), `footer` slot | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors` | — |
@@ -194,7 +194,8 @@ legacy input and every `wt-switch` use a module-level counter (`wt-input-N` / `w
 - `wt-input name="email"`: `<label for="email">` + `<input id="email" name="email">`. The label
   supplies the input's accessible name through that native association, while automation and
   password managers receive a stable field purpose instead of a generated component id.
-- `wt-switch`: the same `for`/`id` pairing is what makes clicking the visible label text toggle the
+- `wt-switch`: `name` forwards your semantic field name to the native input; unnamed switches
+  omit it. The same `for`/`id` pairing is what makes clicking the visible label text toggle the
   switch. Because the control also carries `role="switch"` (re-purposing a native checkbox), its
   `<input>` *additionally* sets `aria-label` directly from the `label` property, so the accessible
   name doesn't depend on how a given screen reader resolves a `for`/`id` pair against a
