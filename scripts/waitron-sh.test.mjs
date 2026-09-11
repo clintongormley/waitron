@@ -149,3 +149,71 @@ describe("waitron.sh database_ahead advice", () => {
     expect(r.stderr).not.toMatch(/run 'waitron\.sh reset'/);
   });
 });
+
+describe("waitron.sh reset", () => {
+  const installedBox = (sb) => {
+    // A box that looks installed: compose.yml + .env present.
+    writeFileSync(join(sb.boxDir, "compose.yml"), "name: waitron\n");
+    writeFileSync(join(sb.boxDir, ".env"), "POSTGRES_PASSWORD=keepme\n");
+  };
+
+  it("refuses when the box was never installed", () => {
+    const sb = sandbox();
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/no box at/);
+  });
+
+  it("removes the transient volumes, empties state except tls, keeps .env", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).toBe(0);
+    const calls = readFileSync(sb.log, "utf8");
+    for (const v of ["db", "logs", "media", "backups", "mailpit", "print_agent"]) {
+      expect(calls).toMatch(new RegExp(`docker volume rm .*waitron_${v}\\b`));
+    }
+    expect(calls).not.toMatch(/docker volume rm .*waitron_state\b/);
+    // state emptied except tls, via a throwaway container.
+    expect(calls).toMatch(/docker run .*waitron_state.* find \/s .*! -name tls/);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain("POSTGRES_PASSWORD=keepme");
+    expect(calls).toMatch(/docker compose .*up -d/);
+  });
+
+  it("--all also removes the state volume", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["reset", "--all", "--yes"]);
+    expect(r.status).toBe(0);
+    expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_state\b/);
+  });
+
+  it("refuses on a production box (trading.env signal) and removes no volume", () => {
+    const sb = sandbox({ tradingEnv: "WAITRON_ENV=production" });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
+  });
+
+  // Spec §8: refusal must also fire on the DB-stamp signal alone (trading.env empty). Because the
+  // stub only returns the stamp when `-d waitron` is present, this test also fails if the query
+  // targets the wrong database — the wrong-db bug cannot pass unnoticed.
+  it("refuses on a production box (db-stamp signal) and removes no volume", () => {
+    const sb = sandbox({ tradingEnv: "", dbStamp: "production" });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
+  });
+
+  it("--force-production --yes proceeds on a production box", () => {
+    const sb = sandbox({ tradingEnv: "WAITRON_ENV=production" });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--force-production", "--yes"]);
+    expect(r.status).toBe(0);
+    expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_db\b/);
+  });
+});

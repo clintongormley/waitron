@@ -203,11 +203,52 @@ cmd_install() {
   if wait_healthy; then print_links; else report_unhealthy; fi
 }
 
+cmd_reset() {
+  local all=0 yes=0 force_prod=0 a ans
+  for a in "$@"; do
+    case "$a" in
+      --all) all=1 ;;
+      --yes) yes=1 ;;
+      --force-production) force_prod=1 ;;
+      *) die "reset: unknown option '$a'" 2 ;;
+    esac
+  done
+  [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
+
+  if is_production; then
+    [ "$force_prod" -eq 1 ] || die "this box is stamped PRODUCTION and holds real fiscal records that cannot be recreated — a reset would cut the AEAT chain. Recover a broken production box from a backup. To wipe anyway, re-run with --force-production."
+    if [ -t 0 ]; then
+      printf 'waitron.sh: type "production" to wipe this PRODUCTION box: ' >&2
+      read -r ans; [ "$ans" = "production" ] || die "not confirmed — nothing wiped"
+    fi
+  elif [ "$yes" -ne 1 ]; then
+    [ -t 0 ] || die "reset needs confirmation — re-run with --yes for a non-interactive box"
+    printf 'waitron.sh: type "reset" to wipe this box: ' >&2
+    read -r ans; [ "$ans" = "reset" ] || die "not confirmed — nothing wiped"
+  fi
+
+  cd "$WAITRON_DIR"
+  docker compose down
+  local v
+  for v in db logs media backups mailpit print_agent; do
+    docker volume rm -f "waitron_${v}" >/dev/null 2>&1 || true
+  done
+  if [ "$all" -eq 1 ]; then
+    docker volume rm -f waitron_state >/dev/null 2>&1 || true
+  else
+    # Empty state except tls/, keeping the CA + leaf so an already-trusting phone needs no new step.
+    docker run --rm -v waitron_state:/s "$HELPER_IMAGE" \
+      find /s -mindepth 1 -maxdepth 1 ! -name tls -exec rm -rf {} +
+  fi
+  docker compose up -d
+  if wait_healthy; then print_links; else report_unhealthy; fi
+}
+
 main() {
   local verb="${1:-}"
   case "$verb" in
     install) shift; cmd_install "$@" ;;
-    reset)   die "reset is not implemented yet" ;;  # Task 3
+    reset)   shift; cmd_reset "$@" ;;
     ""|-h|--help) usage ;;
     *) die "unknown command '$verb'" 2 ;;
   esac

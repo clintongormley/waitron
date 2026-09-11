@@ -225,6 +225,15 @@ describe("the waitron.sh box command", () => {
   it("records the branch image in .env rather than only inline on compose up", () => {
     expect(WAITRON_SH).toMatch(/env_set WAITRON_IMAGE/);
   });
+
+  it("keeps the tls certificate when it empties the state volume on a plain reset", () => {
+    expect(WAITRON_SH).toMatch(/find \/s .*! -name tls/);
+  });
+
+  it("refuses a reset on a production box unless forced", () => {
+    expect(WAITRON_SH).toMatch(/--force-production/);
+    expect(WAITRON_SH).toMatch(/stamped PRODUCTION/);
+  });
 });
 
 describe("every copy of the box's hostname", () => {
