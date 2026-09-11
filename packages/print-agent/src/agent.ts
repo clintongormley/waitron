@@ -136,6 +136,27 @@ export function createAgent(opts: AgentOptions): Agent {
       report({ phase: "unauthorized", serverUrl: config.serverUrl });
       return false;
     }
+
+    // Before probing the configured server, ask our OWN box to enrol us (design §1.1/§2). This sits
+    // BEFORE the probe and its `anyAccepting` gate ON PURPOSE: a print agent on the primary box is
+    // inside the node's trust boundary and must enrol even when its configured server is momentarily
+    // not an accepting primary (spec §2) — placing it after that gate would couple self-enrol to the
+    // configured server being up. A LITERAL loopback origin, NOT config.serverUrl (which on a till is
+    // the primary's LAN address), with the configured port/protocol kept. On the primary box this
+    // succeeds; on a device nothing answers its own loopback (`unreachable`) and on a mirror the local
+    // server refuses (`refused`) — both fall through unchanged to the probe + knock below.
+    if ((await host.token()) === null) {
+      const loopback = new URL(config.serverUrl);
+      loopback.hostname = "127.0.0.1";
+      const self = await client.enrolSelf(loopback.origin, config.name);
+      if (self.ok) {
+        await host.saveToken(self.value.token);
+        approved = true; // skip the join-status poll next tick; go straight to work
+        report({ phase: "running", serverUrl: config.serverUrl, current: loopback.origin });
+        return false;
+      }
+    }
+
     const r = routerFor(config);
     const round = await r.probe();
     if (config.environment === undefined && r.environment !== undefined) {

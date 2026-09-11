@@ -23,7 +23,9 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
   return {
     probeNode: vi.fn(async () => okR(primary)),
     join: vi.fn(async () => okR({ token: "a1.s", verificationNumber: "07" })),
-    enrolSelf: vi.fn(async () => okR({ token: "self.tok" })),
+    // Default = refused: the happy path is the manual knock, so only a box that opts in self-enrols.
+    // A device (till/mirror) has nothing that self-enrols it, so the loop falls through to join.
+    enrolSelf: vi.fn(async () => failR({ kind: "refused" })),
     joinStatus: vi.fn(async () => okR<JoinStatus>("approved")),
     pullJobs: vi.fn(async () =>
       okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
@@ -208,6 +210,73 @@ describe("createAgent — phases", () => {
     expect((c.probeNode as ReturnType<typeof vi.fn>).mock.calls.map((x) => x[0])).toContain(
       "http://b.test",
     );
+  });
+});
+
+describe("createAgent — on-node self-enrol", () => {
+  it("on the primary box: self-enrol succeeds → token stored, no knock", async () => {
+    const host = fakeHost({ config: CONFIG });
+    const c = client({ enrolSelf: vi.fn(async () => okR({ token: "id.secret" })) });
+    await createAgent({ host, client: c }).runOnce();
+    expect(await host.token()).toBe("id.secret");
+    expect(c.join).not.toHaveBeenCalled(); // never falls through to the manual path
+  });
+
+  it("on a device: self-enrol refused → falls through to the existing knock", async () => {
+    const host = fakeHost({ config: CONFIG });
+    const c = client({ enrolSelf: vi.fn(async () => failR({ kind: "refused" })) });
+    await createAgent({ host, client: c }).runOnce();
+    expect(c.join).toHaveBeenCalledWith(A, "kitchen-pi");
+  });
+
+  it("self-enrol runs even when the configured server reports no accepting primary", async () => {
+    // Proves the placement: the block sits BEFORE the router probe and its `anyAccepting` gate (spec
+    // §2). A self-enrol that only ran after that gate would be coupled to config.serverUrl being an
+    // accepting primary — so here the probe reports none AND is never reached, yet the token is stored.
+    const host = fakeHost({ config: CONFIG });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        okR<NodeProbe>({
+          nodeId: "n1",
+          term: 1,
+          acceptingSales: false,
+          environment: "preproduction",
+        }),
+      ),
+      enrolSelf: vi.fn(async () => okR({ token: "id.secret" })),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    expect(await host.token()).toBe("id.secret");
+    expect(c.probeNode).not.toHaveBeenCalled(); // short-circuited before the probe round
+  });
+
+  it("self-enrol targets a LITERAL 127.0.0.1 origin, not the configured (non-loopback) host", async () => {
+    const host = fakeHost({
+      config: { serverUrl: "https://primary.lan:8443", name: "kitchen-pi" },
+    });
+    let seen = "";
+    const c = client({
+      enrolSelf: vi.fn(async (url: string) => {
+        seen = url;
+        return failR({ kind: "refused" });
+      }),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    const u = new URL(seen);
+    expect(u.hostname).toBe("127.0.0.1"); // hostname forced to loopback
+    expect(u.port).toBe("8443"); // port preserved
+    expect(u.protocol).toBe("https:"); // protocol preserved
+  });
+
+  it("once self-enrolled, the next tick pulls with the stored token WITHOUT polling join status", async () => {
+    const host = fakeHost({ config: CONFIG });
+    const c = client({ enrolSelf: vi.fn(async () => okR({ token: "id.secret" })) });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce(); // self-enrols, stores the token, returns
+    await agent.runOnce(); // token now non-null → skips self-enrol, goes straight to the pull
+    expect(c.enrolSelf).toHaveBeenCalledTimes(1); // second tick had a token, so it did not self-enrol
+    expect(c.joinStatus).not.toHaveBeenCalled(); // `approved` was set, so no status poll
+    expect(c.pullJobs).toHaveBeenCalledTimes(1);
   });
 });
 
