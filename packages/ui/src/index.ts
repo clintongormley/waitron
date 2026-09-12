@@ -49,6 +49,12 @@ export type {
   ZoneTab,
 } from "./floor.js";
 export { submitOnEnter } from "./submit-on-enter.js";
+export {
+  ContentLanguageController,
+  currentContentLanguages,
+  setContentLanguages,
+  subscribeContentLanguages,
+} from "./content-languages.js";
 
 export { UrlStateController, type UrlPathConfig } from "./url-state.js";
 

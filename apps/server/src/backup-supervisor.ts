@@ -64,7 +64,6 @@ export interface BackupSupervisorDeps {
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
   stateDir: string;
-  mediaDir: string;
   jitterSeed: string;
   /** The venue's tenant-scoped wall clock (tz + business-day cutover). */
   readClock: () => Promise<ScheduleClock>;
@@ -162,7 +161,7 @@ export class BackupSupervisor {
         db,
         modules: this.#deps.modules,
         environment: this.#deps.environment,
-        resolvers: { media: this.#deps.mediaDir },
+        resolvers: {},
         stateDir: this.#deps.stateDir,
         stagingDir: join(this.#deps.stateDir, "backup-staging"),
         databaseUrl: url,

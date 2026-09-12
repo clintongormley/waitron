@@ -25,6 +25,7 @@ export const GENERIC_PACKAGES = [
   "workforce",
   "identity",
   "catalogue",
+  "media",
   "sync",
   "tunnel",
   "membership",

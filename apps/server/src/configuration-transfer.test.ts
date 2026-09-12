@@ -1,8 +1,5 @@
-import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
+import { uploadImage, readImageBytes } from "@waitron/media";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -17,11 +14,9 @@ import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
 import {
   buildConfigurationBundle,
-  collectConfigurationMedia,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
   importConfigurationTables,
-  publishConfigurationMedia,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 
@@ -96,6 +91,30 @@ const bundle: ConfigurationBundle = {
 };
 
 describe("configuration transfer archive", () => {
+  it("round-trips image bytes and metadata in the database payload", () => {
+    const imageBundle: ConfigurationBundle = {
+      ...bundle,
+      tables: {
+        products: [{ ...bundle.tables.products![0], image: "a".repeat(64) + ".png" }],
+        media_images: [
+          {
+            id: "image",
+            filename: "a".repeat(64) + ".png",
+            names: { en: "Bread" },
+            alt_text: { en: "A loaf" },
+            labels: ["Food"],
+          },
+        ],
+        media_image_data: [{ image_id: "image", bytes: "\\x89504e470d0a1a0a" }],
+      },
+    };
+    expect(
+      decodeConfigurationBundle(
+        encodeConfigurationBundle(imageBundle, "a strong passphrase"),
+        "a strong passphrase",
+      ),
+    ).toEqual(imageBundle);
+  });
   it("round-trips the versioned payload under the export passphrase", () => {
     expect(
       decodeConfigurationBundle(
@@ -118,51 +137,6 @@ describe("configuration transfer archive", () => {
       code: "setup.request_invalid",
       params: { field: "module:probe" },
     });
-  });
-
-  it("carries only referenced, digest-matched media and publishes it byte-for-byte", async () => {
-    const source = await mkdtemp(join(tmpdir(), "waitron-config-source-"));
-    const target = await mkdtemp(join(tmpdir(), "waitron-config-target-"));
-    try {
-      const bytes = Buffer.from("prepared product image");
-      const name = `${createHash("sha256").update(bytes).digest("hex")}.png`;
-      await writeFile(join(source, name), bytes);
-      await writeFile(join(source, `${"0".repeat(64)}.png`), "unreferenced");
-      const withImage: ConfigurationBundle = {
-        ...bundle,
-        tables: { products: [{ ...bundle.tables.products![0], image: name }] },
-      };
-      const media = await collectConfigurationMedia(withImage, source);
-      expect(media.map((entry) => entry.name)).toEqual([`media/${name}`]);
-
-      const artifact = encodeConfigurationBundle(withImage, "a strong passphrase", media);
-      expect(decodeConfigurationBundle(artifact, "a strong passphrase")).toEqual(withImage);
-      await publishConfigurationMedia(artifact, "a strong passphrase", target);
-      expect(await readFile(join(target, name))).toEqual(bytes);
-    } finally {
-      await Promise.all([
-        rm(source, { recursive: true, force: true }),
-        rm(target, { recursive: true, force: true }),
-      ]);
-    }
-  });
-
-  it("refuses media whose content does not match its content-addressed filename", async () => {
-    const source = await mkdtemp(join(tmpdir(), "waitron-config-source-"));
-    try {
-      const name = `${"0".repeat(64)}.png`;
-      await writeFile(join(source, name), "different bytes");
-      const withImage: ConfigurationBundle = {
-        ...bundle,
-        tables: { products: [{ ...bundle.tables.products![0], image: name }] },
-      };
-      await expect(collectConfigurationMedia(withImage, source)).rejects.toMatchObject({
-        code: "setup.request_invalid",
-        params: { field: `media:${name}` },
-      });
-    } finally {
-      await rm(source, { recursive: true, force: true });
-    }
   });
 });
 
@@ -210,6 +184,17 @@ describe("configuration transfer database path", () => {
       modules: ALL_MODULES,
     });
     await withTenant(suite.db, source.tenantId, async (tx) => {
+      const uploaded = await uploadImage(
+        tx,
+        source.tenantId,
+        {
+          bytes: new Uint8Array([0xff, 0xd8, 0xff, 1]),
+          names: { es: "Pan" },
+          altText: { es: "Una hogaza" },
+          labels: ["Food"],
+        },
+        { maxUploadBytes: 100 },
+      );
       await tx.execute(sql`
         insert into persons
           (id, tenant_id, display_name, pin_hash, password_hash, email, role)
@@ -225,6 +210,9 @@ describe("configuration transfer database path", () => {
         values
           ('22222222-aaaa-aaaa-aaaa-222222222222', ${source.tenantId},
            '11111111-aaaa-aaaa-aaaa-111111111111', '{"es-ES":"Café"}', 'each', 1.50, 'general')`);
+      await tx.execute(
+        sql`update products set image = ${uploaded.image.filename} where tenant_id = ${source.tenantId} and id = '22222222-aaaa-aaaa-aaaa-222222222222'`,
+      );
       await tx.execute(sql`
         insert into persons
           (id, tenant_id, display_name, pin_hash, password_hash, email, role)
@@ -339,6 +327,15 @@ describe("configuration transfer database path", () => {
           versions,
         );
       },
+    });
+    await withTenant(suite.db, target.tenantId, async (tx) => {
+      const [metadata] = transferred.tables.media_images!;
+      const bytes = await readImageBytes(tx, target.tenantId, metadata!.filename as string);
+      expect(bytes?.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 1]));
+      const attached = await tx.execute<{ image: string }>(
+        sql`select image from products where tenant_id = ${target.tenantId}`,
+      );
+      expect(attached.rows[0]!.image).toBe(metadata!.filename);
     });
     const imported = await suite.db.execute<{
       products: number;

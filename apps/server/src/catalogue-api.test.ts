@@ -1,9 +1,6 @@
-import { tmpdir } from "node:os";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -15,7 +12,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the ROUTES — the request/response boundary, the body +
-// id screens, the permission gate wiring and the image-upload mechanics — end to end in-process, the
+// id screens, the permission gate wiring — end to end in-process, the
 // same way `till-api.test.ts` proves the till routes. The catalogue tables live in CORE_MIGRATIONS and
 // the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTenant` +
 // `asAppUser` exactly as production does. The gate-by-DELETION proof (removing `authorizeManager`
@@ -24,16 +21,10 @@ import "./errors.js";
 // grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
-// A comfortable per-file limit for the handler-path tests (happy path, missing, unsupported): well
-// above the multipart framing so a small payload reaches the handler. The two `media.too_large` tests
-// mount their own app with a tiny limit instead (see below).
-const HANDLER_LIMIT = 1024 * 1024;
-
 let tenantId: string;
 let locationId: string;
 let managerCookie: string;
 let staffCookie: string;
-let mediaDir: string;
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -73,14 +64,7 @@ const suite = usePgliteDb({
   },
 });
 
-beforeAll(async () => {
-  mediaDir = await mkdtemp(join(tmpdir(), "waitron-catalogue-api-"));
-});
-afterAll(async () => {
-  if (mediaDir !== undefined) await rm(mediaDir, { recursive: true, force: true });
-});
-
-function mountApp(maxUploadBytes: number = HANDLER_LIMIT): Hono {
+function mountApp(venueLocale = "es-ES", mountedTenantId = tenantId): Hono {
   const app = new Hono();
   mountCatalogueApi(
     app,
@@ -88,14 +72,102 @@ function mountApp(maxUploadBytes: number = HANDLER_LIMIT): Hono {
     // origin (that is sync-origin.test.ts's job); any valid node id satisfies the type.
     {
       db: suite.db,
-      cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
-      mediaDir,
-      maxUploadBytes,
+      cfg: { tenantId: mountedTenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
+      venueLocale,
     },
     noopLog,
   );
   return app;
 }
+
+describe("content-language configuration", () => {
+  beforeEach(async () => {
+    await suite.db.execute(sql`delete from content_languages`);
+  });
+
+  it("starts from the configured site language and saves additional content languages", async () => {
+    const app = mountApp("en-GB");
+    const initial = await send(app, "GET", "/management-api/content-languages");
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toEqual({ defaultLanguage: "en", languages: ["en"] });
+    const settings = { defaultLanguage: "en", languages: ["en", "fr", "ca"] };
+    expect(
+      (await send(app, "PUT", "/management-api/content-languages", { body: settings })).status,
+    ).toBe(204);
+    expect(await (await send(app, "GET", "/management-api/content-languages")).json()).toEqual(
+      settings,
+    );
+  });
+
+  it("exposes language choices to public content readers without a management session", async () => {
+    const app = mountApp("en-GB");
+    const response = await send(app, "GET", "/api/content-languages", { cookie: null });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ defaultLanguage: "en", languages: ["en"] });
+  });
+
+  it("requires a management session and refuses staff writes", async () => {
+    const app = mountApp();
+    expect(
+      (await send(app, "GET", "/management-api/content-languages", { cookie: null })).status,
+    ).toBe(401);
+    expect(
+      (
+        await send(app, "PUT", "/management-api/content-languages", {
+          cookie: staffCookie,
+          body: { defaultLanguage: "es", languages: ["es", "fr"] },
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("requires the configured default for new products and modifier names", async () => {
+    const app = mountApp("en-GB");
+    const catalogueId = await createCatalogueVia(app, "Lunch");
+    const product = {
+      catalogueId,
+      categoryId: null,
+      descriptions: { fr: "Pain" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "general",
+    };
+    const missing = await send(app, "POST", "/management-api/products", { body: product });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toEqual({
+      error: { code: "content.translation_required", params: { language: "en" } },
+    });
+    expect(
+      (
+        await send(app, "POST", "/management-api/products", {
+          body: { ...product, descriptions: { en: "Bread" } },
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await send(app, "POST", "/management-api/option-groups", {
+          body: { name: { fr: "Taille" } },
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await send(app, "POST", "/management-api/option-groups", { body: { name: { en: "Size" } } }))
+        .status,
+    ).toBe(201);
+  });
+
+  it.each([
+    null,
+    {},
+    { defaultLanguage: "es", languages: "es" },
+    { defaultLanguage: "es", languages: [4] },
+  ])("rejects malformed language configuration %j", async (body) => {
+    expect(
+      (await send(mountApp(), "PUT", "/management-api/content-languages", { body })).status,
+    ).toBe(400);
+  });
+});
 
 /** JSON POST/PATCH helper with the manager cookie unless overridden. */
 async function send(
@@ -119,29 +191,6 @@ async function createCatalogueVia(app: Hono, name: string): Promise<string> {
   const res = await send(app, "POST", "/management-api/catalogues", { body: { name } });
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
-}
-
-const PNG_BYTES = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
-]);
-const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x00, 0x00]);
-
-async function uploadRequest(
-  app: Hono,
-  part: { name: string; bytes: Uint8Array<ArrayBuffer>; type: string; filename?: string } | null,
-  cookie: string | null = managerCookie,
-): Promise<Response> {
-  const fd = new FormData();
-  if (part !== null) {
-    fd.append(
-      part.name,
-      new Blob([part.bytes], { type: part.type }),
-      part.filename ?? "upload.bin",
-    );
-  }
-  const headers: Record<string, string> = {};
-  if (cookie !== null) headers["cookie"] = cookie;
-  return app.request("/management-api/product-images", { method: "POST", headers, body: fd });
 }
 
 describe("mountCatalogueApi — catalogues", () => {
@@ -397,7 +446,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId: productsMenuId,
         categoryId: null,
-        descriptions: { en: "Negroni" },
+        descriptions: { en: "Negroni", es: "Negroni" },
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "general",
@@ -410,7 +459,7 @@ describe("mountCatalogueApi — products", () => {
         app,
         "POST",
         `/management-api/catalogues/${menuId}/sections`,
-        { body: { name: { en: "Cocktails" }, displayOrder: 0 } },
+        { body: { name: { en: "Cocktails", es: "Cócteles" }, displayOrder: 0 } },
       );
       expect(sectionResponse.status).toBe(201);
       const sectionId = ((await sectionResponse.json()) as { id: string }).id;
@@ -938,7 +987,9 @@ describe("mountCatalogueApi — null request bodies map to the route's own 4xx, 
   });
 
   it("PATCH /products/:id null body → 204 no-op", async () => {
-    const res = await send(mountApp(), "PATCH", `/management-api/products/${DUMMY_UUID}`, {
+    const app = mountApp();
+    const productId = await createProductVia(app, await createCatalogueVia(app, "Null body"));
+    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
       body: null,
     });
     expect(res.status).toBe(204);
@@ -963,7 +1014,8 @@ describe("mountCatalogueApi — null request bodies map to the route's own 4xx, 
       error: { code: "management.request_invalid", params: { field: "catalogueId" } },
     });
 
-    const patch = await app.request(`/management-api/products/${DUMMY_UUID}`, {
+    const productId = await createProductVia(app, await createCatalogueVia(app, "Malformed body"));
+    const patch = await app.request(`/management-api/products/${productId}`, {
       method: "PATCH",
       headers,
       body: "{ not json",
@@ -971,92 +1023,6 @@ describe("mountCatalogueApi — null request bodies map to the route's own 4xx, 
     expect(patch.status).toBe(204);
   });
 });
-
-describe("mountCatalogueApi — image upload", () => {
-  it("POST /management-api/product-images with a valid PNG → 201 { image: <64hex>.png } and writes the file", async () => {
-    const app = mountApp();
-    const res = await uploadRequest(app, {
-      name: "file",
-      bytes: PNG_BYTES,
-      type: "image/png",
-      filename: "photo.png",
-    });
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { image: string };
-    expect(body.image).toMatch(/^[0-9a-f]{64}\.png$/);
-    // The bytes were written under the content-addressed name (idempotent by construction).
-    const onDisk = new Uint8Array(await readFile(join(mediaDir, body.image)));
-    expect(onDisk).toEqual(PNG_BYTES);
-  });
-
-  it("POST /management-api/product-images with no file part → media.missing 400", async () => {
-    const res = await uploadRequest(mountApp(), {
-      name: "notfile",
-      bytes: PNG_BYTES,
-      type: "image/png",
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "media.missing" },
-    });
-  });
-
-  it("POST /management-api/product-images with a GIF blob → media.unsupported_type 415", async () => {
-    const res = await uploadRequest(mountApp(), {
-      name: "file",
-      bytes: GIF_BYTES,
-      type: "image/gif",
-      filename: "x.gif",
-    });
-    expect(res.status).toBe(415);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "media.unsupported_type" },
-    });
-  });
-
-  it("POST /management-api/product-images unauthenticated → 401", async () => {
-    const res = await uploadRequest(
-      mountApp(),
-      { name: "file", bytes: PNG_BYTES, type: "image/png" },
-      null,
-    );
-    expect(res.status).toBe(401);
-  });
-
-  it("POST /management-api/product-images over the per-file limit → media.too_large 413 (precise check)", async () => {
-    // A file whose bytes exceed the tiny per-file limit but whose whole multipart body stays under the
-    // coarse bodyLimit ceiling, so it reaches the handler's precise `file.size` check.
-    const app = mountApp(256);
-    const big = new Uint8Array(400);
-    big.set(PNG_BYTES, 0);
-    const res = await uploadRequest(app, { name: "file", bytes: big, type: "image/png" });
-    expect(res.status).toBe(413);
-    expect(
-      (await res.json()) as { error: { code: string; params: { limit: number } } },
-    ).toMatchObject({ error: { code: "media.too_large", params: { size: 400, limit: 256 } } });
-  });
-
-  it("POST /management-api/product-images over the coarse body ceiling → media.too_large 413 (bodyLimit)", async () => {
-    // A body far larger than the coarse ceiling (limit + framing headroom): bodyLimit rejects it
-    // mid-stream, before parseBody buffers it, and answers the same media.too_large 413.
-    const app = mountApp(256);
-    const huge = new Uint8Array(64 * 1024);
-    huge.set(PNG_BYTES, 0);
-    const res = await uploadRequest(app, { name: "file", bytes: huge, type: "image/png" });
-    expect(res.status).toBe(413);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "media.too_large" },
-    });
-  });
-});
-
-// ── Option groups + items authoring (Task 11) ────────────────────────────────────────────────────
-// Route mechanics for the modifier-authoring surface, proved in-process on PGlite like the rest of
-// this file: the group/item CRUD, the request-shape + id screens, the domain `options.group_invalid`
-// bounds check, and the product↔group attach carried on the product POST/PATCH body. The
-// `person.manage` gate-by-deletion and the attach's tenant-consistent composite FK are the
-// real-Postgres suite's job (catalogue-api.pg.test.ts), which PGlite cannot show (every PGlite
-// connection is a superuser holding every grant).
 
 interface OptionGroupShape {
   id: string;
@@ -1471,7 +1437,7 @@ describe("mountCatalogueApi — option group items", () => {
     const app = mountApp();
     const g = await createGroupVia(app, { name: { es: "Panes" } });
     const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { en: "Gluten-free bun" }, removeAllergens: ["gluten"] },
+      body: { name: { en: "Gluten-free bun", es: "Pan sin gluten" }, removeAllergens: ["gluten"] },
     });
     expect(res.status).toBe(201);
     expect((await res.json()) as Record<string, unknown>).toMatchObject({
@@ -1485,7 +1451,7 @@ describe("mountCatalogueApi — option group items", () => {
     const g = await createGroupVia(app, { name: { es: "x" } });
     const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
       body: {
-        name: { en: "x" },
+        name: { en: "x", es: "x" },
         addAllergens: { gluten: { presence: "contains" } },
         removeAllergens: ["gluten"],
       },
@@ -1544,7 +1510,11 @@ describe("mountCatalogueApi — option group items", () => {
     const app = mountApp();
     const g = await createGroupVia(app, { name: { es: "Extras" } });
     const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { en: "Add bacon" }, addOrigins: ["meat"], removeOrigins: ["dairy"] },
+      body: {
+        name: { en: "Add bacon", es: "Añadir beicon" },
+        addOrigins: ["meat"],
+        removeOrigins: ["dairy"],
+      },
     });
     expect(res.status).toBe(201);
     expect((await res.json()) as Record<string, unknown>).toMatchObject({
@@ -1557,7 +1527,7 @@ describe("mountCatalogueApi — option group items", () => {
     const app = mountApp();
     const g = await createGroupVia(app, { name: { es: "x" } });
     const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { en: "x" }, addOrigins: ["wombat"] },
+      body: { name: { en: "x", es: "x" }, addOrigins: ["wombat"] },
     });
     expect(res.status).toBe(400);
     expect(
@@ -1815,5 +1785,240 @@ describe("menu name edits", () => {
       sql`select name from catalogues where id = ${id}`,
     );
     expect(row.rows).toEqual([{ name: "Other" }]);
+  });
+});
+
+describe("menu-section translations", () => {
+  it("updates translations with default-language validation and scopes section ids to the venue", async () => {
+    const app = mountApp("en-GB");
+    const foreignTenantId = await seedTenant(suite.db);
+    const seedSection = async (ownerId: string) => {
+      const menu = await suite.db.execute<{ id: string }>(sql`
+        insert into catalogues (tenant_id, name) values (${ownerId}, 'Section edit') returning id`);
+      return (
+        await suite.db.execute<{ id: string }>(sql`
+        insert into menu_sections (tenant_id, menu_id, name)
+        values (${ownerId}, ${menu.rows[0]!.id}, '{"en":"Cocktails","de":"Getränke"}'::jsonb) returning id`)
+      ).rows[0]!.id;
+    };
+    const sectionId = await seedSection(tenantId);
+    const foreignSectionId = await seedSection(foreignTenantId);
+    await suite.db.execute(sql`
+      insert into content_languages (tenant_id, default_language, languages) values (${tenantId}, 'en', array['en','fr'])
+      on conflict (tenant_id) do update set default_language = 'en', languages = array['en','fr']`);
+    try {
+      const path = `/management-api/menu-sections/${sectionId}`;
+      const input = { name: { en: "Drinks", fr: "Boissons", de: "Getränke" } };
+      expect((await send(app, "PATCH", path, { body: input, cookie: null })).status).toBe(401);
+      expect((await send(app, "PATCH", path, { body: input, cookie: staffCookie })).status).toBe(
+        403,
+      );
+      for (const body of [
+        {},
+        { name: [] },
+        { name: "Drinks" },
+        { name: { en: 42 } },
+        { name: { fr: "Boissons" } },
+      ]) {
+        expect((await send(app, "PATCH", path, { body })).status).toBe(400);
+      }
+      expect(
+        (await send(app, "PATCH", "/management-api/menu-sections/bad-id", { body: input })).status,
+      ).toBe(400);
+      expect(
+        (
+          await send(app, "PATCH", `/management-api/menu-sections/${foreignSectionId}`, {
+            body: input,
+          })
+        ).status,
+      ).toBe(404);
+      expect(
+        (
+          await send(app, "PATCH", `/management-api/menu-sections/${crypto.randomUUID()}`, {
+            body: input,
+          })
+        ).status,
+      ).toBe(404);
+      expect((await send(app, "PATCH", path, { body: input })).status).toBe(204);
+      const own = await suite.db.execute<{ name: Record<string, string> }>(
+        sql`select name from menu_sections where tenant_id = ${tenantId} and id = ${sectionId}`,
+      );
+      const foreign = await suite.db.execute<{ name: Record<string, string> }>(
+        sql`select name from menu_sections where tenant_id = ${foreignTenantId} and id = ${foreignSectionId}`,
+      );
+      expect(own.rows).toEqual([input]);
+      expect(foreign.rows).toEqual([{ name: { en: "Cocktails", de: "Getränke" } }]);
+    } finally {
+      await suite.db.execute(sql`delete from content_languages where tenant_id = ${tenantId}`);
+    }
+  });
+});
+
+describe("menu-section list", () => {
+  it("lists empty sections in display order without exposing another tenant's menu", async () => {
+    const app = mountApp();
+    const menuId = await createCatalogueVia(app, "Empty sections");
+    await suite.db.execute(sql`insert into menu_sections (tenant_id, menu_id, name, display_order)
+      values (${tenantId}, ${menuId}, '{"es":"Postres"}'::jsonb, 2),
+             (${tenantId}, ${menuId}, '{"es":"Bebidas"}'::jsonb, 1)`);
+    const path = `/management-api/catalogues/${menuId}/sections`;
+    expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
+    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
+    const response = await send(app, "GET", path);
+    expect(response.status).toBe(200);
+    const rows = (await response.json()) as {
+      id: string;
+      menuId: string;
+      name: Record<string, string>;
+      displayOrder: number;
+      active: boolean;
+    }[];
+    expect(rows.map(({ id, ...row }) => ({ ...row, hasId: typeof id === "string" }))).toEqual([
+      { menuId, name: { es: "Bebidas" }, displayOrder: 1, active: true, hasId: true },
+      { menuId, name: { es: "Postres" }, displayOrder: 2, active: true, hasId: true },
+    ]);
+    const foreignTenantId = await seedTenant(suite.db);
+    const foreignMenu = await suite.db.execute<{ id: string }>(
+      sql`insert into catalogues (tenant_id, name) values (${foreignTenantId}, 'Private') returning id`,
+    );
+    const foreignMenuId = foreignMenu.rows[0]!.id;
+    await suite.db.execute(
+      sql`insert into menu_sections (tenant_id, menu_id, name) values (${foreignTenantId}, ${foreignMenuId}, '{"en":"Private"}'::jsonb)`,
+    );
+    expect(
+      (await send(app, "GET", `/management-api/catalogues/${foreignMenuId}/sections`)).status,
+    ).toBe(404);
+    expect(
+      (await send(app, "GET", `/management-api/catalogues/${crypto.randomUUID()}/sections`)).status,
+    ).toBe(404);
+    expect((await send(app, "GET", "/management-api/catalogues/bad-id/sections")).status).toBe(400);
+  });
+});
+
+describe("catalogue API tenant authorization", () => {
+  it.each(["catalogues", "location catalogues"])(
+    "lists only its own %s for an authorized manager",
+    async (listing) => {
+      const other = await seedTenant(suite.db);
+      const foreign = await suite.db.execute<{ id: string }>(
+        sql`insert into catalogues (tenant_id, name) values (${other}, 'Private menu') returning id`,
+      );
+      const app = mountApp();
+      const ownId = await createCatalogueVia(app, "Own menu");
+      const path =
+        listing === "catalogues"
+          ? "/management-api/catalogues"
+          : `/management-api/locations/${locationId}/catalogues`;
+      const response = await send(app, "GET", path);
+      expect(response.status).toBe(200);
+      const rows = (await response.json()) as { id: string }[];
+      expect(rows.map((row) => row.id)).toContain(ownId);
+      expect(rows.map((row) => row.id)).not.toContain(foreign.rows[0]!.id);
+    },
+  );
+
+  it("does not return another tenant's products through its catalogue ID to an authorized manager", async () => {
+    const other = await seedTenant(suite.db);
+    const foreign = await suite.db.execute<{ id: string }>(
+      sql`insert into catalogues (tenant_id, name) values (${other}, 'Private products') returning id`,
+    );
+    await suite.db
+      .execute(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
+      values (${other}, ${foreign.rows[0]!.id}, '{"es":"Privado"}'::jsonb, 'each', '2', 'general')`);
+    const app = mountApp();
+    const ownMenuId = await createCatalogueVia(app, "Own products");
+    const ownProductId = await createProductVia(app, ownMenuId);
+    const own = await send(app, "GET", `/management-api/catalogues/${ownMenuId}/products`);
+    expect(own.status).toBe(200);
+    expect(await own.json()).toMatchObject([{ id: ownProductId }]);
+    const response = await send(
+      app,
+      "GET",
+      `/management-api/catalogues/${foreign.rows[0]!.id}/products`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+  });
+
+  it("refuses a manager session from another tenant before reading or writing language configuration", async () => {
+    const other = await seedTenant(suite.db);
+    const app = mountApp("en", other);
+    expect((await send(app, "GET", "/management-api/content-languages")).status).toBe(403);
+    expect(
+      (
+        await send(app, "PUT", "/management-api/content-languages", {
+          body: { defaultLanguage: "fr", languages: ["fr"] },
+        })
+      ).status,
+    ).toBe(403);
+    const config = await suite.db.execute(
+      sql`select * from content_languages where tenant_id = ${other}`,
+    );
+    expect(config.rows).toEqual([]);
+  });
+
+  it("refuses foreign product image and description edits and preserves the original fields", async () => {
+    const other = await seedTenant(suite.db);
+    const menu = await suite.db.execute<{ id: string }>(
+      sql`insert into catalogues (tenant_id, name) values (${other}, 'Other menu') returning id`,
+    );
+    const product = await suite.db.execute<{
+      id: string;
+    }>(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class, image)
+      values (${other}, ${menu.rows[0]!.id}, '{"es":"Pan"}'::jsonb, 'each', '2', 'general', 'original.png') returning id`);
+    const result = await send(
+      mountApp(),
+      "PATCH",
+      `/management-api/products/${product.rows[0]!.id}`,
+      { body: { image: null, descriptions: { es: "Cambio" } } },
+    );
+    expect(result.status).toBe(403);
+    const after = await suite.db.execute(
+      sql`select image, descriptions from products where tenant_id = ${other} and id = ${product.rows[0]!.id}`,
+    );
+    expect(after.rows).toEqual([{ image: "original.png", descriptions: { es: "Pan" } }]);
+  });
+
+  it("refuses foreign modifier edits and a mismatched item group, including empty patches", async () => {
+    const other = await seedTenant(suite.db);
+    const group = await suite.db.execute<{ id: string }>(
+      sql`insert into option_groups (tenant_id, name) values (${other}, '{"es":"Tamaño"}'::jsonb) returning id`,
+    );
+    const item = await suite.db.execute<{ id: string }>(
+      sql`insert into option_group_items (tenant_id, group_id, name) values (${other}, ${group.rows[0]!.id}, '{"es":"Grande"}'::jsonb) returning id`,
+    );
+    const app = mountApp();
+    for (const path of [
+      `/management-api/option-groups/${group.rows[0]!.id}`,
+      `/management-api/option-groups/${group.rows[0]!.id}/items/${item.rows[0]!.id}`,
+    ]) {
+      expect((await send(app, "PATCH", path, { body: { name: { es: "Cambio" } } })).status).toBe(
+        403,
+      );
+      expect((await send(app, "PATCH", path, { body: {} })).status).toBe(403);
+    }
+    const ownA = await createGroupVia(app, { name: { es: "A" } });
+    const ownB = await createGroupVia(app, { name: { es: "B" } });
+    const ownItem = await suite.db.execute<{ id: string }>(
+      sql`insert into option_group_items (tenant_id, group_id, name) values (${tenantId}, ${ownA.id}, '{"es":"Original"}'::jsonb) returning id`,
+    );
+    expect(
+      (
+        await send(
+          app,
+          "PATCH",
+          `/management-api/option-groups/${ownB.id}/items/${ownItem.rows[0]!.id}`,
+          { body: { name: { es: "Cambio" } } },
+        )
+      ).status,
+    ).toBe(403);
+    const names = await suite.db.execute(
+      sql`select name from option_group_items where id in (${item.rows[0]!.id}, ${ownItem.rows[0]!.id}) order by name::text`,
+    );
+    expect(names.rows).toEqual([{ name: { es: "Grande" } }, { name: { es: "Original" } }]);
+    expect(
+      (await suite.db.execute(sql`select name from option_groups where id=${group.rows[0]!.id}`))
+        .rows,
+    ).toEqual([{ name: { es: "Tamaño" } }]);
   });
 });

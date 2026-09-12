@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, hasCode } from "@waitron/shared";
-import { DEFAULT_MEDIA_ROOT, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
+import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
@@ -28,7 +28,7 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
 
 /**
  * `waitron-restore restore <artifact-path>` — decrypt and restore one BR-3 backup artifact
- * (`restoreFromArtifact`, `restore.ts`): validate → set aside any existing identity → db → media →
+ * (`restoreFromArtifact`, `restore.ts`): validate → set aside any existing identity → database →
  * migrate → hooks (one transaction) → secrets (identity last). The target database must be FRESH.
  * Secrets come from the environment, NEVER argv: the recovery key (`WAITRON_BACKUP_RECOVERY_KEY` — the SAME variable a backup was
  * encrypted under, `backup-config.ts`) and the privileged admin connection to the restore target
@@ -40,9 +40,9 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * a valid connection string" (CLAUDE.md §3): a blank value here must refuse outright rather than
  * quietly restore onto whatever answers on this box's default Postgres port.
  *
- * Resolves `mediaDir`/`stateDir`/`migrationsRoot`/`environment` exactly as `boot.ts`'s `loadConfig`
- * does — the same `WAITRON_MEDIA_DIR`/`WAITRON_STATE_DIR`/`WAITRON_MIGRATIONS_DIR`/`WAITRON_ENV`
- * variables, the same `DEFAULT_MEDIA_ROOT`/`DEFAULT_STATE_ROOT`/`DEFAULT_MIGRATIONS_ROOT` defaults
+ * Resolves `stateDir`/`migrationsRoot`/`environment` exactly as `boot.ts`'s `loadConfig`
+ * does — the same `WAITRON_STATE_DIR`/`WAITRON_MIGRATIONS_DIR`/`WAITRON_ENV`
+ * variables, the same `DEFAULT_STATE_ROOT`/`DEFAULT_MIGRATIONS_ROOT` defaults
  * (imported from `boot.ts` rather than recomputed, so the two can never drift) and the same
  * `isUnset`-gated `resolve()`-only-a-real-value shape. `migrationsRoot` is stored VERBATIM when
  * overridden — no `resolve()` — mirroring `config.ts`'s own `loadConfig` exactly. `stagingDir` is
@@ -113,7 +113,6 @@ export async function runRestore(deps: {
     return 1;
   }
 
-  const mediaDir = deps.env.WAITRON_MEDIA_DIR;
   const stateDir = deps.env.WAITRON_STATE_DIR;
   const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
   // Computed once so `stagingDir` below joins onto the SAME resolved root the returned `stateDir`
@@ -138,7 +137,6 @@ export async function runRestore(deps: {
     artifact,
     recoveryKey,
     databaseUrl,
-    mediaDir: resolveConfigDir(mediaDir, DEFAULT_MEDIA_ROOT),
     stateDir: resolvedStateDir,
     stagingDir: join(resolvedStateDir, "restore-staging"),
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,

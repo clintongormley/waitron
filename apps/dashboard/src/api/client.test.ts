@@ -530,16 +530,20 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("uploadImage POSTs a multipart FormData file part with no JSON content-type and returns { image }", async () => {
+  it("imageLibraryRequest preserves multipart bodies and credentials", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ image: "deadbeef.png" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
     const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "photo.png", {
       type: "image/png",
     });
-    expect(await api.uploadImage(file)).toEqual({ image: "deadbeef.png" });
+    const form = new FormData();
+    form.set("file", file);
+    expect(await api.imageLibraryRequest("/management-api/images", "POST", form)).toEqual({
+      image: "deadbeef.png",
+    });
     const call = fetchImpl.mock.calls[0] as [string, RequestInit];
     const [url, init] = call;
-    expect(url).toBe("/management-api/product-images");
+    expect(url).toBe("/management-api/images");
     expect(init.method).toBe("POST");
     expect(init.credentials).toBe("include");
     // The body is the multipart FormData carrying the file part…
@@ -553,13 +557,17 @@ describe("DashboardApi", () => {
     expect(headers["content-type"]).toBeUndefined();
   });
 
-  it("uploadImage throws the envelope code on a non-2xx", async () => {
+  it("imageLibraryRequest preserves an image error envelope", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "media.unsupported_type" } }, false, 415));
     const api = new DashboardApi("", fetchImpl);
     const file = new File([new Uint8Array([1, 2, 3])], "notes.txt", { type: "text/plain" });
-    await expect(api.uploadImage(file)).rejects.toMatchObject({ code: "media.unsupported_type" });
+    const form = new FormData();
+    form.set("file", file);
+    await expect(
+      api.imageLibraryRequest("/management-api/images", "POST", form),
+    ).rejects.toMatchObject({ code: "media.unsupported_type" });
   });
 
   it("getReceipt GETs the receipt trim with credentials", async () => {

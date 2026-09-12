@@ -1,5 +1,5 @@
-import { mkdir, realpath, rename, rm } from "node:fs/promises";
-import { join, posix, resolve } from "node:path";
+import { mkdir, rename, rm } from "node:fs/promises";
+import { join, posix } from "node:path";
 import { and, eq } from "drizzle-orm";
 import {
   AppError,
@@ -34,12 +34,9 @@ import type { BundleFiles } from "./recovery-bundle.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import "./errors.js";
 
-/** The fixed archive entry names this orchestrator understands, mirroring `backup-sweep.ts`'s pack
- * order: the plaintext index (`manifest.json`), the whole-DB dump (`db.dump`), the module non-DB
- * state under `media/` (content-addressed blobs), and the state secrets under `secrets/`. */
+/** Images are database rows; the archive carries the dump and protected state files. */
 const MANIFEST_NAME = "manifest.json";
 const DB_DUMP_NAME = "db.dump";
-const MEDIA_PREFIX = "media/";
 const SECRETS_PREFIX = "secrets/";
 const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
 const TRADING_ENV_FILE = "trading.env";
@@ -51,20 +48,13 @@ const IDENTITY_KEYS = [
   "WAITRON_TILL_LOCATION_ID",
   "WAITRON_TILL_SERIES_ID",
 ] as const;
-/** Media blobs are public content-addressed files (`GET /media/:filename`), not secrets — 0644, not
- * the 0600 the secret writers use. The staged dump IS sensitive (whole-DB plaintext), so it is 0600. */
-const MEDIA_FILE_MODE = 0o644;
+/** The staged database dump contains protected data. */
 const STAGED_DUMP_MODE = 0o600;
-/** How many media blobs `restoreMedia` writes at once — the WRITE-direction twin of
- * `backup-sources.ts`'s `CONCURRENCY`, bounding open file descriptors so a restore of a large
- * content-addressed store (thousands of blobs) cannot exhaust them (EMFILE). Writes are to distinct
- * files, so chunk order does not matter (unlike the read side, which sorts for a deterministic archive). */
-const MEDIA_WRITE_CONCURRENCY = 64;
 
 /**
  * Everything BR-3's restore orchestrator needs to turn one encrypted backup artifact back into a
  * live box: the ciphertext + its recovery key, a privileged connection to the FRESH target database,
- * the three destination roots (media / state-secrets / a scratch staging dir), the module list (for
+ * the state-secrets and scratch staging roots, the module list (for
  * both the compatibility gate's `expectedVersions` and the restore hooks), and this binary's target
  * environment. `runRestore` is injected so a unit test drives the flow without spawning `pg_restore`;
  * it defaults to {@link realPgRestore}. `migrationsRoot` is `config.migrationsRoot` (or `null` when
@@ -74,7 +64,6 @@ export interface RestoreDeps {
   readonly artifact: Uint8Array;
   readonly recoveryKey: string;
   readonly databaseUrl: string;
-  readonly mediaDir: string;
   readonly stateDir: string;
   readonly stagingDir: string;
   readonly migrationsRoot: string | null;
@@ -105,7 +94,6 @@ export interface RestoreDeps {
 export interface ValidatedArtifact {
   readonly manifest: BackupManifest;
   readonly dumpEntry: ArchiveEntry;
-  readonly mediaEntries: readonly ArchiveEntry[];
   readonly secretEntries: readonly ArchiveEntry[];
 }
 
@@ -120,7 +108,7 @@ export interface ValidatedArtifact {
  * artifact bytes alone.
  *
  * The GATE and the GUARD live HERE, before any write, on purpose: `pg_restore` mutates the live
- * database irreversibly and media/secrets writes land permanently on disk, so an incompatible manifest
+ * database irreversibly and secret writes land permanently on disk, so an incompatible manifest
  * or a single crafted-but-authentic entry name must abort before the first byte is written — never
  * after a half-restore (CLAUDE.md §5). R3 rejoin runs this BEFORE its irreversible wipe so the same
  * rejections refuse the whole operation while the old database is still intact.
@@ -142,13 +130,11 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
   // destination is refused by the guard loop regardless.
   let manifestEntry: ArchiveEntry | undefined;
   let dumpEntry: ArchiveEntry | undefined;
-  const mediaEntries: ArchiveEntry[] = [];
   const secretEntries: ArchiveEntry[] = [];
   let firstUnexpected: ArchiveEntry | undefined;
   for (const entry of entries) {
     if (entry.name === MANIFEST_NAME) manifestEntry ??= entry;
     else if (entry.name === DB_DUMP_NAME) dumpEntry ??= entry;
-    else if (entry.name.startsWith(MEDIA_PREFIX)) mediaEntries.push(entry);
     else if (entry.name.startsWith(SECRETS_PREFIX)) secretEntries.push(entry);
     else firstUnexpected ??= entry;
   }
@@ -170,52 +156,21 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
   );
   checkRestoreCompatibility(manifest, { environment: deps.environment, expectedVersions });
 
-  // FAIL-VISIBLE — every entry must route somewhere, before ANY write. This orchestrator handles
-  // exactly `manifest.json`, `db.dump`, `media/*` and `secrets/*`; an entry matching none of those
-  // (captured as `firstUnexpected` above) would otherwise be SILENTLY dropped. BR-2 emits only those
-  // four shapes today, so nothing drops now — but the day a second non-DB source id starts packing
-  // `<source>/...` blobs, a silent drop would lose that data on the cold-recovery path that must not
-  // lose it (CLAUDE.md §5), so refuse it LOUD here rather than proceed to a half-restore. Widening
-  // the routing to accept a new source is later work; this reject is the tripwire that forces it.
+  // A source without a restore destination must fail before any database or secret write.
   if (firstUnexpected !== undefined) {
     throw new AppError("restore.unexpected_entry", { name: firstUnexpected.name });
   }
 
-  // Restore creates its OWN destination roots before the guard realpath's them: the backup side
-  // mkdir's its staging (backup-sweep.ts `runOnce`), so the restore side must mkdir its staging AND
-  // its media/state destinations, or the guard's `realpath` ENOENTs on a fresh box — after `runRejoin`
-  // has already run the IRREVERSIBLE wipe, leaving the box wiped-but-not-restored. stagingDir is proven
-  // by deletion in restore.test.ts (deleting all three mkdirs fails at the FIRST guard, stagingDir);
-  // media/state are established by the same guard-realpath shape — the up-front guard realpaths all
-  // three roots (db.dump→stagingDir, media/*→mediaDir, secrets/*→stateDir), the secret-guard loop
-  // running even under `skipSecrets`. Recursive mkdir of an existing dir is a harmless no-op. These
-  // are directory creations, not artifact writes — no restored content lands until `writeValidated`.
-  // stagingDir (whole-DB plaintext dump) and stateDir (secrets) are created 0700, the same mode
-  // `state-secrets.ts` uses for secret-bearing dirs — a world/group-readable dir would expose the
-  // 0600 files inside it by traversal. `mode` applies only when the dir is CREATED here; an existing
-  // dir keeps the operator's perms (mkdir does not tighten one). mediaDir is public content served at
-  // `/media/*` (0644 files), so it takes the default mode like `local-fs-backend.ts`.
+  // The path guard resolves existing roots; create protected directories before validating entries.
+  // Existing directory permissions belong to the operator and are not changed by mkdir.
   await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
-  await mkdir(deps.mediaDir, { recursive: true });
   await mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
 
-  // GUARD — every entry against ITS destination root, before ANY write. The db.dump goes to
-  // stagingDir, media/* to mediaDir, secrets/* to stateDir; each is guarded against the root it
-  // will actually be written under, with the same prefix-stripping the writes use, so the guard
-  // validates the real target and a crafted name aborts before pg_restore or any file write.
+  // Guard each entry against the same destination and stripped name used by its writer.
   const destinations = new Set<string>();
   for (const entry of entries) {
-    const prefix = entry.name.startsWith(MEDIA_PREFIX)
-      ? MEDIA_PREFIX
-      : entry.name.startsWith(SECRETS_PREFIX)
-        ? SECRETS_PREFIX
-        : "";
-    const root =
-      prefix === MEDIA_PREFIX
-        ? deps.mediaDir
-        : prefix === SECRETS_PREFIX
-          ? deps.stateDir
-          : deps.stagingDir;
+    const prefix = entry.name.startsWith(SECRETS_PREFIX) ? SECRETS_PREFIX : "";
+    const root = prefix === SECRETS_PREFIX ? deps.stateDir : deps.stagingDir;
     const target = await assertSafeEntryName(entry.name.slice(prefix.length), root);
     if (destinations.has(target)) {
       throw new AppError("restore.unsafe_entry_path", { name: entry.name });
@@ -226,13 +181,13 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
 
   if (!deps.skipSecrets) readArtifactIdentity(secretEntries);
 
-  return { manifest, dumpEntry, mediaEntries, secretEntries };
+  return { manifest, dumpEntry, secretEntries };
 }
 
 /**
  * Identity completeness is checked by `validateArtifact`: refusal leaves the target intact, before
  * any set-aside or database restore. After validation, set any existing identity aside → restore
- * database and media → migrate → run module hooks and settle series in one transaction → write
+ * database → migrate → run module hooks and settle series in one transaction → write
  * secrets. Once the old identity is set
  * aside, a failure before the secrets write leaves no bootable identity. `skipSecrets` keeps the
  * target's identity and skips hooks.
@@ -253,7 +208,6 @@ export async function writeValidated(
       runRestore: deps.runRestore ?? realPgRestore,
       log,
     });
-    await restoreMedia({ entries: validated.mediaEntries, mediaDir: deps.mediaDir, log });
     // The gate admits an OLDER schema; a hook written against today's must not run against
     // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
     await (deps.migrate ?? applyMigrations)(
@@ -304,7 +258,7 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
 
 /**
  * Write the DB dump to a staging file and feed it to `pg_restore`. Exposed for R3 composition
- * (restore DB + media, skip secrets). Guards `db.dump` against `stagingDir` (defence in depth — the
+ * (restore DB, skip secrets). Guards `db.dump` against `stagingDir` (defence in depth — the
  * name is a fixed literal, but a step must be safe called standalone) and writes it 0600 (whole-DB
  * plaintext). Returns the staged path so the caller can clean it; cleanup is the caller's job — a
  * restore READS the dump and WRITES the live DB, so there is no half-written artifact to fan out
@@ -323,41 +277,6 @@ export async function restoreDatabase(args: {
   args.log("info", "restore.db.staged", { bytes: args.dumpBytes.byteLength });
   await args.runRestore({ databaseUrl: args.databaseUrl, inFile, signal: args.signal });
   return inFile;
-}
-
-/**
- * Restore every `media/<file>` entry into `mediaDir`, prefix stripped, byte-for-byte (media is
- * binary — jpg/webp/png). Exposed for R3. Each name is guarded against `mediaDir` (the same two-layer
- * lexical+symlink check the orchestrator runs up front) so this is safe standalone; writes are atomic
- * (a public serve route must never read a torn blob) and 0644 (public content, not a secret).
- */
-export async function restoreMedia(args: {
-  entries: readonly ArchiveEntry[];
-  mediaDir: string;
-  log: Logger;
-}): Promise<void> {
-  // realpath(mediaDir) is the SAME for every entry, so compute it once here rather than once per
-  // blob — `assertSafeEntryName`'s realDestRoot param exists for exactly this fan-out.
-  const realMediaDir = await realpath(resolve(args.mediaDir));
-  // Write in bounded-concurrency CHUNKS rather than a sequential loop or one unbounded `Promise.all`
-  // — the same fan-out `backup-sources.ts` uses on the read side (see `MEDIA_WRITE_CONCURRENCY`).
-  // Each entry keeps its own `assertSafeEntryName` guard (the two-layer lexical+symlink check); a
-  // single unsafe name rejects its chunk's `Promise.all` and so the whole call. Distinct target
-  // files mean write order is irrelevant.
-  for (let i = 0; i < args.entries.length; i += MEDIA_WRITE_CONCURRENCY) {
-    const chunk = args.entries.slice(i, i + MEDIA_WRITE_CONCURRENCY);
-    await Promise.all(
-      chunk.map(async (entry) => {
-        const target = await assertSafeEntryName(
-          entry.name.slice(MEDIA_PREFIX.length),
-          args.mediaDir,
-          realMediaDir,
-        );
-        await writeFileAtomic(target, entry.bytes, MEDIA_FILE_MODE);
-      }),
-    );
-  }
-  args.log("info", "restore.media.done", { count: args.entries.length });
 }
 
 /**

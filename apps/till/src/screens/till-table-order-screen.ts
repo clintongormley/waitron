@@ -1,3 +1,4 @@
+import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -483,6 +484,7 @@ export class TillTableOrderScreen extends LitElement {
 
   constructor() {
     super();
+    new ContentLanguageController(this);
     // Re-render on any round change (add/remove/clear) so the round basket and the Enviar-ronda
     // disabled state track the store; the controller owns the subscription lifecycle.
     new StoreChangeController(this, () => this.#roundStore);

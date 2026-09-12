@@ -47,7 +47,7 @@ describe.each(["light", "dark"] as const)("option-group-manager a11y (%s theme)"
   it("renders accessibly with groups collapsed", async () => {
     const { host } = await mountWidget<OptionGroupManager>(
       "dashboard-option-group-manager",
-      { groups },
+      { locales: ["es"], groups },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -56,7 +56,7 @@ describe.each(["light", "dark"] as const)("option-group-manager a11y (%s theme)"
   it("renders accessibly with a group's items panel expanded", async () => {
     const { host } = await mountWidget<OptionGroupManager>(
       "dashboard-option-group-manager",
-      { groups, expandedGroupId: "g1", items },
+      { locales: ["es"], groups, expandedGroupId: "g1", items },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -65,7 +65,7 @@ describe.each(["light", "dark"] as const)("option-group-manager a11y (%s theme)"
   it("renders accessibly with a group error shown", async () => {
     const { host } = await mountWidget<OptionGroupManager>(
       "dashboard-option-group-manager",
-      { groups, groupError: "options.group_invalid" },
+      { locales: ["es"], groups, groupError: "options.group_invalid" },
       theme,
     );
     await expectNoA11yViolations(host);

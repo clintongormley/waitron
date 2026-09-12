@@ -1,3 +1,4 @@
+import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -68,6 +69,11 @@ export interface ModifierConfirmDetail {
  */
 @customElement("till-modifier-picker")
 export class TillModifierPicker extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     selectStyles,

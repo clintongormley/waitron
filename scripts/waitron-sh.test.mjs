@@ -234,10 +234,11 @@ describe("waitron.sh reset", () => {
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
     const calls = readFileSync(sb.log, "utf8");
-    for (const v of ["db", "logs", "media", "backups", "mailpit", "print_agent"]) {
+    for (const v of ["db", "logs", "backups", "mailpit", "print_agent"]) {
       expect(calls).toMatch(new RegExp(`docker volume rm .*waitron_${v}\\b`));
     }
     expect(calls).not.toMatch(/docker volume rm .*waitron_state\b/);
+    expect(calls).not.toMatch(/docker volume rm .*waitron_media\b/);
     // state emptied except tls, via a throwaway container.
     expect(calls).toMatch(/docker run .*waitron_state.* find \/s .*! -name tls/);
     expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain("POSTGRES_PASSWORD=keepme");

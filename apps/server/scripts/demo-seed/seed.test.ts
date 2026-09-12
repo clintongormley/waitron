@@ -12,10 +12,7 @@
 // Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
 // `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -93,21 +90,6 @@ async function provisionVenue(): Promise<Venue> {
 }
 
 describe("seedDemoRestaurant", () => {
-  let mediaDir: string;
-  const priorMediaDir = process.env.WAITRON_MEDIA_DIR;
-
-  beforeAll(async () => {
-    // Point the media step at a throwaway dir, never the repo's dev media store.
-    mediaDir = await mkdtemp(join(tmpdir(), "waitron-seed-media-"));
-    process.env.WAITRON_MEDIA_DIR = mediaDir;
-  });
-
-  afterAll(async () => {
-    if (priorMediaDir === undefined) delete process.env.WAITRON_MEDIA_DIR;
-    else process.env.WAITRON_MEDIA_DIR = priorMediaDir;
-    if (mediaDir !== undefined) await rm(mediaDir, { recursive: true, force: true });
-  });
-
   it("runs every sub-seed: both menus, the floor, the staff, a sale, and content-addressed media", async () => {
     const venue = await provisionVenue();
 

@@ -58,7 +58,7 @@ export async function collectStateSecrets(stateDir: string): Promise<BundleFiles
  * reveals that. `destRoot` must already exist (its callers create it before validating any entry).
  *
  * `realDestRoot` is `realpath(resolve(destRoot))`, precomputed by the caller — a caller validating
- * many entries against the same root (`unpackBundleToDir`'s loop, `restoreMedia`'s chunks) computes
+ * many entries against the same root (`unpackBundleToDir`'s loop) computes
  * it ONCE rather than once per entry; a single-entry caller (`assertSafeEntryName`) just computes it
  * inline before the one call, which costs nothing extra.
  *

@@ -29,7 +29,13 @@ const COURSES: Course[] = [
 
 /** The base props every mount needs: an open dialog scoped to a catalogue, with the category list. */
 function baseProps(overrides: Partial<ProductForm> = {}): Partial<ProductForm> {
-  return { open: true, catalogueId: "cat-1", categories: CATEGORIES, ...overrides };
+  return {
+    open: true,
+    catalogueId: "cat-1",
+    categories: CATEGORIES,
+    locales: ["es"],
+    ...overrides,
+  };
 }
 
 /** The wt-dialog inside the form, once its own first render (which calls showModal) has settled. */
@@ -70,7 +76,7 @@ async function emitAllergens(el: ProductForm, value: AllergenDeclaration): Promi
   await el.updateComplete;
 }
 
-/** Announce a stored image reference from the child upload control, as its event would. */
+/** Announce a stored image reference from the child image control, as its event would. */
 async function emitImage(el: ProductForm, image: string): Promise<void> {
   const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
   upload.dispatchEvent(
@@ -92,8 +98,42 @@ function nextEvent<T>(el: ProductForm, type: string): Promise<CustomEvent<T>> {
 }
 
 describe("product-form", () => {
+  it("suspends Save and Enter while the image library is open", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
+    await setInput(el, "description-es", "Pan");
+    const created = vi.fn();
+    el.addEventListener("create-product", created);
+    const uploader = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+    uploader.dispatchEvent(
+      new CustomEvent("image-picker-state", {
+        detail: { open: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    confirm(el);
+    const description = el
+      .shadowRoot!.querySelector("[data-test=description-es]")!
+      .shadowRoot!.querySelector("input")!;
+    description.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    expect(created).not.toHaveBeenCalled();
+    uploader.dispatchEvent(
+      new CustomEvent("image-picker-state", {
+        detail: { open: false },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    confirm(el);
+    expect(created).toHaveBeenCalledOnce();
+  });
   it("stays closed by default", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       catalogueId: "cat-1",
       categories: CATEGORIES,
     });
@@ -119,6 +159,7 @@ describe("product-form", () => {
 
   it("keeps selling prices and preparation routing out of the product editor", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -239,6 +280,24 @@ describe("product-form", () => {
   // product is a UI error). An empty name blocks confirm — no event — and shows an error. The banner
   // renders LOCALISED copy through the i18n layer, never the raw `product.description_required` code
   // (which stays raw in @state; codeMessage maps it at the render edge, mirroring the screens).
+  it("names native controls and offers Cancel in the shared form footer", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
+    for (const control of el.shadowRoot!.querySelectorAll("select, wt-switch, wt-input")) {
+      expect(
+        control.getAttribute("name"),
+        control.getAttribute("data-test") ?? control.tagName,
+      ).not.toBeNull();
+    }
+    const dialog = await openedDialog(el);
+    const footer = el.shadowRoot!.querySelector('wt-form-actions[slot="footer"]');
+    expect(footer).not.toBeNull();
+    footer!.querySelector<HTMLElement>('[slot="cancel"]')!.click();
+    await el.updateComplete;
+    await new Promise(requestAnimationFrame);
+    expect(el.open).toBe(false);
+    expect(dialog.open).toBe(false);
+  });
+
   it("blocks confirm and shows a localised error when the primary description is empty", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
     let fired = false;
@@ -250,6 +309,7 @@ describe("product-form", () => {
     expect(alert).not.toBe(null);
     expect(alert!.textContent).toContain(codeMessage("product.description_required", "es-ES"));
     expect(alert!.textContent).not.toContain("product.description_required");
+    expect(alert!.textContent).toContain(t("form.error_heading"));
   });
 
   // Whitespace-only is still empty.
@@ -295,6 +355,7 @@ describe("product-form", () => {
 
   it("pre-fills every field from a passed product in edit mode", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -327,6 +388,7 @@ describe("product-form", () => {
 
   it("emits update-product with the id and a patch of the mutable fields in edit mode", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -355,6 +417,7 @@ describe("product-form", () => {
   // (it resets the declaration to PENDING), unlike a create.
   it("sends allergens: null in an edit patch to clear the declaration", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -391,6 +454,7 @@ describe("product-form", () => {
       dietOverride: null,
     };
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       ...baseProps(),
       product,
       open: true,
@@ -419,7 +483,7 @@ describe("product-form", () => {
 
   // The api the screen passes for uploads is threaded down to the image control unchanged.
   it("passes its api through to the image-upload control", async () => {
-    const api = { uploadImage: vi.fn() } as unknown as DashboardApi;
+    const api = { imageLibraryRequest: vi.fn() } as unknown as DashboardApi;
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps({ api }));
     const upload = el.shadowRoot!.querySelector<HTMLElement & { api: unknown }>(
       "dashboard-image-upload",
@@ -446,6 +510,7 @@ describe("product-form", () => {
 
   it("renders the default-course select in edit mode (a none option + one per course)", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -468,6 +533,7 @@ describe("product-form", () => {
 
   it("emits set-product-course with the product id + picked course on change", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -485,6 +551,7 @@ describe("product-form", () => {
 
   it("emits set-product-course with a null courseId when the none option is picked", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -555,10 +622,7 @@ describe("product-form", () => {
     expect(values).toEqual(["og1", "og2", "og3"]);
   });
 
-  // A picker option's label falls back to another locale's name, then to the bare id — the same
-  // `primaryName` rule `option-group-manager.ts` uses for its own rows, duplicated here for the
-  // picker's inline label (the picker offers groups, not items/groups this widget owns state for).
-  it("labels a picker option by another locale's name, then by the bare id", async () => {
+  it("labels a picker option by its id when the default name is missing", async () => {
     const oddGroups: OptionGroup[] = [
       {
         id: "og4",
@@ -578,10 +642,10 @@ describe("product-form", () => {
     const labels = [
       ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=option-group-pick] option"),
     ].map((o) => o.textContent!.trim());
-    expect(labels).toEqual(["Sauce", "og5"]);
+    expect(labels).toEqual(["og4", "og5"]);
   });
 
-  it("labels an attached row by another locale's name, then by the bare id", async () => {
+  it("labels an attached row by its id when the default name is missing", async () => {
     const oddGroups: OptionGroup[] = [
       {
         id: "og4",
@@ -595,6 +659,7 @@ describe("product-form", () => {
       { id: "og5", name: {}, minSelect: 0, maxSelect: 1, required: false, sort: 0, active: true },
     ];
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -603,7 +668,8 @@ describe("product-form", () => {
     });
     await el.updateComplete;
     const rows = el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]");
-    expect(rows[0]!.textContent).toContain("Sauce");
+    expect(rows[0]!.textContent).toContain("og4");
+    expect(rows[0]!.textContent).not.toContain("Sauce");
     expect(rows[1]!.textContent).toContain("og5");
   });
 
@@ -699,6 +765,7 @@ describe("product-form", () => {
 
   it("seeds the attach list from attachedGroupIds (the read-back), in order, in edit mode", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -721,6 +788,7 @@ describe("product-form", () => {
   // is still in flight — so a row for it falls back to the bare id rather than throwing on a lookup miss.
   it("shows the bare id for an attached group not (yet) present in optionGroups", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -737,6 +805,7 @@ describe("product-form", () => {
     // Mirrors the async read-back the screen kicks off on edit-product: the form opens first (product
     // set, attachedGroupIds still its default []), then the screen's GET resolves and updates the prop.
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -755,6 +824,7 @@ describe("product-form", () => {
 
   it("resets the attach list to empty when the form reopens for a create after an edit", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -837,6 +907,7 @@ describe("product-form", () => {
   // the diet twin of seeding the allergen picker from `manualAllergens`).
   it("seeds the diet controls from the product's dietOverride in edit mode", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,
@@ -859,6 +930,7 @@ describe("product-form", () => {
   // override edited to all-auto sends `null`, clearing the override server-side.
   it("clears the override to null in an edit patch when every control is reset to auto", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      locales: ["es"],
       open: true,
       catalogueId: "cat-1",
       categories: CATEGORIES,

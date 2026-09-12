@@ -1,9 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { startManagementSession } from "@waitron/identity";
@@ -21,7 +18,6 @@ let venue: VenueResult;
 let cookie: string;
 let foreignCookie: string;
 let moduleVersions: Record<string, number>;
-let mediaDir: string;
 
 const request: VenueRequest = {
   country: "ES",
@@ -93,13 +89,6 @@ const suite = usePgliteDb({
   },
 });
 
-beforeAll(async () => {
-  mediaDir = await mkdtemp(join(tmpdir(), "waitron-configuration-export-"));
-});
-afterAll(async () => {
-  if (mediaDir !== undefined) await rm(mediaDir, { recursive: true, force: true });
-});
-
 function app(): Hono {
   const app = new Hono();
   mountConfigurationExportApi(
@@ -109,7 +98,6 @@ function app(): Hono {
       cfg: venue,
       modules: ALL_MODULES,
       moduleVersions,
-      mediaDir,
       now: () => new Date("2026-09-09T00:00:00.000Z"),
     },
     noopLog,

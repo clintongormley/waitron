@@ -78,7 +78,6 @@ vi.mock("undici", async (importOriginal) => {
   };
 });
 
-const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-e2e-media-"));
 const FISCAL_NONE_OFF = JSON.stringify({ modules: { "fiscal-none": false } });
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-e2e-state-"));
 writeFileSync(join(STATE_ROOT, "modules.json"), FISCAL_NONE_OFF);
@@ -91,7 +90,6 @@ const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: CREDENTIALS_KEY,
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  WAITRON_MEDIA_DIR: MEDIA_ROOT,
   WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
   WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
@@ -295,7 +293,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  rmSync(MEDIA_ROOT, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 

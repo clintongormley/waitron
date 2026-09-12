@@ -1,6 +1,6 @@
 import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as liveRetryDelay } from "node:timers/promises";
 import { serve } from "@hono/node-server";
@@ -116,7 +116,6 @@ import {
 } from "./configuration-import.js";
 import {
   importConfigurationTables,
-  publishConfigurationMedia,
   validateConfigurationBundle,
 } from "./configuration-transfer.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
@@ -131,7 +130,6 @@ import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
-import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
@@ -244,25 +242,15 @@ interface BootTeardown {
 export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.meta.url));
 
 /**
- * The default local store for product images, computed exactly as `DEFAULT_MIGRATIONS_ROOT` above:
- * beside the bundle (`<dist>/media`) for a built artefact, or `apps/server/src/media` run from
- * source. `WAITRON_MEDIA_DIR` overrides it (config.ts), and deployment (#9) sets it explicitly to a
- * durable path; this default only has to exist so a from-source dev boot has somewhere to write.
- * Threaded into `loadConfig` as the `defaultMediaRoot` argument, the same way this file supplies
- * `DEFAULT_MIGRATIONS_ROOT`.
- */
-export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url));
-
-/**
  * The default persisted store for the box's self-signed cert PEMs and generated secrets, computed
- * exactly as `DEFAULT_MEDIA_ROOT` above: beside the bundle (`<dist>/state`) for a built artefact, or
+ * beside the server entry point: beside the bundle (`<dist>/state`) for a built artefact, or
  * `apps/server/src/state` run from source. The setup branch below materialises the box's self-signed
  * cert + secrets here on first setup boot (`ensureBoxSecrets`, `box-secrets.ts`) and serves the setup
  * surface over HTTPS from them; leaf renewal/rotation is later work. `WAITRON_STATE_DIR`
  * overrides it (config.ts), and deployment (#9) sets a durable, protected path; this default only has
  * to exist so a from-source dev boot has somewhere to write. The dev default is gitignored
  * (`apps/server/src/state/`) because it holds SECRETS. Threaded into `loadConfig` as the
- * `defaultStateRoot` argument, the same way this file supplies `DEFAULT_MEDIA_ROOT`.
+ * `defaultStateRoot` argument.
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
@@ -736,7 +724,7 @@ export async function startServer(
   // Config is loaded FIRST so `config.logDir` + the rotation knobs are available when the file sink is
   // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
   // escapes here (§8) before any logger, pool or listener exists.
-  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
+  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
   // The addresses this box tells the LAN to reach it on — the leaf's iPAddress SANs, the discovery
   // document's IP URLs (and the QR built from them) and the mDNS answers. One resolver, so all three
   // read the same list on any single call: the operator's `WAITRON_BOX_ADDRESSES` when set, else the
@@ -1055,7 +1043,6 @@ export async function startServer(
                   artifact: candidate.artifact,
                   recoveryKey: candidate.recoveryKey,
                   databaseUrl: config.migrationsDatabaseUrl,
-                  mediaDir: config.mediaDir,
                   stateDir: config.stateDir,
                   stagingDir: join(config.stateDir, "restore-staging"),
                   migrationsRoot: config.migrationsRoot,
@@ -1186,28 +1173,10 @@ export async function startServer(
                 },
                 req,
               );
-              if (staged !== null) {
-                await publishConfigurationMedia(
-                  staged.artifact,
-                  staged.passphrase,
-                  config.mediaDir,
-                );
-              }
               return result;
             },
             recoverProvision: async (req) => {
               const result = await recoverProvisionedVenue(ownerDb, req);
-              if (req.configurationImport) {
-                const staged = await readStagedConfigurationImport(config.stateDir, ring);
-                if (staged === null) {
-                  throw new AppError("setup.request_invalid", { field: "configurationImport" });
-                }
-                await publishConfigurationMedia(
-                  staged.artifact,
-                  staged.passphrase,
-                  config.mediaDir,
-                );
-              }
               return result;
             },
             seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
@@ -1733,13 +1702,6 @@ export async function startServer(
   });
   const duty = reconcilerAsDuty(reconciler);
 
-  // The product-image store must exist before mounting the routes that read and write it (the
-  // upload/serve mounts land in later slices). Done ONCE here, not per request; `recursive: true`
-  // makes it idempotent — a no-op once the directory is there, which is every boot after the first.
-  // After migrations deliberately: a boot that fails earlier never creates a stray media directory.
-  // Trading-only — a setup box serves no media.
-  mkdirSync(config.mediaDir, { recursive: true });
-
   // CORS for the venue's own origins on `/api/*` (till-reroute §3.4), registered before the API mounts
   // so it wraps them and after `requestIdMiddleware` so the request id is stamped first. Trading-only:
   // the allow-list reads the held membership document off `db`, which a setup box has not provisioned.
@@ -1750,7 +1712,7 @@ export async function startServer(
     now: () => Date.now(),
   });
   app.use("/api/*", corsForVenue(allowOrigin));
-  // The media surface is served at `/media/*` (media-api.ts), OUTSIDE `/api/*`, but §3.4 lists it
+  // The media module serves `/media/*`, OUTSIDE `/api/*`, but §3.4 lists it
   // among the CORS surfaces: a rerouted till fetches menu photos cross-origin. Same `allowOrigin`
   // instance — one allow-list, not a second read path.
   app.use("/media/*", corsForVenue(allowOrigin));
@@ -2046,7 +2008,6 @@ export async function startServer(
         },
         modules: setsToMigrate,
         moduleVersions: appliedModuleVersions,
-        mediaDir: config.mediaDir,
       },
       log,
     );
@@ -2068,21 +2029,21 @@ export async function startServer(
   // All three routes are gated behind `diagnostics.view`. Routes only — no database work at boot;
   // the gate runs per request.
   mountDiagnosticsApi(app, { db, cfg: { tenantId: till.tenantId }, reader, verbosity }, log);
-  // The deployment holds one tenant per database. The dashboard's gated catalogue write group
-  // (catalogues/categories/products + image upload) on the SAME app, the identical convention. It
-  // reuses the EXACT `db` and tenant `mountManagementApi` above receives (`till.tenantId`) so the
-  // two cannot drift, plus the store `mkdirSync` above ensured (`config.mediaDir`) and the shared
-  // `MAX_UPLOAD_BYTES` DoS ceiling — one value read by this mount and its route, not two
-  // literals. No fiscal backend, clock or card provider: these routes touch only the catalogue
-  // and the image store. Routes only — no database work at boot; the `person.manage` gate runs
-  // per request.
+  // Catalogue writes and language settings share the management permission gate.
   mountCatalogueApi(
     app,
     {
       db,
       cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
-      mediaDir: config.mediaDir,
-      maxUploadBytes: MAX_UPLOAD_BYTES,
+      contentTranslationGaps: async (tx, tenantId, language) => {
+        const gaps = [];
+        for (const module of setsToMigrate) {
+          if (module.contentTranslations)
+            gaps.push(...(await module.contentTranslations.gaps(tx, tenantId, language)));
+        }
+        return gaps;
+      },
+      venueLocale,
     },
     log,
   );
@@ -2103,7 +2064,12 @@ export async function startServer(
   // seat; the other `mount*Api` calls stay as they are.
   const routeCtx: ModuleRouteContext = {
     db,
-    cfg: { tenantId: till.tenantId, locationId: till.locationId },
+    cfg: {
+      tenantId: till.tenantId,
+      locationId: till.locationId,
+      contentDefaultLanguage: venueLocale,
+    },
+    maxUploadBytes: MAX_UPLOAD_BYTES,
     core: { openTab: (tx, req) => openTab(tx, till, req) },
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
@@ -2169,13 +2135,6 @@ export async function startServer(
     },
     log,
   );
-  // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /
-  // `mountTillApi` / `mountManagementApi` convention again. Deliberately UNAUTHENTICATED and taking
-  // no `db`/session: it serves bytes from `config.mediaDir` (the store `mkdirSync` above ensured),
-  // guarding the filename against traversal with its own explicit regex (design §5e). Mounted after
-  // the gated groups purely for reading order; route registration only, no database work at boot.
-  mountMedia(app, { mediaDir: config.mediaDir }, log);
-
   // The backup duty's lifecycle owner (BR-1 Task 4). It re-reads the box-env files from DISK on every
   // `reload()` (so the wizard's `backup.env` takes effect without a restart), derives the read
   // connection — the config's explicit `WAITRON_BACKUP_DATABASE_URL` or, when unset, the box's own
@@ -2191,7 +2150,6 @@ export async function startServer(
     modules: ALL_MODULES,
     environment: config.environment,
     stateDir: config.stateDir,
-    mediaDir: config.mediaDir,
     jitterSeed: till.nodeId,
     // The venue's real wall clock (tz + business-day cutover), tenant-scoped and keyed by this node —
     // the same read `report-api` uses, so an `at: "auto"` / wall-clock schedule fires in the venue's

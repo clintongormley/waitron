@@ -60,7 +60,18 @@ describe("VenueServiceApi", () => {
       .mockResolvedValueOnce(jsonResponse([{ id: "s1", name: "Bar", isDefault: false }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "p1", descriptions: { en: "Negroni" } }]))
-      .mockResolvedValueOnce(jsonResponse([{ id: "i1", productId: "p1", grossPrice: "9.00" }]));
+      .mockResolvedValueOnce(jsonResponse([{ id: "i1", productId: "p1", grossPrice: "9.00" }]))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            id: "sec-empty",
+            menuId: "m1",
+            name: { en: "Desserts" },
+            displayOrder: 0,
+            active: true,
+          },
+        ]),
+      );
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
 
     await expect(api.load()).resolves.toMatchObject({
@@ -68,6 +79,9 @@ describe("VenueServiceApi", () => {
       categories: [{ id: "c1", name: "Cocktails" }],
       stations: [{ id: "s1", name: "Bar" }],
       floorZones: [{ id: "z1", name: "Upstairs" }],
+      sections: [
+        { id: "sec-empty", menuId: "m1", name: { en: "Desserts" }, displayOrder: 0, active: true },
+      ],
     });
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
@@ -77,6 +91,7 @@ describe("VenueServiceApi", () => {
       "/management-api/zones",
       "/management-api/catalogues/m1/products",
       "/management-api/catalogues/m1/offers",
+      "/management-api/catalogues/m1/sections",
     ]);
   });
 
@@ -99,6 +114,7 @@ describe("VenueServiceApi", () => {
     await api.deleteRoute("r1");
     await api.createMenu("Terrace drinks");
     await api.createMenuSection("m1", { name: { en: "Cocktails" }, displayOrder: 0 });
+    await api.updateMenuSection("sec1", { name: { en: "Drinks", fr: "Boissons" } });
     await api.createMenuItem("m1", {
       productId: "p1",
       sectionId: "sec1",
@@ -118,9 +134,13 @@ describe("VenueServiceApi", () => {
       ["/management-api/venue-service/routes/r1", "DELETE"],
       ["/management-api/catalogues", "POST"],
       ["/management-api/catalogues/m1/sections", "POST"],
+      ["/management-api/menu-sections/sec1", "PATCH"],
       ["/management-api/catalogues/m1/items", "POST"],
       ["/management-api/catalogues/m1/items/i1", "PATCH"],
       ["/management-api/catalogues/m1/items/i1", "DELETE"],
     ]);
+    expect(JSON.parse(fetchImpl.mock.calls[9]![1].body as string)).toEqual({
+      name: { en: "Drinks", fr: "Boissons" },
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -6,8 +7,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { donenessLabel } from "../i18n/doneness-label.js";
 import { selectStyles } from "../select-styles.js";
-import { productName } from "./product-name.js";
-import { descriptionFor } from "./dish-format.js";
+import { descriptionFor, snapshotDescriptionFor } from "./dish-format.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
@@ -192,6 +192,7 @@ export class TillBasket extends LitElement {
 
   constructor() {
     super();
+    new ContentLanguageController(this);
     // Re-render on any basket change (add / remove / clear); the controller owns the subscription
     // lifecycle. `() => this.store` is read lazily on connect, after the property is assigned. The
     // custom handler also closes a dangling editor when the whole basket is swapped out.
@@ -245,6 +246,17 @@ export class TillBasket extends LitElement {
     this.store.removeLine(index);
   }
 
+  #lineText(line: OrderLine, text: Record<string, string>, fallback: string): string {
+    // Retrieved rows carry receipt snapshots; new selections carry enabled catalogue translations.
+    return line.workingOrderLineId === undefined
+      ? descriptionFor(text, fallback)
+      : snapshotDescriptionFor(text, fallback);
+  }
+
+  #lineName(line: OrderLine): string {
+    return this.#lineText(line, line.product.descriptions, line.product.id);
+  }
+
   override render() {
     const lines = this.store.lines;
     if (lines.length === 0) {
@@ -254,7 +266,7 @@ export class TillBasket extends LitElement {
       ${lines.map(
         (line, index) => html`
           <div class="line">
-            <span class="name">${productName(line.product)}</span>
+            <span class="name">${this.#lineName(line)}</span>
             ${this.#quantityCell(line, index)}
             <span class="line-total">${formatMoney(dishGross(line))}</span>
             <wt-button
@@ -263,7 +275,7 @@ export class TillBasket extends LitElement {
               size="md"
               data-test=${`line-note-button-${index}`}
               aria-expanded=${this.editingIndex === index}
-              aria-label=${`${t("line.note.button")} ${productName(line.product)}`}
+              aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
               @click=${() => this.#toggleEditor(index)}
             >
               ${t("line.note.button")}
@@ -272,7 +284,7 @@ export class TillBasket extends LitElement {
               class="remove"
               variant="ghost"
               size="md"
-              aria-label=${`${t("action.remove")} ${productName(line.product)}`}
+              aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
               @click=${() => this.#removeLine(index)}
             >
               <span aria-hidden="true">×</span>
@@ -288,7 +300,7 @@ export class TillBasket extends LitElement {
             (option) => html`
               <div class="option">
                 <span class="name"
-                  >${descriptionFor(option.name, "")}${optionQuantityBadge(option.quantity)}</span
+                  >${this.#lineText(line, option.name, "")}${optionQuantityBadge(option.quantity)}</span
                 >
                 <span class="option-total">${formatMoney(optionGross(line, option))}</span>
               </div>
@@ -382,7 +394,7 @@ export class TillBasket extends LitElement {
       return html`<span class="qty">${quantityLabel(line)}</span>`;
     }
     const count = Number(line.quantity);
-    const name = productName(line.product);
+    const name = this.#lineName(line);
     return html`
       <span class="qty stepper">
         <wt-button

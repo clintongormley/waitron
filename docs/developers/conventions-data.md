@@ -310,3 +310,11 @@ identifier into a generic package, a regime term in any language into `packages/
 module's word to the base list instead of the module's own declaration, or one that drops a generic
 package from `GENERIC_PACKAGES` (and its pin) to make a scan pass, is a design question to raise,
 not a nit to wave through.
+
+## Schema-qualify helpers used by expression indexes
+
+Restore can rebuild an index with an empty `search_path`, so nested user-defined calls must name
+their schema explicitly. The populated-image restore failed with `media_text_config` missing until
+the media search functions called `public.media_text_config`. The real restore regression then
+passed: `apps/server/src/restore-fiscal-e2e.test.ts`, “re-registers the SIF…”, with its command recorded
+in [the image-library plan](../superpowers/plans/2026-09-12-image-library.md).

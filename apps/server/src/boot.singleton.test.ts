@@ -55,7 +55,6 @@ const TILL_ENV = {
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
-const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-singleton-media-"));
 // A `modules.json` resolving the two-member fiscal slot to Veri*Factu (disabling `fiscal-none`), so a
 // trading boot does not refuse `module.fiscal_slot_ambiguous` under the default-on both-enabled set.
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-singleton-state-"));
@@ -70,7 +69,6 @@ const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  WAITRON_MEDIA_DIR: MEDIA_ROOT,
   WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_ENV: "preproduction",
   ...TILL_ENV,
@@ -132,7 +130,6 @@ beforeAll(async () => {
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   if (backupDir !== undefined) await rm(backupDir, { recursive: true, force: true });
-  rmSync(MEDIA_ROOT, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 

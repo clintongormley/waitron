@@ -24,7 +24,7 @@ export interface SpaDeps {
 }
 
 /** A content-addressed asset name (`app-<hash>.js`) changes only when its bytes change, so its URL is
- * safe to cache forever — the same reasoning `media-api.ts` caches a content-hashed image under. */
+ * safe to cache forever. */
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 /** index.html and any non-hashed file carry a stable URL whose CONTENTS change on each deploy, so they
  * must be revalidated — otherwise a browser pins a stale index.html and never sees the new bundle. */
@@ -142,7 +142,7 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
 /**
  * Read a file and answer with it, or a bare 404. Any read failure is a 404 to the caller — this route
  * never 500s and never leaks filesystem detail — but a non-ENOENT failure (a misconfigured root, a
- * permission problem) is logged once, exactly as `media-api.ts` does for its media reads. ENOENT is
+ * permission problem) is logged once. ENOENT is
  * the ordinary "no such file" and is left unlogged.
  */
 async function sendFile(
@@ -158,8 +158,7 @@ async function sendFile(
     return c.body(bytes, 200, {
       // Hono ships an extension→Content-Type table for its own static server; reuse it rather than
       // hand-maintaining a local map that silently drifts from it. Unknown extensions → octet-stream
-      // (getMimeType returns undefined), as before. (Unlike media-api.ts's closed 3-type upload
-      // allowlist, a built SPA emits an open set of file types, which is exactly getMimeType's job.)
+      // when getMimeType returns undefined.
       "Content-Type": getMimeType(absolutePath) ?? "application/octet-stream",
       "Cache-Control": cacheControl,
     });
@@ -167,6 +166,6 @@ async function sendFile(
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") return c.body(null, 404); // missing file → plain 404, no fallback
     log("error", "spa.read_failed", { path: absolutePath, code });
-    return c.body(null, 404); // never 500, never leak fs detail — as media-api.ts does
+    return c.body(null, 404); // Never expose filesystem details.
   }
 }

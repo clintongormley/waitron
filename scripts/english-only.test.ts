@@ -111,6 +111,7 @@ describe("configuration", () => {
       "workforce",
       "identity",
       "catalogue",
+      "media",
       "sync",
       "tunnel",
       "membership",

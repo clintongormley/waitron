@@ -52,6 +52,7 @@ import {
   priceBasketWithOptions,
   priceLockedLines,
   toInvoiceLineDescriptions,
+  readContentLanguages,
 } from "@waitron/catalogue";
 import type {
   BasketItemWithOptions,
@@ -464,25 +465,14 @@ async function priceOrderLines(
   // filed `sale_lines` (Task 4/5) — and through the working_order_lines self-FK built below.
   const priced = priceBasketWithOptions(items);
 
-  // Feature B — re-key catalogue content to the fiscal line. Catalogue descriptions are authored under
-  // the BARE language tag (`es` = "our Spanish"); the `working_order_lines_check_locales` trigger (and
-  // the receipt) require the per-line map to hold EXACTLY this location's full-tag `invoice_locales`
-  // (`es-ES`). Use the location's DB `invoice_locales`, NOT `cfg.invoiceLocales` — the latter is
-  // env-derived and can drift from what the trigger actually checks, which is the location row. This
-  // closes that drift FOR THE LINE DESCRIPTIONS ONLY: the sale HEADER's locale fields
-  // (`sales.locale`/`sales.invoice_locales`, stamped by `recordSale` from `cfg`) are still sourced from
-  // boot-time config, so a config-vs-env drift can still file a header inconsistent with these lines
-  // (immutable record, §5) — a residual gap tracked in the backlog, not closed here. That `invoice_locales`
-  // value comes from the SAME `listAvailableProducts` read above: `resolveAccessibleCatalogueIds`
-  // projects `locations.invoice_locales` independently of whether products are priced through legacy
-  // catalogue rows or menu offers. An absent location yields the helper's documented `[]` fallback.
-  // `toInvoiceLineDescriptions`
-  // graceful-fills and NEVER throws (§5: nothing may block a sale), and mutating `priced.lines` in place
-  // propagates the re-key to BOTH the `working_order_lines` rows built below AND the filed `sale_lines`
-  // (the same `priced` is threaded back out and fed to `recordSale`). The inherited/locked paths
-  // (`priceLockedLines`, move/transfer) already carry full tags and are untouched.
+  // New lines snapshot the location's receipt languages. Locked and issued lines keep their stored text.
+  const contentConfig = await readContentLanguages(tx, cfg.tenantId, cfg.locale);
   for (const line of priced.lines) {
-    line.descriptions = toInvoiceLineDescriptions(line.descriptions, invoiceLocales);
+    line.descriptions = toInvoiceLineDescriptions(
+      line.descriptions,
+      invoiceLocales,
+      contentConfig.defaultLanguage,
+    );
   }
 
   // Pre-generate the line ids so a CHILD row's `parent_line_id` can name its PARENT's id in the SAME

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -224,6 +225,33 @@ const orderCard = (el: TillExpoScreen, orderNumber: number) =>
 afterEach(cleanupWidgets);
 
 describe("till-expo-screen", () => {
+  it("keeps dish and modifier receipt snapshots visible with an unrelated content default", async () => {
+    const previousLocale = currentLocale();
+    setLocale("en-GB");
+    setContentLanguages({ defaultLanguage: "ca", languages: ["ca"] });
+    try {
+      const order: ExpoOrder = {
+        ...threeCourseOrder,
+        courses: [
+          {
+            ...threeCourseOrder.courses[0]!,
+            items: [
+              {
+                ...threeCourseOrder.courses[0]!.items[0]!,
+                modifiers: [{ descriptions: { "es-ES": "Mantequilla" } }],
+              },
+            ],
+          },
+        ],
+      };
+      const el = await mount({ api: stubApi([order]) });
+      expect(el.shadowRoot!.querySelector(".item-name")!.textContent).toBe("1× Pan");
+      expect(el.shadowRoot!.textContent).toContain("Mantequilla");
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-expo-screen")).toBe(TillExpoScreen);
   });

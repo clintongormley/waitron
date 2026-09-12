@@ -4,6 +4,14 @@ import "@waitron/shared";
 /** @waitron/catalogue's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    /** Content configuration requires distinct languages and an enabled default. */
+    "content.languages_invalid": Record<string, never>;
+    /** A translation map contains a non-text value. */
+    "content.translation_invalid": Record<string, never>;
+    /** Required content has no text in the configured default language. */
+    "content.translation_required": { language: string };
+    /** Required content needs translating before the default can change. */
+    "content.default_missing": { language: string; count: number };
     /** A key in a product's allergen declaration is not one of the EU-14 codes. */
     "allergen.invalid_code": { code: string };
     /** An allergen's presence is not "contains" | "may_contain". */
@@ -39,7 +47,7 @@ declare module "@waitron/shared" {
     /** A menu offer operation names no active item; menuId is present when the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };
     "product.not_found": { productId: string };
-    "menu_section.not_found": { menuId: string; sectionId: string };
+    "menu_section.not_found": { menuId?: string; sectionId: string };
     /**
      * An option group's AUTHORING config violated one of its DB invariants (ordering modifiers, Task
      * 11): the select bounds must satisfy `max_select >= min_select >= 0`, and a `required` group must

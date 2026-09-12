@@ -343,8 +343,12 @@ export async function createCatalogue(
   return row!;
 }
 
-export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
-  return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
+export async function listCatalogues(tx: Transaction, tenantId: TenantId): Promise<Catalogue[]> {
+  return tx
+    .select(CATALOGUE_COLUMNS)
+    .from(catalogues)
+    .where(eq(catalogues.tenantId, tenantId))
+    .orderBy(catalogues.createdAt, catalogues.id);
 }
 
 export async function createMenuSection(
@@ -363,6 +367,43 @@ export async function createMenuSection(
       active: menuSections.active,
     });
   return row!;
+}
+
+export async function listMenuSections(
+  tx: Transaction,
+  tenantId: TenantId,
+  menuId: string,
+): Promise<MenuSection[]> {
+  const [menu] = await tx
+    .select({ id: catalogues.id })
+    .from(catalogues)
+    .where(and(eq(catalogues.tenantId, tenantId), eq(catalogues.id, menuId)));
+  if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+  return tx
+    .select({
+      id: menuSections.id,
+      menuId: menuSections.menuId,
+      name: menuSections.name,
+      displayOrder: menuSections.displayOrder,
+      active: menuSections.active,
+    })
+    .from(menuSections)
+    .where(and(eq(menuSections.tenantId, tenantId), eq(menuSections.menuId, menuId)))
+    .orderBy(menuSections.displayOrder, menuSections.id);
+}
+
+export async function updateMenuSection(
+  tx: Transaction,
+  tenantId: TenantId,
+  sectionId: string,
+  patch: { name: Record<string, string> },
+): Promise<void> {
+  const [row] = await tx
+    .update(menuSections)
+    .set(patch)
+    .where(and(eq(menuSections.tenantId, tenantId), eq(menuSections.id, sectionId)))
+    .returning({ id: menuSections.id });
+  if (row === undefined) throw new AppError("menu_section.not_found", { sectionId });
 }
 
 export async function createMenuItem(
@@ -1009,11 +1050,15 @@ export async function createProduct(
   return toProduct(row!);
 }
 
-export async function listProducts(tx: Transaction, catalogueId: string): Promise<Product[]> {
+export async function listProducts(
+  tx: Transaction,
+  tenantId: TenantId,
+  catalogueId: string,
+): Promise<Product[]> {
   const rows = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
-    .where(eq(products.catalogueId, catalogueId))
+    .where(and(eq(products.tenantId, tenantId), eq(products.catalogueId, catalogueId)))
     .orderBy(products.createdAt, products.id);
   return rows.map(toProduct);
 }
@@ -1196,9 +1241,10 @@ export interface LocationCatalogue extends Catalogue {
  */
 export async function listCataloguesForLocation(
   tx: Transaction,
+  tenantId: TenantId,
   locationId: string,
 ): Promise<LocationCatalogue[]> {
-  const all = await listCatalogues(tx);
+  const all = await listCatalogues(tx, tenantId);
   const { ids, defaultId } = await resolveAccessibleCatalogueIds(tx, locationId);
   const sellable = new Set(ids);
   return all.map((c) => ({ ...c, sellable: sellable.has(c.id), isDefault: c.id === defaultId }));

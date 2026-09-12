@@ -102,7 +102,6 @@ RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
   && install -d -o waitron -g waitron -m 0700 \
     /var/lib/waitron/state \
     /var/lib/waitron/logs \
-    /var/lib/waitron/media \
     /var/lib/waitron/backups
 
 # Named file by file rather than copying the whole of dist/, because dist/ also holds the demo
@@ -156,7 +155,6 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/med
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_BUILD_ID=${WAITRON_BUILD_ID} \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
-  WAITRON_MEDIA_DIR=/var/lib/waitron/media \
   WAITRON_DEMO_MEDIA_SOURCE=/app/demo-media \
   WAITRON_MIGRATIONS_DIR=/app/drizzle \
   WAITRON_TILL_APP_DIR=/app/web/till \

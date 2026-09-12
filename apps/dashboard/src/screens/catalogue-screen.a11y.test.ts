@@ -64,6 +64,7 @@ const optionGroups: OptionGroup[] = [
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
+    getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue(categories),
     listProducts: vi.fn().mockResolvedValue(products),
     listStations: vi.fn().mockResolvedValue(stations),

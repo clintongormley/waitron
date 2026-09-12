@@ -29,6 +29,20 @@ export const en = {
   "location_settings.saved": "Saved. Future records will use this description.",
   "location_settings.retry": "Retry",
 
+  "content_languages.title": "Content languages",
+  "content_languages.loading": "Loading content languages…",
+  "content_languages.load_error": "Content languages could not be loaded.",
+  "content_languages.retry": "Try again",
+  "content_languages.help":
+    "Choose the languages for products, menus, online content and image descriptions. Missing translations use your default language.",
+  "content_languages.default": "Default language",
+  "content_languages.enabled": "Enabled languages",
+  "content_languages.add": "Add language",
+  "content_languages.choose": "Choose a language",
+  "content_languages.remove": "Remove",
+  "content_languages.preserve":
+    "Removing a language keeps its translations. Choose another default before removing the current default.",
+  "content_languages.problem": "There is a problem with this form. Check the highlighted field.",
   "action.close": "Close",
   "action.delete": "Delete",
   "action.add": "Add",
@@ -646,6 +660,8 @@ export const en = {
   "category.no_station": "— none —",
   // Image upload
   "image.label": "Image",
+  "image.choose": "Choose image",
+  "image.remove": "Remove image",
   "image.preview_alt": "Product preview",
   // Product form
   "product.new": "New product",
@@ -1025,6 +1041,20 @@ export const es: Record<StringKey, string> = {
   "location_settings.saved": "Guardado. Los futuros registros usarán esta descripción.",
   "location_settings.retry": "Reintentar",
 
+  "content_languages.title": "Idiomas del contenido",
+  "content_languages.loading": "Cargando los idiomas del contenido…",
+  "content_languages.load_error": "No se pudieron cargar los idiomas del contenido.",
+  "content_languages.retry": "Reintentar",
+  "content_languages.help":
+    "Elige los idiomas de productos, menús, contenido online y descripciones de imágenes. Si falta una traducción, se utiliza el idioma predeterminado.",
+  "content_languages.default": "Idioma predeterminado",
+  "content_languages.enabled": "Idiomas disponibles",
+  "content_languages.add": "Añadir idioma",
+  "content_languages.choose": "Elige un idioma",
+  "content_languages.remove": "Quitar",
+  "content_languages.preserve":
+    "Al quitar un idioma se conservan sus traducciones. Elige otro idioma predeterminado antes de quitar el actual.",
+  "content_languages.problem": "Hay un problema con este formulario. Revisa el campo indicado.",
   "action.close": "Cerrar",
   "action.delete": "Eliminar",
   "action.add": "Añadir",
@@ -1608,6 +1638,8 @@ export const es: Record<StringKey, string> = {
   "category.station": "Estación",
   "category.no_station": "— ninguna —",
   "image.label": "Imagen",
+  "image.choose": "Elegir imagen",
+  "image.remove": "Quitar imagen",
   "image.preview_alt": "Vista previa del producto",
   "product.new": "Nuevo producto",
   "product.edit": "Editar producto",

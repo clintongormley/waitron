@@ -1,3 +1,5 @@
+import type { ContentLanguages } from "@waitron/shared";
+
 /**
  * The browser-side face of the till's HTTP API — one thin `fetch` wrapper per server route
  * (`apps/server/src/till-api.ts`). It exists so the Lit views built on top of it never touch
@@ -775,7 +777,7 @@ export interface StationQueueItem {
   /**
    * The line's snapshotted dish description (locale → text), so the kitchen display renders the dish
    * name ("2× Paella"), not a bare line number. Resolved for display in the operator's locale with a
-   * first-available fallback, exactly as `productName` resolves a product's `descriptions`.
+   * fallback among the stored receipt-language descriptions.
    */
   descriptions: Record<string, string>;
   /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
@@ -1328,6 +1330,10 @@ export class TillApi {
 
   getTill(): Promise<TillInfo> {
     return this.#request<TillInfo>("/api/till", "GET");
+  }
+
+  getContentLanguages(): Promise<ContentLanguages> {
+    return this.#request<ContentLanguages>("/api/content-languages", "GET");
   }
 
   /**

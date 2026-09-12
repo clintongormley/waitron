@@ -145,19 +145,18 @@ describe("runOnce (fan-out)", () => {
     expect(entriesOf(a).get("db.dump")!.toString()).toBe("DUMP-BYTES");
   });
 
-  it("assembles a full archive: manifest.json, db.dump, media/<blob>, secrets/<path>", async () => {
+  it("assembles database and secret entries without copying the obsolete media directory", async () => {
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
     const entries = entriesOf(a);
-    // All four entry kinds are present.
+    // Photo bytes travel inside the database dump.
     expect(entries.has("manifest.json")).toBe(true);
     expect(entries.has("db.dump")).toBe(true);
-    expect(entries.has("media/abc123.jpg")).toBe(true);
+    expect(entries.has("media/abc123.jpg")).toBe(false);
     expect(entries.has("secrets/secrets.env")).toBe(true);
     // Every RECOVERY_FILES path is captured under `secrets/`.
     for (const rel of RECOVERY_FILES) expect(entries.has(`secrets/${rel}`)).toBe(true);
-    // The media blob and a secret round-trip verbatim.
-    expect(entries.get("media/abc123.jpg")!.toString()).toBe("IMG");
+    // Secrets retain their exact bytes.
     expect(entries.get("secrets/secrets.env")!.toString()).toBe("secrets.env-contents");
     // The manifest parses back to the builder's object.
     expect(JSON.parse(entries.get("manifest.json")!.toString())).toEqual(FIXED_MANIFEST);
@@ -328,21 +327,19 @@ describe("runOnce (fan-out)", () => {
 // through as `"unknown"` rather than as a raw message that could carry the connection string.
 describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
   let staging: string;
-  let mediaDir: string;
   let stateDir: string;
   beforeEach(async () => {
     staging = await mkdtemp(join(tmpdir(), "backup-loop-staging-"));
-    mediaDir = await mkdtemp(join(tmpdir(), "backup-loop-media-"));
     stateDir = await makeStateDir();
   });
   afterEach(async () => {
-    for (const d of [staging, mediaDir, stateDir])
+    for (const d of [staging, stateDir])
       if (d !== undefined) await rm(d, { recursive: true, force: true });
   });
 
   // Mirrors the `deps()` helper in the runOnce block: the constant loop fields in one place
   // (including the BR-2 archive deps — a `db` stand-in for backup reads, the module set, the
-  // media resolver and state dir, and the injected manifest builder so the loop never needs a
+  // state directory, and the injected manifest builder so the loop never needs a
   // real journal), with the per-test signal/sleep/log (and optional runDump/now) supplied as
   // overrides. `signal`/`sleep`/`log` are required here because every loop test drives its own
   // AbortController through them.
@@ -352,7 +349,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     db: NO_DB,
     modules: ALL_MODULES,
     environment: "preproduction",
-    resolvers: { media: mediaDir },
+    resolvers: {},
     stateDir,
     buildManifest: fixedManifest,
     databaseUrl: "postgres://x",
@@ -677,15 +674,13 @@ const suite = useTemplateDb({ template: "manifest" });
 // `TESTCONTAINERS_RYUK_DISABLED=true` (§4).
 describe("runOnce with the real buildManifest (useTemplateDb)", () => {
   let staging: string;
-  let mediaDir: string;
   let stateDir: string;
   beforeEach(async () => {
     staging = await mkdtemp(join(tmpdir(), "backup-real-staging-"));
-    mediaDir = await mkdtemp(join(tmpdir(), "backup-real-media-"));
     stateDir = await makeStateDir();
   });
   afterEach(async () => {
-    for (const d of [staging, mediaDir, stateDir])
+    for (const d of [staging, stateDir])
       if (d !== undefined) await rm(d, { recursive: true, force: true });
   });
 
@@ -696,7 +691,7 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
       db: suite.admin, // owner read of the drizzle journal, which has no app_user SELECT grant
       modules: ALL_MODULES,
       environment: "preproduction",
-      resolvers: { media: mediaDir },
+      resolvers: {},
       stateDir,
       // buildManifest intentionally OMITTED so the real default runs.
       databaseUrl: suite.pg.uri,

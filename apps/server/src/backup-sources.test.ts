@@ -39,7 +39,9 @@ function moduleWithBackup(backup: WaitronModule["backup"]): WaitronModule {
   };
 }
 
-const CORE = moduleWithBackup({ nonDbState: [{ kind: "content-addressed-dir", source: "media" }] });
+const WITH_FILES = moduleWithBackup({
+  nonDbState: [{ kind: "content-addressed-dir", source: "documents" }],
+});
 
 describe("collectModuleNonDbState", () => {
   let dir: string;
@@ -50,44 +52,44 @@ describe("collectModuleNonDbState", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("emits media/<name> entries for every file under the resolved source dir", async () => {
+  it("emits documents/<name> entries for every file under the resolved source dir", async () => {
     await writeFile(join(dir, "b.jpg"), Buffer.from("bee"));
     await writeFile(join(dir, "a.jpg"), Buffer.from("aye"));
-    const entries = await collectModuleNonDbState([CORE], { media: dir });
+    const entries = await collectModuleNonDbState([WITH_FILES], { documents: dir });
     // Sorted by filename for a deterministic archive, regardless of write/readdir order.
-    expect(entries.map((e) => e.name)).toEqual(["media/a.jpg", "media/b.jpg"]);
+    expect(entries.map((e) => e.name)).toEqual(["documents/a.jpg", "documents/b.jpg"]);
     expect(Buffer.from(entries[0].bytes).toString()).toBe("aye");
     expect(Buffer.from(entries[1].bytes).toString()).toBe("bee");
   });
 
   it("throws backup.source_unresolved for a source with no resolver", async () => {
-    await expect(collectModuleNonDbState([CORE], {})).rejects.toMatchObject({
+    await expect(collectModuleNonDbState([WITH_FILES], {})).rejects.toMatchObject({
       code: "backup.source_unresolved",
-      params: { source: "media" },
+      params: { source: "documents" },
     });
   });
 
   it("throws backup.source_unresolved for a source resolving to an empty string, rather than silently emitting nothing", async () => {
-    await expect(collectModuleNonDbState([CORE], { media: "" })).rejects.toMatchObject({
+    await expect(collectModuleNonDbState([WITH_FILES], { documents: "" })).rejects.toMatchObject({
       code: "backup.source_unresolved",
-      params: { source: "media" },
+      params: { source: "documents" },
     });
   });
 
   it("tolerates a missing source dir as empty — a venue with no images is valid", async () => {
-    const entries = await collectModuleNonDbState([CORE], { media: join(dir, "nope") });
+    const entries = await collectModuleNonDbState([WITH_FILES], { documents: join(dir, "nope") });
     expect(entries).toEqual([]);
   });
 
   it("a module with no backup declaration contributes nothing", async () => {
     const plain = moduleWithBackup(undefined);
-    const entries = await collectModuleNonDbState([plain], { media: dir });
+    const entries = await collectModuleNonDbState([plain], { documents: dir });
     expect(entries).toEqual([]);
   });
 
   it("a module with backup but no nonDbState contributes nothing", async () => {
     const noSources = moduleWithBackup({});
-    const entries = await collectModuleNonDbState([noSources], { media: dir });
+    const entries = await collectModuleNonDbState([noSources], { documents: dir });
     expect(entries).toEqual([]);
   });
 
@@ -99,11 +101,11 @@ describe("collectModuleNonDbState", () => {
       const other = moduleWithBackup({
         nonDbState: [{ kind: "content-addressed-dir", source: "other" }],
       });
-      const entries = await collectModuleNonDbState([CORE, other], {
-        media: dir,
+      const entries = await collectModuleNonDbState([WITH_FILES, other], {
+        documents: dir,
         other: secondDir,
       });
-      expect(entries.map((e) => e.name).sort()).toEqual(["media/one.jpg", "other/two.jpg"]);
+      expect(entries.map((e) => e.name).sort()).toEqual(["documents/one.jpg", "other/two.jpg"]);
     } finally {
       await rm(secondDir, { recursive: true, force: true });
     }
@@ -111,7 +113,9 @@ describe("collectModuleNonDbState", () => {
 
   it("propagates a non-ENOENT readdir failure rather than treating it as empty", async () => {
     const unreadable = join(dir, UNREADABLE_DIR_MARKER);
-    await expect(collectModuleNonDbState([CORE], { media: unreadable })).rejects.toMatchObject({
+    await expect(
+      collectModuleNonDbState([WITH_FILES], { documents: unreadable }),
+    ).rejects.toMatchObject({
       code: "EACCES",
     });
   });
@@ -120,9 +124,9 @@ describe("collectModuleNonDbState", () => {
     // A future NonDbSource kind added to the type without a capture branch must fail visibly rather
     // than be given flat-dir treatment. Cast a bogus kind past the closed union to simulate that.
     const bogus = moduleWithBackup({
-      nonDbState: [{ kind: "gcs-bucket", source: "media" } as unknown as never],
+      nonDbState: [{ kind: "gcs-bucket", source: "documents" } as unknown as never],
     });
-    await expect(collectModuleNonDbState([bogus], { media: dir })).rejects.toMatchObject({
+    await expect(collectModuleNonDbState([bogus], { documents: dir })).rejects.toMatchObject({
       code: "backup.source_kind_unsupported",
       params: { kind: "gcs-bucket" },
     });
@@ -132,7 +136,7 @@ describe("collectModuleNonDbState", () => {
     await writeFile(join(dir, "flat.jpg"), Buffer.from("flat"));
     await mkdir(join(dir, "nested"));
     await writeFile(join(dir, "nested", "inner.jpg"), Buffer.from("inner"));
-    const entries = await collectModuleNonDbState([CORE], { media: dir });
-    expect(entries.map((e) => e.name)).toEqual(["media/flat.jpg"]);
+    const entries = await collectModuleNonDbState([WITH_FILES], { documents: dir });
+    expect(entries.map((e) => e.name)).toEqual(["documents/flat.jpg"]);
   });
 });

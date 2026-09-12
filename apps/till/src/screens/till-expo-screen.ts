@@ -1,3 +1,4 @@
+import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
@@ -7,7 +8,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { donenessLabel } from "../i18n/doneness-label.js";
 import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
-import { descriptionFor, trimQuantity } from "../widgets/dish-format.js";
+import { snapshotDescriptionFor, trimQuantity } from "../widgets/dish-format.js";
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
@@ -68,6 +69,11 @@ function courseOrder(course: ExpoCourse): number {
  */
 @customElement("till-expo-screen")
 export class TillExpoScreen extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     dietBadgeStyles,
@@ -606,7 +612,9 @@ export class TillExpoScreen extends LitElement {
     const forgotten = this.#itemBand(item) === "forgotten";
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
       <span class="item-main">
-        <span class="item-name">${trimQuantity(item.qty)}× ${descriptionFor(item.name, "")}</span>
+        <span class="item-name"
+          >${trimQuantity(item.qty)}× ${snapshotDescriptionFor(item.name, "")}</span
+        >
         <span class="item-station">${item.stationName}</span>
         <span class="item-state">${t(`station.state.${item.state}` as const)}</span>
         ${
@@ -700,7 +708,9 @@ export class TillExpoScreen extends LitElement {
     return html`<span class="item-modifiers">
       ${modifiers.map(
         (modifier) =>
-          html`<span class="modifier">+ ${descriptionFor(modifier.descriptions, "")}</span>`,
+          html`<span class="modifier"
+            >+ ${snapshotDescriptionFor(modifier.descriptions, "")}</span
+          >`,
       )}
     </span>`;
   }

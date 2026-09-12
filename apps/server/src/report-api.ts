@@ -228,7 +228,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       });
 
       // ISO-8859-1 fixed-layout file: `record` is a latin1-encoded Buffer; `new Uint8Array` narrows it
-      // to Uint8Array<ArrayBuffer> for `c.body` (the media-api idiom). It is a per-request fiscal
+      // to Uint8Array<ArrayBuffer> for `c.body`. It is a per-request fiscal
       // document behind auth → never cached; a download → Content-Disposition attachment.
       return c.body(new Uint8Array(record), 200, {
         "Content-Type": "text/plain; charset=ISO-8859-1",

@@ -5,6 +5,7 @@ export const dashboardPath: UrlPathConfig = {
   primary: "dashboard",
   children: {
     "*": { view: "view" },
+    catalogue: { view: "view", product: "product" },
     floor: { "floor-view": "view", "floor-zone": "zone" },
     "canvas-editor": { canvas: "canvas", "canvas-tab": "tab" },
   },

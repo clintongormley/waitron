@@ -7,11 +7,7 @@ import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
-import {
-  buildConfigurationBundle,
-  collectConfigurationMedia,
-  encodeConfigurationBundle,
-} from "./configuration-transfer.js";
+import { buildConfigurationBundle, encodeConfigurationBundle } from "./configuration-transfer.js";
 import "./errors.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -28,7 +24,6 @@ export interface ConfigurationExportDeps {
   cfg: { tenantId: string; locationId: string; tillId: string; nodeId: string };
   modules: readonly WaitronModule[];
   moduleVersions: Record<string, number>;
-  mediaDir: string;
   now?: () => Date;
 }
 
@@ -68,8 +63,7 @@ export function mountConfigurationExportApi(
           deps.moduleVersions,
         );
       });
-      const media = await collectConfigurationMedia(bundle, deps.mediaDir);
-      const artifact = encodeConfigurationBundle(bundle, passphrase, media);
+      const artifact = encodeConfigurationBundle(bundle, passphrase);
       c.header("content-type", "application/octet-stream");
       c.header("content-disposition", 'attachment; filename="waitron-configuration.enc"');
       c.header("cache-control", "no-store");

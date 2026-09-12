@@ -1,12 +1,14 @@
+import { resolveContentText } from "@waitron/shared";
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles, currentContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "./allergen-picker.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
 import { DIETARY_ORIGINS } from "../api/client.js";
@@ -37,11 +39,9 @@ function buildName(draft: Record<string, string>): Record<string, string> {
   return out;
 }
 
-/** A group or item's display name for its list row: the primary locale, falling back to any other
- * value, then the bare id — a name in the wrong language beats a blank row, and an id beats nothing
- * (the `recipe-screen.ts` `#productName` rule). */
 function primaryName(name: Record<string, string>, primaryLocale: string, id: string): string {
-  return name[primaryLocale] ?? Object.values(name)[0] ?? id;
+  const language = primaryLocale || currentContentLanguages().defaultLanguage;
+  return resolveContentText(name, language, language) || id;
 }
 
 /**
@@ -73,11 +73,8 @@ function primaryName(name: Record<string, string>, primaryLocale: string, id: st
  * is independently patchable server-side. A non-integer min/max/sort edit (an in-progress or invalid
  * typed value) is DROPPED rather than emitted with `NaN` — the operator is mid-typing.
  *
- * NAMES ARE SET ONLY ON CREATE, never edited in place — the same posture `category-manager.ts` takes
- * for an existing category's name (no update route for it either). One `wt-input` per `locales` entry,
- * mirroring `product-form.ts`'s per-locale description fields; the create fields are NOT cleared on
- * submit (the screen owns success via a prop reload, and a rejected create should leave the typed
- * values in place for a retry — the `category-manager.ts` convention).
+ * Name translations are saved together so optional languages can be completed while retaining
+ * the default-language name and translations in languages that are currently disabled.
  */
 @customElement("dashboard-option-group-manager")
 export class OptionGroupManager extends LitElement {
@@ -164,8 +161,8 @@ export class OptionGroupManager extends LitElement {
    * pattern) — this widget only asks to toggle it via `toggle-option-group-items`. */
   @property({ attribute: false }) expandedGroupId: string | null = null;
 
-  /** The locales a create-name field is rendered for; default `["es"]`, mirrors `product-form.ts`. */
-  @property({ attribute: false }) locales: readonly string[] = ["es"];
+  /** Configured content languages, with the site's default first. */
+  @property({ attribute: false }) locales: readonly string[] = [];
 
   /** A raw `{ code }` for the group create/edit form's inline error slot (e.g. `options.group_invalid`
    * on an inconsistent min/max/required), or null. Screen-owned; localised here via `codeMessage`. */
@@ -173,6 +170,9 @@ export class OptionGroupManager extends LitElement {
 
   /** A raw `{ code }` for the item create/edit form's inline error slot, or null. Screen-owned. */
   @property() itemError: string | null = null;
+
+  @state() private nameDrafts: Record<string, Record<string, string>> = {};
+  @state() private nameErrors: Record<string, boolean> = {};
 
   @state() private newGroupName: Record<string, string> = {};
   @state() private newGroupMinSelect = 0;
@@ -234,6 +234,7 @@ export class OptionGroupManager extends LitElement {
    * this shadow boundary. Does NOT clear the draft — the screen owns success via a prop reload. */
   #createGroup(event: Event): void {
     event.stopPropagation();
+    if (!this.#validName("group", this.newGroupName)) return;
     this.dispatchEvent(
       new CustomEvent("create-option-group", {
         detail: {
@@ -297,6 +298,7 @@ export class OptionGroupManager extends LitElement {
   #createItem(event: Event): void {
     event.stopPropagation();
     if (this.itemBusy || this.expandedGroupId === null) return; // the create-item form only renders when one is open
+    if (!this.#validName("item", this.newItemName)) return;
     this.dispatchEvent(
       new CustomEvent("create-option-group-item", {
         detail: {
@@ -369,13 +371,85 @@ export class OptionGroupManager extends LitElement {
     this.#updateItem(groupId, itemId, { [field]: selected.length ? selected : null });
   }
 
+  #validName(key: string, name: Record<string, string>): boolean {
+    const valid = (name[this.locales[0] ?? ""] ?? "").trim() !== "";
+    this.nameErrors = { ...this.nameErrors, [key]: !valid };
+    return valid;
+  }
+
+  #nameSummary(key: string) {
+    return this.nameErrors[key]
+      ? html`<p class="error" role="alert" data-test=${`${key}-name-summary`}>
+          ${t("form.error_heading")}
+        </p>`
+      : nothing;
+  }
+
+  #nameEditor(
+    key: string,
+    name: Record<string, string>,
+    save: (name: Record<string, string>) => void,
+  ) {
+    const names = new Intl.DisplayNames([currentLocale()], { type: "language" });
+    return html`<div class="name-editor">
+      ${this.#nameSummary(key)}
+      ${this.locales.map(
+        (locale) =>
+          html`<wt-input
+            name=${`${key}-name-${locale}`}
+            data-test=${`${key}-name-${locale}`}
+            label=${`${t("option_group.name")} (${names.of(locale)})`}
+            .required=${locale === this.locales[0]}
+            .error=${this.nameErrors[key] && locale === this.locales[0] ? codeMessage("content.translation_required") : ""}
+            .value=${(this.nameDrafts[key] ?? name)[locale] ?? ""}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              this.nameDrafts = {
+                ...this.nameDrafts,
+                [key]: { ...(this.nameDrafts[key] ?? name), [locale]: event.detail.value },
+              };
+            }}
+            @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=save-${key}-name]`))}
+          ></wt-input>`,
+      )}
+      <wt-form-actions>
+        <wt-button
+          slot="cancel"
+          data-test=${`cancel-${key}-name`}
+          variant="secondary"
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            const drafts = { ...this.nameDrafts };
+            delete drafts[key];
+            this.nameDrafts = drafts;
+            this.nameErrors = { ...this.nameErrors, [key]: false };
+          }}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          data-test=${`save-${key}-name`}
+          variant="secondary"
+          ?disabled=${key.startsWith("item-") && this.itemBusy}
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            const draft = this.nameDrafts[key] ?? name;
+            if (this.#validName(key, draft)) save(buildName(draft));
+          }}
+          >${t("action.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
+
   #renderItemRow(groupId: string, item: OptionGroupItem) {
     return html`
       <wt-card data-test=${`item-row-${item.id}`}>
         <div class="row">
           <span class="name">${primaryName(item.name, this.locales[0]!, item.id)}</span>
+          ${this.#nameEditor(`item-${item.id}`, item.name, (name) => this.#updateItem(groupId, item.id, { name }))}
           <wt-input
             class="field"
+            name=${`item-price-${item.id}`}
             data-test=${`item-price-${item.id}`}
             label=${t("option_group.price_delta")}
             .value=${item.priceDelta}
@@ -385,6 +459,7 @@ export class OptionGroupManager extends LitElement {
           <label class="vat"
             >${t("option_group.vat")}
             <select
+              name=${`item-vat-${item.id}`}
               data-test=${`item-vat-${item.id}`}
               @change=${(e: Event) => this.#onItemVatChange(groupId, item.id, e)}
             >
@@ -414,6 +489,7 @@ export class OptionGroupManager extends LitElement {
             ${t("option_group.removes")}
             <select
               multiple
+              name=${`item-remove-${item.id}`}
               data-test=${`item-remove-${item.id}`}
               @change=${(e: Event) => this.#onItemRemoveChange(groupId, item.id, e)}
             >
@@ -432,6 +508,7 @@ export class OptionGroupManager extends LitElement {
             ${t("option_group.adds_origins")}
             <select
               multiple
+              name=${`item-add-origins-${item.id}`}
               data-test=${`item-add-origins-${item.id}`}
               @change=${(e: Event) => this.#onItemOriginsChange(groupId, item.id, "addOrigins", e)}
             >
@@ -450,6 +527,7 @@ export class OptionGroupManager extends LitElement {
             ${t("option_group.removes_origins")}
             <select
               multiple
+              name=${`item-remove-origins-${item.id}`}
               data-test=${`item-remove-origins-${item.id}`}
               @change=${(e: Event) =>
                 this.#onItemOriginsChange(groupId, item.id, "removeOrigins", e)}
@@ -468,6 +546,7 @@ export class OptionGroupManager extends LitElement {
           <wt-input
             class="field"
             type="number"
+            name=${`item-maxqty-${item.id}`}
             data-test=${`item-maxqty-${item.id}`}
             label=${t("option_group.max_quantity")}
             .value=${String(item.maxQuantity)}
@@ -477,6 +556,7 @@ export class OptionGroupManager extends LitElement {
           <wt-input
             class="field"
             type="number"
+            name=${`item-sort-${item.id}`}
             data-test=${`item-sort-${item.id}`}
             label=${t("option_group.sort")}
             .value=${String(item.sort)}
@@ -484,6 +564,7 @@ export class OptionGroupManager extends LitElement {
               this.#applyInteger(e, (n) => this.#updateItem(groupId, item.id, { sort: n }))}
           ></wt-input>
           <wt-switch
+            name=${`item-active-${item.id}`}
             data-test=${`item-active-${item.id}`}
             label=${t("option_group.active")}
             .checked=${item.active}
@@ -502,10 +583,14 @@ export class OptionGroupManager extends LitElement {
       <div class="items" data-test=${`items-${groupId}`}>
         ${this.items.map((item) => this.#renderItemRow(groupId, item))}
         <div class="create">
+          ${this.#nameSummary("item")}
           ${this.locales.map(
             (locale) => html`
               <wt-input
                 @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-item]"))}
+                name=${`item-name-${locale}`}
+                .required=${locale === this.locales[0]}
+                .error=${this.nameErrors.item && locale === this.locales[0] ? codeMessage("content.translation_required") : ""}
                 data-test=${`item-name-${locale}`}
                 label=${`${t("option_group.name")} (${locale})`}
                 .value=${this.newItemName[locale] ?? ""}
@@ -517,6 +602,7 @@ export class OptionGroupManager extends LitElement {
           <wt-input
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-item]"))}
             class="field"
+            name="item-new-price"
             data-test="item-new-price"
             label=${t("option_group.price_delta")}
             .value=${this.newItemPriceDelta}
@@ -524,7 +610,11 @@ export class OptionGroupManager extends LitElement {
           ></wt-input>
           <label class="vat"
             >${t("option_group.vat")}
-            <select data-test="item-new-vat" @change=${(e: Event) => this.#onNewItemVatChange(e)}>
+            <select
+              name="item-new-vat"
+              data-test="item-new-vat"
+              @change=${(e: Event) => this.#onNewItemVatChange(e)}
+            >
               <option value="" .selected=${this.newItemVatClass === null}>
                 ${t("option_group.vat_inherit")}
               </option>
@@ -540,6 +630,7 @@ export class OptionGroupManager extends LitElement {
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-item]"))}
             class="field"
             type="number"
+            name="item-new-maxqty"
             data-test="item-new-maxqty"
             label=${t("option_group.max_quantity")}
             .value=${String(this.newItemMaxQuantity)}
@@ -550,6 +641,7 @@ export class OptionGroupManager extends LitElement {
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-item]"))}
             class="field"
             type="number"
+            name="item-new-sort"
             data-test="item-new-sort"
             label=${t("option_group.sort")}
             .value=${String(this.newItemSort)}
@@ -557,6 +649,7 @@ export class OptionGroupManager extends LitElement {
               this.#applyInteger(e, (n) => (this.newItemSort = n))}
           ></wt-input>
           <wt-switch
+            name="item-new-active"
             data-test="item-new-active"
             label=${t("option_group.active")}
             .checked=${this.newItemActive}
@@ -588,9 +681,11 @@ export class OptionGroupManager extends LitElement {
       <wt-card data-test=${`group-row-${group.id}`}>
         <div class="row">
           <span class="name">${primaryName(group.name, this.locales[0]!, group.id)}</span>
+          ${this.#nameEditor(`group-${group.id}`, group.name, (name) => this.#updateGroup(group.id, { name }))}
           <wt-input
             class="field"
             type="number"
+            name=${`group-min-${group.id}`}
             data-test=${`group-min-${group.id}`}
             label=${t("option_group.min")}
             .value=${String(group.minSelect)}
@@ -600,6 +695,7 @@ export class OptionGroupManager extends LitElement {
           <wt-input
             class="field"
             type="number"
+            name=${`group-max-${group.id}`}
             data-test=${`group-max-${group.id}`}
             label=${t("option_group.max")}
             .value=${String(group.maxSelect)}
@@ -607,6 +703,7 @@ export class OptionGroupManager extends LitElement {
               this.#applyInteger(e, (n) => this.#updateGroup(group.id, { maxSelect: n }))}
           ></wt-input>
           <wt-switch
+            name=${`group-required-${group.id}`}
             data-test=${`group-required-${group.id}`}
             label=${t("option_group.required")}
             .checked=${group.required}
@@ -616,6 +713,7 @@ export class OptionGroupManager extends LitElement {
               )}
           ></wt-switch>
           <wt-switch
+            name=${`group-active-${group.id}`}
             data-test=${`group-active-${group.id}`}
             label=${t("option_group.active")}
             .checked=${group.active}
@@ -625,6 +723,7 @@ export class OptionGroupManager extends LitElement {
           <wt-input
             class="field"
             type="number"
+            name=${`group-sort-${group.id}`}
             data-test=${`group-sort-${group.id}`}
             label=${t("option_group.sort")}
             .value=${String(group.sort)}
@@ -648,10 +747,14 @@ export class OptionGroupManager extends LitElement {
     return html`
       <div class="list">${this.groups.map((group) => this.#renderGroupRow(group))}</div>
       <div class="create">
+        ${this.#nameSummary("group")}
         ${this.locales.map(
           (locale) => html`
             <wt-input
               @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-group]"))}
+              name=${`group-name-${locale}`}
+              .required=${locale === this.locales[0]}
+              .error=${this.nameErrors.group && locale === this.locales[0] ? codeMessage("content.translation_required") : ""}
               data-test=${`group-name-${locale}`}
               label=${`${t("option_group.name")} (${locale})`}
               .value=${this.newGroupName[locale] ?? ""}
@@ -664,6 +767,7 @@ export class OptionGroupManager extends LitElement {
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-group]"))}
           class="field"
           type="number"
+          name="group-new-min"
           data-test="group-new-min"
           label=${t("option_group.min")}
           .value=${String(this.newGroupMinSelect)}
@@ -674,6 +778,7 @@ export class OptionGroupManager extends LitElement {
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-group]"))}
           class="field"
           type="number"
+          name="group-new-max"
           data-test="group-new-max"
           label=${t("option_group.max")}
           .value=${String(this.newGroupMaxSelect)}
@@ -681,6 +786,7 @@ export class OptionGroupManager extends LitElement {
             this.#applyInteger(e, (n) => (this.newGroupMaxSelect = n))}
         ></wt-input>
         <wt-switch
+          name="group-new-required"
           data-test="group-new-required"
           label=${t("option_group.required")}
           .checked=${this.newGroupRequired}
@@ -688,6 +794,7 @@ export class OptionGroupManager extends LitElement {
             this.#applyBoolean(e, (checked) => (this.newGroupRequired = checked))}
         ></wt-switch>
         <wt-switch
+          name="group-new-active"
           data-test="group-new-active"
           label=${t("option_group.active")}
           .checked=${this.newGroupActive}
@@ -698,6 +805,7 @@ export class OptionGroupManager extends LitElement {
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-group]"))}
           class="field"
           type="number"
+          name="group-new-sort"
           data-test="group-new-sort"
           label=${t("option_group.sort")}
           .value=${String(this.newGroupSort)}

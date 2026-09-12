@@ -1,4 +1,5 @@
 import { commands, page } from "@vitest/browser/context";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
@@ -129,6 +130,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // does not leave a stray rejection (a rejection is a finding — the suite runs pristine). The
     // catalogue screen also loads `listStations` (KDS-1 routing selects), as does the Cocina screen.
     listCatalogues: vi.fn().mockResolvedValue([]),
+    getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
@@ -437,6 +439,80 @@ beforeEach(() => setLocale("es-ES"));
 afterEach(() => setLocale("es-ES"));
 
 describe("dashboard-app", () => {
+  it("waits for content languages before mounting an editable screen", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    let finish!: (config: { defaultLanguage: string; languages: string[] }) => void;
+    const api = stubApi({
+      getContentLanguages: vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=content-language-loading]")).not.toBeNull();
+    expect(logoutBtn(el)).not.toBeNull();
+    expect(currentLocale()).toBe("es-ES");
+    finish({ defaultLanguage: "fr", languages: ["fr", "es"] });
+    await flush(el);
+    expect(currentContentLanguages().defaultLanguage).toBe("fr");
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(currentLocale()).toBe("es-ES");
+  });
+
+  it("offers retry while failed initial content-language loading keeps screens unmounted", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const getContentLanguages = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal" })
+      .mockResolvedValue({ defaultLanguage: "fr", languages: ["fr", "es"] });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getContentLanguages }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=content-language-error]")).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-content-languages]")!.click();
+    await flush(el);
+    expect(currentContentLanguages().defaultLanguage).toBe("fr");
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=content-language-error]")).toBeNull();
+  });
+
+  it("ignores a language read that finishes after logout", async () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    let finish!: (config: { defaultLanguage: string; languages: string[] }) => void;
+    const api = stubApi({
+      getContentLanguages: vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    logoutBtn(el)!.click();
+    await flush(el);
+    finish({ defaultLanguage: "fr", languages: ["fr"] });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    expect(currentContentLanguages().defaultLanguage).toBe("es");
+  });
+  it("loads the site's content languages independently of the interface language", async () => {
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "fr", languages: ["fr", "en"] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await vi.waitFor(() => expect(currentContentLanguages().defaultLanguage).toBe("fr"));
+    expect(currentLocale()).toBe("es-ES");
+  });
   it("returns to login when the known session deadline passes without another request", async () => {
     vi.useFakeTimers();
     try {

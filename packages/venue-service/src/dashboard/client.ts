@@ -76,11 +76,19 @@ export interface VenueServiceChoices {
   floorZones: FloorZone[];
   products: Product[];
   offers: MenuOffer[];
+  sections: MenuSection[];
 }
 export interface Product {
   id: string;
   descriptions: Record<string, string>;
   pricingUnit: "each" | "weight";
+  active: boolean;
+}
+export interface MenuSection {
+  id: string;
+  menuId: string;
+  name: Record<string, string>;
+  displayOrder: number;
   active: boolean;
 }
 export interface MenuOffer {
@@ -117,7 +125,7 @@ export class VenueServiceApi {
       this.#read<VenueServiceChoices["stations"]>("/management-api/stations"),
       this.#read<FloorZone[]>("/management-api/zones"),
     ]);
-    const [productLists, offerLists] = await Promise.all([
+    const [productLists, offerLists, sectionLists] = await Promise.all([
       Promise.all(
         menus.map((menu) =>
           this.#read<Product[]>(`/management-api/catalogues/${menu.id}/products`),
@@ -126,6 +134,11 @@ export class VenueServiceApi {
       Promise.all(
         menus.map((menu) =>
           this.#read<MenuOffer[]>(`/management-api/catalogues/${menu.id}/offers`),
+        ),
+      ),
+      Promise.all(
+        menus.map((menu) =>
+          this.#read<MenuSection[]>(`/management-api/catalogues/${menu.id}/sections`),
         ),
       ),
     ]);
@@ -140,6 +153,7 @@ export class VenueServiceApi {
       floorZones,
       products,
       offers: offerLists.flat(),
+      sections: sectionLists.flat(),
     };
   }
 
@@ -183,6 +197,10 @@ export class VenueServiceApi {
     input: { name: Record<string, string>; displayOrder: number },
   ): Promise<{ id: string }> {
     return this.request(`/management-api/catalogues/${menuId}/sections`, "POST", input);
+  }
+
+  updateMenuSection(sectionId: string, input: { name: Record<string, string> }): Promise<void> {
+    return this.request(`/management-api/menu-sections/${sectionId}`, "PATCH", input);
   }
 
   createMenuItem(

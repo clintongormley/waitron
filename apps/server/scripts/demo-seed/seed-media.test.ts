@@ -1,15 +1,8 @@
 import { tenantId as brandTenantId } from "@waitron/shared";
-// Real-Postgres proof of `seedMedia` (Phase 2, Task 9): it reads the committed per-dish PNG
-// tiles, content-addresses them into a media dir under their SHA-256, and rewrites each seeded
-// product's `image` from the plain basename to the served `<sha256hex>.png` name. Real Postgres
-// (not PGlite): the media step runs as `app_user` (it UPDATEs `products`, a table app_user holds
-// UPDATE on), exactly as the demo scripts do; PGlite's superuser connection cannot check that
-// grant (CLAUDE.md §4). Uses the shared `manifest` template cloned per file via `useTemplateDb`,
-// the same pattern as `seed-catalogue.test.ts`.
+// Real PostgreSQL checks the demo writes image bytes and product references as app_user.
 
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -20,9 +13,10 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { seedCatalogues } from "./seed-catalogue.js";
+import { readImageBytes } from "@waitron/media";
 import { seedMedia } from "./seed-media.js";
 // The exact regex the public `GET /media/:filename` route accepts — the produced names MUST pass it.
-import { MEDIA_FILENAME } from "../../src/media-api.js";
+import { MEDIA_FILENAME } from "@waitron/media";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
@@ -78,9 +72,8 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
 }
 
 describe("seedMedia", () => {
-  it("content-addresses each committed tile into the media dir and rewrites products.image", async () => {
+  it("stores committed tiles in the library and attaches content-addressed product references", async () => {
     const { tenantId, locationId } = await provisionVenue();
-    const mediaDir = await mkdtemp(join(tmpdir(), "waitron-seed-media-"));
 
     const { productsByImage, images } = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
@@ -88,10 +81,10 @@ describe("seedMedia", () => {
         locationId,
         locale: LOCALE,
       });
-      await seedMedia(tx, { mediaDir, productsByImage });
+      await seedMedia(tx, { tenantId, productsByImage });
       // Read every product's stored image back, as app_user, keyed by product id.
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
-        sql`select id, image from products`,
+        sql`select id, image from products where tenant_id = ${tenantId}`,
       );
       const images = new Map(rows.map((r) => [r.id, r.image]));
       return { productsByImage, images };
@@ -99,8 +92,7 @@ describe("seedMedia", () => {
 
     expect(productsByImage.size).toBeGreaterThan(35);
 
-    // Every seeded product's image is now a served content-hash name (NOT the plain basename), the
-    // file exists in the media dir, and its bytes round-trip to the committed source tile.
+    // Each reference retains the source hash and resolves to the committed bytes.
     for (const [basename, productId] of productsByImage) {
       const stored = images.get(productId);
       expect(stored).toMatch(/^[0-9a-f]{64}\.png$/);
@@ -112,14 +104,20 @@ describe("seedMedia", () => {
       const expectedName = `${createHash("sha256").update(srcBytes).digest("hex")}.png`;
       expect(stored).toBe(expectedName);
 
-      const writtenBytes = await readFile(join(mediaDir, stored!));
+      const storedImage = await withTenant(suite.admin, tenantId, async (tx) => {
+        await asAppUser(tx);
+        return readImageBytes(tx, tenantId, stored!);
+      });
+      expect(storedImage?.contentType).toBe("image/png");
+      const writtenBytes = storedImage!.bytes;
       expect(createHash("sha256").update(writtenBytes).digest("hex")).toBe(
         createHash("sha256").update(srcBytes).digest("hex"),
       );
     }
 
-    // The media dir holds exactly one file per DISTINCT source hash (all 44 tiles are distinct).
-    const written = (await readdir(mediaDir)).filter((f) => f.endsWith(".png"));
+    const written = await suite.admin.execute<{ count: number }>(
+      sql`select count(*)::int as count from media_images where tenant_id = ${tenantId}`,
+    );
     const distinctHashes = new Set(
       await Promise.all(
         [...productsByImage.keys()].map(async (basename) =>
@@ -129,24 +127,27 @@ describe("seedMedia", () => {
         ),
       ),
     );
-    expect(written.length).toBe(distinctHashes.size);
+    expect(written.rows[0]!.count).toBe(distinctHashes.size);
   });
 
-  it("creates the media dir if it does not yet exist", async () => {
+  it("reuses existing image bytes when the media step runs twice", async () => {
     const { tenantId, locationId } = await provisionVenue();
-    const base = await mkdtemp(join(tmpdir(), "waitron-seed-media-"));
-    const mediaDir = join(base, "nested", "media"); // does not exist yet
-
     await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
       const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
         locationId,
         locale: LOCALE,
       });
-      await seedMedia(tx, { mediaDir, productsByImage });
+      await seedMedia(tx, { tenantId, productsByImage });
+      const before = await tx.execute(
+        sql`select id, filename, names, alt_text from media_images where tenant_id = ${tenantId} order by id`,
+      );
+      await seedMedia(tx, { tenantId, productsByImage });
+      const after = await tx.execute(
+        sql`select id, filename, names, alt_text from media_images where tenant_id = ${tenantId} order by id`,
+      );
+      expect(after.rows).toEqual(before.rows);
+      expect(after.rows.length).toBeGreaterThan(0);
     });
-
-    const written = (await readdir(mediaDir)).filter((f) => f.endsWith(".png"));
-    expect(written.length).toBeGreaterThan(0);
   });
 });

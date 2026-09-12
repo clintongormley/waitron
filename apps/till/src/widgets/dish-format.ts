@@ -1,3 +1,5 @@
+import { resolveEnabledContentText, resolveSnapshotText } from "@waitron/shared";
+import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
 
 /**
@@ -15,31 +17,22 @@ export function trimQuantity(quantity: string): string {
   return quantity.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
 
-/**
- * A locale-keyed description with a first-available fallback: the requested `locale`'s text as a FULL
- * tag ("es-ES"), else its REGION-STRIPPED language ("es"), else ANY description the map carries (a
- * name in the wrong language beats a blank), else the caller's `fallback` (a product id for a
- * catalogue name, "" for a queue line). Default locale is the current operator locale.
- *
- * The region-strip tier is load-bearing (Feature B): `/api/products` now returns BARE-keyed catalogue
- * content (`{ es: …, en: … }` — "our Spanish", spec §"Two paths"), so a Spanish till (`es-ES`) would
- * MISS the full tag and land on `Object.values()[0]` — the FIRST-authored (English) value — printing
- * a bilingual product in the wrong language. Trying `locale.replace(/-.*$/, "")` ("es") after the full
- * tag resolves bare content correctly. The full-tag tier stays FIRST and is an exact hit, so the
- * KDS/station-queue reads of full-tag `working_order_lines` content still resolve exactly.
- *
- * The explicit-locale path is load-bearing too — the legal receipt passes the invoice locale so a
- * product prints in the invoice's language regardless of the operator's UI language.
- */
+/** Resolve live catalogue text against enabled languages and the configured content default. */
 export function descriptionFor(
   descriptions: Record<string, string>,
   fallback: string,
   locale: string = currentLocale(),
 ): string {
+  return resolveEnabledContentText(descriptions, locale, currentContentLanguages()) || fallback;
+}
+
+/** Stored order names keep their receipt-language text when content settings change. */
+export function snapshotDescriptionFor(
+  descriptions: Record<string, string>,
+  fallback: string,
+  locale: string = currentLocale(),
+): string {
   return (
-    descriptions[locale] ??
-    descriptions[locale.replace(/-.*$/, "")] ??
-    Object.values(descriptions)[0] ??
-    fallback
+    resolveSnapshotText(descriptions, locale, currentContentLanguages().defaultLanguage) || fallback
   );
 }

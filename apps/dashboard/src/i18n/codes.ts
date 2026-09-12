@@ -16,6 +16,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Several addresses are being checked. Wait a moment and try again.",
     es: "Se están comprobando varias direcciones. Espera un momento e inténtalo de nuevo.",
   },
+  "content.language_invalid": {
+    en: "Choose a recognised language.",
+    es: "Elige un idioma reconocido.",
+  },
+  "content.languages_invalid": {
+    en: "Choose a default from your enabled languages and remove any duplicates.",
+    es: "Elige un idioma predeterminado entre los disponibles y elimina los duplicados.",
+  },
+  "content.translation_invalid": {
+    en: "Enter text for each translation.",
+    es: "Introduce texto para cada traducción.",
+  },
+  "content.translation_required": {
+    en: "Enter the required text in the site's default language.",
+    es: "Introduce el texto obligatorio en el idioma predeterminado del sitio.",
+  },
+  "content.default_missing": {
+    en: "Some products, menu sections, modifiers or images need translating before this can become the default language.",
+    es: "Debes traducir algunos productos, secciones del menú, modificadores o imágenes antes de usar este idioma como predeterminado.",
+  },
   "management_session.required": {
     en: "Please log in to continue",
     es: "Inicia sesión para continuar",
@@ -392,8 +412,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Revisa los ajustes de selección mínima/máxima del grupo",
   },
   "product.description_required": {
-    en: "Add a description in at least one language",
-    es: "Añade una descripción en al menos un idioma",
+    en: "Enter a name in the default content language",
+    es: "Introduce un nombre en el idioma de contenido predeterminado",
   },
   // The ingredient form's own client-side validation message: a non-empty name is required (the column
   // is NOT NULL and a nameless ingredient is a UI error), surfaced via `codeMessage` from the form's

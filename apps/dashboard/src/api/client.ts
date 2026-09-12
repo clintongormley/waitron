@@ -1,3 +1,5 @@
+import type { ContentLanguages } from "@waitron/shared";
+
 /**
  * The browser-side face of the management dashboard's HTTP API — one thin `fetch` wrapper per
  * slice-1b `/management-api/*` route. It exists so the Lit views built on top of it never touch
@@ -1744,6 +1746,14 @@ export class DashboardApi {
     return this.#request<CatalogueSummary[]>("/management-api/catalogues", "GET");
   }
 
+  getContentLanguages(): Promise<ContentLanguages> {
+    return this.#request<ContentLanguages>("/api/content-languages", "GET");
+  }
+
+  updateContentLanguages(config: ContentLanguages): Promise<void> {
+    return this.#request<void>("/management-api/content-languages", "PUT", config);
+  }
+
   /** `POST /management-api/catalogues` — create a catalogue by name; returns the created row (201). */
   createCatalogue(name: string): Promise<CatalogueSummary> {
     return this.#request<CatalogueSummary>("/management-api/catalogues", "POST", { name });
@@ -1878,19 +1888,8 @@ export class DashboardApi {
     );
   }
 
-  /**
-   * `POST /management-api/product-images` — upload an image as `multipart/form-data` (a single `file`
-   * part) and get back its stored `{ image }` reference (`<sha256>.<ext>`, served at `/media/<image>`).
-   *
-   * The body is a `FormData`, which `#request` passes through AS-IS with NO `content-type` header — the
-   * browser derives `multipart/form-data` and appends the boundary itself; setting the header by hand
-   * would omit that boundary and corrupt the request. Credential + error-envelope handling is
-   * `#request`'s, exactly as the JSON methods.
-   */
-  uploadImage(file: File): Promise<{ image: string }> {
-    const form = new FormData();
-    form.append("file", file);
-    return this.#request<{ image: string }>("/management-api/product-images", "POST", form);
+  get imageLibraryRequest(): DashboardRequest {
+    return this.#request;
   }
 
   // ── Ingredients & product recipes ──────────────────────────────────────────────────────────────

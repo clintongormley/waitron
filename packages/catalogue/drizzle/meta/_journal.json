@@ -15,6 +15,20 @@
       "when": 1788989841861,
       "tag": "0001_menu_offers_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789236224021,
+      "tag": "0002_content_languages",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789236230181,
+      "tag": "0003_content_languages_grants",
+      "breakpoints": true
     }
   ]
 }

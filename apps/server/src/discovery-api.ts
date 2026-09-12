@@ -70,8 +70,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT") {
         // `code` is optional on the ERROR TYPE, but every fs read failure this route can hit (EISDIR,
-        // EACCES, ENOTDIR, …) sets it, so the `?? "unknown"` fallback is type-required but unreachable
-        // — the same shape `media-api.ts`'s `code ?? "unknown"` documents and v8-ignores.
+        // EACCES, ENOTDIR, …) sets it, so the `?? "unknown"` fallback is type-required but unreachable.
         /* v8 ignore next */
         log("error", "setup.ca_read_failed", { code: code ?? "unknown" });
       }
@@ -119,7 +118,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
     return c.html(html, 200, { "Cache-Control": "no-cache" });
   });
 
-  // One line at mount, mirroring `mountSetup`/`mountMedia`: an operator scanning logs sees the
+  // One line at mount, mirroring `mountSetup`: an operator scanning logs sees the
   // discovery surface came up. Fires once, not per request.
   log("info", "discovery.mounted", { hostname: deps.hostname });
 }

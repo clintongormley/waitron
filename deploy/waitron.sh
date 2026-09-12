@@ -308,7 +308,7 @@ cmd_reset() {
   # a box whose database cannot be wiped is never left half-wiped and restarted against surviving data
   # with its secrets already gone. A volume that is already absent is not a failure.
   local v
-  for v in db logs media backups mailpit print_agent; do
+  for v in db logs backups mailpit print_agent; do
     rm_volume "waitron_${v}"
   done
   if [ "$all" -eq 1 ]; then

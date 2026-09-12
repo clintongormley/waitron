@@ -1,3 +1,4 @@
+import { uploadImage } from "@waitron/media";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 // Real PostgreSQL checks startup through app_user connections and contending backends.
@@ -175,11 +176,6 @@ const TILL_ENV = {
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
-// Every successful boot in this suite writes its media directory here (an existing temp dir, so the
-// recursive `mkdirSync` boot performs is a no-op) rather than into `boot.ts`'s own default — which,
-// run from SOURCE, resolves to `apps/server/src/media` and would pollute the checkout on every run.
-// Created synchronously so the `KEY_ENV` const below can reference it; torn down in `afterAll`.
-const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-boot-media-"));
 // Every trading boot in this suite carries a `modules.json` that resolves the fiscal slot to Veri*Factu
 // (disabling the no-regime `fiscal-none`) — the shape a real ES provision persists. `ALL_MODULES` now
 // holds TWO fiscal-slot members, so the default-on set (an absent file) would enable both and boot would
@@ -199,7 +195,6 @@ const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  WAITRON_MEDIA_DIR: MEDIA_ROOT,
   WAITRON_STATE_DIR: TRADING_STATE_DIR,
   // The passkey Relying Party ID + origin, now REQUIRED by `loadConfig` in production — every
   // real-host boot in this suite that sets `WAITRON_ENV: "production"` would otherwise throw
@@ -310,10 +305,9 @@ beforeAll(async () => {
 // must not be followed by an `rm(undefined)` reported as a second failure beside the real one.
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  // `MEDIA_ROOT` and `TRADING_STATE_DIR` are created synchronously at module load (always defined), so
+  // `TRADING_STATE_DIR` is created synchronously at module load (always defined), so
   // no undefined guard — `force: true` also absorbs the case where a boot's own nested subdir was
   // already removed.
-  await rm(MEDIA_ROOT, { recursive: true, force: true });
   await rm(TRADING_STATE_DIR, { recursive: true, force: true });
 });
 
@@ -1016,7 +1010,7 @@ describe("startServer, against a real container as the deployment role", () => {
       // `0 === 0` pass without boot having migrated anything (CLAUDE.md §1) — except `fiscal-none`, which
       // ships NO migrations by design, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(12);
+      expect(sets).toHaveLength(13);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);
@@ -2107,42 +2101,39 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  // The upload/serve routes (later slices) store product images under `config.mediaDir`; `boot.ts`
-  // must ensure that directory exists once, at startup, before mounting anything — a missing store
-  // would fail the first upload rather than the boot. Proven by behaviour, not by mocking: point
-  // `WAITRON_MEDIA_DIR` at a nested path that does NOT exist yet, boot, and assert `existsSync`
-  // flipped false -> true — proof the recursive `mkdirSync` ran with this resolved, absolute
-  // mediaDir, not merely that some directory happened to be present already.
-  it("ensures the configured media directory exists at boot (recursive), and serves it from the public /media route", async () => {
+  // Exercise the module route through trading boot, including bytes, CORS and rejected names.
+  it("serves database image bytes through the public route on a running server", async () => {
     const port = await freePort();
-    const mediaDir = join(MEDIA_ROOT, "created-at-boot", "product-images");
-    expect(existsSync(mediaDir)).toBe(false);
-    expect(isAbsolute(mediaDir)).toBe(true);
-
     const server = await startServer({
       ...KEY_ENV,
       DATABASE_URL: databaseUrl,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      // Overrides KEY_ENV's own MEDIA_ROOT with the fresh nested path this test asserts on.
-      WAITRON_MEDIA_DIR: mediaDir,
       WAITRON_MIN_TICK_MS: "50",
       WAITRON_MAX_TICK_MS: "200",
       WAITRON_SKIP_RETRY_MS: "100",
     });
 
     try {
-      // `startServer` resolves only after the mkdir (which runs before the first pass), so the
-      // directory is already present the moment the boot returns — no polling needed.
-      expect(existsSync(mediaDir)).toBe(true);
-
-      // `mountMedia` is on the SAME app, wired to `config.mediaDir` (this very dir). Drop a
-      // content-hash-shaped file into it and fetch it back through the public serve route: a 200 with
-      // the right bytes and Content-Type is the proof the mount ran AND reads from `config.mediaDir` —
-      // a plain nonexistent route would answer Hono's own 404, so only a 200 distinguishes the two.
-      const imageName = "a".repeat(64) + ".png";
       const imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      await writeFile(join(mediaDir, imageName), imageBytes);
+      const imageName = await withTenant(
+        suite.admin,
+        TILL_ENV.WAITRON_TILL_TENANT_ID,
+        async (tx) => {
+          const result = await uploadImage(
+            tx,
+            TILL_ENV.WAITRON_TILL_TENANT_ID,
+            {
+              bytes: imageBytes,
+              names: { en: "Bread", es: "Pan" },
+              altText: { en: "A loaf", es: "Una hogaza" },
+              labels: [],
+            },
+            { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: "es" },
+          );
+          return result.image.filename;
+        },
+      );
       const image = await fetch(`http://127.0.0.1:${port}/media/${imageName}`);
       expect(image.status).toBe(200);
       expect(image.headers.get("content-type")).toBe("image/png");
@@ -2586,7 +2577,7 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
 });
 
 describe("MAX_UPLOAD_BYTES", () => {
-  it("is 5 MiB — the product-image upload ceiling the write routes (later slices) enforce", () => {
+  it("is 5 MiB — the image-library upload ceiling", () => {
     // A settled config constant (design §5e, proposal 5 MiB), pinned here so a later edit to the
     // upload route cannot silently change the ceiling without this failing.
     expect(MAX_UPLOAD_BYTES).toBe(5 * 1024 * 1024);

@@ -1,139 +1,115 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { codeMessage } from "../i18n/codes.js";
-// Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
-// registers `dashboard-image-upload` so `mountWidget` can create it.
-import { ImageUpload } from "./image-upload.js";
-import type { DashboardApi } from "../api/client.js";
+import { ImageUpload, type ImageUploader } from "./image-upload.js";
+import { setContentLanguages } from "@waitron/ui";
+import { setLocale } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
-
-/** A stub carrying only the `uploadImage` seam the widget uses; the real `DashboardApi` satisfies it. */
-function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
-  return {
-    uploadImage: vi.fn().mockResolvedValue({ image: "abc123.png" }),
-    ...overrides,
-  } as unknown as DashboardApi;
+afterEach(() => setLocale("es-ES"));
+function stubApi(): ImageUploader {
+  return { imageLibraryRequest: vi.fn().mockResolvedValue({}) };
 }
-
-/** A tiny in-memory PNG-typed file; the widget passes the whole `File` to `uploadImage` unread. */
-function pngFile(): File {
-  return new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "photo.png", { type: "image/png" });
-}
-
-/** Put `file` on the widget's file input and fire the native `change`, as a real file pick does. */
-function pickFile(el: ImageUpload, file: File): void {
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=file]")!;
-  const transfer = new DataTransfer();
-  transfer.items.add(file);
-  input.files = transfer.files;
-  input.dispatchEvent(new Event("change"));
-}
-
-/** Settle the in-flight upload promise and the follow-up render. */
-async function flush(el: ImageUpload): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
+async function open(el: ImageUpload): Promise<HTMLElement> {
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
   await el.updateComplete;
+  return el.shadowRoot!.querySelector("media-image-picker")!;
+}
+function select(picker: HTMLElement, filename = "abc123.png"): void {
+  picker.dispatchEvent(
+    new CustomEvent("select-image", {
+      detail: { filename, altText: { es: "Pan recién hecho" } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
 }
 
 describe("image-upload", () => {
-  it("uploads the picked file and emits image-changed with the stored reference", async () => {
+  it("uses default-language alt text when the interface language is disabled for content", async () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    setLocale("en-GB");
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api: stubApi() });
+    const picker = await open(el);
+    picker.dispatchEvent(
+      new CustomEvent("select-image", {
+        detail: {
+          filename: "bread.png",
+          altText: { es: "Pan recién hecho", en: "English description" },
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.alt).toBe(
+      "Pan recién hecho",
+    );
+  });
+  it("opens the shared library and emits the stored reference on selection", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api });
-    const file = pngFile();
-    const seen = new Promise<CustomEvent<{ image: string }>>((resolve) =>
-      el.addEventListener("image-changed", (e) => resolve(e as CustomEvent), { once: true }),
-    );
-    pickFile(el, file);
-    const event = await seen;
-    expect(api.uploadImage).toHaveBeenCalledWith(file);
-    expect(event.detail.image).toBe("abc123.png");
+    const changed = vi.fn();
+    el.addEventListener("image-changed", changed);
+    const picker = await open(el);
+    expect((picker as HTMLElement & { request: unknown }).request).toBe(api.imageLibraryRequest);
+    select(picker);
+    expect(changed.mock.calls[0]![0].detail).toEqual({ image: "abc123.png" });
+    expect(changed.mock.calls[0]![0].bubbles).toBe(true);
+    expect(changed.mock.calls[0]![0].composed).toBe(true);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
   });
-
-  // image-changed must escape this widget's shadow boundary to reach the product form, so it is
-  // dispatched bubbles+composed — asserted so a future edit does not quietly drop either.
-  it("emits image-changed as a bubbling, composed event", async () => {
+  it("renders the selected image preview from /media with its translated alt text", async () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api: stubApi() });
-    const seen = new Promise<Event>((resolve) =>
-      el.addEventListener("image-changed", resolve, { once: true }),
-    );
-    pickFile(el, pngFile());
-    const event = await seen;
-    expect(event.bubbles).toBe(true);
-    expect(event.composed).toBe(true);
-  });
-
-  it("renders a preview served from /media with a non-empty alt after upload", async () => {
-    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api: stubApi() });
-    pickFile(el, pngFile());
-    await flush(el);
+    select(await open(el));
+    await el.updateComplete;
     const img = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!;
     expect(img.getAttribute("src")).toBe("/media/abc123.png");
-    expect(img.getAttribute("alt")).toBeTruthy();
+    expect(img.alt).toBe("Pan recién hecho");
   });
-
-  // Edit-mode pre-fill: a product already carrying an image shows its preview immediately, with no
-  // upload, so the form can seed the control from the loaded product.
-  it("renders a preview for a pre-set image without uploading", async () => {
+  it("shows a pre-set preview without requesting the library", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api,
       image: "seed.webp",
     });
-    const img = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!;
-    expect(img.getAttribute("src")).toBe("/media/seed.webp");
-    expect(api.uploadImage).not.toHaveBeenCalled();
+    expect(
+      el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.getAttribute("src"),
+    ).toBe("/media/seed.webp");
+    expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.alt).toBeTruthy();
+    expect(api.imageLibraryRequest).not.toHaveBeenCalled();
   });
-
-  // A rejected upload surfaces the server's `media.*` code through the i18n layer as localised copy in
-  // a `role="alert"` region — the operator NEVER sees the raw wire code (the errorKey stays raw in
-  // state; `codeMessage` maps it at the render edge, mirroring the login/staff screens).
-  it("shows localised copy for the media.* error code in a role=alert region on a rejected upload", async () => {
-    const api = stubApi({
-      uploadImage: vi.fn().mockRejectedValue({ code: "media.unsupported_type" }),
-    } as Partial<DashboardApi>);
-    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api });
-    pickFile(el, pngFile());
-    await flush(el);
-    const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent).toContain(codeMessage("media.unsupported_type", "es-ES"));
-    expect(alert.textContent).not.toContain("media.unsupported_type");
+  it("removes a product image without deleting the library asset", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api,
+      image: "seed.webp",
+    });
+    const changed = vi.fn();
+    el.addEventListener("image-changed", changed);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-image]")!.click();
+    await el.updateComplete;
+    expect(changed.mock.calls[0]![0].detail).toEqual({ image: null });
+    expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
+    expect(api.imageLibraryRequest).not.toHaveBeenCalled();
   });
-
-  // A thrown error with no `{ code }` falls back to `server.internal`, mirroring the screens, so the
-  // operator always gets a stable localised sentence rather than a raw message or a blank banner.
-  it("falls back to server.internal copy when the rejection names no code", async () => {
-    const api = stubApi({
-      uploadImage: vi.fn().mockRejectedValue(new Error("boom")),
-    } as Partial<DashboardApi>);
-    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api });
-    pickFile(el, pngFile());
-    await flush(el);
-    const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent).toContain(codeMessage("server.internal", "es-ES"));
-    expect(alert.textContent).not.toContain("server.internal");
-  });
-
-  // A successful upload after a failed one clears the stale banner, so a recovered pick does not leave
-  // the operator looking at an error for an image that is now uploaded.
-  it("clears a prior error on a subsequent successful upload", async () => {
-    const api = stubApi({
-      uploadImage: vi
-        .fn()
-        .mockRejectedValueOnce({ code: "media.too_large" })
-        .mockResolvedValueOnce({ image: "ok.png" }),
-    } as Partial<DashboardApi>);
-    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api });
-    pickFile(el, pngFile());
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("media.too_large", "es-ES"),
+  it("announces pending selection and cancellation without changing an existing image", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      image: "seed.webp",
+    });
+    const pending = vi.fn();
+    const changed = vi.fn();
+    el.addEventListener("image-picker-state", pending);
+    el.addEventListener("image-changed", changed);
+    await open(el);
+    expect(pending.mock.calls[0]![0].detail).toEqual({ open: true });
+    el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(
+      new CustomEvent("wt-close", { bubbles: true, composed: true }),
     );
-    pickFile(el, pngFile());
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBe(null);
-    expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.src).toContain(
-      "/media/ok.png",
-    );
+    await el.updateComplete;
+    expect(pending.mock.calls[1]![0].detail).toEqual({ open: false });
+    expect(changed).not.toHaveBeenCalled();
+    expect(el.image).toBe("seed.webp");
   });
 });

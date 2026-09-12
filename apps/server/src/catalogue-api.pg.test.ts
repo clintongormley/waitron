@@ -1,9 +1,6 @@
-import { tmpdir } from "node:os";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
@@ -14,7 +11,7 @@ import { mountCatalogueApi } from "./catalogue-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: the route mechanics (body/id screens, upload) are already proven
+// Real Postgres, not PGlite: the route mechanics (body/id screens) are already proven
 // in-process on PGlite (`catalogue-api.test.ts`); what needs the real cluster is the write group run
 // as the non-superuser `app_user` — its table grants are enforced here and held unconditionally by
 // PGlite's superuser (CLAUDE.md §4) — and the tenant-consistent composite FK on the option-group
@@ -25,17 +22,6 @@ const suite = useTemplateDb({ template: "manifest" });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
-
-// The upload route writes the accepted bytes under a content-addressed name; only the staff-refusal
-// test drives it, and (gated) it never reaches the write, but `mountCatalogueApi` still needs a real
-// directory on `deps`.
-let mediaDir: string;
-beforeAll(async () => {
-  mediaDir = await mkdtemp(join(tmpdir(), "waitron-catalogue-pg-"));
-});
-afterAll(async () => {
-  if (mediaDir !== undefined) await rm(mediaDir, { recursive: true, force: true });
-});
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so each provisioned venue needs its own NIF — the same per-suite counter `management-api.pg.test.ts`
@@ -133,8 +119,6 @@ function mountApp(tenantId: string): Hono {
       // These suites assert the gate and the option-group FKs, never the captured origin; any valid node id
       // satisfies the (now required) cfg.nodeId. Origin attribution is proven in sync-origin.test.ts.
       cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
-      mediaDir,
-      maxUploadBytes: 1024 * 1024,
     },
     noopLog,
   );
@@ -164,39 +148,10 @@ async function createCatalogue(app: Hono, cookie: string, name: string): Promise
   return ((await res.json()) as { id: string }).id;
 }
 
-const PNG_BYTES = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
-]);
-
-/** POST a multipart upload (used only by the staff-refusal gate test). */
-async function uploadRequest(app: Hono, cookie: string): Promise<Response> {
-  const fd = new FormData();
-  fd.append("file", new Blob([PNG_BYTES], { type: "image/png" }), "photo.png");
-  return app.request("/management-api/product-images", {
-    method: "POST",
-    headers: { cookie },
-    body: fd,
-  });
-}
-
 describe("Catalogue API over real Postgres (option groups, gates, tenant-consistent FKs)", () => {
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // Prove the `person.manage` gate BY DELETION. A `staff`-role management session holds no
-    // `person.manage`, so `authorizeManager` (inside `gated`) throws `authorization.not_permitted`
-    // before any catalogue op runs on every write route. The list/read routes stay reachable to
-    // staff by the same gate (they are gated too, but this test targets the WRITES the design §9
-    // enumerates: POST /catalogues, POST /products, PATCH /products/:id, POST /product-images, plus the
-    // location-menu writes POST/DELETE /locations/:id/catalogues and PUT /locations/:id/default-catalogue).
-    // Every write funnels through the ONE `gated` helper, so a zero-uuid location/catalogue id is enough —
-    // the gate fires before the id reaches any table.
-    //
-    // GUARD-BY-DELETION (authorizeManager), actually run on 2026-08-11 against postgres:18 via
-    // Testcontainers (TESTCONTAINERS_RYUK_DISABLED=true): removed the
-    //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: CATALOGUE_WRITE_PERMISSION });`
-    // call from `catalogue-api.ts`'s `gated` helper. This test then FAILED — every staff request that
-    // expected 403 instead succeeded (POST /catalogues → 201, POST /products → 201/500, PATCH → 204,
-    // POST /product-images → 201), so the four `toBe(403)` assertions flipped green→red. Restored the
-    // line and the test passed again; `git diff catalogue-api.ts` is clean afterwards.
+    // Every write shares the permission gate; invalid resource ids must not reveal lookup results
+    // to a staff session that cannot manage the catalogue.
     const { tenantId, staffCookie } = await setupVenue();
     const app = mountApp(tenantId);
 
@@ -229,7 +184,6 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
         { unitPrice: "9.99" },
       ),
     );
-    await expect403(await uploadRequest(app, staffCookie));
     const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
     await expect403(
       await send(app, "POST", `/management-api/locations/${ZERO_UUID}/catalogues`, staffCookie, {

@@ -1,3 +1,4 @@
+import { MEDIA_MODULE } from "@waitron/media";
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
 import {
   CATALOGUE_CLASSIFICATION,
@@ -69,7 +70,7 @@ import {
  * `CREATE TRIGGER … ON <table>` — which the root `module-graph-honesty` guard cross-checks against the
  * migrations. Populated seats today: `vocabulary` on the Spanish-by-design modules (SP-3b),
  * `classification` on every table-owning module (swap S1 — `fiscal-none` owns no tables and has none),
- * `backup.nonDbState` on `core`, and `provisioning`, `fiscal` + `backup.restore` on `fiscal-verifactu`.
+ * `provisioning`, `fiscal` and `backup.restore` on `fiscal-verifactu`.
  * Two modules fill the `fiscal` slot — `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly
  * one is enabled per deployment (`fiscalSlot`); provisioning selects it from the venue's territory. The
  * remaining seats stay declared on the contract and empty until their slices land.
@@ -82,9 +83,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
     classification: CORE_CLASSIFICATION,
     changes: CORE_CHANGE_SOURCES,
-    // The content-addressed media store is core's non-DB state; a backup must capture it
-    // alongside the DB.
-    backup: { nonDbState: [{ kind: "content-addressed-dir", source: "media" }] },
     configurationTransfer: CORE_CONFIGURATION_TRANSFER,
   },
   {
@@ -102,6 +100,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
     provisioning: CATALOGUE_PROVISIONING,
   },
+  MEDIA_MODULE,
   {
     name: "venue-service",
     version: "0.0.0",

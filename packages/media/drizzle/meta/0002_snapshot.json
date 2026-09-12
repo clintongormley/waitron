@@ -1,0 +1,207 @@
+{
+  "id": "67e0e217-6063-48bf-8018-e111c0cc074a",
+  "prevId": "6d09c9fb-36d9-42ed-828b-8a7c449ae1e7",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.media_image_data": {
+      "name": "media_image_data",
+      "schema": "",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_id": {
+          "name": "image_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "media_image_data_image_fk": {
+          "name": "media_image_data_image_fk",
+          "tableFrom": "media_image_data",
+          "columnsFrom": [
+            "tenant_id",
+            "image_id"
+          ],
+          "tableTo": "media_images",
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "media_image_data_tenant_id_image_id_pk": {
+          "name": "media_image_data_tenant_id_image_id_pk",
+          "columns": [
+            "tenant_id",
+            "image_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.media_images": {
+      "name": "media_images",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "filename": {
+          "name": "filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "names": {
+          "name": "names",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alt_text": {
+          "name": "alt_text",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "labels": {
+          "name": "labels",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "media_images_tenant_date_idx": {
+          "name": "media_images_tenant_date_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "media_images_tenant_id_tenants_id_fk": {
+          "name": "media_images_tenant_id_tenants_id_fk",
+          "tableFrom": "media_images",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "media_images_tenant_filename_key": {
+          "name": "media_images_tenant_filename_key",
+          "columns": [
+            "tenant_id",
+            "filename"
+          ],
+          "nullsNotDistinct": false
+        },
+        "media_images_tenant_id_key": {
+          "name": "media_images_tenant_id_key",
+          "columns": [
+            "tenant_id",
+            "id"
+          ],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "media_images_filename_ck": {
+          "name": "media_images_filename_ck",
+          "value": "\"media_images\".\"filename\" ~ '^[a-f0-9]{64}[.](jpg|png|webp)$'"
+        },
+        "media_images_names_ck": {
+          "name": "media_images_names_ck",
+          "value": "jsonb_typeof(\"media_images\".\"names\") = 'object' and jsonb_typeof(\"media_images\".\"alt_text\") = 'object'"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "views": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -79,6 +79,8 @@ import type {
   ParkOrderDetail,
 } from "./widgets/tender-pay.js";
 
+import { setContentLanguages } from "@waitron/ui";
+
 /**
  * The lock-vs-not marker (SP-B4). Since the always-present device canvas took over the authenticated
  * surface, {@link render} is `enrol-overlays → lock → shell`: `"lock"` (or a boot failure) renders the
@@ -351,6 +353,8 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#contentLanguageGeneration++;
+    clearTimeout(this.#contentLanguageTimer);
     this.#detach();
     this.removeEventListener("pointerdown", this.#onInteraction);
     this.removeEventListener("keydown", this.#onInteraction);
@@ -816,9 +820,31 @@ export class TillApp extends LitElement {
    * throw escapes the microtask. The bare `catch` covers both, surfacing the `boot.error` banner; the lock
    * screen still renders beneath it and recovery is a page reload (this runs once, with no in-UI retry).
    */
-  async #boot(): Promise<void> {
+  #contentLanguageGeneration = 0;
+  #contentLanguageTimer?: ReturnType<typeof setTimeout>;
+
+  async #refreshContentLanguages(generation: number): Promise<void> {
     try {
-      const till = await this.api.getTill();
+      const config = await this.api.getContentLanguages();
+      if (this.isConnected && generation === this.#contentLanguageGeneration)
+        setContentLanguages(config);
+    } finally {
+      if (this.isConnected && generation === this.#contentLanguageGeneration) {
+        this.#contentLanguageTimer = setTimeout(() => {
+          void this.#refreshContentLanguages(generation).catch(() => undefined);
+        }, 60_000);
+      }
+    }
+  }
+
+  async #boot(): Promise<void> {
+    clearTimeout(this.#contentLanguageTimer);
+    const contentGeneration = ++this.#contentLanguageGeneration;
+    try {
+      const [till] = await Promise.all([
+        this.api.getTill(),
+        this.#refreshContentLanguages(contentGeneration),
+      ]);
       // Guard the ONE post-await external effect: setLocale mutates module-global state, so a boot that
       // resolves after the app was torn down must not repaint a live sibling's locale. The state writes
       // below need no such guard — Lit never paints a detached element.

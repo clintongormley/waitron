@@ -1,10 +1,12 @@
+import { resolveContentText } from "@waitron/shared";
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles, currentContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 // Value imports (not `import type`): pull in the child widget modules for their `@customElement`
 // side effects, so `<dashboard-allergen-picker>` and `<dashboard-image-upload>` are registered
 // before this form renders them (the `staff-screen.ts` widget-registration pattern).
@@ -98,7 +100,7 @@ export interface UpdateProductDetail {
 /**
  * The management dashboard's PRODUCT FORM: a `wt-dialog` (create + edit) composing the product's own
  * fields with the two landed catalogue widgets — `<dashboard-allergen-picker>` and
- * `<dashboard-image-upload>`. The catalogue screen (a later task) drives it by setting `.open`,
+ * `<dashboard-image-upload>`. The catalogue screen drives it by setting `.open`,
  * `.catalogueId`, `.categories`, `.api` and (for an edit) `.product`, and hears one of two events:
  * `create-product` (create mode) or `update-product { id, patch }` (edit mode). Like `person-form`,
  * the form does NOT call the API and does NOT close itself on confirm — the screen closes it on a
@@ -112,7 +114,7 @@ export interface UpdateProductDetail {
  * changes back through `allergens-changed` / `image-changed`, which this form captures (with
  * `stopPropagation`, the house pattern) into `allergens` / `image`.
  *
- * THE CREATE-VS-PATCH ALLERGEN ASYMMETRY is load-bearing. On CREATE a PENDING picker (`value === null`)
+ * CREATE and PATCH treat a pending allergen declaration differently. On CREATE a PENDING picker (`value === null`)
  * OMITS the `allergens` key entirely — an explicit `allergens: null` makes `createProduct` throw
  * `allergen.invalid_code`. On PATCH `allergens: null` is legal and clears the declaration back to
  * PENDING, so the edit patch always carries the current value, null included. `image` is omitted on
@@ -218,17 +220,18 @@ export class ProductForm extends LitElement {
    */
   @property({ attribute: false }) attachedGroupIds: string[] = [];
 
-  /** The locales a description field is rendered for; default `["es"]` (tenant-locale seeding deferred). */
-  @property({ attribute: false }) locales: readonly string[] = ["es"];
+  /** Configured content languages, with the site's default first. */
+  @property({ attribute: false }) locales: readonly string[] = [];
 
   /** The product being edited, or null for a create. Setting it pre-fills every field on the next open. */
   @property({ attribute: false }) product: Product | null = null;
 
-  /** The upload dependency threaded down to the image control (the `DashboardApi`, or a stub in tests). */
+  /** The library request threaded down to the image control (the `DashboardApi`, or a stub in tests). */
   @property({ attribute: false }) api?: ImageUploader;
 
   /** Single-flight gate: the screen sets it true while a create/update is in flight; confirm is a no-op. */
   @property({ type: Boolean }) busy = false;
+  @state() private imagePickerOpen = false;
 
   @state() private descriptions: Record<string, string> = {};
   @state() private unitPrice = "";
@@ -412,8 +415,8 @@ export class ProductForm extends LitElement {
     return Object.keys(out).length === 0 ? null : out;
   }
 
-  /** Capture the uploaded image reference; `stopPropagation` keeps its composed event inside this form. */
-  #onImageChanged(event: CustomEvent<{ image: string }>): void {
+  /** Capture the selected image reference; `stopPropagation` keeps its composed event inside this form. */
+  #onImageChanged(event: CustomEvent<{ image: string | null }>): void {
     event.stopPropagation();
     this.image = event.detail.image;
   }
@@ -485,7 +488,7 @@ export class ProductForm extends LitElement {
    */
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return; // single-flight: a second confirm while one is in flight is ignored
+    if (this.busy || this.imagePickerOpen) return;
     const primary = this.locales[0];
     if ((this.descriptions[primary] ?? "").trim() === "") {
       this.validationError = "product.description_required";
@@ -548,11 +551,9 @@ export class ProductForm extends LitElement {
     this.open = false;
   }
 
-  /** A group's PRIMARY-locale display name (`locales[0]`), falling back to any locale present in
-   * `name`, falling back to the group's own id if `name` is somehow empty. Shared by the attach
-   * section's pick list row and the picker `<option>` so the two never drift. */
   #groupLabel(group: OptionGroup): string {
-    return group.name[this.locales[0]!] ?? Object.values(group.name)[0] ?? group.id;
+    const language = this.locales[0] ?? currentContentLanguages().defaultLanguage;
+    return resolveContentText(group.name, language, language) || group.id;
   }
 
   /** One row of the attach section's ordered pick list: the group's name, ↑/↓ (disabled at the ends,
@@ -613,6 +614,7 @@ export class ProductForm extends LitElement {
                 <label class="field"
                   >${t("product.option_groups_pick")}
                   <select
+                    name="option-group-pick"
                     data-test="option-group-pick"
                     @change=${(e: Event) => this.#onAddGroupChoiceChange(e)}
                   >
@@ -650,6 +652,7 @@ export class ProductForm extends LitElement {
               <label class="field"
                 >${t(`diet.${field}`)}
                 <select
+                  name=${`diet-${field}`}
                   data-test=${`diet-${field}`}
                   @change=${(e: Event) => this.#onDietLabelChange(e, field)}
                 >
@@ -671,6 +674,7 @@ export class ProductForm extends LitElement {
               <label class="field"
                 >${t(`diet.contains_${tag}`)}
                 <select
+                  name=${`diet-contains-${tag}`}
                   data-test=${`diet-contains-${tag}`}
                   @change=${(e: Event) => this.#onDietContainsChange(e, tag)}
                 >
@@ -705,6 +709,9 @@ export class ProductForm extends LitElement {
             <wt-input
               class="field"
               data-test=${`description-${locale}`}
+              name=${`description-${locale}`}
+              .required=${locale === this.locales[0]}
+              .error=${this.validationError && locale === this.locales[0] ? codeMessage(this.validationError) : ""}
               label=${`${t("product.description")} (${locale})`}
               .value=${this.descriptions[locale] ?? ""}
               @wt-change=${(e: CustomEvent<{ value: string }>) =>
@@ -714,7 +721,11 @@ export class ProductForm extends LitElement {
         )}
         <label class="field"
           >${t("product.vat")}
-          <select data-test="vat-class" @change=${(e: Event) => this.#onVatClassChange(e)}>
+          <select
+            name="vat-class"
+            data-test="vat-class"
+            @change=${(e: Event) => this.#onVatClassChange(e)}
+          >
             ${VAT_CLASSES.map(
               (v) =>
                 html`<option value=${v} .selected=${v === this.vatClass}>
@@ -725,7 +736,11 @@ export class ProductForm extends LitElement {
         </label>
         <label class="field"
           >${t("product.unit")}
-          <select data-test="pricing-unit" @change=${(e: Event) => this.#onPricingUnitChange(e)}>
+          <select
+            name="pricing-unit"
+            data-test="pricing-unit"
+            @change=${(e: Event) => this.#onPricingUnitChange(e)}
+          >
             ${PRICING_UNITS.map(
               (u) =>
                 html`<option value=${u} .selected=${u === this.pricingUnit}>
@@ -736,7 +751,11 @@ export class ProductForm extends LitElement {
         </label>
         <label class="field"
           >${t("product.category")}
-          <select data-test="category" @change=${(e: Event) => this.#onCategoryChange(e)}>
+          <select
+            name="category"
+            data-test="category"
+            @change=${(e: Event) => this.#onCategoryChange(e)}
+          >
             <option value="" .selected=${this.categoryId === null}>
               ${t("product.no_category")}
             </option>
@@ -755,7 +774,11 @@ export class ProductForm extends LitElement {
           this.product
             ? html`<label class="field"
                 >${t("product.course")}
-                <select data-test="product-course" @change=${(e: Event) => this.#onCourseChange(e)}>
+                <select
+                  name="product-course"
+                  data-test="product-course"
+                  @change=${(e: Event) => this.#onCourseChange(e)}
+                >
                   <option value="">${t("product.no_course")}</option>
                   ${this.courses.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
                 </select>
@@ -764,6 +787,7 @@ export class ProductForm extends LitElement {
         }
         <wt-switch
           class="field"
+          name="active"
           data-test="active"
           label=${t("product.active")}
           .checked=${this.active}
@@ -781,23 +805,36 @@ export class ProductForm extends LitElement {
           data-test="image"
           .api=${this.api}
           .image=${this.image}
-          @image-changed=${(e: CustomEvent<{ image: string }>) => this.#onImageChanged(e)}
+          @image-changed=${(e: CustomEvent<{ image: string | null }>) => this.#onImageChanged(e)}
+          @image-picker-state=${(e: CustomEvent<{ open: boolean }>) => {
+            e.stopPropagation();
+            this.imagePickerOpen = e.detail.open;
+          }}
         ></dashboard-image-upload>
         ${
           this.validationError
             ? html`<p class="error" role="alert" data-test="error">
-                ${codeMessage(this.validationError)}
+                ${t("form.error_heading")}. ${codeMessage(this.validationError)}
               </p>`
             : nothing
         }
-        <wt-button
-          slot="footer"
-          variant="primary"
-          data-test="confirm"
-          ?disabled=${this.busy}
-          @click=${(e: Event) => this.#confirm(e)}
-          >${this.product ? t("action.save") : t("action.create")}</wt-button
-        >
+        <wt-form-actions slot="footer">
+          <wt-button
+            slot="cancel"
+            variant="secondary"
+            data-test="cancel"
+            ?disabled=${this.busy || this.imagePickerOpen}
+            @click=${() => this.#onClose()}
+            >${t("action.cancel")}</wt-button
+          >
+          <wt-button
+            variant="primary"
+            data-test="confirm"
+            ?disabled=${this.busy || this.imagePickerOpen}
+            @click=${(e: Event) => this.#confirm(e)}
+            >${this.product ? t("action.save") : t("action.create")}</wt-button
+          >
+        </wt-form-actions>
       </wt-dialog>
     `;
   }

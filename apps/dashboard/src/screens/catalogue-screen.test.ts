@@ -103,6 +103,7 @@ function createDetail(overrides: Record<string, unknown> = {}) {
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
+    getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
     listCategories: vi.fn().mockResolvedValue(categories),
     listProducts: vi.fn().mockResolvedValue(products),
@@ -153,6 +154,64 @@ function emit(source: Element, type: string, detail: unknown): void {
 afterEach(cleanupWidgets);
 
 describe("catalogue-screen", () => {
+  it("opens a product linked from image usage after the product list loads", async () => {
+    const original = location.href;
+    try {
+      history.replaceState(null, "", "/manage/catalogue/product/p1");
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      const form = el.shadowRoot!.querySelector("dashboard-product-form") as ProductForm;
+      expect(form.open).toBe(true);
+      expect(form.product?.id).toBe("p1");
+      emit(form, "wt-close", {});
+      await el.updateComplete;
+      expect(location.pathname).toBe("/manage/catalogue");
+      expect(form.open).toBe(false);
+    } finally {
+      history.replaceState(null, "", original);
+    }
+  });
+  it("closes language settings after saving even if the following refresh fails", async () => {
+    const getContentLanguages = vi
+      .fn()
+      .mockResolvedValueOnce({ defaultLanguage: "es", languages: ["es"] })
+      .mockRejectedValue({ code: "server.internal" });
+    const api = stubApi({
+      getContentLanguages,
+      updateContentLanguages: vi.fn().mockResolvedValue(undefined),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-languages]")!.click();
+    await el.updateComplete;
+    const editor = el.shadowRoot!.querySelector("dashboard-content-languages")!;
+    await editor.updateComplete;
+    editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-languages]")!.click();
+    await vi.waitFor(() => expect(api.updateContentLanguages).toHaveBeenCalledTimes(1));
+    await flush(el);
+    expect(editor.open).toBe(false);
+    expect(errorKey(el)).toBe("server.internal");
+  });
+  it("authors products and modifiers in the configured site languages, with the default first", async () => {
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "en", languages: ["en", "fr"] }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!.click();
+    await el.updateComplete;
+    await form(el).updateComplete;
+    const english = form(el).shadowRoot!.querySelector("[data-test=description-en]");
+    expect(english?.shadowRoot?.querySelector("input")).toBeInstanceOf(HTMLInputElement);
+    expect(form(el).shadowRoot!.querySelector("[data-test=description-fr]")).not.toBeNull();
+    expect(form(el).shadowRoot!.querySelector("[data-test=description-es]")).toBeNull();
+    expect(optionGroupManager(el).locales).toEqual(["en", "fr"]);
+    expect(list(el).primaryLocale).toBe("en");
+  });
   it("loads reusable products across every menu and removes duplicates", async () => {
     const menus = [...catalogues, { id: "cat-b", name: "Bebidas", active: true, version: 1 }];
     const second = { ...products[0]!, id: "p2", catalogueId: "cat-b" };

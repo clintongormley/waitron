@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { setContentLanguages } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillBasket } from "./basket.js";
 import type { TillOptionItem, TillProduct } from "../api/client.js";
@@ -30,6 +31,36 @@ const jamon: TillProduct = {
 afterEach(cleanupWidgets);
 
 describe("till-basket", () => {
+  it("keeps retrieved receipt names while new basket content uses the configured default", async () => {
+    const previousLocale = currentLocale();
+    setLocale("en-GB");
+    setContentLanguages({ defaultLanguage: "ca", languages: ["ca"] });
+    try {
+      const store = new WorkingOrderStore();
+      store.loadFrom("held", [
+        {
+          workingOrderLineId: "stored-line",
+          product: { ...cafe, descriptions: { "es-ES": "Pan" } },
+          quantity: "1",
+          options: [
+            { optionGroupItemId: "butter", name: { "es-ES": "Mantequilla" }, priceDelta: "0.50" },
+          ],
+        },
+      ]);
+      store.addProduct({ ...cafe, id: "fresh", descriptions: { en: "Bread", ca: "Pa" } }, "1");
+      const { el } = await mountWidget<TillBasket>("till-basket", { store });
+      expect(
+        [...el.shadowRoot!.querySelectorAll(".line > .name")].map((node) => node.textContent),
+      ).toEqual(["Pan", "Pa"]);
+      expect(el.shadowRoot!.querySelector(".option .name")!.textContent).toContain("Mantequilla");
+      expect(el.shadowRoot!.querySelector(".step-inc")!.getAttribute("aria-label")).toContain(
+        "Pan",
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-basket")).toBe(TillBasket);
   });

@@ -32,9 +32,14 @@ describe("ALL_MODULES backup contribution", () => {
     expect(fiscal.backup?.restore).toBe(FISCAL_RESTORE);
   });
 
-  it("core declares the media store as non-DB backup state", () => {
+  it("image bytes belong to replicated database state", () => {
     const core = ALL_MODULES.find((m) => m.name === "core");
-    expect(core?.backup?.nonDbState).toEqual([{ kind: "content-addressed-dir", source: "media" }]);
+    expect(core?.backup?.nonDbState).toBeUndefined();
+    expect(
+      ALL_MODULES.find((module) => module.name === "media")?.classification?.map(
+        (table) => table.table,
+      ),
+    ).toEqual(["media_images", "media_image_data"]);
   });
   it("a module may omit backup (open contribution set)", () => {
     const identity = ALL_MODULES.find((m) => m.name === "identity");

@@ -1,3 +1,5 @@
+import { uploadImage, readImageBytes } from "@waitron/media";
+import { withTenant } from "@waitron/db";
 import { execFile } from "node:child_process";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -35,7 +37,6 @@ import { locateSharedContainer } from "./testing/locate-shared-container.js";
 // The suite owns baseline clones and empty targets so pg_restore sees a fresh database.
 const execFileAsync = promisify(execFile);
 const RECOVERY_KEY = "s3cr3t-recovery-key-for-fiscal-restore-e2e";
-const MEDIA_NAME = "deadbeefdeadbeefdeadbeefdeadbeef.jpg";
 const BASELINE_MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 const HUELLA = "A".repeat(64);
 const noopLog: Logger = () => {};
@@ -151,15 +152,14 @@ async function makeFreshTarget(): Promise<string> {
   return databaseUrl(adminUri, name);
 }
 
-async function arrangeDirs(): Promise<{ mediaDir: string; stateDir: string }> {
-  const mediaDir = await mkdtemp(join(scratchRoot, "media-"));
+async function arrangeDirs(): Promise<{ stateDir: string }> {
   const stateDir = await mkdtemp(join(scratchRoot, "state-"));
-  return { mediaDir, stateDir };
+  return { stateDir };
 }
 
 async function restoreDepsFor(
   targetUrl: string,
-  dirs: { mediaDir: string; stateDir: string },
+  dirs: { stateDir: string },
   artifact = artifactPath,
 ): Promise<RestoreDeps> {
   return {
@@ -177,11 +177,7 @@ async function restoreDepsFor(
   };
 }
 
-async function drive(
-  targetUrl: string,
-  dirs: { mediaDir: string; stateDir: string },
-  artifact = artifactPath,
-) {
+async function drive(targetUrl: string, dirs: { stateDir: string }, artifact = artifactPath) {
   return restoreFromArtifact(await restoreDepsFor(targetUrl, dirs, artifact));
 }
 
@@ -248,6 +244,19 @@ beforeAll(async () => {
     const baselineAdmin = await createPostgresDb(pg.uri);
     try {
       await seedFiscalRegistro(baselineAdmin);
+      await withTenant(baselineAdmin, F.tenantId, async (tx) => {
+        await uploadImage(
+          tx,
+          F.tenantId,
+          {
+            bytes: BASELINE_MEDIA,
+            names: { es: "Pan" },
+            altText: { es: "Una hogaza" },
+            labels: ["Food"],
+          },
+          { maxUploadBytes: 100, fallbackLanguage: "es" },
+        );
+      });
       const head = await baselineAdmin.execute<{ secuencia: number; ultima_huella: string }>(
         sql`select secuencia, ultima_huella from cadenas`,
       );
@@ -289,7 +298,6 @@ beforeAll(async () => {
       const entries: ArchiveEntry[] = [
         { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
         { name: "db.dump", bytes: dumpBytes },
-        { name: `media/${MEDIA_NAME}`, bytes: BASELINE_MEDIA },
         {
           name: "secrets/trading.env",
           bytes: Buffer.from(
@@ -374,6 +382,17 @@ describe("fiscal restore (real Postgres, end to end)", () => {
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );
+      await withTenant(db, F.tenantId, async (tx) => {
+        const images = await tx.execute<{
+          filename: string;
+          names: Record<string, string>;
+          labels: string[];
+        }>(sql`select filename, names, labels from media_images where tenant_id = ${F.tenantId}`);
+        expect(images.rows).toHaveLength(1);
+        expect(images.rows[0]).toMatchObject({ names: { es: "Pan" }, labels: ["Food"] });
+        const restored = await readImageBytes(tx, F.tenantId, images.rows[0]!.filename);
+        expect(restored?.bytes).toEqual(new Uint8Array(BASELINE_MEDIA));
+      });
       const ledger = await db.execute<{ n: number }>(
         sql`select count(*)::int as n from registros_facturacion`,
       );

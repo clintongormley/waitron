@@ -113,7 +113,7 @@ it("trust page shows a no-QR note (and skips the renderer) when there is no LAN 
 
 // A non-ENOENT ca.crt read failure (misconfiguration) must still answer 404 no_box_ca to the LAN
 // caller — no fs detail leaked — but log one line, unlike the ordinary ENOENT. Mirrors
-// media-api.test.ts's non-ENOENT case: a `ca.crt` that is a DIRECTORY makes `readFile` throw EISDIR.
+// A `ca.crt` that is a directory makes readFile throw EISDIR.
 it("logs a non-ENOENT ca.crt read failure and still answers 404 no_box_ca", async () => {
   const d = await mkdtemp(join(tmpdir(), "disc-eisdir-"));
   dirs.push(d);

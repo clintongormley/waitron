@@ -97,6 +97,7 @@ describe("applyInstance against a blank container", () => {
       expect(after.inside?.migratedSets).toEqual([
         "core",
         "catalogue",
+        "media",
         "venue-service",
         "identity",
         "workforce",

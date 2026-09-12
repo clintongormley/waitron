@@ -70,13 +70,12 @@ export interface BackupSweepDeps {
    * SELECT. If a journal read fails after boot, buildManifest fails the tick before pg_dump or archive
    * delivery, so an incomplete manifest cannot be shipped as a successful backup. */
   db: Database;
-  /** The running composition's modules — their `backup.nonDbState` refs drive the media/etc. capture
+  /** The running composition's modules — their `backup.nonDbState` refs drive filesystem capture
    * and their names + applied schema versions populate the manifest. */
   modules: readonly WaitronModule[];
   /** Stamped into the manifest so BR-3's restore can refuse an incompatible target. */
   environment: DeploymentEnvironment;
-  /** Maps a module's declared non-DB source id (e.g. `"media"`) to the absolute dir it resolves to
-   * (`{ media: config.mediaDir }`) — see `collectModuleNonDbState`. */
+  /** Maps declared non-DB source ids to absolute directories; see `collectModuleNonDbState`. */
   resolvers: Record<string, string>;
   /** State dir holding the RECOVERY_FILES secrets captured into `secrets/<path>` (state-secrets.ts). */
   stateDir: string;
@@ -123,12 +122,12 @@ export interface BackupSweepDeps {
 
 /**
  * One backup: dump the DB to a staging file, then assemble the FULL backup archive — a manifest, the
- * DB dump, every module's non-DB state (the media store), and the state-dir secrets — encrypt the
+ * DB dump, declared non-DB state, and the state-dir secrets — encrypt the
  * whole archive ONCE, fan the same ciphertext out to every backend as `waitron-<stamp>.backup.enc`,
  * and prune each backend to `retain`. Exported (rather than kept internal to `runBackupSweep`) so a
  * single tick can be unit-tested directly, without driving the loop's sleep/abort machinery.
  *
- * FAIL-FAST: the manifest, the media capture, and the secrets read all happen BEFORE the expensive
+ * FAIL-FAST: the manifest, the non-DB state capture, and the secrets read all happen BEFORE the expensive
  * `pg_dump`, so a throw in any of them (an unreadable journal, a missing recovery file →
  * `recovery.state_incomplete`) fails the tick WITHOUT re-dumping the whole DB every tick only to
  * throw. It is also fail-visible: the throw propagates out of `runOnce` to the tick's `backup.failed`
@@ -149,7 +148,7 @@ export async function runOnce(
   let dumped = false;
   try {
     // Collect the cheap, throw-prone pieces FIRST — the manifest, the module non-DB state
-    // (`media/<sha>`), the required state secrets (`secrets/<path>`), and the OPTIONAL state config
+    // (`<source>/<filename>`), the required state secrets (`secrets/<path>`), and the OPTIONAL state config
     // (`backup.env`/`modules.json`, absent-is-fine). A misconfigured box fails here before the
     // whole-DB dump is wasted (see the FAIL-FAST note above). They are independent, so they run
     // concurrently; `Promise.all` still rejects (and the tick still fails BEFORE the dump) if any
@@ -177,7 +176,7 @@ export async function runOnce(
     await chmod(staged, 0o600);
     const dumpBytes = await readFile(staged);
     // Pack the archive in its fixed ENTRY order: index first, then the dump, then the module non-DB
-    // state (`media/<sha>`), then the secrets (`secrets/<path>`) — the required RECOVERY_FILES first,
+    // state (`<source>/<filename>`), then the secrets (`secrets/<path>`) — the required RECOVERY_FILES first,
     // then any present OPTIONAL_BACKUP_STATE (`backup.env`/`modules.json`), also under `secrets/` so
     // the restore writes them back with no restore-side change.
     const entries: ArchiveEntry[] = [

@@ -34,7 +34,7 @@ describe("state-secrets", () => {
 
   it("propagates a non-ENOENT read failure raw, not as recovery.state_incomplete", async () => {
     // A `secrets.env` that is a DIRECTORY makes `readFile` throw EISDIR, not ENOENT — the branch the
-    // catch must distinguish. Mirrors discovery-api.test.ts / media-api.test.ts's non-ENOENT case.
+    // catch must distinguish. Mirrors discovery-api.test.ts's non-ENOENT case.
     const dir = mkdtempSync(join(tmpdir(), "state-secrets-eisdir-"));
     await mkdir(join(dir, "secrets.env"), { recursive: true });
     const err = await collectStateSecrets(dir).then(

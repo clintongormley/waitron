@@ -203,3 +203,11 @@ mostly restated rules that already live elsewhere in `CLAUDE.md` or in
 was kept, but it is not here: the database-test rules went to [testing-guide.md](testing-guide.md)
 and the package-boundary and vocabulary rules to [conventions-data.md](conventions-data.md), each
 under the same provenance note.
+
+## Resolve live content and receipt snapshots separately
+
+Live catalogue text uses enabled content languages and their configured default. Stored order and
+sale descriptions contain receipt-language keys, so that filter can hide every recorded name when
+receipt and content languages differ. Snapshot displays may fall back to a stored nonblank value;
+they never rewrite the record. Regression: `packages/shared/src/content-languages.test.ts`,
+“keeps a receipt-only name visible when the content default is absent”.

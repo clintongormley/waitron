@@ -1,3 +1,4 @@
+import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { PropertyValues } from "lit";
@@ -73,6 +74,11 @@ type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "pri
  */
 @customElement("till-allergen-screen")
 export class TillAllergenScreen extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     dietBadgeStyles,

@@ -85,7 +85,6 @@ const FIXTURE = JSON.parse(
 // The credentials key + media/state dirs a trading boot requires, and a `modules.json` resolving the
 // two-member fiscal slot to Veri*Factu (else the default-on both-enabled set refuses
 // `module.fiscal_slot_ambiguous`), under this suite's own temp root.
-const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-reroute-e2e-media-"));
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-reroute-e2e-state-"));
 writeFileSync(
   join(STATE_ROOT, "modules.json"),
@@ -98,7 +97,6 @@ const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  WAITRON_MEDIA_DIR: MEDIA_ROOT,
   WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_ENV: "preproduction",
 };
@@ -250,7 +248,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  rmSync(MEDIA_ROOT, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 

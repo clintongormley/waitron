@@ -97,8 +97,101 @@ function click(el: OptionGroupManager, dataTest: string): void {
 }
 
 describe("option-group-manager", () => {
+  it("edits existing group translations, requires the default and preserves disabled languages", async () => {
+    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["en", "fr"],
+      groups: [{ ...groups[0]!, name: { en: "Size", de: "Größe" } }],
+    });
+    const saved: unknown[] = [];
+    el.addEventListener("update-option-group", (event) =>
+      saved.push((event as CustomEvent).detail),
+    );
+    const input = el.shadowRoot!.querySelector<HTMLElement>('[data-test="group-g1-name-en"]')!;
+    expect(input.shadowRoot!.querySelector("input")!.name).toBe("group-g1-name-en");
+    expect(input.shadowRoot!.querySelector("input")!.required).toBe(true);
+    type(el, "group-g1-name-en", "");
+    type(el, "group-g1-name-fr", "Taille");
+    click(el, "save-group-g1-name");
+    await el.updateComplete;
+    expect(saved).toEqual([]);
+    expect(
+      el.shadowRoot!.querySelector('[data-test="group-g1-name-summary"]')!.textContent,
+    ).toContain(t("form.error_heading"));
+    expect(input.shadowRoot!.textContent).toContain(codeMessage("content.translation_required"));
+    type(el, "group-g1-name-en", "Size");
+    click(el, "save-group-g1-name");
+    expect(saved).toEqual([
+      { id: "g1", patch: { name: { en: "Size", de: "Größe", fr: "Taille" } } },
+    ]);
+    el.groupError = "content.translation_required";
+    el.groups = [{ ...groups[0]!, name: { en: "Size", de: "Größe" } }];
+    await el.updateComplete;
+    expect(
+      (
+        el.shadowRoot!.querySelector('[data-test="group-g1-name-fr"]') as HTMLElement
+      ).shadowRoot!.querySelector("input")!.value,
+    ).toBe("Taille");
+    click(el, "cancel-group-g1-name");
+    await el.updateComplete;
+    expect(
+      (
+        el.shadowRoot!.querySelector('[data-test="group-g1-name-fr"]') as HTMLElement
+      ).shadowRoot!.querySelector("input")!.value,
+    ).toBe("");
+    expect(saved).toHaveLength(1);
+  });
+
+  it("edits an existing option translation and clears optional enabled text without dropping disabled text", async () => {
+    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["en", "fr"],
+      groups: [{ ...groups[0]!, name: { en: "Size" } }],
+      expandedGroupId: "g1",
+      items: [{ ...items[0]!, name: { en: "Small", fr: "Petit", de: "Klein" } }],
+    });
+    const saved: unknown[] = [];
+    el.addEventListener("update-option-group-item", (event) =>
+      saved.push((event as CustomEvent).detail),
+    );
+    type(el, "item-i1-name-fr", "");
+    type(el, "item-i1-name-en", "Little");
+    click(el, "save-item-i1-name");
+    expect(saved).toEqual([
+      { groupId: "g1", itemId: "i1", patch: { name: { en: "Little", de: "Klein" } } },
+    ]);
+  });
+
+  it("marks the default name required and explains an empty create submission", async () => {
+    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["en", "fr"],
+      groups,
+      expandedGroupId: "g1",
+      items,
+    });
+    const created: unknown[] = [];
+    el.addEventListener("create-option-group", (event) =>
+      created.push((event as CustomEvent).detail),
+    );
+    el.addEventListener("create-option-group-item", (event) =>
+      created.push((event as CustomEvent).detail),
+    );
+    click(el, "create-group");
+    click(el, "create-item");
+    await el.updateComplete;
+    expect(created).toEqual([]);
+    for (const kind of ["group", "item"]) {
+      const field = el.shadowRoot!.querySelector(`[data-test="${kind}-name-en"]`)!;
+      expect(field.shadowRoot!.querySelector("input")!.required).toBe(true);
+      expect(field.shadowRoot!.querySelector("input")!.name).toBe(`${kind}-name-en`);
+      expect(field.shadowRoot!.textContent).toContain(codeMessage("content.translation_required"));
+      expect(
+        el.shadowRoot!.querySelector(`[data-test="${kind}-name-summary"]`)!.textContent,
+      ).toContain(t("form.error_heading"));
+    }
+  });
+
   it("lists one row per group with its name", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
     });
     const rows = el.shadowRoot!.querySelectorAll("[data-test^=group-row-]");
@@ -109,15 +202,13 @@ describe("option-group-manager", () => {
 
   it("renders no group rows for an empty list", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: [],
     });
     expect(el.shadowRoot!.querySelectorAll("[data-test^=group-row-]").length).toBe(0);
   });
 
-  // A row's name falls back to any OTHER locale's value when the primary locale is missing, then to
-  // the bare id when the name map is empty — a name in the wrong language beats a blank row, and an id
-  // beats nothing (the `primaryName` rule, mirroring `recipe-screen.ts`'s `#productName`).
-  it("falls back to another locale's name, then to the bare id", async () => {
+  it("uses the id when the default name is missing", async () => {
     const oddGroups: OptionGroup[] = [
       {
         id: "g3",
@@ -131,9 +222,12 @@ describe("option-group-manager", () => {
       { id: "g4", name: {}, minSelect: 0, maxSelect: 1, required: false, sort: 0, active: true },
     ];
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: oddGroups,
     });
-    expect(el.shadowRoot!.querySelector("[data-test=group-row-g3]")!.textContent).toContain("Size");
+    expect(el.shadowRoot!.querySelector("[data-test=group-row-g3]")!.textContent).not.toContain(
+      "Size",
+    );
     expect(el.shadowRoot!.querySelector("[data-test=group-row-g4]")!.textContent).toContain("g4");
   });
 
@@ -141,6 +235,7 @@ describe("option-group-manager", () => {
 
   it("emits create-option-group with the typed name + defaults on submit", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: [],
     });
     const detail = new Promise<OptionGroupInput>((resolve) =>
@@ -161,6 +256,7 @@ describe("option-group-manager", () => {
 
   it("emits create-option-group with edited min/max/required/active/sort", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: [],
     });
     const detail = new Promise<OptionGroupInput>((resolve) =>
@@ -201,6 +297,7 @@ describe("option-group-manager", () => {
 
   it("emits create-option-group as a bubbling, composed event", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: [],
     });
     const seen = new Promise<Event>((resolve) =>
@@ -218,6 +315,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group when a row's min changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
     });
     const detail = new Promise<{ id: string; patch: Record<string, unknown> }>((resolve) =>
@@ -229,6 +327,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group when a row's required switch toggles", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
     });
     const detail = new Promise<{ id: string; patch: Record<string, unknown> }>((resolve) =>
@@ -240,6 +339,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group when a row's active switch toggles", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
     });
     const detail = new Promise<{ id: string; patch: Record<string, unknown> }>((resolve) =>
@@ -251,6 +351,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group when a row's max or sort changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
     });
     let detail = new Promise<{ id: string; patch: Record<string, unknown> }>((resolve) =>
@@ -272,6 +373,7 @@ describe("option-group-manager", () => {
 
   it("ignores a non-numeric min/max/sort edit (no event)", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
     });
     let fired = false;
@@ -287,6 +389,7 @@ describe("option-group-manager", () => {
 
   it("surfaces a groupError as a role=alert inline message, localised (never the raw code)", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: [],
       groupError: "options.group_invalid",
     });
@@ -298,6 +401,7 @@ describe("option-group-manager", () => {
 
   it("renders no group error when groupError is null", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: [],
       groupError: null,
     });
@@ -306,6 +410,7 @@ describe("option-group-manager", () => {
 
   it("shows newly-created groups once the screen reloads the groups prop (no crash)", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: [],
     });
     expect(el.shadowRoot!.querySelectorAll("[data-test^=group-row-]").length).toBe(0);
@@ -319,6 +424,7 @@ describe("option-group-manager", () => {
 
   it("does not render an items panel when no group is expanded", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
     });
     expect(el.shadowRoot!.querySelector("[data-test^=items-]")).toBeNull();
@@ -326,6 +432,7 @@ describe("option-group-manager", () => {
 
   it("emits toggle-option-group-items with the group id on the Items button", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
     });
     const detail = new Promise<{ groupId: string }>((resolve) =>
@@ -337,6 +444,7 @@ describe("option-group-manager", () => {
 
   it("renders the expanded group's items and shows them on reload", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items: [],
@@ -353,6 +461,7 @@ describe("option-group-manager", () => {
 
   it("renders the item VAT select with an inherit option + one per VAT class", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -381,6 +490,7 @@ describe("option-group-manager", () => {
       },
     ];
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items: capped,
@@ -395,6 +505,7 @@ describe("option-group-manager", () => {
 
   it("emits create-option-group-item for the expanded group with the typed fields", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items: [],
@@ -423,6 +534,7 @@ describe("option-group-manager", () => {
   // The per-option quantity cap defaults to 1 ("no per-option quantity") and rides along on create.
   it("emits create-option-group-item with the default max quantity of 1 when untouched", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items: [],
@@ -438,6 +550,7 @@ describe("option-group-manager", () => {
 
   it("emits create-option-group-item with the typed max quantity", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items: [],
@@ -454,6 +567,7 @@ describe("option-group-manager", () => {
 
   it("emits create-option-group-item with vatClass null when inherit is left selected", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items: [],
@@ -469,6 +583,7 @@ describe("option-group-manager", () => {
 
   it("returns the new-item VAT picker to inherit (null) after picking a class then reverting", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items: [],
@@ -489,6 +604,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group-item when an item row's price delta changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -503,6 +619,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group-item when an item row's VAT override changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -517,6 +634,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group-item with vatClass null when reverted to inherit", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -531,6 +649,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group-item when an item row's sort or active changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -555,6 +674,7 @@ describe("option-group-manager", () => {
 
   it("emits update-option-group-item when an item row's max quantity changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -569,6 +689,7 @@ describe("option-group-manager", () => {
 
   it("ignores a non-numeric max-quantity edit (no event)", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -586,6 +707,7 @@ describe("option-group-manager", () => {
 
   it("emits removeAllergens when an item's remove-list changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -604,6 +726,7 @@ describe("option-group-manager", () => {
 
   it("emits removeAllergens null when an item's remove-list is cleared", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -623,6 +746,7 @@ describe("option-group-manager", () => {
 
   it("seeds the remove-list from the item's current removeAllergens", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -634,6 +758,7 @@ describe("option-group-manager", () => {
 
   it("emits addAllergens when an item's add-picker changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -659,6 +784,7 @@ describe("option-group-manager", () => {
 
   it("seeds the add-picker's declaration from the item's current addAllergens", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -673,6 +799,7 @@ describe("option-group-manager", () => {
 
   it("emits addOrigins when an item's add-origins list changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -691,6 +818,7 @@ describe("option-group-manager", () => {
 
   it("emits removeOrigins when an item's remove-origins list changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -709,6 +837,7 @@ describe("option-group-manager", () => {
 
   it("emits addOrigins null when an item's add-origins list is cleared", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -728,6 +857,7 @@ describe("option-group-manager", () => {
 
   it("seeds the origin add/remove lists from the item's current addOrigins/removeOrigins", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items,
@@ -742,6 +872,7 @@ describe("option-group-manager", () => {
 
   it("surfaces an itemError as a role=alert inline message, localised", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups,
       expandedGroupId: "g1",
       items: [],
@@ -756,6 +887,7 @@ describe("option-group-manager", () => {
 
   it("renders the create-group button label from the i18n layer", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      locales: ["es"],
       groups: [],
     });
     expect(el.shadowRoot!.querySelector("[data-test=create-group]")!.textContent).toContain(

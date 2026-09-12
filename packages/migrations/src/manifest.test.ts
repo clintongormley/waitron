@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { captureError, CORE_MIGRATIONS } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import { MEDIA_MIGRATIONS } from "@waitron/media";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
@@ -28,6 +29,7 @@ describe("the migration manifest", () => {
     expect(byName).toEqual({
       core: CORE_MIGRATIONS.migrationsTable,
       catalogue: CATALOGUE_MIGRATIONS.migrationsTable,
+      media: MEDIA_MIGRATIONS.migrationsTable,
       "venue-service": VENUE_SERVICE_MIGRATIONS.migrationsTable,
       identity: IDENTITY_MIGRATIONS.migrationsTable,
       workforce: WORKFORCE_MIGRATIONS.migrationsTable,

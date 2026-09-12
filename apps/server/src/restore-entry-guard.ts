@@ -9,7 +9,7 @@ import "./errors.js";
  * returns the resolved absolute path it is safe to write to. A thin restore-side wrapper over the
  * shared {@link resolveSafeEntryPath} (`state-secrets.ts`) — the SAME two-layer lexical+symlink
  * guard `unpackBundleToDir` uses — applied to a whole archive's entry names (`db.dump`,
- * `media/<file>`, `secrets/<path>`) rather than the fixed `RECOVERY_FILES` set. GCM/tar integrity
+ * `secrets/<path>`) rather than the fixed `RECOVERY_FILES` set. GCM/tar integrity
  * proves the archive's BYTES are authentic, never that its entry NAMES stay inside `destRoot`, so a
  * crafted-but-authentic archive must still be refused here before any write. The archive validator
  * rejects repeated destination paths and normalizes accepted names before identity reads or writes;
@@ -20,7 +20,7 @@ import "./errors.js";
  * `unpackBundleToDir`'s own `mkdir(destDir)`-before-guard ordering.
  *
  * `realDestRoot` lets a caller looping over many entries against the SAME `destRoot` (e.g.
- * `restoreMedia`'s chunked writes) pass a `realpath(resolve(destRoot))` computed ONCE up front,
+ * secret unpacking) pass a `realpath(resolve(destRoot))` computed ONCE up front,
  * rather than re-`realpath`ing the same root on every call. A single-entry caller omits it and this
  * computes it inline — one `realpath` either way, so nothing regresses for that shape.
  *
