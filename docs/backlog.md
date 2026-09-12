@@ -271,6 +271,16 @@ Two halves, one branch each (owner decision 2026-09-12).
   the pack's rule where there is one, otherwise `+` and country code then digits; browser and server.
   Open: normalise or keep as typed; whether an old bad number blocks an unrelated edit; which fields
   follow (the tax identifier is fiscal).
+- **Adding a second passkey on the same device shows a generic error** (owner, 2026-09-12). Reading
+  the code, not yet reproduced with a real authenticator: `beginPasskeyRegistration` lists the
+  person's enrolled credentials as `excludeCredentials` (`packages/identity/src/passkey.ts:157`), so
+  the authenticator refuses a duplicate and the browser throws a WebAuthn `InvalidStateError` from
+  `startRegistration` — before any request reaches the server. The profile screen's catch maps every
+  error through `codeOf` (`apps/dashboard/src/screens/profile-screen.ts:383`), so a browser error
+  with no Waitron code reads as the generic fallback; the login screen's offer-a-passkey path
+  swallows `NotAllowedError`/`AbortError` and nothing else. Wanted: say "this device already holds a
+  passkey for this account" in both languages, on both screens, and leave the form open. The server's
+  `passkey.already_registered` 409 stays as the backstop for a non-compliant client.
 - Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
   passwordless account; an operator screen for Google provider credentials; native passkey prompts on
   real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
