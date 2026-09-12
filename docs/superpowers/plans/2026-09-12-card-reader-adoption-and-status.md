@@ -20,14 +20,14 @@ The Stripe SDK timestamp is already milliseconds: JavaScript `Date` takes millis
 value directly to produce ISO text. Dividing by 1000 is needed only for a seconds-based date API.
 
 
-## Verification receipts
+## Initial implementation verification receipts
 
 - Provider tests failed before implementation: missing `readers.list`, missing telemetry, and the old
   unreachable detail. The updated SumUp and Stripe suites passed (26 and 21 tests respectively).
 - `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run src/payments-api.pg.test.ts`
   passed the route regressions. The suite queries `current_user` and `rolsuper` and gets
   `{ role: "app_user", rolsuper: false }`; it then exercises the two-tenant operations through the
-  real management routes. Full server coverage includes the final 33 route regressions.
+  real management routes. The initial server coverage run included 33 route regressions.
 - Removing the adoption list check made the forged-reference regression receive 201 instead of 422.
   Removing the dashboard's `unreachable` check made its Chromium regression display Offline instead
   of Unknown. Treating Stripe's timestamp as seconds returned year 58667 instead of 2026. Each
