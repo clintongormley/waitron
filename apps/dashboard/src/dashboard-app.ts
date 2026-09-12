@@ -6,6 +6,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, UrlStateController } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeOf } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
@@ -247,18 +248,45 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-1);
       }
 
-      /* Group header: small caps, like a card's group-label (see profile-screen.ts) — makes it
-         unmistakably a label rather than a fainter link, which plain small+muted text didn't. Uses
-         the primary accent rather than muted grey so it doesn't read as the same weight of "quiet"
-         as a resting nav item beneath it — headers aren't clickable, so sharing the accent hue with
-         the current-page indicator doesn't create the same false affordance it would on an item. */
+      /* Group header: a toggle button (collapses/expands its own items), small caps like a card's
+         group-label (see profile-screen.ts) — makes it unmistakably a label rather than a fainter
+         link, which plain small+muted text didn't. Uses the primary accent rather than muted grey so
+         it doesn't read as the same weight of "quiet" as a resting nav item beneath it; sharing the
+         accent hue with the current-page indicator is fine here because a header is never itself the
+         current page, so there's no ambiguity about what the colour is pointing at. */
       .nav-group {
-        margin: var(--wt-space-3) 0 var(--wt-space-1);
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        margin: var(--wt-space-2) 0 0;
+        padding: 0;
+        border: none;
+        background: transparent;
         color: var(--wt-color-primary);
+        font: inherit;
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
         letter-spacing: 0.04em;
+        text-align: start;
+        cursor: pointer;
+      }
+
+      .nav-group:hover {
+        background: var(--wt-color-surface);
+      }
+
+      /* Points down at rest ("expand downward"); rotated to point up when expanded ("collapse"),
+         matching the direction its own panel of items opens in. */
+      .nav-group .chevron {
+        flex-shrink: 0;
+        transition: transform 150ms ease;
+      }
+
+      .nav-group[aria-expanded="true"] .chevron {
+        transform: rotate(180deg);
       }
 
       /* A flat nav row, not a button: no border/background box, so a list of ~20 of these reads as
@@ -446,6 +474,17 @@ export class DashboardApp extends LitElement {
    * hamburger + scrim are hidden, so this flag is inert there. The hamburger toggles it, and selecting
    * ANY nav item — or clicking the scrim — sets it back to `false`. */
   @state() private drawerOpen = false;
+
+  /** Manually-collapsed nav groups (headerless groups are never collapsible, so never appear here).
+   * A group in this set still renders expanded if it contains the CURRENT screen — collapsing "Team"
+   * and then navigating to Staff should not hide the page you are already on. */
+  @state() private collapsedGroups = new Set<NavGroupId>();
+  #toggleGroup(id: NavGroupId): void {
+    const next = new Set(this.collapsedGroups);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    this.collapsedGroups = next;
+  }
 
   /** Whether the viewport is at/below the drawer breakpoint (Task 12). Tracked from `matchMedia` so the
    * shell knows when the sidebar is off-canvas: a CLOSED off-canvas sidebar must be made `inert` (see
@@ -914,8 +953,8 @@ export class DashboardApp extends LitElement {
                 data-test="nav-toggle"
                 aria-label=${t("nav.toggle")}
                 @click=${() => (this.drawerOpen = !this.drawerOpen)}
-                >☰</wt-button
-              >`
+                ><wt-icon name="hamburger"></wt-icon
+              ></wt-button>`
             : nothing
         }
         <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
@@ -1011,52 +1050,76 @@ export class DashboardApp extends LitElement {
   }
 
   /** The manager nav, shown only for a NON-staff session (a `staff` person opens their schedule or profile without a sidebar). Rendered data-driven from {@link NAV_GROUPS}: the pinned first group (overview +
-   * sales, the two reporting faces) leads with no header, then the Menu / Service / Team / Purchasing /
-   * Configuration groups, each headed by an `<h2 class="nav-group">`. Each active MODULE contribution
-   * appends its own item into the group whose `id` matches its `screen.group`, sorted by `order`.
-   * Each item is a plain `.nav-item` button, not `wt-button` — a nav list of ~20 rows reads as
-   * navigation, not a stack of buttons. The active face carries `aria-current="page"`, which is
-   * what `.nav-item[aria-current="page"]` styles from. Every item keeps its stable
+   * sales, the two reporting faces) leads with no header and is never collapsible, then the Menu /
+   * Service / Team / Purchasing / Configuration groups, each headed by a toggle button (chevron +
+   * label) that shows/hides its items — collapsed by default only via user action, and forced open
+   * whenever it contains the current screen (see {@link collapsedGroups}). Each active MODULE
+   * contribution appends its own item into the group whose `id` matches its `screen.group`, sorted
+   * by `order`. Each item is a plain `.nav-item` button, not `wt-button` — a nav list of ~20 rows
+   * reads as navigation, not a stack of buttons. The active face carries `aria-current="page"`,
+   * which is what `.nav-item[aria-current="page"]` styles from. Every item keeps its stable
    * `data-test="nav-<screen>"` id. */
   #nav(): TemplateResult {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
-        ${NAV_GROUPS.map(
-          (group) => html`
-            ${group.headerKey ? html`<h2 class="nav-group">${t(group.headerKey)}</h2>` : nothing}
-            ${group.items
-              .filter(
-                (item) =>
-                  !item.requiresManager ||
-                  this.sessionRole === "manager" ||
-                  this.sessionRole === "admin",
-              )
-              .map(
-                (item) =>
+        ${NAV_GROUPS.map((group) => {
+          const contributions = this.#navGroups.get(group.id) ?? [];
+          const containsCurrentScreen =
+            group.items.some((item) => item.screen === this.screen) ||
+            contributions.some((c) => c.screen.id === this.screen);
+          const collapsed = this.collapsedGroups.has(group.id) && !containsCurrentScreen;
+          const panelId = `nav-group-panel-${group.id}`;
+          return html`
+            ${
+              group.headerKey
+                ? html`<button
+                    type="button"
+                    class="nav-group"
+                    aria-expanded=${!collapsed}
+                    aria-controls=${panelId}
+                    data-test="nav-group-${group.id}"
+                    @click=${() => this.#toggleGroup(group.id)}
+                  >
+                    <wt-icon name="chevron-down" class="chevron"></wt-icon>
+                    ${t(group.headerKey)}
+                  </button>`
+                : nothing
+            }
+            <div id=${panelId} ?hidden=${collapsed}>
+              ${group.items
+                .filter(
+                  (item) =>
+                    !item.requiresManager ||
+                    this.sessionRole === "manager" ||
+                    this.sessionRole === "admin",
+                )
+                .map(
+                  (item) =>
+                    html`<button
+                      type="button"
+                      class="nav-item"
+                      aria-current=${this.screen === item.screen ? "page" : nothing}
+                      data-test="nav-${item.screen}"
+                      @click=${() => this.#selectScreen(item.screen)}
+                    >
+                      ${t(item.labelKey)}
+                    </button>`,
+                )}
+              ${contributions.map(
+                (c) =>
                   html`<button
                     type="button"
                     class="nav-item"
-                    aria-current=${this.screen === item.screen ? "page" : nothing}
-                    data-test="nav-${item.screen}"
-                    @click=${() => this.#selectScreen(item.screen)}
+                    aria-current=${this.screen === c.screen.id ? "page" : nothing}
+                    data-test="nav-${c.screen.id}"
+                    @click=${() => this.#selectScreen(c.screen.id)}
                   >
-                    ${t(item.labelKey)}
+                    ${tKit(c.screen.navLabelKey)}
                   </button>`,
               )}
-            ${(this.#navGroups.get(group.id) ?? []).map(
-              (c) =>
-                html`<button
-                  type="button"
-                  class="nav-item"
-                  aria-current=${this.screen === c.screen.id ? "page" : nothing}
-                  data-test="nav-${c.screen.id}"
-                  @click=${() => this.#selectScreen(c.screen.id)}
-                >
-                  ${tKit(c.screen.navLabelKey)}
-                </button>`,
-            )}
-          `,
-        )}
+            </div>
+          `;
+        })}
       </nav>
     `;
   }

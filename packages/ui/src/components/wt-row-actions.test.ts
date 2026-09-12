@@ -33,6 +33,11 @@ async function mountActions() {
 }
 
 describe("row actions", () => {
+  it("shows the kebab icon on its trigger, not the hamburger — this is a per-row menu, not navigation", async () => {
+    const el = await mount('<wt-row-actions label="Department actions"></wt-row-actions>');
+    const icon = el.shadowRoot!.querySelector("button wt-icon")!;
+    expect(icon.getAttribute("name")).toBe("kebab");
+  });
   it("registers the reusable action disclosure", async () => {
     const el = await mount('<wt-row-actions label="Department actions"></wt-row-actions>');
     expect(el.shadowRoot?.querySelector("button")?.getAttribute("aria-label")).toBe(

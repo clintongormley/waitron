@@ -224,7 +224,17 @@ import { registerIcons } from "@waitron/ui";
 registerIcons({ check: "M2 8 L6 12 L14 4" });
 ```
 
-An unregistered `name` renders nothing — there is no broken-icon fallback markup.
+An unregistered `name` renders nothing — there is no broken-icon fallback markup. When a
+`packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
+trigger, for one), that name becomes part of the primitive's contract: every consuming app must
+register it itself, or that primitive's icon silently disappears there. The dashboard's own set —
+`hamburger`, `kebab`, `chevron-down`, each a plain geometric shape at the same 16x16 viewBox, not
+borrowed from an external icon library — lives in `apps/dashboard/src/icons.ts` and is registered
+once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
+different things at different scales: hamburger opens the whole app's navigation (used once);
+kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
+wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
+or the nav toggle looking like just another row's overflow menu.
 
 ### Accessible, clickable labels (`wt-input`, `wt-switch`)
 
@@ -390,6 +400,17 @@ visible here because the sidebar itself sits on `--wt-color-bg`, unlike `wt-butt
 variant (see `--wt-opacity-hover` above). A `.nav-group` header takes the same small-caps treatment
 as a card's group-label (uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter
 link.
+
+A headed group (the pinned first group — Overview, Sales — has no header and is never
+collapsible) is also its own disclosure toggle: the header is a `<button>` with `aria-expanded` and
+`aria-controls` pointing at its item list, a `chevron-down` `wt-icon` that rotates 180° when
+expanded (pointing down at rest — "expand this way" — up when open — "collapse"). Collapsed state
+is a plain `Set<NavGroupId>` in component state, not persisted — reopens to fully expanded next
+session, deliberately, rather than risk a collapsed-by-default group hiding something a new build
+adds to it. A group that contains the CURRENT screen always renders expanded regardless of that
+set, even if the user collapsed it earlier and then navigated back into it — collapsing "Team" and
+opening Staff must never hide the page you are already on; only navigating to a DIFFERENT screen
+lets a group honour a collapse the user asked for.
 
 The sidebar and the content column both scroll independently, bounded to the space below the
 banner (`.shell { height: 100vh }`, `.sidebar`/`.main` both `max-height: 100%; overflow-y: auto`) —
@@ -810,10 +831,13 @@ shows the first tab. Arrow keys wrap between tabs; Home and End select the first
 The tab strip scrolls on narrow screens. Hidden panels remain mounted, so switching tabs retains
 their input values. Supply unique, nonempty keys and a localized `label` for the tab group.
 
-Put each list in `wt-data-table`. Use `wt-row-actions` for its hamburger menu, with a label that
-identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table heading,
-and Edit, Delete or domain-specific actions in each row's menu. The menu uses a native popover:
-clicking outside or pressing Escape closes it. Its action buttons follow normal Tab navigation.
+Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a
+hamburger; it opens a small menu of actions for one row, not the app's whole navigation, so it
+needs the icon that means "more options here," not "open navigation" (see "Icons" below) — with a
+label that identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table
+heading, and Edit, Delete or domain-specific actions in each row's menu. The menu uses a native
+popover: clicking outside or pressing Escape closes it. Its action buttons follow normal Tab
+navigation.
 
 Open create and edit forms in `wt-modal`, with `wt-form-actions` in its footer. Keep validation
 messages inside the modal, retain entered values after a failed save, and refresh the table after

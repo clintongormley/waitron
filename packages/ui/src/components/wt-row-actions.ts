@@ -2,6 +2,7 @@ import { LitElement, css, html } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
+import "./wt-icon.js";
 
 @customElement("wt-row-actions")
 export class WtRowActions extends LitElement {
@@ -116,7 +117,7 @@ export class WtRowActions extends LitElement {
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
       >
-        <span aria-hidden="true">☰</span>
+        <wt-icon name="kebab"></wt-icon>
       </button>
       <div id="actions" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
         <div class="actions"><slot @click=${this.onAction}></slot></div>

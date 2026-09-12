@@ -1270,8 +1270,8 @@ describe("dashboard-app", () => {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    // Every group header (an <h2 class="nav-group">) renders its localised label…
-    const headers = [...el.shadowRoot!.querySelectorAll("h2.nav-group")].map((h) =>
+    // Every group header (a toggle button.nav-group) renders its localised label…
+    const headers = [...el.shadowRoot!.querySelectorAll("button.nav-group")].map((h) =>
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
@@ -1280,6 +1280,52 @@ describe("dashboard-app", () => {
     expect(NAV_SCREENS).toHaveLength(21);
     expect(navItem(el, "location-menus")).toBeNull();
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
+  });
+
+  it("collapses and expands a nav group's items from its header toggle", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-team")!;
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hidden).toBe(false);
+    expect(navItem(el, "staff")).toBeTruthy();
+
+    header.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.hidden).toBe(true);
+
+    header.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hidden).toBe(false);
+  });
+
+  it("keeps a group expanded once collapsed if it holds the current screen, so you never lose your place", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    // "catalogue" lives in the (collapsible) "menu" group; navigate there first.
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-menu")!;
+
+    header.click(); // user collapses the group its own current page lives in
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hidden).toBe(false);
+    expect(navItem(el, "catalogue")).toBeTruthy();
+
+    // Navigating away, the group now honours the collapse the user asked for.
+    navItem(el, "overview")!.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.hidden).toBe(true);
   });
 
   // The module-UI seam (SP2 Task 3): a BUNDLED module's screen and nav are mounted GENERICALLY from the
@@ -1516,6 +1562,14 @@ describe("dashboard-app", () => {
   // Task 12: the responsive drawer. On narrow screens the sidebar is an off-canvas drawer toggled by
   // the hamburger; opening it flips `.layout.drawer-open` and shows a scrim, and selecting any nav item
   // closes it again while STILL switching the screen (so a phone tap navigates and dismisses in one go).
+  it("shows the hamburger icon on the drawer toggle, not the kebab", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const icon = el.shadowRoot!.querySelector('[data-test="nav-toggle"] wt-icon')!;
+    expect(icon.getAttribute("name")).toBe("hamburger");
+  });
   it("hamburger toggles the drawer open, a nav click closes it", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
