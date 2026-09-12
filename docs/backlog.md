@@ -340,9 +340,12 @@ design-review section apply.
   *Verified live on the real box 2026-09-10 (PR #308): agent joins over HTTPS with the pinned CA, sees
   `/dev/usb/lp0` as the `node` user, and a dashboard "test print" prints a physical slip end-to-end.*
   *Two dashboard join-UI follow-ups surfaced during that live test (both `apps/dashboard`, pre-existing
-  from the #289/#304 join flow, NOT the box-wiring branch): the "print agents waiting to join" list does
-  not live-update (addressed on `live-updates`, awaiting landing), and the pairing window's "Open
-  until …" timestamp renders in UTC instead of the venue's local time zone.*
+  from the #289/#304 join flow, NOT the box-wiring branch). The first — the "print agents waiting to
+  join" list not live-updating — was fixed and LANDED in #322. The second is still open and is wider
+  than first written: `formatIsoMinute` (`apps/dashboard/src/date-utils.ts:27`) builds its text by
+  slicing the ISO string, so it always shows UTC, never the venue's time zone. That is the pairing
+  window's "Open until …", and equally every last-seen, created-at and job timestamp on the printers
+  and devices screens. Fixing it is one shared formatter, not a per-call-site patch.*
   *On-node agent auto-enrolment — LANDED #311, box-verified 2026-09-11 (spec
   [2026-09-11-on-node-agent-auto-enrolment-design.md](superpowers/specs/2026-09-11-on-node-agent-auto-enrolment-design.md)):
   a print agent on the PRIMARY box enrols itself silently over loopback (`POST /api/node/enrol-self`,
@@ -473,11 +476,21 @@ design-review section apply.
   the agent setup page. Design: [printer settings](superpowers/specs/2026-09-11-printer-settings-tables.md);
   the [review record](superpowers/specs/2026-09-11-printer-settings-review.md) lists every finding with
   its disposition.
-  *In flight (2026-09-12, `printers`):* Printer configuration uses Queue, Printers and Print Agents
-  tabs with setup-aware defaults. Add agent owns the pairing window; both Add dialogs are wider and
-  use Scan with a spinner. The queue includes all jobs awaiting delivery, 100 recent completions and 100 failures with no retries left.
-  Retained registrations use Disable/Disabled wording. Design and validation scope:
+  *Printer configuration tabs, LANDED #327 (2026-09-12):* Printer configuration uses Print Queue,
+  Printers and Print Agents tabs. A fresh visit opens the next setup step based on which agents and
+  printers exist; a tab the person picks themselves survives live updates and browser navigation.
+  Add agent owns the pairing window — it opens and renews the window while the dialog is open, closes
+  it when the dialog is dismissed, and ignores replies from an earlier opening; the renewal endpoint
+  checks who is asking without extending the management session. Both Add dialogs are wider and use
+  Scan with visible progress. The queue shows every job awaiting delivery plus the latest 100 printed
+  and the latest 100 failed with no retries left. Retained registrations use Disable/Disabled/Enable
+  wording and can be added again without losing registration, settings, routing or history. Design:
   [printer configuration tabs](superpowers/specs/2026-09-12-printer-configuration-tabs.md).
+  *Still unverified after #327:* physical printer discovery, paper output, cross-box operation, and
+  whether a device knock reaches the box while the Add agent dialog is open — none of these were
+  exercised against hardware. Only the primary box enrols itself automatically; a mirror doing the
+  same waits on the separate cross-box print-agent TLS work noted above. The review suggested
+  sentence case for "Print Queue" and "Print Agents"; the owner's casing was kept deliberately.
   *Follow-ups (2026-09-11):* Disabling a printer requires confirmation. The printer table defaults to Active,
   with Disabled and All filters; Add printer offers a disabled discovered device as **Add again**,
   restoring the same registration, settings and pending jobs. Named `wt-switch` controls replace
