@@ -150,6 +150,20 @@ steps take owner sign-off at land):
    suite. The build + smoke were later scoped (#288): on a PR they run only when `deploy/` changed,
    on a push to `main`/tag still on `code` (so `publish` is unaffected), with the steps in a reusable
    `image-smoke.yml` also driven by a nightly + on-request `image-nightly.yml`.
+   **Both images dropped to `linux/amd64` alone (#325).** The ARM half of the manifest had no
+   consumer — the box is an x86 mini-PC — and cost the `publish` job most of its 6–8 minutes on every
+   merge, because an x86 runner builds ARM under QEMU emulation, `pnpm install` and five package
+   builds included. It also put a second platform's layers into a GitHub Actions cache sitting at the
+   10 GB per-repository ceiling, competing with the Playwright and pnpm caches the test jobs restore
+   (`CLAUDE.md` §2; measurements in `superpowers/specs/2026-09-08-node-containers-design.md` §10).
+   *Follow-ups left, none blocking:* **(a)** re-adding any platform means re-adding the
+   `docker/setup-qemu-action` step the same change removed — buildx alone registers no emulation
+   handler, and the comment at the `publish` step says so; **(b)** `deploy/waitron.sh` pulls with
+   `--ignore-pull-failures`, so a box whose architecture has no manifest entry would fail silently at
+   pull and only break later at `up` — no such box exists, and §3 argues against writing for a case
+   nobody has, but the operator has no terminal to read a pull error on; **(c)** the app and
+   print-agent images share one GHA cache scope, which Docker documents as letting the second
+   overwrite the first's cache — pre-existing, never measured here.
    Proven end to end on 2026-09-09: a blank box → phone setup → provision → trading over HTTPS
    → enrolled till → a recorded preproduction sale (design §11). **A first real-hardware bringup
    (2026-09-10) surfaced and fixed two box bugs — #302:** the setup→trading self-restart hung
