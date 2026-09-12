@@ -226,3 +226,10 @@ describe("permissionsForRole", () => {
     expect(permissionsForRole("admin")).toContain("booking.manage");
   });
 });
+
+it("grants print.resend separately to manager and admin", () => {
+  expect(roleHasPermission("manager", "print.resend")).toBe(true);
+  expect(roleHasPermission("admin", "print.resend")).toBe(true);
+  expect(roleHasPermission("staff", "print.resend")).toBe(false);
+  expect(roleHasPermission("supervisor", "print.resend")).toBe(false);
+});

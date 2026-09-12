@@ -4,6 +4,7 @@ import type { NodeId, SaleId, TenantId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   FiscalBackend,
+  FiledReceipt,
   FiscalRecordRef,
   IntegrityIssue,
   IntegrityReport,
@@ -165,10 +166,7 @@ export class FakeFiscalBackend implements FiscalBackend {
    * (an idempotent replay must reprint the SAME qr). The breakdown, by contrast, is genuinely stored
    * and handed back verbatim, so the read-back round-trips the exact filed figures.
    */
-  async filedReceiptFor(
-    tx: Transaction,
-    saleId: SaleId,
-  ): Promise<{ verificationUrl: string; vatBreakdown: VatBreakdownLine[] } | undefined> {
+  async filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined> {
     const rows = await tx.execute<{ record_id: string; vat_breakdown: VatBreakdownLine[] }>(sql`
       select record_id, vat_breakdown
       from fake_fiscal_records

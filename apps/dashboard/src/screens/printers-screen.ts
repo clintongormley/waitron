@@ -60,7 +60,7 @@ export const SCAN_LISTEN_MS = 10_000;
 export const SCAN_POLL_MS = 2_000;
 
 /** Hardware registration and print-job history; routing policy lives on Printing rules.
- * The server enforces printer.manage. Failures retain their code in state and render localized text. */
+ * The server enforces printer.manage for configuration and print.resend for document resends. */
 @customElement("dashboard-printers-screen")
 export class PrintersScreen extends LitElement {
   static override styles = [
@@ -192,6 +192,7 @@ export class PrintersScreen extends LitElement {
   @state() private preview: PrintJobPreview | null = null;
   @state() private previewOpen = false;
   @state() private jobs: PrintJobRow[] = [];
+  @state() private resendingJobId: string | null = null;
 
   @state() private tills: Till[] = [];
 
@@ -1176,8 +1177,17 @@ export class PrintersScreen extends LitElement {
         label: t("printers.actions"),
         cell: (j) =>
           html`<wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j.id)}
-            >${t("printers.view_job")}</wt-button
-          >`,
+              >${t("printers.view_job")}</wt-button
+            >${
+              j.canResend
+                ? html`<wt-button
+                    data-test=${`resend-job-${j.id}`}
+                    ?disabled=${this.resendingJobId !== null}
+                    @click=${() => void this.#resendJob(j.id)}
+                    >${t("printers.resend_job")}</wt-button
+                  >`
+                : nothing
+            }`,
       },
     ];
     return html`<section>
@@ -1194,6 +1204,16 @@ export class PrintersScreen extends LitElement {
         .emptyMessage=${t("printers.no_jobs")}
       ></wt-data-table>
     </section>`;
+  }
+
+  async #resendJob(id: string): Promise<void> {
+    if (this.resendingJobId !== null) return;
+    this.resendingJobId = id;
+    try {
+      await this.#mutate(() => this.api.resendPrintJob(id));
+    } finally {
+      this.resendingJobId = null;
+    }
   }
 
   async #viewJob(id: string): Promise<void> {

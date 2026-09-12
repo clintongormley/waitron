@@ -688,10 +688,9 @@ describe("payWorkingOrder", () => {
     // The replayed ticket's line list is read back from the order's stored lock (Finding 2), so it is
     // byte-identical to the original's — filed lines both times, never a client basket the retry sent.
     expect(second.lines).toEqual(first.lines);
-    // The replayed ticket carries the SAME mandatory Veri*Factu QR the original did, re-derived from
-    // the filed record. `change` stays 0.00 — a documented replay limitation: the tendered cash is not
-    // persisted and the drawer change was handed over at the ORIGINAL sale.
-    expect(second.tender).toEqual({ method: "cash", change: "0.00" });
+    // The replay reports the same persisted cash facts and filed QR without another drawer action.
+    expect(first.tender).toEqual({ method: "cash", change: "4.50" });
+    expect(second.tender).toEqual(first.tender);
     expect(second.qr).toBe(first.qr);
     expect(second.qr.length).toBeGreaterThan(0);
 
@@ -1734,8 +1733,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await registroCount(id)).toBe(1);
 
     // A further SEQUENTIAL collect of the now-settled order deterministically hits the settled-replay
-    // branch: it returns the same ticket and files nothing (change 0.00 — the drawer change was given
-    // at the original collect).
+    // branch: it returns the same ticket and files nothing. Exact cash has zero change.
     const replay = await collectOrder({ db: suite.admin, backend, clock }, cfg, req, OPERATOR);
     expect(replay.invoiceNumber).toBe("A/1");
     expect(replay.tender).toEqual({ method: "cash", change: "0.00" });

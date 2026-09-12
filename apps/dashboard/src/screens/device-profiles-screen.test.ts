@@ -185,6 +185,27 @@ describe("device-profiles-screen editor form", () => {
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
   });
 
+  it("lets a handheld profile enable receipt printing", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "Waiter");
+    selectFormFactor(el, "phone-portrait");
+    await el.updateComplete;
+    toggle(el, "cap-print-receipt", true);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+      "Waiter",
+      null,
+      ["print-receipt"],
+      "phone-portrait",
+      null,
+    );
+  });
+
   it("New profile defaults the form factor to the cash register (till) when unchanged", async () => {
     const api = stubApi();
     const el = await mount(api);

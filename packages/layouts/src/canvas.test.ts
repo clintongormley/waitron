@@ -15,9 +15,9 @@ describe("catalogue tuples", () => {
     for (const c of ["product-grid", "basket", "total", "tender-pay", "floor-plan", "kds-board"])
       expect(CARD_TYPES).toContain(c);
   });
-  it("capability flags are unique and include payment/drawer/kds", () => {
+  it("capability flags are unique and include payment/drawer/kds/printing", () => {
     expect(noDupes(CAPABILITY_FLAGS)).toBe(true);
-    for (const c of ["integrated-card-payment", "open-cash-drawer", "act-as-kds"])
+    for (const c of ["integrated-card-payment", "open-cash-drawer", "act-as-kds", "print-receipt"])
       expect(CAPABILITY_FLAGS).toContain(c);
   });
 });

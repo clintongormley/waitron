@@ -96,9 +96,7 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
     expect(found!.status).toBe("SUCCESSFUL");
     expect(found!.amount).toEqual(decimal("1.00"));
 
-    // (a2) The capture PERSISTED the card-present facts onto the `payments` row — the receipt's card
-    // block is read back from these columns, so a provider that captured cleanly but dropped the
-    // instrument facts would surface as a card receipt with no scheme/PAN. Keyed by OUR `payment_ref`
+    // (a2) The capture persists the card facts used by the separate payment slip. Keyed by OUR `payment_ref`
     // under the real `SUMUP_PROVIDER` ("sumup", the string the adapter itself writes).
     const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, {

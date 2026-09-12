@@ -32,6 +32,8 @@ import {
 } from "@waitron/db";
 import {
   claimPrintJobs,
+  canResendPrintJob,
+  resendPrintJob,
   createPrinter,
   deactivatePrinter,
   enqueuePrintJob,
@@ -91,13 +93,7 @@ export interface PrintApiDeps {
   enrolRateLimiter?: EnrolRateLimiter;
 }
 
-/**
- * The ONE permission that gates every print-MANAGEMENT route (the agents list/revoke, the printers CRUD,
- * and the job list) — one named constant referenced at each gated route rather than an inline literal, the
- * `purchasing-api.ts` / `device-api.ts` seam. `printer.manage` maps to `manager` + `admin`
- * (permissions.ts) — central printer administration is an admin act, never a till operator's. The
- * AGENT API itself is device-authed (`requireAgent`), deliberately NOT gated on this (design §7).
- */
+/** Printer configuration and history reads use printer.manage; document resends use print.resend. */
 const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
 
 /** How many recent jobs the management job list returns — a bound on the dashboard's status read, not
@@ -144,6 +140,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_rate_limited": 429,
   "printer.not_found": 404,
   "print_job.not_found": 404,
+  "print_job.not_resendable": 409,
   "printer.invalid_config": 422,
   // A second registration of a physical device already registered in this venue — the partial UNIQUE
   // (tenant_id, location_id, local_key), mapped friendly by `createPrinter`/`updatePrinter` (§9).
@@ -277,7 +274,7 @@ function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
 
 /**
  * Mounts the three print route groups on an existing Hono app — the `mountDeviceApi` convention (the
- * unauthenticated knock + status seam, the token-gated agent group, the `printer.manage`-gated management
+ * unauthenticated knock + status seam, the token-gated agent group, the permission-gated management
  * group), attached to the SAME app. Every handler is wrapped in `run` so the whole surface maps errors
  * identically:
  *
@@ -299,7 +296,7 @@ function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
  *     and `discoveryUntil` so the box knows to actively scan while the window is open.
  *  3. `printer.manage`-GATED management routes (the agents list/revoke, the printers CRUD, the job list) —
  *     each calls `requireManagementSession` (401) then funnels its DB work through the local `gated`
- *     helper, which `authorizeManager`s `printer.manage` (403) before the op runs, in exactly one place.
+ *     helper, which checks `printer.manage` (403), or `print.resend` for document resends, before the op runs.
  */
 export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void {
   // The GLOBAL, in-memory, per-process knock rate-limiter (design §7 / the device knock precedent).
@@ -326,18 +323,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const DISCOVERED_TTL_MS = 15_000;
 
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
-  // `printer.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
-  // is applied identically and in exactly one place (the device-api / purchasing-api seam). Proven by
-  // deletion: removing the `authorizeManager(...)` call makes a staff session succeed on every gated
-  // route (print-api.pg.test.ts records the RED/GREEN).
-  const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+  const gated = <T>(
+    sessionId: string,
+    fn: (tx: Transaction) => Promise<T>,
+    permission: Permission = PRINTER_MANAGE_PERMISSION,
+  ): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await authorizeManager(tx, {
-        managementSessionId: sessionId,
-        permission: PRINTER_MANAGE_PERMISSION,
-      });
+      await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
 
@@ -811,6 +804,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             id: printJobs.id,
             printerId: printJobs.printerId,
             status: printJobs.status,
+            kind: printJobs.kind,
             attempts: printJobs.attempts,
             lastError: printJobs.lastError,
             createdAt: printJobs.createdAt,
@@ -821,7 +815,25 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .orderBy(desc(printJobs.createdAt))
           .limit(RECENT_JOBS_LIMIT),
       );
-      return c.json(rows);
+      return c.json(
+        rows.map(({ kind, ...job }) => ({
+          ...job,
+          canResend: canResendPrintJob({ ...job, kind }),
+        })),
+      );
+    }),
+  );
+
+  app.post("/management-api/print-jobs/:id/resend", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrintJobId");
+      const result = await gated(
+        sessionId,
+        (tx) => resendPrintJob(tx, deps.cfg, id),
+        "print.resend",
+      );
+      return c.json(result, 202);
     }),
   );
 

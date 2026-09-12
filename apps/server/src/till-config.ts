@@ -58,6 +58,8 @@ export interface TillConfig {
    * practice warning; fiscal values and hashes never depend on it.
    */
   practiceMode?: boolean;
+  /** Request-derived drawer eligibility; handheld cash sales never open a linked till's drawer. */
+  allowCashDrawer?: boolean;
   /**
    * The venue's pay-timing / service mode, read from the till's LOCATION rather than the environment
    * (the env carries no `order_flow` — the location does), so it is NOT set by `loadTillConfig` and is

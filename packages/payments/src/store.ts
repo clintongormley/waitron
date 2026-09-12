@@ -390,8 +390,8 @@ async function selectCapturedForWorkingOrder(
   return row as CapturedPaymentForOrder | undefined;
 }
 
-/** The captured/accepted-offline payment for a working order, WITHOUT filtering by provider — the
- * ticket/reprint path (readTenderBlock) knows the working order but not which provider settled it.
+/** The captured/accepted-offline payment for a working order, WITHOUT filtering by provider, for
+ * callers that know the working order but not which provider settled it.
  * Returns null when none (a cash sale, or a card sale whose payment row is absent). Shares
  * `selectCapturedForWorkingOrder` with the provider-filtered read above, passing no `provider` so the
  * query spans every provider; the only difference is the null (not undefined) empty return this

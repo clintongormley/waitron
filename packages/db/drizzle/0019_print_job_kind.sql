@@ -1,0 +1,2 @@
+ALTER TABLE "print_jobs" ADD COLUMN "kind" text DEFAULT 'document' NOT NULL;--> statement-breakpoint
+ALTER TABLE "print_jobs" ADD CONSTRAINT "print_jobs_kind_ck" CHECK ("print_jobs"."kind" in ('document', 'drawer'));

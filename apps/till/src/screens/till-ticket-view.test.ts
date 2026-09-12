@@ -15,6 +15,8 @@ const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
 // → 6,40 (10 %). Total 9,40; €10 cash tendered → 0,60 change. The weighed quantity arrives
 // trailing-zero-trimmed ("0.32"): the filed record carries no unit of measure to append "kg".
 const result: TillSaleResult = {
+  orderLabel: "Mesa 6",
+  orderNumber: 41,
   invoiceNumber: "A/1",
   issuedAt: "2026-08-05T12:34:56.000Z",
   total: "9.40",
@@ -77,6 +79,17 @@ describe("till-ticket-view", () => {
     expect(t).toContain("B12345678");
   });
 
+  it("prefers the issuer stored with the filed invoice over current boot identity", async () => {
+    const { el } = await mount({
+      issuer: { venueName: "Filed Venue SL", nif: "B87654321" },
+    });
+    const t = text(el);
+    expect(t).toContain("Filed Venue SL");
+    expect(t).toContain("B87654321");
+    expect(t).not.toContain("Deli Delicioso SL");
+    expect(t).not.toContain("B12345678");
+  });
+
   it("prints the invoice number + series and the formatted issue date (art. 7.1.a, 7.1.b)", async () => {
     const { el } = await mount();
     const expectedDate = new Intl.DateTimeFormat("es-ES", {
@@ -85,6 +98,14 @@ describe("till-ticket-view", () => {
     }).format(new Date(result.issuedAt));
     expect(text(el)).toContain("A/1");
     expect(text(el)).toContain(norm(expectedDate));
+  });
+
+  it("prints the order grouping label and number so split documents can be collected together", async () => {
+    const { el } = await mount();
+    expect(text(el)).toContain("Mesa 6 · Pedido 41");
+
+    const { el: unlabelled } = await mount({ orderLabel: null, orderNumber: 42 });
+    expect(text(unlabelled)).toContain("Pedido 42");
   });
 
   it("identifies each good from the FILED lines: name (invoice locale), quantity and per-line gross (art. 7.1.e)", async () => {
@@ -207,79 +228,62 @@ describe("till-ticket-view", () => {
   });
 
   // -----------------------------------------------------------------------------------------------
-  // Card tender (design §3b), mirroring `apps/server/src/receipt-ticket.test.ts`'s identical branch
-  // over the same `TenderBlock` — the on-screen block must never carry FEWER elements than the paper.
+  // Card tender (receipt/payment-slip design §4.1), mirroring the paper fiscal ticket.
   // -----------------------------------------------------------------------------------------------
   describe("card tender (design §3b)", () => {
-    it("shows the scheme + masked PAN, and the entry-mode·auth line as one joined string", async () => {
+    it("keeps card identity off the fiscal ticket while retaining the card tender", async () => {
       const { el } = await mount({
         tender: {
           method: "card",
           charged: "20.90",
           tip: "0.00",
-          card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
           reference: null,
         },
       });
       const t = text(el);
-      expect(t).toContain("Tarjeta VISA **** 5838");
+      expect(t).toContain("Tarjeta");
+      expect(t).not.toContain("VISA");
+      expect(t).not.toContain("5838");
+      expect(t).not.toContain("Sin contacto");
+      expect(t).not.toContain("328600");
       expect(t).not.toContain("Efectivo");
-      // Strengthened over Task 5's paper assertions: the entry-mode and auth code are asserted as ONE
-      // joined row (`·` = U+00B7), not two independent substrings that could have landed anywhere.
-      const rows = [...el.shadowRoot!.querySelectorAll(".tender-row")].map((r) => r.textContent);
-      expect(rows).toContain("Sin contacto · Aut 328600");
     });
 
-    it("shows the Chip entry-mode label, and Propina/Cobrado only when a tip rode on the card", async () => {
+    it("shows Propina/Cobrado only when a tip rode on the card", async () => {
       const { el } = await mount({
         tender: {
           method: "card",
           charged: "21.40",
           tip: "0.50",
-          card: { scheme: "VISA", last4: "5838", entryMode: "chip", authCode: "112233" },
           reference: null,
         },
       });
       const t = text(el);
-      const rows = [...el.shadowRoot!.querySelectorAll(".tender-row")].map((r) => r.textContent);
-      expect(rows).toContain("Chip · Aut 112233");
       expect(t).toContain("Propina");
       expect(norm(t)).toContain("0,50 €");
       expect(t).toContain("Cobrado");
       expect(norm(t)).toContain("21,40 €");
     });
 
-    it("omits Propina/Cobrado, and omits the entry-mode·auth line entirely, when the card carries neither", async () => {
+    it("omits Propina/Cobrado when the card carries no tip", async () => {
       const { el } = await mount({
         tender: {
           method: "card",
           charged: "20.90",
           tip: "0.00",
-          card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
           reference: null,
         },
       });
       const t = text(el);
       expect(t).not.toContain("Propina");
       expect(t).not.toContain("Cobrado");
-      // No stray `·`: the second line must be ABSENT (not present-but-empty) when neither fragment exists.
-      expect(t).not.toContain("·");
       const rows = el.shadowRoot!.querySelectorAll(".tender-row");
-      expect(rows).toHaveLength(1); // only the "Tarjeta VISA **** 5838" row
-    });
-
-    it("shows Tarjeta alone, with no mask, when no card facts are known", async () => {
-      const { el } = await mount({
-        tender: { method: "card", charged: "20.90", tip: "0.00", card: null, reference: null },
-      });
-      const t = text(el);
-      expect(t).toContain("Tarjeta");
-      expect(t).not.toContain("****");
+      expect(rows).toHaveLength(1);
     });
 
     it("shows the operator's manual reference when present", async () => {
       const { el } = await mount({
-        tender: { method: "card", charged: "20.90", tip: "0.00", card: null, reference: "4471" },
+        tender: { method: "card", charged: "20.90", tip: "0.00", reference: "4471" },
       });
       expect(text(el)).toContain("Ref. 4471");
     });
@@ -289,6 +293,15 @@ describe("till-ticket-view", () => {
       const t = text(el);
       expect(t).toContain("Efectivo");
       expect(t).toContain("Cambio");
+    });
+
+    it("renders no tender extras for an invoice issued before payment", async () => {
+      const { el } = await mount({ tender: { method: "unpaid" } });
+      const t = text(el);
+      expect(t).not.toContain("Efectivo");
+      expect(t).not.toContain("Cambio");
+      expect(t).not.toContain("Tarjeta");
+      expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
     });
   });
 
@@ -325,6 +338,52 @@ describe("till-ticket-view", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  it("offers the original at completion, then emits print-receipt instead of reprint", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result,
+      issuer,
+      originalReceiptAvailable: true,
+    });
+    let captured: Event | undefined;
+    el.addEventListener("print-receipt", (event) => (captured = event));
+    expect(el.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=print-receipt]")!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
+  it("offers a separate payment slip action only for card tenders", async () => {
+    const { el: cash } = await mount();
+    expect(cash.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
+
+    const { el: card } = await mount({
+      tender: { method: "card", charged: "9.40", tip: "0.00", reference: null },
+    });
+    let captured: Event | undefined;
+    card.addEventListener("payment-slip", (event) => (captured = event));
+    card.shadowRoot!.querySelector<HTMLElement>("[data-test=payment-slip]")!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
+  it("hides receipt and payment-slip actions when this enrolled device cannot print them", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result: {
+        ...result,
+        tender: { method: "card", charged: "9.40", tip: "0.00", reference: null },
+      },
+      issuer,
+      originalReceiptAvailable: true,
+      canPrintReceipt: false,
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")).not.toBeNull();
+  });
+
   it("emits a composed, bubbling open-drawer event when Abrir cajón is pressed", async () => {
     const { el } = await mount();
     let captured: Event | undefined;
@@ -333,6 +392,16 @@ describe("till-ticket-view", () => {
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
+  });
+
+  it("hides the manual drawer action when the caller cannot open a drawer", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result,
+      issuer,
+      canOpenDrawer: false,
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
   });
 
   it("labels the reprint + open-drawer buttons in the operator-UI locale, flipping with the UI language", async () => {

@@ -377,6 +377,7 @@ async function ringSale(
   cfg: TillConfig,
   cookie: string,
   menuItemId: string,
+  method: "cash" | "card" = "cash",
 ): Promise<string> {
   const deviceCookie = await enrolTillCookie(cfg);
   const workingOrderId = randomUUID();
@@ -386,7 +387,7 @@ async function ringSale(
     body: JSON.stringify({
       workingOrderId,
       lines: [{ menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
+      tender: { method, amount: "1.50" },
     }),
   });
   expect(res.status).toBe(200);
@@ -442,6 +443,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(jobs[0]!.printerId).toBe(printerId);
     expect(jobs[0]!.status).toBe("queued");
     const payload = new Uint8Array(jobs[0]!.payload);
+    expect(decodeTicket(payload)).toContain("DUPLICADO");
     expect(decodeTicket(payload)).toContain("VERI*FACTU"); // the legal legend proves it is the receipt
     expect(decodeTicket(payload)).toContain("Deli Recibos SL"); // issuer venue name (art. 7.1.d)
     expect(bytesInclude(payload, DRAWER_KICK)).toBe(false); // reprint = paper only, no kick
@@ -869,4 +871,180 @@ afterEach(async () => {
   await suite.admin.execute(sql`delete from management_sessions`);
   await suite.admin.execute(sql`delete from sessions`);
   await suite.admin.execute(sql`delete from persons`);
+});
+
+describe("original receipt and payment slip actions", () => {
+  it("prints an original then a marked duplicate without additional fiscal records", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const id = await ringSale(app, cfg, cookie, each.menuItemId);
+    for (const action of ["receipt", "reprint", "payment-slip"]) {
+      const res = await app.request(`/api/sales/${id}/${action}`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(200);
+    }
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(2);
+    const original = jobs
+      .map((j) => Buffer.from(j.payload).toString("latin1"))
+      .find((p) => !p.includes("DUPLICADO"))!;
+    const duplicate = jobs
+      .map((j) => Buffer.from(j.payload).toString("latin1"))
+      .find((p) => p.includes("DUPLICADO"))!;
+    expect(duplicate.replace("DUPLICADO\n", "")).toBe(original);
+    expect(await registroCount(cfg)).toBe(1);
+    expect(await saleCount(cfg)).toBe(1);
+  });
+  it("refuses unknown and malformed payment-slip ids", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    for (const id of [randomUUID(), "bad-id"]) {
+      const res = await app.request(`/api/sales/${id}/payment-slip`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
+    }
+  });
+});
+
+describe("payment slip persisted capture facts", () => {
+  it.each([true, false])(
+    "prints an integrated capture with card facts=%s and preserves fiscal rows",
+    async (withCard) => {
+      const { cfg, each, operatorId } = await setupVenue();
+      await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const cookie = await login(app, cfg, operatorId);
+      const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+      // Seed the same persisted columns an integrated provider supplies, without contacting hardware.
+      await suite.admin.execute(
+        sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`,
+      );
+      const res = await app.request(`/api/sales/${id}/payment-slip`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(200);
+      const jobs = await printJobsFor(cfg);
+      expect(jobs).toHaveLength(1);
+      const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
+      expect(text).toContain("JUSTIFICANTE DE PAGO");
+      expect(text).toContain("Cobrado");
+      if (withCard) expect(text).toContain("VISA **** 5838");
+      else expect(text).not.toContain("Tarjeta");
+      expect(text).not.toContain("VERI*FACTU");
+      expect(
+        bytesInclude(new Uint8Array(jobs[0]!.payload), Uint8Array.from([0x1d, 0x28, 0x6b])),
+      ).toBe(false);
+      expect(await registroCount(cfg)).toBe(1);
+      expect(await saleCount(cfg)).toBe(1);
+    },
+  );
+  it("does not print a manual card slip or another tenant's sale", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+    expect(
+      (await app.request(`/api/sales/${id}/payment-slip`, { method: "POST", headers: { cookie } }))
+        .status,
+    ).toBe(200);
+    expect(await printJobsFor(cfg)).toEqual([]);
+    const other = await setupVenue();
+    const foreignApp = new Hono();
+    mountTillApi(foreignApp, apiDeps(other.cfg), noopLog);
+    const foreignCookie = await login(foreignApp, other.cfg, other.operatorId);
+    const res = await foreignApp.request(`/api/sales/${id}/payment-slip`, {
+      method: "POST",
+      headers: { cookie: foreignCookie },
+    });
+    expect(res.status).toBe(404);
+    expect(await printJobsFor(other.cfg)).toEqual([]);
+  });
+});
+
+describe("persisted cash receipt facts", () => {
+  it("replays and reprints the original cash handed over and change", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg);
+    const id = randomUUID();
+    const request = {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        workingOrderId: id,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "20.00" },
+      }),
+    };
+    const first = await app.request("/api/sales", request);
+    expect(first.status).toBe(200);
+    const original = await first.json();
+    expect(original.tender).toEqual({ method: "cash", change: "18.50" });
+    expect(original.issuer).toMatchObject({ venueName: "Deli Recibos SL" });
+    const replay = await app.request("/api/sales", request);
+    expect(replay.status).toBe(200);
+    expect((await replay.json()).tender).toEqual(original.tender);
+    const printed = await app.request(`/api/sales/${id}/reprint`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(printed.status).toBe(200);
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(1);
+    const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
+    expect(text).toMatch(/Efectivo\s+20,00/);
+    expect(text).toMatch(/Cambio\s+18,50/);
+    expect(await registroCount(cfg)).toBe(1);
+  });
+});
+
+it("duplicates use the filed issuer identity while optional trim follows the current layout", async () => {
+  const { cfg, each, operatorId } = await setupVenue();
+  await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+  const app = new Hono();
+  mountTillApi(app, apiDeps(cfg), noopLog);
+  const cookie = await login(app, cfg, operatorId);
+  const id = await ringSale(app, cfg, cookie, each.menuItemId);
+  const originalTaxId = (
+    await suite.admin.execute<{ tax_id: string }>(
+      sql`select tax_id from tenants where id = ${cfg.tenantId}`,
+    )
+  ).rows[0]!.tax_id;
+  await suite.admin.execute(
+    sql`update tenants set legal_name = 'Changed venue identity' where id = ${cfg.tenantId}`,
+  );
+  await suite.admin.execute(
+    sql`insert into tenant_receipts (tenant_id, receipt) values (${cfg.tenantId}, ${JSON.stringify({ headerSubtitle: "Current welcome", footerMessage: "Current farewell" })}::jsonb) on conflict (tenant_id) do update set receipt = excluded.receipt`,
+  );
+  const res = await app.request(`/api/sales/${id}/reprint`, {
+    method: "POST",
+    headers: { cookie },
+  });
+  expect(res.status).toBe(200);
+  const jobs = await printJobsFor(cfg);
+  expect(jobs).toHaveLength(1);
+  const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
+  expect(text).toContain("Deli Recibos SL");
+  expect(text).toContain(originalTaxId);
+  expect(text).not.toContain("Changed venue identity");
+  expect(text).toContain("Current welcome");
+  expect(text).toContain("Current farewell");
+  expect(await registroCount(cfg)).toBe(1);
 });

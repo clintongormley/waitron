@@ -1,3 +1,4 @@
+import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
 // them — the reachability convention `till-config.ts`/`config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
@@ -27,17 +28,12 @@ import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId, TenantId } from "@waitron/shared";
 import type { PricedLines } from "@waitron/catalogue";
 import {
+  payments,
   associatePaymentWithSale,
   findCapturedPaymentForWorkingOrder,
-  findCapturedPaymentForWorkingOrderAnyProvider,
   recordManualCardPayment,
 } from "@waitron/payments";
-import type {
-  CapturedPaymentForOrder,
-  CardDetails,
-  PaymentProvider,
-  PaymentResult,
-} from "@waitron/payments";
+import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
 import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
@@ -49,8 +45,15 @@ import {
 } from "./working-order.js";
 import type { LineExtras, TillSaleDeps } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { readReceiptOrder } from "./receipt-order.js";
+import { ticketLinesFrom } from "./receipt-lines.js";
 import type { TillConfig } from "./till-config.js";
-import { enqueueReceiptReprint, enqueueSaleReceipt } from "./receipt-print.js";
+import {
+  enqueueCashSaleDrawer,
+  enqueueOriginalReceipt,
+  enqueueReceiptReprint,
+  enqueueSaleReceipt,
+} from "./receipt-print.js";
 
 /**
  * A `cash` or manual `card` tender, shared by `TillSaleRequest` and `PayWorkingOrderRequest` (which
@@ -149,25 +152,21 @@ export interface TillSaleLine {
   parentLineNo?: number | null;
 }
 
-/**
- * How a filed sale was paid, as facts read back from the committed rows — the receipt's tender block.
- * `cash` carries only the change handed back. `card` carries the whole instrument charge (`charged`,
- * `= total + tip`), the `tip` that rode on it (the canonical numeric string "0.00" when none — a
- * downstream renderer compares `tip !== "0.00"`), the card-present `card` facts (null when the
- * provider supplied none, e.g. a manual or offline tender), and the operator `reference` (the manual
- * acquirer/terminal number, null for an integrated capture).
- */
+/** Persisted tender amounts and optional manual terminal reference. Card identity belongs on the slip. */
 export type TenderBlock =
+  | { method: "unpaid" }
   | { method: "cash"; change: string }
   | {
       method: "card";
       charged: string;
       tip: string;
-      card: CardDetails | null;
       reference: string | null;
     };
 
 export interface TillSaleResult {
+  issuer?: { venueName: string; nif: string };
+  orderLabel: string | null;
+  orderNumber: number;
   /** `NumSerieFactura`-shaped "A/1", read back from the sale row + its series after filing. */
   invoiceNumber: string;
   /** The fiscal record's issuance instant, ISO-8601. */
@@ -186,99 +185,51 @@ export interface TillSaleResult {
   qr: string;
 }
 
-/**
- * Reconstruct the card-present facts from a captured `payments` row, or null when the provider left
- * them unset (cash/manual/offline never fill them). A partial row (some card columns set, some NULL)
- * is treated as "no facts" rather than a half-rendered block — a filed, immutable sale must present,
- * never throw (CLAUDE.md §5).
- */
-function cardFromPaymentRow(row: {
-  cardScheme: string | null;
-  cardLast4: string | null;
-  cardEntryMode: string | null;
-  cardAuthCode: string | null;
-}): CardDetails | null {
-  if (row.cardScheme === null || row.cardLast4 === null || row.cardEntryMode === null) {
-    return null;
-  }
-  return {
-    scheme: row.cardScheme,
-    last4: row.cardLast4,
-    // The card-columns CHECK constraint guarantees one of the four entry modes; the cast is safe.
-    entryMode: row.cardEntryMode as CardDetails["entryMode"],
-    authCode: row.cardAuthCode,
-  };
-}
-
-/**
- * Read the tender block for a filed sale back from its committed rows — the `tenders` row (tender
- * method, the whole charge, and the tip) and, for a card, the captured `payments` row (provider, card
- * facts, operator reference). It reads the persisted rows back rather than reusing values already in
- * memory SO THAT the first print and every reprint build the block through this identical path — a
- * reprint is byte-identical to the first print by construction (the regression property the owner
- * named).
- * Tenant-scoped on every read (one-tenant-per-database is NOT the query's
- * isolation boundary — CLAUDE.md §3). DEGRADES, never throws: a card tender whose payment row is
- * absent, or whose card columns are unset, presents `card: null` rather than failing a sale that is
- * already filed and immutable (§5). `opts.cashChange` is the change a cash tender hands back (the
- * caller knows it; it is not a stored column).
- */
+/** Read the persisted amounts and manual terminal reference; card identity belongs on the slip. */
 export async function readTenderBlock(
   tx: Transaction,
   cfg: TillConfig,
   saleId: SaleId,
   workingOrderId: string,
-  opts: { cashChange?: string } = {},
 ): Promise<TenderBlock> {
   const [tender] = await tx
-    .select({ method: tenders.method, amount: tenders.amount, tip: tenders.tipAmount })
+    .select({
+      method: tenders.method,
+      amount: tenders.amount,
+      tip: tenders.tipAmount,
+      cashTendered: tenders.cashTendered,
+    })
     .from(tenders)
     .where(and(eq(tenders.tenantId, cfg.tenantId), eq(tenders.saleId, saleId)));
-  // A settled sale always has exactly one tender; a missing one presents as cash-with-no-change
-  // rather than throwing on a filed, immutable sale (degrade, never throw — §5).
-  if (tender === undefined || tender.method === "cash") {
-    return { method: "cash", change: opts.cashChange ?? "0.00" };
+  // Invoice-first issuance legitimately precedes the tender.
+  if (tender === undefined) return { method: "unpaid" };
+  if (tender.method === "cash") {
+    return {
+      method: "cash",
+      change: subtractDecimal(
+        decimal(tender.cashTendered ?? tender.amount),
+        decimal(tender.amount),
+      ),
+    };
   }
-  const payment = await findCapturedPaymentForWorkingOrderAnyProvider(tx, {
-    tenantId: cfg.tenantId,
-    workingOrderId,
-  });
+  const [payment] = await tx
+    .select({ externalRef: payments.externalRef })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, cfg.tenantId),
+        eq(payments.saleId, saleId),
+        eq(payments.workingOrderId, workingOrderId),
+        eq(payments.provider, "manual"),
+      ),
+    )
+    .limit(1);
   return {
     method: "card",
     charged: tender.amount,
     tip: tender.tip,
-    card: payment === null ? null : cardFromPaymentRow(payment),
-    reference: payment !== null && payment.provider === "manual" ? payment.externalRef : null,
+    reference: payment?.externalRef ?? null,
   };
-}
-
-/**
- * Trim a filed quantity to a display string: drop trailing zeros (and a bare trailing dot) so a
- * walk-up's "2" and a retrieved order's stored "2.000" both read "2", and a weighed "0.320" reads
- * "0.32". Same normalisation the till's `displayQuantity` applies on retrieve, done here for EVERY
- * path so the receipt's line list is uniform regardless of which path filed it. Display only — the
- * fiscal figures (`total`, `vatBreakdown`) are untouched.
- */
-function trimQuantityForDisplay(quantity: string): string {
-  return quantity.includes(".") ? quantity.replace(/0+$/, "").replace(/\.$/, "") : quantity;
-}
-
-/**
- * Project the FILED priced lines onto the receipt's line list (`TillSaleResult.lines`) — the goods
- * identification (art. 7.1.e). `priced` is exactly what was filed (a walk-up/collect `priceBasket`, or
- * a stored-lock `priceLockedLines`), so the receipt prints the invoiced composition, never the mutable
- * client basket (Finding 2). `grossLineTotals[i]` is parallel to `lines[i]` (see `PricedLines`), so the
- * per-line gross is the exact figure filed, not a recompute that could drift by a cent.
- */
-function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
-  return priced.lines.map((line, i) => ({
-    descriptions: line.descriptions,
-    quantity: trimQuantityForDisplay(line.quantity),
-    gross: priced.grossLineTotals[i]!,
-    // Carry the child→parent link so the receipt can render each option grouped under its dish
-    // (Task 8). `?? null` keeps a plain (no-modifier) line's field exactly `null`.
-    parentLineNo: line.parentLineNo ?? null,
-  }));
 }
 
 /**
@@ -557,26 +508,12 @@ export async function payWorkingOrder(
   }
 }
 
-/**
- * Reconstruct a settled working order's ticket by reading back its ALREADY-FILED record — filing
- * NOTHING. `invoiceNumber`, `issuedAt` and `total` are exact (the immutable `sales` row + its series);
- * `qr` and `vatBreakdown` are read back from the fiscal record via `backend.filedReceiptFor`, so the
- * ticket carries the regime's mandatory verification QR and the EXACT filed difference-method desglose
- * (Task 14) rather than a QR-less, recomputed breakdown that could diverge by a cent from what was
- * filed. Two callers:
- *  - an idempotent REPLAY (a payWorkingOrder/collectOrder retry, or a race loser that saw the order
- *    already `settled`): `change` defaults to "0.00" — the cash actually tendered is not persisted
- *    (only the settled amount, which equals the total), and the drawer change was handed over at the
- *    ORIGINAL sale, so a replay re-prints the ticket and hands over nothing;
- *  - Mode-I's FRESH collect, which settled the deferred invoice just now and passes the real cash-back
- *    (`tendered − total`) so THIS ticket reports the change the operator actually gives.
- */
+/** Reconstruct the filed invoice and persisted payment facts for original, duplicate or pay replay. */
 async function readSettledTicket(
   backend: FiscalBackend,
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
-  change = "0.00",
 ): Promise<TillSaleResult> {
   // The single sale filed from this working order — `sales_working_order_id_key` guarantees at most
   // one, and a settled order always has exactly one (filed in the same transaction that settled it).
@@ -623,11 +560,10 @@ async function readSettledTicket(
   }
   /* v8 ignore stop */
 
-  const tender = await readTenderBlock(tx, cfg, brandSaleId(issued.saleId), workingOrderId, {
-    cashChange: change,
-  });
+  const tender = await readTenderBlock(tx, cfg, brandSaleId(issued.saleId), workingOrderId);
 
   return {
+    ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
     // Normalise the stored `timestamptz` text back to a canonical ISO-8601 instant, so the replayed
     // ticket's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
@@ -637,30 +573,18 @@ async function readSettledTicket(
     lines: ticketLines,
     tender,
     qr: filed.verificationUrl,
+    ...(filed.issuer
+      ? { issuer: { venueName: filed.issuer.legalName, nif: filed.issuer.taxId } }
+      : {}),
   };
 }
 
-/**
- * MANUAL REPRINT of a filed sale's customer receipt (design §3d), keyed by the till's WORKING-ORDER id.
- * `POST /api/sales/:id/reprint`'s `:id` is that working-order id — the id the till holds after a sale
- * (`till-app.ts`'s `#store.id`, the client-minted idempotency key it sends on `POST /api/sales`); the
- * `TillSaleResult` the till also holds carries no sale-ROW id, and `readSettledTicket` already keys the
- * filed sale on the working-order id (`sales_working_order_id_key` makes that 1:1), so this reuses it
- * rather than adding a sale-id reader. Reads the ALREADY-FILED record back and re-enqueues PAPER only —
- * it FILES NOTHING (the fiscal record/huella/invoice number are untouched, §4) and never opens the drawer.
- *
- * An id that names no filed sale (an unknown or still-`open` order) is a 200 NO-OP: there is
- * nothing to reprint, mirroring the kitchen-reprint route (`reprintOrderTickets`) and guarding
- * `readSettledTicket`'s "settled order has no sale" throw, which is corruption-only for its
- * pay/collect callers (they hold a `for update` lock on a settled order) but reachable here from
- * an arbitrary `:id`. A settled sale on a till with no active printer is likewise a no-op
- * (`enqueueReceiptReprint` resolves no printer → enqueues nothing). Opens its OWN
- * `withTenant`/`asAppUser` transaction (the sibling verbs' shape).
- */
-export async function reprintSale(
+/** The action determines original versus duplicate; both only enqueue paper for an existing sale. */
+export async function printSaleReceipt(
   deps: { db: Database; backend: FiscalBackend },
   cfg: TillConfig,
   workingOrderId: string,
+  duplicate: boolean,
 ): Promise<void> {
   await withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
@@ -673,36 +597,18 @@ export async function reprintSale(
       .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
-    await enqueueReceiptReprint(tx, cfg, ticket);
+    if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket);
+    else await enqueueOriginalReceipt(tx, cfg, ticket);
   });
 }
 
-/**
- * The amount to SETTLE a sale at and the CHANGE to hand back, per tender method — the one place both
- * the immediate file (`fileImmediateSale`) and the invoice-first collect (`collectOrder`) derive
- * these, so the coverage branches live and are proven in a single spot:
- *  - CASH may exceed the total (change is handed back); a tender BELOW the total is a shortfall.
- *    `settleSale` demands EXACT coverage (`sum(amount) = total`), so a covered tender settles the sale
- *    at the TOTAL, never at the cash handed over (change is drawer cash, not a settled amount). When
- *    the cash falls short we hand the RAW amount straight through so `settleSale` itself raises
- *    `sale.tender_shortfall` and the whole transaction rolls back — the caller never has to pre-check.
- *  - CARD is a manual/unintegrated tender: the operator charged the EXACT total on a separate bank
- *    terminal, so the settled amount IS the total and there is no change — `tender.amount` is not
- *    consulted (a client over/under-send cannot move the filed figure).
- * `change` for the short-cash case is "0.00" (never used — the shortfall aborts first), so a caller
- * that reaches the return value always has a non-negative change.
- */
-function settlementFor(
-  tender: TillTender,
-  total: string,
-): { settledAmount: string; change: string } {
-  if (tender.method === "card") {
-    return { settledAmount: total, change: "0.00" };
-  }
-  const covered = compareDecimal(decimal(tender.amount), decimal(total)) >= 0;
+/** Cash covers the settled total; short cash is passed through so settlement rejects it atomically. */
+function settlementFor(tender: TillTender, total: string): { settledAmount: string } {
   return {
-    settledAmount: covered ? total : tender.amount,
-    change: covered ? subtractDecimal(decimal(tender.amount), decimal(total)) : "0.00",
+    settledAmount:
+      tender.method === "card" || compareDecimal(decimal(tender.amount), decimal(total)) >= 0
+        ? total
+        : tender.amount,
   };
 }
 
@@ -736,7 +642,7 @@ async function fileImmediateSale(
   markCollected = false,
 ): Promise<TillSaleResult> {
   const isCard = tender.method === "card";
-  const { settledAmount, change } = settlementFor(tender, priced.total);
+  const { settledAmount } = settlementFor(tender, priced.total);
 
   // One clock reading for the settlement instant, shared by the tender and the order's `settled_at`
   // so both name the same moment. recordSale reads its own clock for the sale's `issued_at`.
@@ -759,7 +665,15 @@ async function fileImmediateSale(
     operatorId,
     settlement: {
       kind: "immediate",
-      tenders: [{ method: tender.method, amount: settledAmount, tipAmount: "0.00", settledAt }],
+      tenders: [
+        {
+          method: tender.method,
+          amount: settledAmount,
+          tipAmount: "0.00",
+          cashTendered: tender.method === "cash" ? tender.amount : null,
+          settledAt,
+        },
+      ],
     },
   });
 
@@ -787,6 +701,7 @@ async function fileImmediateSale(
   await tx
     .update(workingOrders)
     .set({
+      label: (await readReceiptOrder(tx, cfg, workingOrderId, { atIssuance: true })).orderLabel,
       status: "settled",
       settledAt: settledAt.toISOString(),
       ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
@@ -797,14 +712,14 @@ async function fileImmediateSale(
 
   // Read the tender block back AFTER the tender row (recordSale) and, for a manual card, the payment
   // row (recordManualCardPayment) are both written above — so a manual acquirer reference is visible.
-  const tenderBlock = await readTenderBlock(tx, cfg, saleId, workingOrderId, {
-    cashChange: change,
-  });
+  const tenderBlock = await readTenderBlock(tx, cfg, saleId, workingOrderId);
 
   // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
   // human-facing "A/1" is read back from the sale row and its series (the shared `readInvoiceNumber`
   // reader), in this same transaction.
   const ticket: TillSaleResult = {
+    ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+    ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
@@ -816,11 +731,8 @@ async function fileImmediateSale(
     qr: fiscal.verificationUrl ?? "",
   };
 
-  // Print-on-sale (design §3c), POST-filing and INSERT-only: auto-enqueue the customer receipt to the
-  // till's printer and, for cash, append the drawer kick + record the open. NOTHING here can block or
-  // fail the sale (CLAUDE.md §5) — see `receipt-print.ts`'s header. This is the shared filing tail, so
-  // walk-up, retrieved pay and Mode-T collect all print through this one call.
-  await enqueueSaleReceipt(tx, cfg, ticket, tender.method, saleId, operatorId);
+  await enqueueSaleReceipt(tx, cfg, ticket);
+  if (tender.method === "cash") await enqueueCashSaleDrawer(tx, cfg, saleId, operatorId);
   return ticket;
 }
 
@@ -1083,8 +995,7 @@ export async function payWorkingOrderIntegrated(
  * rather than dead code: it is exercised end to end by "two concurrent pays for one parked order file
  * ONE sale; the loser replays (one sale/settlement)" (`apps/server/src/till-sale-integrated.pg.test.ts`),
  * which drives two real, concurrently-racing app-role connections and asserts `registroCount === 1`.
- * `readSettledTicket`
- * defaults `change` to "0.00": a replay hands back nothing (the winner settled the drawer at its sale).
+ * A replay returns the persisted payment facts without reopening the drawer.
  *
  * The tender records the WHOLE card charge (`total + tip`) with the tip attributed on it, satisfying
  * `settleSale`'s coverage identity `sum(amount) = total + sum(tip)`; the fiscal `total` stays ex-tip
@@ -1166,6 +1077,7 @@ async function finalizeCapture(
       await tx
         .update(workingOrders)
         .set({
+          label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
           status: "settled",
           settledAt: settledAt.toISOString(),
           ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
@@ -1174,9 +1086,11 @@ async function finalizeCapture(
 
       // The card tender row (recordSale) and the captured payment row (associated just above) are
       // both committed on this tx, so the tender block reads them back; a card hands nothing back.
-      const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id, { cashChange: "0.00" });
+      const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
 
       const ticket: TillSaleResult = {
+        ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+        ...(await readReceiptOrder(tx, cfg, req.id)),
         invoiceNumber: await readInvoiceNumber(tx, saleId),
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
@@ -1191,7 +1105,7 @@ async function finalizeCapture(
       // it must not, doubly so here, because P2 already charged the card, so a throw would roll back a
       // paid sale into the lost-T2 window. The 23505 REPLAY branch below stays UNHOOKED, so a concurrent
       // winner's ticket is never re-printed — exactly one receipt per filed sale.
-      await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
+      await enqueueSaleReceipt(tx, cfg, ticket);
       return ticket;
     });
   } catch (error) {
@@ -1344,6 +1258,7 @@ async function finalizeRecovery(
     await tx
       .update(workingOrders)
       .set({
+        label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
         status: "settled",
         settledAt: settledAt.toISOString(),
         ...(locked?.status === "placed" ? { collectedAt: settledAt.toISOString() } : {}),
@@ -1352,9 +1267,11 @@ async function finalizeRecovery(
 
     // The card tender row (recordSale) and the recovered captured payment (associated just above) are
     // both committed on this tx; read the tender block back. A card hands nothing back.
-    const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id, { cashChange: "0.00" });
+    const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
 
     const ticket: TillSaleResult = {
+      ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+      ...(await readReceiptOrder(tx, cfg, req.id)),
       invoiceNumber: await readInvoiceNumber(tx, saleId),
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,
@@ -1367,7 +1284,7 @@ async function finalizeRecovery(
     // this tx. Card → receipt, no kick. This is the fresh-file path; the FOR-UPDATE replay above (a
     // concurrent winner) returns without reaching here, so a recovery never double-prints. Never-block
     // as in `finalizeCapture` (`receipt-print.ts`).
-    await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
+    await enqueueSaleReceipt(tx, cfg, ticket);
     return { outcome: "captured", ticket };
   });
 }
@@ -1491,14 +1408,6 @@ async function finalizeSettle(
       // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
       // `change` stays the "0.00" default.
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-      // Print-on-sale (design §3c) for the invoice-first (Mode-I) integrated SETTLE — the receipt
-      // prints at SETTLE, not at placement (the deferred invoice was filed at `placeOrder`, which is
-      // NOT hooked), so the customer gets exactly ONE receipt when they pay. Card → receipt, no kick;
-      // no operator is threaded (card never records a drawer open). The `already_settled` replay in the
-      // catch below stays UNHOOKED — a concurrent winner's ticket is never re-printed. Never-block as in
-      // `finalizeCapture` (`receipt-print.ts`); a settle files nothing new, so the fiscal record is
-      // byte-unchanged.
-      await enqueueSaleReceipt(tx, cfg, ticket, "card", outstanding.saleId);
       return ticket;
     });
   } catch (error) {
@@ -1625,11 +1534,6 @@ async function finalizeSettleRecovery(
       .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-    // Print-on-sale (design §3c) for the invoice-first (Mode-I) integrated SETTLE RECOVERY — the fresh
-    // settle path. Card → receipt, no kick, no operator (card never opens the drawer). The FOR-UPDATE
-    // replay above (a concurrent winner) returns without reaching here, so a recovery never
-    // double-prints. Never-block / byte-unchanged fiscal record as in `finalizeSettle`.
-    await enqueueSaleReceipt(tx, cfg, ticket, "card", outstanding.saleId);
     return { outcome: "captured", ticket };
   });
 }
@@ -1743,14 +1647,20 @@ export async function collectOrder(
       }
       /* v8 ignore stop */
 
-      const { settledAmount, change } = settlementFor(req.tender, sale.total);
+      const { settledAmount } = settlementFor(req.tender, sale.total);
       const settledAt = deps.clock.now().instant;
 
       await settleSale(tx, {
         tenantId: cfg.tenantId,
         saleId: brandSaleId(sale.id),
         tenders: [
-          { method: req.tender.method, amount: settledAmount, tipAmount: "0.00", settledAt },
+          {
+            method: req.tender.method,
+            amount: settledAmount,
+            tipAmount: "0.00",
+            cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
+            settledAt,
+          },
         ],
       });
 
@@ -1795,15 +1705,9 @@ export async function collectOrder(
         })
         .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
-      // Read the ticket back from the just-settled invoice, carrying the real cash-back (a FRESH
-      // collect, not a replay, so not the "0.00" default).
-      const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id, change);
-      // Print-on-sale (design §3c), POST-settlement and INSERT-only — the Mode-I sibling of the
-      // `fileImmediateSale` call. Only this FRESH collect prints; the idempotent-replay path above
-      // (already `settled`) returns its ticket WITHOUT re-printing, so a lost-response retry never
-      // enqueues a second receipt. `sale.id` is the just-settled invoice's id; NOTHING here can block
-      // the sale (CLAUDE.md §5) — see `receipt-print.ts`.
-      await enqueueSaleReceipt(tx, cfg, ticket, req.tender.method, sale.id, operatorId);
+      // The just-settled invoice now carries its persisted payment facts.
+      const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
+      if (req.tender.method === "cash") await enqueueCashSaleDrawer(tx, cfg, sale.id, operatorId);
       return ticket;
     }
 
@@ -1865,4 +1769,12 @@ export async function recordTillSale(
     },
     operatorId,
   );
+}
+
+export async function reprintSale(
+  deps: { db: Database; backend: FiscalBackend },
+  cfg: TillConfig,
+  workingOrderId: string,
+): Promise<void> {
+  await printSaleReceipt(deps, cfg, workingOrderId, true);
 }

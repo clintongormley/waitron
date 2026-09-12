@@ -66,6 +66,8 @@ export interface RecordSaleLine {
 export interface RecordSaleTender {
   method: string;
   amount: string;
+  /** Cash handed over before change, separate from the settled amount. */
+  cashTendered?: string | null;
   /** The payer's affirmed gratuity on THIS tender, non-taxable and on no invoice — it rides on
    * the tender so it is attributed to the payer who left it, and is a part of `amount`, never on
    * top of it (`tip_amount <= amount`; design §9.2). Consumed by `settleSale`, which sums it into

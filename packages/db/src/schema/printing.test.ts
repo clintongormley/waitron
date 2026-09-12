@@ -237,11 +237,45 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     );
     expect(row!.printerId).toBe(printer);
     expect(row!.status).toBe("done");
+    expect(row!.kind).toBe("document");
     expect(row!.attempts).toBe(1);
     expect(row!.deliveredAt).not.toBeNull();
     // payload round-trips as the exact bytes (bytea → Buffer via the customType).
     expect(Buffer.isBuffer(row!.payload)).toBe(true);
     expect(row!.payload.toString("utf8")).toBe("Hello");
+  });
+
+  it("print_jobs: the app role stores a drawer command kind", async () => {
+    const printer = await seedPrinter(TENANT_A, "Drawer command");
+    const [job] = await asApp(TENANT_A, (tx) =>
+      tx
+        .insert(printJobs)
+        .values({
+          tenantId: TENANT_A,
+          locationId: LOCATION_A,
+          printerId: printer,
+          payload: Buffer.from([27, 112, 0, 25, 250]),
+          kind: "drawer",
+        })
+        .returning(),
+    );
+    expect(job!.kind).toBe("drawer");
+  });
+
+  it.each([
+    { kind: "unknown", code: "23514" },
+    { kind: null, code: "23502" },
+  ])("print_jobs: refuses kind $kind", async ({ kind, code }) => {
+    const printer = await seedPrinter(TENANT_A, `Bad kind ${kind}`);
+    const error = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`insert into print_jobs (tenant_id, location_id, printer_id, payload, kind)
+          values (${TENANT_A}, ${LOCATION_A}, ${printer}, decode('1b700019fa', 'hex'), ${kind})`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(error)).toBe(code);
   });
 
   it("print_jobs: the printer binding is tenant-consistent (composite FK to printers)", async () => {

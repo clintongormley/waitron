@@ -150,6 +150,7 @@ const jobs: PrintJobRow[] = [
     id: "j1",
     printerId: "p1",
     status: "failed",
+    canResend: false,
     attempts: 2,
     lastError: "printer offline",
     createdAt: "2026-08-25T14:00:00.000Z",
@@ -159,6 +160,7 @@ const jobs: PrintJobRow[] = [
     id: "j2",
     printerId: "p1",
     status: "done",
+    canResend: true,
     attempts: 1,
     lastError: null,
     createdAt: "2026-08-25T13:00:00.000Z",
@@ -191,6 +193,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listAgents: vi.fn().mockResolvedValue(agents),
     listPrinters: vi.fn().mockResolvedValue(printers),
     listRecentJobs: vi.fn().mockResolvedValue(jobs),
+    resendPrintJob: vi.fn().mockResolvedValue({ jobId: "resent" }),
     updateAgent: vi.fn().mockResolvedValue(undefined),
     getPrintJobPreview: vi.fn().mockResolvedValue({
       text: "Receipt",
@@ -1796,4 +1799,48 @@ it("keeps a disabled printer available when adding it again fails", async () => 
   expect(api.createPrinter).not.toHaveBeenCalled();
   expect(q(el, "[data-test=register-SN-2]")).not.toBeNull();
   expect(text(el, "[role=alert]")).toContain(codeMessage("printer.not_found"));
+});
+
+it("offers resend for eligible jobs and enqueues the selected document only once while pending", async () => {
+  let resolve!: (value: { jobId: string }) => void;
+  const api = stubApi({
+    resendPrintJob: vi.fn().mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  expect(q(el, "[data-test=resend-job-j1]")).toBeNull();
+  const button = q(el, "[data-test=resend-job-j2]")!;
+  expect(button).not.toBeNull();
+  button.click();
+  button.click();
+  await flush(el);
+  expect(api.resendPrintJob).toHaveBeenCalledExactlyOnceWith("j2");
+  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
+    true,
+  );
+  resolve({ jobId: "resent" });
+  await flush(el);
+  expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
+  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
+    false,
+  );
+});
+
+it("shows a localized resend failure and permits another attempt", async () => {
+  const api = stubApi({
+    resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.not_resendable" }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=resend-job-j2]")!.click();
+  await flush(el);
+  expect(text(el, "[role=alert]")).toContain(codeMessage("print_job.not_resendable", "es-ES"));
+  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
+    false,
+  );
+  expect(api.listRecentJobs).toHaveBeenCalledTimes(1);
 });

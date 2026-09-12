@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
   customType,
   index,
   integer,
@@ -59,6 +61,8 @@ export const printJobs = pgTable(
     claimedBy: uuid("claimed_by"),
     // OPAQUE ESC/POS bytes (Slice B fills them; the subsystem never inspects them).
     payload: bytea("payload").notNull(),
+    // Drawer pulses share transport delivery but cannot be repeated through document resend.
+    kind: text("kind").$type<"document" | "drawer">().notNull().default("document"),
     status: printJobStatus("status").notNull().default("queued"),
     // Delivery attempt count, bumped by the agent's report path; drives bounded backoff.
     attempts: integer("attempts").notNull().default(0),
@@ -80,5 +84,8 @@ export const printJobs = pgTable(
     // Set when the job reaches `done`. NULL while queued/printing/failed.
     deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "string" }),
   },
-  (t) => [index("print_jobs_pull_idx").on(t.tenantId, t.printerId, t.status)],
+  (t) => [
+    index("print_jobs_pull_idx").on(t.tenantId, t.printerId, t.status),
+    check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer')`),
+  ],
 );

@@ -33,6 +33,14 @@ export interface VatBreakdownLine {
   surcharge?: Decimal;
 }
 
+/** Receipt facts read from a backend's stored fiscal record. */
+export interface FiledReceipt {
+  verificationUrl: string;
+  vatBreakdown: VatBreakdownLine[];
+  /** The stored issuer identity, omitted when the backend stores none. */
+  issuer?: { legalName: string; taxId: string };
+}
+
 export interface Counterparty {
   taxId: string;
   legalName: string;
@@ -251,8 +259,8 @@ export interface FiscalBackend {
 
   /**
    * The reprint data for an ALREADY-FILED sale — the verification link a customer scans and the exact
-   * VAT breakdown that was filed. For an idempotent replay (a lost-response pay retry that reprints
-   * the ticket WITHOUT re-filing — park & retrieve, spec §3), this is the only way the replayed
+   * VAT breakdown and issuer identity that were filed. For an idempotent replay (a lost-response pay
+   * retry that reprints the ticket WITHOUT re-filing — park & retrieve, spec §3), this is the only way the replayed
    * receipt can carry the regime's mandatory QR and the authoritative VAT breakdown: both live only on the
    * regime's own immutable record, which the generic caller may not read across this boundary, and
    * `FiscalRecordRef` is minted at filing time and long gone by the time a retry arrives.
@@ -272,10 +280,7 @@ export interface FiscalBackend {
    * value only when a filed record exists, and a regime that mints no QR simply need not implement a
    * receipt read-back at all.
    */
-  filedReceiptFor(
-    tx: Transaction,
-    saleId: SaleId,
-  ): Promise<{ verificationUrl: string; vatBreakdown: VatBreakdownLine[] } | undefined>;
+  filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined>;
 
   recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef>;
 

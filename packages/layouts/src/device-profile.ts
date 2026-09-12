@@ -49,7 +49,7 @@ export function validateInactivityTimeout(
  * relocated here as capabilities leave the canvas record (Task 9).
  */
 export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> = {
-  till: ["integrated-card-payment", "open-cash-drawer"],
+  till: ["integrated-card-payment", "open-cash-drawer", "print-receipt"],
   "phone-portrait": [],
   "tablet-landscape": [],
   kds: ["act-as-kds"],

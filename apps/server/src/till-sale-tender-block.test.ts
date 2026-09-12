@@ -164,7 +164,7 @@ beforeAll(async () => {
  */
 async function seedSale(
   tx: Transaction,
-  tender: { method: "cash" | "card"; amount: string; tipAmount: string },
+  tender: { method: "cash" | "card"; amount: string; tipAmount: string; cashTendered?: string },
   payment?: { provider: string; externalRef?: string; card?: CardDetails },
 ): Promise<{ saleId: ReturnType<typeof brandSaleId>; workingOrderId: string }> {
   const workingOrderId = randomUUID();
@@ -191,7 +191,13 @@ async function seedSale(
     settlement: {
       kind: "immediate",
       tenders: [
-        { method: tender.method, amount: tender.amount, tipAmount: tender.tipAmount, settledAt },
+        {
+          method: tender.method,
+          amount: tender.amount,
+          tipAmount: tender.tipAmount,
+          cashTendered: tender.cashTendered,
+          settledAt,
+        },
       ],
     },
   });
@@ -223,15 +229,16 @@ describe("readTenderBlock", () => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(tx, {
         method: "cash",
+        cashTendered: "2.00",
         amount: "1.00",
         tipAmount: "0.00",
       });
-      return readTenderBlock(tx, cfg, saleId, workingOrderId, { cashChange: "1.00" });
+      return readTenderBlock(tx, cfg, saleId, workingOrderId);
     });
     expect(block).toEqual({ method: "cash", change: "1.00" });
   });
 
-  it("returns a card block with facts read back from the payment row", async () => {
+  it("returns the card amounts without exposing payment identity", async () => {
     const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
@@ -248,7 +255,6 @@ describe("readTenderBlock", () => {
       method: "card",
       charged: "1.00",
       tip: "0.00",
-      card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
       reference: null,
     });
   });
@@ -270,7 +276,7 @@ describe("readTenderBlock", () => {
     expect(block).toMatchObject({ method: "card", charged: "1.50", tip: "0.50" });
   });
 
-  it("a manual card tender carries the operator reference and null card", async () => {
+  it("a manual card tender carries the operator reference", async () => {
     const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
@@ -284,12 +290,11 @@ describe("readTenderBlock", () => {
       method: "card",
       charged: "1.00",
       tip: "0.00",
-      card: null,
       reference: "4471",
     });
   });
 
-  it("degrades to card:null when the payment row has no card facts and is not manual", async () => {
+  it("keeps card amounts when the payment row has no card facts and is not manual", async () => {
     const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
@@ -299,10 +304,10 @@ describe("readTenderBlock", () => {
       );
       return readTenderBlock(tx, cfg, saleId, workingOrderId);
     });
-    expect(block).toMatchObject({ method: "card", card: null, reference: null });
+    expect(block).toEqual({ method: "card", charged: "1.00", tip: "0.00", reference: null });
   });
 
-  it("degrades to card:null when the card tender's payment row is absent entirely", async () => {
+  it("keeps card amounts when the card tender's payment row is absent entirely", async () => {
     // A settled CARD sale with its `tenders` row but NO `payments` row at all (seedSale omits the
     // payment insert when no payment arg is passed) — the `payment === null` branch of readTenderBlock,
     // which every other case misses. A filed, immutable sale must PRESENT, never throw (CLAUDE.md §5),
@@ -320,7 +325,6 @@ describe("readTenderBlock", () => {
       method: "card",
       charged: "1.00",
       tip: "0.00",
-      card: null,
       reference: null,
     });
   });

@@ -1,3 +1,4 @@
+import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
 // them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
@@ -74,6 +75,10 @@ import { enqueueCorrectionSlips, enqueueKitchenTickets } from "./kitchen-print.j
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
+import { readReceiptOrder } from "./receipt-order.js";
+import { ticketLinesFrom } from "./receipt-lines.js";
+import { enqueueOriginalReceipt } from "./receipt-print.js";
+import type { TillSaleResult } from "./till-sale.js";
 
 export interface WorkingOrderDeps {
   db: Database;
@@ -2542,8 +2547,9 @@ export async function splitOffCheck(
 
   // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
   // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
+  const { orderLabel } = await readReceiptOrder(tx, cfg, fromTabId);
   const checkId = randomUUID();
-  await createOpenOrder(tx, cfg, checkId, [], null);
+  await createOpenOrder(tx, cfg, checkId, [], orderLabel);
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
   // Move the selected items (whole lines + partial splits) onto the check — TS-4's shared move/split
@@ -3177,6 +3183,7 @@ export async function placeOrder(
     // guarantees one invoice per order (a second place sees `placed` and is refused before reaching
     // this).
     let placeResult: PlaceOrderResult = { id, status: "placed" };
+    let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
       const priced = await priceStoredOrder(tx, id);
       // SP-A.2 §16.4 split: the fiscal record's `till_id` is the DEVICE till (`saleTillId`), while the
@@ -3201,20 +3208,39 @@ export async function placeOrder(
       });
       // The human-facing "A/1" is read back from the sale row + its series (the FiscalRecordRef is
       // regime-opaque), in this same transaction — the shared `readInvoiceNumber` reader.
-      placeResult = {
-        id,
-        status: "placed",
+      const ticket: TillSaleResult = {
+        ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+        ...(await readReceiptOrder(tx, cfg, id, { atIssuance: true })),
         invoiceNumber: await readInvoiceNumber(tx, saleId),
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         qr: fiscal.verificationUrl ?? "",
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+        lines: ticketLinesFrom(priced),
+        tender: { method: "unpaid" },
       };
+      placeResult = {
+        id,
+        status: "placed",
+        invoiceNumber: ticket.invoiceNumber,
+        issuedAt: ticket.issuedAt,
+        total: ticket.total,
+        qr: ticket.qr,
+        vatBreakdown: ticket.vatBreakdown,
+      };
+      issuedOrderLabel = ticket.orderLabel;
+      await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket);
     }
 
     // open → placed. `working_orders_enforce_transition` validates OLD.status = 'open'; no `settled_at`
     // (the biconditional requires it stay NULL for a non-settled status).
-    await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
+    await tx
+      .update(workingOrders)
+      .set({
+        status: "placed",
+        ...(issuedOrderLabel === undefined ? {} : { label: issuedOrderLabel }),
+      })
+      .where(and(eq(workingOrders.id, id), eq(workingOrders.tenantId, cfg.tenantId)));
 
     // Open the amendment log with its `order_placed` genesis. `appendOrderAmendment` owns the
     // parent-row-lock serialisation, the per-order sequence and the tamper-evident hash (Task 3); the

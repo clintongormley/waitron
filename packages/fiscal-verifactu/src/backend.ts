@@ -11,6 +11,7 @@ import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type {
   Counterparty,
   FiscalBackend,
+  FiledReceipt,
   FiscalRecordRef,
   IntegrityReport,
   NodeRegistration,
@@ -321,24 +322,9 @@ export class VerifactuBackend implements FiscalBackend {
     return buildQrPayload(fromRegistroRow(row) as RegistroAlta, this.environment);
   }
 
-  /**
-   * The idempotent-replay read-back (`FiscalBackend.filedReceiptFor`): finds the sale's own `alta`
-   * registro and returns the QR re-derived from it plus the EXACT filed desglose, so a lost-response
-   * pay retry can reprint a legally-complete ticket without re-filing anything.
-   *
-   * Pure read: it re-uses `recordVoid`'s own `where sale_id = … and tipo_registro = 'alta'` lookup
-   * shape (the alta is the sale's original record; a later anulación shares the `sale_id` but is
-   * excluded by the `tipo_registro` filter) but selects the FULL row once, then derives BOTH outputs
-   * from it in memory — `verificationUrl` by the SAME `fromRegistroRow` → `buildQrPayload` derivation
-   * `qrPayloadFor` (and thus `recordSale` at filing time) applies, so the replay's QR is byte-identical
-   * to the original's; and `vatBreakdown` by INVERTING the stored `desglose`. It routes through neither
-   * a second `select` nor `qrPayloadFor` (which would re-read this very row by id), never writes,
-   * appends or re-hashes — the immutable record (§5) is only read, exactly once.
-   */
-  async filedReceiptFor(
-    tx: Transaction,
-    saleId: SaleId,
-  ): Promise<{ verificationUrl: string; vatBreakdown: VatBreakdownLine[] } | undefined> {
+  /** Read the sale's original alta so a receipt repeats its filed issuer, QR and exact VAT amounts.
+   * Later void records share the sale id but do not replace those original document facts. */
+  async filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined> {
     const { rows } = await tx.execute<RegistroRow>(sql`
       select *
       from registros_facturacion
@@ -373,7 +359,11 @@ export class VerifactuBackend implements FiscalBackend {
       tax: decimal(detalle.CuotaRepercutida as string),
     }));
 
-    return { verificationUrl, vatBreakdown };
+    return {
+      verificationUrl,
+      vatBreakdown,
+      issuer: { legalName: row.nombre_razon_emisor, taxId: row.id_emisor_factura },
+    };
   }
 
   /**

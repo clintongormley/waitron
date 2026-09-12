@@ -1,5 +1,7 @@
 # Card receipt tender details — design
 
+**2026-09-12 update:** The [receipts and payment slips design](2026-09-12-receipts-payment-slips-and-duplicates-design.md) moves card identity to a separate slip and marks duplicate invoices. The design below records the earlier behavior.
+
 **Date:** 2026-09-11. **Status:** approved, pre-plan. Brainstormed with the owner the same day,
 against a live SumUp Solo paired to the Cloud API (runbook
 [research/2026-09-10-sumup-solo-experiments.md](../../research/2026-09-10-sumup-solo-experiments.md)).

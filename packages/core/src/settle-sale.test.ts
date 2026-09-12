@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   asAppUser,
@@ -77,7 +77,15 @@ describe("settleSale — the happy path", () => {
     await settle(postgres.admin, seed.tenantId, {
       tenantId: seed.tenantId,
       saleId,
-      tenders: [{ method: "cash", amount: "70.00", tipAmount: "5.00", settledAt: SETTLED_AT }],
+      tenders: [
+        {
+          method: "cash",
+          amount: "70.00",
+          cashTendered: "100.00",
+          tipAmount: "5.00",
+          settledAt: SETTLED_AT,
+        },
+      ],
     });
 
     const settled = await postgres.admin
@@ -99,6 +107,35 @@ describe("settleSale — the happy path", () => {
     expect(tenderRows).toHaveLength(1);
     expect(tenderRows[0]!.amount).toBe("70.00");
     expect(tenderRows[0]!.tipAmount).toBe("5.00");
+    expect(tenderRows[0]!.cashTendered).toBe("100.00");
+    const mutation = await captureError(() =>
+      postgres.admin.execute(
+        sql`update tenders set cash_tendered = '200.00' where sale_id = ${saleId}`,
+      ),
+    );
+    expect(pgErrorCode(mutation)).toBe("WT001");
+  });
+
+  it.each([
+    { method: "cash", cashTendered: "64.99" },
+    { method: "card", cashTendered: "100.00" },
+  ])("rejects invalid cash handed over for $method and rolls settlement back", async (cash) => {
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed);
+    const error = await captureError(() =>
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId,
+        tenders: [{ ...cash, amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(await postgres.admin.select().from(tenders).where(eq(tenders.saleId, saleId))).toEqual(
+      [],
+    );
+    expect(
+      await postgres.admin.select().from(saleSettlements).where(eq(saleSettlements.saleId, saleId)),
+    ).toEqual([]);
   });
 
   it("settles a €0 comped sale with no tenders, stamped at the settlement instant (no raw TypeError)", async () => {

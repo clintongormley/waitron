@@ -7,6 +7,7 @@ import { AppError } from "@waitron/shared";
 import { printJobs, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintConfig } from "./printers.js";
+import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 
 /**
  * Enqueue one outbox job (printing subsystem, §3b) — the NEVER-BLOCK guarantee (CLAUDE.md §5). This
@@ -23,6 +24,7 @@ export async function enqueuePrintJob(
   cfg: PrintConfig,
   printerId: string,
   payload: Uint8Array,
+  kind: "document" | "drawer" = "document",
 ): Promise<{ jobId: string }> {
   // A friendly `printer.not_found` for an absent printer, via a DB-only pre-check SELECT (indexed
   // PK lookup — no socket, no wait). Chosen over catching the FK violation because a raised 23503
@@ -61,7 +63,40 @@ export async function enqueuePrintJob(
       locationId: cfg.locationId,
       printerId,
       payload: Buffer.from(payload),
+      kind,
     })
     .returning({ id: printJobs.id });
   return { jobId: job!.id };
+}
+
+/** Only documents whose automatic delivery has ended can be resent; drawer pulses cannot. */
+export function canResendPrintJob(job: {
+  kind: "document" | "drawer";
+  status: string;
+  attempts: number;
+}): boolean {
+  return (
+    job.kind === "document" &&
+    (job.status === "done" || (job.status === "failed" && job.attempts >= MAX_DELIVERY_ATTEMPTS))
+  );
+}
+
+/** Resend the opaque document to its original printer and location, preserving delivery history. */
+export async function resendPrintJob(
+  tx: Transaction,
+  cfg: PrintConfig,
+  jobId: string,
+): Promise<{ jobId: string }> {
+  const [job] = await tx
+    .select()
+    .from(printJobs)
+    .where(and(eq(printJobs.tenantId, cfg.tenantId), eq(printJobs.id, jobId)));
+  if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
+  if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });
+  return enqueuePrintJob(
+    tx,
+    { tenantId: cfg.tenantId, locationId: job.locationId },
+    job.printerId,
+    job.payload,
+  );
 }

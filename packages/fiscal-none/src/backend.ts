@@ -1,10 +1,10 @@
 import type {
   FiscalBackend,
+  FiledReceipt,
   FiscalRecordRef,
   IntegrityReport,
   NodeRegistration,
   SaleForFiscalRecord,
-  VatBreakdownLine,
 } from "@waitron/fiscal";
 import type { NodeId, SaleId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -64,9 +64,7 @@ export class NoneBackend implements FiscalBackend {
     return Promise.resolve(this.recordedRef(sale));
   }
 
-  filedReceiptFor(): Promise<
-    { verificationUrl: string; vatBreakdown: VatBreakdownLine[] } | undefined
-  > {
+  filedReceiptFor(): Promise<FiledReceipt | undefined> {
     return Promise.resolve(undefined);
   }
 

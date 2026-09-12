@@ -410,7 +410,7 @@ export async function assertNotHandheld(
  * server-enforced device capability (the INTEGRATED card reader ⇒ `integrated-card-payment`;
  * opening the cash drawer ⇒ `open-cash-drawer`) runs this right after its `requireSession` guard,
  * on the SAME request, so the fence holds even if the client were bypassed — the identical
- * placement and reasoning as `assertNotHandheld`, which it replaces on those two routes. It
+ * placement and reasoning as `assertNotHandheld`. The drawer route also refuses handhelds. It
  * guards UNRECOVERABLE fiscal records (CLAUDE.md §5), so it fails CLOSED: any device that cannot
  * be shown to hold the capability is refused with `device.forbidden_action` naming the attempted
  * `action`.
@@ -435,7 +435,7 @@ export async function assertNotHandheld(
  * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads the
  * binding ONCE and threads it here and to `requireSaleTillId`, so the read + scrypt run once per
  * request; `null` means "resolved, no device" (passes, branch 1); OMITTING it preserves the original
- * behaviour — this reads the binding itself, which is why `/api/drawer/open` need not change.
+ * behaviour — this reads the binding itself.
  */
 export async function assertDeviceCapability(
   deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },

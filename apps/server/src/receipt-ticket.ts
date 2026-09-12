@@ -50,7 +50,6 @@
 import { esc } from "@waitron/printing";
 import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 
-import type { CardDetails } from "@waitron/payments";
 import type { TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
@@ -82,6 +81,7 @@ export interface FormatReceiptInput {
   invoiceLocale: string;
   /** Marks a Demo/Prepare transaction without changing any filed fiscal value. */
   simulated?: boolean;
+  duplicate?: boolean;
 }
 
 /**
@@ -99,24 +99,12 @@ const LABEL = {
   total: "TOTAL",
   cash: "Efectivo",
   change: "Cambio",
-  card: "Tarjeta",
   tip: "Propina",
   charged: "Cobrado",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
-
-/**
- * Spanish labels for a card tender's entry mode, printed on the second card line (design §3b). No
- * entry for `"unknown"` — that line drops the entry-mode fragment entirely rather than printing a
- * placeholder (`ENTRY_MODE_LABEL[t.card.entryMode]` reads `undefined` for it).
- */
-const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
-  contactless: "Sin contacto",
-  chip: "Chip",
-  swipe: "Banda",
-};
 
 /**
  * The multiplication sign prefixed to a per-dish option-quantity badge (`×2`). Chosen to match the
@@ -241,6 +229,7 @@ export function formatReceipt({
   receipt,
   invoiceLocale,
   simulated = false,
+  duplicate = false,
 }: FormatReceiptInput): Uint8Array {
   const locale = invoiceLocale;
   const b = esc().init();
@@ -252,8 +241,11 @@ export function formatReceipt({
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
   b.line(issuer.venueName);
   if (receipt.headerSubtitle) b.line(receipt.headerSubtitle);
+  if (duplicate) b.line("DUPLICADO");
   b.line(`${LABEL.nif}: ${issuer.nif}`);
   b.line();
+
+  b.line([result.orderLabel, `Pedido ${result.orderNumber}`].filter(Boolean).join(" · "));
 
   // Metadata — serie+número (7.1.a) and fecha de expedición (7.1.b).
   b.line(twoColumn(LABEL.invoice, result.invoiceNumber));
@@ -301,8 +293,7 @@ export function formatReceipt({
   b.line();
 
   // Allowed operational extras — the tender block. Cash: cash tendered (= total + change) and change.
-  // Card: the scheme + masked PAN, entry mode + auth code, an operator manual reference, and — only
-  // when a tip rode on the card — what was charged (total + tip) and the tip itself.
+  // Card identity belongs on the payment slip; amounts and the manual terminal reference stay here.
   const t = result.tender;
   if (t.method === "cash") {
     b.line(
@@ -312,18 +303,8 @@ export function formatReceipt({
       ),
     );
     b.line(twoColumn(LABEL.change, formatMoney(t.change, locale)));
-  } else {
-    if (t.card === null) {
-      b.line(LABEL.card);
-    } else {
-      b.line(`${LABEL.card} ${t.card.scheme} **** ${t.card.last4}`);
-      // `·` is U+00B7 (middle dot), a true Latin-1 code point — safe through the ESC/POS encoder,
-      // unlike `•` (U+2022) which is not.
-      const mode = ENTRY_MODE_LABEL[t.card.entryMode];
-      const auth = t.card.authCode === null ? undefined : `Aut ${t.card.authCode}`;
-      const second = [mode, auth].filter((x) => x !== undefined).join(" · ");
-      if (second !== "") b.line(second);
-    }
+  } else if (t.method === "card") {
+    b.line("Tarjeta");
     if (t.reference !== null) b.line(`Ref. ${t.reference}`);
     // String compare: `tenders.tip_amount` is `numeric(12,2)`, always canonical "0.00"/"0.50" — a
     // Decimal compare here would test object identity and always be true.

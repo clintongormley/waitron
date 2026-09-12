@@ -23,6 +23,7 @@ export const CAPABILITY_FLAGS = [
   "integrated-card-payment",
   "open-cash-drawer",
   "act-as-kds",
+  "print-receipt",
 ] as const;
 export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 

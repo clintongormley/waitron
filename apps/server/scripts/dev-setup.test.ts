@@ -359,7 +359,7 @@ describe("devSetup against real Postgres", () => {
       {
         name: "Counter",
         canvas_id: null,
-        capabilities: ["integrated-card-payment", "open-cash-drawer"],
+        capabilities: ["integrated-card-payment", "open-cash-drawer", "print-receipt"],
       },
       { name: "Handheld", canvas_id: null, capabilities: [] },
       { name: "Kitchen", canvas_id: null, capabilities: ["act-as-kds"] },

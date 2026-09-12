@@ -1,7 +1,17 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { MONEY_SCALE, type Decimal, grossOf, sumDecimals, toScale } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  addDecimal,
+  compareDecimal,
+  decimal,
+  type Decimal,
+  grossOf,
+  subtractDecimal,
+  sumDecimals,
+  toScale,
+} from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { selectStyles } from "../select-styles.js";
@@ -17,6 +27,8 @@ import { StoreChangeController } from "../state/store-controller.js";
 import "../widgets/product-grid.js";
 import "../widgets/basket.js";
 import "../widgets/tender-pay.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-input.js";
 // The multi-menu switcher shown above the round grid — renders nothing for a single-menu location.
 import "../widgets/menu-switcher.js";
 // The menu DIET filter above the round grid (dietary-classification, Task 7) — narrows the tiles to a
@@ -75,9 +87,9 @@ class TabPayStore extends WorkingOrderStore {
  *    **Pendiente de servir** (each a `Servido` tick → `serve-line`), **Servido**, the tab **total**
  *    (summed from the LOCKED add-time prices — never a catalogue recompute), **Cobrar** (the reused
  *    `till-tender-pay`, whose terminal tender the screen re-emits as `pay-tab`), **Estado** (a status
- *    picker → `set-status`) and **Acciones de mesa** — an in-drawer move/join/merge/transfer flow
- *    (TS-3/TS-4) whose target pick dispatches `move-tab`/`join-table`/`merge-tabs`/`transfer-lines`
- *    upward for the app to persist (Split is a disabled placeholder, TS-5 out of scope).
+ *    picker → `set-status`) and **Acciones de mesa** — an in-drawer move/join/merge/transfer/split flow
+ *    whose target/item picks dispatch `move-tab`/`join-table`/`merge-tabs`/`transfer-lines`/
+ *    `split-lines` upward for the app to persist.
  *
  * FISCAL FIREWALL (H2). The screen owns NO fiscal path. Rounds, served ticks and status are pre-fiscal
  * signals the app turns into `addTabRound`/`markLineServed`/`setTableStatus`. Pay is the one
@@ -267,6 +279,28 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .split-line-row {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
+
+      .split-quantity {
+        margin-inline-start: var(--wt-space-4);
+      }
+
+      .split-stepper {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
+
+      .split-count {
+        min-width: 3ch;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+
       .dot {
         display: inline-block;
         width: var(--wt-space-2);
@@ -403,10 +437,11 @@ export class TillTableOrderScreen extends LitElement {
    * the target `pick` step (free tables for move/join, other open tabs for merge/transfer — the two are
    * told apart by {@link actionVerb}); a transfer then advances to `transfer-lines` to choose which lines
    * to move. */
-  @state() private actionStep: "closed" | "menu" | "pick" | "transfer-lines" = "closed";
+  @state() private actionStep: "closed" | "menu" | "pick" | "transfer-lines" | "split-lines" =
+    "closed";
   /** The verb the operator picked in the action menu — decides which target list the picker shows and
    * which event a target pick dispatches. `null` while the flow is closed or on the menu. */
-  @state() private actionVerb: "move" | "join" | "merge" | "transfer" | null = null;
+  @state() private actionVerb: "move" | "join" | "merge" | "transfer" | "split" | null = null;
   /** The destination tab's working-order id for an in-flight transfer, captured when the operator picks
    * it in the `pick` step; the `transfer-lines` step dispatches `transfer-lines` against it. `null`
    * otherwise. */
@@ -414,6 +449,11 @@ export class TillTableOrderScreen extends LitElement {
   /** The lines selected for a transfer, by `lineNo` (v1 moves whole lines only, so no per-line quantity
    * is stored). A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
   @state() private transferLineNos = new Set<number>();
+  /** Selected split lines and the quantity each new check will receive. Kept separate from the
+   * whole-line transfer picker so quantity choices cannot change that established flow. */
+  @state() private splitQuantities = new Map<number, string>();
+  /** Set by a split confirmation attempt so invalid weight fields reveal both inline and summary copy. */
+  @state() private splitAttempted = false;
 
   /** The CURRENT round the product grid rings into and the round basket shows — its own store, distinct
    * from the tab (which is server-side). Cleared by {@link #sendRound}. */
@@ -1207,6 +1247,8 @@ export class TillTableOrderScreen extends LitElement {
     this.actionVerb = null;
     this.transferToTabId = null;
     this.transferLineNos = new Set();
+    this.splitQuantities = new Map();
+    this.splitAttempted = false;
   }
 
   /** Emit one composed, bubbling CustomEvent — the same event shape as this screen's other dispatch sites
@@ -1215,11 +1257,14 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  /** The action-menu verb pick: all four verbs advance to the single `pick` step, which shows free tables
-   * (move/join) or other open tabs (merge/transfer) per {@link actionVerb}. */
-  #chooseVerb(verb: "move" | "join" | "merge" | "transfer"): void {
+  /** A relocation verb advances to a target picker; split advances directly to its item picker. */
+  #chooseVerb(verb: "move" | "join" | "merge" | "transfer" | "split"): void {
     this.actionVerb = verb;
-    this.actionStep = "pick";
+    if (verb === "split") {
+      this.splitQuantities = new Map();
+      this.splitAttempted = false;
+    }
+    this.actionStep = verb === "split" ? "split-lines" : "pick";
   }
 
   /** A target pick in the picker. Move/join/merge dispatch immediately and close; transfer captures the
@@ -1267,6 +1312,95 @@ export class TillTableOrderScreen extends LitElement {
     this.#closeActions();
   }
 
+  /** Select or deselect a top-level line for the detached check. A new selection starts at its full
+   * ordered quantity; the operator can then lower a plain dish to a partial quantity. */
+  #toggleSplitLine(line: TabLine): void {
+    const next = new Map(this.splitQuantities);
+    if (next.has(line.lineNo)) next.delete(line.lineNo);
+    else next.set(line.lineNo, this.#displayQty(line.quantity));
+    this.splitQuantities = next;
+    this.splitAttempted = false;
+  }
+
+  #setSplitQuantity(lineNo: number, quantity: string): void {
+    const next = new Map(this.splitQuantities);
+    next.set(lineNo, quantity);
+    this.splitQuantities = next;
+  }
+
+  /** Step an each-priced dish by one, bounded to 1..the line's ordered quantity. */
+  #stepSplitQuantity(line: TabLine, delta: -1 | 1): void {
+    const current = decimal(
+      this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity),
+    );
+    const next =
+      delta === -1 ? subtractDecimal(current, decimal("1")) : addDecimal(current, decimal("1"));
+    if (compareDecimal(next, decimal("1")) < 0 || compareDecimal(next, decimal(line.quantity)) > 0)
+      return;
+    this.#setSplitQuantity(line.lineNo, next);
+  }
+
+  #splitProduct(line: TabLine): TillProduct | undefined {
+    return this.products.find((product) => product.id === line.productId);
+  }
+
+  /** Return localized field copy when a selected quantity cannot be sent. Each dishes require a
+   * positive whole number; weight and retired products accept up to three decimal places. Both are
+   * bounded by the exact ordered quantity using shared decimal arithmetic. */
+  #splitQuantityError(line: TabLine): string {
+    const value = this.splitQuantities.get(line.lineNo) ?? "";
+    const unit = this.#splitProduct(line)?.pricingUnit;
+    const pattern = unit === "each" ? /^[1-9]\d*$/ : /^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/;
+    if (!pattern.test(value)) {
+      return t(
+        unit === "each" ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+      );
+    }
+    try {
+      const quantity = decimal(value);
+      if (
+        compareDecimal(quantity, decimal("0")) <= 0 ||
+        compareDecimal(quantity, decimal(line.quantity)) > 0
+      ) {
+        return t(
+          unit === "each" ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+        );
+      }
+    } catch {
+      return t(
+        unit === "each" ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+      );
+    }
+    return "";
+  }
+
+  #splitErrors(): string[] {
+    return this.lines
+      .filter((line) => line.productId !== null && this.splitQuantities.has(line.lineNo))
+      .map((line) => this.#splitQuantityError(line))
+      .filter((error) => error !== "");
+  }
+
+  /** Create a detached check from selected dishes. Full quantities omit `quantity`, preserving the
+   * existing whole-line wire shape; partial plain dishes carry their exact selected decimal. Modifier
+   * children are absent from the picker and move with a whole parent on the server. */
+  #confirmSplit(): void {
+    if (this.splitQuantities.size === 0) return;
+    this.splitAttempted = true;
+    if (this.#splitErrors().length > 0) return;
+    const transfers: TabTransfer[] = this.lines
+      .filter((line) => line.productId !== null && this.splitQuantities.has(line.lineNo))
+      .map((line) => {
+        const quantity = this.splitQuantities.get(line.lineNo)!;
+        return compareDecimal(decimal(quantity), decimal(line.quantity)) === 0
+          ? { lineNo: line.lineNo }
+          : { lineNo: line.lineNo, quantity };
+      });
+    if (transfers.length === 0) return;
+    this.#dispatch("split-lines", { transfers });
+    this.#closeActions();
+  }
+
   /** The Back control: from the menu it closes the flow; from the picker it returns to the menu; from the
    * transfer line-picker it returns to the picker. */
   #actionBack(): void {
@@ -1282,6 +1416,12 @@ export class TillTableOrderScreen extends LitElement {
         this.transferToTabId = null;
         this.transferLineNos = new Set();
         this.actionStep = "pick";
+        break;
+      case "split-lines":
+        this.splitQuantities = new Map();
+        this.splitAttempted = false;
+        this.actionStep = "menu";
+        this.actionVerb = null;
         break;
     }
   }
@@ -1304,6 +1444,8 @@ export class TillTableOrderScreen extends LitElement {
         return this.#targetPicker();
       case "transfer-lines":
         return this.#transferLinesStep();
+      case "split-lines":
+        return this.#splitLinesStep();
     }
   }
 
@@ -1326,7 +1468,12 @@ export class TillTableOrderScreen extends LitElement {
       <div class="action-options">
         ${verb("move", "table.action_move")} ${verb("join", "table.action_join")}
         ${verb("merge", "table.action_merge")} ${verb("transfer", "table.action_transfer")}
-        <wt-button class="action" data-action="split" variant="secondary" ?disabled=${true}>
+        <wt-button
+          class="action"
+          data-action="split"
+          variant="secondary"
+          @click=${() => this.#chooseVerb("split")}
+        >
           ${t("table.action_split")}
         </wt-button>
       </div>
@@ -1398,6 +1545,104 @@ export class TillTableOrderScreen extends LitElement {
       <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
       <span class="qty">${this.#displayQty(line.quantity)}</span>
     </wt-button>`;
+  }
+
+  #splitLinesStep(): TemplateResult {
+    const lines = this.lines.filter((line) => line.productId !== null);
+    const errors = this.splitAttempted ? this.#splitErrors() : [];
+    return html`<section class="actions" data-split-lines>
+      <h2>${t("table.split_pick_lines")}</h2>
+      <p data-split-help>${t("table.split_options_together")}</p>
+      <wt-form-error-summary
+        heading=${t("form.error_heading")}
+        .errors=${errors}
+      ></wt-form-error-summary>
+      ${
+        lines.length === 0
+          ? html`<p class="empty">${t("table.split_no_lines")}</p>`
+          : html`<div class="action-options">${lines.map((line) => this.#splitLineRow(line))}</div>`
+      }
+      <wt-button
+        class="transfer-confirm"
+        data-split-confirm
+        variant="primary"
+        ?disabled=${this.splitQuantities.size === 0}
+        @click=${() => this.#confirmSplit()}
+      >
+        ${t("table.split_confirm")}
+      </wt-button>
+      ${this.#backButton()}
+    </section>`;
+  }
+
+  #splitLineRow(line: TabLine): TemplateResult {
+    const selected = this.splitQuantities.has(line.lineNo);
+    const quantity = this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity);
+    const product = this.#splitProduct(line);
+    const name = this.#nameFor(line.productId);
+    const error = this.splitAttempted && selected ? this.#splitQuantityError(line) : "";
+    return html`<div class="split-line-row">
+      <wt-button
+        class="transfer-line ${selected ? "selected" : ""}"
+        data-split-line=${line.lineNo}
+        variant="secondary"
+        aria-pressed=${selected}
+        @click=${() => this.#toggleSplitLine(line)}
+      >
+        <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
+        <span class="qty">${this.#displayQty(line.quantity)}</span>
+      </wt-button>
+      ${
+        selected
+          ? product?.pricingUnit === "each"
+            ? this.#splitEachQuantity(line, name, quantity)
+            : html`<wt-input
+                class="split-quantity"
+                data-split-quantity=${line.lineNo}
+                name=${`split-quantity-${line.lineNo}`}
+                required
+                .label=${t("table.split_quantity")}
+                .value=${quantity}
+                .error=${error}
+                @wt-change=${(event: Event) => {
+                  event.stopPropagation();
+                  this.#setSplitQuantity(
+                    line.lineNo,
+                    (event as CustomEvent<{ value: string }>).detail.value,
+                  );
+                }}
+              ></wt-input>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  #splitEachQuantity(line: TabLine, name: string, quantity: string): TemplateResult {
+    const current = decimal(quantity);
+    return html`<div class="split-quantity split-stepper">
+      <span>${t("table.split_quantity")}</span>
+      <wt-button
+        variant="ghost"
+        size="sm"
+        data-split-dec=${line.lineNo}
+        aria-label=${`${t("basket.decrease")} ${name}`}
+        ?disabled=${compareDecimal(current, decimal("1")) <= 0}
+        @click=${() => this.#stepSplitQuantity(line, -1)}
+      >
+        <span aria-hidden="true">−</span>
+      </wt-button>
+      <span class="split-count" data-split-count=${line.lineNo}>${quantity}</span>
+      <wt-button
+        variant="ghost"
+        size="sm"
+        data-split-inc=${line.lineNo}
+        aria-label=${`${t("basket.increase")} ${name}`}
+        ?disabled=${compareDecimal(current, decimal(line.quantity)) >= 0}
+        @click=${() => this.#stepSplitQuantity(line, 1)}
+      >
+        <span aria-hidden="true">+</span>
+      </wt-button>
+    </div>`;
   }
 
   #backButton(): TemplateResult {

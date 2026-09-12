@@ -1,5 +1,7 @@
 # Counter printing — customer receipt + cash drawer
 
+**2026-09-12 update:** [Receipts, payment slips and duplicates](2026-09-12-receipts-payment-slips-and-duplicates-design.md) separates document printing from drawer opening. Cash settlement at a till creates a separate audited drawer job regardless of receipt-print mode; handhelds cannot open drawers and drawer jobs cannot be manually resent. The design below records the earlier coupling.
+
 _Update 2026-09-11: the configuration controls described on the printer screen below now live on
 Printing rules; see [Printer settings tables](2026-09-11-printer-settings-tables.md)._
 

@@ -515,6 +515,27 @@ describe("pendingCount", () => {
  * working-order.pg.test.ts and till-api.pg.test.ts suites exercise replay through the backend.
  */
 describe("filedReceiptFor", () => {
+  it("returns the filed issuer after the tenant identity changes", async () => {
+    // PGlite covers this read-back: the assertion concerns persisted values, not privileges or concurrency.
+    const { saleId } = await sell();
+    const original = await pg.db.execute<{ legal_name: string; tax_id: string }>(
+      sql`select legal_name, tax_id from tenants where id = ${tenantId}`,
+    );
+    const issuer = { legalName: original.rows[0]!.legal_name, taxId: original.rows[0]!.tax_id };
+    await pg.db.execute(
+      sql`update tenants set legal_name = 'New venue identity', tax_id = ${"changed-" + tenantId} where id = ${tenantId}`,
+    );
+    const filed = await withTenant(pg.db, tenantId, (tx) => backend.filedReceiptFor(tx, saleId));
+    expect(filed).toHaveProperty("issuer", issuer);
+    const current = await pg.db.execute<{ legal_name: string; tax_id: string }>(
+      sql`select legal_name, tax_id from tenants where id = ${tenantId}`,
+    );
+    expect(current.rows[0]).toEqual({
+      legal_name: "New venue identity",
+      tax_id: "changed-" + tenantId,
+    });
+  });
+
   it("returns the exact filed difference-method desglose, not a recompute", async () => {
     // A basket whose FILED figures are the difference method (tax = gross − base) and DIVERGE from a
     // naive base×rate recompute — the whole reason a replay must READ the filed record. For the 21%

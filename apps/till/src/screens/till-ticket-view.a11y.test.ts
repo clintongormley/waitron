@@ -5,6 +5,8 @@ import type { TicketIssuer, TillTicketView } from "./till-ticket-view.js";
 import type { TillSaleResult } from "../api/client.js";
 
 const result: TillSaleResult = {
+  orderLabel: "Mesa 6",
+  orderNumber: 41,
   invoiceNumber: "A/1",
   issuedAt: "2026-08-05T12:34:56.000Z",
   total: "9.40",
@@ -63,9 +65,9 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  // Card tender (design §3b) — the two structurally different branches (card facts known vs. not)
-  // render different markup, so both need their own a11y pass alongside the cash block above.
-  it("has no violations on a card-tendered receipt with full facts and a tip", async () => {
+  // Card tender (design §3b) — tipped and manual-reference branches render different markup, so both
+  // need their own a11y pass alongside the cash block above.
+  it("has no violations on a tipped card receipt", async () => {
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",
       {
@@ -75,7 +77,6 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
             method: "card",
             charged: "9.90",
             tip: "0.50",
-            card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
             reference: null,
           },
         },
@@ -86,13 +87,13 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on a card-tendered receipt with no card facts and a manual reference", async () => {
+  it("has no violations on a card receipt with a manual reference", async () => {
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",
       {
         result: {
           ...result,
-          tender: { method: "card", charged: "9.40", tip: "0.00", card: null, reference: "4471" },
+          tender: { method: "card", charged: "9.40", tip: "0.00", reference: "4471" },
         },
         issuer,
       },

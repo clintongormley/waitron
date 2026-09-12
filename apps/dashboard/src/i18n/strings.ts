@@ -47,6 +47,7 @@ export const en = {
   "printers.queued_at": "Queued at",
   "printers.delivered_at": "Delivered at",
   "printers.view_job": "View printout",
+  "printers.resend_job": "Re-send job",
   "printers.jobs_limit": "Latest 100 print jobs.",
   "printers.host_required": "Enter a host name or IP address",
   "printers.port_invalid": "Enter a whole port number from 1 to 65535",
@@ -901,6 +902,7 @@ export const en = {
   "device_profiles.capability.integrated-card-payment": "Integrated card payment",
   "device_profiles.capability.open-cash-drawer": "Open cash drawer",
   "device_profiles.capability.act-as-kds": "Act as kitchen display",
+  "device_profiles.capability.print-receipt": "Print receipts and payment slips",
   // The form-factor picker: the field label plus one human label per FORM_FACTORS value (the `till`
   // form factor is the CASH REGISTER, the owner's chosen word — never the raw token).
   "device_profiles.form_factor": "Form factor",
@@ -983,6 +985,7 @@ export const es: Record<StringKey, string> = {
   "printers.queued_at": "En cola desde",
   "printers.delivered_at": "Entregado el",
   "printers.view_job": "Ver impresión",
+  "printers.resend_job": "Reenviar trabajo",
   "printers.jobs_limit": "Los últimos 100 trabajos de impresión.",
   "printers.host_required": "Introduce un nombre de equipo o una dirección IP",
   "printers.port_invalid": "Introduce un número entero de puerto entre 1 y 65535",
@@ -1778,6 +1781,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.capability.integrated-card-payment": "Pago con tarjeta integrado",
   "device_profiles.capability.open-cash-drawer": "Abrir cajón portamonedas",
   "device_profiles.capability.act-as-kds": "Actuar como pantalla de cocina",
+  "device_profiles.capability.print-receipt": "Imprimir recibos y justificantes de pago",
   "device_profiles.form_factor": "Formato",
   "device_profiles.form_factor.till": "Caja registradora",
   "device_profiles.form_factor.phone-portrait": "Teléfono de mano",

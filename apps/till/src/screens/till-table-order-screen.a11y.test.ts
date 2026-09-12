@@ -49,6 +49,13 @@ const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
 
 const statuses: TableServiceStatus[] = [{ id: "s1", label: "Reservada", color: "#cc0000" }];
 
+const weightProduct: TillProduct = {
+  ...products[0]!,
+  id: "jamon",
+  descriptions: { es: "Jamón" },
+  pricingUnit: "weight",
+};
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s theme)", (theme) => {
@@ -72,6 +79,29 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       "till-basket",
     )!.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations in the split quantity picker", async () => {
+    const splitLines: TabLine[] = [
+      { ...lines[0]!, quantity: "4.000" },
+      { ...lines[1]!, lineNo: 2, productId: "jamon", quantity: "0.750" },
+    ];
+    const { el, host } = await mountWidget<TillTableOrderScreen>(
+      "till-table-order-screen",
+      { products: [...products, weightProduct], lines: splitLines, orderId: "wo-1" },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="1"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="2"]')!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     await expectNoA11yViolations(host);

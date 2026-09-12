@@ -599,6 +599,12 @@ export class TillApp extends LitElement {
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. The ticket's
    * line list comes from THIS result's `lines` (the filed composition), never the client basket. */
   @state() private result?: TillSaleResult;
+  /** The location's issuance behavior; non-auto modes offer the original on the completion screen. */
+  @state() private receiptPrintMode: "auto" | "on_request" | "never" = "auto";
+  /** Whether the issuance-time original action is still available for the ticket currently shown. */
+  @state() private originalReceiptAvailable = false;
+  /** The working order that produced the ticket currently shown, including detached split checks. */
+  private ticketWorkingOrderId?: string;
   /**
    * The receipt (invoice) locale for the ticket, from `GET /api/till`'s own `invoiceLocale` field
    * (the fiscal `cfg.locale`) — the language the legal receipt renders in. Threaded to
@@ -808,6 +814,7 @@ export class TillApp extends LitElement {
       this.onboardingIntent = till.onboardingIntent;
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
+      this.receiptPrintMode = till.receiptPrintMode ?? "auto";
       this.bumpMode = till.bumpMode;
       this.fireControl = till.fireControl;
       this.courses = till.courses;
@@ -1154,7 +1161,7 @@ export class TillApp extends LitElement {
       await this.#syncIfDirty(id, lines, label);
       reachedFiscal = true;
       this.result = await this.api.recordSale(lines, tender, id);
-      this.#showTicket();
+      this.#showTicket(id);
       // A settled PARKED order must drop off the cross-till held list immediately — mirror the
       // park/retrieve/discard refresh (the four moments the node's open set changes). Without this a
       // just-paid retrieved order lingers in the in-memory `heldOrders` and re-appears on the counter
@@ -1230,7 +1237,7 @@ export class TillApp extends LitElement {
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        this.#showTicket();
+        this.#showTicket(id, this.orderFlow !== "invoice_first");
         await this.#refreshHeldOrders();
       } else {
         this.cardOutcome = out.outcome;
@@ -1383,7 +1390,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.collectOrder(id, tender);
-      this.#showTicket();
+      this.#showTicket(id, this.orderFlow !== "invoice_first");
     } catch (error) {
       // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
       // invoice) with no preliminary save, so a NETWORK failure (no answer) is `sale.unconfirmed` — the
@@ -1640,22 +1647,45 @@ export class TillApp extends LitElement {
 
   /**
    * Reprint the just-filed sale's receipt (counter receipt/drawer §5) — the ticket screen's "Reprint"
-   * button (`till-ticket-view` dispatches `reprint`; the view is presentational and holds no id). The
-   * WORKING-ORDER id is `this.#store.id`, which is STILL the just-filed sale's id at the ticket stage:
-   * `#onConfirmPayment`/`#onCollectCard`/`#onCollectOrder` set `this.result` + move to the `ticket`
-   * screen but NEVER clear `#store`, and {@link #onNewSale} is the one place that re-mints it (via
-   * `#store.clear()`) — so it names the sale the ticket is showing. NON-FISCAL: the server re-enqueues
+   * button (`till-ticket-view` dispatches `reprint`; the view is presentational and holds no id).
+   * `ticketWorkingOrderId` is captured by every terminal sale path, including a detached split check;
+   * the counter store cannot identify that latter case. NON-FISCAL: the server re-enqueues
    * PAPER only and files nothing. A failure (incl. a till with no printer) is non-fatal — the ticket
    * stays on screen and the operator retries — so it surfaces the generic `reprint.error` banner, never
    * an unhandled rejection or the raw domain code (the `#onConfirmPayment` convention). Writes only
    * reactive state, so no `isConnected` guard is needed (the app's DISCONNECT SAFETY note).
    */
   async #onReprint(): Promise<void> {
+    if (this.ticketWorkingOrderId === undefined) return;
     this.errorKey = undefined;
     try {
-      await this.api.reprint(this.#store.id);
+      await this.api.reprint(this.ticketWorkingOrderId);
     } catch {
       this.errorKey = "reprint.error";
+    }
+  }
+
+  /** Enqueue the issuance-time ORIGINAL. Only a successful enqueue retires the original action; a
+   * failed request stays retryable and never silently turns the next attempt into a duplicate. */
+  async #onPrintReceipt(): Promise<void> {
+    if (this.ticketWorkingOrderId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.printReceipt(this.ticketWorkingOrderId);
+      this.originalReceiptAvailable = false;
+    } catch {
+      this.errorKey = "receipt.error";
+    }
+  }
+
+  /** Enqueue the separate card payment slip. Presentation failure cannot affect the filed sale. */
+  async #onPaymentSlip(): Promise<void> {
+    if (this.ticketWorkingOrderId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.printPaymentSlip(this.ticketWorkingOrderId);
+    } catch {
+      this.errorKey = "payment_slip.error";
     }
   }
 
@@ -1672,6 +1702,9 @@ export class TillApp extends LitElement {
    * `#onConfirmPayment` convention). Writes only reactive state, so no `isConnected` guard is needed.
    */
   async #onOpenDrawer(): Promise<void> {
+    // A handheld carries a pocket float rather than a register. Keep this independent of its profile's
+    // print/drawer capabilities so a synthetic event cannot reach the manual drawer route.
+    if (this.handheldMode) return;
     this.errorKey = undefined;
     try {
       await this.api.openDrawer();
@@ -1731,6 +1764,8 @@ export class TillApp extends LitElement {
   /** Clear the completed order and return home, retaining this browser tab's menu preference. */
   #onNewSale(): void {
     this.#store.clear();
+    this.ticketWorkingOrderId = undefined;
+    this.originalReceiptAvailable = false;
     this.stage = "order";
     this.errorKey = undefined;
     this.cardOutcome = undefined;
@@ -2160,6 +2195,25 @@ export class TillApp extends LitElement {
     await Promise.all([this.#loadTabLines(), this.#reloadTables()]);
   }
 
+  /** Carve selected tab lines into a detached check, then point the existing table payment screen at
+   * that check. The origin table id stays captured so its label continues to identify this split bill. */
+  async #onSplitLines(event: Event): Promise<void> {
+    const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      const { checkId } = await this.api.splitTab(this.activeTabId, transfers);
+      this.activeTabId = checkId;
+    } catch (error) {
+      this.errorKey =
+        (error as { code?: string }).code === "tab.transfer_modifier_line"
+          ? "table.split_modifier_error"
+          : "table.error";
+      return;
+    }
+    await Promise.all([this.#loadTabLines(), this.#reloadTables()]);
+  }
+
   /**
    * Settle the WHOLE tab (FP-1, H2-critical). The tab is a PERSISTED OPEN working order, so the EXISTING
    * `recordSale` verb files its STORED LOCKED lines and IGNORES the sent basket — `payWorkingOrder`'s
@@ -2180,7 +2234,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.recordSale([], tender, id);
-      this.#showTicket();
+      this.#showTicket(id);
     } catch (error) {
       // No preliminary save here (this deliberately skips `#syncIfDirty` — see the header), so a NETWORK
       // failure (no answer) is `sale.unconfirmed` — the tab sale may have filed, so a human checks before
@@ -2265,7 +2319,9 @@ export class TillApp extends LitElement {
    * `ticket` screen otherwise. The one place the four terminal fiscal-file paths
    * ({@link #onConfirmPayment}/{@link #onCollectCard}/{@link #onCollectOrder}/{@link #onPayTab}) express
    * that branch, so none re-implements it. */
-  #showTicket(): void {
+  #showTicket(workingOrderId: string, invoiceIssuedNow = true): void {
+    this.ticketWorkingOrderId = workingOrderId;
+    this.originalReceiptAvailable = invoiceIssuedNow && this.receiptPrintMode !== "auto";
     if (this.#inShell()) this.#pushDrill({ kind: "ticket" });
     else this.#setScreen("ticket");
   }
@@ -2550,6 +2606,11 @@ export class TillApp extends LitElement {
           .issuer=${this.issuer}
           .invoiceLocale=${this.invoiceLocale}
           .receipt=${this.receipt}
+          .originalReceiptAvailable=${this.originalReceiptAvailable}
+          .canPrintReceipt=${
+            this.deviceId === undefined || this.capabilities.includes("print-receipt")
+          }
+          .canOpenDrawer=${!this.handheldMode}
           .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
       case "schedule":
@@ -2607,6 +2668,8 @@ export class TillApp extends LitElement {
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
         @new-sale=${() => this.#onNewSale()}
         @reprint=${() => void this.#onReprint()}
+        @print-receipt=${() => void this.#onPrintReceipt()}
+        @payment-slip=${() => void this.#onPaymentSlip()}
         @open-drawer=${() => void this.#onOpenDrawer()}
         @override-confirm=${(event: Event) => void this.#onOverrideConfirm(event)}
         @override-cancel=${() => this.#closeOverrideDialog()}
@@ -2626,6 +2689,7 @@ export class TillApp extends LitElement {
         @join-table=${(event: Event) => void this.#onJoinTable(event)}
         @merge-tabs=${(event: Event) => void this.#onMergeTabs(event)}
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
+        @split-lines=${(event: Event) => void this.#onSplitLines(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
         @back-to-floor=${() => this.#onBackToFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}

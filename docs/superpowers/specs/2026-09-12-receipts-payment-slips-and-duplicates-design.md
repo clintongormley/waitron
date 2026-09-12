@@ -1,6 +1,6 @@
 # Receipts, payment slips and duplicates — design
 
-**Date:** 2026-09-12. **Status:** approved, pre-plan. Brainstormed with the owner the same day, on top
+**Date:** 2026-09-12. **Status:** implemented and locally validated on the feature branch; awaiting `finish-branch`. Brainstormed with the owner the same day, on top
 of the legal research recorded verbatim in
 [compliance/verifactu-findings.md §15](../../compliance/verifactu-findings.md) and the open advisor
 question [asesor-questions.md Q19](../../compliance/asesor-questions.md).
@@ -55,7 +55,7 @@ RD 1619/2012 art. 14.4 forbids.
 - **Nothing requires a card slip** (§15.5): the invoicing rules carry no payment element, and
   RDL 19/2018 contains zero occurrences of `justificante`/`resguardo`/`comprobante`.
 
-**Code facts, each checked rather than assumed:**
+**Code facts at design time, before implementation:**
 
 | Claim | Receipt |
 | --- | --- |
@@ -68,11 +68,16 @@ RD 1619/2012 art. 14.4 forbids.
 | `print_jobs` has NO sale link and carries opaque bytes | «OPAQUE ESC/POS bytes (the subsystem never inspects them)» — [packages/db/src/schema/print-jobs.ts](../../../packages/db/src/schema/print-jobs.ts) |
 | There is no manual job re-send today, only bounded auto-retry | `packages/printing/src/runtime.ts` ~line 123 — a `failed` job under the attempt cap is re-claimed |
 | `sales` cannot carry a mutable "printed" flag | `GRANT SELECT, INSERT` + `reject_mutation()` on UPDATE/DELETE — [packages/db/drizzle/0001_db_baseline_sql.sql](../../../packages/db/drizzle/0001_db_baseline_sql.sql) lines 131–145 |
+| Cash handed over was not persisted | `settlementFor` retained change only in memory; `readSettledTicket` defaulted it to zero. The HTTP regression in `till-api.receipt.test.ts`, “replays and reprints the original cash handed over and change”, reproduced €20 tendered against €1.50 due becoming zero change on replay. |
+
+**Implementation clarification (owner, 2026-09-12).** Preserve missing payment facts on the existing tender row rather than storing receipt snapshots or printer bytes. A duplicate preserves the filed invoice content, QR and recorded payment facts; optional owner-authored header and footer text uses the current layout. Invoice-first mode always prints the original at placement, regardless of the general receipt-print setting.
+
+**Drawer clarification during branch review (owner, 2026-09-12).** Printing is independent of opening the drawer. A cash payment at a till creates a separate audited drawer job regardless of the receipt-print setting; card payments and invoice-first placement do not. Handhelds can record cash payments but cannot open the linked till's drawer, including through the manual-open route even when their profile declares the capability. The till hides that action on handhelds. Document jobs contain no drawer command and can be resent unchanged. Drawer jobs cannot be manually resent; an authorized manual opening at the till creates its own audit entry. `print_jobs.kind` distinguishes `document` from `drawer` without decoding the opaque bytes. This is a core-set column because it describes the existing delivery job.
 
 **Why no new table.** An earlier draft proposed an append-only `receipt_originals` keyed
 `(tenant_id, sale_id)` to decide original-vs-duplicate from a stored fact. The owner's rule — always
 OFFER the receipt at issuance, mark everything after — removes the need: the distinction is carried by
-which action the operator invoked, so no migration, no race, no `on_request` special case. Recorded
+which action the operator invoked, so no original-print tracking table, race or `on_request` special case. The separate cash-fact correction below does require a column migration. Recorded
 because the rejected alternative is the one a future reader will re-propose.
 
 ## 4. Design
@@ -101,6 +106,14 @@ Cambio       0,00 €                           Propina   0,50 €    Ref. 4471
 slip, and the operator-keyed number is the customer's only link between the ticket and the bank
 terminal's own paper. `ENTRY_MODE_LABEL` and the `card` entry in the renderers' `LABEL` tables are
 deleted; `Tarjeta`, `Propina`, `Cobrado` stay.
+
+### 4.1a Persist the missing cash fact
+
+Add nullable `tenders.cash_tendered`, without changing `amount`: the latter remains the amount applied to settlement. A non-null cash amount is valid only for a cash tender and must be at least `amount`. The same INSERT that settles a cash sale stores the money handed over; change is reconstructed as `cash_tendered - amount`. Core callers omitting the optional cash fact leave it null; the till always supplies it for cash. A null fact has no separately recorded change.
+
+This column belongs to the existing core tender table because that row owns settlement facts. Its append-only protection and settlement-sum checks continue to apply. A retried payment returns the recorded change, while its replay path still does not dispense cash or open the drawer again.
+
+The fiscal receipt interface exposes the issuer identity stored by a backend that retains it. Veri*Factu reads the filed issuer name and tax ID; generic callers do not import the regime. A backend with no stored receipt provides no historical issuer identity.
 
 ### 4.2 The payment slip — a new, deliberately separate renderer
 
@@ -153,6 +166,8 @@ as the new check's label, and the check is deliberately not table-anchored — s
 one table carry nothing connecting them to each other or to the table. It will instead stamp the label
 from the ORIGIN tab (its table's name, falling back to the origin's own label when the origin has none).
 
+When a sale files, stamp its resolved table label on the working order. For invoice-first orders, that happens at placement; other orders stamp it at settlement. Filed receipts read the stored label, so table renaming and later table turnover do not change it.
+
 `TillSaleResult` gains `orderLabel: string | null` and `orderNumber: number`, printed on both the
 fiscal ticket and the slip. This is what makes the owner's split-bill workflow physically work: the
 bills for one table come off the printer identifiable as a set.
@@ -166,8 +181,7 @@ bills for one table come off the printer identifiable as a set.
 | **Re-send job** | the Impresoras dashboard | the original bytes, unchanged | `print.resend` |
 
 The rule in one sentence: **the receipt is always offered at the moment the invoice is issued, and that
-print is the original; every print after that moment is a duplicate.** In `auto` mode the offer is the
-automatic print; in `on_request` the till prompts at the completion screen. A customer who declines and
+print is the original; every print after that moment is a duplicate.** For pay-at-issuance flows, `auto` prints automatically and `on_request`/`never` offer the original on the completion screen. In invoice-first mode, placement always prints the original bill for the customer to read and pay. It carries no payment block before settlement; collection offers duplicates and retains the cash-drawer action. A customer who declines and
 later asks gets a duplicate — the invoice was issued and offered, so the later paper is genuinely a
 second copy.
 
@@ -179,7 +193,7 @@ name.
 
 `buildReceiptBytes` ([receipt-print.ts](../../../apps/server/src/receipt-print.ts) ~line 114) gains one
 boolean, `duplicate`. Per Gipuzkoa, the duplicate is otherwise identical — same QR, same fiscal
-identifier — with «DUPLICADO» rendered prominently near the header, and it creates **no** fiscal record
+identifier — with «DUPLICADO» rendered prominently near the header. The filed invoice content, QR and recorded payment facts are preserved; optional header/footer trim follows the current layout. It creates **no** fiscal record
 and triggers **no** submission. `enqueueReceiptReprint` is split into the two named actions above so the
 call site, not a stored fact, carries the meaning.
 
@@ -208,22 +222,22 @@ the ability by having the flag added to its device profile, and is refused `devi
 
 Replace the `"table.action_split": "Split (soon)"` placeholder
 ([apps/till/src/i18n/strings.ts](../../../apps/till/src/i18n/strings.ts) ~line 383) with the real flow
-against the landed `POST /api/tabs/:id/split`. No server work: `splitOffCheck` and its fiscal proofs are
+against the landed `POST /api/tabs/:id/split`. The split operation already exists: `splitOffCheck` and its fiscal proofs are
 on `main` (`apps/server/src/split-bill.fiscal.test.ts` — one tab → 3 checks → exactly 3 chained
-registros with contiguous numbers), and §4.3's label is the only server-side change.
+registros with contiguous numbers), and §4.3's label is the only change to the split operation. The till can select partial quantities of plain dishes. Existing modifier rules remain: a dish with options must move as a whole line.
 
 ## 5. Testing
 
 - **Ticket renderer.** A card ticket renders NO scheme, last4, entry mode or auth code; the
-  `Propina`/`Cobrado` pair still appears when a tip rode along; cash is byte-unchanged; the manual-card
+  `Propina`/`Cobrado` pair still appears when a tip rode along; cash payment lines are unchanged apart from corrected replay facts; the manual-card
   `Ref.` survives. The on-screen twin and its a11y suite get the same variants.
-- **Slip renderer.** Contains no QR, no series and no invoice number — **proved by deletion**, not
-  merely asserted: remove the assertion and confirm the test fails. Every conditional line (missing card
+- **Slip renderer.** Contains no QR, no series and no invoice number. Introduce forbidden output and confirm the test fails, then restore the renderer. Removing an assertion cannot prove its protection. Every conditional line (missing card
   facts, no tip, no label) pinned. The `****` mask survives the Latin-1 round trip
   ([packages/printing/src/escpos.ts](../../../packages/printing/src/escpos.ts) line 30).
-- **Duplicado.** Print → unmarked; reprint → marked; the marked and unmarked bytes differ ONLY by the
-  added text (the Gipuzkoa property: same QR, same identifier); a reprint files no `registros_facturacion`
+- **Duplicado.** Print → unmarked; reprint → marked; for the same rendering inputs, marked and unmarked bytes differ only by the added text. Across a later print, filed invoice facts and QR remain the same; optional trim follows the current layout; a reprint files no `registros_facturacion`
   row and submits nothing — asserted on real Postgres, since that is the claim that matters fiscally.
+- **Stored facts.** A cash sale and its pay replay return the same change; a duplicate prints the original cash handed over. Changing the current issuer identity or reusing/renaming the table preserves the filed identity and stored grouping. Current optional trim remains visible.
+- **Invoice first.** Placement prints one unpaid original in every print mode, to the issuing device’s printer. Collection creates no second original and retains the cash drawer action.
 - **Capability.** A device-less caller passes all three routes; a device whose profile lacks
   `print-receipt` is refused 403 on all three; adding the flag admits it. Proved by deletion on the
   capability check.
