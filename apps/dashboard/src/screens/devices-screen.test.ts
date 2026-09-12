@@ -1,5 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { html } from "lit";
+import { registerCatalogue, type CardProviderPanel } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -9,10 +11,32 @@ import type {
   DeviceRow,
   JoinRequestRow,
   Printer,
+  ReaderRow,
   Station,
   Till,
 } from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
+
+// A pair of fake provider panels so the reader-label tests never depend on the real SumUp/Stripe
+// panels (the payments-screen.test.ts idiom) — only `displayNameKey` matters here, so the connect/
+// add-reader forms are never rendered by this screen and can be stubs.
+registerCatalogue({
+  en: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
+  es: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
+});
+
+const fakePanel = (providerId: string, nameKey: string): CardProviderPanel => ({
+  providerId,
+  displayNameKey: nameKey,
+  strings: { en: {}, es: {} },
+  renderConnectForm: () => html`<div></div>`,
+  renderAddReader: () => html`<div></div>`,
+});
+
+const PANELS: CardProviderPanel[] = [
+  fakePanel("acme", "test.acme.name"),
+  fakePanel("zeta", "test.zeta.name"),
+];
 
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
@@ -121,6 +145,13 @@ const printers: Printer[] = [
   },
 ];
 
+const readers: ReaderRow[] = [
+  { id: "r1", provider: "acme", name: "Front counter", active: true, deviceCount: 1 },
+  { id: "r2", provider: "zeta", name: "Bar", active: true, deviceCount: 0 },
+  // Retired: must be excluded from the picker's options (the printer picker's "active only" idiom).
+  { id: "r3", provider: "acme", name: "Old terminal", active: false, deviceCount: 0 },
+];
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listDevices: vi.fn().mockResolvedValue(devices),
@@ -139,6 +170,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       .mockResolvedValue({ deviceId: "j1", name: "Pantalla pase", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
+    listReaders: vi.fn().mockResolvedValue(readers),
+    // No device carries a default reader unless a test says otherwise.
+    getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
+    setDeviceReader: vi.fn().mockResolvedValue(undefined),
     // Reflect back the patched fields (the way the server returns the updated device) so the editor's
     // controls can show what took.
     patchDeviceHardware: vi.fn().mockImplementation(
@@ -733,6 +768,117 @@ describe("devices-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.binding_invalid");
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("device.binding_invalid", "es-ES"));
+  });
+
+  // ── Per-device default reader (Task 16) ────────────────────────────────────────────────────────
+
+  it("loads the reader list ONCE for the whole screen, and each active device's current default", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await flush(el);
+
+    expect(api.listReaders).toHaveBeenCalledTimes(1);
+    // d1 is active, d2 is revoked (its hardware editor — and so its reader control — never renders).
+    expect(api.getDeviceReader).toHaveBeenCalledTimes(1);
+    expect(api.getDeviceReader).toHaveBeenCalledWith("d1");
+  });
+
+  it("lists only ACTIVE readers, by name and a friendly provider label, with a leading none option", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await flush(el);
+
+    const select = q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    const options = Array.from(select.querySelectorAll("option"));
+    expect(options.map((o) => o.value)).toEqual(["", "r1", "r2"]); // r3 is retired — excluded
+    expect(options[0]!.textContent?.trim()).toBe(t("devices.default_reader_none", "es-ES"));
+    expect(options[1]!.textContent?.trim()).toBe("Front counter (Acme Pay)");
+    expect(options[2]!.textContent?.trim()).toBe("Bar (Zeta Pay)");
+  });
+
+  it("preselects the empty option when a device has no default reader", async () => {
+    const api = stubApi(); // getDeviceReader defaults to { readerId: null }
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await flush(el);
+
+    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("preselects the device's current default reader from the GET", async () => {
+    const api = stubApi({
+      getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r2" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await flush(el);
+
+    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("r2");
+  });
+
+  it("sets a device's default reader as soon as one is picked (no separate Save)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await flush(el);
+
+    pickSelect(el, "hw-reader-d1", "r1");
+    await flush(el);
+
+    expect(api.setDeviceReader).toHaveBeenCalledWith("d1", "r1");
+    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("r1");
+  });
+
+  it("clears a device's default reader when the none option is picked", async () => {
+    const api = stubApi({
+      getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await flush(el);
+    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("r1");
+
+    pickSelect(el, "hw-reader-d1", "");
+    await flush(el);
+
+    expect(api.setDeviceReader).toHaveBeenCalledWith("d1", null);
+    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("shows an error and snaps the reader select back when setting the default is rejected", async () => {
+    const api = stubApi({
+      getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
+      setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await flush(el);
+
+    pickSelect(el, "hw-reader-d1", "r2");
+    await flush(el);
+
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("reader.not_found");
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("reader.not_found", "es-ES"));
+    // The rejected pick never took: the control shows the device's actual stored default again.
+    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("r1");
   });
 
   it("registers as a custom element", () => {

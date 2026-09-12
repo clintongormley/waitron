@@ -7,6 +7,9 @@ export const QUERY_DEPENDENCIES = {
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
   listTills: ["tills"],
+  // The venue's card readers, plus the per-reader device count aggregated over `device_card_readers`,
+  // so a reader added/retired OR a device re-pointed refreshes the list.
+  listReaders: ["card_readers", "device_card_readers"],
   pairingMode: ["pairing"],
   joinRequests: ["join_requests"],
   listDiscoveredPrinters: ["printer_discovery", "printers", "print_agents"],

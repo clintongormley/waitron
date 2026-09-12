@@ -370,6 +370,8 @@ export const en = {
   "devices.receipt_printer": "Receipt printer",
   "devices.receipt_printer_none": "— no printer —",
   "devices.has_cash_drawer": "Cash drawer",
+  "devices.default_reader": "Default card reader",
+  "devices.default_reader_none": "— cash and manual card only —",
   "devices.label": "Label",
   "devices.pairing_title": "Allow new devices",
   "devices.pairing_hint":
@@ -1283,6 +1285,8 @@ export const es: Record<StringKey, string> = {
   "devices.receipt_printer": "Impresora de tickets",
   "devices.receipt_printer_none": "— sin impresora —",
   "devices.has_cash_drawer": "Cajón portamonedas",
+  "devices.default_reader": "Lector predeterminado",
+  "devices.default_reader_none": "— solo efectivo y tarjeta manual —",
   "devices.label": "Etiqueta",
   "devices.pairing_title": "Permitir dispositivos nuevos",
   "devices.pairing_hint":

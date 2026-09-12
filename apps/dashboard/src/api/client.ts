@@ -2986,4 +2986,22 @@ export class DashboardApi {
   retireReader(id: string): Promise<void> {
     return this.#request<void>(`/management-api/payments/readers/${id}/retire`, "POST");
   }
+
+  /** `GET /management-api/payments/devices/:id/reader` — device `id`'s default reader (from
+   * `device_card_readers`, not a device-hardware field), or `null` when none is set. */
+  getDeviceReader(id: string): Promise<{ readerId: string | null }> {
+    return this.#request<{ readerId: string | null }>(
+      `/management-api/payments/devices/${id}/reader`,
+      "GET",
+    );
+  }
+
+  /** `PUT /management-api/payments/devices/:id/reader` — set device `id`'s default reader, or clear it
+   * with `readerId: null`. Answers an empty 204; a foreign, retired or unknown reader id rejects
+   * `{ code: "reader.not_found" }`. */
+  setDeviceReader(id: string, readerId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/payments/devices/${id}/reader`, "PUT", {
+      readerId,
+    });
+  }
 }

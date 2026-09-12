@@ -15,13 +15,12 @@ import type {
 } from "../api/client.js";
 
 /**
- * The Devices screen scanned by axe in both themes, in four states: the default list (each active row
- * carrying its hardware editor) with the pairing window shut and a device waiting to join, a row's
- * hardware editor with the Stripe Terminal reader field revealed, the pairing window OPEN, and the
- * accept dialog with its three number buttons. Mounted by ASSIGNING the `api` STUB as a property (never
- * bare markup), exactly as the sibling screen a11y suites do: `connectedCallback` fires
- * `void this.#load()` → the list verbs, so the stub must resolve them all or a stray rejection pollutes
- * the run (a rejection is a finding).
+ * The Devices screen scanned by axe in both themes, in three states: the default list (each active row
+ * carrying its hardware editor, including the Task 16 default-reader picker) with the pairing window
+ * shut and a device waiting to join, the pairing window OPEN, and the accept dialog with its three
+ * number buttons. Mounted by ASSIGNING the `api` STUB as a property (never bare markup), exactly as the
+ * sibling screen a11y suites do: `connectedCallback` fires `void this.#load()` → the list verbs, so the
+ * stub must resolve them all or a stray rejection pollutes the run (a rejection is a finding).
  *
  * The last block is not about theme: it pins that each number button carries a real accessible NAME
  * ("Number 47", never a bare "47" — design §1.2 wants the comparison to be a deliberate act), and that
@@ -146,6 +145,13 @@ function stubApi(pairingOpen = false): DashboardApi {
       .mockResolvedValue({ deviceId: "j1", name: "Pantalla pase", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
+    listReaders: vi
+      .fn()
+      .mockResolvedValue([
+        { id: "r1", provider: "sumup", name: "Front counter", active: true, deviceCount: 1 },
+      ]),
+    getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
+    setDeviceReader: vi.fn().mockResolvedValue(undefined),
     patchDeviceHardware: vi.fn().mockResolvedValue({
       id: "d1",
       receiptPrinterId: null,

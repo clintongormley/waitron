@@ -7,6 +7,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
+import { registerCatalogue, type CardProviderPanel, t as tRaw } from "@waitron/dashboard-kit";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -18,6 +20,7 @@ import type {
   JoinRequestRow,
   PairingModeState,
   Printer,
+  ReaderRow,
   Station,
   Till,
 } from "../api/client.js";
@@ -79,10 +82,13 @@ const DEFAULT_HARDWARE: HardwareEdit = {
  *    already denied it — so the dialog closes and the copy says the device must ask again. Deny sits
  *    behind the same two-step confirm as Revoke.
  *  - EDITS a device's static hardware (SP-A.2 §16.3): each ACTIVE row carries a receipt-printer picker
- *    (`api.listPrinters()`), a has-cash-drawer switch, a card-provider picker and — only for a Stripe
- *    Terminal reader — a card-reader-id field, saved through `api.patchDeviceHardware(id, …)`. The edit
- *    is held in component state per row until Save; on success the controls reflect the server's stored
- *    values. (The device list carries no hardware, so an unsaved editor opens at the neutral defaults.)
+ *    (`api.listPrinters()`) and a has-cash-drawer switch, staged in component state per row and saved
+ *    together through `api.patchDeviceHardware(id, …)`; on success the controls reflect the server's
+ *    stored values. (The device list carries no hardware, so an unsaved editor opens at the neutral
+ *    defaults.) The same row also carries a DEFAULT-READER picker (Task 16): the venue's active card
+ *    readers (`api.listReaders()`, loaded once for the screen) plus a "none" option, preselected from
+ *    `api.getDeviceReader(id)` and written IMMEDIATELY on change through `api.setDeviceReader(id, …)` —
+ *    unlike the printer/cash-drawer fields, there is no separate Save for it.
  *  - REVOKES a device (`api.revokeDevice(id)`) behind a TWO-STEP confirm (the purchase-list idiom), and
  *    REASSIGNS a device's profile (`api.reassignDeviceProfile(id, …)`) via a per-row select. Both controls
  *    show only for ACTIVE devices.
@@ -198,6 +204,11 @@ export class DevicesScreen extends LitElement {
     },
   );
 
+  /** The card-provider panels whose `displayNameKey` resolves a reader's `provider` token to a
+   * friendly label (the payments-screen idiom). Defaults to the registry; a test injects fakes so it
+   * need not depend on the real SumUp/Stripe elements. */
+  @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
+
   // Whether an accept is in flight — a second tap on a number while the first is unanswered would
   // race a request the server may already have consumed, so the choices disable until it settles.
   @state() private submitting = false;
@@ -213,6 +224,13 @@ export class DevicesScreen extends LitElement {
   // DEFAULT_HARDWARE (the device list carries no hardware); a Save writes it and refreshes the entry
   // from the server's stored values.
   @state() private hardwareEdits: Record<string, HardwareEdit> = {};
+  // The venue's card readers (active AND retired — filtered to active for the picker), loaded once
+  // for the whole screen (Task 16), unlike the per-device default below.
+  @state() private readers: ReaderRow[] = [];
+  // Each ACTIVE device's current default reader id (or null), keyed by device id — read via
+  // `api.getDeviceReader` per device (there is no list form of this read) and written immediately on
+  // change, never staged like `hardwareEdits`.
+  @state() private deviceReaders: Record<string, string | null> = {};
   // The venue's tills — the accept dialog's register picker for a handheld profile.
   @state() private tills: Till[] = [];
   // The pairing window as the server last reported it; undefined until the first read settles.
@@ -239,6 +257,9 @@ export class DevicesScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    // Merge each panel's strings into the shared catalogue so its `displayNameKey` resolves (the
+    // payments-screen idiom) — this screen only reads that key, it never mounts a panel's forms.
+    for (const panel of this.panels) registerCatalogue(panel.strings);
     void this.#load();
   }
 
@@ -260,6 +281,15 @@ export class DevicesScreen extends LitElement {
     )) {
       const id = select.dataset.test!.slice("hw-printer-".length);
       select.value = this.#hardwareFor(id).receiptPrinterId;
+    }
+    // Same reconciliation for the default-reader picker: this both preselects from `deviceReaders`
+    // (populated by the per-device GET) and, after a REJECTED `setDeviceReader` re-renders without
+    // updating that state, snaps the control back to the device's actual stored default.
+    for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
+      '[data-test^="hw-reader-"]',
+    )) {
+      const id = select.dataset.test!.slice("hw-reader-".length);
+      select.value = this.deviceReaders[id] ?? "";
     }
     // The accept dialog's three pickers, same post-render reconciliation as the selects above: their
     // <option> children are rendered in the same pass, and the binding picker is a DIFFERENT element
@@ -283,8 +313,16 @@ export class DevicesScreen extends LitElement {
     this.armedDenyId = null;
     try {
       await Promise.all([
-        this.#queries.watch("listDevices", [], (value) => {
+        this.#queries.watch("listDevices", [], async (value) => {
           this.devices = value;
+          // Each active device's default reader is a PER-DEVICE read (there is no list form), so it
+          // is one request per active device, re-run whenever the reactive device list changes.
+          const entries = await Promise.all(
+            value
+              .filter((d) => d.active)
+              .map(async (d) => [d.id, (await this.api.getDeviceReader(d.id)).readerId] as const),
+          );
+          this.deviceReaders = Object.fromEntries(entries);
         }),
         this.#queries.watch("listStations", [], (value) => {
           this.stations = value;
@@ -294,6 +332,9 @@ export class DevicesScreen extends LitElement {
         }),
         this.#queries.watch("listPrinters", [], (value) => {
           this.printers = value;
+        }),
+        this.#queries.watch("listReaders", [], (value) => {
+          this.readers = value;
         }),
         this.#queries.watch("listTills", [], (value) => {
           this.tills = value;
@@ -530,6 +571,39 @@ export class DevicesScreen extends LitElement {
     }
   }
 
+  /** The panel naming `providerId`, or undefined when none does (the payments-screen idiom). */
+  #panelFor(providerId: string): CardProviderPanel | undefined {
+    return this.panels.find((p) => p.providerId === providerId);
+  }
+
+  /** A reader's provider token resolved to its panel's display name, or the raw token when no panel
+   * names it. */
+  #providerName(providerId: string): string {
+    const key = this.#panelFor(providerId)?.displayNameKey;
+    return key ? tRaw(key) : providerId;
+  }
+
+  /** A reader's option label: its own name plus its provider's friendly name, so two readers named
+   * the same by two providers are still told apart. */
+  #readerLabel(reader: ReaderRow): string {
+    return `${reader.name} (${this.#providerName(reader.provider)})`;
+  }
+
+  /** Set (or, for an empty value, clear) device `id`'s default reader — written IMMEDIATELY, unlike
+   * the staged printer/cash-drawer fields, which need their own Save. A rejection becomes the
+   * `errorKey` banner and leaves `deviceReaders` untouched, so `updated()` snaps the control back to
+   * the device's actual stored default. */
+  async #onReaderChange(id: string, value: string): Promise<void> {
+    this.errorKey = null;
+    const readerId = value === "" ? null : value;
+    try {
+      await this.api.setDeviceReader(id, readerId);
+      this.deviceReaders = { ...this.deviceReaders, [id]: readerId };
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
   /** Resolve a device's `deviceProfileId` to the loaded profile's name; a null id or an unknown profile
    * both fall back to the neutral placeholder. */
   #profileName(deviceProfileId: string | null): string {
@@ -557,11 +631,13 @@ export class DevicesScreen extends LitElement {
   /** The per-device hardware editor (SP-A.2 §16.3): a receipt-printer picker (the venue's ACTIVE
    * printers plus a "none" clear option), a has-cash-drawer switch, and a Save that PATCHes. The
    * printer list is DELIBERATELY not filtered to a location (the deli is single-location); the
-   * server's own binding check is the authority regardless. (The card reader default is edited on the
-   * Payments/Devices screen, not here.) */
+   * server's own binding check is the authority regardless. Also a default-reader picker (Task 16):
+   * the venue's ACTIVE readers plus a "none" option meaning cash and manual card only — this one
+   * writes on change, not through the Save button, since it has its own PUT. */
   #renderHardware(device: DeviceRow): TemplateResult {
     const hw = this.#hardwareFor(device.id);
     const activePrinters = this.printers.filter((p) => p.active);
+    const activeReaders = this.readers.filter((r) => r.active);
     return html`<div class="hardware" data-test="hardware-${device.id}">
       <label class="field"
         >${t("devices.receipt_printer")}
@@ -574,6 +650,17 @@ export class DevicesScreen extends LitElement {
         >
           <option value="">${t("devices.receipt_printer_none")}</option>
           ${activePrinters.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+        </select>
+      </label>
+      <label class="field"
+        >${t("devices.default_reader")}
+        <select
+          data-test="hw-reader-${device.id}"
+          @change=${(e: Event) =>
+            void this.#onReaderChange(device.id, (e.target as HTMLSelectElement).value)}
+        >
+          <option value="">${t("devices.default_reader_none")}</option>
+          ${activeReaders.map((r) => html`<option value=${r.id}>${this.#readerLabel(r)}</option>`)}
         </select>
       </label>
       <wt-switch
