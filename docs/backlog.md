@@ -1825,6 +1825,23 @@ the 38-character base, and the existing “the two must differ” rule, each wit
 the per-field error item above). Every field on this screen also wants an explanation of what it is
 for; a `wt-help-tooltip` is the shared control for that (design system → Forms).
 
+**Incidents are written by four things and displayed by nothing** (found 2026-09-12 while designing
+the record-validation fix; its own branch, owner decision). `openIncidents`
+(`packages/core/src/incidents.ts`) is the only function that reads the `incidents` table, and nothing
+calls it — a whole-repo text search outside tests finds only its definition and the barrel that
+exports it. No dashboard screen, till screen or report mentions incidents; the dashboard's
+diagnostics screen is a live log tail, which is a different thing. Meanwhile four producers write
+them: the fiscal drain when AEAT rejects a record, the payments reconciler on drift, the Stripe
+device provider, and the card provider pool. `apps/server/src/pass.ts` states the intended audience
+in its own comment — "an operator grepping `drain.complete` (or the `incidents` table directly)" —
+and a real venue's operator has no terminal, so neither of those is a surface for the person who
+needs it. Wanted: one operator surface serving every producer, which is why it is not folded into the
+record-validation branch — a screen shaped around that branch's two arithmetic warnings would be the
+wrong shape for the four already waiting. Design questions: whether it is its own screen or part of
+diagnostics, who may see it (the drain's rejections are fiscal, the reconciler's are money), whether
+an incident can be acknowledged or only observed, and how it reaches somebody who is not looking at
+the dashboard.
+
 **Nothing checks a fiscal record against AEAT's rules before it is chained or sent** (found while
 answering a question about series codes, 2026-09-12; **confirmed by experiment**; not fixed).
 `packages/verifactu/src/validate.ts` holds 25 checks — the NIF's length, `NumSerieFactura`'s length
