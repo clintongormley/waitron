@@ -75,6 +75,7 @@ export class StaffList extends LitElement {
           <wt-row-actions label=${`${t("staff.actions")}: ${person.displayName}`}>
             <wt-button
               variant="ghost"
+              align="start"
               data-test="edit-${person.personId}"
               @click=${(event: Event) => this.#edit(event, person.personId)}
               >${t("action.edit")}</wt-button
@@ -96,6 +97,7 @@ export class StaffList extends LitElement {
   #action(person: PersonSummary, action: string, label: string) {
     return html`<wt-button
       variant="ghost"
+      align="start"
       data-test=${`${action}-${person.personId}`}
       ?disabled=${action === "disable" && person.personId === this.currentPersonId}
       @click=${(event: Event) => {

@@ -1,9 +1,10 @@
-import { page } from "@vitest/browser/context";
+import { commands, page } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
+import type { ProfileScreen } from "./screens/profile-screen.js";
 import { diag } from "./diagnostics.js";
 
 /**
@@ -202,8 +203,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
 }
 
 it.each(["staff", "supervisor", "manager", "admin"])(
-  "makes Your profile reachable for %s, including by URL",
+  "makes Your profile reachable for %s as a modal over their ordinary landing face, by URL",
   async (role) => {
+    // "Your profile" is not itself a face — /manage/profile opens it as a modal OVER whatever the
+    // person would normally land on, since it has no sidebar entry to be "the current page" for.
     history.replaceState(null, "", "/manage/profile");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -227,12 +230,27 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=profile]")).not.toBeNull();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(modal.open).toBe(true);
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
     if (role === "staff") expect(el.shadowRoot!.querySelector("nav")).toBeNull();
-    const profile = el.shadowRoot!.querySelector("dashboard-profile-screen")!;
-    await profile.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(profile.shadowRoot!.querySelector("[data-test=close-profile]")).toBeNull();
+    // The URL still says "profile" (deep-linking still works), but the person's ordinary default
+    // is what's actually mounted underneath — never a page called "profile".
+    expect(new URL(location.href).pathname).toBe("/manage/profile");
+    expect(
+      el.shadowRoot!.querySelector(
+        role === "staff" ? "dashboard-my-schedule-screen" : "dashboard-overview-screen",
+      ),
+    ).not.toBeNull();
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await flush(el);
+    expect(modal.open).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).toBeNull();
+    // Closing replaces the URL with the underlying page's own — "profile" leaves no Back-button stop.
+    expect(new URL(location.href).pathname).toBe(
+      role === "staff" ? "/manage/my-schedule" : "/manage/overview",
+    );
   },
 );
 
@@ -265,6 +283,8 @@ const screenCanvasEditor = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-canvas-editor-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
+const accountMenuTrigger = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=account-menu]");
 const brandBanner = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=brand-banner]");
 const venueName = (el: DashboardApp) =>
@@ -596,20 +616,22 @@ describe("dashboard-app", () => {
     expect(getMe).not.toHaveBeenCalled();
   });
 
-  it("puts logout on the right side of the authenticated banner", async () => {
+  it("puts the account menu on the right side of the authenticated banner", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
 
     const banner = brandBanner(el)!;
     const name = venueName(el)!;
-    const logout = logoutBtn(el)!;
+    const trigger = accountMenuTrigger(el)!;
     expect(banner).toBeTruthy();
     expect(name.textContent?.trim()).toBe("Deli Test SL");
-    expect(logout).toBeTruthy();
-    expect(logout.getBoundingClientRect().left).toBeGreaterThan(name.getBoundingClientRect().right);
+    expect(trigger).toBeTruthy();
+    expect(trigger.getBoundingClientRect().left).toBeGreaterThan(
+      name.getBoundingClientRect().right,
+    );
     const bannerBox = banner.getBoundingClientRect();
     const trailingPadding = Number.parseFloat(getComputedStyle(banner).paddingRight);
-    expect(logout.getBoundingClientRect().right).toBeCloseTo(bannerBox.right - trailingPadding, 0);
+    expect(trigger.getBoundingClientRect().right).toBeCloseTo(bannerBox.right - trailingPadding, 0);
   });
 
   it("puts the full-width banner above both the sidebar and page content", async () => {
@@ -781,6 +803,233 @@ describe("dashboard-app", () => {
       }),
     );
     await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
+  });
+
+  it("opens profile from any screen without navigating away, and returns to exactly that screen on close", async () => {
+    // The whole point of profile being a modal: opening it from Catalogue must not lose Catalogue —
+    // no nav item should light up for it (it has none), and closing must land back on Catalogue,
+    // not some generic default the way a real navigation away-and-back would.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(modal.open).toBe(true);
+    // Catalogue is still mounted behind the modal — profile opened OVER it, not instead of it.
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+    expect(new URL(location.href).pathname).toBe("/manage/profile");
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await flush(el);
+    expect(modal.open).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+  });
+
+  it("keeps the underlying screen after saving your profile — a save re-probes the session while the URL still says profile", async () => {
+    // profile-screen's "profile-updated" (dispatched on a successful save) re-probes the session,
+    // which resolves the screen from the CURRENT url — still "profile" at that point, since the
+    // modal has not closed. #applyRequestedScreen("profile") must leave the underlying screen
+    // alone rather than falling through #permittedScreen(null) to the "overview" default: it did
+    // exactly that here before the fix, so closing after a save silently landed on Overview
+    // instead of Catalogue, even though the modal itself looked untouched throughout.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getProfile: vi.fn().mockResolvedValue({
+          displayName: "Alex",
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email: "alex@example.com",
+          pendingEmail: null,
+          locale: "en-GB",
+          hasPassword: true,
+          hasTotp: false,
+          hasGoogle: false,
+          passkeys: [],
+        }),
+        saveProfile: vi.fn().mockResolvedValue({ emailVerificationSent: false }),
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [{ code: "en-GB", label: "English" }],
+          venueDefault: "en-GB",
+        }),
+      }),
+    });
+    await flush(el);
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const profileScreen = el.shadowRoot!.querySelector("dashboard-profile-screen")!;
+    await new Promise((r) => setTimeout(r, 0));
+    await profileScreen.updateComplete;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-profile-details"]')!.click();
+    await profileScreen.updateComplete;
+
+    profileScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await flush(el);
+    await flush(el); // the save's own profile-updated -> #probeSession() round trip
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+  });
+
+  it("disables the relocated Edit button until profile data has actually loaded, and never throws if clicked early", async () => {
+    // Edit used to live INSIDE profile-screen.ts's own render, which only ever ran once
+    // `profile !== null` — so the button and its data always existed together. Moving it into
+    // dashboard-app.ts's own footer decoupled the two: without this, the footer button renders
+    // (and is clickable) the instant the modal opens, before getProfile() has resolved, and
+    // editDetails() dereferences `this.profile!.displayName` — a real crash on a slow load or a
+    // fast double click.
+    let resolveProfile!: (value: unknown) => void;
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getProfile: vi.fn(() => new Promise((resolve) => (resolveProfile = resolve))),
+      }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const editButton = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-test="edit-profile-details"]',
+    )!;
+    expect(editButton.disabled).toBe(true);
+    // The public entry point itself is also guarded, independent of the button's disabled state.
+    const profileScreen = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen")!;
+    expect(() => profileScreen.editDetails()).not.toThrow();
+
+    resolveProfile({
+      displayName: "Alex",
+      firstNames: "Alex",
+      lastNames: "Rivera",
+      telephone: null,
+      email: "alex@example.com",
+      pendingEmail: null,
+      locale: "en-GB",
+      hasPassword: true,
+      hasTotp: false,
+      hasGoogle: false,
+      passkeys: [],
+    });
+    await flush(el);
+    await flush(el);
+    expect(editButton.disabled).toBe(false);
+  });
+
+  it("resets both the active tab and the Edit button's readiness on a fresh reopen, not stale state from the previous visit", async () => {
+    // `<dashboard-profile-screen>` is destroyed and recreated on every open/close
+    // (`${this.profileOpen ? html\`<dashboard-profile-screen...\` : nothing}`), and both
+    // `profileTab` and `profileReady` only ever reset via that fresh instance's own
+    // `connectedCallback` re-announcing "details"/not-ready. Nothing else in dashboard-app.ts
+    // resets them on close — if that announce were ever lost, a reopen would carry over the
+    // PREVIOUS visit's tab and (more seriously) its readiness, showing an enabled Edit button over
+    // data that has not loaded yet for the new visit.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getProfile: vi.fn().mockResolvedValue({
+          displayName: "Alex",
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email: "alex@example.com",
+          pendingEmail: null,
+          locale: "en-GB",
+          hasPassword: true,
+          hasTotp: false,
+          hasGoogle: false,
+          passkeys: [],
+        }),
+      }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const editButton = () =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        '[data-test="edit-profile-details"]',
+      );
+    expect(editButton()!.disabled).toBe(false);
+
+    // Switch to Security — Edit disappears (Security has no equivalent single action) — then close.
+    const profileScreen = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen")!;
+    const wtTabs = profileScreen.shadowRoot!.querySelector("wt-tabs")!;
+    wtTabs.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "security" } }));
+    await profileScreen.updateComplete;
+    await flush(el);
+    expect(editButton()).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await flush(el);
+
+    // Reopen: a fresh profile-screen instance loads fresh — Edit is back on "details" (present,
+    // not carried over as hidden from the previous visit's Security tab) and, once its own load
+    // resolves, enabled — never inheriting the previous visit's readiness by accident.
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    expect(editButton()).not.toBeNull();
+    expect(editButton()!.disabled).toBe(false);
+  });
+
+  it("closing profile-screen's OWN nested edit modal does not also close the outer profile modal", async () => {
+    // wt-close is composed+bubbling. profile-screen's per-field edit modal is nested inside the
+    // outer profile modal, and both listen for that same event type — without a target===
+    // currentTarget guard, dismissing the inner one also dismissed the outer one, since its event
+    // bubbles straight through it. Reproduced live: Cancel on "Your details" dropped all the way
+    // back to the page behind Your profile, not back to Your profile's own view.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getProfile: vi.fn().mockResolvedValue({
+          displayName: "Alex",
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email: "alex@example.com",
+          pendingEmail: null,
+          locale: "en-GB",
+          hasPassword: true,
+          hasTotp: false,
+          hasGoogle: false,
+          passkeys: [],
+        }),
+      }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const outerModal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(outerModal.open).toBe(true);
+
+    const profileScreen = el.shadowRoot!.querySelector("dashboard-profile-screen")!;
+    await new Promise((r) => setTimeout(r, 0));
+    await profileScreen.updateComplete;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-profile-details"]')!.click();
+    await profileScreen.updateComplete;
+    const innerModal = profileScreen.shadowRoot!.querySelector("wt-modal")!;
+    expect(innerModal.open).toBe(true);
+
+    profileScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    await profileScreen.updateComplete;
+    await flush(el);
+    expect(innerModal.open).toBe(false);
+    expect(outerModal.open).toBe(true); // the bug: this used to also be false
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
   });
 
@@ -1270,8 +1519,8 @@ describe("dashboard-app", () => {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    // Every group header (an <h2 class="nav-group">) renders its localised label…
-    const headers = [...el.shadowRoot!.querySelectorAll("h2.nav-group")].map((h) =>
+    // Every group header (a toggle button.nav-group) renders its localised label…
+    const headers = [...el.shadowRoot!.querySelectorAll("button.nav-group")].map((h) =>
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
@@ -1280,6 +1529,84 @@ describe("dashboard-app", () => {
     expect(NAV_SCREENS).toHaveLength(21);
     expect(navItem(el, "location-menus")).toBeNull();
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
+  });
+
+  it("collapses and expands a nav group's items from its header toggle", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-team")!;
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hidden).toBe(false);
+    expect(navItem(el, "staff")).toBeTruthy();
+
+    header.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.hidden).toBe(true);
+
+    header.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hidden).toBe(false);
+  });
+
+  it("keeps a group expanded once collapsed if it holds the current screen, so you never lose your place", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    // "catalogue" lives in the (collapsible) "menu" group; navigate there first.
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-menu")!;
+
+    header.click(); // user collapses the group its own current page lives in
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hidden).toBe(false);
+    expect(navItem(el, "catalogue")).toBeTruthy();
+
+    // Navigating away, the group now honours the collapse the user asked for.
+    navItem(el, "overview")!.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.hidden).toBe(true);
+  });
+
+  it("keeps the clicked group header at the same on-screen position when collapsing shrinks the list above the fold", async () => {
+    // A scrollable sidebar whose content shrinks below the current scroll offset gets its scrollTop
+    // clamped by the browser — collapsing a group below the fold used to visibly snap the whole
+    // list upward as a result. Reproduced with real geometry: a short viewport, scrolled partway
+    // down (not pinned to an extreme edge — that can make exact preservation mathematically
+    // impossible if the group being collapsed is itself propping up the scrollable range, which
+    // is a real but separate constraint from the bug this guards), collapsing a MIDDLE group so
+    // there's real content both above and below to absorb the shrink.
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1200, 550);
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+      const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
+      sidebar.scrollTop = 100;
+      await new Promise((r) => requestAnimationFrame(r));
+      const before = header.getBoundingClientRect().top;
+
+      header.click();
+      await flush(el);
+      await new Promise((r) => requestAnimationFrame(r));
+
+      expect(header.getBoundingClientRect().top).toBeCloseTo(before, 0);
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   // The module-UI seam (SP2 Task 3): a BUNDLED module's screen and nav are mounted GENERICALLY from the
@@ -1501,9 +1828,40 @@ describe("dashboard-app", () => {
     expect(navItem(el, "overview")!.getAttribute("aria-current")).toBeNull();
   });
 
+  it("mutes a resting nav item and paints only the current one from the primary token", async () => {
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+    // Opens on overview (Task 9's landing) → overview is current, catalogue is resting.
+    expect(getComputedStyle(navItem(el, "overview")!).color).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(navItem(el, "catalogue")!).color).toBe("rgb(1, 2, 3)");
+  });
+
   // Task 12: the responsive drawer. On narrow screens the sidebar is an off-canvas drawer toggled by
   // the hamburger; opening it flips `.layout.drawer-open` and shows a scrim, and selecting any nav item
   // closes it again while STILL switching the screen (so a phone tap navigates and dismisses in one go).
+  it("shows the gear icon on the Settings group header, and no other group header", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const settingsHeader = el.shadowRoot!.querySelector('[data-test="nav-group-configuration"]')!;
+    expect(settingsHeader.textContent).toContain(t("nav.group.configuration"));
+    expect(settingsHeader.querySelector('wt-icon[name="gear"]')).not.toBeNull();
+    const teamHeader = el.shadowRoot!.querySelector('[data-test="nav-group-team"]')!;
+    expect(teamHeader.querySelectorAll("wt-icon")).toHaveLength(1); // only the chevron, no gear
+  });
+  it("shows the hamburger icon on the drawer toggle, not the kebab", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const icon = el.shadowRoot!.querySelector('[data-test="nav-toggle"] wt-icon')!;
+    expect(icon.getAttribute("name")).toBe("hamburger");
+  });
   it("hamburger toggles the drawer open, a nav click closes it", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
@@ -1525,6 +1883,69 @@ describe("dashboard-app", () => {
     expect(layout().classList.contains("drawer-open")).toBe(false);
     expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
     expect(catalogue(el)).toBeTruthy();
+  });
+
+  // Real viewport resizes below — the matchMedia STUB the other drawer tests use never applies the
+  // actual CSS @media rule, so it cannot catch a real off-canvas layout bug (see the two below).
+  it("keeps the off-canvas drawer a fixed width, unaffected by which nav groups are expanded", async () => {
+    // .sidebar drops out of flex layout under position:absolute (the narrow media query), so
+    // without its own explicit width it fell back to shrink-to-fit over the nav's content — a width
+    // that could change with every group expand/collapse, making the closed drawer's
+    // translateX(-100%) resolve against a moving target instead of a fixed one (measured live at
+    // 211px vs the intended 170px/18ch — this fixture's own nav content happens not to diverge
+    // enough to fail these two assertions on the unfixed CSS, but they still pin the invariant an
+    // explicit width guarantees: the narrow drawer is exactly as wide as the desktop sidebar, and
+    // never moves when a group's disclosure state changes).
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+    const desktopWidth = sidebar().getBoundingClientRect().width;
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await commands.setViewportSize(400, 800);
+      for (let i = 0; i < 100 && !sidebar().hasAttribute("inert"); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      const widthBeforeToggle = sidebar().getBoundingClientRect().width;
+      expect(widthBeforeToggle).toBeCloseTo(desktopWidth, 0);
+      // Fully off-screen when closed, not a hairline sliver left visible.
+      expect(sidebar().getBoundingClientRect().right).toBeLessThanOrEqual(0);
+
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!.click();
+      await el.updateComplete;
+      expect(sidebar().getBoundingClientRect().width).toBeCloseTo(widthBeforeToggle, 0);
+    } finally {
+      await commands.setViewportSize(width, height);
+    }
+  });
+
+  it("keeps the venue name on a legible line width at narrow viewport, never squeezed into one letter per line", async () => {
+    // .venue-name had no floor on how far it could shrink (min-width: 0, no lower bound), so at a
+    // narrow banner width the flex algorithm could squeeze it down to a sliver a couple of pixels
+    // wide — with overflow-wrap: anywhere, that wraps every single CHARACTER onto its own line
+    // instead of wrapping at word boundaries, producing a tall, unreadable vertical column.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const venueName = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="venue-name"]')!;
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await commands.setViewportSize(390, 800);
+      const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+      for (let i = 0; i < 100 && !sidebar.hasAttribute("inert"); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      const rect = venueName().getBoundingClientRect();
+      expect(rect.width).toBeGreaterThan(20);
+      expect(rect.height).toBeLessThan(100);
+    } finally {
+      await commands.setViewportSize(width, height);
+    }
   });
 
   it("clicking the scrim closes the drawer", async () => {
@@ -1636,6 +2057,43 @@ describe("dashboard-app", () => {
     );
     await el.updateComplete;
     expect(layout().classList.contains("drawer-open")).toBe(false);
+  });
+
+  it("keeps the shell within one screen height so the sidebar and content scroll independently, not the page", async () => {
+    // A screen taller than the viewport used to grow the whole page past one screen while the
+    // sidebar capped itself to exactly one screen height — the sidebar then visibly stopped short
+    // of the page's real bottom. Bounding the shell to the viewport and letting both panes scroll
+    // internally fixes that; this proves it by measuring the actual rendered geometry in a real
+    // browser, not by inspecting styles. A long staff list stands in for "content taller than the
+    // viewport" (profile — the original repro — is a modal now, independent of this mechanism).
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1000, 600);
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          listStaff: vi.fn().mockResolvedValue(
+            Array.from({ length: 30 }, (_, i) => ({
+              ...people[0]!,
+              personId: `p${i}`,
+              displayName: `Person ${i}`,
+            })),
+          ),
+        }),
+      });
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
+      await flush(el);
+      const shell = el.shadowRoot!.querySelector(".shell")!;
+      expect(shell.getBoundingClientRect().height).toBeLessThanOrEqual(600);
+      const sidebar = el.shadowRoot!.querySelector(".sidebar")!;
+      const main = el.shadowRoot!.querySelector(".main")!;
+      expect(
+        Math.abs(sidebar.getBoundingClientRect().bottom - main.getBoundingClientRect().bottom),
+      ).toBeLessThan(2);
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   it("a staff session gets no hamburger toggle (its only face is self-service, so no drawer)", async () => {
@@ -2455,7 +2913,10 @@ it("leaves long dashboard content clear of the bottom-right language chooser on 
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
-    window.scrollTo(0, document.documentElement.scrollHeight);
+    // .main scrolls internally (the shell is bounded to one screen height), not the page — see
+    // "keeps the shell within one screen height..." above.
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    main.scrollTo(0, main.scrollHeight);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const chooser = el.shadowRoot!.querySelector("dashboard-language-chooser")!;
     const trigger = chooser

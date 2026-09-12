@@ -6,6 +6,7 @@ import "./wt-spinner.js";
 
 export type WtButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 export type WtButtonSize = "sm" | "md" | "lg";
+export type WtButtonAlign = "center" | "start";
 
 @customElement("wt-button")
 export class WtButton extends LitElement {
@@ -43,6 +44,14 @@ export class WtButton extends LitElement {
         ${disabledStyles}
       }
 
+      /* Every variant gets the same feedback: a plain opacity dip. Anything variant-specific (a
+         background swap, a border-colour change) would need a distinct value per variant to stay
+         visible in both themes — --wt-color-surface and --wt-color-surface-raised are identical in
+         the light theme today, so a background-based hover treatment would be invisible there. */
+      button:hover:not(:disabled) {
+        opacity: var(--wt-opacity-hover);
+      }
+
       :host([size="sm"]) button {
         min-height: var(--wt-space-6);
         padding: var(--wt-space-1) var(--wt-space-3);
@@ -75,11 +84,19 @@ export class WtButton extends LitElement {
         background: transparent;
         color: var(--wt-color-text);
       }
+
+      /* For a button standing in as a MENU ITEM (e.g. inside wt-row-actions' popover, which already
+         stretches a slotted button to the popover's full width) — a centered label reads oddly once
+         the button is wider than its text, unlike an ordinary button sized to its own content. */
+      :host([align="start"]) button {
+        justify-content: flex-start;
+      }
     `,
   ];
 
   @property({ reflect: true }) variant: WtButtonVariant = "secondary";
   @property({ reflect: true }) size: WtButtonSize = "md";
+  @property({ reflect: true }) align: WtButtonAlign = "center";
   @property({ type: Boolean, reflect: true }) disabled = false;
   /** An in-progress action: the button is disabled, marked `aria-busy`, and a decorative spinner
    * leads the label. The label stays visible — and is the one thing announced — so the caller swaps
@@ -98,10 +115,14 @@ export class WtButton extends LitElement {
   // control in `form.elements`. Forms are handled in JS via `wt-change`, not native submission.
   // Full form association via ElementInternals is out of scope for this component.
 
+  // `part="button"` lets a consumer layer its own hover accent (e.g. `wt-button.foo::part(button):hover`)
+  // without changing what a variant looks like everywhere else it's used — see "Page composition" in
+  // docs/developers/design-system.md.
   override render() {
     return html`
       <button
         type="button"
+        part="button"
         ?disabled=${this.disabled || this.loading}
         aria-busy=${this.loading ? "true" : nothing}
         aria-label=${this.ariaLabel ?? nothing}

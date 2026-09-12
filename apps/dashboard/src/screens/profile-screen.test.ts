@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { ProfileScreen } from "./profile-screen.js";
 import "./profile-screen.js";
 
@@ -101,6 +102,13 @@ async function click(el: ProfileScreen, action: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
   await flush(el);
 }
+// The Edit action for "Your details" lives in dashboard-app.ts's modal footer, not in this screen
+// (see editDetails() on ProfileScreen) — standalone here, tests call the same public entry point
+// that button uses.
+async function editDetails(el: ProfileScreen) {
+  el.editDetails();
+  await flush(el);
+}
 function input(el: ProfileScreen, name: string, value: string) {
   el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
     `wt-input[name=${name}]`,
@@ -113,7 +121,10 @@ describe("your profile", () => {
     const { el, api } = await mount({
       getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null, lastNames: " " }),
     });
-    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
+    // The details card stays visible behind the modal — see "opens Edit in a modal over the
+    // details card, not in place of it" below — so what actually proves the edit form opened
+    // automatically is the modal itself being open with the incomplete fields shown.
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
     for (const [name, key] of [
       ["firstNames", "form.first_names_required"],
       ["lastNames", "form.last_names_required"],
@@ -134,7 +145,9 @@ describe("your profile", () => {
     expect(api.saveProfile).toHaveBeenCalledWith(
       expect.objectContaining({ firstNames: "Alex", lastNames: "Rivera" }),
     );
-    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).not.toBeNull();
+    // Back to view — the details card (its Edit action lives in dashboard-app.ts's modal footer
+    // now, see editDetails()) rather than left stuck open after a successful save.
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   });
 
   it("renders your details and passkeys accessibly", async () => {
@@ -145,6 +158,73 @@ describe("your profile", () => {
     expect(
       el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="privacy-notice"]')!.href,
     ).toBe("https://restaurant.example/privacy");
+    await expectNoA11yViolations(host);
+  });
+  it("shows why the initial load failed, not just a bare Reload button", async () => {
+    // The error summary now lives inside the per-field edit modal (#renderModal), which never
+    // renders at all while profile is still null — so an initial load failure used to leave the
+    // caught error (set in #load()'s catch) with nowhere to display.
+    const { el } = await mount({
+      getProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    expect(el.shadowRoot!.querySelector("wt-button")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(codeMessage("server.internal"));
+  });
+  it("opens Edit in a modal over the details card, not in place of it", async () => {
+    const { el } = await mount();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(modal.open).toBe(false);
+    await editDetails(el);
+    expect(modal.open).toBe(true);
+    // The card is still there behind the modal — this is the whole point of the modal pattern:
+    // editing overlays the page rather than replacing it.
+    expect(el.shadowRoot!.textContent).toContain("alex@example.com");
+    expect(el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
+    await click(el, "cancel");
+    expect(modal.open).toBe(false);
+  });
+  it("a stale close from the previous modal never reopens or reverts a newer one", async () => {
+    // The native <dialog> underlying wt-modal fires its "close" event asynchronously relative to
+    // the property change that triggers it. If that event from an EARLIER close (Cancel, or a
+    // successful Save) arrives after a NEWER edit has already opened, it must not stomp the newer
+    // one back to view. Reproduced only under real timing load — this simulates the race
+    // deterministically by dispatching the delayed event by hand, rather than depending on luck.
+    const { el } = await mount();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await editDetails(el);
+    // Cancel, then immediately open a different edit — both BEFORE Lit has rendered either
+    // transition, so the real "close" event this Cancel will eventually cause has not fired yet
+    // (its flag is still armed) by the time "remove" is already the current mode.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-passkey]")!.click();
+    await flush(el);
+    expect(modal.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-input[name=currentPassword]")).not.toBeNull();
+    // The delayed "close" this Cancel caused, arriving only now — it must not undo "remove".
+    modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(modal.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-input[name=currentPassword]")).not.toBeNull();
+  });
+  it("hides the change-password action for an account with no password", async () => {
+    const { el, host } = await mount({
+      getProfile: vi.fn().mockResolvedValue({
+        displayName: "Alex",
+        firstNames: "Alex",
+        lastNames: "Rivera",
+        telephone: null,
+        email: "alex@example.com",
+        pendingEmail: null,
+        locale: "en-GB",
+        hasPassword: false,
+        hasTotp: false,
+        hasGoogle: false,
+        passkeys: [],
+      }),
+    });
+    expect(el.shadowRoot!.querySelector('[data-test="change-password"]')).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("profile.password_recovery"));
+    expect(el.shadowRoot!.textContent).toContain(t("login.password"));
     await expectNoA11yViolations(host);
   });
   it("shows a passkey's name and keeps a numbered fallback for unnamed keys", async () => {
@@ -186,7 +266,7 @@ describe("your profile", () => {
   });
   it("validates details and lets you cancel edits without saving", async () => {
     const { el, api } = await mount();
-    await click(el, "edit-details");
+    await editDetails(el);
     input(el, "displayName", "");
     input(el, "email", "bad");
     await click(el, "save");
@@ -199,7 +279,7 @@ describe("your profile", () => {
     ).toBeTruthy();
     await click(el, "cancel");
     expect(el.shadowRoot!.textContent).toContain("alex@example.com");
-    await click(el, "edit-details");
+    await editDetails(el);
     input(el, "displayName", "Alex Updated");
     const language = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=locale]")!;
     language.value = "es-ES";
@@ -216,7 +296,7 @@ describe("your profile", () => {
   });
   it("requires current credentials for an email change and gives each password field a reveal control", async () => {
     const { el, api, host } = await mount();
-    await click(el, "edit-details");
+    await editDetails(el);
     input(el, "email", "new@example.com");
     await flush(el);
     await click(el, "save");

@@ -269,6 +269,7 @@ export class VenueOperationsScreen extends LitElement {
         (action) =>
           html`<wt-button
             variant="secondary"
+            align="start"
             data-test=${action.key}
             ?disabled=${this.busy || action.disabled === true}
             @click=${(event: Event) => {

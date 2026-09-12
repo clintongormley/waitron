@@ -3,7 +3,7 @@ export { TickingClock } from "./ticking-clock.js";
 export { baseStyles, disabledStyles, floorTrayStyles, selectStyles } from "./base-styles.js";
 export { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "./interactive.js";
 export { WtButton } from "./components/wt-button.js";
-export type { WtButtonVariant, WtButtonSize } from "./components/wt-button.js";
+export type { WtButtonVariant, WtButtonSize, WtButtonAlign } from "./components/wt-button.js";
 export { WtIcon, registerIcons } from "./components/wt-icon.js";
 export type { WtIconSize } from "./components/wt-icon.js";
 export { WtSpinner } from "./components/wt-spinner.js";

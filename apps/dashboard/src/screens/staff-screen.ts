@@ -284,62 +284,6 @@ export class StaffScreen extends LitElement {
     });
   }
 
-  #onDeactivatePerson(event: Event): void {
-    event.stopPropagation();
-    const person = this.editingPerson;
-    if (person === null || person.personId === this.currentPersonId) return;
-    this.#editWith((id) => this.api.deactivatePerson(id));
-  }
-
-  #onResetPin(event: Event): void {
-    event.stopPropagation();
-    this.#editWith((id) => this.api.resetPin(id));
-  }
-
-  #onResetLogin(event: Event): void {
-    event.stopPropagation();
-    const id = this.editingPerson?.personId;
-    if (id === undefined || this.#editing) return;
-    this.#editing = true;
-    this.errorKey = null;
-    this.invitationStatus = null;
-    void this.api
-      .resetLogin(id)
-      .then(async (result) => {
-        this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
-        this.#closeEdit();
-        await this.#load();
-      })
-      .catch((error: unknown) => {
-        this.errorKey = codeOf(error);
-      })
-      .finally(() => {
-        this.#editing = false;
-      });
-  }
-
-  #onReactivatePerson(event: Event): void {
-    event.stopPropagation();
-    const id = this.editingPerson?.personId;
-    if (id === undefined || this.#editing) return;
-    this.#editing = true;
-    this.errorKey = null;
-    this.invitationStatus = null;
-    void this.api
-      .reactivatePerson(id)
-      .then(async (result) => {
-        this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
-        this.#closeEdit();
-        await this.#load();
-      })
-      .catch((error: unknown) => {
-        this.errorKey = codeOf(error);
-      })
-      .finally(() => {
-        this.#editing = false;
-      });
-  }
-
   async #onResendInvitation(event: Event): Promise<void> {
     event.stopPropagation();
     const personId = this.editingPerson?.personId;
@@ -554,10 +498,6 @@ export class StaffScreen extends LitElement {
         .open=${this.editOpen}
         .error=${this.editOpen ? this.errorKey : null}
         @save-person=${(e: CustomEvent<PersonEditDetails>) => this.#onSavePerson(e)}
-        @deactivate-person=${(e: Event) => this.#onDeactivatePerson(e)}
-        @reset-pin=${(e: Event) => this.#onResetPin(e)}
-        @reset-login=${(e: Event) => this.#onResetLogin(e)}
-        @reactivate-person=${(e: Event) => this.#onReactivatePerson(e)}
         @resend-invitation=${(e: Event) => void this.#onResendInvitation(e)}
         @wt-close=${() => this.#closeEdit()}
       ></dashboard-person-edit>

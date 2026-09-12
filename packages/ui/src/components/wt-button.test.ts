@@ -1,4 +1,5 @@
 import { expect, test, afterEach } from "vitest";
+import { userEvent } from "@vitest/browser/context";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-button.js";
 
@@ -12,6 +13,18 @@ test("renders slotted content", async () => {
 test("defaults to the secondary variant", async () => {
   const el = await mount("<wt-button>x</wt-button>");
   expect(el.getAttribute("variant")).toBe("secondary");
+});
+
+test("centers its label by default, but left-aligns it when used as a menu item", async () => {
+  const el = await mount('<wt-button style="width:200px">Account settings</wt-button>');
+  const button = el.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(button).justifyContent).toBe("center");
+
+  const startEl = await mount(
+    '<wt-button align="start" style="width:200px">Account settings</wt-button>',
+  );
+  const startButton = startEl.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(startButton).justifyContent).toBe("flex-start");
 });
 
 test("meets the minimum tap target at default size on both axes", async () => {
@@ -75,6 +88,35 @@ test("primary variant paints from the primary token", async () => {
   host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
   const inner = el.shadowRoot!.querySelector("button")!;
   expect(getComputedStyle(inner).backgroundColor).toBe("rgb(1, 2, 3)");
+});
+
+test("exposes its inner button as a CSS part, so a consumer can layer its own hover accent", async () => {
+  const el = await mount(
+    `<wt-button class="accent">x</wt-button><style>wt-button.accent::part(button):hover { color: rgb(9, 9, 9); }</style>`,
+  );
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(inner).color).not.toBe("rgb(9, 9, 9)");
+  await userEvent.hover(inner);
+  expect(getComputedStyle(inner).color).toBe("rgb(9, 9, 9)");
+});
+
+test("dims on hover via the hover-opacity token, and stops dimming on unhover", async () => {
+  const el = await mount("<wt-button>x</wt-button>");
+  host.style.setProperty("--wt-opacity-hover", "0.6");
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(inner).opacity).toBe("1");
+  await userEvent.hover(inner);
+  expect(getComputedStyle(inner).opacity).toBe("0.6");
+  await userEvent.unhover(inner);
+  expect(getComputedStyle(inner).opacity).toBe("1");
+});
+
+test("does not dim on hover while disabled", async () => {
+  const el = await mount("<wt-button disabled>x</wt-button>");
+  host.style.setProperty("--wt-opacity-hover", "0.6");
+  const inner = el.shadowRoot!.querySelector("button")!;
+  await userEvent.hover(inner);
+  expect(getComputedStyle(inner).opacity).not.toBe("0.6");
 });
 
 test("loading disables the button, marks it busy and shows a spinner", async () => {

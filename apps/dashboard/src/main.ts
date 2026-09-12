@@ -1,9 +1,10 @@
 import { html, render } from "lit";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, registerIcons } from "@waitron/ui";
 import { createInstrumentedFetch, installErrorCapture } from "@waitron/diagnostics";
 import { createRequest, LiveConnection } from "@waitron/dashboard-kit";
 import { DashboardApi } from "./api/client.js";
 import { diag } from "./diagnostics.js";
+import { DASHBOARD_ICONS } from "./icons.js";
 import "./dashboard-app.js";
 
 // The browser entry point for the management dashboard. It paints the token layer onto the document
@@ -13,6 +14,7 @@ import "./dashboard-app.js";
 // staff) or the login screen. Excluded from coverage (see vitest.config.ts): this runs only in a real
 // browser at startup.
 applyTokens(document.documentElement);
+registerIcons(DASHBOARD_ICONS);
 
 // Crash capture + an instrumented fetch feed the one per-session diagnostics trail: window errors and
 // every API round trip land in `diag`, shared with <dashboard-app>'s nav logging via ./diagnostics.js.

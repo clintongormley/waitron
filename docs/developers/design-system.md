@@ -92,9 +92,22 @@ overlay/veil colour elsewhere, reuse it rather than inventing a new one.
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
-`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`
+`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-opacity-disabled`,
+`--wt-opacity-hover`
 
-`--wt-dialog-max-width` (`min(90vw, 32rem)`) exists so `wt-dialog` never spells out a literal
+`--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
+opacity dip, the same treatment for every variant. A variant-specific background or border-colour
+change would need a distinct value per variant to stay visible in both themes: `--wt-color-surface`
+and `--wt-color-surface-raised`, the pair other primitives already hover onto (`wt-tabs`,
+`wt-data-table`), are identical in the light theme today, so that idiom would be invisible on
+`wt-button`'s own secondary variant, which already rests on `--wt-color-surface`.
+
+`wt-button` also exposes its inner `<button>` as a CSS part (`part="button"`), so a consuming
+screen can layer its own hover accent onto specific buttons — `wt-button.foo::part(button):hover`
+— without changing what a variant looks like everywhere else `wt-button` is used. See "Card action
+buttons" under "Page composition" below for the pattern this exists for.
+
+`--wt-dialog-max-width` (`min(90vw, 48rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
 through a token.
@@ -167,13 +180,42 @@ and Save on the right:
 </wt-modal>
 ```
 
+**A page with a persistent view and one reused `wt-modal` for every edit action** (a settings-style
+screen editing itself, as opposed to a list opening a modal per row) has one more thing to get
+right: the underlying native `<dialog>`'s `close` event lands asynchronously relative to the
+`open` property change that triggers it. If your own code (Cancel, or a successful Save) already
+switched to a different mode/state *before* that pending `close` event arrives — because the
+caller opened a new edit right after closing the old one — a plain `@wt-close=${() =>
+closeHandler()}` will stomp the newer state back to closed. Reproduced only under real timing load
+(passed reliably in isolation, failed intermittently in the full suite) — arm a flag when *you*
+close the modal programmatically, and have the `wt-close` handler consume-and-ignore it once,
+rather than unconditionally acting on every `wt-close`:
+
+```ts
+#closingModal = false;
+#closeModal(): void {
+  this.#closingModal = true;
+  this.#edit("view");
+}
+// in the template:
+// @wt-close=${() => {
+//   if (this.#closingModal) { this.#closingModal = false; return; }
+//   this.#edit("view");
+// }}
+```
+
+See `apps/dashboard/src/screens/profile-screen.ts` (`#closeModal`) for the full pattern and
+`profile-screen.test.ts`'s "a stale close from the previous modal never reopens or reverts a newer
+one" for how to reproduce the race deterministically (dispatch the delayed `wt-close` by hand
+rather than depending on timing luck).
+
 Set `open` to show or close the modal. Handle button clicks in your form and listen for `wt-close`
 to handle dismissal, including Escape. The native dialog keeps focus inside while open and
 returns focus to its trigger on close. Use `wt-dialog` for a compact confirmation.
 
-Variant- and state-like properties (`variant`, `size`, `name`, `raised`, `disabled`, `loading`,
-`decorative`, `checked`, `invalid`, `open`) all reflect to attributes, which is what makes `:host([variant="..."])`-style
-styling possible — see "Adding a primitive" below.
+Variant- and state-like properties (`variant`, `size`, `align`, `name`, `raised`, `disabled`,
+`loading`, `decorative`, `checked`, `invalid`, `open`) all reflect to attributes, which is what makes
+`:host([variant="..."])`-style styling possible — see "Adding a primitive" below.
 
 Icons are registered by the consuming app, so `packages/ui` depends on no icon library:
 
@@ -182,7 +224,18 @@ import { registerIcons } from "@waitron/ui";
 registerIcons({ check: "M2 8 L6 12 L14 4" });
 ```
 
-An unregistered `name` renders nothing — there is no broken-icon fallback markup.
+An unregistered `name` renders nothing — there is no broken-icon fallback markup. When a
+`packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
+trigger, for one), that name becomes part of the primitive's contract: every consuming app must
+register it itself, or that primitive's icon silently disappears there. The dashboard's own set —
+`hamburger`, `kebab`, `chevron-down`, `gear`, `person`, each a plain geometric shape at the same
+16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (see that file's own header for which of
+these were plotted fresh and which one was scaled from a published glyph's path data) and is
+registered once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
+different things at different scales: hamburger opens the whole app's navigation (used once);
+kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
+wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
+or the nav toggle looking like just another row's overflow menu.
 
 ### Accessible, clickable labels (`wt-input`, `wt-switch`)
 
@@ -329,8 +382,55 @@ Keep the dashboard's branded banner at the very top of the page, spanning its fu
 login screen and every authenticated screen. The menu and page content belong underneath it. The
 banner shows the canonical Waitron lockup and the deployment tenant's legal name, not a location
 name: one deployment database represents one tenant, while that tenant can contain several
-locations. Once a session is active, put Logout at the banner's trailing (right-hand in the shipped
-locales) edge. Do not show Logout before authentication.
+locations. Once a session is active, put the account menu — a person-icon `wt-row-actions` popover
+holding Account settings and Log out — at the banner's trailing (right-hand in the shipped locales)
+edge. Do not show it before authentication.
+
+### Dashboard sidebar navigation
+
+A sidebar nav row is a `.nav-item` — a plain flat `<button>`, not `wt-button`. `wt-button`'s own
+box (border, background, bold text) is right for a page action, but a sidebar lists ~20 of them;
+stacking that many buttons reads as a wall of buttons, not navigation. A resting row is
+`--wt-color-text-muted`, not full-strength text — at equal weight and colour, ~20 items compete
+with the group headers above them and bury the current page's accent in a crowd of equally dark
+siblings. The selected item carries `aria-current="page"` and is styled from that attribute: an
+accent-coloured leading edge plus bold, full-strength coloured text, no background fill — the same
+idiom `wt-tabs` already uses for its selected tab (`border-bottom-color` there,
+`border-inline-start-color` here), not a new one — and it is now the one loud thing in an otherwise
+calm list. Hovering a row moves it to full-strength text plus a `--wt-color-surface` background —
+visible here because the sidebar itself sits on `--wt-color-bg`, unlike `wt-button`'s own secondary
+variant (see `--wt-opacity-hover` above). A `.nav-group` header takes a small-caps treatment
+(uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter link.
+
+A headed group (the pinned first group — Overview, Sales — has no header and is never
+collapsible) is also its own disclosure toggle: the header is a `<button>` with `aria-expanded` and
+`aria-controls` pointing at its item list, a `chevron-down` `wt-icon` that rotates 180° when
+expanded (pointing down at rest — "expand this way" — up when open — "collapse"). Collapsed state
+is a plain `Set<NavGroupId>` in component state, not persisted — reopens to fully expanded next
+session, deliberately, rather than risk a collapsed-by-default group hiding something a new build
+adds to it. A group that contains the CURRENT screen always renders expanded regardless of that
+set, even if the user collapsed it earlier and then navigated back into it — collapsing "Team" and
+opening Staff must never hide the page you are already on; only navigating to a DIFFERENT screen
+lets a group honour a collapse the user asked for.
+
+A group that has ITS OWN scrolled-to items shrink when collapsed can leave the sidebar's
+`scrollTop` past the new (shorter) scrollable range — the browser then clamps it down on its own,
+snapping every visible row upward even though nothing above the clicked header moved. `#toggleGroup`
+records the clicked header's own on-screen position before the toggle and corrects `scrollTop` by
+the same delta once the DOM has updated, so the header stays where it was clicked. This can't
+always be perfect — if the collapsing group's own items were propping up enough scroll range to
+reach that position in the first place, restoring it exactly may be mathematically impossible once
+they're gone — but it always gets as close as the remaining content allows, which reads as "stayed
+put" in every case that matters (the group being collapsed isn't the last thing wedging the page
+open). A group header can also carry an `icon` (a registered `wt-icon` name) — kept rare, used only
+where it's as unambiguous as Settings' gear; most groups have none.
+
+The sidebar and the content column both scroll independently, bounded to the space below the
+banner (`.shell { height: 100vh }`, `.sidebar`/`.main` both `max-height: 100%; overflow-y: auto`) —
+the page itself never scrolls. Before this, only `.sidebar` was self-contained
+(`max-height: 100vh`); `.main` just grew with its content and pushed the whole page taller, so once
+a screen exceeded one viewport the sidebar — capped to one screen — visibly stopped short of where
+the page actually ended. Both panes now share the same bound, so they always end at the same line.
 
 ### Dashboard authentication
 
@@ -372,8 +472,9 @@ normal sign-in, including any enrolled second factor, before that offer.
 The authenticator setup screen presents the enrolment URI as a QR code, keeps the setup key behind
 a manual fallback, and enables the factor only after the server accepts a current six-digit code.
 
-Every authenticated dashboard banner includes **Your profile**, including for staff without a
-sidebar. Profile edits cannot expose role or suspension controls.
+Every authenticated dashboard banner includes a way to reach **Your profile** — the account menu's
+"Account settings" item — including for staff without a sidebar. Profile edits cannot expose role
+or suspension controls.
 
 ### Empty slots don't reserve space
 
@@ -409,9 +510,16 @@ row: label on top, value below, both left-aligned:
 
 A group label and a field label are both small and muted; only the group label is bold and
 uppercase. That distinction is the entire signal separating "this is a section" from "this is a
-field" — apply it consistently or it stops working.
+field" — apply it consistently or it stops working. (No page-content screen currently groups
+fields into cards with a standalone group label above them — profile-screen.ts, the pattern's
+original home, moved to `wt-tabs` instead — so this is the rule for the NEXT screen that needs it,
+not a description of one that exists today; see the "Typography roles" table below.)
 
-Separate rows inside a card with a `--wt-color-border` hairline; the last row carries none.
+Separate rows with a `--wt-color-border` hairline ONLY where a row carries its own action (Password,
+a passkey, "Add") — a plain field/value row (label on top, value below, no button) carries no
+divider at all; between two of those, the extra line was clutter, not structure. Among rows that DO
+get one, the first row in its container carries none, since the hairline marks the boundary between
+rows, not a top border on every row.
 
 ### One action per row or card — matching what it actually opens
 
@@ -419,9 +527,12 @@ Never give a row a generic "edit this" affordance (a chevron, an icon) when the 
 opens something bigger than that one field, and never give a card a single action when each row
 inside it does something different. Four shapes cover what's needed so far:
 
-- **A card edited as one form** (e.g. name, phone, email and language together): one "Edit" action
-  in a footer below every row, not per-row. The footer sits below the last row, separated by the
-  same hairline border the rows use.
+- **A card edited as one form** (e.g. name, phone, email and language together): one "Edit" action,
+  not per-row. Ordinarily that sits in a footer below the last row, separated by the same hairline
+  border the rows use — UNLESS the card's own content is already wrapped in its own outer modal (a
+  page-level entity like "Your profile" below), in which case Edit moves into that outer modal's own
+  `wt-form-actions` footer instead, next to Close, rather than duplicating a second footer one level
+  in.
 - **A field whose value can't be shown** (a password, a PIN): don't render a fake masked value —
   there's nothing real to show. Put the label and its one action ("Change") on the same row.
 - **A repeatable list** (passkeys today; the same shape applies to printers, staff, devices): each
@@ -431,12 +542,90 @@ inside it does something different. Four shapes cover what's needed so far:
   with no action — unless there's actually something to configure, in which case that's the
   card's one action.
 
-### Button variant discipline
+Every one of these actions opens a `wt-modal`, not an inline mode-swap that replaces the whole
+page — the view stays on screen, dimmed behind the modal, exactly like a list opening its "Edit"
+modal per row (`person-edit.ts`). This fixes two things an inline swap gets wrong on a page built
+from these cards: the edit form no longer needs to fit the page's own (narrower) width, since a
+modal sizes itself independently; and there's no more "why doesn't the current page highlight in
+the sidebar while editing" confusion, since the page never stopped being the page. See "Card action
+buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
+above for the close-event race a shared, reused modal needs to guard against.
 
-`secondary` (outlined) is the default for everyday actions. `primary` (filled) is reserved for the
-one main call-to-action on a screen — most settings screens have none. `danger` (red) is only for
-an action that removes or disables something; "Change password" is not destructive and stays
-`secondary`.
+**A screen that isn't itself a navigable destination is the whole page in a modal, not just its
+edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the
+banner on any face — `dashboard-app.ts` treats it as a boolean (`profileOpen`), never a `screen`,
+and wraps the whole thing (the view-mode cards from above, not only the per-field edit modals) in
+one outer `wt-modal` that opens over whichever face is current and closes back to it. This is what
+the "one action opens a wt-modal" rule above already gives you, applied one level up: the page's
+own per-field edits still open THEIR OWN modal exactly as documented, which now nests inside the
+outer one — the same relationship a list has with its own per-row edit modal, just with the list
+itself also being a modal here since it has no page of its own to be a list ON. Two things this
+nesting makes non-optional, not just good practice:
+
+- **`wt-close` is `composed: true` and bubbles**, and two modals in the same ancestry both listen
+  for it — without a target === currentTarget guard, dismissing the INNER modal also dismisses the
+  outer one, since its close event bubbles straight through it on its way up. Both modals in this
+  pair guard for exactly this (`dashboard-app.ts`'s outer one and `profile-screen.ts`'s own inner
+  one, even though nothing nests inside IT today) — reproduced live: Cancel on the inner "Your
+  details" form dropped all the way back to the page behind Your profile, not back to Your
+  profile's own view.
+- **Mount the inner content only while the outer modal is actually open.** `dashboard-profile-screen`
+  fetches on `connectedCallback` (`getProfile`/`getLocales`/`getGoogleConfig`); mounting it
+  unconditionally alongside the modal (rather than gated on the SAME `profileOpen` the modal's own
+  `.open` reads) would make every session pay for those calls on every page load, whether or not
+  anyone ever opens their profile.
+
+Reachability by URL still matters here even though it isn't a real destination: `/manage/profile`
+opens the modal on load, with the underlying face resolving to this person's ordinary default
+(never a page literally named "profile" — `#permittedScreen` never sees that value, since
+`#applyRequestedScreen` intercepts it first) — closing the modal REPLACES the URL with that
+underlying face's own path, so "profile" never lingers as its own stop in Back-button history.
+Opening it (the banner's account menu, or the auto-open after account setup) PUSHes instead, the
+same as selecting a real nav item, so the browser's own Back button closes it like any other
+navigation.
+
+### Card action buttons: calm at rest, accented on hover
+
+A card or row's action button (Edit, Change, Add, Remove, Set up, Disable, Replace, Confirm) stays
+`secondary` (plain/outlined) **at rest**, regardless of what it does — filling every action solid
+at rest (an earlier version of this rule made "primary" mean "the card's one forward action" and
+painted it blue always-on) reads as visual noise once a screen has several cards, each with its own
+"primary" fighting for attention, and different-length labels at solid fill read as mismatched
+pills. Colour appears only on **hover**, via `wt-button`'s exposed `button` CSS part:
+
+```css
+.card-action.accent-primary::part(button):hover {
+  border-color: var(--wt-color-primary);
+  color: var(--wt-color-primary);
+}
+.card-action.accent-danger::part(button):hover {
+  border-color: var(--wt-color-danger);
+  color: var(--wt-color-danger);
+}
+```
+
+Use `accent-primary` for a forward/constructive action, `accent-danger` for one that removes or
+disables something, and neither class for a purely maintenance action ("Replace recovery codes"
+when 2FA is already on) — it gets only `wt-button`'s own generic hover dim. This is deliberately
+**not** a change to what `variant="primary"`/`"danger"` mean on `wt-button` itself — those still
+render solid at rest everywhere else (the till's checkout button, for one, needs to read as
+"the important action" without anyone hovering it first, and there is no hover on a touchscreen at
+all). The part hook lets a screen layer an accent onto specific buttons without touching that
+contract.
+
+Give every card action a fixed `min-width` (`ch`-based — see `--dashboard-sidebar-width` in
+`dashboard-app.ts` for the same reasoning) so a row of differently-worded actions still reads as
+one uniform set rather than a jumble of pill widths, and keep labels short — reuse the small shared
+`action.*` vocabulary (`action.edit`, `action.remove`, `action.add`, `action.change`,
+`action.setup`, `action.disable`, `action.replace`, `action.confirm`) rather than spelling out what
+the surrounding row or card label already says. Where a short label repeats more than once on the
+same screen for genuinely different things (two "Change" buttons, for Password and PIN; two "Set
+up" buttons, for the authenticator and Google), give each an `aria-label` with the fuller wording —
+otherwise a screen reader's "list all buttons" navigation can't tell them apart. A label that
+appears once on the screen doesn't need one, matching the sitewide bare "Edit"/"Remove" convention.
+
+Right-align a card's footer actions (`justify-content: flex-end`) — the same "primary action
+bottom-right" rule `wt-form-actions` already applies to forms sitewide (see "Forms" above).
 
 ### Spacing rhythm
 
@@ -447,12 +636,25 @@ Using the existing `--wt-space-*` scale:
 - `--wt-space-2` between a group label and its card
 - row padding inside a card: `--wt-space-3` vertical, `--wt-space-4` horizontal
 
+### Left-anchor narrow content — don't centre it
+
+A narrower `max-width` on a settings/form screen keeps line length readable, but the screen itself
+stays anchored to the body's left padding, the same as a full-width `wt-data-table` screen — never
+`margin-inline: auto`. Centering a narrow screen in the *remaining* space beside the sidebar makes
+it read as a visually different app from the wide table screens next to it; anchoring both to the
+same edge and varying only the width does not. `backup-screen.ts` and `receipt-screen.ts` already
+follow this (`max-width` alone). `profile-screen.ts` no longer applies here at all — it isn't a
+screen positioned beside the sidebar any more; it's a modal, bounded by `--wt-dialog-max-width`
+like any other. The one legitimate exception among actual screens is a full-page one with no
+sidebar at all, like the login screen — centering a freestanding form with nothing to anchor to is
+the normal, expected treatment there.
+
 ### Typography roles
 
 | Role | Token(s) | Example |
 | --- | --- | --- |
-| Page title | `--wt-font-size-xl`, bold | "Your profile" |
-| Group label | `--wt-font-size-sm`, bold, uppercase, muted | "YOUR DETAILS" |
+| Page title | `--wt-font-size-xl`, bold | a screen's own `<h1>` — "Your profile" no longer qualifies: it's a `wt-modal` heading now (`--wt-font-size-lg`, its own role, not this one) |
+| Group label | `--wt-font-size-sm`, bold, uppercase, muted | illustrative — no page-content screen currently uses this role; the nav's own small-caps group header is styled separately (primary-accent, not muted — see "Dashboard sidebar navigation" below) |
 | Field label | `--wt-font-size-sm`, normal weight, muted | "Name" |
 | Field value | `--wt-font-size-md`, bold | "Clinton Gormley" |
 
@@ -663,7 +865,6 @@ Composition, held keys, and Enter with Shift, Control, Alt, or Meta do not submi
 filters and controls that persist each edit immediately unbound. If a field edits a draft that you
 commit with Save, bind it to that Save even when its preview updates as you type.
 
-
 ### Tabbed management pages
 
 When one management area contains several lists, use `wt-tabs` to show one concern at a time.
@@ -688,10 +889,17 @@ shows the first tab. Arrow keys wrap between tabs; Home and End select the first
 The tab strip scrolls on narrow screens. Hidden panels remain mounted, so switching tabs retains
 their input values. Supply unique, nonempty keys and a localized `label` for the tab group.
 
-Put each list in `wt-data-table`. Use `wt-row-actions` for its hamburger menu, with a label that
-identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table heading,
-and Edit, Delete or domain-specific actions in each row's menu. The menu uses a native popover:
-clicking outside or pressing Escape closes it. Its action buttons follow normal Tab navigation.
+Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a
+hamburger; it opens a small menu of actions for one row, not the app's whole navigation, so it
+needs the icon that means "more options here," not "open navigation" (see "Icons" below) — with a
+label that identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table
+heading, and Edit, Delete or domain-specific actions in each row's menu. The menu uses a native
+popover: clicking outside or pressing Escape closes it. Its action buttons follow normal Tab
+navigation. Give every `wt-button` slotted into a `wt-row-actions` popover `align="start"` — a
+centred label reads oddly once the button has been stretched to the popover's full width, the way a
+dropdown menu item never centres its text. This applies to every `wt-row-actions` popover, not just
+per-row kebab menus — the account menu in the banner uses the same primitive and the same
+alignment.
 
 Open create and edit forms in `wt-modal`, with `wt-form-actions` in its footer. Keep validation
 messages inside the modal, retain entered values after a failed save, and refresh the table after
