@@ -1,7 +1,6 @@
 /**
  * The dashboard's registered icon set — see registerIcons() in @waitron/ui and "Icons" in
- * docs/developers/design-system.md. Each is a plain geometric shape at wt-icon's 16x16 viewBox,
- * hand-plotted or computed directly — with one exception, `person` (see below).
+ * docs/developers/design-system.md. Each is a plain geometric shape at wt-icon's 16x16 viewBox.
  *
  * - hamburger: the sidebar drawer toggle (three bars — opens the whole app's navigation).
  * - kebab: wt-row-actions' per-row "more actions" trigger (three dots — a small, local menu, not
@@ -12,12 +11,9 @@
  *   computed with trigonometry at 16x16, verified by rendering it large before use.
  * - person: the banner's account-menu trigger (head + shoulders bust).
  *
- * Attribution: `person`'s path data is derived from Google's Material Symbols icon set (the
- * "person" glyph, filled variant), scaled by 2/3 from its published 24x24 coordinates to this
- * file's 16x16 viewBox — a uniform scale, so its Bezier curves stay correct. Material Symbols is
- * Copyright Google and licensed under the Apache License, Version 2.0
- * (https://www.apache.org/licenses/LICENSE-2.0); the icon set itself is published at
- * https://fonts.google.com/icons. No other icon in this file is derived from an external source.
+ * Attribution: some of these are adapted from Google's Material Symbols icon set, Copyright
+ * Google, licensed under the Apache License, Version 2.0
+ * (https://www.apache.org/licenses/LICENSE-2.0), published at https://fonts.google.com/icons.
  */
 export const DASHBOARD_ICONS: Record<string, string> = {
   hamburger: "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",
