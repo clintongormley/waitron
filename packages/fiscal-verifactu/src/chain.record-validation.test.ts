@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
 import { asAppUser, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { decimal } from "@waitron/shared";
+import { decimal, saleId as brandSaleId } from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { VerifactuBackend } from "./backend.js";
@@ -179,5 +179,107 @@ describe("a record whose totals disagree with themselves is written, filed and f
 
     const rows = await pg.db.execute(sql`select 1 from incidents where tenant_id = ${tenantId}`);
     expect(rows.rows).toEqual([]);
+  });
+});
+
+describe("a recipient's name is checked as closely as the issuer's", () => {
+  /** The run-it review's own reproduction, at the seam it got past. A Spanish business customer's
+   * name is typed or pasted at the till, so U+0007 reaches the record exactly the way it reached
+   * the reviewer's: the F1 path this branch opened is the first thing that ever wrote a recipient
+   * on a sale, and `validate` scanned the ISSUER's name but not the recipient's. `registros_facturacion`
+   * is append-only, so a bell character stored there could never be taken out again.
+   *
+   * `packages/core`'s `recordSale` hardcodes `counterparty: null`, so the F1 branch is reached by
+   * calling the backend directly — the same bypass `backend.test.ts`'s own F1 cases use. The sale
+   * row is inserted on the SAME `withTenant` transaction, which is what makes the "nothing was
+   * written" assertions below meaningful: a refusal rolls back both or neither. */
+  // `sales_pkey` is global while the tenant is fresh each `beforeEach`, so each case mints its own
+  // id and invoice number — a shared literal would make a case that EXPECTS the write to succeed
+  // depend on its siblings having rolled theirs back.
+  let sequence = 0;
+
+  function sellToNamedRecipient(legalName: string) {
+    sequence += 1;
+    const saleId = `77777777-7777-4777-8777-7777777770${String(sequence).padStart(2, "0")}`;
+    const invoiceNumber = 900 + sequence;
+    return withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.insert(sales).values({
+        id: saleId,
+        tenantId,
+        tillId,
+        nodeId,
+        seriesId,
+        invoiceNumber,
+        issuedAt: "2026-03-01T12:05:00.000Z",
+        issuedOffsetMinutes: 60,
+        total: "0.00",
+        vatBreakdown: [],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      await backend.recordSale(tx, {
+        tenantId,
+        tillId,
+        nodeId,
+        saleId: brandSaleId(saleId),
+        seriesId,
+        seriesCode: "FS",
+        invoiceNumber,
+        issuedAt: new Date("2026-03-01T12:05:00.000Z"),
+        offsetMinutes: 60,
+        descriptionOfOperation: "Venta en establecimiento",
+        total: decimal("12.10"),
+        vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+        counterparty: { taxId: "B12345678", legalName, countryCode: "ES" },
+      });
+    });
+  }
+
+  it("refuses an F1 whose recipient name carries a control character", async () => {
+    await useSeriesCode("FS");
+    await expect(sellToNamedRecipient("Cliente\u0007SL")).rejects.toMatchObject({
+      code: "fiscal.record_invalid",
+      params: {
+        fields: ["Destinatarios.IDDestinatario[0].NombreRazon"],
+        codes: ["CONTROL_CHAR"],
+      },
+    });
+  });
+
+  it("writes nothing at all when it refuses", async () => {
+    await useSeriesCode("FS");
+    await expect(sellToNamedRecipient("Cliente\u0007SL")).rejects.toMatchObject({
+      code: "fiscal.record_invalid",
+    });
+
+    const registros = await pg.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.tenantId, tenantId));
+    expect(registros).toEqual([]);
+
+    const soldRows = await pg.db.select().from(sales).where(eq(sales.tenantId, tenantId));
+    expect(soldRows).toEqual([]);
+
+    const heads = await pg.db.execute<{ secuencia: number }>(
+      sql`select secuencia from cadenas where tenant_id = ${tenantId} and node_id = ${nodeId}`,
+    );
+    expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
+  });
+
+  it("records the same sale once the recipient's name is ordinary text", async () => {
+    await useSeriesCode("FS");
+    await sellToNamedRecipient("Cliente SL");
+
+    const [registro] = await pg.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.tenantId, tenantId));
+    expect(registro?.destinatarios).toEqual({
+      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
+    });
   });
 });

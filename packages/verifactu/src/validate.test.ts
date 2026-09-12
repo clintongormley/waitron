@@ -752,6 +752,66 @@ describe("validate — Destinatarios rules (F1/F3 require, F2 forbids)", () => {
   });
 });
 
+describe("validate — the recipient's own name and NIF", () => {
+  // The recipient is customer-supplied text: a name is typed or pasted at the till, so it reaches
+  // the record with whatever the keyboard or clipboard put in it. Both rules below already apply
+  // to the ISSUER's equivalent fields; these cases prove the RECIPIENT is not an exception.
+  const withRecipients = (recipients: Array<{ NombreRazon: string; NIF: string }>) =>
+    buildAltaRecord({ ...INPUT, Destinatarios: { IDDestinatario: recipients } });
+
+  it("rejects a control character in the recipient's name", () => {
+    // The exact shape the run-it review reproduced against real PostgreSQL: a Spanish business
+    // customer whose pasted name carried U+0007. Before this rule the sale COMMITTED and the bell
+    // character was stored in the append-only record.
+    const record = withRecipients([{ NombreRazon: "Cliente\x07SL", NIF: "B12345678" }]);
+    expect(codes(record)).toContain("CONTROL_CHAR");
+  });
+
+  it("names WHICH recipient carries the control character", () => {
+    const record = withRecipients([
+      { NombreRazon: "Cliente Uno SL", NIF: "B12345678" },
+      { NombreRazon: "Cliente\x07Dos SL", NIF: "B99999999" },
+    ]);
+    const issue = validate(record).find((i) => i.code === "CONTROL_CHAR");
+    expect(issue?.field).toBe("Destinatarios.IDDestinatario[1].NombreRazon");
+  });
+
+  it("accepts an ordinary recipient name", () => {
+    expect(codes(withRecipients([{ NombreRazon: "Cliente SL", NIF: "B12345678" }]))).not.toContain(
+      "CONTROL_CHAR",
+    );
+  });
+
+  it("rejects a recipient NIF that is not exactly 9 characters", () => {
+    // sf:NIFType is `<restriction base="string"><length value="9"/>` — the same restriction
+    // IDEmisorFactura carries (SuministroInformacion.xsd:677-683), so the recipient's NIF gets the
+    // same rule rather than a looser one.
+    const record = withRecipients([{ NombreRazon: "Cliente SL", NIF: "B1234567" }]);
+    const issue = validate(record).find((i) => i.code === "NIF_LENGTH");
+    expect(issue?.field).toBe("Destinatarios.IDDestinatario[0].NIF");
+  });
+
+  it("accepts a 9-character recipient NIF", () => {
+    expect(codes(withRecipients([{ NombreRazon: "Cliente SL", NIF: "B12345678" }]))).not.toContain(
+      "NIF_LENGTH",
+    );
+  });
+
+  it("does not length-check a foreign recipient's IDOtro, which is a different XSD type", () => {
+    // The xsd:choice's other branch is IDOtroType, whose ID is TextMax20Type — a 9-character rule
+    // there would refuse identifiers AEAT accepts.
+    const record = buildAltaRecord({
+      ...INPUT,
+      Destinatarios: {
+        IDDestinatario: [
+          { NombreRazon: "Client SARL", IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR123" } },
+        ],
+      },
+    });
+    expect(codes(record)).not.toContain("NIF_LENGTH");
+  });
+});
+
 describe("validate — RegistroAnulacion", () => {
   it("returns no issues for a well-formed annulment record", () => {
     expect(validate(validAnulacion())).toEqual([]);
@@ -1014,6 +1074,25 @@ describe("validate — pins the exact field, message and severity for every Vali
       mutate: (r) => {
         r.TipoFactura = "R1";
         r.TipoRectificativa = "S";
+      },
+    },
+    {
+      description: "CONTROL_CHAR on Destinatarios.IDDestinatario[0].NombreRazon",
+      code: "CONTROL_CHAR",
+      field: "Destinatarios.IDDestinatario[0].NombreRazon",
+      message:
+        "Destinatarios.IDDestinatario[0].NombreRazon must not contain XML control characters",
+      mutate: (r) => {
+        r.Destinatarios = { IDDestinatario: [{ NombreRazon: "Clien\x07te SL", NIF: "B99999999" }] };
+      },
+    },
+    {
+      description: "NIF_LENGTH on Destinatarios.IDDestinatario[0].NIF",
+      code: "NIF_LENGTH",
+      field: "Destinatarios.IDDestinatario[0].NIF",
+      message: "NIF must be exactly 9 characters",
+      mutate: (r) => {
+        r.Destinatarios = { IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B9999999" }] };
       },
     },
     {

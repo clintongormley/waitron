@@ -285,6 +285,28 @@ export function validate(record: RegistroAlta | RegistroAnulacion): ValidationIs
       "Destinatarios, when present, must carry at least one IDDestinatario",
     );
   }
+  // The recipient's own text is operator- or customer-supplied and reaches the record unfiltered,
+  // so it needs the same two rules the issuer's identity already gets. IDDestinatario is
+  // maxOccurs=1000 (SuministroInformacion.xsd:159), so every entry is scanned and the issue names
+  // WHICH one, the same `[index]` convention the Desglose issues below use.
+  //
+  // NombreRazon: sf:TextMax120Type, an ordinary xsd:string (SuministroInformacion.xsd:344-355,
+  // 575-579) — nothing in the schema excludes a control character, so a serialised record carrying
+  // one is not merely schema-invalid, it is unparseable XML, and the row it would be written into
+  // is append-only.
+  //
+  // NIF: sf:NIFType, which is `<restriction base="string"><length value="9"/>`
+  // (SuministroInformacion.xsd:677-683) — EXACTLY 9 characters, the identical restriction
+  // IDEmisorFactura and SistemaInformatico.NIF carry, so it earns the identical NIF_LENGTH rule.
+  // The IDOtro branch of the xsd:choice is a different type (TextMax20Type, up to 15 characters per
+  // its own documentation) and is deliberately NOT length-checked here.
+  record.Destinatarios?.IDDestinatario.forEach((destinatario, index) => {
+    const field = `Destinatarios.IDDestinatario[${index}]`;
+    checkNoControlChars(`${field}.NombreRazon`, destinatario.NombreRazon);
+    if (destinatario.NIF !== undefined && destinatario.NIF.length !== 9) {
+      add("NIF_LENGTH", `${field}.NIF`, "NIF must be exactly 9 characters");
+    }
+  });
 
   if (record.DescripcionOperacion.length > 500) {
     add(
