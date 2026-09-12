@@ -25,6 +25,33 @@ function change(el: PersonEdit, testId: string, value: string): void {
 }
 
 describe("person-edit", () => {
+  it("suspends detail submission while a lifecycle confirmation is open", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    const saves: Event[] = [];
+    const resets: Event[] = [];
+    el.addEventListener("save-person", (event) => saves.push(event));
+    el.addEventListener("reset-login", (event) => resets.push(event));
+    const input = el
+      .shadowRoot!.querySelector("[data-test=edit-email]")!
+      .shadowRoot!.querySelector("input")!;
+    const enter = () =>
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+      );
+    enter();
+    expect(saves).toHaveLength(1);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-login]")!.click();
+    await el.updateComplete;
+    enter();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    expect(saves).toHaveLength(1);
+    expect(resets).toHaveLength(0);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-action]")!.click();
+    await el.updateComplete;
+    enter();
+    expect(saves).toHaveLength(2);
+  });
+
   it("uses the shared modal with one field per row and a divider before role and status", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     const modal = el.shadowRoot!.querySelector("wt-modal");

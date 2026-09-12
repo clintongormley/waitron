@@ -213,6 +213,7 @@ export class StaffScreen extends LitElement {
    * `wt-close`, which the render's `@wt-close` tracks back into `formOpen` (see the class doc).
    */
   #openForm(): void {
+    this.rowAction = null;
     this.errorKey = null;
     this.invitationStatus = null;
     this.#closeEdit(); // the two dialogs are mutually exclusive (both are modal)
@@ -241,6 +242,7 @@ export class StaffScreen extends LitElement {
     event.stopPropagation();
     const person = this.people.find((p) => p.personId === event.detail.personId);
     if (person === undefined) return;
+    this.rowAction = null;
     this.errorKey = null;
     this.invitationStatus = null;
     this.formOpen = false;

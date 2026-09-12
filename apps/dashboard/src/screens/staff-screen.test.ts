@@ -132,6 +132,25 @@ describe("staff-screen", () => {
     },
   );
 
+  it.each(["create", "edit"])(
+    "clears a row confirmation when the %s editor is requested",
+    async (editor) => {
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+      await flush(el);
+      list(el).dispatchEvent(
+        new CustomEvent("person-action", { detail: { personId: "p1", action: "reset-pin" } }),
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+      if (editor === "create")
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+      else await openEdit(el, "p1");
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(false);
+      expect(editor === "create" ? form(el).open : editForm(el).open).toBe(true);
+    },
+  );
+
   it("closes the editor after a successful save even when refreshing fails", async () => {
     const api = stubApi({
       listStaff: vi

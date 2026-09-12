@@ -30,7 +30,9 @@ backoff, login/recovery polish and automatic return to login at session expiry a
 the [account setup and user management plan](superpowers/plans/2026-09-09-user-management-and-account-setup.md).
 Still open: passkey-based reauthentication for an account with no password; an
 operator screen that stores Google provider credentials in the vault. Turnstile and SMS verification
-belong to the later optional cloud/remote offering.
+belong to the later optional cloud/remote offering. Wording follow-up: the till still renders
+`person.suspended` as “Account suspended”; align its English and Spanish messages with the
+dashboard's Disabled terminology (`apps/till/src/i18n/strings.ts`).
 
 **Shared database-backed table paging, search and sorting: separate PR, user admin first**
 (owner decision, 2026-09-12). Large lists should query the database from the first page, regardless

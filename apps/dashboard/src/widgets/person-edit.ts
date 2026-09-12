@@ -119,6 +119,7 @@ export class PersonEdit extends LitElement {
 
   #save(event: Event): void {
     event.stopPropagation();
+    if (this.pendingAction !== null) return;
     if (!this.#validate()) return;
     this.#emit("save-person", {
       displayName: this.details.displayName.trim(),
@@ -350,6 +351,7 @@ export class PersonEdit extends LitElement {
           <wt-button
             data-test="save"
             variant="primary"
+            ?disabled=${this.pendingAction !== null}
             @click=${(event: Event) => this.#save(event)}
             >${t("action.save")}</wt-button
           >

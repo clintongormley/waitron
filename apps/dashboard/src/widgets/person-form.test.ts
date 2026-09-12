@@ -27,6 +27,23 @@ async function fillRequired(el: PersonForm): Promise<void> {
 }
 
 describe("person-form", () => {
+  it("stacks contact fields above a divider and the role selector", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await openedDialog(el);
+    const fields = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".field")];
+    expect(
+      fields.map((field) => field.getAttribute("data-test") ?? field.querySelector("select")!.name),
+    ).toEqual(["first-names", "last-names", "display-name", "email", "telephone", "role"]);
+    for (let i = 1; i < fields.length; i++) {
+      expect(fields[i]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        fields[i - 1]!.getBoundingClientRect().bottom,
+      );
+    }
+    const divider = el.shadowRoot!.querySelector("hr")!;
+    expect(divider.previousElementSibling!.getAttribute("data-test")).toBe("telephone");
+    expect(divider.nextElementSibling!.querySelector("select")!.name).toBe("role");
+  });
+
   it("opens only when requested and offers every role", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", {});
     expect((await openedDialog(el)).open).toBe(false);
