@@ -64,7 +64,6 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
-      resolveReader: () => Promise.resolve(READER_ID!),
       incidents: () => Promise.resolve(true),
       // Default poll (120 attempts × 1s = 2 minutes) — the real window a tap needs, not the
       // hermetic suites' near-zero one.
@@ -76,6 +75,7 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("1.00"),
+      readerRef: READER_ID!,
     });
 
     expect(result.state).toBe("captured");

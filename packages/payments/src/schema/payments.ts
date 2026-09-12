@@ -12,6 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { nodes, sales, workingOrders } from "@waitron/db";
+import { cardReaders } from "./card-readers.js";
 
 /**
  * The lifecycle state of one electronic tender. 4a's online subset: `captured` (money taken),
@@ -64,6 +65,11 @@ export const payments = pgTable(
     // tenant, not merely exist somewhere in `nodes`. MATCH SIMPLE (the default) satisfies it while
     // node_id is NULL, so the column stays nullable.
     nodeId: uuid("node_id"),
+    // Nullable: cash, manual card, and the Stripe phone-as-reader path name no physical reader.
+    // Bare column: the FK is the tenant-consistent COMPOSITE (tenant_id, reader_id) →
+    // card_readers(tenant_id, id) declared in extraConfig below, mirroring node_id/sale_id. MATCH
+    // SIMPLE (the default) satisfies it while reader_id is NULL, so the column stays nullable.
+    readerId: uuid("reader_id"),
     provider: text("provider").notNull(),
     /** This provider's opaque reference and the idempotency anchor. */
     paymentRef: text("payment_ref").notNull(),
@@ -125,6 +131,14 @@ export const payments = pgTable(
       foreignColumns: [nodes.tenantId, nodes.id],
       name: "payments_node_fk",
     }),
+    // Tenant-consistent composite FK to the card reader that took this payment. Mirrors
+    // `payments_sale_fk`/`payments_node_fk`. MATCH SIMPLE (the default) satisfies it while
+    // reader_id is NULL, so the column stays nullable.
+    foreignKey({
+      columns: [t.tenantId, t.readerId],
+      foreignColumns: [cardReaders.tenantId, cardReaders.id],
+      name: "payments_reader_fk",
+    }).onDelete("restrict"),
     index("payments_working_order_idx").on(t.workingOrderId),
     index("payments_sale_idx").on(t.saleId),
     // The reconcile sweep's own filter: one tenant's rows for one provider over a settled_at

@@ -15,13 +15,12 @@ import type {
 } from "../api/client.js";
 
 /**
- * The Devices screen scanned by axe in both themes, in four states: the default list (each active row
- * carrying its hardware editor) with the pairing window shut and a device waiting to join, a row's
- * hardware editor with the Stripe Terminal reader field revealed, the pairing window OPEN, and the
- * accept dialog with its three number buttons. Mounted by ASSIGNING the `api` STUB as a property (never
- * bare markup), exactly as the sibling screen a11y suites do: `connectedCallback` fires
- * `void this.#load()` → the list verbs, so the stub must resolve them all or a stray rejection pollutes
- * the run (a rejection is a finding).
+ * The Devices screen scanned by axe in both themes, in three states: the default list (each active row
+ * carrying its hardware editor, including the Task 16 default-reader picker) with the pairing window
+ * shut and a device waiting to join, the pairing window OPEN, and the accept dialog with its three
+ * number buttons. Mounted by ASSIGNING the `api` STUB as a property (never bare markup), exactly as the
+ * sibling screen a11y suites do: `connectedCallback` fires `void this.#load()` → the list verbs, so the
+ * stub must resolve them all or a stray rejection pollutes the run (a rejection is a finding).
  *
  * The last block is not about theme: it pins that each number button carries a real accessible NAME
  * ("Number 47", never a bare "47" — design §1.2 wants the comparison to be a deliberate act), and that
@@ -146,12 +145,17 @@ function stubApi(pairingOpen = false): DashboardApi {
       .mockResolvedValue({ deviceId: "j1", name: "Pantalla pase", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
+    listReaders: vi
+      .fn()
+      .mockResolvedValue([
+        { id: "r1", provider: "sumup", name: "Front counter", active: true, deviceCount: 1 },
+      ]),
+    getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
+    setDeviceReader: vi.fn().mockResolvedValue(undefined),
     patchDeviceHardware: vi.fn().mockResolvedValue({
       id: "d1",
       receiptPrinterId: null,
       hasCashDrawer: false,
-      cardProvider: "stripe_terminal",
-      cardReaderId: null,
     }),
   } as unknown as DashboardApi;
 }
@@ -172,25 +176,6 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       theme,
     );
     await flush(el);
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders a row's hardware editor with the Stripe Terminal reader field accessibly", async () => {
-    const { el, host } = await mountWidget<DevicesScreen>(
-      "dashboard-devices-screen",
-      { api: stubApi() },
-      theme,
-    );
-    await flush(el);
-    // Switch the active row's card-provider to a Stripe Terminal reader — the card-reader-id field
-    // joins the receipt-printer / cash-drawer / card-provider controls, so the whole hardware editor
-    // state is in the a11y tree.
-    const provider = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=hw-card-provider-d1]",
-    )!;
-    provider.value = "stripe_terminal";
-    provider.dispatchEvent(new Event("change"));
-    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 

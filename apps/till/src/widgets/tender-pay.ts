@@ -5,8 +5,9 @@ import { type Decimal, compareDecimal, decimal, subtractDecimal } from "@waitron
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import "./numeric-pad.js";
+import "./reader-picker.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { OrderFlow, PayOutcome, TillProduct } from "../api/client.js";
+import type { OrderFlow, PayOutcome, TillActiveReader, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
 
@@ -39,6 +40,10 @@ export interface CollectCardDetail {
   tip?: string;
   allowOffline?: boolean;
   simulationOutcome?: "captured" | "declined";
+  /** The reader the operator picked this session (Task 17's picker), or absent when they never
+   * opened it — the server then falls back to the paying device's own default reader. Rides `POST
+   * /api/pay`'s `readerId` (`till-app`'s `#onCollectCard` reads it straight off this detail). */
+  readerId?: string;
 }
 
 /**
@@ -188,6 +193,18 @@ export class TillTenderPay extends LitElement {
         gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-3);
       }
+
+      .reader-control {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+      }
+
+      .reader-name {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
 
@@ -231,6 +248,19 @@ export class TillTenderPay extends LitElement {
    * `willUpdate`.
    */
   @property() cardOutcome?: CardOutcome;
+  /**
+   * The venue's ACTIVE card readers (Task 12/17, threaded from `till-app` via `till-counter-screen` →
+   * `card-grid`), feeding the "use a different reader" control and the picker it opens. `[]` (the
+   * default) hides the control entirely — see {@link readerPickerAvailable}.
+   */
+  @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
+  /**
+   * The paying device's DEFAULT reader id (Task 17, mirrors `GET /api/till`'s `defaultReaderId`), or
+   * `undefined` when it has none. Used only to NAME the default on the idle screen (looked up in
+   * {@link activeReaders}) before the operator has picked anything this session — never sent to the
+   * server itself; an unset {@link chosenReaderId} already means "use the device default".
+   */
+  @property() defaultReaderId?: string;
 
   @state() private view: View = "idle";
   /** The digits the keypad has entered — a partial number string shared by both keypad screens. */
@@ -253,6 +283,13 @@ export class TillTenderPay extends LitElement {
    * on the idle screen, which is no longer on screen by the time Retry is tapped. Not `@state`: it
    * never drives a render on its own. */
   #lastCollectDetail: CollectCardDetail = {};
+  /** The reader the operator explicitly picked this session (Task 17), or `undefined` while they have
+   * never opened the picker (or opened it and cancelled) — the manual path never sets this. Persists
+   * across repeated taps of this same widget instance, so a chosen reader stays chosen for the next
+   * sale too, until the operator opens the picker again. */
+  @state() private chosenReaderId?: string;
+  /** Whether the reader-picker dialog is showing over the idle screen (Task 17). */
+  @state() private pickingReader = false;
 
   constructor() {
     super();
@@ -339,6 +376,9 @@ export class TillTenderPay extends LitElement {
         ? { allowOffline: true }
         : {}),
       ...(this.cardProvider === "simulator" ? { simulationOutcome: this.simulationOutcome } : {}),
+      // The operator's picked reader (Task 17), if any — omitted when they never opened the picker
+      // (or opened it and cancelled), so the server falls back to the device's own default.
+      ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
     });
   }
 
@@ -380,6 +420,45 @@ export class TillTenderPay extends LitElement {
   #onOfflineChange(event: Event): void {
     event.stopPropagation();
     this.allowOffline = (event as CustomEvent<{ checked: boolean }>).detail.checked;
+  }
+
+  /**
+   * Whether the "use a different reader" control is worth showing at all (Task 17): the manual
+   * path (`cardProvider === "none"`) and practice mode's local simulator have no real reader to pick
+   * an ALTERNATIVE to, and an empty {@link activeReaders} leaves nothing to offer either way.
+   */
+  get #readerPickerAvailable(): boolean {
+    return (
+      this.cardProvider !== "none" &&
+      this.cardProvider !== "simulator" &&
+      this.activeReaders.length > 0
+    );
+  }
+
+  /** The reader whose name shows on the idle screen: the operator's own pick this session, else the
+   * device's default — looked up in {@link activeReaders} by id. `undefined` when neither resolves to
+   * a listed reader (a stale id, or a boot before any reader was configured). */
+  get #displayedReader(): TillActiveReader | undefined {
+    const id = this.chosenReaderId ?? this.defaultReaderId;
+    return id === undefined ? undefined : this.activeReaders.find((reader) => reader.id === id);
+  }
+
+  /** Open the reader picker (Task 17), pre-selecting whichever reader is currently in effect. */
+  #openReaderPicker(): void {
+    this.pickingReader = true;
+  }
+
+  /** A pick from the dialog (Task 17): remember it for every collection from here on and close the
+   * dialog. Read straight off the event rather than trusting a stale closure — the dialog is the only
+   * thing that ever fires this. */
+  #onReaderChosen(event: Event): void {
+    this.chosenReaderId = (event as CustomEvent<{ readerId: string }>).detail.readerId;
+    this.pickingReader = false;
+  }
+
+  /** Dismiss the picker without changing the current reader (Cancel / Escape / backdrop). */
+  #onReaderPickerCancel(): void {
+    this.pickingReader = false;
   }
 
   /**
@@ -522,6 +601,10 @@ export class TillTenderPay extends LitElement {
   }
 
   override render() {
+    return html`${this.#renderView()}${this.#renderReaderPicker()}`;
+  }
+
+  #renderView() {
     if (this.view === "paying") return this.#renderPaying();
     if (this.view === "weighing") return this.#renderWeighing();
     if (this.view === "holding") return this.#renderHolding();
@@ -529,6 +612,22 @@ export class TillTenderPay extends LitElement {
     if (this.view === "collecting") return this.#renderCollecting();
     if (this.view === "card_outcome") return this.#renderCardOutcome();
     return this.#renderIdle();
+  }
+
+  /**
+   * The reader-picker dialog (Task 17), shown OVER whichever view is on screen while
+   * {@link pickingReader} is set — it is only ever opened from the idle screen's "use a different
+   * reader" control, but rendered here (not inlined into `#renderIdle`) so it is never torn down by a
+   * view switch racing its own open state.
+   */
+  #renderReaderPicker() {
+    if (!this.pickingReader) return nothing;
+    return html`<till-reader-picker
+      .readers=${this.activeReaders}
+      .selectedReaderId=${this.chosenReaderId ?? this.defaultReaderId}
+      @reader-chosen=${(event: Event) => this.#onReaderChosen(event)}
+      @reader-picker-cancel=${() => this.#onReaderPickerCancel()}
+    ></till-reader-picker>`;
   }
 
   #renderIdle() {
@@ -656,10 +755,37 @@ export class TillTenderPay extends LitElement {
    * `packages/payments-stripe/src/provider.ts:142-145`). Read at tap time by `#onCardTap`, not bound
    * into the emitted event until then.
    */
+  /**
+   * The reader name + "use a different reader" control (Task 17), shown above the rest of
+   * `#renderCardExtras`'s affordances whenever there is a real reader to pick an alternative
+   * to — see `#readerPickerAvailable`'s own doc for the manual/simulator exclusions. Names
+   * whichever reader is CURRENTLY in effect (the operator's pick this session, else the device
+   * default); a name that fails to resolve (a stale id, or no reader configured at all) falls back to
+   * naming nothing rather than guessing, so the control still opens the picker to let it be fixed.
+   */
+  #renderReaderControl() {
+    if (!this.#readerPickerAvailable) return nothing;
+    const reader = this.#displayedReader;
+    return html`
+      <div class="reader-control">
+        ${reader === undefined ? nothing : html`<p class="reader-name">${reader.name}</p>`}
+        <wt-button
+          class="change-reader"
+          variant="secondary"
+          size="sm"
+          @click=${() => this.#openReaderPicker()}
+        >
+          ${t("action.use_different_reader")}
+        </wt-button>
+      </div>
+    `;
+  }
+
   #renderCardExtras() {
     if (this.cardProvider === "none") return nothing;
     return html`
       <div class="card-extras">
+        ${this.#renderReaderControl()}
         ${
           this.cardProvider === "simulator"
             ? html`<div

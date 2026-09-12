@@ -120,6 +120,13 @@
       "when": 1789147463822,
       "tag": "0016_print_agent_host",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789205848045,
+      "tag": "0017_drop_device_card_columns",
+      "breakpoints": true
     }
   ]
 }

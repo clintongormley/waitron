@@ -7,13 +7,19 @@ import { describe, expect, it } from "vitest";
 import * as schema from "./schema/index.js";
 
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
-const OWNED = ["payments", "payment_refunds", "payment_policy"];
+const OWNED = [
+  "payments",
+  "payment_refunds",
+  "payment_policy",
+  "card_readers",
+  "device_card_readers",
+];
 
 /**
  * Every core table this package's schema files import (to declare foreign keys) or otherwise
  * risk re-exporting. None of these may ever appear in this package's output.
  */
-const CORE = ["working_orders", "sales", "tenants", "tenders", "invoice_series"];
+const CORE = ["working_orders", "sales", "tenants", "tenders", "invoice_series", "devices"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 

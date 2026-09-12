@@ -22,6 +22,41 @@
       "when": 1789133649957,
       "tag": "0002_card_details",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789154159035,
+      "tag": "0003_card_readers",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789154167518,
+      "tag": "0004_card_readers_sql",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789156077019,
+      "tag": "0005_device_card_readers",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789156085778,
+      "tag": "0006_device_card_readers_sql",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789156734501,
+      "tag": "0007_payment_reader_id",
+      "breakpoints": true
     }
   ]
 }

@@ -130,6 +130,16 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "printer.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "printer.manage")).toBe(false);
   });
+  it("grants payments.manage to manager and admin only (payments configuration screen)", () => {
+    // A domain-named payments-admin permission gating the Payments configuration screen/routes
+    // (@waitron/payments), granted to exactly the roles that hold the other manager write gates —
+    // manager and admin — and NEVER to staff or supervisor (least privilege — a kitchen operator or
+    // floor supervisor cannot change how the venue takes card payments).
+    expect(roleHasPermission("manager", "payments.manage")).toBe(true);
+    expect(roleHasPermission("admin", "payments.manage")).toBe(true);
+    expect(roleHasPermission("staff", "payments.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "payments.manage")).toBe(false);
+  });
   it("grants report.view to supervisor, manager and admin, not staff", () => {
     // A domain-named reporting permission (viewing the management reporting surface — sales/takings),
     // held by SUPERVISOR (so supervisor, manager via ...SUPERVISOR and admin via ALL hold it) and NEVER

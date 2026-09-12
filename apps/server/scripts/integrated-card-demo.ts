@@ -9,9 +9,9 @@
 // 1. connects to a FRESH postgres (via `DATABASE_URL`) and applies the core, identity, fiscal and
 // payments migrations itself — so it runs against a blank `postgres:18-alpine` with nothing
 // pre-seeded (a card sale touches `payments`, which a cash-only demo never needs); 2. stands up a
-// real chained venue + registered SIF with `applyVenue` (@waitron/provisioning), configured
-// `cardProvider: "stripe_terminal"` (the per-node config `loadTillConfig` would resolve from
-// `WAITRON_TILL_CARD_PROVIDER`/`WAITRON_TILL_STRIPE_READER_ID` at real boot); 3. seeds one
+// real chained venue + registered SIF with `applyVenue` (@waitron/provisioning); at real boot the
+// reader a sale charges is resolved from a `card_readers` row (added from the dashboard) — this
+// demo pins one fake reader id (`READER_ID`) in its place; 3. seeds one
 // `each`-priced product; 4. wraps `FakeStripe` in a thin narrating client so the ACTUAL reader
 // calls `collect` makes (`createPaymentIntent`, `processPaymentIntent`, `readerOutcome`) print to
 // stdout as they happen — the "P2 (collect)" narration is not scripted commentary, it is the real
@@ -282,9 +282,9 @@ async function main(): Promise<void> {
       { db, modules: ALL_MODULES },
     );
 
-    // The till's identity, WITH an integrated Stripe terminal configured — the shape `loadTillConfig`
-    // would resolve from `WAITRON_TILL_CARD_PROVIDER=stripe_terminal` /
-    // `WAITRON_TILL_STRIPE_READER_ID=reader_1` at real boot (`till-config.ts:122-173`).
+    // The till's identity. At real boot the reader a card sale charges comes from a `card_readers`
+    // row resolved by `/api/pay` (added from the dashboard), not from the till config; this demo
+    // pins the one fake reader id (`READER_ID`) directly into the pay deps below.
     const cfg: TillConfig = {
       tenantId: brandTenantId(venue.tenantId),
       tillId: brandTillId(venue.tillId),
@@ -293,8 +293,6 @@ async function main(): Promise<void> {
       locationId: brandLocationId(venue.locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
-      cardProvider: "stripe_terminal",
-      stripeReaderId: READER_ID,
       tipsEnabled: false,
       // The venue's default pay-timing mode (design §3); this demo drives the prepay walk-up path.
       orderFlow: "prepay",
@@ -350,10 +348,6 @@ async function main(): Promise<void> {
       db,
       tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
-      // Ignores its args and always returns the one configured reader — the exact shape
-      // `boot.ts`'s production wiring uses (`buildCardProvider`, `till-sale-integrated.pg.test.ts`'s
-      // `integratedDeps`) — a real per-tenant resolver would look the reader id up from `cfg`.
-      resolveReader: () => Promise.resolve(READER_ID),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const capturedDeps: IntegratedPayDeps = {
@@ -361,6 +355,9 @@ async function main(): Promise<void> {
       backend,
       clock,
       provider: capturedProvider,
+      // The chosen reader's vendor reference for this sale — in production it comes from the resolved
+      // `card_readers` row; here it is the one configured fake reader.
+      readerRef: READER_ID,
     };
 
     const captured = await payWorkingOrderIntegrated(capturedDeps, cfg, {
@@ -396,7 +393,6 @@ async function main(): Promise<void> {
       db,
       tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
-      resolveReader: () => Promise.resolve(READER_ID),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const declinedDeps: IntegratedPayDeps = {
@@ -404,6 +400,7 @@ async function main(): Promise<void> {
       backend,
       clock,
       provider: declinedProvider,
+      readerRef: READER_ID,
     };
 
     const declined = await payWorkingOrderIntegrated(declinedDeps, cfg, {

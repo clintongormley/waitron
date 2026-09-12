@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as liveRetryDelay } from "node:timers/promises";
 import { serve } from "@hono/node-server";
-import { sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   asAppUser,
@@ -22,23 +22,23 @@ import {
   withTenant,
   type Database,
 } from "@waitron/db";
-import { credentialTenants, loadKeyRing } from "@waitron/credentials";
+import { credentialTenants, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, mountLiveApi } from "./live-api.js";
 import { runDue } from "@waitron/scheduler";
+import { StripeReconciler } from "@waitron/payments-stripe";
 import {
-  StripeOnDeviceProvider,
-  StripeReconciler,
-  StripeTerminalProvider,
-} from "@waitron/payments-stripe";
-import { SimulatorPaymentProvider, type PaymentProvider } from "@waitron/payments";
-import { SumUpCloudProvider } from "@waitron/payments-sumup";
+  SimulatorPaymentProvider,
+  type CardProviderContribution,
+  type PaymentProvider,
+} from "@waitron/payments";
 import { recordIncidentOnce } from "@waitron/core";
+import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import type { ModuleRouteContext } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, type TenantId } from "@waitron/shared";
 import {
   ALL_MODULES,
   ALL_MODULE_PERMISSIONS,
@@ -87,15 +87,7 @@ import { runLoop, realSleep } from "./loop.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
-import {
-  cardClientResolver,
-  cardDeviceClientResolver,
-  stripeAccountResolver,
-  defaultMakeStripe,
-} from "./stripe-account.js";
-import type { StripeAccountDeps } from "./stripe-account.js";
-import { sumupClientResolver } from "./sumup-account.js";
-import type { SumUpAccountDeps } from "./sumup-account.js";
+import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountNodeApi } from "./node-api.js";
@@ -104,6 +96,9 @@ import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
+import { mountPaymentsApi } from "./payments-api.js";
+import { createCardProviderPool } from "./card-provider-pool.js";
+import type { CardProviderPool } from "./card-provider-pool.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
@@ -309,68 +304,28 @@ const BOX_HOSTNAME = "waitron.local";
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /**
- * The card-payment provider this till drives. Demo receives the local simulator. Prepare does too
- * unless its explicit integration switch selects the configured test provider. A live till serves
- * one tenant (`cfg.tenantId`), so its provider is built once at boot. Its collect-side client comes
- * from that tenant's encrypted `payments.stripe` credential through the environment-key guard, so
- * bad credentials fail here rather than on the first sale.
+ * The card-payment provider a Demo or default-Prepare till drives: the local simulator, built once at
+ * boot for this till's tenant. Every OTHER card sale routes to its reader's own provider through the
+ * pool at collect time (Task 12 cutover), so a live/integration till returns `undefined` here — there
+ * is no single per-till provider any more. Prepare that explicitly opts into real test providers
+ * (`paymentTestProviders`) also returns `undefined` and uses real readers.
  *
  * Exported, not inlined into `startServer`: `startServer`'s only test subject (`boot.test.ts`) boots
- * against a real container with `cardProvider=none`, so it exercises only the `undefined` branch —
- * unit-testing THIS function directly (`boot-card-provider.test.ts`, PGlite + a seeded credential) is
- * what reaches the simulator, terminal, and on-device branches without a full boot per provider, the same
- * "exported for a direct test subject" reasoning `DEFAULT_MIGRATIONS_ROOT` below carries.
+ * against a real container in a non-demo mode, so it exercises only the `undefined` branch —
+ * unit-testing THIS function directly (`boot-card-provider.test.ts`, PGlite) is what reaches the
+ * simulator branch, the same "exported for a direct test subject" reasoning `DEFAULT_MIGRATIONS_ROOT`
+ * below carries.
  */
 export async function buildCardProvider(
-  cfg: TillConfig,
-  deps: StripeAccountDeps,
-  sumupDeps: SumUpAccountDeps,
+  cfg: Pick<TillConfig, "tenantId">,
+  db: Database,
   onboardingIntent?: OnboardingIntent,
   paymentTestProviders = false,
 ): Promise<PaymentProvider | undefined> {
   if (onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders)) {
-    return new SimulatorPaymentProvider(deps.db, cfg.tenantId);
+    return new SimulatorPaymentProvider(db, cfg.tenantId);
   }
-  if (cfg.cardProvider === "none") return undefined;
-  if (cfg.cardProvider === "stripe_terminal") {
-    const client = await cardClientResolver(deps)(cfg.tenantId);
-    // Present because `cfg.cardProvider === "stripe_terminal"`: `loadTillConfig` `required`s
-    // `WAITRON_TILL_STRIPE_READER_ID` on exactly that branch (till-config.ts's `stripeReaderId`
-    // resolution), so a terminal cfg that reached here always carries one. `resolveReader` ignores
-    // its `(tenantId, tillId)` args — this till drives one fixed, provisioned reader, not one
-    // selected per collect.
-    const readerId = cfg.stripeReaderId!;
-    return new StripeTerminalProvider({
-      client,
-      db: deps.db,
-      tenantId: cfg.tenantId,
-      // The till's own node id, identifying this node on the card-collect record path.
-      nodeId: cfg.nodeId,
-      resolveReader: () => Promise.resolve(readerId),
-    });
-  }
-  if (cfg.cardProvider === "sumup_cloud") {
-    const client = await sumupClientResolver(sumupDeps)(cfg.tenantId);
-    // Present because `loadTillConfig` `required`s WAITRON_TILL_SUMUP_READER_ID on exactly this branch.
-    const readerId = cfg.sumupReaderId!;
-    return new SumUpCloudProvider({
-      client,
-      db: deps.db,
-      tenantId: cfg.tenantId,
-      nodeId: cfg.nodeId,
-      resolveReader: () => Promise.resolve(readerId),
-      incidents: recordIncidentOnce,
-    });
-  }
-  // `stripe_on_device` — the handheld Tap-to-Pay flow, which mints its own connection token and needs
-  // no server-side reader id (till-config.ts requires none for this branch).
-  const client = await cardDeviceClientResolver(deps)(cfg.tenantId);
-  return new StripeOnDeviceProvider({
-    client,
-    db: deps.db,
-    tenantId: cfg.tenantId,
-    nodeId: cfg.nodeId,
-  });
+  return undefined;
 }
 
 /** Run the card provider's own `resolvePending` sweep on every tick, wrapping (not replacing) the
@@ -384,29 +339,100 @@ export async function buildCardProvider(
  * signal, so it does not gate `/health` (the deferred SumUp reconciler is the same tier, likewise
  * off it). The returned `nextDueAt` is logged, not yet used to pace the loop.
  *
+ * Since the reader-provider cutover (Task 12) a live box builds NO single provider at boot — readers
+ * come from the pool per sale — so the set of providers to sweep is enumerated EACH pass
+ * (`sweepProviders`, `connectedCardProviderSweep` below): every card provider this tenant has a sealed
+ * credential for, plus the demo/prepare simulator if one was built. A tenant connected while the host
+ * runs is therefore swept on the next pass, no restart. An empty set is a no-op (no card configured).
+ *
  * Exported for a direct unit test (`boot-pending-sweep.test.ts`) — a stubbed `inner` + a fake
- * provider, no container — the same "exported for a direct test subject" reasoning `buildCardProvider`
+ * enumerator, no container — the same "exported for a direct test subject" reasoning `buildCardProvider`
  * carries; the full loop wiring is exercised only through a real boot. */
 export function withPendingSweep(
   inner: (now: Date) => Promise<PassReport>,
-  provider: PaymentProvider | undefined,
+  sweepProviders: () => Promise<readonly PaymentProvider[]>,
   log: Logger,
 ): (now: Date) => Promise<PassReport> {
-  if (provider === undefined) return inner;
   return async (now) => {
     const report = await inner(now);
+    // Enumerating the providers can itself fail (a credential read, a pool build) — that is a sweep
+    // failure, logged like a stuck sweep and never propagated into the pass (the fiscal `report` is
+    // already computed and must be returned whatever the card backstop does). The whole CALL is
+    // wrapped, not just the returned promise, so a SYNCHRONOUS throw from the enumerator is contained
+    // exactly like a rejection rather than escaping and dropping the report.
+    let providers: readonly PaymentProvider[];
     try {
-      const r = await provider.resolvePending(now);
-      log("info", "resolve_pending.complete", {
-        captured: r.forwarded,
-        failed: r.declined,
-        incidentsRaised: r.incidentsRaised,
-        nextDueAt: r.nextDueAt?.toISOString() ?? null,
-      });
+      providers = await sweepProviders();
     } catch (error) {
       log("warn", "resolve_pending.failed", { error: String(error) });
+      providers = [];
+    }
+    for (const provider of providers) {
+      try {
+        const r = await provider.resolvePending(now);
+        log("info", "resolve_pending.complete", {
+          provider: provider.provider,
+          captured: r.forwarded,
+          failed: r.declined,
+          incidentsRaised: r.incidentsRaised,
+          nextDueAt: r.nextDueAt?.toISOString() ?? null,
+        });
+      } catch (error) {
+        log("warn", "resolve_pending.failed", {
+          provider: provider.provider,
+          error: String(error),
+        });
+      }
     }
     return report;
+  };
+}
+
+/**
+ * The per-pass enumerator `withPendingSweep` calls: the demo/prepare simulator (if one was built),
+ * plus every pooled card provider this tenant has a SEALED CREDENTIAL for — the same
+ * credential-presence signal `payments-api`'s GET providers and `/api/pay`'s connected pre-check use.
+ * Read EACH pass, as the app role under the tenant, so a provider connected mid-run is swept next
+ * pass without a restart. A provider with no sealed credential is NOT swept (its `resolvePending`
+ * would only fail on a missing credential), which is the negative control the test pins.
+ *
+ * Exported for a direct test (`boot-pending-sweep.test.ts`, PGlite + a seeded credential + a fake
+ * pool). */
+export function connectedCardProviderSweep(deps: {
+  db: Database;
+  tenantId: TenantId;
+  pool: CardProviderPool;
+  contributions: readonly Pick<CardProviderContribution, "providerId" | "credentialPurpose">[];
+  simulator: PaymentProvider | undefined;
+}): () => Promise<readonly PaymentProvider[]> {
+  return async () => {
+    const out: PaymentProvider[] = [];
+    if (deps.simulator !== undefined) out.push(deps.simulator);
+    const purposes = [...new Set(deps.contributions.map((c) => c.credentialPurpose))];
+    // No card seats at all → nothing pooled to sweep (only the simulator, already added).
+    if (purposes.length > 0) {
+      const held = await withTenant(deps.db, deps.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const rows = await tx
+          .select({ purpose: tenantCredentials.purpose })
+          .from(tenantCredentials)
+          .where(
+            and(
+              eq(tenantCredentials.tenantId, deps.tenantId),
+              inArray(tenantCredentials.purpose, purposes),
+            ),
+          );
+        return new Set(rows.map((r) => r.purpose));
+      });
+      for (const c of deps.contributions) {
+        if (!held.has(c.credentialPurpose)) continue;
+        // The sweep only drives `resolvePending`, which touches no reader, so `get` needs no reader:
+        // the provider carries none (the reader is a per-collect input), so fetching one to sweep is
+        // exactly the same cached instance the pay path uses.
+        out.push(await deps.pool.get(c.providerId));
+      }
+    }
+    return out;
   };
 }
 
@@ -1792,23 +1818,32 @@ export async function startServer(
     tenantId: till.tenantId,
     locationId: till.locationId,
   });
-  // Demo and the default Prepare target use the local simulator. Live and the explicit Prepare
-  // integration target build from the tenant's Stripe credential. `makeStripe` is
-  // `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses.
+  // Demo and the default Prepare target use the local simulator. Every other card sale routes to its
+  // reader's own provider through `cardPool` below (built once, one live provider per id), so a
+  // live/integration till gets `undefined` here.
   const cardProvider = await buildCardProvider(
     till,
-    {
-      db,
-      ring,
-      environment: config.environment,
-      makeStripe: defaultMakeStripe,
-    },
-    // The SumUp resolver's deps — the same vault handle + ring, reading this tenant's `payments.sumup`
-    // credential. No injected `fetch`: the live host uses the global one; only a test observes calls.
-    { db, ring },
+    db,
     config.onboardingIntent,
     config.paymentTestProviders,
   );
+  // The card-provider POOL, built ONCE for this tenant/node (one live provider per id, rebuilt on a
+  // credential change via `evict`). It reaches a seat only through `CARD_PROVIDERS`, the composition
+  // list, so `boot.ts` names no provider package for this path. Built HERE, before `mountTillApi`, so
+  // the pay route (`POST /api/pay`) can resolve each sale's reader through it; the payments MANAGEMENT
+  // surface below reuses the SAME instance (never a second pool), so a reader added there and a sale
+  // driven here share one cache and one eviction. Cheap and DB-free at construction (just a Map + the
+  // seat closures), so building it on a mirror/fenced boot too costs nothing — those boots never reach
+  // a sale.
+  const cardPool = createCardProviderPool({
+    providers: CARD_PROVIDERS,
+    db,
+    ring,
+    tenantId: till.tenantId,
+    nodeId: till.nodeId,
+    environment: config.environment,
+    incidents: recordIncidentOnce,
+  });
   mountTillApi(
     app,
     {
@@ -1823,6 +1858,8 @@ export async function startServer(
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
       secureCookies,
       cardProvider,
+      pool: cardPool,
+      providers: CARD_PROVIDERS,
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
@@ -1930,6 +1967,24 @@ export async function startServer(
     mountPrintApi(
       app,
       { db, cfg: till, readMembership: () => readNodeMembership(db), pairingMode },
+      log,
+    );
+    // The card-payments MANAGEMENT surface on the SAME app (design Phase C): connect/disconnect a
+    // provider, add/retire readers, and set a device's default reader — all `payments.manage`-gated.
+    // It reuses the SAME `cardPool` the pay route received above (built once before `mountTillApi`), so
+    // a reader added or a credential rotated here evicts the exact provider the next sale rebuilds —
+    // never a second pool with its own stale cache. Not mounted under mirror/fenced mode, the sibling
+    // operational surfaces' rule.
+    mountPaymentsApi(
+      app,
+      {
+        db,
+        cfg: till,
+        ring,
+        environment: config.environment,
+        pool: cardPool,
+        providers: CARD_PROVIDERS,
+      },
       log,
     );
   }
@@ -2514,9 +2569,13 @@ export async function startServer(
     // token) still reports healthy; those surface as `sync.pull_failed` log lines. Real
     // replication-lag monitoring belongs to the hosting slice (like real per-user auth), out of scope
     // for the C2a stand-in.
-    // `withPendingSweep` runs the card provider's `resolvePending` sweep around the singleton fiscal
-    // pass on EVERY trading node with a provider (primary or sell-only secondary), returning the
-    // inner `PassReport` unchanged so the `/health` contract is untouched (see its own header).
+    // `withPendingSweep` runs each connected card provider's `resolvePending` sweep around the
+    // singleton fiscal pass on EVERY trading node (primary or sell-only secondary), returning the
+    // inner `PassReport` unchanged so the `/health` contract is untouched (see its own header). The
+    // providers are enumerated per pass (`connectedCardProviderSweep`): the demo/prepare simulator, if
+    // one was built, plus every pooled provider `till.tenantId` has a sealed credential for — the
+    // money-critical backstop that resolves a SumUp payment whose outcome was lost between the reader
+    // push and the first poll (`payment.pending_outcome_unactionable`).
     pass: withPendingSweep(
       singletonPass(
         () => holders.singletonRole.current,
@@ -2569,7 +2628,13 @@ export async function startServer(
             at,
           ),
       ),
-      cardProvider,
+      connectedCardProviderSweep({
+        db,
+        tenantId: till.tenantId,
+        pool: cardPool,
+        contributions: CARD_PROVIDERS,
+        simulator: cardProvider,
+      }),
       log,
     ),
     now,

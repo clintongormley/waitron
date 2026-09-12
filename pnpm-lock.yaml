@@ -558,6 +558,12 @@ importers:
       '@waitron/payments':
         specifier: workspace:*
         version: link:../payments
+      '@waitron/payments-stripe':
+        specifier: workspace:*
+        version: link:../payments-stripe
+      '@waitron/payments-sumup':
+        specifier: workspace:*
+        version: link:../payments-sumup
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../scheduler
@@ -760,6 +766,12 @@ importers:
       '@waitron/dashboard-kit':
         specifier: workspace:*
         version: link:../dashboard-kit
+      '@waitron/payments-stripe':
+        specifier: workspace:*
+        version: link:../payments-stripe
+      '@waitron/payments-sumup':
+        specifier: workspace:*
+        version: link:../payments-sumup
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../venue-service
@@ -1184,6 +1196,9 @@ importers:
 
   packages/payments:
     dependencies:
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -1227,6 +1242,12 @@ importers:
       '@waitron/core':
         specifier: workspace:*
         version: link:../core
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../dashboard-kit
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -1236,9 +1257,15 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/ui':
+        specifier: workspace:*
+        version: link:../ui
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.3
       stripe:
         specifier: ^22.3.2
         version: 22.3.2(@types/node@24.13.3)
@@ -1249,12 +1276,18 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@vitest/browser':
+        specifier: ^3.0.0
+        version: 3.2.7(playwright@1.61.1)(vite@6.4.3(@types/node@24.13.3)(tsx@4.23.1)(yaml@2.9.0))(vitest@3.2.7)
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -1264,6 +1297,12 @@ importers:
 
   packages/payments-sumup:
     dependencies:
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../dashboard-kit
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -1273,9 +1312,15 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/ui':
+        specifier: workspace:*
+        version: link:../ui
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.3
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.5.4
@@ -1283,9 +1328,15 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@vitest/browser':
+        specifier: ^3.0.0
+        version: 3.2.7(playwright@1.61.1)(vite@6.4.3(@types/node@24.13.3)(tsx@4.23.1)(yaml@2.9.0))(vitest@3.2.7)
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

@@ -120,7 +120,7 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
 /** The enrolled device row's binding columns, read as the superuser. */
 async function deviceBindings(deviceId: string): Promise<Record<string, unknown>> {
   const { rows } = await suite.admin.execute<Record<string, unknown>>(sql`
-    select till_id, device_profile_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
+    select till_id, device_profile_id, receipt_printer_id, has_cash_drawer
     from devices where id = ${deviceId}`);
   return rows[0]!;
 }
@@ -911,7 +911,7 @@ describe("Device management routes (device.manage)", () => {
 });
 
 describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
-  it("sets the hardware trio (+reader) and returns the updated device", async () => {
+  it("sets the receipt printer + cash drawer and returns the updated device", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
@@ -922,8 +922,6 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
       body: {
         receiptPrinterId: printerId,
         hasCashDrawer: true,
-        cardProvider: "stripe_terminal",
-        cardReaderId: "reader-9",
       },
     });
     expect(res.status).toBe(200);
@@ -931,15 +929,11 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
       id: deviceId,
       receiptPrinterId: printerId,
       hasCashDrawer: true,
-      cardProvider: "stripe_terminal",
-      cardReaderId: "reader-9",
     });
     // The row itself carries the new bindings (read back as the superuser, bypassing the route).
     expect(await deviceBindings(deviceId)).toMatchObject({
       receipt_printer_id: printerId,
       has_cash_drawer: true,
-      card_provider: "stripe_terminal",
-      card_reader_id: "reader-9",
     });
   });
 
@@ -949,7 +943,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     const { deviceId } = await enrolTill(app, venue, "Caja gate");
 
     const unauth = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      body: { cardProvider: "none" },
+      body: { hasCashDrawer: true },
     });
     expect(unauth.status).toBe(401);
     expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
@@ -958,31 +952,12 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
 
     const staff = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
       cookie: venue.staffCookie,
-      body: { cardProvider: "none" },
+      body: { hasCashDrawer: true },
     });
     expect(staff.status).toBe(403);
     expect((await staff.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
-  });
-
-  it("rejects an unknown cardProvider with 400 management.request_invalid naming the field", async () => {
-    const venue = await setupVenue(suite.admin);
-    const app = mountApp(venue.cfg);
-    const { deviceId } = await enrolTill(app, venue, "Caja bad");
-
-    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      cookie: venue.managerCookie,
-      body: { cardProvider: "paypal" },
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "cardProvider" } },
-    });
-    // Nothing was written — the provider stayed at the enrol default.
-    expect((await deviceBindings(deviceId)).card_provider).toBe("none");
   });
 
   it("404s an unknown or malformed device id", async () => {
@@ -991,7 +966,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     const unknown = randomUUID();
     const res = await send(app, "PATCH", `/management-api/devices/${unknown}/hardware`, {
       cookie: venue.managerCookie,
-      body: { cardProvider: "none" },
+      body: { hasCashDrawer: true },
     });
     expect(res.status).toBe(404);
     expect(
@@ -1000,7 +975,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
 
     const malformed = await send(app, "PATCH", "/management-api/devices/not-a-uuid/hardware", {
       cookie: venue.managerCookie,
-      body: { cardProvider: "none" },
+      body: { hasCashDrawer: true },
     });
     expect(malformed.status).toBe(404);
   });
@@ -1070,8 +1045,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
     const { deviceId, jar } = await enrolTill(app, venue, "Caja hw");
     await suite.admin.execute(sql`
       update devices
-         set receipt_printer_id = ${printerId}, has_cash_drawer = true,
-             card_provider = 'sumup', card_reader_id = 'reader-xyz'
+         set receipt_printer_id = ${printerId}, has_cash_drawer = true
        where id = ${deviceId}`);
     const tillId = (await deviceBindings(deviceId)).till_id;
 
@@ -1085,8 +1059,6 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       tillId,
       receiptPrinterId: printerId,
       hasCashDrawer: true,
-      cardProvider: "sumup",
-      cardReaderId: "reader-xyz",
     });
   });
 

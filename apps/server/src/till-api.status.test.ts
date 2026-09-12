@@ -103,7 +103,6 @@ function makeCfg(
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };

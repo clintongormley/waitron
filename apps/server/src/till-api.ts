@@ -20,7 +20,9 @@ import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalo
 import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from "@waitron/layouts";
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { PaymentProvider } from "@waitron/payments";
+import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
+import { cardProviderById, cardReaders, deviceCardReaders } from "@waitron/payments";
+import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -28,6 +30,7 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
+import type { CardProviderPool } from "./card-provider-pool.js";
 import {
   collectOrder,
   payWorkingOrderIntegrated,
@@ -131,13 +134,30 @@ export interface TillApiDeps {
   floorAnnotators?: readonly FloorAnnotator[];
   secureCookies: boolean;
   /**
-   * The integrated card-payment provider `boot.ts` built for this till's tenant, or `undefined` when
-   * `WAITRON_TILL_CARD_PROVIDER=none`. Unused by the routes below — the card-collect route (Task 8)
-   * drives it — but wired into this one interface now, beside the fiscal `backend`/`clock`, so the
-   * shape and every caller stay stable across the slice. `deps.cfg.cardProvider` carries the STRING
-   * form `GET /api/till` echoes; THIS is the built object the collect path invokes.
+   * The DEMO/PREPARE local simulator `boot.ts` built for this till's tenant, or `undefined` on a
+   * live/integration till. Since the Task 12 cutover this is ONLY ever the simulator: a real card sale
+   * routes to its reader's own provider through {@link pool} at collect time, keyed by the reader row's
+   * `provider`. `GET /api/till` echoes `"simulator"` when this is present, so a practice till renders
+   * the practice pay control.
    */
   cardProvider?: PaymentProvider;
+  /**
+   * The card-provider pool (`boot.ts`, one live provider per id, DB-free at construction). `/api/pay`
+   * resolves the sale's reader, then `pool.get(row.provider)` for the provider that drives it — the
+   * reader's own ref rides into `collect` per sale, so the pooled provider carries no reader.
+   * OPTIONAL only so the hermetic session/park suites that never reach the reader-pay path need not
+   * build one; a live boot always supplies it, and the pay route only dereferences it after a reader
+   * row resolves (which those suites never seed).
+   */
+  pool?: CardProviderPool;
+  /**
+   * The card-provider composition list (`CARD_PROVIDERS`), threaded from `boot.ts`. The pay path reads
+   * a reader's provider `credentialPurpose` from its seat here rather than duplicating a provider →
+   * purpose map. OPTIONAL only so the hermetic session/park suites that never reach the reader-pay
+   * path need not build one; a live boot always supplies it, and the pre-check that uses it only runs
+   * once a reader row has resolved (which those suites never seed).
+   */
+  providers?: readonly CardProviderContribution[];
   /**
    * Whether this host runs in DEV mode (SP-C, `config.devMode`) — the switch the per-tab device
    * override header (`x-waitron-dev-device`) gates on. Boot wires `config.devMode`; forwarded to the
@@ -177,6 +197,94 @@ async function resolveHttpOrderZone(
     await asAppUser(tx);
     if ((await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).length === 0) return undefined;
     return (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId;
+  });
+}
+
+/** The till app's closed card-provider union, as far as this surface hands it out (`apps/till`'s own
+ * `CardProvider` also carries `stripe_on_device`, deferred here — Task 12 §I2 — and `none`). */
+type TillCardProvider = "sumup_cloud" | "stripe_terminal" | "simulator" | "none";
+
+/**
+ * Map a `card_readers.provider` / seat provider id (`"sumup"` / `"stripe"`) onto the till app's
+ * closed `CardProvider` union (`"sumup_cloud"` / `"stripe_terminal"`), the ONE place the mapping
+ * lives so `GET /api/till` never hands the till's union a value it does not know (Task 12 §I1). An
+ * unrecognised provider maps to `undefined`, which every caller resolves to `"none"` rather than
+ * leaking a raw seat id onto the wire.
+ */
+function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_terminal" | undefined {
+  if (provider === "sumup") return "sumup_cloud";
+  if (provider === "stripe") return "stripe_terminal";
+  return undefined;
+}
+
+/**
+ * The `card_readers` row a `/api/pay` charge routes to (Task 12), resolved as the app role under the
+ * till's tenant. The reader is `body.readerId` when the caller named one (Task 17's picker), else the
+ * paying DEVICE's default (`device_card_readers`). A device with neither → `reader.not_found`. The
+ * chosen reader is loaded BY ID with an explicit `eq(tenantId)` predicate — one-tenant-per-db is NOT
+ * the query's isolation boundary (CLAUDE.md §3), so a foreign or unknown reader id is `reader.not_found`,
+ * never chargeable — and must still be `active` (a retired reader cannot take a payment).
+ */
+async function resolvePayReader(
+  deps: TillApiDeps,
+  deviceId: string | undefined,
+  requestedReaderId: string | undefined,
+): Promise<{ id: string; provider: string; providerRef: string }> {
+  return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    let readerId = requestedReaderId;
+    if (readerId === undefined && deviceId !== undefined) {
+      const [row] = await tx
+        .select({ readerId: deviceCardReaders.readerId })
+        .from(deviceCardReaders)
+        .where(
+          and(
+            eq(deviceCardReaders.tenantId, deps.cfg.tenantId),
+            eq(deviceCardReaders.deviceId, deviceId),
+          ),
+        );
+      readerId = row?.readerId;
+    }
+    if (readerId === undefined) throw new AppError("reader.not_found", { id: "" });
+    const [reader] = await tx
+      .select({
+        id: cardReaders.id,
+        provider: cardReaders.provider,
+        providerRef: cardReaders.providerRef,
+      })
+      .from(cardReaders)
+      .where(
+        and(
+          eq(cardReaders.tenantId, deps.cfg.tenantId),
+          eq(cardReaders.id, readerId),
+          eq(cardReaders.active, true),
+        ),
+      );
+    if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
+    // The provider must be CONNECTED (a sealed credential exists) before we drive the reader. Both
+    // adapters turn a deferred credential-read failure into a payment DECLINE, so without this
+    // pre-check a disconnected provider would answer a misleading "declined" (200) instead of the
+    // actionable `reader.provider_disconnected` (409). Metadata read only — the purpose, never the
+    // ciphertext — scoped by the explicit `tenant_id` predicate (CLAUDE.md §3), the same pre-check the
+    // payments-management surface makes before add-reader. The seat declares its own credential
+    // purpose (`CardProviderContribution.credentialPurpose`), read from the composition list boot
+    // threads in, so there is no provider → purpose map to keep in step with the seats.
+    if (deps.providers !== undefined) {
+      const purpose = cardProviderById(deps.providers, reader.provider).credentialPurpose;
+      const [cred] = await tx
+        .select({ purpose: tenantCredentials.purpose })
+        .from(tenantCredentials)
+        .where(
+          and(
+            eq(tenantCredentials.tenantId, deps.cfg.tenantId),
+            eq(tenantCredentials.purpose, purpose),
+          ),
+        );
+      if (cred === undefined) {
+        throw new AppError("reader.provider_disconnected", { providerId: reader.provider });
+      }
+    }
+    return reader;
   });
 }
 
@@ -295,6 +403,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // table create/patch routes (see `requireCapacity`). Listed explicitly though 400 is the table's
   // default, matching those siblings.
   "management.request_invalid": 400,
+  // Integrated card pay (Task 12). No reader resolves for the paying device (no default and no
+  // request `readerId`), or a `readerId` that is not this tenant's active reader, is `reader.not_found`
+  // (404) — the same code and status the payments-management surface (`payments-api.ts`) maps it to. A
+  // reader whose provider has no sealed credential (the pool's deferred read fails at first use) is
+  // `reader.provider_disconnected` (409), likewise matching the management surface.
+  "reader.not_found": 404,
+  "reader.provider_disconnected": 409,
   // Table + tab (TS-1). A bad/absent/foreign table id is a 404 (`table.not_found`); a label
   // collision or an already-open tab / non-open tab / deactivated table is a 409 (the id may be
   // valid but the table's or tab's STATE forbids the operation); a `line_no` naming no line is a 404
@@ -798,6 +913,53 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         } else {
           canvas = await getCanvasForFormFactor(tx, deps.cfg.tenantId, "till");
         }
+        // The integrated card provider is now PER-DEVICE (Task 12): the string the till reads to pick
+        // its card-collect route comes from the paying device's DEFAULT reader (`device_card_readers`
+        // → `card_readers`), mapped to the till's union. A cookieless request or a device with no
+        // default reader carries no provider here (→ `"none"` below). Read in THIS same boot tx.
+        // `defaultReaderId` rides alongside it (Task 17): `cardProvider` alone only names a PROVIDER
+        // TYPE, and a venue can have more than one active reader on the same provider, so the till
+        // needs the actual row id to look its NAME up in `activeReaders` below and pre-select it in
+        // the picker.
+        let defaultReaderProvider: "sumup_cloud" | "stripe_terminal" | undefined;
+        let defaultReaderId: string | undefined;
+        if (device != null) {
+          const [reader] = await tx
+            .select({ id: cardReaders.id, provider: cardReaders.provider })
+            .from(deviceCardReaders)
+            .innerJoin(
+              cardReaders,
+              and(
+                eq(cardReaders.tenantId, deviceCardReaders.tenantId),
+                eq(cardReaders.id, deviceCardReaders.readerId),
+              ),
+            )
+            .where(
+              and(
+                eq(deviceCardReaders.tenantId, deps.cfg.tenantId),
+                eq(deviceCardReaders.deviceId, device.deviceId),
+                eq(cardReaders.active, true),
+              ),
+            );
+          if (reader !== undefined) {
+            const provider = tillProviderForReader(reader.provider);
+            if (provider !== undefined) {
+              defaultReaderProvider = provider;
+              defaultReaderId = reader.id;
+            }
+          }
+        }
+        // The venue's ACTIVE readers for Task 17's picker — id + name + mapped provider, no secrets.
+        // A reader whose provider does not map (should not happen) is dropped rather than leaked.
+        const activeReaders = (
+          await tx
+            .select({ id: cardReaders.id, name: cardReaders.name, provider: cardReaders.provider })
+            .from(cardReaders)
+            .where(and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.active, true)))
+        ).flatMap((r) => {
+          const provider = tillProviderForReader(r.provider);
+          return provider === undefined ? [] : [{ id: r.id, name: r.name, provider }];
+        });
         return {
           issuer: row,
           bumpMode: loc?.bumpMode,
@@ -807,6 +969,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           canvas,
           capabilities,
           inactivityTimeoutSeconds,
+          defaultReaderProvider,
+          defaultReaderId,
+          activeReaders,
         };
       });
       /* v8 ignore start */
@@ -849,14 +1014,24 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the tab-order screen's course picker options
         // and the id→name source for its waiter-fire actions. `[]` for a venue with no courses configured.
         courses: boot.courses,
-        // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
-        // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
-        // affordance (Task 8). Practice installs surface the local simulator selected at boot;
-        // other installs use the configured hardware selector.
-        // `tipsEnabled` comes from `deps.cfg` too — the single source (`TillConfig.tipsEnabled`,
-        // set at boot from `config.till`), not a second copy on `deps` that could drift from it.
-        cardProvider:
-          deps.cardProvider?.provider === "simulator" ? "simulator" : deps.cfg.cardProvider,
+        // The integrated card terminal: the STRING provider selector the till app reads BEFORE login
+        // to pick its card-collect route (Task 8), now PER-DEVICE (Task 12). A practice install
+        // surfaces the local simulator selected at boot; otherwise it is the paying device's DEFAULT
+        // reader's provider mapped to the till's union (`boot.defaultReaderProvider`), or `"none"`
+        // when the device has no default reader (or the request is cookieless). `tipsEnabled` comes
+        // from `deps.cfg` — the single source (`TillConfig.tipsEnabled`, set at boot from `config.till`).
+        cardProvider: (deps.cardProvider?.provider === "simulator"
+          ? "simulator"
+          : (boot.defaultReaderProvider ?? "none")) satisfies TillCardProvider,
+        // The DEFAULT reader's row id (Task 17), so the till can look its NAME up in `activeReaders`
+        // below rather than guessing from `cardProvider` alone (a venue can have more than one active
+        // reader on the same provider). Absent under practice mode's local simulator, like the real
+        // lookup it would otherwise shadow, and whenever the device has no default reader.
+        defaultReaderId:
+          deps.cardProvider?.provider === "simulator" ? undefined : boot.defaultReaderId,
+        // The venue's ACTIVE card readers (Task 12) — `[{ id, name, provider(mapped) }]` — for Task
+        // 17's reader picker, so it needs no second fetch. `[]` when none are configured.
+        activeReaders: boot.activeReaders,
         tipsEnabled: deps.cfg.tipsEnabled,
         // The authored (or default) receipt trim (Task 8) — the till app threads it to its ticket view.
         // Rides this same unauthenticated boot fetch, so the till makes no second request.
@@ -1036,26 +1211,62 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
-      // `deps.cardProvider` is `undefined` on a till booted with `WAITRON_TILL_CARD_PROVIDER=none`
-      // (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this route on EVERY till regardless of
-      // `cardProvider` (`boot.ts` calls it unconditionally), so this branch stays reachable at the HTTP
-      // layer even on a "none" till — only the till UI's own affordance is expected not to post here.
-      // A request that does is therefore a genuine misconfiguration/foreign-request fault, never a
-      // payment outcome, refused BEFORE any DB write. Covered directly by
-      // `till-api.test.ts` ("500s server.internal when the till has no integrated card provider
-      // configured"), not ignored.
-      if (deps.cardProvider === undefined) {
-        throw new Error("/api/pay: no integrated card provider configured");
+      // A named reader override (Task 17's picker) must be a well-formed uuid before it reaches the
+      // by-id read below, so a malformed one is a 400, not a `22P02` → 500.
+      if (body.readerId !== undefined) {
+        requireUuidParam(body.readerId, "CardReaderId");
       }
       // SP-A.2 §16.4 cutover: the integrated pay's `till_id` comes from the AUTHENTICATED device, not env
       // (only `tillId` changes — `nodeId`/`seriesId` stay `deps.cfg`). Resolved AFTER the capability
-      // firewall + provider guard so those refusals keep their existing status; the reader-identity till
-      // (`provider.collect`) moves to the same device till, consistent with the fiscal record it files.
-      // Threads the once-resolved `device` so the fail-closed `unauthorized`/`till_required` checks reuse
-      // the binding read above rather than a second scrypt pass.
+      // firewall so its refusal keeps its status; `requireSaleTillId` fails closed with
+      // `device.unauthorized` on a missing cookie (§16.4), so past this line the caller is an
+      // authenticated device. Threads the once-resolved `device` so the fail-closed checks reuse the
+      // binding read above rather than a second scrypt pass.
       const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
+
+      // DEMO/PREPARE: the local simulator `boot.ts` built (`deps.cardProvider`), driven directly and
+      // stamping NO reader (`payments.reader_id` stays NULL — a practice sale touches no real reader).
+      if (deps.cardProvider?.provider === "simulator") {
+        const outcome = await payWorkingOrderIntegrated(
+          { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
+          saleCfg,
+          { ...body, zoneId },
+          personId,
+        );
+        return c.json(outcome); // 200 with the discriminated outcome — even a decline.
+      }
+
+      // A LIVE/integration till (Task 12 cutover): route the charge to a reader's own provider. Resolve
+      // the reader (request `readerId`, else the device's default), tenant-scoped by-id — a foreign or
+      // unknown reader is `reader.not_found`, and a device with no default and no request reader is
+      // `reader.not_found` too (the deliberate "no sellable reader" refusal that replaced the old
+      // "no provider configured" 500). `resolvePayReader` ALSO pre-checks the provider is connected,
+      // throwing `reader.provider_disconnected` when no credential is sealed (the adapters would
+      // otherwise turn a deferred credential-read failure into a misleading decline).
+      const reader = await resolvePayReader(deps, device?.deviceId, body.readerId);
+      // The pool is DB-free at construction and always supplied by a live boot; a reader that resolved
+      // without one is a boot misconfiguration, not a client fault.
+      /* v8 ignore next 3 */
+      if (deps.pool === undefined) {
+        throw new Error("/api/pay: card provider pool not configured");
+      }
+      // The pool builds (or returns cached) the reader's provider. The provider carries NO reader:
+      // this sale's chosen reader travels as a per-collect input (`readerRef` below), so one cached
+      // provider serves every reader on the same vendor. A genuine decline / network stall is returned
+      // as DATA (200) by `payWorkingOrderIntegrated`, never thrown — only a real fault becomes a 500.
+      const provider = await deps.pool.get(reader.provider);
       const outcome = await payWorkingOrderIntegrated(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
+        {
+          db: deps.db,
+          backend: deps.backend,
+          clock: deps.clock,
+          provider,
+          // The chosen reader's vendor reference — passed into `provider.collect` as `readerRef` for
+          // THIS sale, so the shared cached provider charges the reader the operator picked.
+          readerRef: reader.providerRef,
+          // Stamp the resolved reader on the captured payment (via `associatePaymentWithSale`).
+          readerId: reader.id,
+        },
         saleCfg,
         { ...body, zoneId },
         personId,

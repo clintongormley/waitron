@@ -212,7 +212,6 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     // No integrated card terminal; these park routes never read it.
-    cardProvider: "none",
     tipsEnabled: false,
     // Defaults to prepay (park/list/retrieve/update/abandon don't dispatch on the mode); the KDS fire
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.

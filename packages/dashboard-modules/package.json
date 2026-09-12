@@ -14,6 +14,8 @@
   "dependencies": {
     "@waitron/bookings": "workspace:*",
     "@waitron/dashboard-kit": "workspace:*",
+    "@waitron/payments-stripe": "workspace:*",
+    "@waitron/payments-sumup": "workspace:*",
     "@waitron/venue-service": "workspace:*"
   },
   "devDependencies": {

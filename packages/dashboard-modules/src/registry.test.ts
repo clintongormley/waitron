@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { DASHBOARD_MODULES } from "./index.js";
+import { CARD_PROVIDERS } from "@waitron/composition";
+import { CARD_PROVIDER_PANELS, DASHBOARD_MODULES } from "./index.js";
 
 // The honesty pin (spec §10, forward-only): every registry entry names a REAL server module and is
 // unique. The reverse — a UI-bearing module silently MISSING from the registry — is NOT mechanically
@@ -16,5 +17,17 @@ describe("DASHBOARD_MODULES honesty", () => {
 
   it("registers the bookings contribution (not vacuous)", () => {
     expect(DASHBOARD_MODULES.map((c) => c.module)).toContain("bookings");
+  });
+});
+
+describe("CARD_PROVIDER_PANELS honesty", () => {
+  it("names the same providers as the server's CARD_PROVIDERS list, uniquely", () => {
+    const panelIds = CARD_PROVIDER_PANELS.map((p) => p.providerId);
+    expect(new Set(panelIds).size).toBe(panelIds.length);
+    expect([...panelIds].sort()).toEqual([...CARD_PROVIDERS.map((p) => p.providerId)].sort());
+  });
+
+  it("registers the sumup and stripe panels (not vacuous)", () => {
+    expect(CARD_PROVIDER_PANELS.map((p) => p.providerId).sort()).toEqual(["stripe", "sumup"]);
   });
 });

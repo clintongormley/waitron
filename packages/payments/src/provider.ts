@@ -54,6 +54,13 @@ export interface CollectParams {
   /** Exact decimal, tax-inclusive amount to take on this tender. Split tender is several
    * `collect` calls against one working order, each with its own amount. */
   amount: Decimal;
+  /** The resolved provider reference for THIS sale's chosen reader — the vendor's own reader id
+   * (SumUp's paired-reader id, Stripe's Terminal reader id). Supplied per collect so one pooled,
+   * cached provider serves every reader on the same vendor; a provider that uses no server-side
+   * reader (`stripe_on_device`, the simulator, manual) leaves it undefined. A server-driven reader
+   * provider (SumUp / Stripe Terminal) throws if it is undefined — a collect there cannot proceed
+   * without a reader. */
+  readerRef?: string;
   /** Per-transaction staff consent to accept this card offline if the network is down (default
    * false). Even when true, acceptance still requires the tenant policy to allow it and the amount
    * to be within the cap — offline is never automatic. */

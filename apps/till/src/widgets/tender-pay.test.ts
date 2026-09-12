@@ -912,4 +912,180 @@ describe("till-tender-pay", () => {
       expect(spy).toHaveBeenCalledOnce();
     });
   });
+
+  describe("payment-time reader picker (Task 17)", () => {
+    const readers = [
+      { id: "r1", name: "Front counter", provider: "stripe_terminal" as const },
+      { id: "r2", name: "Bar", provider: "stripe_terminal" as const },
+    ];
+
+    it("shows the default reader's name on the idle screen", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: "r2",
+      });
+      expect(el.shadowRoot!.textContent).toContain("Bar");
+      expect(query(el, ".change-reader")).not.toBeNull();
+    });
+
+    it("names nothing when neither a default nor a chosen reader is set", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: readers, // no defaultReaderId supplied
+      });
+      expect(query(el, ".reader-name")).toBeNull();
+      expect(query(el, ".change-reader")).not.toBeNull();
+    });
+
+    it("names nothing when the default reader id does not resolve in the active list", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: "stale-id",
+      });
+      expect(query(el, ".reader-name")).toBeNull();
+      // The control still shows, so a stale id can be fixed by picking a real reader.
+      expect(query(el, ".change-reader")).not.toBeNull();
+    });
+
+    it("hides the control under the manual path, even with active readers configured", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        activeReaders: readers, // cardProvider left at its "none" default
+      });
+      expect(query(el, ".change-reader")).toBeNull();
+    });
+
+    it("hides the control under practice mode's local simulator", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "simulator",
+        activeReaders: readers,
+      });
+      expect(query(el, ".change-reader")).toBeNull();
+    });
+
+    it("hides the control when there are no active readers to pick from", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: [],
+      });
+      expect(query(el, ".change-reader")).toBeNull();
+    });
+
+    it("opens the picker showing the active readers, pre-selecting the current default", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: "r1",
+      });
+      click(el, ".change-reader");
+      await el.updateComplete;
+      const picker = el.shadowRoot!.querySelector("till-reader-picker") as HTMLElement & {
+        readers: unknown;
+        selectedReaderId: unknown;
+      };
+      expect(picker).not.toBeNull();
+      expect(picker.readers).toEqual(readers);
+      expect(picker.selectedReaderId).toBe("r1");
+    });
+
+    it("choosing a reader updates the displayed name, closes the picker, and rides the next collect-card", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: "r1",
+      });
+      click(el, ".change-reader");
+      await el.updateComplete;
+      const picker = el.shadowRoot!.querySelector("till-reader-picker")!;
+      picker.dispatchEvent(
+        new CustomEvent("reader-chosen", {
+          detail: { readerId: "r2" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-reader-picker")).toBeNull(); // dialog closed
+      expect(el.shadowRoot!.textContent).toContain("Bar"); // now shows the CHOSEN reader's name
+
+      const spy = vi.fn();
+      el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
+      click(el, ".pay-card");
+      expect(spy).toHaveBeenCalledWith({ readerId: "r2" });
+    });
+
+    it("cancelling the picker leaves the prior selection untouched", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: "r1",
+      });
+      click(el, ".change-reader");
+      await el.updateComplete;
+      const picker = el.shadowRoot!.querySelector("till-reader-picker")!;
+      picker.dispatchEvent(
+        new CustomEvent("reader-picker-cancel", { bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-reader-picker")).toBeNull();
+      expect(el.shadowRoot!.textContent).toContain("Front counter"); // still the default
+
+      const spy = vi.fn();
+      el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
+      click(el, ".pay-card");
+      expect(spy).toHaveBeenCalledWith({}); // no explicit pick was ever made — no readerId sent
+    });
+
+    it("Retry replays the SAME chosen readerId, not a re-read of the (long gone) idle control", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: "r1",
+      });
+      click(el, ".change-reader");
+      await el.updateComplete;
+      el.shadowRoot!.querySelector("till-reader-picker")!.dispatchEvent(
+        new CustomEvent("reader-chosen", {
+          detail: { readerId: "r2" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      click(el, ".pay-card");
+      await el.updateComplete;
+      el.cardOutcome = "declined";
+      await el.updateComplete;
+      const spy = vi.fn();
+      el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
+      click(el, ".retry");
+      expect(spy).toHaveBeenCalledWith({ readerId: "r2" });
+    });
+  });
 });

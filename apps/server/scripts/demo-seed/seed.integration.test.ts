@@ -126,7 +126,6 @@ function tillConfigFor(venue: Venue): TillConfig {
     locale: SEED_INVOICE_LOCALE[LOCALE],
     invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
     // The park/retrieve path reads neither a card provider nor tips; fresh safe values keep the shape whole.
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };

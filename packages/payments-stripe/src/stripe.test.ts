@@ -36,7 +36,6 @@ describe("the stripe terminal adapter against a real database", () => {
         db: probe,
         tenantId: brandTenantId(t.tenantId),
         nodeId: "11111111-1111-4111-8111-111111111111",
-        resolveReader: () => Promise.resolve("reader_1"),
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });
       const result = await provider.collect({
@@ -44,6 +43,7 @@ describe("the stripe terminal adapter against a real database", () => {
         tillId: brandTillId(t.tillId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
         amount: decimal("10.00"),
+        readerRef: "reader_1",
       });
       expect(result.state).toBe("captured");
     } finally {

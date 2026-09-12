@@ -434,7 +434,6 @@ async function seedDemoDevices(
     locationId: brandLocationId(ids.locationId),
     locale: SEED_INVOICE_LOCALE[seedLocale],
     invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };

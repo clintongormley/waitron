@@ -194,6 +194,12 @@ export const en = {
   "card.wait": "Keep waiting",
   "card.tip": "Tip (optional)",
   "card.offline_consent": "Accept offline if the network is down",
+  // The payment-time reader picker (Task 17): the idle screen's "use a different reader" control and
+  // the dialog it opens, listing the venue's active readers.
+  "action.use_different_reader": "Use a different reader",
+  "reader_picker.heading": "Choose a card reader",
+  "reader_picker.empty": "No active readers configured",
+  "reader_picker.offline": "Offline",
   // Allergens (menu & allergens) — UI chrome for the till allergen screen. `may_contain` follows the
   // snake_case sibling convention every other multi-word key here uses (card_ref, switch_tender, …),
   // not the camelCase the task brief spelled it; the allergen CODES/name strings are elsewhere
@@ -548,6 +554,10 @@ export const es: Record<StringKey, string> = {
   "card.wait": "Seguir esperando",
   "card.tip": "Propina (opcional)",
   "card.offline_consent": "Aceptar sin conexión si la red no funciona",
+  "action.use_different_reader": "Usar otro lector",
+  "reader_picker.heading": "Elige un lector de tarjetas",
+  "reader_picker.empty": "No hay lectores activos configurados",
+  "reader_picker.offline": "Sin conexión",
   "allergens.open": "Alérgenos",
   "allergens.title": "Alérgenos",
   "allergens.notice": "Hay información sobre alérgenos disponible — pregunta al personal.",

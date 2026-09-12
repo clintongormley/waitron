@@ -252,8 +252,6 @@ function makeCfg(
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
-    // No integrated card terminal for the default cfg — these routes don't build or drive one.
-    cardProvider: "none",
     tipsEnabled: false,
     // These API tests exercise the session/roster/park routes, none of which dispatch on the mode.
     orderFlow: "prepay",
@@ -1030,7 +1028,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded location has none, so `[]` reaches
       // the wire (the tab course picker offers nothing then).
       courses: [],
+      // Cookieless: no device → no default reader → the per-device provider string is `none`, and the
+      // venue has no readers configured, so the picker list (Task 12) is empty.
       cardProvider: "none",
+      activeReaders: [],
       tipsEnabled: false,
       receipt: DEFAULT_RECEIPT,
       // Cookieless: no device, so the boot read resolves the `till` form-factor default canvas
@@ -1121,24 +1122,18 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(await res.json()).toEqual({ locales: SUPPORTED_LOCALES, venueDefault: "es-ES" });
   });
 
-  it("GET /api/till echoes a non-default cardProvider and cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {
-    // A default of `none`/`false` would pass even if the route hardcoded those values, so drive both
-    // to their OTHER value. Both now come off `deps.cfg` — `cardProvider` always did, and
-    // `tipsEnabled` does too since `TillApiDeps.tipsEnabled` (a second copy that could never diverge
-    // from `cfg.tipsEnabled`, since `boot.ts` set both from the SAME `till` object) was dropped as
-    // redundant. Driving `cfg.tipsEnabled` to `true` here, against the suite default `false` asserted
-    // above, still proves the route reads config rather than a constant.
+  it("GET /api/till echoes cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {
+    // A default of `false` would pass even if the route hardcoded it, so drive `cfg.tipsEnabled` to
+    // `true` (against the suite default `false` asserted above). The per-device `cardProvider` string
+    // (from the paying device's default reader) is proven in the real-PG `till-api.pg.test.ts`, where
+    // a device + reader can be seeded; a cookieless request here carries `cardProvider: "none"`.
     const app = new Hono();
-    mountTillApi(
-      app,
-      { ...deps(suite.db), cfg: { ...cfg, cardProvider: "stripe_terminal", tipsEnabled: true } },
-      collect([]),
-    );
+    mountTillApi(app, { ...deps(suite.db), cfg: { ...cfg, tipsEnabled: true } }, collect([]));
 
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toMatchObject({ cardProvider: "stripe_terminal", tipsEnabled: true });
+    expect(body).toMatchObject({ cardProvider: "none", tipsEnabled: true });
   });
 
   it("GET /api/till surfaces the local simulator selected by boot", async () => {
@@ -1600,15 +1595,13 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("500s server.internal when the till has no integrated card provider configured", async () => {
-    // `deps(suite.db)` leaves `cardProvider` undefined — the shape a till boots with when
-    // `WAITRON_TILL_CARD_PROVIDER=none` (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this
-    // route on EVERY till regardless of `cardProvider` (`boot.ts`'s `startServer`, which always calls
-    // it), so `/api/pay` stays reachable on such a till: nothing at the HTTP layer stops a client from
-    // posting here even though the till UI's own affordance is not expected to. That makes a request
-    // reaching this branch a genuine misconfiguration/foreign-request fault — never a payment outcome
-    // — refused BEFORE any DB write, with the SAME opaque `server.internal` 500 every other
-    // non-AppError failure gets from `run`.
+  it("401s device.unauthorized on /api/pay from a cookieless caller (an env-only till is not a sellable box)", async () => {
+    // The Task 12 cutover removed the old "no integrated card provider configured" 500: a card sale
+    // now routes to its reader's provider through the pool, and the reader is resolved from the paying
+    // DEVICE. A cookieless caller therefore nets to `device.unauthorized` (401) at `requireSaleTillId`
+    // — the SP-A.2 §16.4 gate — before any reader read. The reader-routing happy path and the
+    // `reader.not_found` refusal (a device with no default reader) are proven in the real-PG
+    // `till-api.pg.test.ts`, where a device + reader can be seeded.
     const id = await openSession(suite.db);
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1618,8 +1611,8 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
       body: JSON.stringify({ id: randomUUID(), lines: [] }),
     });
-    expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
   });
 
   it("refuses a browser-selected simulation outcome for a real provider", async () => {

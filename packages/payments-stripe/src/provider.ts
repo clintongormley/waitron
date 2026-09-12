@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import type { Decimal, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, TenantId } from "@waitron/shared";
 import { withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
@@ -44,7 +44,6 @@ export interface StripeTerminalProviderOptions {
   /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path. A
    * per-till provider serves one node, so the id is known at construction, exactly like `tenantId`. */
   nodeId: string;
-  resolveReader: (tenantId: TenantId, tillId: TillId) => Promise<string>;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
 
@@ -103,7 +102,14 @@ export class StripeTerminalProvider implements PaymentProvider {
 
   async collect(params: CollectParams): Promise<PaymentResult> {
     this.requireOwnTenant(params.tenantId);
-    const readerId = await this.opts.resolveReader(params.tenantId, params.tillId);
+    // The reader ref is a PER-COLLECT input, not baked into the provider: one cached provider serves
+    // every reader on this vendor, and the sale carries the reader it chose. A Terminal collect
+    // cannot proceed without one — its absence is a host wiring error, not an operator condition.
+    if (params.readerRef === undefined)
+      throw new Error(
+        "stripe collect requires a readerRef (the chosen reader's provider reference)",
+      );
+    const readerId = params.readerRef;
     const paymentRef = randomUUID();
     // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the on-device provider).
     const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);

@@ -10,3 +10,5 @@ export const DASHBOARD_MODULES: readonly DashboardContribution[] = [
   BOOKINGS_DASHBOARD,
   VENUE_SERVICE_DASHBOARD,
 ];
+
+export { CARD_PROVIDER_PANELS } from "./card-providers.js";

@@ -543,6 +543,49 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The saved key didn't take effect — try again",
     es: "La clave guardada no se aplicó; inténtalo de nuevo",
   },
+  // Card payments (providers + readers). The connect/pairing forms live in each provider's panel, but
+  // the human copy for every code the payments feature throws lives centrally here (a panel falls back
+  // to codeMessage for a rejected connect), so an operator never sees a raw wire code.
+  "reader.not_found": {
+    en: "That card reader no longer exists",
+    es: "Ese lector de tarjetas ya no existe",
+  },
+  "reader.provider_disconnected": {
+    en: "Connect this payment provider before adding a reader for it",
+    es: "Conecta este proveedor de pagos antes de añadirle un lector",
+  },
+  "payment.provider_in_use": {
+    en: "Retire this provider's card readers before disconnecting it",
+    es: "Retira los lectores de tarjetas de este proveedor antes de desconectarlo",
+  },
+  "payment.provider_credential_rejected": {
+    en: "The payment provider rejected those details — check them and try again",
+    es: "El proveedor de pagos rechazó esos datos; revísalos e inténtalo de nuevo",
+  },
+  "payment.provider_merchant_ambiguous": {
+    en: "That key covers more than one merchant — choose which one to connect",
+    es: "Esa clave cubre más de un comercio; elige cuál conectar",
+  },
+  "payment.provider_unknown": {
+    en: "That payment provider is not available",
+    es: "Ese proveedor de pagos no está disponible",
+  },
+  "payment.provider_duplicate": {
+    en: "There is a problem with the payment provider setup",
+    es: "Hay un problema con la configuración del proveedor de pagos",
+  },
+  "payment.pairing_expired": {
+    en: "The reader did not pair in time — start the pairing again",
+    es: "El lector no se emparejó a tiempo; vuelve a iniciar el emparejamiento",
+  },
+  "payment.pairing_refused": {
+    en: "The reader refused to pair — check the code and try again",
+    es: "El lector rechazó el emparejamiento; comprueba el código e inténtalo de nuevo",
+  },
+  "payment.credential_environment_mismatch": {
+    en: "Those credentials are for a different environment (test vs live) than this venue",
+    es: "Esas credenciales son de un entorno distinto (prueba o real) al de este local",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

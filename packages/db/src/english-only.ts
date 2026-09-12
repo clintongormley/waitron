@@ -125,6 +125,27 @@ export const PRODUCTION_ONLY: ReadonlySet<string> = new Set(["provisioning"]);
 export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const;
 
 /**
+ * Dashboard i18n translation catalogues, excluded by exact suffix from the scan.
+ *
+ * A module's dashboard panel keeps its own `{ en, es }` copy in `src/dashboard/strings.ts`: English
+ * the source of truth, Spanish the user-facing TRANSLATION of that copy. Those `es` values are
+ * translation, not vocabulary — the same principle the `dashboard-kit` / `dashboard-modules` entries
+ * in `GENERIC_PACKAGES` already record ("user-facing translation VALUES (a `{ en, es }` copy entry)
+ * are not vocabulary"). A translation catalogue simply holds those values in one file rather than
+ * scattered through browser widgets, so the whole file is excluded on the same ground. Without this,
+ * `payments-stripe` and `payments-sumup` fail on `nombre`/`pagos` in their Spanish copy — real
+ * translations, not leaked schema or identifier vocabulary.
+ *
+ * NARROW, by design: only the exact suffix `dashboard/strings.ts`, so the guard still scans every
+ * other file in these packages. A Spanish IDENTIFIER, table/column name or comment anywhere ELSE —
+ * including in a `dashboard/*.ts` widget that is NOT the catalogue — is caught exactly as before.
+ * The four catalogues today (bookings, venue-service, payments-stripe, payments-sumup) all sit at
+ * this path; bookings/venue-service are not in `GENERIC_PACKAGES` and so were never scanned anyway,
+ * so covering them here is a no-op for them and a fix for the two payment packages.
+ */
+export const I18N_CATALOGUES = ["dashboard/strings.ts"] as const;
+
+/**
  * There is deliberately no exception list.
  *
  * An earlier draft of the naming contract called the `locations` column
@@ -287,6 +308,7 @@ export function sourceFilesIn(packageName: string): string[] {
   return readdirSync(root, { recursive: true, encoding: "utf8" })
     .filter((entry) => entry.endsWith(".ts"))
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
+    .filter((entry) => !I18N_CATALOGUES.some((suffix) => entry.endsWith(suffix)))
     .filter((entry) => !(productionOnly && entry.endsWith(".test.ts")))
     .map((entry) => join(root, entry))
     .filter((entry) => statSync(entry).isFile())

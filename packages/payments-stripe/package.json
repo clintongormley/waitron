@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dashboard": "./src/dashboard/index.ts",
+    "./src/testing/fake-stripe.js": "./src/testing/fake-stripe.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -14,17 +19,23 @@
   },
   "dependencies": {
     "@waitron/core": "workspace:*",
+    "@waitron/credentials": "workspace:*",
+    "@waitron/dashboard-kit": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/ui": "workspace:*",
     "drizzle-orm": "^0.45.2",
+    "lit": "^3.2.0",
     "stripe": "^22.3.2"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.4",
     "@types/node": "^24.0.0",
+    "@vitest/browser": "^3.0.0",
     "@vitest/coverage-v8": "^3.0.0",
     "@waitron/fiscal": "workspace:*",
+    "playwright": "^1.49.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

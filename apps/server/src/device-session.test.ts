@@ -68,7 +68,6 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
   };
@@ -108,8 +107,6 @@ const NO_BINDINGS = {
   tillId: null,
   receiptPrinterId: null,
   hasCashDrawer: false,
-  cardProvider: "none",
-  cardReaderId: null,
   // `enrolDeviceFixture`'s kds profile declares no capabilities, so the binding carries `[]`.
   capabilities: [],
 } as const;
@@ -163,12 +160,12 @@ async function enrolTillDeviceFixture(): Promise<{
     name: "Counter till",
     profileId: deviceProfileId,
   });
-  // The hardware trio (cash drawer + reader) is bound LATER via the dashboard — accept leaves
-  // those columns at their defaults — so set them here as the dashboard would, so the binding read below
-  // surfaces them. Read back the auto-created register the till device rings against.
+  // The cash-drawer flag is bound LATER via the dashboard — accept leaves the column at its default —
+  // so set it here as the dashboard would, so the binding read below surfaces it. Read back the
+  // auto-created register the till device rings against.
   const { rows } = await suite.admin.execute<{ till_id: string }>(sql`
     update devices
-       set has_cash_drawer = true, card_provider = 'stripe_terminal', card_reader_id = 'reader_ABC'
+       set has_cash_drawer = true
      where id = ${dev.deviceId}
      returning till_id`);
   return {
@@ -499,8 +496,6 @@ describe("requireDevice (real Postgres)", () => {
         deviceProfileId,
         receiptPrinterId: null,
         hasCashDrawer: true,
-        cardProvider: "stripe_terminal",
-        cardReaderId: "reader_ABC",
         // The `till` profile declares both fenced flags — carried on the binding by the profile join.
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
       },

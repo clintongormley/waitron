@@ -3,12 +3,8 @@ import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { TenantId } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
-import { stripeClient, stripeDeviceClient, stripeReportClient } from "@waitron/payments-stripe";
-import type {
-  StripeClient,
-  StripeDeviceClient,
-  StripeReconcileAccount,
-} from "@waitron/payments-stripe";
+import { stripeClient, stripeReportClient } from "@waitron/payments-stripe";
+import type { StripeReconcileAccount } from "@waitron/payments-stripe";
 import type { DeploymentEnvironment } from "./config.js";
 import { readCredential } from "./credentials.js";
 import "./errors.js";
@@ -114,38 +110,5 @@ export function stripeAccountResolver(
     const secretKey = await resolveStripeSecretKey(deps, tenantId);
     const stripe = deps.makeStripe(secretKey);
     return { report: stripeReportClient(stripe), refund: stripeClient(stripe) };
-  };
-}
-
-/**
- * A COLLECT-side `StripeClient` built from the till's single tenant credential — the server-driven
- * (Terminal) counterpart of `stripeAccountResolver`, resolving the SAME `payments.stripe` key the
- * same way (`resolveStripeSecretKey` -> `makeStripe`), then wrapping it as the collect surface
- * `StripeTerminalProvider` drives rather than the report/refund pair reconcile needs. The
- * environment-prefix guard (`sk_live_`/`sk_test_` vs this host) lives inside `stripeSecretKeyFrom`,
- * so a mismatched key fails loudly here before any client is built. `boot.ts` calls this ONCE for the
- * till's own tenant.
- */
-export function cardClientResolver(
-  deps: StripeAccountDeps,
-): (tenantId: TenantId) => Promise<StripeClient> {
-  return async (tenantId) => {
-    const secretKey = await resolveStripeSecretKey(deps, tenantId);
-    return stripeClient(deps.makeStripe(secretKey));
-  };
-}
-
-/**
- * The on-device (Tap-to-Pay) counterpart of `cardClientResolver`: identical key resolution, wrapped as
- * a `StripeDeviceClient` for `StripeOnDeviceProvider`. Separate from `cardClientResolver` only in the
- * wrapper it returns — the device client exposes the connection-token / on-device-collect surface the
- * handheld flow needs, which the server-driven `StripeClient` does not.
- */
-export function cardDeviceClientResolver(
-  deps: StripeAccountDeps,
-): (tenantId: TenantId) => Promise<StripeDeviceClient> {
-  return async (tenantId) => {
-    const secretKey = await resolveStripeSecretKey(deps, tenantId);
-    return stripeDeviceClient(deps.makeStripe(secretKey));
   };
 }

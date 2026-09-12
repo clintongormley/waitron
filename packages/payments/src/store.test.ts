@@ -341,6 +341,23 @@ describe("associatePaymentWithSale", () => {
     expect(row?.saleId).toBe(saleId);
   });
 
+  it("stamps reader_id when supplied, in the same write-once UPDATE as sale_id", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "p12r");
+    const saleId = await seedSale(pg.db, seeded);
+    const reader = await pg.db.execute<{ id: string }>(sql`
+      insert into card_readers (tenant_id, provider, provider_ref, name)
+      values (${seeded.tenantId}, 'stripe', 'tmr_stamp', 'Front counter') returning id`);
+    const readerId = reader.rows[0]!.id;
+    await pg.db.transaction((tx) => associatePaymentWithSale(tx, { ...key, saleId, readerId }));
+    const [row] = (
+      await pg.db.execute<{ reader_id: string | null }>(sql`
+        select reader_id from payments
+        where tenant_id = ${key.tenantId} and provider = ${key.provider} and payment_ref = ${key.paymentRef}`)
+    ).rows;
+    expect(row!.reader_id).toBe(readerId);
+  });
+
   it("throws payment.not_found for an unknown ref", async () => {
     const seeded = await seedTenant();
     const saleId = await seedSale(pg.db, seeded);

@@ -25,6 +25,7 @@ import type {
   OrderFlow,
   ServiceZoneSummary,
   StationQueueGroup,
+  TillActiveReader,
   TillApi,
   TillMenu,
   TillProduct,
@@ -197,6 +198,12 @@ export class TillCounterScreen extends LitElement {
    * straight through to the pay widget's own `cardOutcome` — see its doc for how a fresh value drives
    * the retry / switch-tender / wait screen. */
   @property() cardOutcome?: CardOutcome;
+  /** The venue's ACTIVE card readers (Task 17), threaded straight through to the pay widget's own
+   * `activeReaders` — feeds its "use a different reader" picker. */
+  @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
+  /** The paying device's DEFAULT reader id (Task 17), threaded straight through to the pay widget's
+   * own `defaultReaderId` — names the reader shown before the operator picks anything. */
+  @property() defaultReaderId?: string;
   /**
    * Whether this screen is rendered INSIDE the canvas tab shell (SP-B2.1). When set, the screen
    * suppresses its own `.header` — the brand/operator/log-out/affordance chrome lives in the shell
@@ -371,6 +378,8 @@ export class TillCounterScreen extends LitElement {
         .cardProvider=${this.cardProvider}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
+        .activeReaders=${this.activeReaders}
+        .defaultReaderId=${this.defaultReaderId}
       ></till-card-grid>
     </div>`;
   }

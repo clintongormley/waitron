@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError, tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
-import type { Decimal, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, TenantId } from "@waitron/shared";
 import { withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
@@ -47,7 +47,6 @@ export interface SumUpCloudProviderOptions {
   /** The tenant this provider serves — a per-till object, one tenant, known at construction. */
   tenantId: TenantId;
   nodeId: string;
-  resolveReader: (tenantId: TenantId, tillId: TillId) => Promise<string>;
   /** Where `resolvePending` raises `payment.pending_outcome_unactionable`. */
   incidents: IncidentSink;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
@@ -135,7 +134,14 @@ export class SumUpCloudProvider implements PaymentProvider {
 
   async collect(params: CollectParams): Promise<PaymentResult> {
     this.requireOwnTenant(params.tenantId);
-    const readerId = await this.opts.resolveReader(params.tenantId, params.tillId);
+    // The reader ref is a PER-COLLECT input, not baked into the provider: one cached provider serves
+    // every reader on this vendor, and the sale carries the reader it chose. A SumUp collect cannot
+    // proceed without one — its absence is a host wiring error, not an operator condition.
+    if (params.readerRef === undefined)
+      throw new Error(
+        "sumup collect requires a readerRef (the chosen reader's provider reference)",
+      );
+    const readerId = params.readerRef;
     const paymentRef = randomUUID();
     const key = { tenantId: params.tenantId, provider: SUMUP_PROVIDER, paymentRef };
 

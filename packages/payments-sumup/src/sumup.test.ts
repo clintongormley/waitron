@@ -38,7 +38,6 @@ describe("the sumup cloud adapter against a real database", () => {
         db: probe,
         tenantId: brandTenantId(t.tenantId),
         nodeId: NODE,
-        resolveReader: () => Promise.resolve("rdr_1"),
         incidents: () => Promise.resolve(true),
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });
@@ -47,6 +46,7 @@ describe("the sumup cloud adapter against a real database", () => {
         tillId: brandTillId(t.tillId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
         amount: decimal("10.00"),
+        readerRef: "rdr_1",
       });
       expect(result.state).toBe("captured");
       expect(result.settledAt).toBeInstanceOf(Date);
@@ -54,6 +54,28 @@ describe("the sumup cloud adapter against a real database", () => {
     } finally {
       await probe.close();
     }
+  });
+
+  it("collect() throws when no readerRef is supplied — a SumUp collect cannot proceed without a reader", async () => {
+    // The reader is a per-collect input now; a collect with none is a host wiring error, not a
+    // decline. Thrown after the tenant check, before any DB write or network call — no attempting row.
+    const t = await seedWorkingOrder(suite.admin, freshNif());
+    const provider = new SumUpCloudProvider({
+      client: new FakeSumUp(),
+      db: suite.admin,
+      tenantId: brandTenantId(t.tenantId),
+      nodeId: NODE,
+      incidents: () => Promise.resolve(true),
+      poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
+    });
+    await expect(
+      provider.collect({
+        tenantId: brandTenantId(t.tenantId),
+        tillId: brandTillId(t.tillId),
+        workingOrderId: brandWorkingOrderId(t.workingOrderId),
+        amount: decimal("10.00"),
+      }),
+    ).rejects.toThrow(/readerRef/);
   });
 
   // A second tenant's attempting row for provider "sumup" must still be attempting after this
@@ -87,7 +109,6 @@ describe("the sumup cloud adapter against a real database", () => {
         db: probe,
         tenantId: brandTenantId(a.tenantId),
         nodeId: NODE,
-        resolveReader: () => Promise.resolve("rdr_1"),
         incidents: () => Promise.resolve(true),
       });
       expect((await provider.resolvePending(new Date())).forwarded).toBe(1);

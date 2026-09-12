@@ -8,5 +8,15 @@ declare module "@waitron/shared" {
     /** A `collect` was handed params for a different tenant than the provider was constructed
      * for — a host wiring error. Raised BEFORE any network call, so no money moves. */
     "sumup.tenant_mismatch": { expected: string; supplied: string };
+    /** The API key acts as several merchant accounts and the connect form named none, so the seat
+     * cannot choose one to seal. Carries the pickable list — merchant codes and names are not
+     * secrets — so the form offers a picker and re-submits with the chosen `merchantCode`. */
+    "payment.provider_merchant_ambiguous": { merchants: { code: string; name: string }[] };
+    /** A reader would not pair: SumUp answered `pairReader` with a 4xx (a bad, expired or
+     * already-used pairing code — the common operator mistake). Thrown by the SumUp seat's
+     * `readers.add` so the box operator sees actionable "check the code and try again" copy instead
+     * of an opaque 500, and so the route never inserts a null-`provider_ref` reader row. Carries only
+     * the `providerId` — never the code or SumUp's raw body. */
+    "payment.pairing_refused": { providerId: string };
   }
 }

@@ -130,8 +130,20 @@ describe("apps/server imports the Spanish regime only from the deferred runtime 
  * is forbidden as a bare PREFIX (the `imports()` helper matches `from "<pkg>`), which also catches the
  * browser sub-path `@waitron/bookings/dashboard` — the app must import NEITHER; the registry, a different
  * specifier (`@waitron/dashboard-modules`), is the only path in. The app imports none of these today.
+ *
+ * The card-provider PANELS (Task 14) join the rule: `@waitron/payments-sumup` and
+ * `@waitron/payments-stripe` are reached only through `@waitron/dashboard-modules`'s
+ * `CARD_PROVIDER_PANELS` (the browser twin of the server card-provider seam below). The `/dashboard`
+ * subpath is what `dashboard-modules` imports; `apps/dashboard` imports neither the subpath nor the
+ * root — the prefix match catches both.
  */
-const APP_FORBIDDEN = ["@waitron/composition", "@waitron/module", "@waitron/bookings"];
+const APP_FORBIDDEN = [
+  "@waitron/composition",
+  "@waitron/module",
+  "@waitron/bookings",
+  "@waitron/payments-sumup",
+  "@waitron/payments-stripe",
+];
 
 describe("apps/dashboard reaches UI modules only via the registry, never a module or the composition list", () => {
   const files = sourceFiles(join(REPO_ROOT, "apps/dashboard/src"));
@@ -147,9 +159,71 @@ describe("apps/dashboard reaches UI modules only via the registry, never a modul
       const bad = join(dir, "bad.ts");
       writeFileSync(bad, 'import { BOOKINGS_DASHBOARD } from "@waitron/bookings/dashboard";\n');
       expect(imports(bad, APP_FORBIDDEN)).toEqual(["@waitron/bookings"]);
+      const badProvider = join(dir, "bad-provider.ts");
+      writeFileSync(
+        badProvider,
+        'import { SUMUP_PANEL } from "@waitron/payments-sumup/dashboard";\n',
+      );
+      expect(imports(badProvider, APP_FORBIDDEN)).toEqual(["@waitron/payments-sumup"]);
       const good = join(dir, "good.ts");
       writeFileSync(good, 'import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";\n');
       expect(imports(good, APP_FORBIDDEN)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * The card-provider seam (Task 9): `packages/composition/src/card-providers.ts` is the registry
+ * (the server twin of `ALL_MODULES`) — new code that needs a card-payment provider goes through
+ * `CARD_PROVIDERS`, not a direct import of a provider package. Unlike the regime allowlist above,
+ * this one is ADVISORY, not exhaustive: it only refuses a NEW, non-allowlisted import — it does not
+ * assert that every allowlisted file still needs to be there. The Task 12 cutover pulled the
+ * reader-collect construction out of `boot.ts` (readers now come from the pool via the seat), but
+ * `boot.ts` still names `@waitron/payments-stripe` for the hosted-payment reconciler + webhook
+ * wiring, so it stays allowlisted.
+ */
+const PROVIDER_PACKAGES = ["@waitron/payments-sumup", "@waitron/payments-stripe"];
+
+const PROVIDER_DEFERRED = new Map<string, string>([
+  [
+    "apps/server/src/boot.ts",
+    "StripeReconciler (hosted-payment settlement) + webhook wiring; the reader-collect path now goes through the pool/seat",
+  ],
+  [
+    "apps/server/src/stripe-account.ts",
+    "Stripe account-connect route reads the client/report helpers directly; migrates behind the seat later",
+  ],
+  [
+    "apps/server/src/sumup-account.ts",
+    "SumUp account-connect route reads the client helpers directly; migrates behind the seat later",
+  ],
+  [
+    "apps/server/src/webhook.ts",
+    "Stripe hosted-payment webhook wiring; migrates behind the seat later",
+  ],
+]);
+
+describe("apps/server reaches a card-provider package only via the registry or the deferred allowlist", () => {
+  const files = sourceFiles(join(REPO_ROOT, "apps/server/src"));
+  it("scans the host (not vacuous)", () => {
+    expect(files.some((f) => f.endsWith("boot.ts"))).toBe(true);
+  });
+  it.each(files.map((f) => [relative(REPO_ROOT, f), f]))("%s", (rel, file) => {
+    if (PROVIDER_DEFERRED.has(rel)) return;
+    expect(imports(file, PROVIDER_PACKAGES)).toEqual([]);
+  });
+  it("packages/composition/src/card-providers.ts is the registry and may import both providers", () => {
+    const file = join(REPO_ROOT, "packages/composition/src/card-providers.ts");
+    expect(imports(file, PROVIDER_PACKAGES).sort()).toEqual([...PROVIDER_PACKAGES].sort());
+  });
+  it("finds a planted provider-package import (positive control)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
+    try {
+      const bad = join(dir, "bad.ts");
+      writeFileSync(bad, 'import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";\n');
+      expect(imports(bad, PROVIDER_PACKAGES)).toEqual(["@waitron/payments-sumup"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

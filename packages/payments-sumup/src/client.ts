@@ -54,6 +54,27 @@ export interface SumUpClient {
     transactionId: string;
     amount?: Decimal;
   }): Promise<{ status: "accepted" | "refused" }>;
+  /** Every reader paired to the merchant account. */
+  listReaders(): Promise<{ id: string; name: string; status: string }[]>;
+  /** Completes pairing for a reader already showing a pairing code on its screen (Connections →
+   * Cloud API on the device). The returned `status` starts `processing` — the device has not yet
+   * confirmed — and settles to `paired` moments later; poll `getReader` to observe that. */
+  pairReader(params: {
+    pairingCode: string;
+    name: string;
+  }): Promise<{ id: string; status: string }>;
+  /** Null for a reader id SumUp does not recognise (never paired, or already removed) — mirrors
+   * `findTransaction`'s 404-as-null shape, since a removed reader is an ordinary outcome here, not
+   * an error. */
+  getReader(readerId: string): Promise<{ id: string; status: string } | null>;
+  /** The reader's own live state: `online` from SumUp's `ONLINE`/`OFFLINE`, `detail` carrying the
+   * connection type and screen state for an operator to read (no fixed shape SumUp promises to keep
+   * stable — free text, not a code). */
+  readerStatus(readerId: string): Promise<{ online: boolean; detail?: string }>;
+  /** Unpairs a reader from the merchant account. */
+  deleteReader(readerId: string): Promise<void>;
+  /** The merchant accounts this API key can act as — the SumUp connect seat's picker (Task 7). */
+  memberships(): Promise<{ merchantCode: string; name: string }[]>;
 }
 
 /** Exact major→minor for `total_amount.value` (SumUp wants integer minor units with

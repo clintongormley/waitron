@@ -257,19 +257,6 @@ declare module "@waitron/shared" {
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
     /**
-     * A tenant's Stripe key belongs to the other environment. A test key on a production
-     * deployment takes payments that never settle, and `reconcile` then sweeps a test-mode account
-     * against live rows and reports every one as missing upstream.
-     *
-     * Carries the key's ENVIRONMENT, never the key or any prefix of it — the same rule
-     * `credentials.invalid_payload` follows by reporting a count rather than field values.
-     */
-    "payment.credential_environment_mismatch": {
-      tenantId: string;
-      keyEnvironment: string;
-      hostEnvironment: string;
-    };
-    /**
      * An inbound hosted-payment webhook failed signature verification for the tenant named in the
      * path. The signature is the sole gate (design §2): the path tenant is attacker-controllable,
      * so nothing acts on the event until THAT tenant's own `webhookSecret` verifies the raw bytes.
@@ -303,6 +290,27 @@ declare module "@waitron/shared" {
      * not an error (design §4).
      */
     "payment.webhook_unresolved": { provider: string; externalRef: string };
+    /**
+     * A card provider cannot be disconnected while a card reader that uses it is still active — the
+     * dashboard must retire those readers first. `activeReaders` is a COUNT so the message can say
+     * how many; never a reader id or a secret. Thrown by the payments API's disconnect route
+     * (`payments-api.ts`); `payment.*` because it is a fact about the payment provider, not the
+     * process.
+     */
+    "payment.provider_in_use": { activeReaders: number };
+    /**
+     * A card reader id named in a request is not this tenant's, or does not exist — the by-id
+     * isolation refusal every reader route makes (one-tenant-per-db is not the query's boundary,
+     * CLAUDE.md §3). `id` is the reader uuid the caller already holds, not a secret. Thrown by the
+     * payments API (`payments-api.ts`).
+     */
+    "reader.not_found": { id: string };
+    /**
+     * A reader operation was asked for a provider that has no sealed credential — the provider must
+     * be connected first. `providerId` is the public provider token (`"sumup"`/`"stripe"`), never a
+     * credential. Thrown by the payments API's add-reader route (`payments-api.ts`).
+     */
+    "reader.provider_disconnected": { providerId: string };
     /**
      * The deployment holds one tenant per database. A basket line named a product the till cannot
      * sell at its location — it is not in the location's assigned catalogue or is deactivated.

@@ -87,13 +87,15 @@ function mentionsTerm(source: string, term: string): boolean {
 // Provider/SDK vocabulary. A second provider (Adyen, SumUp) brings its own names and its own
 // tables and must touch nothing in this neutral package; a term here naming a Stripe/terminal
 // concept has leaked across the boundary this guard exists to hold.
+// "reader" and "readerid" are deliberately NOT here: a card reader is neutral, provider-agnostic
+// domain vocabulary this package owns (a `card_readers` table with a `provider` discriminator and an
+// opaque `provider_ref`). A provider-specific reader still carries a banned provider token, so the
+// boundary holds regardless — `stripeReader` trips "stripe", `terminalReader` trips "terminal".
 const FORBIDDEN = [
   "stripe",
   "adyen",
   "sumup",
   "paymentintent",
-  "readerid",
-  "reader",
   "terminal",
   "connectiontoken",
   "acquirer",
@@ -119,7 +121,6 @@ describe("the guard has teeth", () => {
   });
 
   it("rejects acronym-adjacent compounds, where the letter before the term is itself upper-case", () => {
-    expect(mentionsTerm("class NFCReader {}", "reader")).toBe(true);
     expect(mentionsTerm("new APIStripeClient()", "stripe")).toBe(true);
     expect(mentionsTerm("function POSTerminalHandler(){}", "terminal")).toBe(true);
     expect(mentionsTerm("PSPAcquirerGateway", "acquirer")).toBe(true);
@@ -136,7 +137,7 @@ describe("the guard has teeth", () => {
   });
 
   it("does not reject prose containing a longer word that merely starts with the term", () => {
-    expect(mentionsTerm("the reads were already done", "reader")).toBe(false);
+    expect(mentionsTerm("the terminates soon", "terminal")).toBe(false);
   });
 
   it("blanks a comment mention so it is not counted", () => {

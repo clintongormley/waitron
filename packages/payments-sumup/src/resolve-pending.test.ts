@@ -33,7 +33,6 @@ async function setup() {
     db: suite.db,
     tenantId: brandTenantId(t.tenantId),
     nodeId: "11111111-1111-4111-8111-111111111111",
-    resolveReader: () => Promise.resolve("rdr_1"),
     incidents,
     poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
     now: () => T0,

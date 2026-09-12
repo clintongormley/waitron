@@ -68,6 +68,10 @@ export const PERMISSIONS = [
   // only the central-management surface (printing design §7). Codes/permissions are never renamed
   // once shipped.
   "printer.manage",
+  // Gates the Payments configuration screen and its server routes (@waitron/payments) — choosing and
+  // setting up the card-payment provider and reader; granted to manager + admin, the same roles as
+  // the other management write gates. Codes/permissions are never renamed once shipped.
+  "payments.manage",
   // Authorizing a cash-drawer OPEN when a location's drawer_open_policy is 'gated' (@waitron/db
   // drawer_opens audit log). A domain-named CASH-ACCOUNTABILITY permission on the floor lane, NOT a
   // management-dashboard config gate — so it sits in the SUPERVISOR set beside sale.void/refund/
@@ -114,6 +118,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "report.export",
   "device.manage",
   "printer.manage",
+  "payments.manage",
   "diagnostics.view",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);

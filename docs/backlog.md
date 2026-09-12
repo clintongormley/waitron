@@ -778,11 +778,11 @@ unchanged, so no new H2 receipt
      (b) **owner copy decision:** the Spanish form-factor label differs across two pickers
      (`canvas_editor.form_factor.till` = "TPV" vs `device_profiles.form_factor.till` = "Caja
      registradora"); (c) `WAITRON_TILL_TILL_ID`/provisioning still seeds a "Caja 1" register while a
-     till enrol auto-creates its own — dedupe deferred by the decision doc; (d) the hardware PATCH
-     validates `card_provider` and `card_reader_id` independently — the "reader id only for
-     `stripe_terminal`" rule lives only in the dashboard UI; move it server-side if it is a real
-     invariant; (e) the device-management routes build their `devices ⨝ device_profiles` read inline
-     in the HTTP layer — a `listDevices` store verb would restore the layer.
+     till enrol auto-creates its own — dedupe deferred by the decision doc; (d) the device-management
+     routes build their `devices ⨝ device_profiles` read inline in the HTTP layer — a `listDevices`
+     store verb would restore the layer. (The former hardware-PATCH `card_provider`/`card_reader_id`
+     validation follow-up is gone: this slice moved the reader default to `device_card_readers` and
+     dropped both columns from `devices` in `0017_drop_device_card_columns.sql`.)
    - *Test-infra follow-ups (from #286, the two-node cluster flake this slice's push surfaced):* the
      heavy two-node replication suites (`replication-fidelity`, `replication-subscribe`,
      `replication-over-tunnel`, `replication-arc`) hung for 300s under the full local run.
@@ -1185,22 +1185,24 @@ for the projected remainder.
 - **Definable roles with selectable privileges** — roles are a fixed 4-value enum + a code-defined
   permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a large
   backend change. (Bookings SP2's `getMe` permission set is the first step off the coarse role gate.)
-- **Payment-provider config UI** (Stripe / SumUp / …) — none today (provider is env-stamped, sealed via
-  the credentials CLI); also gated on the SumUp standalone-after-pairing experiment (*Debt → SumUp*).
-  Owner, 2026-09-11: this is wanted. Note it is MORE than a settings form — SumUp's reader pairing is
-  an interactive ceremony (the operator logs the reader out, reads an 8–9 character code off its
-  screen that expires in five minutes, and the server POSTs it and polls until `paired`), so the UI
-  owns a live flow with a countdown and a failure path, then stores the returned reader id where
-  `WAITRON_TILL_SUMUP_READER_ID` is read from today.
-- **More than one card provider loaded at once** (e.g. SumUp Solo and Square side by side) — today a till
-  drives exactly ONE (`WAITRON_TILL_CARD_PROVIDER` is a single `CardProvider` enum; `buildCardProvider`
-  returns one `PaymentProvider`; the pay path drives that single `deps.cardProvider`). A venue with two
-  acquirers, or a counter routing walk-up-reader vs. Tap-to-Pay to different providers, needs a SET of
-  providers chosen per pay call by something the call carries (reader id / staff tender choice), not one
-  boot-time pick. Touches `CardProvider`, `buildCardProvider`, the till pay routing, and the credential
-  seal (one `payments.<provider>` purpose per configured provider rather than one). The `payments.provider`
-  column already records which provider took each tender, so the ledger side is ready. Look-at item, no
-  decision yet.
+- **Payment-provider config UI + card readers from the dashboard** — slice 1 LANDED (2026-09-12). A
+  manager connects Stripe or SumUp from the Payments dashboard screen (the typed credentials are verified
+  against the provider, then sealed to the vault), pairs a SumUp reader through the live pairing ceremony
+  (post the code, poll until `paired`, with a countdown and a page-actionable failure) or registers a
+  Stripe Terminal reader by id, and each device picks its default reader on the Devices screen. The old
+  env selection (`WAITRON_TILL_CARD_PROVIDER` / `WAITRON_TILL_SUMUP_READER_ID` / the Stripe reader-id
+  env) is GONE — a sale routes to its reader's provider, resolved from the `card_readers` row at pay
+  time. Deferred follow-ups: slice 2 is the handheld NFC/QR link (pay a table order from a phone);
+  Redsys / bank terminals are PARKED (the research already sits in the design spec); and the small
+  minors — restoring `stripe_on_device` (Tap-to-Pay), reconciling a reader-add that pairs at the vendor
+  but fails to insert the local row, and a live reader online/offline signal on the dashboard.
+- **More than one card provider loaded at once** — DONE (2026-09-12, same branch as above). A venue can
+  now have several providers connected and several readers per provider; the pay path chooses the reader
+  per call (the payment-time picker on the till, or the paying device's default) and drives THAT reader's
+  provider from a shared pool. The pool caches one live provider per id and the reader reference is a
+  per-collect input, so two readers on one acquirer route each sale to its own reader. The one open
+  cross-acquirer nicety left is routing walk-up-reader vs. Tap-to-Pay to different providers, which waits
+  on the slice-2 handheld path above.
 - **AEAT cert / Veri*Factu management UI** — first-run only today (`apps/setup` cert screen);
   `cert-expiry.ts` monitors but there is no view/rotate/renew surface. The cert-distribution rebuild
   (Track B item 3) adds the install/replace endpoint this UI would call.

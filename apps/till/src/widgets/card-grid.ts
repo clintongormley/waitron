@@ -27,6 +27,7 @@ import type {
   TableServiceStatus,
   TableState,
   TabLine,
+  TillActiveReader,
   TillApi,
   TillCourse,
   TillMenu,
@@ -92,6 +93,12 @@ export class TillCardGrid extends LitElement {
   @property({ type: Boolean }) tipsEnabled = false;
   /** The outcome of the most recent non-captured `collect-card` attempt, threaded to the pay card. */
   @property() cardOutcome?: CardOutcome;
+  /** The venue's ACTIVE card readers (Task 17), threaded through to the pay card's own
+   * `activeReaders` — feeds its "use a different reader" picker. */
+  @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
+  /** The paying device's DEFAULT reader id (Task 17), threaded through to the pay card's own
+   * `defaultReaderId` — names the reader shown before the operator picks anything. */
+  @property() defaultReaderId?: string;
   /** The device's granted capability flags — a card whose required capability is absent is skipped. */
   @property({ attribute: false }) capabilities: CapabilityFlag[] = [];
   /** The HTTP face of the till, threaded to the big-card screens (floor placement writes, expo levers). */
@@ -215,6 +222,8 @@ export class TillCardGrid extends LitElement {
           .cardProvider=${this.cardProvider}
           .tipsEnabled=${this.tipsEnabled}
           .cardOutcome=${this.cardOutcome}
+          .activeReaders=${this.activeReaders}
+          .defaultReaderId=${this.defaultReaderId}
         ></till-tender-pay>`;
       case "held-orders":
         return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;

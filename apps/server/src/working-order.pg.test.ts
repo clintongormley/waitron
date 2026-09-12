@@ -117,7 +117,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     // No integrated card terminal for these working-order PostgreSQL suites.
-    cardProvider: "none",
     tipsEnabled: false,
     // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
     // cfg field AND the location's `order_flow` column via `modeVenue` (below).

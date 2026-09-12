@@ -129,4 +129,35 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     );
     await expectNoA11yViolations(host);
   });
+
+  // The payment-time reader picker (Task 17): the idle screen's reader name + "use a different
+  // reader" control, and the dialog it opens.
+  const readers = [
+    { id: "r1", name: "Front counter", provider: "stripe_terminal" as const },
+    { id: "r2", name: "Bar", provider: "stripe_terminal" as const, online: false },
+  ];
+
+  it("has no violations on the idle screen with the reader name + change-reader control shown", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, cardProvider: "stripe_terminal", activeReaders: readers, defaultReaderId: "r1" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the reader picker dialog open, including an offline-marked reader", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el, host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, cardProvider: "stripe_terminal", activeReaders: readers, defaultReaderId: "r1" },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>(".change-reader")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });

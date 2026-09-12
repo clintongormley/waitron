@@ -95,30 +95,32 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
   it("accepts same-tenant bindings; a NULL printer is unconstrained (MATCH SIMPLE) and the defaults apply", async () => {
     const bound = await admin.execute<{ id: string }>(
       sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash,
-                               till_id, receipt_printer_id,
-                               has_cash_drawer, card_provider, card_reader_id)
+                               till_id, receipt_printer_id, has_cash_drawer)
           values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Bound till', ${TOKEN_HASH},
-                  ${TILL_A}, ${PRINTER_A}, true, 'sumup', 'reader-1') returning id`,
+                  ${TILL_A}, ${PRINTER_A}, true) returning id`,
     );
     expect(bound.rows).toHaveLength(1);
 
     // A same-tenant till (required by the binding rule) with a NULL receipt_printer_id — the composite
-    // printer FK skips the check on the NULL column, and the hardware defaults apply (has_cash_drawer
-    // false, card_provider 'none', card_reader_id null).
+    // printer FK skips the check on the NULL column, and the hardware default applies (has_cash_drawer
+    // false).
     const [row] = (
-      await admin.execute<{
-        has_cash_drawer: boolean;
-        card_provider: string;
-        card_reader_id: string | null;
-      }>(
+      await admin.execute<{ has_cash_drawer: boolean }>(
         sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
             values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Unbound printer', ${TOKEN_HASH}, ${TILL_A})
-            returning has_cash_drawer, card_provider, card_reader_id`,
+            returning has_cash_drawer`,
       )
     ).rows;
     expect(row!.has_cash_drawer).toBe(false);
-    expect(row!.card_provider).toBe("none");
-    expect(row!.card_reader_id).toBeNull();
+  });
+
+  it("has no card_provider / card_reader_id column (dropped in Task 13)", async () => {
+    // The per-device card columns were write-and-display only; the reader default now lives in
+    // `device_card_readers` and the pay path routes through the provider pool. The migration DROPs both.
+    const { rows } = await admin.execute<{ column_name: string }>(sql`
+      select column_name from information_schema.columns
+       where table_name = 'devices' and column_name in ('card_provider', 'card_reader_id')`);
+    expect(rows).toEqual([]);
   });
 
   it("rejects a device_profile_id naming a DIFFERENT tenant's profile (composite FK)", async () => {

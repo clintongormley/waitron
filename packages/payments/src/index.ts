@@ -81,3 +81,20 @@ export type {
 export { PAYMENTS_CLASSIFICATION } from "./classification.js";
 export { PAYMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { PAYMENTS_CHANGE_SOURCES } from "./classification.js";
+export type {
+  AddReaderResult,
+  CardProviderBuildDeps,
+  CardProviderContribution,
+  CardProviderRuntimeDeps,
+  ConnectResult,
+  ProviderCredentialField,
+  ReaderAddMode,
+  ReaderStatus,
+} from "./card-provider.js";
+export { cardProviderById, selectCardProviders } from "./card-provider.js";
+// The two reader tables (this module owns them) — re-exported from the package root so the host's
+// payments API reads and writes them the way it reads `@waitron/db`'s tables, rather than
+// deep-importing the schema. The Drizzle snapshot is still built from `./schema/index.js` alone;
+// this re-export is the runtime/TS surface only.
+export { cardReaders } from "./schema/card-readers.js";
+export { deviceCardReaders } from "./schema/device-card-readers.js";

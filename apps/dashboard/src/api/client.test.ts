@@ -1955,16 +1955,12 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       id: "d1",
       receiptPrinterId: "pr1",
       hasCashDrawer: true,
-      cardProvider: "stripe_terminal",
-      cardReaderId: "reader-9",
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(updated));
     const api = new DashboardApi("", fetchImpl);
     const body = {
       receiptPrinterId: "pr1",
       hasCashDrawer: true,
-      cardProvider: "stripe_terminal",
-      cardReaderId: "reader-9",
     };
     expect(await api.patchDeviceHardware("d1", body)).toEqual(updated);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/hardware", {

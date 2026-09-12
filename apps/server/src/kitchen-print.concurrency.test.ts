@@ -100,7 +100,6 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
       locationId: brandLocationId(locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
-      cardProvider: "none",
       tipsEnabled: false,
       orderFlow: "prepay",
     };

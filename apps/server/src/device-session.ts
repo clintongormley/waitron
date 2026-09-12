@@ -109,9 +109,8 @@ export function readDeviceCookie(c: Context): string | null {
  * SP-A.2 §16 widened this with the device's assigned TILL + static HARDWARE bindings, all read
  * straight off the row so the boot reads (`/api/device/me`, `/api/till`) can surface them. `tillId` —
  * the `tills` row a sale-capable device rings against (§16.4; NULL for a `kds_station`). The hardware
- * trio — the per-device `receiptPrinterId` (NULL when none), `hasCashDrawer`, `cardProvider` (config
- * token, defaults `"none"`), and `cardReaderId` (NULL when none). None is a credential; the reader's
- * secrets stay in the vault, never on this row. */
+ * bindings — the per-device `receiptPrinterId` (NULL when none) and `hasCashDrawer`. The reader default
+ * lives in `device_card_readers`, not on this row. */
 export interface DeviceBinding {
   deviceId: string;
   // The device's FORM FACTOR, read from its profile (a device is DEFINED by its profile now). The
@@ -131,8 +130,6 @@ export interface DeviceBinding {
   deviceProfileId: string | null;
   receiptPrinterId: string | null;
   hasCashDrawer: boolean;
-  cardProvider: string;
-  cardReaderId: string | null;
   // The device PROFILE's declared capability set (device-profile §5.3), carried here off the SAME
   // (tenant_id, device_profile_id) join that resolves `formFactor` — so the capability firewall
   // (`assertDeviceCapability`) reads it straight off the binding rather than opening a second
@@ -156,8 +153,6 @@ const deviceBindingColumns = {
   deviceProfileId: devices.deviceProfileId,
   receiptPrinterId: devices.receiptPrinterId,
   hasCashDrawer: devices.hasCashDrawer,
-  cardProvider: devices.cardProvider,
-  cardReaderId: devices.cardReaderId,
   capabilities: deviceProfiles.capabilities,
 };
 
@@ -183,8 +178,6 @@ function toDeviceBinding(
     deviceProfileId: row.deviceProfileId,
     receiptPrinterId: row.receiptPrinterId,
     hasCashDrawer: row.hasCashDrawer,
-    cardProvider: row.cardProvider,
-    cardReaderId: row.cardReaderId,
     capabilities: row.capabilities as CapabilityFlag[],
   };
 }

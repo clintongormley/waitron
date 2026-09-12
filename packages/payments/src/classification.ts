@@ -15,8 +15,10 @@ export const PAYMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("payments", "ledger", LEDGER),
   classify("payment_refunds", "ledger", LEDGER),
 
-  // state (1) — manager-configured payment policy; copied to a standby, never drained back.
+  // state (3) — manager configuration; copied to a standby, never drained back.
   classify("payment_policy", "state", STATE),
+  classify("card_readers", "state", STATE),
+  classify("device_card_readers", "state", STATE),
 ];
 
 export const PAYMENTS_CHANGE_SOURCES: readonly ChangeSource[] = PAYMENTS_CLASSIFICATION.map(
