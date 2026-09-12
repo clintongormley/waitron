@@ -60,3 +60,20 @@ the real-PG invoice regression and deleted the fiscal validator: the control-cha
 cases then failed, while the generic type/blank checks still passed. The original value-preservation
 decision is now explicit in the design. Future country packs without Demo generation remain outside
 the enabled setup list; enabling one requires a separate Demo-flow decision.
+
+The force-push hook selected #333's packages after rebase. Its resolved dependencies covered A2's
+dashboard, server, setup and fiscal-verifactu, but omitted country, country-es and fiscal. Explicit
+typechecks and coverage covered those three. An unnecessarily overlapping fiscal-verifactu run
+failed writing `coverage/.tmp/coverage-41.json` with `ENOENT`; Vitest 3.2.7's coverage provider
+creates and removes the directory under `reportsDirectory` (`coverage.DfSpMS-b.js:3998,4013–4023,4070`).
+The follow-up used a separate `/tmp` report directory. Never infer the selected dependency set
+from the hook's short package label alone.
+
+The second workspace run passed every package except one dashboard test: `service-status-screen`
+reported Playwright's `Frame was detached` on Enter. Its focused suite then passed all 15 tests
+without a code change; that rerun does not explain the first failure. The original log and screenshot
+are retained with the finishing artifacts rather than treating it as a repaired regression.
+The subsequent full dashboard coverage run passed all 1,682 tests without a code change. The
+force-push hook passed in 546 seconds; the isolated fiscal-verifactu coverage run passed all 400
+tests and its thresholds. Combined with the explicit country/fiscal checks, coverage includes every
+A2 package despite the hook's incorrect initial scope.
