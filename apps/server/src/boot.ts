@@ -357,11 +357,16 @@ export function withPendingSweep(
     const report = await inner(now);
     // Enumerating the providers can itself fail (a credential read, a pool build) — that is a sweep
     // failure, logged like a stuck sweep and never propagated into the pass (the fiscal `report` is
-    // already computed and must be returned whatever the card backstop does).
-    const providers = await sweepProviders().catch((error) => {
+    // already computed and must be returned whatever the card backstop does). The whole CALL is
+    // wrapped, not just the returned promise, so a SYNCHRONOUS throw from the enumerator is contained
+    // exactly like a rejection rather than escaping and dropping the report.
+    let providers: readonly PaymentProvider[];
+    try {
+      providers = await sweepProviders();
+    } catch (error) {
       log("warn", "resolve_pending.failed", { error: String(error) });
-      return [] as readonly PaymentProvider[];
-    });
+      providers = [];
+    }
     for (const provider of providers) {
       try {
         const r = await provider.resolvePending(now);

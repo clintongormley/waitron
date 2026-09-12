@@ -168,6 +168,25 @@ describe("withPendingSweep", () => {
       error: "Error: enumerate boom",
     });
   });
+
+  it("contains a SYNCHRONOUS throw from the enumerator, exactly like a rejection", async () => {
+    // A non-async enumerator (or one that throws before it awaits) throws while it is CALLED, not on a
+    // returned promise, so a bare `.catch()` would miss it and reject the whole wrapper — which would
+    // drop the fiscal PassReport. The call is wrapped so the report still returns.
+    const inner = vi.fn(async () => REPORT);
+    const log = vi.fn();
+    const report = await withPendingSweep(
+      inner,
+      (() => {
+        throw new Error("sync boom");
+      }) as unknown as () => Promise<readonly PaymentProvider[]>,
+      log,
+    )(new Date());
+    expect(report).toBe(REPORT);
+    expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
+      error: "Error: sync boom",
+    });
+  });
 });
 
 // `connectedCardProviderSweep` gates on a SEALED CREDENTIAL, so it needs a real (PGlite) database +
