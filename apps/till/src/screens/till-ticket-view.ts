@@ -353,6 +353,8 @@ export class TillTicketView extends LitElement {
   @property({ type: Boolean }) originalReceiptAvailable = false;
   /** Whether this caller may request receipt and payment-slip print jobs. */
   @property({ type: Boolean }) canPrintReceipt = true;
+  /** Whether this device may expose the manual no-sale cash-drawer action. */
+  @property({ type: Boolean }) canOpenDrawer = true;
 
   /** Announce that the operator wants to start the next sale. The parent (Task 19) swaps the screen. */
   #newSale(): void {
@@ -535,15 +537,19 @@ export class TillTicketView extends LitElement {
               </wt-button>`
             : nothing
         }
-        <wt-button
-          class="open-drawer"
-          variant="secondary"
-          size="lg"
-          data-test="open-drawer"
-          @click=${() => this.#openDrawer()}
-        >
-          ${t("action.open_drawer")}
-        </wt-button>
+        ${
+          this.canOpenDrawer
+            ? html`<wt-button
+                class="open-drawer"
+                variant="secondary"
+                size="lg"
+                data-test="open-drawer"
+                @click=${() => this.#openDrawer()}
+              >
+                ${t("action.open_drawer")}
+              </wt-button>`
+            : nothing
+        }
       </div>
 
       <wt-button class="new-sale" variant="primary" size="lg" @click=${() => this.#newSale()}>

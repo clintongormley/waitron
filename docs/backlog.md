@@ -1078,6 +1078,8 @@ The branch moves card identity to a separate payment slip, distinguishes origina
 
 Implementation exposed lost cash-change facts on replay. The approved correction adds `cash_tendered` beside the settled tender amount, reads the issuer from the filed fiscal record, and freezes grouping when the invoice files. Optional header and footer use the current layout; no receipt snapshot is stored.
 
+Branch review separated drawer opening from printing: cash settlement at a till creates its own audited drawer job in every print mode. Handhelds cannot open the drawer, even with a drawer capability, and drawer jobs cannot be manually resent. Documents remain resendable without a drawer effect.
+
 Local validation passed: the full workspace lint, typecheck, formatting and test gate, plus affected-package coverage. Branch review and CI remain part of `finish-branch`.
 
 Legal groundwork and the unresolved multi-recipient route remain in [findings §15](compliance/verifactu-findings.md) and [advisor Q19](compliance/asesor-questions.md).

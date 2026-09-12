@@ -19,7 +19,7 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** No print job with this id is visible in the current tenant. */
     "print_job.not_found": { id: string };
-    /** The job is still eligible for automatic delivery. */
+    /** The job is a drawer command or remains eligible for automatic delivery. */
     "print_job.not_resendable": { id: string };
     /** No printer with this id is visible in the current tenant. `id` is the id looked up. */
     "printer.not_found": { id: string };

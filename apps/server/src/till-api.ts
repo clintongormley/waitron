@@ -17,7 +17,13 @@ import {
 } from "@waitron/identity";
 import type { PinThrottle } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from "@waitron/layouts";
+import {
+  kindOfFormFactor,
+  getReceipt,
+  getCanvas,
+  getCanvasForFormFactor,
+  getDeviceProfile,
+} from "@waitron/layouts";
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
@@ -1125,7 +1131,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // SP-A.2 §16.4 cutover: the sale's `till_id` comes from the AUTHENTICATED enrolled device, not env.
       // Only `tillId` changes — `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`; a `DeviceBinding`
       // carries no node/series. `recordTillSale` reads `cfg.tillId` unchanged, now the device's via `saleCfg`.
-      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
+      const device = await tryReadDevice(deps, c);
+      const saleCfg: TillConfig = {
+        ...deps.cfg,
+        tillId: await requireSaleTillId(deps, c, device),
+        allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
+      };
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
         saleCfg,
@@ -1597,19 +1608,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Reprint a FILED sale's customer receipt to the till's printer (counter receipt/drawer §3d) — the
-  // operator's "print it again" lever on the ticket screen. SESSION-GUARDED (an operational action, like
-  // the kitchen reprint above). The `:id` is the till's WORKING-ORDER id — the id the till holds after a
-  // sale (`#store.id`, the client-minted key it sent on `POST /api/sales`); `reprintSale` reads the
-  // ALREADY-FILED sale back by it (`readSettledTicket` reads ANY invoice filed under this id — incl. a
-  // Mode-I one filed at placement, a genuine legal document with `change` "0.00"; the name predates that
-  // case and the reprint UI only surfaces post-collect, so reprinting a placed order is route-only, not a
-  // defect) and re-enqueues PAPER only,
-  // filing NOTHING (§4). It IGNORES the location's `receipt_print_mode` (a reprint is always available,
-  // §0), so it works even under `on_request`/`never`, and never opens the drawer. An id naming no filed
-  // sale (unknown/open/foreign), or a till with no active printer, is a 200 NO-OP — the kitchen-reprint
-  // shape. The `:id` is `isUuid`-screened first, refused as `working_order.not_found` (404, the honest
-  // "no such order") rather than the `22P02` opaque 500 a malformed value would raise. Returns 200 empty.
+  // Document actions use the working-order id and never enqueue drawer commands.
+  // A filed but unpaid invoice renders without a payment block.
   for (const action of ["receipt", "payment-slip"] as const) {
     app.post(`/api/sales/:id/${action}`, (c) =>
       run(c, log, async () => {
@@ -1681,12 +1681,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
-      // Capability firewall (SP-A.2 §16): opening the cash drawer requires the device's assigned
-      // device profile to declare `open-cash-drawer`. This generalises the old hardcoded handheld check — a
-      // handheld carries a capability-less device profile (or none) and so has no drawer to open, refused
-      // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries
-      // no device cookie and passes.
-      await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open");
+      const device = await tryReadDevice(deps, c);
+      await assertNotHandheld(deps, c, "drawer_open", device);
+      await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);

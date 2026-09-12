@@ -19,6 +19,8 @@ Persist `cash_tendered` on the existing core tender row. This is a core-set colu
 
 Invoice-first placement always prints an unpaid original, including `never` and `on_request` settings. Collection offers duplicates and preserves cash-drawer behavior. The till’s print controls follow its device profile.
 
+During branch review, the owner clarified that printing never opens the drawer. Cash settlement at a till enqueues a separate audited drawer job in every receipt-print mode. Handheld cash settlement remains available, with no drawer effect; manual drawer opening is refused for handhelds regardless of profile capability. `print_jobs.kind` keeps drawer jobs out of manual resends while preserving document bytes exactly.
+
 ## Contract test inventory at implementation
 
 Searched the server and till tests with `rg` for `TillSaleResult`, `TenderBlock`, `receiptPrintMode` and tender property assertions. The resulting suites, including unchanged consumers covered by the final gate:

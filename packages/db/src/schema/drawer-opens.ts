@@ -8,7 +8,7 @@ export type DrawerOpenReason = "cash_sale" | "manual";
  * The cash-drawer AUDIT log (counter-receipt/drawer slice §2). One append-only row per drawer kick,
  * for cash accountability: a `manual` open (a staff member opens the drawer with no sale — always
  * recorded, who/when) and, optionally, a `cash_sale` open (the drawer kicked automatically as a cash
- * sale's receipt printed). The drawer is the till's receipt printer's kick (deli-hardware §6 — no
+ * sale settled at the till). The drawer is the till's receipt printer's kick (deli-hardware §6 — no
  * separate device), so this table records the ACT of opening, not a device.
  *
  * `till_id` and `sale_id` are BARE uuids: their tenant-consistent composite FKs —
@@ -59,7 +59,7 @@ export const drawerOpens = pgTable(
     // Plain uuid, NULLABLE, NO FK — the same shape and reason as `person_id` above: the person/identity
     // schema is a separate slice, so this audit row records the authorizer as a raw id and stays
     // independent of it (the daily_closes.closed_by / sale_voids.voided_by house seam). NULLABLE because
-    // the automatic `cash_sale` drawer kick (a cash sale's receipt printing — `receipt-print.ts`) records
+    // the automatic `cash_sale` drawer kick (a cash settlement at the till — `receipt-print.ts`) records
     // no authorizer; a MANUAL open always sets it — a gated override to the authorizing supervisor, an
     // `open`-policy or self-authorized open to the operator (= person_id). Written by the drawer route.
     authorizedBy: uuid("authorized_by"),

@@ -804,6 +804,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             id: printJobs.id,
             printerId: printJobs.printerId,
             status: printJobs.status,
+            kind: printJobs.kind,
             attempts: printJobs.attempts,
             lastError: printJobs.lastError,
             createdAt: printJobs.createdAt,
@@ -814,7 +815,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .orderBy(desc(printJobs.createdAt))
           .limit(RECENT_JOBS_LIMIT),
       );
-      return c.json(rows.map((job) => ({ ...job, canResend: canResendPrintJob(job) })));
+      return c.json(
+        rows.map(({ kind, ...job }) => ({
+          ...job,
+          canResend: canResendPrintJob({ ...job, kind }),
+        })),
+      );
     }),
   );
 

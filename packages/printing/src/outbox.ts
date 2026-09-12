@@ -24,6 +24,7 @@ export async function enqueuePrintJob(
   cfg: PrintConfig,
   printerId: string,
   payload: Uint8Array,
+  kind: "document" | "drawer" = "document",
 ): Promise<{ jobId: string }> {
   // A friendly `printer.not_found` for an absent printer, via a DB-only pre-check SELECT (indexed
   // PK lookup — no socket, no wait). Chosen over catching the FK violation because a raised 23503
@@ -62,15 +63,21 @@ export async function enqueuePrintJob(
       locationId: cfg.locationId,
       printerId,
       payload: Buffer.from(payload),
+      kind,
     })
     .returning({ id: printJobs.id });
   return { jobId: job!.id };
 }
 
-/** Jobs still eligible for automatic delivery must finish before an operator can resend them. */
-export function canResendPrintJob(job: { status: string; attempts: number }): boolean {
+/** Only documents whose automatic delivery has ended can be resent; drawer pulses cannot. */
+export function canResendPrintJob(job: {
+  kind: "document" | "drawer";
+  status: string;
+  attempts: number;
+}): boolean {
   return (
-    job.status === "done" || (job.status === "failed" && job.attempts >= MAX_DELIVERY_ATTEMPTS)
+    job.kind === "document" &&
+    (job.status === "done" || (job.status === "failed" && job.attempts >= MAX_DELIVERY_ATTEMPTS))
   );
 }
 

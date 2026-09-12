@@ -11,25 +11,12 @@ import { formatReceipt } from "./receipt-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 
-/**
- * The cash-drawer pulse bytes (`ESC p 0 25 250`, Task 3's `esc().kick()`) appended after the receipt so
- * one job prints the ticket THEN opens the drawer. Built once at module load (the builder is pure).
- * Exported so the print-on-sale suite can assert the kick is present in (cash) / absent from (card) the
- * enqueued payload.
- */
+/** Drawer commands are separate from documents, so printing and resending never open the drawer. */
 export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 
 /** The tenant + location scope `enqueuePrintJob` runs under — `TillConfig` carries both. */
 function printConfig(cfg: TillConfig): PrintConfig {
   return { tenantId: cfg.tenantId, locationId: cfg.locationId };
-}
-
-/** Append the drawer-kick bytes to a receipt payload, returning a fresh array (one job: receipt → kick). */
-function withDrawerKick(receipt: Uint8Array): Uint8Array {
-  const out = new Uint8Array(receipt.length + DRAWER_KICK.length);
-  out.set(receipt);
-  out.set(DRAWER_KICK, receipt.length);
-  return out;
 }
 
 /**
@@ -116,69 +103,18 @@ async function resolvePrinterAndReceipt(
   return { printer, receiptBytes };
 }
 
-/**
- * Auto-print the customer receipt for a just-filed counter sale, and — for a cash tender — append the
- * cash-drawer kick and record the drawer open (design §3c). Runs on the caller's `tx`, AFTER the sale is
- * filed/settled, so it commits atomically with the sale. Pure INSERTs; see the active-printer lock and operator guard below.
- *
- * The behaviour, all inside the tx (spec §3c):
- *  1. Read the location's `receipt_print_mode`. Only `auto` auto-prints; `on_request`/`never` enqueue
- *     nothing (the completion screen offers `enqueueOriginalReceipt`).
- *  2. Resolve the till's ACTIVE receipt printer (`resolveReceiptPrinter`). None → enqueue nothing.
- *  3. Build the receipt bytes (`buildReceiptBytes`).
- *  4. Cash tender WITH a known operator → append the drawer kick to the payload and INSERT a
- *     `drawer_opens('cash_sale', saleId)` audit row (who/when/which sale). Card, or no operator, gets
- *     the receipt with no kick and no audit row.
- *  5. Enqueue the one payload (receipt, or receipt+kick) to the till's printer — a single outbox INSERT.
- *
- * `saleId` is the just-filed sale (the `drawer_opens.sale_id` back-reference); `operatorId` is the person
- * who rang the sale (the `drawer_opens.person_id`), present on every session-guarded pay route.
- */
+/** Automatic document printing follows the receipt setting and has no drawer side effects. */
 export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: TillConfig,
   ticket: TillSaleResult,
-  tenderMethod: "cash" | "card",
-  saleId: string,
-  operatorId?: string,
 ): Promise<void> {
-  // 1. `auto` mode only. Read from the till's own LOCATION (explicitly tenant-filtered), the way
-  // `readOrderFlow`/the boot handler read location config. `on_request`/`never` → nothing to
-  // enqueue.
   const [loc] = await tx
     .select({ mode: locations.receiptPrintMode })
     .from(locations)
     .where(and(eq(locations.tenantId, cfg.tenantId), eq(locations.id, cfg.locationId)));
-  /* v8 ignore next -- the till's own location always exists (selected by id); degrade to no-print, never abort the sale (§5) */
-  if (loc === undefined) return;
-  if (loc.mode !== "auto") return;
-
-  // 2/3. The till's ACTIVE receipt printer (FOR SHARE-locked) AND the receipt bytes
-  //       (issuer + trim + fiscal-locale rendering). No printer, or an unbuildable receipt → nothing to
-  //       enqueue.
-  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, false);
-  if (resolved === undefined) return;
-  const { printer, receiptBytes } = resolved;
-
-  // 4. Cash WITH a known operator → the drawer opens as the receipt prints: append the kick to the SAME
-  //    payload and record the open. Card (no drawer) and the operator-less path (can't attribute the
-  //    NOT-NULL `person_id`) both print the plain receipt with no kick and no audit row.
-  let payload = receiptBytes;
-  if (tenderMethod === "cash" && operatorId !== undefined) {
-    payload = withDrawerKick(receiptBytes);
-    await tx.insert(drawerOpens).values({
-      tenantId: cfg.tenantId,
-      tillId: cfg.tillId,
-      personId: operatorId,
-      reason: "cash_sale",
-      saleId,
-    });
-  }
-
-  // 5. The single outbox INSERT — a `queued` job the agent runtime delivers asynchronously. Opens no
-  //    socket, waits on no hardware; `printer.id` came from the ACTIVE + FOR SHARE-locked read, so
-  //    `enqueuePrintJob`'s `printer.not_found` pre-check cannot fire.
-  await enqueuePrintJob(tx, printConfig(cfg), printer.id, payload);
+  if (loc?.mode !== "auto") return;
+  await enqueueOriginalReceipt(tx, cfg, ticket);
 }
 
 /**
@@ -231,7 +167,7 @@ export async function enqueueManualDrawerOpen(
     authorizedBy,
     viaOverride,
   });
-  await enqueuePrintJob(tx, printConfig(cfg), printerId, DRAWER_KICK);
+  await enqueuePrintJob(tx, printConfig(cfg), printerId, DRAWER_KICK, "drawer");
 }
 
 /** The issuance action emits an unmarked original without opening the drawer. */
@@ -245,19 +181,14 @@ export async function enqueueOriginalReceipt(
   await enqueuePrintJob(tx, printConfig(cfg), resolved.printer.id, resolved.receiptBytes);
 }
 
-/** Invoice-first collection retains the auto-mode drawer policy without issuing another original. */
+/** Cash collected at a till opens its drawer independently of document printing. */
 export async function enqueueCashSaleDrawer(
   tx: Transaction,
   cfg: TillConfig,
   saleId: string,
   operatorId?: string,
 ): Promise<void> {
-  if (operatorId === undefined) return;
-  const [loc] = await tx
-    .select({ mode: locations.receiptPrintMode })
-    .from(locations)
-    .where(and(eq(locations.tenantId, cfg.tenantId), eq(locations.id, cfg.locationId)));
-  if (loc?.mode !== "auto") return;
+  if (operatorId === undefined || cfg.allowCashDrawer === false) return;
   const printer = await resolveReceiptPrinter(tx, cfg);
   if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
@@ -267,5 +198,5 @@ export async function enqueueCashSaleDrawer(
     reason: "cash_sale",
     saleId,
   });
-  await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK);
+  await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
 }

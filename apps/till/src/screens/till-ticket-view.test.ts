@@ -394,6 +394,16 @@ describe("till-ticket-view", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  it("hides the manual drawer action when the caller cannot open a drawer", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result,
+      issuer,
+      canOpenDrawer: false,
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
+  });
+
   it("labels the reprint + open-drawer buttons in the operator-UI locale, flipping with the UI language", async () => {
     // UNLIKE the fiscal ticket body (invoice-locale Spanish constants), these two OPERATOR actions read
     // the operator-UI `t()`, so they flip with the UI language — the i18n keys are English identifiers

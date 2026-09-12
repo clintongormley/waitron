@@ -990,6 +990,20 @@ describe("print job resend as the deployment role", () => {
     });
     expect(pending.status).toBe(409);
     expect(await pending.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+    await suite.admin.execute(sql`update print_jobs set kind = 'drawer' where id = ${originalId}`);
+    const drawerResend = await send(app, "POST", path, { cookie: managerCookie });
+    expect(drawerResend.status).toBe(409);
+    expect(await drawerResend.json()).toMatchObject({
+      error: { code: "print_job.not_resendable" },
+    });
+    const afterDrawer = await send(app, "GET", "/management-api/print-jobs", {
+      cookie: managerCookie,
+    });
+    expect(
+      ((await afterDrawer.json()) as { id: string; canResend: boolean }[]).find(
+        (job) => job.id === originalId,
+      )?.canResend,
+    ).toBe(false);
     const foreign = await seedTenantWithLocation();
     expect((await send(mountApp(foreign), "POST", path, { cookie: managerCookie })).status).toBe(
       404,

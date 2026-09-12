@@ -391,8 +391,41 @@ describe("receipt grouping after table changes", () => {
   );
 });
 
+describe("cash payment drawer separation", () => {
+  it.each(["auto", "on_request", "never"] as const)(
+    "%s mode keeps cash payment separate from document printing",
+    async (mode) => {
+      const { cfg, each } = await setupVenue();
+      const printerId = await makePrinter(cfg);
+      await configureReceipt(cfg, { mode, printerId });
+      await recordTillSale(
+        deps(),
+        cfg,
+        {
+          lines: [{ productId: each.id, quantity: "1" }],
+          tender: { method: "cash", amount: "2.00" },
+        },
+        OPERATOR,
+      );
+      const jobs = await printJobsFor(cfg);
+      const drawerJobs = jobs.filter((job) =>
+        bytesInclude(new Uint8Array(job.payload), DRAWER_KICK),
+      );
+      expect(drawerJobs).toHaveLength(1);
+      expect([...drawerJobs[0]!.payload]).toEqual([...DRAWER_KICK]);
+      const documents = jobs.filter((job) =>
+        decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
+      );
+      expect(documents).toHaveLength(mode === "auto" ? 1 : 0);
+      for (const job of documents)
+        expect(bytesInclude(new Uint8Array(job.payload), DRAWER_KICK)).toBe(false);
+      expect(await drawerOpensFor(cfg)).toHaveLength(1);
+    },
+  );
+});
+
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
-  it("auto + printer + CASH: enqueues ONE receipt+kick job, records the drawer open, never blocks filing", async () => {
+  it("auto + printer + CASH: enqueues separate receipt and drawer jobs, records the drawer open, never blocks filing", async () => {
     const { cfg, each } = await setupVenue();
     // A network_tcp printer, so the never-block spy below actually covers ITS delivery adapter (a
     // cloud_poll printer uses neither NetworkTcp nor Usb, which would make the spy vacuous — MINOR 1).
@@ -417,19 +450,20 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(netSend).not.toHaveBeenCalled();
     expect(usbSend).not.toHaveBeenCalled();
 
-    // Exactly ONE outbox job, to the till's printer, left `queued` for the async agent (delivery deferred).
     const jobs = await printJobsFor(cfg);
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0]!.printerId).toBe(printerId);
-    expect(jobs[0]!.status).toBe("queued");
-    // The payload carries the full receipt (the legend proves it is the customer ticket) AND ends with
-    // the drawer kick appended (cash → the drawer opens as the receipt prints).
-    const payload = new Uint8Array(jobs[0]!.payload);
-    expect(decodeTicket(payload)).toContain("VERI*FACTU");
-    expect(decodeTicket(payload)).toContain("Deli Recibos SL"); // issuer venue name (art. 7.1.d)
-    expect(bytesInclude(payload, DRAWER_KICK)).toBe(true);
-    // …and the kick is at the very END (receipt THEN kick, one job).
-    expect([...payload.slice(-DRAWER_KICK.length)]).toEqual([...DRAWER_KICK]);
+    expect(jobs).toHaveLength(2);
+    for (const job of jobs) {
+      expect(job.printerId).toBe(printerId);
+      expect(job.status).toBe("queued");
+    }
+    const receipt = jobs.find((job) =>
+      decodeTicket(new Uint8Array(job.payload)).includes("VERI*FACTU"),
+    )!;
+    const payload = new Uint8Array(receipt.payload);
+    expect(decodeTicket(payload)).toContain("Deli Recibos SL");
+    expect(bytesInclude(payload, DRAWER_KICK)).toBe(false);
+    const drawer = jobs.find((job) => job !== receipt)!;
+    expect([...drawer.payload]).toEqual([...DRAWER_KICK]);
 
     // The drawer open is audited: one `cash_sale` row for this sale, this till, this operator, with its
     // `sale_id` back-reference PINNED to the actual filed sale (MINOR 2).
@@ -462,7 +496,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     );
 
     const jobs = await printJobsFor(cfg);
-    expect(jobs).toHaveLength(1);
+    expect(jobs).toHaveLength(2);
     const decoded = decodeTicket(new Uint8Array(jobs[0]!.payload));
     expect(decoded).toContain("VERI*FACTU"); // still a real fiscal receipt
     expect(decoded).toContain("Gracias por su visita"); // the authored trim renders around the art
@@ -485,7 +519,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     );
 
     const jobs = await printJobsFor(cfg);
-    expect(jobs).toHaveLength(1);
+    expect(jobs).toHaveLength(2);
     expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("PRUEBA - SIN COBRO REAL");
   });
 
@@ -514,7 +548,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(await drawerOpensFor(cfg)).toEqual([]); // card → NO cash_sale audit row
   });
 
-  it("mode 'on_request': files the sale but enqueues NO auto job and opens no drawer", async () => {
+  it("mode 'on_request': files the sale and enqueues only the cash drawer job", async () => {
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "on_request", printerId });
@@ -530,11 +564,11 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     );
 
     expect(await registroCount(cfg)).toBe(1); // sale still files
-    expect(await printJobsFor(cfg)).toEqual([]); // no auto-enqueue
-    expect(await drawerOpensFor(cfg)).toEqual([]); // no kick, no audit row
+    expect((await printJobsFor(cfg)).map((job) => [...job.payload])).toEqual([[...DRAWER_KICK]]);
+    expect(await drawerOpensFor(cfg)).toHaveLength(1);
   });
 
-  it("mode 'never': files the sale but enqueues NO auto job and opens no drawer", async () => {
+  it("mode 'never': files the sale and enqueues only the cash drawer job", async () => {
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "never", printerId });
@@ -550,8 +584,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     );
 
     expect(await registroCount(cfg)).toBe(1);
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect((await printJobsFor(cfg)).map((job) => [...job.payload])).toEqual([[...DRAWER_KICK]]);
+    expect(await drawerOpensFor(cfg)).toHaveLength(1);
   });
 
   it("auto but NO printer set: files the sale, enqueues nothing, opens no drawer", async () => {
@@ -649,58 +683,61 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     },
   );
 
-  it("invoice-first placement prints an unpaid original; collection only opens and audits the drawer", async () => {
-    const base = await setupVenue();
-    // Placement issues the invoice before any payment; collection retains its separate drawer action.
-    await withTenant(suite.admin, base.cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      await tx
-        .update(locations)
-        .set({ orderFlow: "invoice_first" })
-        .where(eq(locations.id, base.cfg.locationId));
-    });
-    const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
-    const printerId = await makePrinter(cfg);
-    await configureReceipt(cfg, { mode: "auto", printerId });
+  it.each(["auto", "on_request", "never"] as const)(
+    "invoice-first %s placement prints an unpaid original; collection only opens and audits the drawer",
+    async (mode) => {
+      const base = await setupVenue();
+      // Placement issues the invoice before any payment; collection retains its separate drawer action.
+      await withTenant(suite.admin, base.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await tx
+          .update(locations)
+          .set({ orderFlow: "invoice_first" })
+          .where(eq(locations.id, base.cfg.locationId));
+      });
+      const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
+      const printerId = await makePrinter(cfg);
+      await configureReceipt(cfg, { mode, printerId });
 
-    const id = randomUUID();
-    await parkOrder({ db: suite.admin }, cfg, {
-      id,
-      lines: [{ productId: base.each.id, quantity: "1" }],
-    });
-    await placeOrder(deps(), cfg, id, OPERATOR, cfg.tillId);
-    const issuedJobs = await printJobsFor(cfg);
-    expect(issuedJobs).toHaveLength(1);
-    const original = new Uint8Array(issuedJobs[0]!.payload);
-    const text = decodeTicket(original);
-    expect(text).toContain("TOTAL");
-    expect(text).not.toContain("Efectivo");
-    expect(text).not.toContain("Cambio");
-    expect(text).not.toContain("Tarjeta");
-    expect(text).not.toContain("DUPLICADO");
-    expect(bytesInclude(original, DRAWER_KICK)).toBe(false);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+      const id = randomUUID();
+      await parkOrder({ db: suite.admin }, cfg, {
+        id,
+        lines: [{ productId: base.each.id, quantity: "1" }],
+      });
+      await placeOrder(deps(), cfg, id, OPERATOR, cfg.tillId);
+      const issuedJobs = await printJobsFor(cfg);
+      expect(issuedJobs).toHaveLength(1);
+      const original = new Uint8Array(issuedJobs[0]!.payload);
+      const text = decodeTicket(original);
+      expect(text).toContain("TOTAL");
+      expect(text).not.toContain("Efectivo");
+      expect(text).not.toContain("Cambio");
+      expect(text).not.toContain("Tarjeta");
+      expect(text).not.toContain("DUPLICADO");
+      expect(bytesInclude(original, DRAWER_KICK)).toBe(false);
+      expect(await drawerOpensFor(cfg)).toEqual([]);
 
-    await collectOrder(
-      deps(),
-      cfg,
-      { id, lines: [], tender: { method: "cash", amount: "2.00" } },
-      OPERATOR,
-    );
+      await collectOrder(
+        deps(),
+        cfg,
+        { id, lines: [], tender: { method: "cash", amount: "2.00" } },
+        OPERATOR,
+      );
 
-    // Collection settles the same invoice and emits only the cash-drawer command.
-    expect(await registroCount(cfg)).toBe(1);
-    expect(netSend).not.toHaveBeenCalled();
-    expect(usbSend).not.toHaveBeenCalled();
-    const jobs = await printJobsFor(cfg);
-    expect(jobs).toHaveLength(2);
-    expect(jobs[0]!.printerId).toBe(printerId);
-    expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(original));
-    expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(DRAWER_KICK));
-    const opens = await drawerOpensFor(cfg);
-    expect(opens).toHaveLength(1);
-    expect(opens[0]).toMatchObject({ reason: "cash_sale", personId: OPERATOR });
-    // The `sale_id` back-reference is PINNED to the settled invoice's sale (MINOR 2).
-    expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
-  });
+      // Collection settles the same invoice and emits only the cash-drawer command.
+      expect(await registroCount(cfg)).toBe(1);
+      expect(netSend).not.toHaveBeenCalled();
+      expect(usbSend).not.toHaveBeenCalled();
+      const jobs = await printJobsFor(cfg);
+      expect(jobs).toHaveLength(2);
+      expect(jobs[0]!.printerId).toBe(printerId);
+      expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(original));
+      expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(DRAWER_KICK));
+      const opens = await drawerOpensFor(cfg);
+      expect(opens).toHaveLength(1);
+      expect(opens[0]).toMatchObject({ reason: "cash_sale", personId: OPERATOR });
+      // The `sale_id` back-reference is PINNED to the settled invoice's sale (MINOR 2).
+      expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
+    },
+  );
 });

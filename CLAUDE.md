@@ -601,6 +601,12 @@ _Reference_.
 
 ## 5. Fiscal invariants — the unrecoverable ones
 
+- **Printing never opens the cash drawer.** Cash settlement at a till enqueues a separate audited
+  `drawer` job; receipt jobs are `document` jobs and contain no drawer command. Handhelds cannot
+  open the drawer, even with a profile capability, and drawer jobs cannot be manually resent.
+  The receipt review reproduced a resent cash receipt opening the drawer without a new audit row.
+  Pointer: `docs/superpowers/specs/2026-09-12-receipts-payment-slips-and-duplicates-design.md` §3.
+
 - **One database per environment.** A pre-production database is never promoted:
   `invoice_series.next_number` carries across and pre-production sales would leave a permanent hole
   in the production series — which is what Veri\*Factu detects. `WAITRON_ENV` governs this; unset

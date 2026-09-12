@@ -7,7 +7,7 @@ import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { createPrinter, deactivatePrinter } from "./printers.js";
-import { enqueuePrintJob, resendPrintJob } from "./outbox.js";
+import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
 import type { PrintConfig } from "./printers.js";
 import "./errors.js";
 
@@ -128,6 +128,35 @@ describe("enqueuePrintJob (never-block outbox)", () => {
 });
 
 describe("resendPrintJob", () => {
+  it.each(["done", "failed"] as const)("refuses a terminal %s drawer command", async (status) => {
+    const cfg = await setup();
+    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      const printer = await createPrinter(tx, cfg, {
+        name: "Drawer",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const original = await enqueuePrintJob(
+        tx,
+        cfg,
+        printer.id,
+        new Uint8Array([27, 112, 0, 25, 250]),
+        "drawer",
+      );
+      await tx
+        .update(printJobs)
+        .set({ status, attempts: 5 })
+        .where(eq(printJobs.id, original.jobId));
+      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+        code: "print_job.not_resendable",
+      });
+      const jobs = await tx.select().from(printJobs).where(eq(printJobs.printerId, printer.id));
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]!.kind).toBe("drawer");
+      expect(canResendPrintJob(jobs[0]!)).toBe(false);
+    });
+  });
+
   it.each(["done", "failed"] as const)(
     "copies a terminal %s job byte-for-byte into a new queue entry",
     async (status) => {
@@ -161,6 +190,7 @@ describe("resendPrintJob", () => {
         expect(result.jobId).not.toBe(original.jobId);
         const [copy] = await tx.select().from(printJobs).where(eq(printJobs.id, result.jobId));
         expect(copy).toMatchObject({
+          kind: "document",
           tenantId: cfg.tenantId,
           locationId: cfg.locationId,
           printerId: printer.id,

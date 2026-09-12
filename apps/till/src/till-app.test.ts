@@ -1602,6 +1602,48 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it("a handheld hides the manual drawer action and ignores a forged open-drawer event even with the capability", async () => {
+    const openDrawer = vi.fn().mockResolvedValue(undefined);
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        canvas: phoneCanvasDef,
+        capabilities: ["open-cash-drawer", "print-receipt"],
+      }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+      getTablesState: vi.fn().mockResolvedValue([openTable]),
+      listZones: vi.fn().mockResolvedValue([floorZone]),
+      getTabLines: vi.fn().mockResolvedValue([]),
+      recordSale,
+      openDrawer,
+    });
+    await flush(el);
+    emit(lock(el)!, "logged-in", {
+      personId: "p1",
+      displayName: "Ana",
+      canConfigureTill: false,
+    });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: true });
+    await flush(el);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "20.00" });
+    await flush(el);
+    expect(recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "20.00" },
+      openTable.tabId,
+    );
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
+
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    expect(openDrawer).not.toHaveBeenCalled();
+  });
+
   it("open-drawer: a drawer.no_printer rejection surfaces the drawer.error banner, never an unhandled rejection", async () => {
     // The till has no receipt printer set → the server rejects `{ code: "drawer.no_printer" }`. The app
     // surfaces its usual non-fatal banner (generic copy, never the raw code) and stays on the ticket.

@@ -72,6 +72,8 @@ RD 1619/2012 art. 14.4 forbids.
 
 **Implementation clarification (owner, 2026-09-12).** Preserve missing payment facts on the existing tender row rather than storing receipt snapshots or printer bytes. A duplicate preserves the filed invoice content, QR and recorded payment facts; optional owner-authored header and footer text uses the current layout. Invoice-first mode always prints the original at placement, regardless of the general receipt-print setting.
 
+**Drawer clarification during branch review (owner, 2026-09-12).** Printing is independent of opening the drawer. A cash payment at a till creates a separate audited drawer job regardless of the receipt-print setting; card payments and invoice-first placement do not. Handhelds can record cash payments but cannot open the linked till's drawer, including through the manual-open route even when their profile declares the capability. The till hides that action on handhelds. Document jobs contain no drawer command and can be resent unchanged. Drawer jobs cannot be manually resent; an authorized manual opening at the till creates its own audit entry. `print_jobs.kind` distinguishes `document` from `drawer` without decoding the opaque bytes. This is a core-set column because it describes the existing delivery job.
+
 **Why no new table.** An earlier draft proposed an append-only `receipt_originals` keyed
 `(tenant_id, sale_id)` to decide original-vs-duplicate from a stored fact. The owner's rule — always
 OFFER the receipt at issuance, mark everything after — removes the need: the distinction is carried by

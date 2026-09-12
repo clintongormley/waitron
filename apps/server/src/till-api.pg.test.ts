@@ -28,6 +28,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { MANUAL_PROVIDER, SimulatorPaymentProvider } from "@waitron/payments";
+import { createPrinter } from "@waitron/printing";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
@@ -1759,6 +1760,23 @@ describe("handheld sales and device capability gates", () => {
     },
   );
 
+  it("refuses a handheld drawer open even when its profile declares the capability", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolHandheldCookie(cfg, ["open-cash-drawer"]);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
+    const res = await app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      error: { code: "device.forbidden_action", params: { action: "drawer_open" } },
+    });
+  });
+
   it("allows a handheld CASH sale (200) and files exactly one chained registro under the node/SIF — parity with a counter cash sale", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
@@ -1767,6 +1785,20 @@ describe("handheld sales and device capability gates", () => {
 
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const printer = await createPrinter(tx, cfg, {
+        name: "Counter",
+        transport: "network_tcp",
+        host: "192.0.2.1",
+      });
+      await tx.execute(
+        sql`update tills set receipt_printer_id = ${printer.id} where id = ${cfg.tillId}`,
+      );
+      await tx.execute(
+        sql`update locations set receipt_print_mode = 'auto' where id = ${cfg.locationId}`,
+      );
+    });
 
     // The owner reversed the order-only firewall for the CASH tender (2026-08-30): a handheld may SETTLE a
     // cash sale because the fiscal chain is keyed by the submitting NODE (`nodeId`), not the till
@@ -1783,6 +1815,11 @@ describe("handheld sales and device capability gates", () => {
       }),
     });
     expect(res.status).toBe(200);
+    const opens = await suite.admin.execute(
+      sql`select id from drawer_opens where tenant_id = ${cfg.tenantId}`,
+    );
+    expect(opens.rows).toHaveLength(0);
+
     const ticket = await res.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
 

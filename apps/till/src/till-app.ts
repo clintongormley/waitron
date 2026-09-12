@@ -1702,6 +1702,9 @@ export class TillApp extends LitElement {
    * `#onConfirmPayment` convention). Writes only reactive state, so no `isConnected` guard is needed.
    */
   async #onOpenDrawer(): Promise<void> {
+    // A handheld carries a pocket float rather than a register. Keep this independent of its profile's
+    // print/drawer capabilities so a synthetic event cannot reach the manual drawer route.
+    if (this.handheldMode) return;
     this.errorKey = undefined;
     try {
       await this.api.openDrawer();
@@ -2607,6 +2610,7 @@ export class TillApp extends LitElement {
           .canPrintReceipt=${
             this.deviceId === undefined || this.capabilities.includes("print-receipt")
           }
+          .canOpenDrawer=${!this.handheldMode}
           .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
       case "schedule":

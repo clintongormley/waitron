@@ -731,11 +731,8 @@ async function fileImmediateSale(
     qr: fiscal.verificationUrl ?? "",
   };
 
-  // Print-on-sale (design §3c), POST-filing and INSERT-only: auto-enqueue the customer receipt to the
-  // till's printer and, for cash, append the drawer kick + record the open. NOTHING here can block or
-  // fail the sale (CLAUDE.md §5) — see `receipt-print.ts`'s header. This is the shared filing tail, so
-  // walk-up, retrieved pay and Mode-T collect all print through this one call.
-  await enqueueSaleReceipt(tx, cfg, ticket, tender.method, saleId, operatorId);
+  await enqueueSaleReceipt(tx, cfg, ticket);
+  if (tender.method === "cash") await enqueueCashSaleDrawer(tx, cfg, saleId, operatorId);
   return ticket;
 }
 
@@ -1108,7 +1105,7 @@ async function finalizeCapture(
       // it must not, doubly so here, because P2 already charged the card, so a throw would roll back a
       // paid sale into the lost-T2 window. The 23505 REPLAY branch below stays UNHOOKED, so a concurrent
       // winner's ticket is never re-printed — exactly one receipt per filed sale.
-      await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
+      await enqueueSaleReceipt(tx, cfg, ticket);
       return ticket;
     });
   } catch (error) {
@@ -1287,7 +1284,7 @@ async function finalizeRecovery(
     // this tx. Card → receipt, no kick. This is the fresh-file path; the FOR-UPDATE replay above (a
     // concurrent winner) returns without reaching here, so a recovery never double-prints. Never-block
     // as in `finalizeCapture` (`receipt-print.ts`).
-    await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
+    await enqueueSaleReceipt(tx, cfg, ticket);
     return { outcome: "captured", ticket };
   });
 }
