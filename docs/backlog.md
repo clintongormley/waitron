@@ -1778,6 +1778,15 @@ genuinely-decision-bearing.
 
 **Cross-cutting engineering:**
 
+- **`pnpm install` now prints exactly one warning, and nobody has looked at it.** #326 removed the
+  `Failed to create bin` warnings by moving command names out of the npm `bin` field; what remains is
+  a cyclic workspace dependency among `bookings`, `migrations`, `fiscal-verifactu`, `sync`,
+  `provisioning` and `composition`. It predates all of this and was simply invisible among the
+  others, but it is now the only noise an install makes, so it is the next thing anyone will ask
+  about. Unknown whether the cycle is real or an artefact of the composition list depending on the
+  modules it names. #326 also left the older plans that instruct a reader to add a `bin` entry
+  standing as history; the rule and its guard are in `CLAUDE.md` §3, and a `bin` pointing into
+  `dist/` now turns the root project red.
 - **Two stale lock-order claims in `apps/server/src/working-order.ts`** (found by the 2026-09-05
   model-seats probe, verified against main): the `unjoinTable` docstring says it "MATCHES the
   sale/settle path and mergeTabs" — true today, but a twin to keep in step; and the `mergeTabs`
