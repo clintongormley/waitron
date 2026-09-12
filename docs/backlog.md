@@ -1744,12 +1744,23 @@ wizard makes harder than it needs to be; each one names what it does today.
 they are and what may be typed in them, 2026-09-12; not started). Three more fields on the same
 wizard screen, each traced below.
 
-- *“Till name” really is the till, not the filing identity.* It inserts a row in `tills`
-  (`create-till`, `packages/provisioning/src/venue-plan.ts` → `venue-apply.ts`). The node — the SIF
-  that owns the fiscal chain and files to AEAT — is created alongside it and named automatically
-  after the location (`create-node`, same plan), so nobody is ever asked to name it. The till name is
-  an operator-facing label: it is what a Z report prints beside each register. Every seed in this
-  repository uses “Caja 1”, which is the value to prefill. The till name never reaches AEAT.
+- *“Till name” really is the till, not the filing identity — and the wizard probably should not ask
+  for it at all* (owner, 2026-09-12). It inserts a row in `tills` (`create-till`,
+  `packages/provisioning/src/venue-plan.ts` → `venue-apply.ts`). The node — the SIF that owns the
+  fiscal chain and files to AEAT — is created alongside it and named automatically after the location
+  (`create-node`, same plan), so nobody is ever asked to name the filing identity. The till name is
+  an operator-facing label that never reaches AEAT; it is what a Z report prints beside each register.
+  The reason to drop the question: enrolling a device already creates the register. A
+  `till`-form-factor device ALWAYS creates its own, named after the device
+  (`createRegister`, `apps/server/src/device.ts`) — it never binds an existing one — so the wizard's
+  register is left over unless something else claims it. The one thing that claims it is a handheld,
+  which must be given an existing register to ring against (`requireLiveRegister`, same file), and no
+  dashboard screen creates a register directly. So today the wizard's till exists mainly so that a
+  handheld-first venue has something to point at, and `applyVenue`'s completeness guard refuses a
+  plan without one. Wanted: prefill it (“Caja 1”, which every seed here uses) or drop the question and
+  let the dashboard create registers, which is where the rest of the device work already lives. That
+  is a small design decision, not a rename: the completeness guard and the handheld binding both have
+  to move with it.
 - *The two series codes should be defaulted rather than optional.* A series row must exist — the plan
   always emits both `create-series` actions — so “optional” has to mean a default (“A” and “R”, say)
   the operator can override, not a field that may be left empty. Do not ask for them at all on the
@@ -1768,11 +1779,18 @@ wizard screen, each traced below.
   PGlite through the real write path: with the series code set to `Serie A`, `recordSale` resolved
   normally and wrote `num_serie_factura = "Serie A/1"` into `registros_facturacion` — the immutable,
   hash-chained table. **Ran the validator** on that same string: `NUMSERIE_CHARSET`, so AEAT would
-  reject every record carrying it. A separate finding from the same probe, evidence weaker (a text
-  search for importers, plus the write path above accepting an invalid record): `validate` is
-  exported from `@waitron/verifactu` but no production file imports it — only its own tests — so
-  nothing checks a record against AEAT's rules before it is chained or sent. That wants confirming
-  and then fixing on its own account; it is not only about series codes.
+  reject every record carrying it. That record was never checked because nothing checks
+  any record — see the next entry, which is the wider version of this problem.
+- *What to default them to.* Avoid a trailing `-<digits>`, which is the shape the restore path
+  claims for itself. **Ran it**: `stripOwnSuffixes` removes a trailing `-<number>` whenever that
+  number is an installation number the tenant has registered, and installation numbers start at 1
+  (`mintNumeroInstalacion`, `packages/fiscal-verifactu/src/registro-sif.ts`), so both `Fa-1` and
+  `Fa-00001` are reduced to the base `Fa` and come back from a restore as `Fa-2`. Zero-padding also
+  misleads: the counter is appended by the system after a slash, so `Fa-00001` prints as
+  `Fa-00001/1` then `Fa-00001/42` — the padding never becomes the invoice number. Two codes that
+  survive both, and read correctly to a Spanish accountant: **`FS`** (factura simplificada, which is
+  what a till issues — every till sale is `TipoFactura` F2) and **`FR`** (factura rectificativa).
+  They leave nearly all of the 38-character budget spare.
 - *Who changes a series code, and when?* In practice the system does, not the operator: a cold
   restore or standby activation retires the live series and opens disjoint ones by suffixing the
   installation number (`deriveReservedSeriesCodes`, same file). An operator would only change it to
@@ -1784,6 +1802,37 @@ code at the wizard and at the server boundary that the fiscal record would later
 the 38-character base, and the existing “the two must differ” rule, each with its own message (see
 the per-field error item above). Every field on this screen also wants an explanation of what it is
 for; a `wt-help-tooltip` is the shared control for that (design system → Forms).
+
+**Nothing checks a fiscal record against AEAT's rules before it is chained or sent** (found while
+answering a question about series codes, 2026-09-12; **confirmed by experiment**; not fixed).
+`packages/verifactu/src/validate.ts` holds 25 checks — the NIF's length, `NumSerieFactura`'s length
+and charset, date and hash formats, XML control characters in free-text fields, the amount patterns,
+the VAT breakdown's line count, `DescripcionOperacion`'s 500-character cap, the total cross-checks —
+and `validate` is exported from the package barrel. No production file calls it.
+
+How that was established, since a text search alone would not be enough (§1). Made `validate` throw
+on its first line, then ran two suites. `@waitron/fiscal-verifactu` passed whole — 343 tests, 39
+files, including the end-to-end write path, the correction and canje paths, the drain and the
+real-PostgreSQL replication fidelity cases — so no production path in the package that writes and
+submits records calls it. The control in the other direction: `@waitron/verifactu`'s own tests fail
+with the same sabotage in place, so the sabotage was reachable and detectable. The file was restored
+afterwards.
+
+Why it matters here rather than in the abstract: the fields a validator would catch are exactly the
+ones an operator types and nothing else re-checks. The same session proved one end to end — a series
+code of `Serie A` produced `num_serie_factura = "Serie A/1"` in `registros_facturacion`, which is
+append-only and hash-chained, and that string fails the charset rule AEAT would apply. The legal
+name, the operation description and the tax identifier reach the same records by the same route.
+A record that AEAT rejects cannot be edited afterwards; §5's whole point is that a wrong value there
+stays wrong.
+
+Open questions for whoever picks it up. Where the check belongs — before the chain append (refusing
+the sale, which fiscal §5 says nothing external may block, though this check is local and not
+external), or at the boundary where the operator's value is accepted, or both. Whether the drain
+should refuse to send a record it knows is invalid, or send it and let AEAT's rejection be the
+signal. Whether `validate`'s warning-severity issues should behave differently from its errors. And
+whether the guard that this stays wired belongs with the other root guards (§4), since an exported
+function with no caller is exactly what a text-walking guard can see.
 
 **“What this location does” is the wrong question for a required tax-agency field** (owner asked
 why we ask it, 2026-09-12; not started). The answer is stored on the location
