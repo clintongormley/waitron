@@ -1,7 +1,9 @@
 # `@waitron/provisioning`
 
-Stands up a Waitron deployment: one bin, `waitron-provision`, matching how `@waitron/credentials`
-ships `waitron-credentials`.
+Stands up a Waitron deployment through one command, `waitron-provision`, matching how
+`@waitron/credentials` ships `waitron-credentials`. Neither is an executable on your PATH: both are
+bundles you build and run by path (below), so each manifest declares its name under
+`waitron.commands` rather than `bin` — `scripts/manifest-commands.test.ts` records why.
 
 Design: [`docs/superpowers/specs/2026-07-29-provisioning-tool-design.md`](../../docs/superpowers/specs/2026-07-29-provisioning-tool-design.md).
 This document is the operational half of that spec — written for whoever runs the tool, not whoever

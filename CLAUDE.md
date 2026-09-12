@@ -293,6 +293,16 @@ unfiltered `main` run, not a wrong hook.
   tty, …); a class that is neither a Docker default nor 180 (e.g. hidraw) is what gets denied. Pinned
   by `scripts/deploy-image-env.test.ts`; spec
   `docs/superpowers/specs/2026-09-10-print-agent-box-wiring-design.md` §5.
+- **A command name is declared under `waitron.commands`, never `bin`.** pnpm links a `bin` at
+  INSTALL time and skips one whose target is missing, so a path under `dist/` is never linked and the
+  command does not exist afterwards even once the bundle is built — measured both directions
+  (build-before-install links and runs; build-after-install reports `Command not found`). Every CLI
+  here is run by path anyway: `node /app/bin-restore.js` in the image,
+  `node packages/provisioning/dist/bin.js` locally. Cost: a `Failed to create bin` warning per
+  declaration per dependent on every install, in every worktree and in the image build, plus an AEAT
+  runbook whose `pnpm exec waitron-credentials` steps could never have run. Guards:
+  `scripts/manifest-commands.test.ts` (every declared `bin` target exists) and
+  `scripts/deploy-image-env.test.ts` (the image ships every name the server declares).
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would
   publish the whole harness and give `asAppUser` a second import path. Consequence: `apps/server`

@@ -399,6 +399,14 @@ pnpm --filter @waitron/credentials build
 checkout — `pnpm install` warns about exactly this. Without the build, the next step fails with
 "command not found".
 
+> **2026-09-12:** the two `pnpm --filter @waitron/credentials exec waitron-credentials` invocations
+> in Steps 3 and 4 below never worked, before or after this build step. pnpm links a command at
+> INSTALL time and skips one whose file is missing, so a bundle built afterwards is never linked
+> (measured both directions: build-before-install links and runs, build-after-install reports
+> "Command not found"). Run the bundle by path instead, keeping every other argument as written:
+> `node packages/credentials/dist/bin.js set --tenant … --purpose fiscal.aeat`. The manifest no
+> longer declares a `bin` at all — see `scripts/manifest-commands.test.ts`.
+
 - [ ] **Step 2: [HUMAN] Confirm the credential key ring is set**
 
 Task 2 Step 4 already generated this — `boot.ts` reads the key ring before it runs migrations, so

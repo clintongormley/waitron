@@ -29,8 +29,11 @@ const WAITRON_SH = read("deploy/waitron.sh");
 const CI = read(".github/workflows/ci.yml");
 const IMAGE_SMOKE = read(".github/workflows/image-smoke.yml");
 const CONFIG_SOURCE = read("apps/server/src/config.ts");
+// The operator commands the server bundle produces. Declared under `waitron.commands` rather than
+// `bin` because nothing builds at install time, so a `bin` target under `dist/` is a command pnpm
+// cannot link — see scripts/manifest-commands.test.ts.
 const SERVER_MANIFEST = JSON.parse(read("apps/server/package.json")) as {
-  bin: Record<string, string>;
+  waitron: { commands: Record<string, string> };
 };
 
 /** A capture that must exist: a regex that stops matching would otherwise pass every assertion. */
@@ -142,7 +145,10 @@ describe("the container image's environment", () => {
     const copied = new Set(
       [...DOCKERFILE.matchAll(/\/src\/apps\/server\/dist\/([\w.-]+)/g)].map((m) => m[1]),
     );
-    for (const target of Object.values(SERVER_MANIFEST.bin)) {
+    const commands = Object.values(SERVER_MANIFEST.waitron.commands);
+    // An empty declaration would satisfy the loop below without checking anything (CLAUDE.md §2).
+    expect(commands.length).toBeGreaterThan(0);
+    for (const target of commands) {
       expect(copied).toContain(target.replace("./dist/", ""));
     }
     // The demo scripts write real sales through the real fiscal backend into an append-only,
