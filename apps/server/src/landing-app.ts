@@ -14,7 +14,7 @@ export interface LandingDeps {
   stateDir: string;
   /** The URLs a device can open the box on over HTTPS — the `.local` URL then one per detected IPv4. */
   reachUrls: string[];
-  /** The box's canonical HTTPS URL — the "continue to the secure site" hand-off link on the page. */
+  /** The box's canonical HTTPS URL, used by the "Continue to Waitron" link. */
   httpsUrl: string;
   log: Logger;
 }
