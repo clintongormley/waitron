@@ -1288,20 +1288,36 @@ for the projected remainder.
   Redsys / bank terminals are PARKED (the research already sits in the design spec); and the small
   minors — restoring `stripe_on_device` (Tap-to-Pay), reconciling a reader-add that pairs at the vendor
   but fails to insert the local row.
-  **Slice 1b is implemented on `reader-adoption`, automated validation complete** ([specs/2026-09-12-card-reader-adoption-and-status-design.md](superpowers/specs/2026-09-12-card-reader-adoption-and-status-design.md)):
-  the first live run found that a reader already paired to the provider's cloud could not be added
-  — it never offers a pairing code, so the owner had to delete it on SumUp's website first. 1b adds a
-  `list` operation to the card-provider seat (both providers), offers the account's existing readers
+  **Slice 1b LANDED (#329, 2026-09-12)** ([design](superpowers/specs/2026-09-12-card-reader-adoption-and-status-design.md)):
+  the first live run found that a reader already paired to the provider's cloud could not be added at
+  all — it never offers a pairing code, so the owner had to delete it on SumUp's website first. 1b adds
+  a `list` operation to the card-provider seat (both providers), offers the account's existing readers
   inside the Add dialog with an editable name, renames Retire to Disable (Waitron-only, so a disabled
-  reader stays re-addable as printers already do) with Unpair as a separate row-menu action, and keeps
-  the battery / connection / firmware / last-seen the vendors already report, including showing
-  "Unknown" when the provider cannot be reached.
-  If your demo database already has the payments schema, run `wa-wt reset demo` before using this
-  branch: the original reader migration now creates `disabled_at`. This discards the demo data;
-  an existing schema is not upgraded by the edited migration.
-  Live Solo check passed on 2026-09-12: the dashboard adopted the already-paired reader into a
-  disposable PostgreSQL database and displayed 100%, matching SumUp's response. The provider
-  registration remained present; all vendor requests were GETs.
+  reader stays re-addable as printers already do) with Unpair as a separate confirmed row-menu action,
+  and shows the battery / connection / firmware / last-seen the vendors already report — including
+  "Unknown" when the provider cannot be reached, a state that previously rendered a healthy reader as
+  "Offline". A reader unpaired at the provider records `unpaired_at` and can no longer be enabled
+  locally; adopting it again clears that marker only once the provider lists it. Live Solo check passed
+  on 2026-09-12: the dashboard adopted the already-paired reader into a disposable PostgreSQL database
+  and displayed Online / 100%, matching SumUp's response; all seven vendor requests were GETs and the
+  provider registration survived.
+  **If your demo database predates #329, run `wa-wt reset demo`** — the original reader migration was
+  edited to create `disabled_at`, so an existing schema is not upgraded by it, and the reset discards
+  the demo data.
+  What 1b left open: (a) **adding or adopting a reader does not shut out a provider disconnect
+  happening at the same moment** — the sealed credential is re-read inside the transaction, but a
+  disconnect committing during the vendor round-trip is still an accepted race, on the pairing,
+  adoption and add paths alike; (b) **Stripe's reader list is one page and is not paginated** — honest
+  for a venue with a handful of readers, wrong for an account with dozens, and the seat's own comment
+  says so rather than implying the list is complete; (c) **nothing warns about a low battery** — that
+  needs somewhere on the dashboard to put a notification, so it waits for that surface; (d) **status
+  never refreshes by itself** — the owner chose open-the-screen-plus-a-refresh-button, and adding
+  polling later has to go through the passive-session controller
+  (`docs/developers/dashboard-live-updates.md`), never a bare timer. The slice-1 minor above about a
+  reader that pairs at the vendor but fails to insert locally is now **recoverable rather than
+  fixed**: by the adoption design's own labelling that reader is paired at the provider with no
+  Waitron row, so it appears in the Add dialog as available and can be adopted — nobody is stuck, but
+  nothing reconciles it automatically.
 - **More than one card provider loaded at once** — DONE (2026-09-12, same branch as above). A venue can
   now have several providers connected and several readers per provider; the pay path chooses the reader
   per call (the payment-time picker on the till, or the paying device's default) and drives THAT reader's
@@ -2315,6 +2331,18 @@ genuinely-decision-bearing.
   run and the subsequent push hook passed. Cause unconfirmed; on recurrence, retain the failed log
   and inspect the browser module graph before changing caches or retrying. Receipt:
   [printer follow-ups review](superpowers/specs/2026-09-11-printer-followups-review.md).
+
+- **A test PostgreSQL container started with no published port (seen once, 2026-09-12, during #329's
+  full-workspace gate).** The run stopped before the WireGuard change-feed test body, waiting for a
+  port on the host that never appeared. `docker inspect` showed PostgreSQL itself healthy and the
+  request to publish a port present (`HostConfig.PortBindings["5432/tcp"]` held one entry), while the
+  list of ports Docker had actually assigned (`NetworkSettings.Ports["5432/tcp"]`) was empty — so the
+  container was fine and the port mapping was the thing missing. Re-running the change-feed suite on
+  its own passed both the plain-LAN and the WireGuard case with no code change, which does NOT explain
+  or repair it. On recurrence: capture `docker inspect` of the stuck container before killing it, and
+  check whether the Docker Desktop virtual machine had exhausted its ephemeral ports; a passing re-run
+  is not the repair (standing rule: a flaky test is fixed at the root, never re-run past). The log and
+  container state were kept under `/private/tmp/` at the time and will not have survived a reboot.
 
 - **`test-heavy` and `test-server` are sharded three ways** (#216; mechanism in CLAUDE.md §2). Vitest
   `--shard` splits by FILE COUNT, not duration, so imbalance is the real limit; bumping the matrix means
