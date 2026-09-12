@@ -167,16 +167,29 @@ The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps dra
 shared components. Whether they follow in this pass or later is open — decide it before the
 component rules harden around the dashboard alone.
 
-**In flight:**
+**Content languages and the image library — LANDED #339 (2026-09-12).** The operator now picks which
+languages product and menu text is written in, and which one of them everything falls back to when a
+translation is missing; receipt languages stay a separate setting. Photos live in a shared library
+with translated names and alt text, labels, search across languages, reuse from the product editor,
+and deletion refused while a product still uses the picture. Image bytes and their metadata moved out
+of `apps/server` into a new mandatory module, `packages/media`, so backup, restore, replication and
+configuration transfer carry them the same way they carry any other module's tables.
+[Image-library design](superpowers/specs/2026-09-12-image-library-design.md),
+[content-language design](superpowers/specs/2026-09-12-content-languages-design.md),
+[plan and review evidence](superpowers/plans/2026-09-12-image-library.md),
+[operator guide](content-and-images.md).
 
-- **`image-library`** (2026-09-12) implements configurable content languages and a shared photo
-  library with translations, labels, search, product reuse and deletion blocked by existing uses.
-  Receipt languages stay separate. Image bytes now use the media module's Postgres tables;
-  the `finish-branch` review and local validation of its search, restore and feedback fixes
-  are complete. Push and current-head CI follow. This work has not landed.
-  [Design](superpowers/specs/2026-09-12-image-library-design.md),
-  [plan and focused checks](superpowers/plans/2026-09-12-image-library.md),
-  [operator guide](content-and-images.md).
+What it left open:
+
+- **A new picture consumer has to add a real database reference, not just store a filename.** Products
+  point at the image table through a foreign key that also checks the tenant matches, which is what
+  makes "you cannot delete a picture something is using" true. Any future screen that shows a library
+  picture has to add the same kind of reference and a sentence naming the use, or that check will not
+  see it. Next action: whoever adds the second consumer writes the reference and the usage text in
+  the same change.
+- **The online language selector has nothing to select for yet.** The setting and the rule for
+  choosing a language are built and tested; the customer-facing online ordering surface they were
+  built for does not exist. This is a prerequisite that landed early, not a half-finished feature.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
@@ -483,10 +496,10 @@ ongoing overhaul listed at the top of Track A.
   neutral shared card package); the visual theme editor; community canvas sharing.
 - **Language resolution follow-ons**
   ([original design](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
-  `image-library` implements configurable content languages and their shared fallback separately
-  from interface and receipt languages; it is still in flight. The write-side header drift
-  (`sales.locale` stamped from boot-time `cfg` rather than `locations.invoice_locales`) remains
-  separate work. Adding content translations does not translate Waitron's interface.
+  configurable content languages and their shared fallback landed in #339, separately from interface
+  and receipt languages. Still open, and unchanged by it: the write-side drift, where a sale's
+  `sales.locale` is stamped from the boot-time `cfg` rather than from `locations.invoice_locales`.
+  Adding content translations does not translate Waitron's interface.
 - **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
   recurring, a calendar grid, deposits.
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
@@ -509,7 +522,7 @@ ongoing overhaul listed at the top of Track A.
 The box, the image, the data layer and the machinery: `deploy/`, the Dockerfiles and compose,
 `packages/provisioning`, `packages/migrations`, `packages/db`, `packages/credentials`, the
 print-agent process (`packages/print-agent`, `apps/print-agent`), `apps/server`'s boot, config,
-TLS, backup and media code, the module framework, CI and test infra. `packages/sync` and
+TLS and backup code, `packages/media`, the module framework, CI and test infra. `packages/sync` and
 `packages/membership` belong here too but their open work is under *Afterwards*.
 
 **Built:** the two containers + `deploy/compose.yml` + named volumes (#285); `waitron.sh install` and
