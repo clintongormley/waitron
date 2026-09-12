@@ -1,10 +1,7 @@
 /**
  * The dashboard's registered icon set — see registerIcons() in @waitron/ui and "Icons" in
  * docs/developers/design-system.md. Each is a plain geometric shape at wt-icon's 16x16 viewBox,
- * hand-plotted or computed directly rather than imported from an icon library's asset files — with
- * one exception, `person` (see below), whose path numbers were scaled from a published glyph's own
- * coordinates rather than plotted independently. Whether that needs its own attribution is an open
- * question this comment does not resolve; flag it rather than assuming either answer.
+ * hand-plotted or computed directly — with one exception, `person` (see below).
  *
  * - hamburger: the sidebar drawer toggle (three bars — opens the whole app's navigation).
  * - kebab: wt-row-actions' per-row "more actions" trigger (three dots — a small, local menu, not
@@ -13,9 +10,14 @@
  *   when expanded rather than needing a second registered icon.
  * - gear: the Settings nav group's header icon. Generated (not hand-plotted) — an 8-tooth ring
  *   computed with trigonometry at 16x16, verified by rendering it large before use.
- * - person: the banner's account-menu trigger (head + shoulders bust). Scaled by 2/3 from Material
- *   Design's 24x24 "person" glyph's own path numbers (a uniform scale keeps its bezier curves
- *   correct) — the one icon here derived from a specific external source rather than plotted fresh.
+ * - person: the banner's account-menu trigger (head + shoulders bust).
+ *
+ * Attribution: `person`'s path data is derived from Google's Material Symbols icon set (the
+ * "person" glyph, filled variant), scaled by 2/3 from its published 24x24 coordinates to this
+ * file's 16x16 viewBox — a uniform scale, so its Bezier curves stay correct. Material Symbols is
+ * Copyright Google and licensed under the Apache License, Version 2.0
+ * (https://www.apache.org/licenses/LICENSE-2.0); the icon set itself is published at
+ * https://fonts.google.com/icons. No other icon in this file is derived from an external source.
  */
 export const DASHBOARD_ICONS: Record<string, string> = {
   hamburger: "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",
