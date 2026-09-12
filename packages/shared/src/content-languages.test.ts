@@ -16,12 +16,36 @@ describe("content languages", () => {
         { code: "ca", name: "Catalan" },
         { code: "ja", name: "Japanese" },
         { code: "fil", name: "Filipino" },
+        { code: "zu", name: "Zulu" },
+        { code: "az", name: "Azerbaijani" },
+        { code: "gez", name: "Geez" },
       ]),
     );
     expect(new Set(choices.map(({ code }) => code)).size).toBe(choices.length);
-    expect(choices.some(({ code }) => code === "zz")).toBe(false);
+    const names = new Intl.DisplayNames(["en-GB"], { type: "language", fallback: "none" });
+    for (const choice of choices) {
+      expect(choice).toEqual({ code: expect.any(String), name: expect.any(String) });
+      expect(choice.code).toBe(new Intl.Locale(choice.code).language);
+      expect(choice.name).toBe(names.of(choice.code));
+      expect(["und", "mul", "zxx", "zz"]).not.toContain(choice.code);
+    }
+    expect(choices.map(({ name }) => name)).toEqual(
+      choices.map(({ name }) => name).sort((a, b) => a.localeCompare(b, "en-GB")),
+    );
     expect(contentLanguageChoices("es-ES").find(({ code }) => code === "fr")?.name).toBe("francés");
   });
+  it("returns independent choices when another editor changes its copy", () => {
+    const first = contentLanguageChoices("fr-FR");
+    const saved = first.map((choice) => ({ ...choice }));
+    first[0]!.name = "Changed by an editor";
+    first.pop();
+    const second = contentLanguageChoices("fr-FR");
+    expect(second).toEqual(saved);
+    second[0]!.code = "invalid";
+    second.push({ code: "invalid", name: "Invalid" });
+    expect(contentLanguageChoices("fr-FR")).toEqual(saved);
+  });
+
   it.each(["es", "en", "ca", "gl", "eu", "fr", "de", "it", "ar", "ja"])(
     "accepts %s independently of shipped interface translations",
     (language) => expect(contentLanguageCode(language)).toBe(language),
@@ -32,9 +56,12 @@ describe("content languages", () => {
     expect(contentLanguageCode("ES-es")).toBe("es");
   });
 
-  it.each(["", " ", "not-a-language", "zz", "../../en", "en_GB"])(
+  it.each(["", " ", "not-a-language", "zz", "../../en", "en_GB", "und", "mul", "zxx"])(
     "refuses invalid or unknown language %j",
-    (language) => expect(() => contentLanguageCode(language)).toThrow(),
+    (language) =>
+      expect(() => contentLanguageCode(language)).toThrowError(
+        expect.objectContaining({ code: "content.language_invalid" }),
+      ),
   );
 
   it("uses the configured default, regardless of translation insertion order", () => {
@@ -51,6 +78,13 @@ describe("content languages", () => {
   it("does not present an unrelated language as the default or inherit object properties", () => {
     expect(resolveContentText({ en: "Bread" }, "fr", "es")).toBe("");
     expect(resolveContentText({}, "constructor", "toString")).toBe("");
+  });
+
+  it("chooses a deterministic regional variant after exact and bare matches", () => {
+    const text = { "en-US": "US", "en-AU": "AU", english: "Unrelated", fr: "French" };
+    expect(resolveContentText(text, "en-CA", "fr")).toBe("AU");
+    expect(resolveContentText(text, "en-US", "fr")).toBe("US");
+    expect(resolveContentText({ ...text, en: "Bare" }, "en-CA", "fr")).toBe("Bare");
   });
 
   it("resolves historical full-tag maps without modifying their snapshot", () => {

@@ -127,3 +127,13 @@ The sole conflict was documentation: the new concise CLAUDE.md keeps the rules, 
 to the matching topic documents. The documentation-pointer guard passed. This main also changed
 the gate policy: the push hook now checks local static/root gates; required package coverage runs
 in CI. Follow that policy for the push instead of repeating the completed local package runs.
+
+## CI mutation follow-up, 2026-09-12
+
+The first PR run's `mutation-shared` job scored 88.14%, below its unchanged 90% threshold.
+Strengthened the content-language assertions for reserved codes, aliases, alphabetic choice order,
+code-range endpoints, independent cached results, exact error codes and regional fallback order.
+Deleting both reserved-code guards made three tests fail for the expected reason; restoring the
+unchanged implementation passed all 231 shared-package tests. Local
+`pnpm --filter @waitron/shared mutation --concurrency 4` then scored 92.79%. No production change
+or threshold reduction was needed. CI is rerun on the resulting commit.
