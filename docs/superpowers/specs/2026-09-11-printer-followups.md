@@ -31,3 +31,7 @@ most 2,048 dots on either axis. Whichever limit is reached first applies; many s
 can truncate before the character limit. A large image can leave insufficient room for later
 images, which are flagged as omitted while their QR content remains available as text.
 Only the builder's model-2 native QR and normal raster variants are interpreted.
+
+2026-09-12 update: [Printer configuration tabs](2026-09-12-printer-configuration-tabs.md)
+supersedes the Delete wording, stacked sections, manual pairing controls and latest-100-only
+job list described here.

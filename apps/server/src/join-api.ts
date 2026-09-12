@@ -11,7 +11,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, type Permission } from "@waitron/identity";
+import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -121,9 +121,9 @@ function optionalBodyUuid(v: unknown, field: string): string | null {
  *
  * Two groups:
  *
- *  1. THE PAIRING WINDOW (`GET`/`POST`/`DELETE /management-api/pairing-mode`) — read it, open or
- *     extend it, shut it. The holder is the venue's one window (`pairing-mode.ts`), shared with every
- *     surface that has a knock.
+ *  1. THE PAIRING WINDOW (`GET`/`POST`/`DELETE /management-api/pairing-mode` and `POST /renew`) —
+ *     read it, open or extend it, shut it. The holder is the venue's one window (`pairing-mode.ts`),
+ *     shared with every surface that has a knock.
  *  2. THE PENDING REQUESTS. Everything that is the MECHANISM is shared across the surfaces — list,
  *     challenge, deny — and takes its permission from the row's kind. Only ACCEPT is per-surface,
  *     because that is the one step where the surfaces differ in what an approved request becomes; this
@@ -178,15 +178,14 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       return fn(tx);
     });
 
-  // The three window routes are gated on `device.manage` ALONE, not on "either management permission".
+  // The window routes are gated on `device.manage` ALONE, not on "either management permission".
   // `device.manage` and `printer.manage` are held by exactly the same roles today
   // (`packages/identity/src/permissions.ts`: MANAGER carries both, and `admin` holds ALL), so one gate
   // excludes nobody who could otherwise open one of the two queues this window feeds. That is a claim
   // about the role map, not about the permissions themselves — if the map ever separates them, this
   // gate has to become "either", and nothing else here would notice.
   //
-  // `gated` is what authorizes, and it needs a transaction to resolve the session in, so even the two
-  // routes that touch no table run their (empty) body inside one.
+  // Authorization resolves the session inside a transaction even when the route only changes memory.
 
   // ── Read the window (device.manage) ─────────────────────────────────────────────────────────────
   app.get("/management-api/pairing-mode", (c) =>
@@ -212,6 +211,18 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       // `open()` on an already-open window MOVES the lapse to one window from now rather than adding
       // another — so the admin's "still doing this" is one idempotent tap, and a run of them cannot
       // leave the door open for hours.
+      return c.json(deps.pairingMode.open(), 200);
+    }),
+  );
+
+  // ── Renew the window while an enrolment dialog is open (device.manage) ──────────────────────────
+  app.post("/management-api/pairing-mode/renew", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      // A dialog can reopen a lapsed window, but renewal never counts as human session activity.
+      await withPassiveManagementRead(() =>
+        gated(sessionId, "device.manage", async () => undefined),
+      );
       return c.json(deps.pairingMode.open(), 200);
     }),
   );

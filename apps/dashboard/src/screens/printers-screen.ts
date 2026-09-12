@@ -2,6 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   submitOnEnter,
+  UrlStateController,
   baseStyles,
   selectStyles,
   type DataTableColumn,
@@ -10,6 +11,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -20,6 +22,7 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import { t } from "../i18n/t.js";
+import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -49,13 +52,7 @@ interface EditablePrinter {
   active: boolean;
 }
 
-/** How long Scan keeps re-reading the discovered list, and how often. The agents learn the window is
- * open on their next poll (`POLL_INTERVAL_MS` in `packages/print-agent/src/agent.ts` — the idle
- * interval, at most 2 s; a busy agent re-polls sooner) and post what they found on the pull after
- * that, so the first results land several seconds after the press; a single read right after opening
- * the window sees nothing (owner, 2026-09-11: several presses before a result). The server's window
- * stays open far longer (`DISCOVERY_WINDOW_MS`, 3 min, `apps/server/src/print-api.ts`); this is only
- * how long the screen listens for a press. Exported for the fake-timer test. */
+/** Discovery reports arrive on later agent polls, so a scan listens beyond its initial read. */
 export const SCAN_LISTEN_MS = 10_000;
 export const SCAN_POLL_MS = 2_000;
 
@@ -83,6 +80,31 @@ export class PrintersScreen extends LitElement {
       wt-data-table::part(discovered-details) {
         max-width: min(28vw, 24dvh);
         overflow-wrap: anywhere;
+      }
+      wt-modal.add-hardware {
+        --wt-dialog-max-width: min(90vw, 48rem);
+        --wt-modal-aspect-ratio: 1.2;
+      }
+      wt-data-table::part(job-status) {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      wt-data-table::part(job-status)::before {
+        content: "";
+        width: var(--wt-space-2);
+        height: var(--wt-space-2);
+        border-radius: 50%;
+        background: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(job-done)::before {
+        background: var(--wt-color-success);
+      }
+      wt-data-table::part(job-failed)::before {
+        background: var(--wt-color-danger);
+      }
+      wt-data-table::part(job-printing)::before {
+        background: var(--wt-color-primary);
       }
       .printer-filter {
         display: grid;
@@ -179,6 +201,31 @@ export class PrintersScreen extends LitElement {
 
   // The enrolled agents (server order kept), the registered printers, and the recent jobs — all
   // (re)loaded on connect and after every mutation.
+  @state() private view = "";
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "printers") return;
+      const view = this.#url.read("view");
+      this.view =
+        view !== null && ["queue", "printers", "agents"].includes(view)
+          ? view
+          : this.loading
+            ? ""
+            : this.#defaultView();
+      if (this.view) this.#url.write({ view: this.view }, true);
+    },
+    dashboardPath,
+  );
+
+  #defaultView(): string {
+    return !this.agents.some((agent) => agent.active)
+      ? "agents"
+      : !this.printers.some((printer) => printer.active)
+        ? "printers"
+        : "queue";
+  }
+
   @state() private submitting = false;
   @state() private agents: PrintAgentRow[] = [];
   @state() private printers: Printer[] = [];
@@ -200,16 +247,11 @@ export class PrintersScreen extends LitElement {
   @state() private armedRevokeId: string | null = null;
   @state() private armedDeletePrinterId: string | null = null;
 
-  // The id of the agent whose "Allow again" control is ARMED, or null. Its own state (like Deny's) so
+  // The id of the agent whose "Enable" control is ARMED, or null. Its own state (like Deny's) so
   // arming one agent's re-allow does not disarm another agent's revoke.
   @state() private armedAllowId: string | null = null;
 
-  // The shared join-and-accept half (device-join-and-accept, reused for print agents; the Devices
-  // screen documents each field). The pairing window as last read (undefined until the first read
-  // settles); the print agents waiting to join, in server order, each carrying NO number; the request
-  // whose accept dialog is open (single-valued: one dialog at a time); the three numbers the server
-  // offered per request, CACHED because the set is fixed at join; and the id of the request whose Deny
-  // is ARMED (its own state, so arming a Deny does not disarm a Revoke above).
+  // Pairing is venue-wide; challenges stay cached because each request's numbers are fixed.
   @state() private pairing: PairingModeState | undefined;
   @state() private pendingJoins: JoinRequestRow[] = [];
   @state() private openRequestId: string | null = null;
@@ -220,6 +262,13 @@ export class PrintersScreen extends LitElement {
   /** A Scan press is listening for results — the button is busy and a second press is ignored. Its
    * own gate, not `submitting`: the listen runs for seconds and must not block Add/Register. */
   @state() private scanning = false;
+  @state() private scanningAgents = false;
+  #agentTimer?: ReturnType<typeof setInterval>;
+  #agentScanUntil = 0;
+  #agentReadInFlight = false;
+  #agentEpoch = 0;
+  #pairingOperations: Promise<void> = Promise.resolve();
+  #renewPairingAt = 0;
   // The listen's re-read timer, cleared in `disconnectedCallback` and never started on a detached
   // screen (the diagnostics screen's `#timer` shape); `#scanUntil` is the wall-clock end of the listen
   // (five ticks are not ten seconds in a throttled background tab); `#scanInFlight` keeps a slow read
@@ -240,6 +289,7 @@ export class PrintersScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#endScan();
+    this.#stopAgentModal();
     super.disconnectedCallback();
   }
 
@@ -270,6 +320,10 @@ export class PrintersScreen extends LitElement {
           this.pendingJoins = pendingJoins;
         }),
       ]);
+      if (!this.view) {
+        this.view = this.#defaultView();
+        if (this.#url.read("dashboard") === "printers") this.#url.write({ view: this.view }, true);
+      }
       await this.#queries.watch("listDiscoveredPrinters", [], (devices) =>
         this.#setDiscovered(devices),
       );
@@ -326,27 +380,89 @@ export class PrintersScreen extends LitElement {
     this.agents = await this.api.listAgents();
   }
 
-  /** Open the pairing window, or extend an already-open one — the SAME call (the route moves an open
-   * window's lapse to a fresh window from now rather than adding one). */
-  async #openPairing(): Promise<void> {
-    this.errorKey = null;
-    try {
-      await this.api.openPairingMode();
-      await this.#reloadJoins();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
+  // Serialize opens and closes so a late open cannot leave pairing enabled after closing the modal.
+  #setPairing(open: boolean, passive = false): Promise<void> {
+    const epoch = this.#agentEpoch;
+    this.#pairingOperations = this.#pairingOperations.then(async () => {
+      try {
+        if (open) {
+          if (epoch !== this.#agentEpoch || !this.addingAgent || !this.isConnected) return;
+          this.#renewPairingAt = Date.now() + 60_000;
+          const api = passive ? (this.api.background ?? this.api) : this.api;
+          const result = await (passive ? api.renewPairingMode() : api.openPairingMode());
+          if (epoch !== this.#agentEpoch) return;
+          this.pairing = {
+            open: true,
+            openUntil: result.openUntil,
+            refusedRecently: this.pairing?.refusedRecently ?? 0,
+          };
+        } else {
+          await this.api.closePairingMode();
+        }
+      } catch (error) {
+        if (epoch !== this.#agentEpoch) return;
+        this.errorKey = codeOf(error);
+        this.scanningAgents = false;
+      }
+    });
+    return this.#pairingOperations;
   }
 
-  /** Shut the window. Requests already pending stay pending and are still acceptable — the window admits
-   * an ask, it does not hold one open. */
-  async #closePairing(): Promise<void> {
+  #openAgentModal(): void {
+    if (this.addingAgent) return;
+    this.#agentEpoch++;
     this.errorKey = null;
+    this.addingAgent = true;
+    void this.#scanAgents();
+    this.#agentTimer = setInterval(() => void this.#agentTick(), SCAN_POLL_MS);
+  }
+
+  #stopAgentModal(): void {
+    if (!this.addingAgent) return;
+    this.addingAgent = false;
+    this.#agentEpoch++;
+    this.#agentReadInFlight = false;
+    this.pairing = {
+      open: false,
+      openUntil: null,
+      refusedRecently: this.pairing?.refusedRecently ?? 0,
+    };
+    this.openRequestId = null;
+    clearInterval(this.#agentTimer);
+    this.#agentTimer = undefined;
+    this.scanningAgents = false;
+    void this.#setPairing(false);
+  }
+
+  async #scanAgents(): Promise<void> {
+    if (this.scanningAgents) return;
+    this.errorKey = null;
+    this.scanningAgents = true;
+    this.#agentScanUntil = Date.now() + SCAN_LISTEN_MS;
+    const epoch = this.#agentEpoch;
+    await this.#setPairing(true);
+    if (epoch === this.#agentEpoch) await this.#agentTick();
+  }
+
+  async #agentTick(): Promise<void> {
+    if (!this.addingAgent || this.#agentReadInFlight) return;
+    this.#agentReadInFlight = true;
+    const epoch = this.#agentEpoch;
     try {
-      await this.api.closePairingMode();
-      await this.#reloadJoins();
+      if (Date.now() >= this.#renewPairingAt) await this.#setPairing(true, true);
+      const api = this.api.background ?? this.api;
+      const pending = await api.joinRequests("print_agent");
+      if (epoch === this.#agentEpoch && this.addingAgent && this.isConnected)
+        this.pendingJoins = pending;
     } catch (error) {
+      if (epoch !== this.#agentEpoch) return;
       this.errorKey = codeOf(error);
+      this.scanningAgents = false;
+    } finally {
+      if (epoch === this.#agentEpoch) {
+        this.#agentReadInFlight = false;
+        if (Date.now() >= this.#agentScanUntil) this.scanningAgents = false;
+      }
     }
   }
 
@@ -471,16 +587,6 @@ export class PrintersScreen extends LitElement {
       alreadyRegistered:
         device.alreadyRegistered || this.#registeredDevices.has(this.#deviceKey(device)),
     }));
-  }
-
-  /** Refresh the shared inventory without opening another discovery window. */
-  async #refreshDiscovered(): Promise<void> {
-    this.errorKey = null;
-    try {
-      await this.#loadDiscovered();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
   }
 
   /** Listen for agent reports while the discovery window is open. */
@@ -680,7 +786,7 @@ export class PrintersScreen extends LitElement {
               data-armed=${revokeArmed ? "true" : nothing}
               @click=${() => this.#onRevokeAgent(agent.id)}
             >
-              ${revokeArmed ? t("printers.delete_confirm") : t("action.delete")}
+              ${revokeArmed ? t("printers.delete_confirm") : t("printers.disable")}
             </wt-button>`
           : html`<wt-button
               data-keep-open
@@ -694,58 +800,10 @@ export class PrintersScreen extends LitElement {
     </dashboard-row-actions>`;
   }
 
-  /** The venue-wide pairing window (device-join-and-accept §1.1, shared with the Devices screen). While
-   * OPEN: when it lapses, plus Extend and Close. While SHUT: Open, and — only when there were any — how
-   * many knocks were turned away in the last ten minutes. Counts are composed with `.replace` (this
-   * catalogue has no interpolation). */
   #renderPairing(): TemplateResult {
-    const mode = this.pairing;
-    if (mode === undefined) return html`<p class="hint">${t("printers.pairing_loading")}</p>`;
-    return html`<wt-card data-test="pairing-mode">
-      <h3 class="panel-title" style="margin-top:0">${t("printers.pairing_title")}</h3>
-      <p class="hint">${t("printers.pairing_hint")}</p>
-      ${
-        mode.open
-          ? html`<p data-test="pairing-until">
-                ${t("printers.pairing_open_until").replace(
-                  "{time}",
-                  mode.openUntil === null ? "" : formatIsoMinute(mode.openUntil),
-                )}
-              </p>
-              <div class="actions">
-                <wt-button
-                  variant="primary"
-                  data-test="pairing-extend"
-                  @click=${() => void this.#openPairing()}
-                  >${t("printers.pairing_extend")}</wt-button
-                >
-                <wt-button
-                  variant="secondary"
-                  data-test="pairing-close"
-                  @click=${() => void this.#closePairing()}
-                  >${t("printers.pairing_close")}</wt-button
-                >
-              </div>`
-          : html`<div class="actions">
-                <wt-button
-                  variant="primary"
-                  data-test="pairing-open"
-                  @click=${() => void this.#openPairing()}
-                  >${t("printers.pairing_open")}</wt-button
-                >
-              </div>
-              ${
-                mode.refusedRecently > 0
-                  ? html`<p class="hint" data-test="pairing-refused">
-                      ${t("printers.pairing_refused").replace(
-                        "{count}",
-                        String(mode.refusedRecently),
-                      )}
-                    </p>`
-                  : nothing
-              }`
-      }
-    </wt-card>`;
+    return html`<p class="hint" data-test="pairing-panel">${t("printers.pairing_hint")}</p>
+      ${(this.pairing?.refusedRecently ?? 0) > 0 ? html`<p class="hint" data-test="pairing-refused">${t("printers.pairing_refused").replace("{count}", String(this.pairing!.refusedRecently))}</p>` : nothing}
+      ${this.pairing?.open ? html`<p data-test="pairing-until">${t("printers.pairing_open_until").replace("{time}", this.#timestamp(this.pairing.openUntil))}</p>` : nothing}`;
   }
 
   /** One waiting agent: the name it asked for and when, plus Let in and the two-step Deny. NO number is
@@ -885,10 +943,7 @@ export class PrintersScreen extends LitElement {
         class="section-action"
         variant="primary"
         data-test="open-add-agent"
-        @click=${() => {
-          this.errorKey = null;
-          this.addingAgent = true;
-        }}
+        @click=${() => this.#openAgentModal()}
         >${t("printers.add_agent")}</wt-button
       >
     </section>`;
@@ -897,13 +952,14 @@ export class PrintersScreen extends LitElement {
   #renderAgentModal(): TemplateResult | typeof nothing {
     if (!this.addingAgent) return nothing;
     return html`<wt-modal
+      class="add-hardware"
       data-test="new-agent-modal"
       heading=${t("printers.add_agent")}
       .open=${true}
-      @wt-close=${() => (this.addingAgent = false)}
+      @wt-close=${() => this.#stopAgentModal()}
     >
-      ${this.#renderError()}
-      <section data-test="pairing-panel">${this.#renderPairing()}</section>
+      ${this.#renderError()} ${this.#renderPairing()}
+      <p class="hint">${t("printers.agent_setup_hint")}</p>
       <section data-test="join-panel">
         <h3 class="panel-title">${t("printers.join_waiting_title")}</h3>
         <p class="hint">
@@ -918,9 +974,10 @@ export class PrintersScreen extends LitElement {
               </ol>`
         }
         <wt-button
-          data-test="refresh-joins"
-          @click=${() => void this.#mutate(() => this.#reloadJoins())}
-          >${t("printers.refresh")}</wt-button
+          data-test="scan-agents"
+          ?loading=${this.scanningAgents}
+          @click=${() => void this.#scanAgents()}
+          >${this.scanningAgents ? t("printers.scan_loading") : t("printers.scan_agents")}</wt-button
         >
       </section>
       <wt-form-actions slot="footer"
@@ -1027,7 +1084,7 @@ export class PrintersScreen extends LitElement {
         data-armed=${this.armedDeletePrinterId === p.id ? "true" : nothing}
         ?disabled=${!p.active}
         @click=${() => void this.#deactivatePrinter(p.id)}
-        >${this.armedDeletePrinterId === p.id ? t("printers.delete_confirm") : t("action.delete")}</wt-button
+        >${this.armedDeletePrinterId === p.id ? t("printers.delete_confirm") : t("printers.disable")}</wt-button
       >
     </dashboard-row-actions>`;
   }
@@ -1151,7 +1208,8 @@ export class PrintersScreen extends LitElement {
         key: "status",
         label: t("printers.status"),
         cell: (j) =>
-          html`<span data-test=${`job-status-${j.id}`}>${jobStatusName(j.status)}</span
+          html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
+              >${jobStatusName(j.status)}</span
             >${j.lastError === null ? nothing : html`<p data-test=${`job-error-${j.id}`}>${j.lastError}</p>`}`,
       },
       {
@@ -1400,6 +1458,7 @@ export class PrintersScreen extends LitElement {
       },
     ];
     return html`<wt-modal
+      class="add-hardware"
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}
@@ -1417,9 +1476,6 @@ export class PrintersScreen extends LitElement {
           ?loading=${this.scanning}
           @click=${() => void this.#scan()}
           >${this.scanning ? t("printers.scan_loading") : t("printers.scan")}</wt-button
-        >
-        <wt-button data-test="refresh-discovered" @click=${() => void this.#refreshDiscovered()}
-          >${t("printers.refresh")}</wt-button
         >
       </div>
       <wt-data-table
@@ -1443,9 +1499,24 @@ export class PrintersScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`<h1 class="title">${t("printers.title")}</h1>
-      ${this.#renderAgentsSection()}
-      ${this.agents.length > 0 ? this.#renderPrintersSection() : nothing}
-      ${this.#renderJobsSection()}${this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter ? nothing : this.#renderError()}
+      <wt-tabs
+        label=${t("printers.title")}
+        .value=${this.view}
+        .items=${[
+          { key: "queue", label: t("printers.jobs_title") },
+          { key: "printers", label: t("printers.list_title") },
+          { key: "agents", label: t("printers.agents_title") },
+        ]}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          if (event.target !== event.currentTarget) return;
+          this.view = event.detail.value;
+          this.#url.write({ dashboard: "printers", view: this.view });
+        }}
+      >
+        <div slot="queue">${this.#renderJobsSection()}</div>
+        <div slot="printers">${this.#renderPrintersSection()}</div>
+        <div slot="agents">${this.#renderAgentsSection()}</div> </wt-tabs
+      >${this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter ? nothing : this.#renderError()}
       ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}
       <dashboard-print-job-preview
         .preview=${this.preview}

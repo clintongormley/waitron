@@ -20,7 +20,7 @@ export class WtModal extends WtDialog {
         width: min(
           var(--wt-dialog-max-width),
           calc(100dvw - 2 * var(--wt-space-5)),
-          calc((100dvh - 2 * var(--wt-space-5)) * 0.8)
+          calc((100dvh - 2 * var(--wt-space-5)) * var(--wt-modal-aspect-ratio, 0.8))
         );
         overflow: hidden;
       }

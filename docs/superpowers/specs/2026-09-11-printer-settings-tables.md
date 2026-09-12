@@ -35,3 +35,7 @@ Validation: failing browser tests first for table structure, conditional visibil
 open/cancel/save, validation and menu actions; preserve existing pairing/discovery and write-path
 assertions. Backend tests cover hostname reporting, rename, aggregates and preview isolation.
 Run affected package coverage, browser accessibility tests and the full repository gate.
+
+2026-09-12 update: [Printer configuration tabs](2026-09-12-printer-configuration-tabs.md)
+supersedes the Delete wording, stacked sections, manual pairing controls and latest-100-only
+job list described here.

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
+import { resolveManagementSession } from "@waitron/identity";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { mountJoinApi } from "./join-api.js";
 import { createJoinRequest, type JoinRequestKind, PENDING_CAP } from "./join-requests.js";
@@ -154,13 +155,65 @@ describe("the pairing-mode control", () => {
     expect(mode.isOpen()).toBe(false);
   });
 
-  it("all three need device.manage — a staff session is 403 and the window is untouched", async () => {
+  it.each([false, true])(
+    "renews the window without extending the session (initially open: %s), while a manual open extends it",
+    async (initiallyOpen) => {
+      const venue = await setupVenue(suite.admin);
+      const sessionId = venue.managerCookie.split("=")[1]!;
+      let clock = Date.now();
+      const mode = createPairingMode({ now: () => clock });
+      const app = mountApp(venue.cfg, mode);
+      if (initiallyOpen) mode.open();
+      clock += 60_000;
+      await suite.admin.execute(sql`
+      update management_sessions set last_seen_at = now() - interval '10 minutes'
+      where id = ${sessionId}`);
+      const session = () =>
+        withTenant(suite.admin, venue.cfg.tenantId, (tx) =>
+          resolveManagementSession(tx, sessionId, { touch: false }),
+        );
+      const before = await session();
+      const renewed = await send(app, "POST", "/management-api/pairing-mode/renew", {
+        cookie: venue.managerCookie,
+      });
+      expect(renewed.status).toBe(200);
+      expect(await renewed.json()).toEqual({
+        openUntil: new Date(clock + PAIRING_WINDOW_MS).toISOString(),
+      });
+      expect((await session()).expiresAt).toBe(before.expiresAt);
+
+      const manual = await send(app, "POST", "/management-api/pairing-mode", {
+        cookie: venue.managerCookie,
+      });
+      expect(manual.status).toBe(200);
+      expect(Date.parse((await session()).expiresAt)).toBeGreaterThan(Date.parse(before.expiresAt));
+    },
+  );
+
+  it("refuses renewal after the management session expires without opening the window", async () => {
+    const venue = await setupVenue(suite.admin);
+    const sessionId = venue.managerCookie.split("=")[1]!;
+    const mode = createPairingMode();
+    const app = mountApp(venue.cfg, mode);
+    await suite.admin.execute(sql`
+      update management_sessions set last_seen_at = now() - interval '1 hour'
+      where id = ${sessionId}`);
+    const response = await send(app, "POST", "/management-api/pairing-mode/renew", {
+      cookie: venue.managerCookie,
+    });
+    expect(response.status).toBe(401);
+    expect((await errorOf(response)).code).toBe("management_session.expired");
+    expect(mode.isOpen()).toBe(false);
+  });
+
+  it("all window routes need device.manage — a staff session is 403 and the window is untouched", async () => {
     const venue = await setupVenue(suite.admin);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     for (const [method, path] of [
       ["GET", "/management-api/pairing-mode"],
       ["POST", "/management-api/pairing-mode"],
+      ["POST", "/management-api/pairing-mode/renew"],
       ["DELETE", "/management-api/pairing-mode"],
     ] as const) {
       const res = await send(app, method, path, { cookie: venue.staffCookie });
@@ -173,12 +226,19 @@ describe("the pairing-mode control", () => {
     expect(mode.isOpen()).toBe(false);
   });
 
-  it("all three need a management session at all", async () => {
+  it("all window routes need a management session at all", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const res = await send(app, "GET", "/management-api/pairing-mode");
-    expect(res.status).toBe(401);
-    expect((await errorOf(res)).code).toBe("management_session.required");
+    for (const [method, path] of [
+      ["GET", "/management-api/pairing-mode"],
+      ["POST", "/management-api/pairing-mode"],
+      ["POST", "/management-api/pairing-mode/renew"],
+      ["DELETE", "/management-api/pairing-mode"],
+    ] as const) {
+      const res = await send(app, method, path);
+      expect(res.status).toBe(401);
+      expect((await errorOf(res)).code).toBe("management_session.required");
+    }
   });
 });
 

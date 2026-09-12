@@ -462,6 +462,7 @@ design-review section apply.
   later). Security-review item (the authz boundary moves to venue/visible-keys). Replaces the manual
   create form (agent dropdown) with a transport-aware flow + a discovered-printers list.
   *Printer settings UI, LANDED #319 (2026-09-11):* agents, printers and the latest 100 jobs use tables
+  (superseded by the 2026-09-12 queue/history split below)
   and modal editors (a shared portrait `wt-modal` in `@waitron/ui` with a fixed Save/Cancel footer). Add
   printer scans all supported transports into one results table of unregistered devices; each row has
   Add, with no type selector and **no manual host:port form any more** (follow-up (i) under #313 above —
@@ -472,7 +473,12 @@ design-review section apply.
   the agent setup page. Design: [printer settings](superpowers/specs/2026-09-11-printer-settings-tables.md);
   the [review record](superpowers/specs/2026-09-11-printer-settings-review.md) lists every finding with
   its disposition.
-  *Follow-ups (2026-09-11):* Delete now requires confirmation. The printer table defaults to Active,
+  *In flight (2026-09-12, `printers`):* Printer configuration uses Queue, Printers and Print Agents
+  tabs with setup-aware defaults. Add agent owns the pairing window; both Add dialogs are wider and
+  use Scan with a spinner. The queue includes all jobs awaiting delivery, 100 recent completions and 100 failures with no retries left.
+  Retained registrations use Disable/Disabled wording. Design and validation scope:
+  [printer configuration tabs](superpowers/specs/2026-09-12-printer-configuration-tabs.md).
+  *Follow-ups (2026-09-11):* Disabling a printer requires confirmation. The printer table defaults to Active,
   with Disabled and All filters; Add printer offers a disabled discovered device as **Add again**,
   restoring the same registration, settings and pending jobs. Named `wt-switch` controls replace
   the native hardware/routing toggles. Table-cell styles use shadow parts. Job-statistics timestamps

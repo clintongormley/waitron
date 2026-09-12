@@ -1683,3 +1683,6 @@ git commit -s -m "docs(backlog): print-agent process LANDED — join-and-accept 
 - **Type consistency.** `JoinReply.token`/`verificationNumber` (Task 1) → the agent stores `token`, displays `verificationNumber` (Task 2) → the route returns `{ token: ${joinId}.${secret}, verificationNumber }` (Task 6). `readAgentJoinStatus(tx, cfg, joinId, secret)` (Task 5) ← the status route splits the Bearer (Task 6). `acceptPrintAgentJoinRequest → AgentAcceptResult` (Task 5) ← the accept route throws `device.join_mismatch` on `{ ok: false }` (Task 6).
 - **Tenant scoping** proven by two-tenant real-PG probes as `app_user` in Tasks 5 and 6 (accept, status, the shared by-id routes).
 - **Grants:** deny deletes a `join_requests` row (`app_user` holds DELETE there); accept inserts a `print_agents` row (`app_user` holds INSERT); no grant is widened.
+
+2026-09-12 update: [Printer configuration tabs](../specs/2026-09-12-printer-configuration-tabs.md)
+replaces manual pairing controls with the Add dialog lifecycle and uses Disable/Enable for retained agents.
