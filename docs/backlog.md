@@ -1110,7 +1110,12 @@ Legal groundwork and the unresolved multi-recipient route remain in [findings §
 
 Named out of scope in the spec, each its own future item: **bilingual receipts** (`invoice_locales` is
 configured and snapshotted but rendered by NEITHER document — its own slice covering both); making
-one-original-per-invoice **structural** rather than procedural; putting the invoice number on the slip
+one-original-per-invoice **structural** rather than procedural — the review measured what
+"procedural" costs today: `POST /api/sales/:id/receipt` has no limit and no idempotency, so two calls
+after collection produced three unmarked originals of one invoice (the fiscal record untouched at one).
+An operator retrying after a lost response is not doing anything wrong, and art. 14.1 says that document
+has exactly one original. Cheapest containment named by the reviewer: make the route idempotent per sale
+— if a receipt job already exists for that sale, print the duplicate instead; putting the invoice number on the slip
 (Q19(e)); and a **per-tender payment slip** when one sale is settled by several cards — today the slip
 assumes a single card capture, and the multi-tender pay path in the dependency note below is its
 prerequisite.
