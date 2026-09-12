@@ -1,7 +1,7 @@
 # `@waitron/provisioning`
 
 Stands up a Waitron deployment through one command, `waitron-provision`, matching how
-`@waitron/credentials` ships `waitron-credentials`. Neither is an executable on your PATH: both are
+`@waitron/credentials` names `waitron-credentials`. Neither is an executable on your PATH: both are
 bundles you build and run by path (below), so each manifest declares its name under
 `waitron.commands` rather than `bin` — `scripts/manifest-commands.test.ts` records why.
 

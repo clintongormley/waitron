@@ -83,6 +83,11 @@ does not exist in a fresh checkout — `pnpm install` even warns about it. Run
 `pnpm --filter @waitron/credentials build` before anything else in this step, or the command is
 simply not found. (CI builds it as part of its smoke test; a working tree never does.)
 
+> **2026-09-12:** the paragraph above is retired, and so is the bare `waitron-credentials …` spelling
+> below. There is no `bin` entry any more and no install warning; build the bundle and run it by
+> path, `node packages/credentials/dist/bin.js set --tenant … --purpose fiscal.aeat`. The plan's
+> Task 3 carries the full note; the mechanism is in `scripts/manifest-commands.test.ts`.
+
 `waitron-credentials set --tenant <uuid> --purpose fiscal.aeat` then takes its payload as a JSON
 object **on stdin**. It deliberately refuses a payload as an argument (there is a test pinning that), and
 it has no `get` command at all — the tool never prints a decrypted credential.

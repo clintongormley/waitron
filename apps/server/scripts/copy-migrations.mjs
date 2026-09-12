@@ -41,7 +41,7 @@ for (const set of manifest) {
 // one inferred from source syntax by whichever Node happens to run it, matching how every other
 // package.json in this repo declares "type" rather than relying on sniffing. Chosen over renaming
 // the bundle to `dist/server.mjs` (which forces the same fact through the file's extension
-// instead, unconditionally) because a rename also touches `package.json`'s `bin` field, the CI
+// instead, unconditionally) because a rename also touches `package.json`'s `waitron.commands`, the CI
 // gate's smoke-test paths, and every `node dist/server.js` example in the README, for a difference
 // that only shows up off this repo's own tested Node baseline.
 await writeFile(join(distDir, "package.json"), `${JSON.stringify({ type: "module" })}\n`);

@@ -399,13 +399,16 @@ pnpm --filter @waitron/credentials build
 checkout — `pnpm install` warns about exactly this. Without the build, the next step fails with
 "command not found".
 
-> **2026-09-12:** the two `pnpm --filter @waitron/credentials exec waitron-credentials` invocations
-> in Steps 3 and 4 below never worked, before or after this build step. pnpm links a command at
-> INSTALL time and skips one whose file is missing, so a bundle built afterwards is never linked
-> (measured both directions: build-before-install links and runs, build-after-install reports
-> "Command not found"). Run the bundle by path instead, keeping every other argument as written:
-> `node packages/credentials/dist/bin.js set --tenant … --purpose fiscal.aeat`. The manifest no
-> longer declares a `bin` at all — see `scripts/manifest-commands.test.ts`.
+> **2026-09-12: the paragraph directly above is retired.** `packages/credentials` no longer declares
+> a `bin` entry, so `pnpm install` no longer warns about one, and building first was never what made
+> the command resolve. pnpm links a command while it INSTALLS and skips one whose file is missing, so
+> a bundle built afterwards is linked only by a later install (measured both directions:
+> build-before-install links and runs; build-after-install reports "Command not found" until the next
+> install). Step 1 itself still stands — the bundle is what you run. What does not stand are the two
+> `pnpm --filter @waitron/credentials exec waitron-credentials` invocations in Steps 3 and 4 below,
+> which could never have worked. Run the bundle by path instead, keeping every other argument as
+> written: `node packages/credentials/dist/bin.js set --tenant … --purpose fiscal.aeat`. See
+> `scripts/manifest-commands.test.ts`.
 
 - [ ] **Step 2: [HUMAN] Confirm the credential key ring is set**
 
@@ -570,8 +573,9 @@ Also verified: both failure paths exit non-zero (an operator's `&&` chain depend
 3. **The `build` script now repeats the same esbuild flag set and `createRequire` banner three
    times.** Third occurrence is where extraction earns itself; a bump to `--target` is currently a
    three-site edit inside one string with nothing to catch a miss. Left alone here because collapsing
-   it touches the two pre-existing invocations and `dist/server.js`'s name is load-bearing in both the
-   `bin` field and CI's bundle smoke test.
+   it touches the two pre-existing invocations and `dist/server.js`'s name is depended on by both the
+   `bin` field and CI's bundle smoke test. [2026-09-12: there is no `bin` field any more — the name
+   is declared under `waitron.commands` instead, and the smoke test is unchanged.]
 4. **`record-one-sale.ts` keeps the older convention** — whole body in `scripts/`, therefore
    uncovered. Moving its body into `src/` the way this step did would give it the two refusal paths
    it has never had.
