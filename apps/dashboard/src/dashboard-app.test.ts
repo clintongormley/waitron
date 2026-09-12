@@ -1328,6 +1328,38 @@ describe("dashboard-app", () => {
     expect(panel.hidden).toBe(true);
   });
 
+  it("keeps the clicked group header at the same on-screen position when collapsing shrinks the list above the fold", async () => {
+    // A scrollable sidebar whose content shrinks below the current scroll offset gets its scrollTop
+    // clamped by the browser — collapsing a group below the fold used to visibly snap the whole
+    // list upward as a result. Reproduced with real geometry: a short viewport, scrolled partway
+    // down (not pinned to an extreme edge — that can make exact preservation mathematically
+    // impossible if the group being collapsed is itself propping up the scrollable range, which
+    // is a real but separate constraint from the bug this guards), collapsing a MIDDLE group so
+    // there's real content both above and below to absorb the shrink.
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1200, 550);
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+      const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
+      sidebar.scrollTop = 100;
+      await new Promise((r) => requestAnimationFrame(r));
+      const before = header.getBoundingClientRect().top;
+
+      header.click();
+      await flush(el);
+      await new Promise((r) => requestAnimationFrame(r));
+
+      expect(header.getBoundingClientRect().top).toBeCloseTo(before, 0);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   // The module-UI seam (SP2 Task 3): a BUNDLED module's screen and nav are mounted GENERICALLY from the
   // registry, not hand-wired. `bookings` is now a module contribution (its screen + widget live in
   // @waitron/bookings/dashboard, reached only via @waitron/dashboard-modules); here it is active with no
@@ -1562,6 +1594,17 @@ describe("dashboard-app", () => {
   // Task 12: the responsive drawer. On narrow screens the sidebar is an off-canvas drawer toggled by
   // the hamburger; opening it flips `.layout.drawer-open` and shows a scrim, and selecting any nav item
   // closes it again while STILL switching the screen (so a phone tap navigates and dismisses in one go).
+  it("shows the gear icon on the Settings group header, and no other group header", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const settingsHeader = el.shadowRoot!.querySelector('[data-test="nav-group-configuration"]')!;
+    expect(settingsHeader.textContent).toContain(t("nav.group.configuration"));
+    expect(settingsHeader.querySelector('wt-icon[name="gear"]')).not.toBeNull();
+    const teamHeader = el.shadowRoot!.querySelector('[data-test="nav-group-team"]')!;
+    expect(teamHeader.querySelectorAll("wt-icon")).toHaveLength(1); // only the chevron, no gear
+  });
   it("shows the hamburger icon on the drawer toggle, not the kebab", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),

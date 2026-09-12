@@ -120,8 +120,10 @@ const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg"
  * (`requiresManager` hides it from a `supervisor` session — `#nav()` filters on it before mapping). */
 type NavItem = { screen: ScreenId; labelKey: StringKey; requiresManager?: boolean };
 /** One sidebar group: a stable `id` (a module contribution names one as its `screen.group`), an optional
- * header label (the pinned first group has none) and its items. */
-type NavGroup = { id: NavGroupId; headerKey?: StringKey; items: NavItem[] };
+ * header label (the pinned first group has none), an optional registered icon name for that header
+ * (kept rare — see "Icons" in design-system.md; a group only gets one where it's as unambiguous as
+ * Settings' gear, not attempted for every group) and its items. */
+type NavGroup = { id: NavGroupId; headerKey?: StringKey; icon?: string; items: NavItem[] };
 
 /**
  * The grouped, DATA-DRIVEN sidebar. `#nav()` renders this in a loop, so the manager faces are
@@ -172,6 +174,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "configuration",
     headerKey: "nav.group.configuration",
+    icon: "gear",
     items: [
       { screen: "receipt", labelKey: "nav.receipt" },
       { screen: "devices", labelKey: "nav.devices" },
@@ -479,11 +482,22 @@ export class DashboardApp extends LitElement {
    * A group in this set still renders expanded if it contains the CURRENT screen — collapsing "Team"
    * and then navigating to Staff should not hide the page you are already on. */
   @state() private collapsedGroups = new Set<NavGroupId>();
-  #toggleGroup(id: NavGroupId): void {
+  // Collapsing a group the user has scrolled down to reach shrinks the sidebar's scrollable
+  // content, and the browser then CLAMPS scrollTop to the new (shorter) max — snapping the whole
+  // visible list upward even though nothing above the clicked header actually moved. Recording the
+  // trigger's own on-screen position before the toggle and correcting scrollTop by the same amount
+  // once the DOM has updated keeps it exactly where the user clicked it, regardless of that clamp.
+  #toggleGroup(id: NavGroupId, trigger: HTMLElement): void {
+    const before = trigger.getBoundingClientRect().top;
     const next = new Set(this.collapsedGroups);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     this.collapsedGroups = next;
+    void this.updateComplete.then(() => {
+      const sidebar = trigger.closest<HTMLElement>(".sidebar");
+      if (!sidebar) return;
+      sidebar.scrollTop += trigger.getBoundingClientRect().top - before;
+    });
   }
 
   /** Whether the viewport is at/below the drawer breakpoint (Task 12). Tracked from `matchMedia` so the
@@ -1078,9 +1092,11 @@ export class DashboardApp extends LitElement {
                     aria-expanded=${!collapsed}
                     aria-controls=${panelId}
                     data-test="nav-group-${group.id}"
-                    @click=${() => this.#toggleGroup(group.id)}
+                    @click=${(e: MouseEvent) =>
+                      this.#toggleGroup(group.id, e.currentTarget as HTMLElement)}
                   >
                     <wt-icon name="chevron-down" class="chevron"></wt-icon>
+                    ${group.icon ? html`<wt-icon name=${group.icon}></wt-icon>` : nothing}
                     ${t(group.headerKey)}
                   </button>`
                 : nothing

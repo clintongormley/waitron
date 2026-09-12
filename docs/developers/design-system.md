@@ -412,6 +412,18 @@ set, even if the user collapsed it earlier and then navigated back into it — c
 opening Staff must never hide the page you are already on; only navigating to a DIFFERENT screen
 lets a group honour a collapse the user asked for.
 
+A group that has ITS OWN scrolled-to items shrink when collapsed can leave the sidebar's
+`scrollTop` past the new (shorter) scrollable range — the browser then clamps it down on its own,
+snapping every visible row upward even though nothing above the clicked header moved. `#toggleGroup`
+records the clicked header's own on-screen position before the toggle and corrects `scrollTop` by
+the same delta once the DOM has updated, so the header stays where it was clicked. This can't
+always be perfect — if the collapsing group's own items were propping up enough scroll range to
+reach that position in the first place, restoring it exactly may be mathematically impossible once
+they're gone — but it always gets as close as the remaining content allows, which reads as "stayed
+put" in every case that matters (the group being collapsed isn't the last thing wedging the page
+open). A group header can also carry an `icon` (a registered `wt-icon` name) — kept rare, used only
+where it's as unambiguous as Settings' gear; most groups have none.
+
 The sidebar and the content column both scroll independently, bounded to the space below the
 banner (`.shell { height: 100vh }`, `.sidebar`/`.main` both `max-height: 100%; overflow-y: auto`) —
 the page itself never scrolls. Before this, only `.sidebar` was self-contained
