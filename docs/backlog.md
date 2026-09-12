@@ -79,45 +79,40 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 Ranked 2026-09-12, with the reason for each place and the track it belongs to. Each item is its own
 brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Checking a fiscal record before it is written** (A1) — **done, awaiting land** on
-   `feat/fiscal-record-validation`. Wrong values would otherwise land in an append-only hash-chained
-   table that cannot be edited, and the fields at risk are exactly the ones a setup operator types.
-   Two follow-ups it uncovered are below (A1a, A1b); neither blocks the merge.
-
-2. **A box a real operator can set up without a terminal** (B1). After a re-image the box serves a
+1. **A box a real operator can set up without a terminal** (B1). After a re-image the box serves a
    NEW self-signed CA, the browser silently keeps trusting the old one, and "provision now" fails at
    TLS with no in-page remedy. Cost: a full box-setup dead-end on 2026-09-11. Everything else about the
    box works, so this is what stands between us and an installable product.
 
-3. **The setup wizard asks the wrong things and checks nothing** (A2) — the till name, the two series
-   codes and "what this location does" want defaults, explanations and boundary checks; the demo path
-   should not demand real business details; form errors should say which field. The boundary check is
-   the other half of item 1.
+2. **The setup wizard asks the wrong things** (A2) — the till name, the two series codes and "what
+   this location does" want defaults and explanations, and the demo path should not demand real
+   business details. The *checking* half landed with A1 (#331); what is left here is defaults,
+   wording and the demo path.
 
-4. **A printer on another subnet cannot be added at all** (A3). #319 removed the manual host:port form
+3. **A printer on another subnet cannot be added at all** (A3). #319 removed the manual host:port form
    and neither discovery pass crosses a subnet, which is exactly the owner's home setup. Small, and it
    blocks real use today.
 
-5. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
+4. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
    run; the box and sale path worked.
 
-6. **Somewhere for things that went wrong to show up** (A5). The `incidents` table has four producers
-   and no reader, and the dashboard has no notification surface. A rejected filing, a payment drift, a
+5. **Somewhere for things that went wrong to show up** (A5). The `incidents` table has several
+   producers and no reader, and the dashboard has no notification surface. A rejected filing, a payment drift, a
    stalled print agent and a failed or stale backup are all invisible; several other items end "…waits
    for the notification surface".
 
-7. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
+6. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
    standalone primary's only off-box copy. Only `LocalFsBackend` exists.
 
-8. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
+7. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut.
 
-9. **The two remaining by-id read classes** (C1) — request-supplied table ids and the `ticket_items`
+8. **The two remaining by-id read classes** (C1) — request-supplied table ids and the `ticket_items`
    reads. Same class as the cross-tenant leak the run-it seat caught on till-reroute S3; CLAUDE.md §3
    makes it a rule.
 
-10. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
+9. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
 
 Then the on-prem mirror, then the cloud primary — under *Afterwards*. Everything else ranks beneath
 these.
@@ -133,15 +128,13 @@ order; the small items at the end of each area live in Track C.
 
 **In flight:**
 
-- **`feat/fiscal-record-validation`** — A1, fifteen commits on 2026-09-12, reviewed and green
-  ([design](superpowers/specs/2026-09-12-fiscal-record-validation-design.md), approved). Ready to land.
 - **`ui-overhaul`** — a dashboard restyle: collapsible nav sections and group colours, the profile
   edited in a modal, calmer card actions, and the matching `design-system.md` rules, with touch-ups in
   the payments screens. Branched off `main` on 2026-09-12; no spec in the tree, the nearest plan is
   [UI navigation and controls](superpowers/plans/2026-09-06-ui-navigation-and-controls.md), whose own
   scope landed as #249.
 
-### A1. Checking a fiscal record before it is written — done, awaiting land
+### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
 `packages/verifactu/src/validate.ts` holds AEAT's rules and no production file called it, confirmed by
 experiment (a series code of `Serie A` reached `registros_facturacion` as `Serie A/1`, which AEAT
@@ -601,9 +594,9 @@ turns out to need a design moves to its track.
    instead of a clean 401.
 3. **`report-api.ts` runs three concurrent queries on ONE `withTenant` transaction** — serial and
    deprecated in pg@8, broken in pg@9. Sequential awaits or one combined query.
-4. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
+3. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
-5. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
+4. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
    `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
 
 **Dashboard, till and setup:**
