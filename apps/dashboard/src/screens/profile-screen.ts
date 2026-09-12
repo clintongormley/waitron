@@ -93,7 +93,6 @@ export class ProfileScreen extends LitElement {
       .action-row {
         padding-block: var(--wt-space-3);
       }
-      .row:not(:first-child),
       .action-row:not(:first-child) {
         border-top: 1px solid var(--wt-color-border);
       }
