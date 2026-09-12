@@ -53,8 +53,8 @@
           "notNull": true,
           "default": "now()"
         },
-        "retired_at": {
-          "name": "retired_at",
+        "disabled_at": {
+          "name": "disabled_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

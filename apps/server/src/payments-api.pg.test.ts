@@ -174,7 +174,7 @@ function cfgOf(venue: Venue): TillConfig {
   };
 }
 
-function mountApp(venue: Venue): Hono {
+function mountApp(venue: Venue, providers: readonly CardProviderContribution[] = PROVIDERS): Hono {
   const app = new Hono();
   mountPaymentsApi(
     app,
@@ -184,7 +184,7 @@ function mountApp(venue: Venue): Hono {
       ring: RING,
       environment: "preproduction",
       pool,
-      providers: PROVIDERS,
+      providers,
     },
     noopLog,
   );
@@ -193,7 +193,7 @@ function mountApp(venue: Venue): Hono {
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PUT" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
   path: string,
   opts: { body?: unknown; cookie?: string } = {},
 ): Promise<Response> {
@@ -471,10 +471,10 @@ describe("readers — lifecycle and screens", () => {
     });
     expect(status.status).toBe(200);
     expect(
-      (await status.json()) as { online: boolean; detail?: string; pairingStatus?: string },
+      (await status.json()) as { online: boolean; model?: string; pairingStatus?: string },
     ).toEqual({
       online: true,
-      detail: "bbpos_wisepos_e",
+      model: "bbpos_wisepos_e",
       // A Stripe reference reader is paired the instant it is added, so its status carries this.
       pairingStatus: "paired",
     });
@@ -546,7 +546,7 @@ describe("an injected fetch is threaded to the seat", () => {
     return app;
   }
 
-  it("connects, adds, reads status and retires with fetch supplied", async () => {
+  it("connects, adds, reads status and disables with fetch supplied", async () => {
     const venue = await seedVenue();
     const app = mountAppWithFetch(venue);
     expect((await connectStripe(app, venue)).status).toBe(200);
@@ -564,7 +564,7 @@ describe("an injected fetch is threaded to the seat", () => {
     ).toBe(200);
     expect(
       (
-        await send(app, "POST", `/management-api/payments/readers/${readerId}/retire`, {
+        await send(app, "POST", `/management-api/payments/readers/${readerId}/disable`, {
           cookie: venue.managerCookie,
         })
       ).status,
@@ -573,7 +573,7 @@ describe("an injected fetch is threaded to the seat", () => {
 });
 
 describe("disconnect", () => {
-  it("refuses payment.provider_in_use while an active reader remains, then disconnects once retired", async () => {
+  it("refuses payment.provider_in_use while an active reader remains, then disconnects once disabled", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);
     await connectStripe(app, venue);
@@ -591,10 +591,15 @@ describe("disconnect", () => {
       (await inUse.json()) as { error: { code: string; params: { activeReaders: number } } },
     ).toMatchObject({ error: { code: "payment.provider_in_use", params: { activeReaders: 1 } } });
 
-    const retired = await send(app, "POST", `/management-api/payments/readers/${readerId}/retire`, {
-      cookie: venue.managerCookie,
-    });
-    expect(retired.status).toBe(204);
+    const disabled = await send(
+      app,
+      "POST",
+      `/management-api/payments/readers/${readerId}/disable`,
+      {
+        cookie: venue.managerCookie,
+      },
+    );
+    expect(disabled.status).toBe(204);
 
     const gone = await send(app, "POST", "/management-api/payments/providers/stripe/disconnect", {
       cookie: venue.managerCookie,
@@ -681,19 +686,16 @@ describe("add reader — races with a concurrent disconnect", () => {
   });
 });
 
-describe("retire reader — retryable after a failed vendor unpair", () => {
-  it("re-attempts the vendor removal on a retry and 204s (retirement is idempotent)", async () => {
-    // Retire tells the provider to forget the reader. If that vendor call fails, a naive retire that
-    // had already flipped `active=false` would 404 on the retry (the row is no longer active) and
-    // never re-call the vendor, stranding the reader paired forever. Retirement looks the row up by
-    // id WITHOUT requiring active, so a retry finds the already-handled row and completes the vendor
-    // removal. Reproduces the Codex run-it probe's {first:500, retry:404, removes:1} finding.
+describe("unpair reader — retryable after a failed vendor unpair", () => {
+  it("re-attempts the vendor removal on a retry and 204s (unpairing is idempotent)", async () => {
+    // Vendor failure leaves the row active; a retry must call the vendor again and disable it.
     const venue = await seedVenue();
     let removes = 0;
     const seat: CardProviderContribution = {
       ...stripeSeat,
       readers: {
         ...stripeSeat.readers,
+        canUnpair: true,
         remove: async () => {
           removes += 1;
           if (removes === 1) throw new Error("temporary provider outage");
@@ -716,17 +718,358 @@ describe("retire reader — retryable after a failed vendor unpair", () => {
     await connectStripe(app, venue);
     const reader = (await (await addReader(app, venue, nextRef())).json()) as { id: string };
 
-    const first = await send(app, "POST", `/management-api/payments/readers/${reader.id}/retire`, {
+    const first = await send(app, "POST", `/management-api/payments/readers/${reader.id}/unpair`, {
       cookie: venue.managerCookie,
     });
     // The vendor call failed, so the first attempt is a server fault (not a clean 204).
     expect(first.status).toBe(500);
 
-    const retry = await send(app, "POST", `/management-api/payments/readers/${reader.id}/retire`, {
+    const retry = await send(app, "POST", `/management-api/payments/readers/${reader.id}/unpair`, {
       cookie: venue.managerCookie,
     });
     expect(retry.status).toBe(204);
     // The vendor removal was re-attempted on the retry (2 calls total) and succeeded.
     expect(removes).toBe(2);
   });
+});
+
+describe("reader adoption and local management", () => {
+  function discoverySeat(
+    list: CardProviderContribution["readers"]["list"],
+    remove: CardProviderContribution["readers"]["remove"] = async () => {},
+  ) {
+    return { ...stripeSeat, readers: { ...stripeSeat.readers, canUnpair: true, list, remove } };
+  }
+  const base = "/management-api/payments";
+  const vendor = {
+    providerRef: "tmr_existing",
+    name: "My Reader",
+    model: "solo",
+    serial: "serial-1",
+  };
+  const adoption = { providerId: "stripe", providerRef: vendor.providerRef, name: "Counter" };
+
+  it("runs as non-superuser app_user", async () => {
+    await withTenant(suite.admin, randomUUID(), async (tx) => {
+      await asAppUser(tx);
+      const result = await tx.execute(
+        sql`select current_user as role, rolsuper from pg_roles where rolname = current_user`,
+      );
+      expect(result.rows).toEqual([{ role: "app_user", rolsuper: false }]);
+    });
+  });
+
+  it("labels available, added and disabled and reuses the disabled id and device default", async () => {
+    const venue = await seedVenue();
+    const removed: string[] = [];
+    const app = mountApp(venue, [
+      discoverySeat(
+        async () => [vendor],
+        async (_deps, ref) => {
+          removed.push(ref);
+        },
+      ),
+    ]);
+    await connectStripe(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    const available = async () =>
+      (await send(app, "GET", `${base}/providers/stripe/available-readers`, opts)).json();
+    expect(await available()).toEqual([{ ...vendor, status: "available" }]);
+    const first = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    expect(first.status).toBe(201);
+    const { id } = (await first.json()) as { id: string };
+    expect(await available()).toEqual([{ ...vendor, status: "added" }]);
+    const device = await seedDevice(venue);
+    expect(
+      (
+        await send(app, "PUT", `${base}/devices/${device}/reader`, {
+          ...opts,
+          body: { readerId: id },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
+    expect(await available()).toEqual([{ ...vendor, status: "disabled" }]);
+    const disabled = await suite.admin.execute(
+      sql`select active, disabled_at is not null as dated from card_readers where id = ${id}`,
+    );
+    expect(disabled.rows).toEqual([{ active: false, dated: true }]);
+    const again = await send(app, "POST", `${base}/readers/adopt`, {
+      ...opts,
+      body: { ...adoption, name: "Terrace" },
+    });
+    expect(await again.json()).toEqual({ id, status: "paired" });
+    const stored = await suite.admin.execute(
+      sql`select id, name, active, disabled_at from card_readers where tenant_id = ${venue.tenantId}`,
+    );
+    expect(stored.rows).toEqual([{ id, name: "Terrace", active: true, disabled_at: null }]);
+    expect(await (await send(app, "GET", `${base}/devices/${device}/reader`, opts)).json()).toEqual(
+      { readerId: id },
+    );
+    expect(removed).toEqual([]);
+  });
+
+  it("refuses an unlisted reference without inserting or removing anything", async () => {
+    const venue = await seedVenue();
+    const removed: string[] = [];
+    const app = mountApp(venue, [
+      discoverySeat(
+        async () => [vendor],
+        async (_deps, ref) => {
+          removed.push(ref);
+        },
+      ),
+    ]);
+    await connectStripe(app, venue);
+    const result = await send(app, "POST", `${base}/readers/adopt`, {
+      cookie: venue.managerCookie,
+      body: { ...adoption, providerRef: "forged" },
+    });
+    expect(result.status).toBe(422);
+    expect(await result.json()).toEqual({
+      error: { code: "reader.not_listed", params: { providerId: "stripe" } },
+    });
+    expect(
+      (
+        await suite.admin.execute(
+          sql`select id from card_readers where tenant_id = ${venue.tenantId}`,
+        )
+      ).rows,
+    ).toEqual([]);
+    expect(removed).toEqual([]);
+  });
+
+  it("keeps another tenant's same provider reference out of comparison and adoption", async () => {
+    const a = await seedVenue();
+    const b = await seedVenue();
+    const seat = discoverySeat(async () => [vendor]);
+    const appA = mountApp(a, [seat]);
+    const appB = mountApp(b, [seat]);
+    await connectStripe(appA, a);
+    await connectStripe(appB, b);
+    const bReader = (await (await addReader(appB, b, vendor.providerRef, "Tenant B")).json()) as {
+      id: string;
+    };
+    expect(
+      await (
+        await send(appA, "GET", `${base}/providers/stripe/available-readers`, {
+          cookie: a.managerCookie,
+        })
+      ).json(),
+    ).toEqual([{ ...vendor, status: "available" }]);
+    const adopted = (await (
+      await send(appA, "POST", `${base}/readers/adopt`, { cookie: a.managerCookie, body: adoption })
+    ).json()) as { id: string };
+    expect(adopted).toEqual({ id: expect.any(String), status: "paired" });
+    expect(adopted.id).not.toBe(bReader.id);
+    expect(
+      (
+        await suite.admin.execute(
+          sql`select name, active from card_readers where id = ${bReader.id}`,
+        )
+      ).rows,
+    ).toEqual([{ name: "Tenant B", active: true }]);
+  });
+
+  it.each(["rename", "disable", "enable", "unpair"] as const)(
+    "isolates %s by tenant before any vendor call",
+    async (action) => {
+      const a = await seedVenue();
+      const b = await seedVenue();
+      let removes = 0;
+      const seat = discoverySeat(
+        async () => [vendor],
+        async () => {
+          removes++;
+        },
+      );
+      const appA = mountApp(a, [seat]);
+      const appB = mountApp(b, [seat]);
+      await connectStripe(appB, b);
+      const { id } = (await (await addReader(appB, b, nextRef())).json()) as { id: string };
+      const result = await send(
+        appA,
+        action === "rename" ? "PATCH" : "POST",
+        `${base}/readers/${id}${action === "rename" ? "" : `/${action}`}`,
+        { cookie: a.managerCookie, body: { name: "Changed" } },
+      );
+      expect(result.status).toBe(404);
+      expect(await result.json()).toEqual({ error: { code: "reader.not_found", params: { id } } });
+      expect(removes).toBe(0);
+      expect(
+        (await suite.admin.execute(sql`select name, active from card_readers where id = ${id}`))
+          .rows,
+      ).toEqual([{ name: "Barra 1", active: true }]);
+    },
+  );
+
+  it("renames, disables and enables locally, while unpair alone calls the vendor", async () => {
+    const venue = await seedVenue();
+    const removed: string[] = [];
+    const app = mountApp(venue, [
+      discoverySeat(
+        async () => [vendor],
+        async (_deps, ref) => {
+          removed.push(ref);
+        },
+      ),
+    ]);
+    await connectStripe(app, venue);
+    const { id } = (await (await addReader(app, venue, vendor.providerRef)).json()) as {
+      id: string;
+    };
+    const opts = { cookie: venue.managerCookie };
+    expect(
+      (await send(app, "PATCH", `${base}/readers/${id}`, { ...opts, body: { name: "Terrace" } }))
+        .status,
+    ).toBe(204);
+    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
+    expect((await send(app, "POST", `${base}/readers/${id}/enable`, opts)).status).toBe(204);
+    expect(
+      (
+        await suite.admin.execute(
+          sql`select name, active, disabled_at from card_readers where id = ${id}`,
+        )
+      ).rows,
+    ).toEqual([{ name: "Terrace", active: true, disabled_at: null }]);
+    expect(removed).toEqual([]);
+    expect((await send(app, "POST", `${base}/readers/${id}/unpair`, opts)).status).toBe(204);
+    expect(removed).toEqual([vendor.providerRef]);
+    expect(
+      (await suite.admin.execute(sql`select active from card_readers where id = ${id}`)).rows,
+    ).toEqual([{ active: false }]);
+  });
+
+  it.each(["adopt", "rename"] as const)(
+    "refuses an empty %s name at the server boundary",
+    async (action) => {
+      const venue = await seedVenue();
+      const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+      await connectStripe(app, venue);
+      const { id } = (await (await addReader(app, venue, nextRef())).json()) as { id: string };
+      const response = await send(
+        app,
+        action === "adopt" ? "POST" : "PATCH",
+        action === "adopt" ? `${base}/readers/adopt` : `${base}/readers/${id}`,
+        {
+          cookie: venue.managerCookie,
+          body: { ...adoption, name: "   " },
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "name" } },
+      });
+    },
+  );
+
+  it("rejects unpair when the provider does not support it", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    await connectStripe(app, venue);
+    const { id } = (await (await addReader(app, venue, nextRef())).json()) as { id: string };
+    const response = await send(app, "POST", `${base}/readers/${id}/unpair`, {
+      cookie: venue.managerCookie,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "providerId" } },
+    });
+  });
+
+  it("rechecks the credential after the vendor list round-trip without vendor rollback", async () => {
+    const venue = await seedVenue();
+    let removes = 0;
+    const seat = discoverySeat(
+      async () => {
+        expect(
+          (
+            await send(app, "POST", `${base}/providers/stripe/disconnect`, {
+              cookie: venue.managerCookie,
+            })
+          ).status,
+        ).toBe(204);
+        return [vendor];
+      },
+      async () => {
+        removes++;
+      },
+    );
+    const app = mountApp(venue, [seat]);
+    await connectStripe(app, venue);
+    const response = await send(app, "POST", `${base}/readers/adopt`, {
+      cookie: venue.managerCookie,
+      body: adoption,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
+    });
+    expect(
+      (
+        await suite.admin.execute(
+          sql`select id from card_readers where tenant_id = ${venue.tenantId}`,
+        )
+      ).rows,
+    ).toEqual([]);
+    expect(removes).toBe(0);
+  });
+
+  it("gates every new route before reaching the provider", async () => {
+    const venue = await seedVenue();
+    let listed = 0;
+    let removed = 0;
+    const app = mountApp(venue, [
+      discoverySeat(
+        async () => {
+          listed++;
+          return [vendor];
+        },
+        async () => {
+          removed++;
+        },
+      ),
+    ]);
+    await connectStripe(app, venue);
+    const { id } = (await (await addReader(app, venue, nextRef())).json()) as { id: string };
+    const routes = [
+      ["GET", `${base}/providers/stripe/available-readers`],
+      ["POST", `${base}/readers/adopt`],
+      ["PATCH", `${base}/readers/${id}`],
+      ...["disable", "enable", "unpair"].map((a) => ["POST", `${base}/readers/${id}/${a}`]),
+    ] as const;
+    for (const [method, path] of routes) {
+      const response = await send(app, method as "GET" | "POST" | "PATCH", path!, {
+        cookie: venue.staffCookie,
+        body: method === "GET" ? undefined : adoption,
+      });
+      expect(response.status, path).toBe(403);
+    }
+    expect([listed, removed]).toEqual([0, 0]);
+  });
+
+  it.each(["available-readers", "adopt"])(
+    "refuses disconnected %s before the vendor call",
+    async (action) => {
+      const venue = await seedVenue();
+      let listed = 0;
+      const app = mountApp(venue, [
+        discoverySeat(async () => {
+          listed++;
+          return [vendor];
+        }),
+      ]);
+      const response = await send(
+        app,
+        action === "adopt" ? "POST" : "GET",
+        action === "adopt" ? `${base}/readers/adopt` : `${base}/providers/stripe/available-readers`,
+        { cookie: venue.managerCookie, ...(action === "adopt" ? { body: adoption } : {}) },
+      );
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
+      });
+      expect(listed).toBe(0);
+    },
+  );
 });

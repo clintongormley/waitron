@@ -65,6 +65,10 @@ export interface CardProviderContribution {
   /** Build the live PaymentProvider from the sealed credential (called by the pool). */
   build(deps: CardProviderBuildDeps): PaymentProvider;
   readers: {
+    /** Whether remove releases the device registration at the provider. */
+    readonly canUnpair: boolean;
+    /** The account's readers; a provider unable to enumerate returns an empty list. */
+    list(deps: CardProviderRuntimeDeps): Promise<VendorReader[]>;
     add(
       deps: CardProviderRuntimeDeps,
       input: { name: string; code?: string; reference?: string },
@@ -74,9 +78,26 @@ export interface CardProviderContribution {
   };
 }
 
+export interface VendorReader {
+  providerRef: string;
+  name: string;
+  model?: string;
+  serial?: string;
+  registeredAt?: string;
+}
+
 export interface ReaderStatus {
   online: boolean;
-  detail?: string; // connection type, screen state
+  /** Whole percent, absent when the provider does not report battery. */
+  batteryPercent?: number;
+  connection?: string;
+  activity?: string;
+  firmwareVersion?: string;
+  lastSeenAt?: string;
+  model?: string;
+  serial?: string;
+  /** The status read failed; the device's connectivity is unknown. */
+  unreachable?: boolean;
   /** Where pairing itself stands, DISTINCT from device connectivity (`online`): a reader confirms
    * pairing (`processing → paired`) and only later may go briefly offline. The add-reader dialog
    * polls THIS to decide a pairing succeeded, never `online` — a reader that paired but is momentarily

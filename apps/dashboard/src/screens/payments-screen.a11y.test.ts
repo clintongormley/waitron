@@ -34,8 +34,8 @@ const PANELS: CardProviderPanel[] = [
 ];
 
 const PROVIDERS: PaymentProviderRow[] = [
-  { providerId: "acme", state: "connected" },
-  { providerId: "zeta", state: "not_connected" },
+  { providerId: "acme", state: "connected", canUnpair: true },
+  { providerId: "zeta", state: "not_connected", canUnpair: false },
 ];
 
 const READERS: ReaderRow[] = [
@@ -49,7 +49,12 @@ function stubApi(): DashboardApi {
     listReaders: vi.fn().mockResolvedValue(READERS),
     readerStatus: vi.fn().mockResolvedValue({ online: true }),
     disconnectPaymentProvider: vi.fn().mockResolvedValue(undefined),
-    retireReader: vi.fn().mockResolvedValue(undefined),
+    disableReader: vi.fn().mockResolvedValue(undefined),
+    availableReaders: vi.fn().mockResolvedValue([
+      { providerRef: "v-1", name: "Counter", status: "available", model: "solo", serial: "123" },
+      { providerRef: "v-2", name: "Terrace", status: "disabled" },
+      { providerRef: "v-3", name: "Bar", status: "added" },
+    ]),
   } as unknown as DashboardApi;
 }
 
@@ -75,6 +80,33 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     await flush(el);
     await expectNoA11yViolations(host);
   });
+
+  it.each(["discovery", "edit", "details", "unpair"])(
+    "renders the %s dialog accessibly",
+    async (mode) => {
+      const { el, host } = await mountWidget<PaymentsScreen>(
+        "dashboard-payments-screen",
+        {
+          api: stubApi(),
+          request: vi.fn() as unknown as PaymentsScreen["request"],
+          panels: PANELS,
+        },
+        theme,
+      );
+      await flush(el);
+      const root =
+        mode === "discovery"
+          ? el.shadowRoot!
+          : el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+      root
+        .querySelector<HTMLElement>(
+          mode === "discovery" ? "[data-test=add-reader-acme]" : `[data-test=${mode}-r-1]`,
+        )!
+        .click();
+      await flush(el);
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("renders an open connect form accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(

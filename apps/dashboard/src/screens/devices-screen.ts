@@ -224,7 +224,7 @@ export class DevicesScreen extends LitElement {
   // DEFAULT_HARDWARE (the device list carries no hardware); a Save writes it and refreshes the entry
   // from the server's stored values.
   @state() private hardwareEdits: Record<string, HardwareEdit> = {};
-  // The venue's card readers (active AND retired — filtered to active for the picker), loaded once
+  // The venue's card readers (active AND disabled — filtered to active for the picker), loaded once
   // for the whole screen (Task 16), unlike the per-device default below.
   @state() private readers: ReaderRow[] = [];
   // Each ACTIVE device's current default reader id (or null), keyed by device id — read via

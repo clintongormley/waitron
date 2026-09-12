@@ -1,3 +1,4 @@
+import type { SumUpReader } from "./client.js";
 import type { Decimal } from "@waitron/shared";
 import { fromMajorUnits, toMinorUnits } from "./client.js";
 import type {
@@ -160,8 +161,8 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
     },
     async listReaders() {
       const r = await call("GET", `/v0.1/merchants/${mc}/readers`);
-      const items = (r.json as { items: { id: string; name: string; status: string }[] }).items;
-      return items.map((i) => ({ id: i.id, name: i.name, status: i.status }));
+      if (r.status >= 400) throw new Error(`sumup GET readers: HTTP ${r.status}`);
+      return (r.json as { items: (SumUpReader & { name: string })[] }).items;
     },
     async pairReader(p: { pairingCode: string; name: string }) {
       const r = await call("POST", `/v0.1/merchants/${mc}/readers`, {
@@ -187,20 +188,35 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       if (r.status >= 400) return null;
       const data = r.json as { id?: unknown; status?: unknown };
       if (typeof data.id !== "string" || typeof data.status !== "string") return null;
-      return { id: data.id, status: data.status };
+      return r.json as SumUpReader;
     },
     async readerStatus(readerId: string) {
       const r = await call(
         "GET",
         `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}/status`,
       );
+      if (r.status >= 400) throw new Error(`sumup GET reader status: HTTP ${r.status}`);
       const data = (
-        r.json as { data: { status: string; connection_type?: string; state?: string } }
+        r.json as {
+          data: {
+            status: string;
+            connection_type?: string;
+            state?: string;
+            battery_level?: number | null;
+            firmware_version?: string;
+            last_activity?: string;
+          };
+        }
       ).data;
-      const parts = [data.connection_type, data.state].filter((v): v is string => v !== undefined);
       return {
         online: data.status === "ONLINE",
-        ...(parts.length > 0 ? { detail: parts.join(" / ") } : {}),
+        ...(data.battery_level != null
+          ? { batteryPercent: Math.max(0, Math.min(100, Math.round(data.battery_level))) }
+          : {}),
+        ...(data.connection_type !== undefined ? { connection: data.connection_type } : {}),
+        ...(data.state !== undefined ? { activity: data.state } : {}),
+        ...(data.firmware_version !== undefined ? { firmwareVersion: data.firmware_version } : {}),
+        ...(data.last_activity !== undefined ? { lastSeenAt: data.last_activity } : {}),
       };
     },
     async deleteReader(readerId: string): Promise<void> {

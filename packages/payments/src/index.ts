@@ -90,6 +90,7 @@ export type {
   ProviderCredentialField,
   ReaderAddMode,
   ReaderStatus,
+  VendorReader,
 } from "./card-provider.js";
 export { cardProviderById, selectCardProviders } from "./card-provider.js";
 // The two reader tables (this module owns them) — re-exported from the package root so the host's

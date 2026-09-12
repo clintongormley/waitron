@@ -1377,9 +1377,10 @@ export interface BackupApplyBody {
 export interface PaymentProviderRow {
   providerId: string;
   state: "connected" | "not_connected";
+  canUnpair: boolean;
 }
 
-/** One `GET /management-api/payments/readers` row. `active` is false for a retired reader (the row is
+/** One `GET /management-api/payments/readers` row. `active` is false for a disabled reader (the row is
  * kept so historical payments still resolve its name); `deviceCount` is how many devices name it as
  * their default. `provider` is the provider token ("sumup"/"stripe"), resolved to a display name via
  * the matching panel's `displayNameKey`. */
@@ -1391,12 +1392,28 @@ export interface ReaderRow {
   deviceCount: number;
 }
 
+export interface AvailableReader {
+  providerRef: string;
+  name: string;
+  model?: string;
+  serial?: string;
+  registeredAt?: string;
+  status: "available" | "disabled" | "added";
+}
+
 /** A reader's live status as `GET /management-api/payments/readers/:id/status` returns it — loaded
  * lazily per row. `online` is device connectivity; `pairingStatus` (SumUp) is pairing completion,
  * DISTINCT from connectivity (a reader can be paired yet briefly offline). */
 export interface ReaderStatusView {
   online: boolean;
-  detail?: string;
+  batteryPercent?: number;
+  connection?: string;
+  activity?: string;
+  firmwareVersion?: string;
+  lastSeenAt?: string;
+  model?: string;
+  serial?: string;
+  unreachable?: boolean;
   pairingStatus?: "processing" | "paired";
 }
 
@@ -2938,7 +2955,7 @@ export class DashboardApi {
   // (`apps/server/src/payments-api.ts`). The per-provider connect + add-reader forms are NOT here — a
   // provider's own panel (`CARD_PROVIDER_PANELS`) owns those and talks to the routes through the shared
   // request primitive — so the screen's client covers only the provider-neutral reads and actions:
-  // list providers/readers, a reader's lazy status, disconnect a provider, retire a reader.
+  // list providers/readers, a reader's lazy status, disconnect a provider, disable or unpair a reader.
 
   /** `GET /management-api/payments/providers` — every card provider and its connection state. */
   listPaymentProviders(): Promise<PaymentProviderRow[]> {
@@ -2961,13 +2978,13 @@ export class DashboardApi {
 
   /** `POST /management-api/payments/providers/:id/disconnect` — drop the sealed credential. Answers an
    * empty 204; rejects `{ code: "payment.provider_in_use" }` while any active reader still uses it (the
-   * operator retires those first), `{ code: "payment.provider_unknown" }` on a bad id. */
+   * operator disables those first), `{ code: "payment.provider_unknown" }` on a bad id. */
   disconnectPaymentProvider(id: string): Promise<void> {
     return this.#request<void>(`/management-api/payments/providers/${id}/disconnect`, "POST");
   }
 
-  /** `GET /management-api/payments/readers` — this tenant's card readers by name (active AND retired,
-   * so the surface can show a retired one). Each carries its provider, active flag and device count. */
+  /** `GET /management-api/payments/readers` — this tenant's card readers by name (active AND disabled,
+   * so the surface can show a disabled one). Each carries its provider, active flag and device count. */
   listReaders(): Promise<ReaderRow[]> {
     return this.#request<ReaderRow[]>("/management-api/payments/readers", "GET");
   }
@@ -2989,11 +3006,39 @@ export class DashboardApi {
     return this.#request<ReaderStatusView>(`/management-api/payments/readers/${id}/status`, "GET");
   }
 
-  /** `POST /management-api/payments/readers/:id/retire` — retire a reader (soft: `active = false`,
-   * the row is KEPT so historical payments still resolve its name). Answers an empty 204; an
-   * unknown/already-retired id rejects `{ code: "reader.not_found" }`. */
-  retireReader(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/payments/readers/${id}/retire`, "POST");
+  availableReaders(providerId: string): Promise<AvailableReader[]> {
+    return this.#request<AvailableReader[]>(
+      `/management-api/payments/providers/${encodeURIComponent(providerId)}/available-readers`,
+      "GET",
+    );
+  }
+
+  adoptReader(input: {
+    providerId: string;
+    providerRef: string;
+    name: string;
+  }): Promise<{ id: string; status: "paired" }> {
+    return this.#request<{ id: string; status: "paired" }>(
+      "/management-api/payments/readers/adopt",
+      "POST",
+      input,
+    );
+  }
+
+  renameReader(id: string, name: string): Promise<void> {
+    return this.#request<void>(`/management-api/payments/readers/${id}`, "PATCH", { name });
+  }
+
+  disableReader(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/payments/readers/${id}/disable`, "POST");
+  }
+
+  enableReader(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/payments/readers/${id}/enable`, "POST");
+  }
+
+  unpairReader(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/payments/readers/${id}/unpair`, "POST");
   }
 
   /** `GET /management-api/payments/devices/:id/reader` — device `id`'s default reader (from
@@ -3006,7 +3051,7 @@ export class DashboardApi {
   }
 
   /** `PUT /management-api/payments/devices/:id/reader` — set device `id`'s default reader, or clear it
-   * with `readerId: null`. Answers an empty 204; a foreign, retired or unknown reader id rejects
+   * with `readerId: null`. Answers an empty 204; a foreign, disabled or unknown reader id rejects
    * `{ code: "reader.not_found" }`. */
   setDeviceReader(id: string, readerId: string | null): Promise<void> {
     return this.#request<void>(`/management-api/payments/devices/${id}/reader`, "PUT", {

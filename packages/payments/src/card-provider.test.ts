@@ -15,6 +15,8 @@ const fake = (providerId: string): CardProviderContribution =>
     connect: async () => ({ merchantName: "x", sealedPayload: {} }),
     build: () => ({}) as unknown as PaymentProvider,
     readers: {
+      canUnpair: false,
+      list: async () => [],
       add: async () => ({ providerRef: "x", status: "paired" }),
       status: async () => ({ online: true }),
       remove: async () => {},

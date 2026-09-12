@@ -29,7 +29,7 @@ type Phase = "form" | "pairing" | "expired" | "failed";
  * (`online`): a reader can confirm pairing and then be briefly offline within the code's window, and
  * gating on `online` would wrongly time it out. Navigating away stops the poll — `disconnectedCallback`
  * clears the timer, the printers-screen `#endScan` precedent. On a genuine expiry or failure (never
- * reaching `paired`) the `processing` reader row this attempt created is retired, so no un-paired orphan
+ * reaching `paired`) the `processing` reader row this attempt created is unpaired, so no un-paired orphan
  * lingers to be picked as a device default. All pairing calls go through the server, so the API key
  * never reaches the browser.
  */
@@ -114,7 +114,7 @@ export class SumUpAddReader extends LitElement {
       result = await this.#client().addReader({ name: this.name, code: this.code });
     } catch {
       // The POST failed before a row was created (the server inserts only after the seat pairs), so
-      // there is no orphan to retire here — just show the failure.
+      // there is no orphan to unpair here — just show the failure.
       this.phase = "failed";
       return;
     }
@@ -159,20 +159,20 @@ export class SumUpAddReader extends LitElement {
     this.onClose();
   }
 
-  /** End a pairing attempt that never reached `paired`: stop the poll, show the end state, and retire
+  /** End a pairing attempt that never reached `paired`: stop the poll, show the end state, and unpair
    * the `processing` reader row this attempt created so it does not linger as an un-paired orphan. */
   #abandon(phase: "expired" | "failed"): void {
     this.#endPoll();
     this.phase = phase;
-    void this.#retireOrphan();
+    void this.#unpairOrphan();
   }
 
-  /** Best-effort retire of the row the successful POST created. A failed retire must not hang the
-   * dialog — the orphan can still be retired from the readers list — so its rejection is swallowed. */
-  async #retireOrphan(): Promise<void> {
+  /** Best-effort unpair of the row the successful POST created. A failed unpair must not hang the
+   * dialog — the orphan can still be unpaired from the readers list — so its rejection is swallowed. */
+  async #unpairOrphan(): Promise<void> {
     if (this.#readerId === "") return;
     try {
-      await this.#client().retireReader(this.#readerId);
+      await this.#client().unpairReader(this.#readerId);
     } catch {
       // swallow — cleanup is best-effort; never block the try-again flow on it
     }

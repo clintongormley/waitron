@@ -355,3 +355,11 @@ seats filling it; the Battery column, the Details dialog, the Unknown state and 
   `Location`, stays deferred from slice 1.
 - **Alerting on a low battery** — a notification surface, not a config screen; worth raising separately
   once the dashboard has somewhere to put it.
+
+
+## Implementation note — 2026-09-12
+
+Stripe's `last_seen_at` goes directly to JavaScript `Date`, which accepts milliseconds. The division
+by 1000 in Section 3 applies only when the receiving date API expects seconds. The regression uses
+`1789211028930` and expects `2026-09-12T11:03:48.930Z`; treating that value as seconds produces a year
+of 58667 and fails the test (`packages/payments-stripe/src/card-provider.test.ts`).

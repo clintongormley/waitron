@@ -315,8 +315,8 @@ describe("sumupClient reader management", () => {
     const status = await client.readerStatus("rdr_1");
 
     expect(status.online).toBe(true);
-    expect(status.detail).toContain("Wi-Fi");
-    expect(status.detail).toContain("IDLE");
+    expect(status.connection).toBe("Wi-Fi");
+    expect(status.activity).toBe("IDLE");
     expect(s.calls).toContainEqual(["GET", "/v0.1/merchants/MC/readers/rdr_1/status"]);
   });
 

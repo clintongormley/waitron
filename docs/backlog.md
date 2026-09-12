@@ -1287,15 +1287,16 @@ for the projected remainder.
   time. Deferred follow-ups: slice 2 is the handheld NFC/QR link (pay a table order from a phone);
   Redsys / bank terminals are PARKED (the research already sits in the design spec); and the small
   minors — restoring `stripe_on_device` (Tap-to-Pay), reconciling a reader-add that pairs at the vendor
-  but fails to insert the local row, and a live reader online/offline signal on the dashboard.
-  **Slice 1b is designed and next** ([specs/2026-09-12-card-reader-adoption-and-status-design.md](superpowers/specs/2026-09-12-card-reader-adoption-and-status-design.md)):
-  the first live run found that a reader already paired to the provider's cloud cannot be added at all
+  but fails to insert the local row.
+  **Slice 1b is implemented on `reader-adoption`, automated validation complete** ([specs/2026-09-12-card-reader-adoption-and-status-design.md](superpowers/specs/2026-09-12-card-reader-adoption-and-status-design.md)):
+  the first live run found that a reader already paired to the provider's cloud could not be added
   — it never offers a pairing code, so the owner had to delete it on SumUp's website first. 1b adds a
   `list` operation to the card-provider seat (both providers), offers the account's existing readers
   inside the Add dialog with an editable name, renames Retire to Disable (Waitron-only, so a disabled
   reader stays re-addable as printers already do) with Unpair as a separate row-menu action, and keeps
-  the battery / connection / firmware / last-seen the vendors already report — including fixing a
-  provider outage that currently renders a healthy reader as "Offline".
+  the battery / connection / firmware / last-seen the vendors already report, including showing
+  "Unknown" when the provider cannot be reached.
+  Live Solo adoption and battery confirmation remain required before the PR.
 - **More than one card provider loaded at once** — DONE (2026-09-12, same branch as above). A venue can
   now have several providers connected and several readers per provider; the pay path chooses the reader
   per call (the payment-time picker on the till, or the paying device's default) and drives THAT reader's

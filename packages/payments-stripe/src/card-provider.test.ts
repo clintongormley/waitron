@@ -55,6 +55,7 @@ function fakeMakeStripe(
   opts: {
     account?: () => Promise<unknown>;
     reader?: (id: string) => Promise<unknown>;
+    list?: (...args: unknown[]) => Promise<unknown>;
   },
   calls: FakeCalls,
 ): (secretKey: string) => Stripe {
@@ -69,6 +70,7 @@ function fakeMakeStripe(
       },
       terminal: {
         readers: {
+          list: opts.list,
           retrieve: async (id: string) => {
             calls.readersRetrieved.push(id);
             return (
@@ -218,6 +220,73 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
     return { deps: { db: suite.db, ring, tenantId }, seat: createStripeCardProvider(makeStripe) };
   }
 
+  it("lists the default account page without a location filter", async () => {
+    const args: unknown[][] = [];
+    const { deps, seat } = await readerDeps(
+      fakeMakeStripe(
+        {
+          list: async (...input) => {
+            args.push(input);
+            return {
+              data: [
+                {
+                  id: "tmr_abc",
+                  label: "Counter",
+                  device_type: "bbpos_wisepos_e",
+                  serial_number: "serial-1",
+                },
+              ],
+              has_more: true,
+            };
+          },
+        },
+        freshCalls(),
+      ),
+    );
+    expect(await seat.readers.list(deps)).toEqual([
+      { providerRef: "tmr_abc", name: "Counter", model: "bbpos_wisepos_e", serial: "serial-1" },
+    ]);
+    expect(args).toEqual([[]]);
+    expect(seat.readers.canUnpair).toBe(false);
+  });
+
+  it("maps the millisecond last-seen epoch to its 2026 ISO date with no battery", async () => {
+    const { deps, seat } = await readerDeps(
+      fakeMakeStripe(
+        {
+          reader: async () => ({
+            status: "online",
+            device_type: "stripe_s700",
+            serial_number: "serial-1",
+            device_sw_version: "2.3",
+            ip_address: "192.168.1.5",
+            last_seen_at: 1789211028930,
+          }),
+        },
+        freshCalls(),
+      ),
+    );
+    expect(await seat.readers.status(deps, "tmr_abc")).toEqual({
+      online: true,
+      pairingStatus: "paired",
+      model: "stripe_s700",
+      serial: "serial-1",
+      firmwareVersion: "2.3",
+      connection: "192.168.1.5",
+      lastSeenAt: "2026-09-12T11:03:48.930Z",
+    });
+  });
+
+  it("reports a deleted reader as unreachable", async () => {
+    const { deps, seat } = await readerDeps(
+      fakeMakeStripe({ reader: async () => ({ id: "tmr_gone", deleted: true }) }, freshCalls()),
+    );
+    expect(await seat.readers.status(deps, "tmr_gone")).toEqual({
+      online: false,
+      unreachable: true,
+    });
+  });
+
   it("add verifies the reader id exists and returns it paired", async () => {
     const calls = freshCalls();
     const { deps, seat } = await readerDeps(
@@ -238,7 +307,7 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
     await expect(seat.readers.add(deps, { name: "Counter" })).rejects.toThrow(/reference/);
   });
 
-  it("status maps an online reader and its detail", async () => {
+  it("status maps an online reader and its model", async () => {
     const { deps, seat } = await readerDeps(
       fakeMakeStripe(
         { reader: async (id) => ({ id, status: "online", device_type: "stripe_s700" }) },
@@ -247,7 +316,7 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
     );
     const result = await seat.readers.status(deps, "tmr_abc");
     expect(result.online).toBe(true);
-    expect(result.detail).toBe("stripe_s700");
+    expect(result.model).toBe("stripe_s700");
     // A reference reader is paired the instant it is added, so status always reports paired.
     expect(result.pairingStatus).toBe("paired");
   });
@@ -263,7 +332,7 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
     expect(result.online).toBe(false);
   });
 
-  it("status tolerates a failing retrieve, reporting offline rather than crashing", async () => {
+  it("status marks a failed retrieve unreachable", async () => {
     const { deps, seat } = await readerDeps(
       fakeMakeStripe(
         {
@@ -275,8 +344,7 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
       ),
     );
     const result = await seat.readers.status(deps, "tmr_gone");
-    expect(result.online).toBe(false);
-    expect(typeof result.detail).toBe("string");
+    expect(result).toEqual({ online: false, unreachable: true });
   });
 
   it("remove is a no-op that makes no vendor call", async () => {

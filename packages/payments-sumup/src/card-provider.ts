@@ -203,6 +203,19 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
   },
 
   readers: {
+    canUnpair: true,
+    async list(deps) {
+      const client = await sumupClientForTenant(deps);
+      return (await client.listReaders())
+        .filter((reader) => reader.status === "paired")
+        .map((reader) => ({
+          providerRef: reader.id,
+          name: reader.name,
+          ...(reader.device?.model !== undefined ? { model: reader.device.model } : {}),
+          ...(reader.device?.identifier !== undefined ? { serial: reader.device.identifier } : {}),
+          ...(reader.created_at !== undefined ? { registeredAt: reader.created_at } : {}),
+        }));
+    },
     async add(deps: CardProviderRuntimeDeps, input): Promise<AddReaderResult> {
       // SumUp's reader-add mode is `pairing-poll`, so the route always supplies a pairing `code`;
       // its absence is a caller-contract violation, not a runtime condition an operator can act on.
@@ -229,10 +242,8 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
       try {
         base = await client.readerStatus(providerRef);
       } catch {
-        // The low-level status call throws on an unknown/removed reader or a SumUp outage. A reader
-        // page must render that as offline, never crash — so an unreadable status is reported, not
-        // rethrown (Task 6 review).
-        base = { online: false, detail: "unreachable" };
+        // A failed read says nothing about whether the physical reader is online.
+        base = { online: false, unreachable: true };
       }
       // Pairing completion is `getReader`'s status settling `processing → paired`, a DIFFERENT thing
       // from device connectivity above: a reader can pair and then be briefly offline. The add-reader
@@ -241,7 +252,15 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
       // `pairingStatus` undefined rather than crash.
       try {
         const reader = await client.getReader(providerRef);
-        if (reader !== null) return { ...base, pairingStatus: pairingStatus(reader.status) };
+        if (reader !== null)
+          return {
+            ...base,
+            pairingStatus: pairingStatus(reader.status),
+            ...(reader.device?.model !== undefined ? { model: reader.device.model } : {}),
+            ...(reader.device?.identifier !== undefined
+              ? { serial: reader.device.identifier }
+              : {}),
+          };
       } catch {
         // fall through — pairingStatus stays undefined
       }
