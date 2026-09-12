@@ -52,3 +52,11 @@ walkthrough, and GET-only redirects match the browser-navigation requirement.
 Server-staged configuration cleanup across mode changes was not exercised by this review; A2 clears
 the local import request flag and does not claim to remove the server artifact. Physical certificate
 export remains unverified as stated above.
+
+After the first green PR run, #333 advanced main with overlapping dashboard navigation and strings.
+A second rebase onto `025276c7c76f1e401a37ecd116c8d1108836bcbf` applied cleanly. The required fresh
+Claude Opus 5 review took 185 seconds and reproduced no correctness or regression defect. It ran
+the real-PG invoice regression and deleted the fiscal validator: the control-character and length
+cases then failed, while the generic type/blank checks still passed. The original value-preservation
+decision is now explicit in the design. Future country packs without Demo generation remain outside
+the enabled setup list; enabling one requires a separate Demo-flow decision.
