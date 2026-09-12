@@ -89,11 +89,41 @@ export class ProfileScreen extends LitElement {
         letter-spacing: 0.04em;
         color: var(--wt-color-text-muted);
       }
+      .button-group {
+        display: flex;
+        gap: var(--wt-space-2);
+      }
+      /* Each passkey is a member of the "Passkeys" row above it, not a setting in its own right —
+         inset and in the muted/normal-weight voice (vs. the bold field-value every other row here
+         uses) so the list reads as subordinate detail, one line per key. */
+      .passkey-item {
+        padding-left: var(--wt-space-5);
+      }
+      .passkey-text {
+        font-weight: var(--wt-font-weight-normal);
+        color: var(--wt-color-text-muted);
+      }
       .row,
       .action-row {
         padding-block: var(--wt-space-3);
       }
       .action-row:not(:first-child) {
+        border-top: 1px solid var(--wt-color-border);
+      }
+      /* Between individual keys the divider is inset to align with .passkey-item's own indent
+         (a plain border-top would span the full row, edge to edge, like every other divider in
+         this card) — a pseudo-element rather than padding/margin so the row itself stays full
+         width for its flex layout and the right-aligned Remove button. */
+      .passkey-item + .passkey-item {
+        position: relative;
+        border-top: none;
+      }
+      .passkey-item + .passkey-item::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: var(--wt-space-5);
+        right: 0;
         border-top: 1px solid var(--wt-color-border);
       }
       .row {
@@ -614,30 +644,9 @@ export class ProfileScreen extends LitElement {
               >${t("action.change")}</wt-button
             >
           </div>
-        </wt-card>
-      </div>
-      <div class="group">
-        <h2 class="group-label">${t("profile.passkeys")}</h2>
-        <wt-card raised>
-          ${
-            p.passkeys.length === 0
-              ? html`<p class="hint">${t("profile.no_passkeys")}</p>`
-              : p.passkeys.map(
-                  (key, index) =>
-                    html`<div class="action-row">
-                      <div class="text">
-                        <span class="field-value"
-                          >${key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1))}</span
-                        >
-                        <span class="field-meta"
-                          >${new Date(key.createdAt).toLocaleDateString()}</span
-                        >
-                      </div>
-                      ${p.hasPassword ? html`<wt-button data-test="remove-passkey" class="card-action accent-danger" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_name").replace("{name}", key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1)))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
-                    </div>`,
-                )
-          }
-          <div class="card-footer">
+
+          <div class="action-row">
+            <span class="field-value">${t("profile.passkeys")}</span>
             <wt-button
               data-test="add-passkey"
               class="card-action accent-primary"
@@ -646,29 +655,56 @@ export class ProfileScreen extends LitElement {
               >${t("action.add")}</wt-button
             >
           </div>
-        </wt-card>
-      </div>
-      <div class="group">
-        <h2 class="group-label">${t("profile.authenticator")}</h2>
-        <wt-card raised>
-          <p class="hint">
-            ${p.hasTotp ? t("profile.authenticator_enabled") : t("profile.authenticator_hint")}
-          </p>
-          <div class="card-footer">
+          ${
+            p.passkeys.length === 0
+              ? html`<p class="hint">${t("profile.no_passkeys")}</p>`
+              : p.passkeys.map((key, index) => {
+                  const name =
+                    key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1));
+                  return html`<div class="action-row passkey-item">
+                    <span class="passkey-text"
+                      >${name} · ${new Date(key.createdAt).toLocaleDateString()}</span
+                    >
+                    ${
+                      p.hasPassword
+                        ? html`<wt-button
+                            data-test="remove-passkey"
+                            class="card-action accent-danger"
+                            ?disabled=${this.busy}
+                            aria-label=${t("profile.remove_passkey_name").replace("{name}", name)}
+                            @click=${() => this.#edit("remove", key.id)}
+                            >${t("action.remove")}</wt-button
+                          >`
+                        : nothing
+                    }
+                  </div>`;
+                })
+          }
+
+          <div class="action-row">
+            <div class="text">
+              <span class="field-value">${t("profile.authenticator")}</span>
+              <span class="field-meta"
+                >${p.hasTotp ? t("profile.authenticator_enabled") : t("profile.authenticator_hint")}</span
+              >
+            </div>
             ${
               p.hasTotp
-                ? html`<wt-button
+                ? html`<div class="button-group">
+                    <wt-button
                       data-test="recovery-codes"
                       class="card-action"
                       aria-label=${t("profile.replace_recovery_codes")}
                       @click=${() => this.#edit("recovery")}
                       >${t("action.replace")}</wt-button
-                    ><wt-button
+                    >
+                    <wt-button
                       data-test="disable-authenticator"
                       class="card-action accent-danger"
                       @click=${() => this.#edit("disable-totp")}
                       >${t("action.disable")}</wt-button
-                    >`
+                    >
+                  </div>`
                 : html`<wt-button
                     data-test="setup-authenticator"
                     class="card-action accent-primary"
@@ -678,43 +714,40 @@ export class ProfileScreen extends LitElement {
                   >`
             }
           </div>
-        </wt-card>
-      </div>
-      <div class="group">
-        <h2 class="group-label">${t("profile.google_login")}</h2>
-        <wt-card raised>
-          <p class="hint">
+
+          <div class="action-row">
+            <div class="text">
+              <span class="field-value">${t("profile.google_login")}</span>
+              <span class="field-meta"
+                >${
+                  p.hasGoogle
+                    ? t("profile.google_linked")
+                    : this.googleConfigured
+                      ? t("profile.google_hint")
+                      : t("profile.google_unavailable")
+                }</span
+              >
+            </div>
             ${
               p.hasGoogle
-                ? t("profile.google_linked")
+                ? html`<wt-button
+                    data-test="unlink-google"
+                    class="card-action accent-danger"
+                    @click=${() => this.#edit("unlink-google")}
+                    >${t("action.remove")}</wt-button
+                  >`
                 : this.googleConfigured
-                  ? t("profile.google_hint")
-                  : t("profile.google_unavailable")
+                  ? html`<wt-button
+                      data-test="setup-google"
+                      class="card-action accent-primary"
+                      aria-label=${t("profile.setup_google")}
+                      ?disabled=${this.busy}
+                      @click=${() => this.#edit("google")}
+                      >${t("action.setup")}</wt-button
+                    >`
+                  : nothing
             }
-          </p>
-          ${
-            p.hasGoogle || this.googleConfigured
-              ? html`<div class="card-footer">
-                  ${
-                    p.hasGoogle
-                      ? html`<wt-button
-                          data-test="unlink-google"
-                          class="card-action accent-danger"
-                          @click=${() => this.#edit("unlink-google")}
-                          >${t("action.remove")}</wt-button
-                        >`
-                      : html`<wt-button
-                          data-test="setup-google"
-                          class="card-action accent-primary"
-                          aria-label=${t("profile.setup_google")}
-                          ?disabled=${this.busy}
-                          @click=${() => this.#edit("google")}
-                          >${t("action.setup")}</wt-button
-                        >`
-                  }
-                </div>`
-              : nothing
-          }
+          </div>
         </wt-card>
       </div>
       ${
