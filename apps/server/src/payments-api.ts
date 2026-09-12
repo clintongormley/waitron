@@ -304,14 +304,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       });
       // Relay to the seat (pairs SumUp / verifies Stripe) OUTSIDE any transaction — a provider
       // round-trip. The seat reads the sealed credential itself.
-      const result = await seat.readers.add(
-        runtimeDeps(),
-        {
-          name,
-          ...(code !== undefined ? { code } : {}),
-          ...(reference !== undefined ? { reference } : {}),
-        },
-      );
+      const result = await seat.readers.add(runtimeDeps(), {
+        name,
+        ...(code !== undefined ? { code } : {}),
+        ...(reference !== undefined ? { reference } : {}),
+      });
       // A disconnect can commit between the pre-check above and this insert (the provider round-trip
       // holds no transaction), leaving the just-paired reader's provider with NO sealed credential.
       // Re-check the credential is STILL present in the same transaction as the insert and refuse if
@@ -344,12 +341,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // The provider was disconnected mid-add. Best-effort unpair the vendor reader we just paired
         // so it is not stranded; a remove failure is swallowed (the row was never inserted, and the
         // operator's next action is to reconnect and add again).
-        await seat.readers
-          .remove(
-            runtimeDeps(),
-            result.providerRef,
-          )
-          .catch(() => {});
+        await seat.readers.remove(runtimeDeps(), result.providerRef).catch(() => {});
         throw new AppError("reader.provider_disconnected", { providerId });
       }
       return c.json({ id: inserted.id, status: result.status }, 201);
@@ -372,10 +364,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         return row;
       });
       const seat = cardProviderById(deps.providers, reader.provider);
-      const status = await seat.readers.status(
-        runtimeDeps(),
-        reader.providerRef,
-      );
+      const status = await seat.readers.status(runtimeDeps(), reader.providerRef);
       return c.json(status);
     }),
   );
@@ -400,10 +389,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // so it runs outside any transaction. Do it BEFORE flipping the row so a vendor failure leaves
       // the reader still active and the whole retire retryable; a retry re-runs the vendor call.
       const seat = cardProviderById(deps.providers, reader.provider);
-      await seat.readers.remove(
-        runtimeDeps(),
-        reader.providerRef,
-      );
+      await seat.readers.remove(runtimeDeps(), reader.providerRef);
       // Only once the vendor has forgotten it do we retire the row = UPDATE `active=false,
       // retired_at=now()` (the row is KEPT so historical payments still resolve its name; `app_user`
       // holds no DELETE on `card_readers`). Idempotent: a retry after the vendor already succeeded

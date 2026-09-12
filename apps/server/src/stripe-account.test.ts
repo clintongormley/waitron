@@ -4,11 +4,7 @@ import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
-import {
-  defaultMakeStripe,
-  stripeAccountResolver,
-  stripeSecretKeyFrom,
-} from "./stripe-account.js";
+import { defaultMakeStripe, stripeAccountResolver, stripeSecretKeyFrom } from "./stripe-account.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const KEY_ENV = {
