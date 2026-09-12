@@ -1,195 +1,10 @@
 #!/usr/bin/env sh
-# Local gate run before anything reaches the remote, SCOPED to what the push actually adds.
-#
-# What it runs, in order. Cheapest first, and where two steps cost the same, the one likeliest to
-# fail first — so the common failure surfaces in a second rather than after a minute. Every figure
-# below was timed in this worktree on 2026-08-01 by bracketing the command in `time.time()`; where
-# several runs are quoted the spread is quoted with them, because the first run of anything here is
-# consistently the slowest.
-#
-#   sign-off (DCO)                  always     7-8ms for one commit (5 runs) when the walk was
-#                                              inline here. It is now one more process — the walk
-#                                              moved into scripts/check-signoff.sh, the same file
-#                                              licence.yml's `dco` job runs — and the two shapes
-#                                              were timed against each other on 2026-08-01, five
-#                                              runs each, both wrapped in an outer `sh -c` so the
-#                                              comparison is like for like: 14.0-18.5ms inline
-#                                              against 20.1-31.6ms through the script. (Those
-#                                              figures are NOT the 7-8ms measured differently
-#                                              above; what they establish is the delta, ~6-13ms for
-#                                              the extra process.) Still the cheapest step here, so
-#                                              it goes FIRST — see the receipt beside the classifier
-#                                              for why it can.
-#   classify the push               always     46-51ms on a documentation-only push (5 runs),
-#                                              241-248ms when there is code to attribute (5 runs).
-#                                              The difference is one `pnpm ls -r --depth -1 --json`
-#                                              (192-201ms over 10 runs), which scripts/changed-
-#                                              packages.mjs only runs when the answer needs it.
-#                                              Decides every gate below it.
-#   pnpm install --frozen-lockfile  always     967-1049ms (3 runs, everything already installed).
-#                                              Seven of ci.yml's nine jobs run it as their first
-#                                              `run` step; `changes` never installs at all (its own
-#                                              comment says so) and the `ci` aggregator has no
-#                                              install either, and neither of licence.yml's two jobs
-#                                              installs. Moving a dependency between `dependencies`
-#                                              and `devDependencies` passes a plain `pnpm install`
-#                                              and fails those seven at the install step —
-#                                              CLAUDE.md §2 carries that as a trap this closes. It
-#                                              also repairs a stale `node_modules` (CLAUDE.md §6),
-#                                              which is why it runs on the documentation path too
-#                                              rather than being gated on a manifest change.
-#   pnpm format:check               always     1912-2066ms (3 runs). The ONLY step that reads prose,
-#                                              so it runs on a documentation-only push.
-#   pnpm lint                       code       1681-1860ms (3 runs)
-#   pnpm vitest run --coverage      code       2.22-2.24s (3 runs, 2026-08-01, when it held five
-#                                              suites). The REPO-LEVEL Vitest project, never narrowed:
-#                                              the two classifiers below, the guards that read
-#                                              `packages/` and `apps/` whole, and the tests for the
-#                                              sign-off script this file's first step runs. Unscoped
-#                                              by construction — see the step's own comment for why
-#                                              it is not on the documentation path and why it is a
-#                                              step of its own rather than part of the run below.
-#   pnpm typecheck                  package    scoped to the changed packages and their dependents
-#   scope is runnable               scoped     199-202ms (5 runs, `...@waitron/ui` scope) — one
-#                                              `pnpm <the same filters> ls` piped into node. Only on
-#                                              a scoped push. Refuses a scope that would run no test
-#                                              at all — see the step's own comment.
-#   pnpm -r test:coverage           package    ditto — and `test:coverage`, NOT `test`: CI's shards
-#                                              run coverage thresholds and a plain `pnpm test` does
-#                                              not, so a threshold regression used to pass here and
-#                                              fail there (CLAUDE.md §2)
-#
-# The `package` steps are the ones a ROOT-SCOPE push skips: `scripts/`, `.husky/` and `.github/` are
-# read by the repo-level project and by no workspace member (the receipt is beside
-# `isRootScopePath` in scripts/changed-scope.mjs), so such a push runs lint, format:check and that
-# project and stops. It used to run the whole workspace's typecheck and coverage — ten minutes to
-# change the classifier that decides what runs.
-#
-# A DOCUMENTATION-ONLY push stops after `format:check`, and that split is measured, not assumed:
-#
-#   * `pnpm lint` is `eslint .`, and `pnpm exec eslint . --format json` on 2026-08-01 linted zero
-#     Markdown files and zero files under `docs/` — so of what is in the tree TODAY, eslint reads
-#     nothing a documentation-only push contains, and skipping it removes ~1.7s from that path for
-#     no loss of coverage. (Deliberately not a file count: a number that moves is a receipt that
-#     goes stale, CLAUDE.md §2. The zeros are the load-bearing part.)
-#
-#     That is a fact about today's file inventory, NOT a property of the two configurations, and
-#     they do not agree. `eslint.config.js` ignores only `dist`, `node_modules`, `__screenshots__`
-#     and `coverage` — not `docs/` — while `isInertPath` calls anything under `docs/` documentation
-#     whatever its extension. So a `docs/**/*.ts` file would be linted by `pnpm lint` and skipped by
-#     this path. Measured on 2026-08-01 by feeding eslint one unused declaration on stdin under
-#     three names: `--stdin-filename docs/probe.ts` reported
-#     `@typescript-eslint/no-unused-vars` and exited 1, `docs/probe.md` reported
-#     `File ignored because no matching configuration was supplied` and exited 0, and
-#     `dist/probe.ts` reported `File ignored because of a matching ignore pattern` and exited 0.
-#     Nothing enforces the gap staying shut; the first `.ts` under `docs/` opens it.
-#   * `pnpm format:check` is NOT skipped, because prettier genuinely can fail on such a push.
-#     `.prettierignore` lists `docs/`, but a root-level Markdown file is not covered by it:
-#     `pnpm exec prettier --file-info docs/backlog.md` gives `{"ignored": true}` while
-#     `--file-info CLAUDE.md` and `--file-info README.md` each give
-#     `{"ignored": false, "inferredParser": "markdown"}`. Run in the failing direction too —
-#     appending a mis-formatted heading to CLAUDE.md made `prettier --check CLAUDE.md` print
-#     `[warn] CLAUDE.md` and exit 1.
-#
-# The classifier is scripts/changed-packages.mjs. ONE invocation answers both questions this hook
-# asks: is this prose, and if not, what does it reach. Since 2026-08-01 it is also the ONLY
-# mechanism — ci.yml's `changes` job runs this same script on the pull request's diff, where it used
-# to run pnpm's changed-since filter instead and skip every package's tests on a root-config change.
-# One tested code path rather than two that can drift; docs/backlog.md carries what the drift cost.
-#
-# SCOPING. That script maps the push's changed paths onto workspace packages; this hook turns each
-# into `--filter "...<pkg>"`, whose LEFT-hand ellipsis selects that package AND ITS DEPENDENTS
-# (measured in this worktree on 2026-07-31: `--filter "...@waitron/shared"` lists 12 packages,
-# `--filter "@waitron/shared..."` lists 1). Any path outside every package directory that is not the
-# repository's own machinery — root config, the lockfile — makes the run GLOBAL, and so does a push
-# range we could not work out. Fail closed, always: a run that was not needed costs a minute, a skip
-# that was needed pushes something broken.
-#
-# The obvious implementation, pnpm's own `--filter "...[<ref>]"`, is NOT usable here. Run in both
-# directions on 2026-07-31 with one commit touching `packages/db/README.md` on top of `main`, and
-# the identical commands in each place: `git diff --name-only main...HEAD` named that path in both,
-# while `pnpm --filter "...[main]" ls --depth -1 --json` gave 2760 bytes and 11 packages in a plain
-# `git clone` and 0 bytes, exit 0 in a `git worktree` — indistinguishable from a filter that matched
-# nothing. All work in this repository happens in a worktree (CLAUDE.md §6), so a hook built on that
-# filter would narrow every push to nothing. CI ran in a clone, where that filter does work, and it
-# is gone from there too as of 2026-08-01 — for a different reason: it answers a path belonging to
-# no package with the workspace ROOT, which is narrower than the truth rather than wider.
-#
-# NOT RUN HERE, deliberately — so a green hook does NOT imply a green CI:
-#
-#   * MUTATION TESTING (`mutation-verifactu`, `mutation-shared`). Measured on CI run 30650089655:
-#     mutation-verifactu alone was 3m26s of a 4m8s run. CI already scopes both to the packages that
-#     can affect them; a hook that ran them would be the thing that makes people reach for
-#     --no-verify.
-#   * The `bundle-smoke` BUILDS. Nothing here builds an esbuild bundle, so the failure modes that
-#     job exists for — a collapsed `import.meta.url`, a CJS require under `--format=esm` — are
-#     invisible to this hook by construction. See ci.yml's own comments on that job.
-#   * ANY TEST AT ALL, when the scope holds only packages that declare no `test:coverage` script.
-#     Measured on 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None
-#     of the selected packages has a "test:coverage" script` and exits 0. That is still true and
-#     still honest — @waitron/bench-pglite deliberately has no tests
-#     (bench/pglite-throughput/README.md) — but it is now DECLARED rather than assumed: the package
-#     is named in PACKAGES_WITHOUT_TESTS in scripts/changed-scope.mjs, and the "scope is runnable"
-#     step below fails on any other package that turns up with no such script. So a green hook still
-#     does not imply tests ran on such a push; it does imply nobody added a package that quietly
-#     runs none.
-#
-# In a hurry / hook is wrong? Bypass with: git push --no-verify
-# Please still fix the underlying failure — CI runs the same checks and will block the PR either
-# way.
-#
-# EDITING THIS FILE: husky runs it as `sh -e "$s" "$@"` — .husky/_/h LINE 17, where `$s` is this
-# file's path, built from `$0` at lines 3-4 of that file. Its LAST line is line 22, `exit $c`, which
-# reports this script's exit code back to git. `-e` is unforgiving in two places this script relies
-# on. Measured with the same /bin/sh husky gets here (bash 3.2.57 in sh mode):
-# `sh -e -c 'x=$(false); echo reached'` prints NOTHING and exits 1, and
-# `sh -e -c 'echo hi | grep -q nope; echo reached'` does the same. So every command substitution
-# that can fail carries `|| <fallback>`, and every `grep` sits inside an `if`. An unguarded one does
-# not misbehave — it kills the hook silently, mid-gate, with a bare exit code. Re-run on
-# 2026-08-01 in the shape this script now uses:
-# `sh -e -c 'x=$(git rev-list <bogus>..HEAD 2>/dev/null) || { echo "guard fired"; }; echo reached'`
-# printed both lines and exited 0.
-
-# Husky invokes this script via `sh -e "<this file>" "$@"` with the working
-# directory already set to the repository root (or the current worktree's
-# root, in a `git worktree` checkout) by git itself — so this works
-# regardless of which subdirectory `git push` was run from. The explicit `cd`
-# below is a defensive no-op that keeps the script correct even if invoked
-# some other way.
+# Fast feedback before upload: sign-off, locked install, formatting, lint, root guards and types.
+# Package tests and coverage belong to CI; focused behavioral tests run during implementation.
+# Git starts hooks at the repository root; Husky invokes this script with sh -e.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-# Git feeds this hook one line per ref being pushed, on stdin:
-#
-#   <local ref> <local sha> <remote ref> <remote sha>
-#
-# A DELETION carries the all-zero local sha (`git push --delete`, or the
-# `:branch` refspec). It uploads no objects and changes no code, so running the
-# gate on one checks the WORKING TREE — which has nothing to do with what is
-# being pushed, and which fails for reasons the push cannot cause. Deleting a
-# merged branch is the common case, and it was blocked by a stale
-# `node_modules` in the main checkout: `tsc: command not found` in
-# `packages/migrations`, on a push that carried no TypeScript at all.
-#
-# Fails CLOSED. If stdin carries no refs we do not know what this push is, so
-# the gate runs. Only an explicit, non-empty, all-deletions push skips it.
-#
-# The same pass works out the RANGE each updated ref adds and accumulates its commits and its
-# changed paths, which is what the sign-off check walks and what the classifier is fed:
-#
-#   <remote sha> non-zero  the branch exists on the remote, so the push adds <remote sha>..<local
-#                          sha> exactly. Also the force-push case: the two-point diff is still the
-#                          net change, and `rev-list` still lists the commits that are new to the
-#                          remote, which is the set that needs signing off.
-#   <remote sha> all-zero  a NEW branch, which has no "before" on the remote — fall back to
-#                          `git merge-base origin/main <local sha>`.
-#
-# Anything that leaves a range undetermined (no `origin/main` to branch from, an endpoint this
-# checkout does not have) sets `range_unknown`, which runs everything.
-#
-# This loop reads from the script's own stdin rather than from a pipe, so it is NOT a subshell and
-# what it assigns survives it. That is load-bearing and is what the end-to-end runs show: a crafted
-# push carrying an unsigned commit was blocked with that commit named, which can only happen if
-# `commits` outlived the loop.
+# Only an explicit deletion-only push skips checks. Empty or unknown ranges keep all local checks.
 saw_ref=0
 has_update=0
 have_range=0
@@ -200,52 +15,22 @@ changed_paths=""
 while read -r _local_ref local_sha _remote_ref remote_sha; do
   saw_ref=1
   case "$local_sha" in
-  # Any character that is not "0" means a real object is being pushed.
   *[!0]*) has_update=1 ;;
-  # A deletion adds no commits and no paths, so there is no range to compute for it.
   *) continue ;;
   esac
 
+  # Existing refs use their remote tip; new refs use the main merge base.
   case "$remote_sha" in
   *[!0]*) base="$remote_sha" ;;
   *) base=$(git merge-base origin/main "$local_sha" 2>/dev/null) || base="" ;;
   esac
 
-  # An empty base must NOT be allowed through to build "..$local_sha": git reads the empty side as
-  # HEAD, so the range is VALID and means something else entirely — `git rev-list "..HEAD"` and
-  # `git diff --name-only "..HEAD"` both exit 0 rather than complaining.
-  #
-  # Proven by deleting these four lines on 2026-08-01, in a `git clone --no-hardlinks` of this
-  # worktree with its `origin` remote removed (so the merge-base fallback above returns nothing) and
-  # three commits A→B→C, B touching `packages/ui` and C touching `packages/db`. HEAD is C; the
-  # crafted push points its ref at B with an all-zero remote sha:
-  #
-  #   with the guard      "could not work out what this push adds — running the whole gate", and the
-  #                       classifier reported `no changed paths could be determined`.
-  #   without the guard   the range became C..B — the REVERSE diff — and the hook printed
-  #                       `1 changed code path(s) map to @waitron/db`, narrowing to a package the
-  #                       push does not touch while never testing `packages/ui`, which it does. No
-  #                       warning of any kind.
-  #
-  # Both runs skipped the sign-off check ("no commit range"), so that is NOT what the guard buys.
-  # What it buys is refusing to narrow on a range that is wrong rather than merely absent.
+  # An empty base would turn the range into HEAD..local_sha, silently checking the wrong diff.
   if [ -z "$base" ]; then
     range_unknown=1
     continue
   fi
 
-  # No `git rev-parse --verify` pre-flight: these two commands already reject what it rejected, and
-  # with the same loudness once stderr is discarded. Run on 2026-08-01 with a base of forty `dead`/
-  # `beef` hex, `git rev-list <bogus>..HEAD` and `git diff --name-only <bogus>..HEAD` each exited
-  # 128 and printed `fatal: Invalid revision range …` on stderr, which `2>/dev/null` swallows and
-  # the `||` turns into range_unknown.
-  #
-  # `-c core.quotePath=false` on the diff is not cosmetic. Run on 2026-08-01 in a throwaway repo
-  # (git 2.54.0) holding `packages/db/src/café.ts`, `git diff --name-only` printed
-  # `"packages/db/src/caf\303\251.ts"` — wrapped in double quotes, with the UTF-8 bytes octal-
-  # escaped — while `git -c core.quotePath=false diff --name-only` printed the path itself. The
-  # quoted form starts with `"`, so it matches no package directory, and the classifier widens the
-  # push to a whole-workspace run. Safe, but an accented filename should not cost two minutes.
   range_commits=$(git rev-list "$base..$local_sha" 2>/dev/null) || {
     range_unknown=1
     continue
@@ -267,27 +52,17 @@ fi
 
 start_ts=$(date +%s)
 
-# No ref produced a usable range — including the no-refs-on-stdin case, where the loop never ran.
 if [ "$have_range" -eq 0 ]; then
   range_unknown=1
 fi
 
-# The classifier fails closed on empty stdin, so there is no separate branch for the unknown case:
-# it is the same code path with nothing to narrow on.
 if [ "$range_unknown" -eq 1 ]; then
   commits=""
   changed_paths=""
   echo "pre-push: could not work out what this push adds — running the whole gate"
 fi
 
-# Runs one gate step, printing a clear failure message with the exact command to reproduce it
-# locally before blocking the push.
-#
-# The command is passed as ARGV, not as a string to `eval`, so nothing here is re-parsed by the
-# shell and a package name is one argument whatever it contains. `$2` is the human-readable
-# reproduction line, which is separate because two of the steps are not commands a person can
-# retype: `check_signoff` is a shell function, and the scoped steps' `--filter` arguments carry
-# quoting that only makes sense typed out.
+# Keep command arguments separate from the printable reproduction command; never eval them.
 run_step() {
   step_name="$1"
   step_repro="$2"
@@ -304,52 +79,13 @@ run_step() {
   fi
 }
 
-# Every commit in the push range needs a `Signed-off-by` trailer. The predicate and the walk are
-# scripts/check-signoff.sh — ONE copy, which licence.yml's `dco` job runs too. That job is a
-# REQUIRED status check ("Every commit is signed off", ruleset 19899160, read back on 2026-08-01
-# with `gh api repos/:owner/:repo/rulesets/19899160`), so a commit missing one blocks the pull
-# request from merging until it is rebased away — and the two gates giving the same answer is the
-# only thing that makes failing here cheaper than failing there. They held byte-identical copies of
-# the regex and the loop until 2026-08-01; docs/backlog.md's entry has why that was not good enough.
-#
-# What is NOT shared is how the commit list is built — CI diffs the pull request, this hook
-# accumulates a range per pushed ref — nor the reporting: `::error::` annotations there, the
-# indented list below here.
-#
-# This is the step that failed in CI and prompted this hook: `git revert --no-edit` writes a commit
-# message with no trailer, and nothing local said so until CI did.
-#
-# It runs on a documentation-only push too, unlike lint, typecheck and the tests. Sign-off is a
-# property of the COMMITS, not of the code they carry, and CI's `dco` job makes no exception for
-# prose either.
 check_signoff() {
-  # Nothing to walk. TWO different pushes land here, and only one of them has already been reported:
-  #
-  #   the range was undetermined       `range_unknown` cleared `commits`, and the "could not work
-  #                                    out what this push adds" message above named it.
-  #   the range was determined and is  a rewind — the local sha is behind the remote one, so
-  #   EMPTY                            `rev-list <remote>..<local>` lists nothing while
-  #                                    `diff <remote>..<local>` still names the reverted paths.
-  #                                    Nothing has been printed about it at all.
-  #
-  # Run on 2026-08-01 with a crafted rewind (`refs/heads/x <parent> refs/heads/x <child>`, the child
-  # touching `docs/backlog.md`): `rev-list` was empty, `diff --name-only` printed `docs/backlog.md`,
-  # and the hook printed this line with no preceding message of any kind. So this message has to
-  # stand on its own rather than lean on one above it — which is why it names the consequence
-  # (licence.yml still checks) instead of the cause.
   if [ -z "$commits" ]; then
     echo "  no commit range — sign-off not checked here; licence.yml's dco job still will"
     return 0
   fi
 
-  # The predicate and the walk are scripts/check-signoff.sh, which licence.yml's `dco` job runs
-  # too; what stays here is this hook's own reporting. It prints the failing commits on stdout, one
-  # `git log --oneline` line each, and exits 1 when there are any.
-  #
-  # The `||` is not decoration: husky runs this file under `sh -e`, where an unguarded
-  # `x=$(false)` kills the script silently mid-gate — this file's header carries the measurement.
-  # A command substitution assigns what it captured whatever the exit status, so `$missing` holds
-  # the lines by the time this branch runs.
+  # Guard failure capture under sh -e so the diagnostic survives the failed command.
   missing=$(printf '%s\n' "$commits" | scripts/check-signoff.sh) || {
     echo "  Commits with no Signed-off-by trailer:"
     printf '%s\n' "$missing" | sed 's/^/    /'
@@ -360,95 +96,17 @@ check_signoff() {
 
 run_step "sign-off (DCO)" "git rebase --signoff <base>   (or: git commit -s --amend)" check_signoff
 
-# ONE classifier call answers both questions. stdout carries five lines (`code=`, `scope=`,
-# `packages=`, `root=`, `deploy=`) and nothing else; this hook reads `scope=` and `packages=` and
-# routes on them — `root=` and `deploy=` are emitted for other consumers and read by no consumer
-# here (`deploy=` gates CI's image job, and this hook builds no image). The reason goes to stderr,
-# where it has already been printed by the time this reads the result.
-#
-#   scope=documentation   every changed path is inert: prose, or root config no code-gated job reads
-#   scope=root            the repository's own machinery only — the repo-level suite, nothing scoped
-#   scope=global          run everything
-#   scope=packages        `packages=` names what to narrow to
-#
-# `root=true|false` is a further line, orthogonal to the scope: true whenever ANY changed path is that
-# machinery, so a push touching `scripts/` and `packages/db` is `scope=packages root=true`. The
-# repo-level suite is unscoped and runs on every non-documentation push, so nothing here reads it
-# today; it is emitted for the same reason `code=` is — one classifier, one answer. `deploy=` is the
-# last line, likewise unread here — it tells CI's image job whether the box image's inputs changed.
-#
-# It runs AFTER the sign-off check, which it does not feed: `check_signoff` reads `$commits` alone,
-# and the ref loop above has already determined that. Run on 2026-08-01 against a crafted push
-# carrying one unsigned commit, with the classifier's interpreter taken away
-# (`env -i HOME=$HOME PATH=/usr/bin:/bin:/usr/sbin:/sbin sh -e .husky/pre-push origin url`, node
-# being at /opt/homebrew/bin/node): the classifier printed `node: command not found`, the scope fell
-# back to the whole workspace, and the sign-off step still named the offending commit and still
-# exited 1.
 echo "pre-push: working out what this push can affect..."
 scope_output=$(printf '%s\n' "$changed_paths" | node scripts/changed-packages.mjs) || scope_output=""
 scope_kind=$(printf '%s\n' "$scope_output" | sed -n 's/^scope=//p') || scope_kind=""
 scope_packages=$(printf '%s\n' "$scope_output" | sed -n 's/^packages=//p') || scope_packages=""
 
-# Fails CLOSED on anything but the two literals this script tests for — `packages` just below and
-# `documentation` after the always-run steps. An empty string, a missing line, a node that could not
-# run: all land on the whole workspace.
-#
-# The `--filter` arguments are accumulated as POSITIONAL PARAMETERS rather than concatenated into a
-# string for `eval`. That removes the SECOND shell pass, so a quote, a `$` or a backtick in a package
-# name reaches pnpm literally. It does NOT remove the first pass: `$scope_packages` is unquoted in
-# the `for` below — deliberately, the single space in the classifier's output is what it splits on —
-# and an unquoted expansion undergoes PATHNAME EXPANSION as well as field splitting. A `*`, `?` or
-# `[` in a name is therefore still a glob, and `set -f` is what guards it; `set +f` restores globbing
-# straight afterwards, because nothing else in this script wants it off.
-#
-# Measured on 2026-08-01 from a directory holding `package.json` and `packages/`, in the /bin/sh
-# husky invokes here (bash 3.2.57 in sh mode) and again under busybox `ash` and bash 5.3.15
-# (`docker run --rm bash:5`) — all three agreed line for line:
-#
-#   PKGS="pack*"; set --; for pkg in $PKGS; do set -- "$@" --filter "...$pkg"; done; echo "$*"
-#     → --filter ...package.json --filter ...packages
-#   the same loop wrapped in `set -f` … `set +f`
-#     → --filter ...pack*
-#   and `echo pack*` after the `set +f` expands again, so the guard does not leak into later steps.
-#
-# Run end to end too, in a throwaway pnpm workspace holding a member literally named `pack*` beside a
-# normal one (2026-08-01, pnpm 9.15.0). The two filter lists above do NOT agree, which is what makes
-# this a probe rather than a reading: `pnpm --filter "...pack*" ls --depth -1 --json` selects that
-# member and prints it, while `pnpm --filter "...package.json" --filter "...packages" ls --depth -1
-# --json` prints ZERO bytes on both streams at exit 0.
-#
-# What is NOT true is that such a name is impossible. `pnpm ls -r --depth -1 --json` listed that
-# member without complaint, and npm's own name rules never apply here — every member in this
-# workspace is `"private": true` and none is published (`npm pack --dry-run` does not validate the
-# name either; it cheerfully wrote `pack*-1.0.0.tgz`). What makes this unreachable TODAY is only that
-# all fifteen members are named `@waitron/<lowercase-and-hyphens>` — a property of today's manifests
-# rather than of this code, which is the exact argument the `eval` version of this loop was defended
-# with and CLAUDE.md §1 rejected. Hence a guard, not a paragraph.
-#
-# One more thing the guard does NOT buy here: loudness in every case. When the corrupted name is the
-# WHOLE scope the selection ends up empty and the "scope is runnable" step below exits 1 on it
-# (measured on that same throwaway workspace). When the scope also held a name that survived, that
-# name's filter still matches, the guard passes, and the corrupted package is simply dropped from
-# the run — silently, exactly as in ci.yml, whose gates step has no such step at all.
-#
-# The claim this replaces said the positional-parameter form had removed the word-splitting question
-# outright. The change was real and the claim overran it — CLAUDE.md §1.
-#
-# `set --` with no operands clears the positional parameters (checked with the /bin/sh husky uses,
-# bash 3.2.57 in sh mode: `sh -c 'set -- a b c; set --; echo $#'` prints 0). What it clears is this
-# script's own arguments, which githooks(5) gives as "the name and location of the destination
-# remote". Nothing here reads them.
 set --
 repro_filters=""
 scope_label="whole workspace"
 
 if [ "$scope_kind" = "packages" ] && [ -n "$scope_packages" ]; then
-  # The LEFT-hand ellipsis is load-bearing: `...<pkg>` is the package and its DEPENDENTS, while
-  # `<pkg>...` is the package and its dependencies and would test the wrong set.
-  #
-  # `set -f` for the field-splitting-without-globbing reason above. It does not disturb the
-  # positional parameters (`sh -c 'set -- a b c; set -f; echo $#'` prints 3), which this loop is
-  # building.
+  # Split the classifier's package list into arguments without expanding shell globs.
   set -f
   for pkg in $scope_packages; do
     set -- "$@" --filter "...$pkg"
@@ -470,123 +128,25 @@ fi
 
 run_step "lint" "pnpm lint" pnpm lint
 
-# The REPO-LEVEL Vitest project, and the only step here that no scope can narrow. It holds the two
-# classifiers under `scripts/` — if either is wrong every gating decision above it is wrong — the
-# tests for check-signoff.sh, which the first step of this file runs, and, since 2026-08-01, the
-# guards that read `packages/` and `apps/` whole (the repo-root vitest.config.ts lists them):
-# guarded-teardowns scans every `*.test.ts` under both, english-only scans the generic packages'
-# `src/`, and so on. The first two lived in `packages/db`
-# until then, where they only loaded when `packages/db` was in scope; the receipts for what that
-# skipped are in the repo-root vitest.config.ts.
-#
-# Its own step rather than part of the `test:coverage` run below, because that run is scoped and
-# this must not be. Until this step existed the root `test:coverage` SCRIPT was what ran the
-# project — `vitest run --coverage && pnpm -r test:coverage`, so only on a global push, and never
-# on the scoped pushes that need it most. The step below now runs `pnpm -r`, so the project runs
-# exactly once on either path rather than twice on one of them.
-#
-# NOT on the documentation path, which is a claim about what these suites read rather than a
-# judgement about cost. Between them they read `packages/**/*.test.ts`, `apps/**/*.test.ts`,
-# `packages/<generic>/src/**/*.ts`, `scripts/**`, `.github/workflows/licence.yml` (extracted, not
-# transcribed, by check-signoff.test.mjs) and throwaway git repositories under $TMPDIR;
-# `isInertPath` (scripts/changed-scope.mjs) calls a path documentation only when it is under
-# `docs/` or is a root-level `*.md`. The two sets do not intersect, so on such a push this can only
-# fail for something already on `main`. CI runs it there anyway — ci.yml's `lint` job is ungated —
-# so that half is covered.
+# Root guards read the whole tree and must not be narrowed to selected packages.
 run_step "repo-level suite" "pnpm vitest run --coverage" pnpm vitest run --coverage
 
-# Everything below is PACKAGE work, and a root-scope push has none: `scripts/`, `.husky/` and
-# `.github/` are read by the step above and by no workspace member. Compared against the literal
-# `root` so every other value — `packages`, `global`, an empty string, a node that could not run —
-# falls through to the full scoped run, which is the fail-closed direction.
 if [ "$scope_kind" = "root" ]; then
   end_ts=$(date +%s)
   echo "pre-push: repository machinery only — typecheck and package tests skipped, $((end_ts - start_ts))s"
   exit 0
 fi
 
-# Reap what earlier interrupted runs leaked, before this push's own test phase: STALE waitron
-# testcontainers (scoped by the `com.waitron.reapable` label so another project's containers are never
-# touched, AND a 2h age filter so a watch-mode session's container is spared — unless that one session has
-# itself run past the threshold, the accepted residual edge) AND orphaned vitest workers (reparented to
-# launchd, ppid 1, spinning at ~100% CPU — scoped by ppid 1 + the `node (vitest N)` title). See the
-# script's own header (scripts/reap-testcontainers.mjs) for WHY each leaks and the guards. Manual
-# equivalent is `pnpm reap`. Best-effort: the script exits 0 even with Docker or `ps` absent or nothing to
-# reap, and `|| true` guarantees it never blocks a push.
-node scripts/reap-testcontainers.mjs || true
-
-# Refuses a SCOPED run that would execute no test at all. pnpm reports both of its "nothing to do"
-# outcomes on stdout with exit 0 — measured on 2026-08-01, pnpm 9.15.0:
-#
-#   pnpm --filter "@waitron/nope" test:coverage        → No projects matched the filters in "…"
-#   pnpm --filter "...@waitron/bench-pglite" test:cov… → None of the selected packages has a
-#                                                        "test:coverage" script
-#
-# so the step below cannot tell "everything passed" from "nothing ran". This reads the SAME filters
-# through `pnpm ls` and fails on a selection that would run nothing, unless every package in it is
-# declared test-less in PACKAGES_WITHOUT_TESTS.
-#
-# Only on a scoped push. With no filters there is no selection to judge — `pnpm -r test:coverage`
-# runs every member — and running it there would FAIL every global push: measured on 2026-08-01,
-# `pnpm ls --depth -1 --json` with no filter prints one entry, the workspace root itself, which the
-# guard drops by path and then reads as an empty selection.
+# An empty pnpm selection exits successfully, so validate it before running scoped typechecks.
 if [ "$#" -gt 0 ]; then
   check_scope_runnable() {
-    pnpm "$@" ls --depth -1 --json | node scripts/changed-packages.mjs runnable test:coverage
+    pnpm "$@" ls --depth -1 --json | node scripts/changed-packages.mjs runnable typecheck
   }
-
   run_step "scope is runnable ($scope_label)" \
-    "pnpm$repro_filters ls --depth -1 --json | node scripts/changed-packages.mjs runnable test:coverage" \
+    "pnpm$repro_filters ls --depth -1 --json | node scripts/changed-packages.mjs runnable typecheck" \
     check_scope_runnable "$@"
 fi
 
-# `-r` rather than the root `test:coverage` script: that script is `vitest run --coverage && pnpm
-# -r test:coverage`, and its first half is the step above. `-r` runs every SELECTED member and
-# never the workspace root — which is also why the root script cannot recurse into itself.
-# Typecheck and the coverage run are independent — tsc reads sources, vitest runs them — so they
-# run AT ONCE (owner decision 2026-09-06: the hook's serial steps were the wall clock, and the
-# machine has the headroom; CI shards the same way). The coverage run streams to the terminal as
-# before; the typecheck writes to its own log, printed only when it fails, so the two never
-# interleave. Both statuses are collected and both reported with run_step's Reproduce line; the
-# per-step and wall-clock seconds printed at the end are the receipt for the overlap.
-tc_log=$(mktemp "${TMPDIR:-/tmp}/waitron-pre-push-typecheck.XXXXXX")
-echo "pre-push: running typecheck ($scope_label) and tests with coverage ($scope_label) concurrently..."
-par_start=$(date +%s)
-# Husky runs this hook under `sh -e` (.husky/_/h). Inside the subshell that flag would end it the
-# moment the typecheck failed, before the status file is written, and `wait` would then end the hook
-# before the failure is reported — the push still blocked, the diagnostics gone (a run-it reviewer
-# reproduced exactly that, 2026-09-06). So the subshell turns `-e` off, and `wait` is guarded.
-( set +e; pnpm "$@" typecheck > "$tc_log" 2>&1; echo "$?" > "$tc_log.rc"; date +%s > "$tc_log.end" ) &
-tc_pid=$!
-cov_rc=0
-# Bound the whole process group, including startup and teardown outside Vitest hook timers.
-# Two package processes cap nested test-worker concurrency; each package keeps its own fork cap.
-node scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2 "$@" test:coverage || cov_rc=$?
-cov_end=$(date +%s)
-wait "$tc_pid" || true
-tc_rc=$(cat "$tc_log.rc" 2>/dev/null || echo 1)
-tc_end=$(cat "$tc_log.end" 2>/dev/null || date +%s)
-failed=0
-if [ "$tc_rc" -ne 0 ]; then
-  cat "$tc_log"
-  echo ""
-  echo "pre-push BLOCKED: 'typecheck ($scope_label)' failed."
-  echo "  Reproduce:      pnpm$repro_filters typecheck"
-  echo "  Skip this once: git push --no-verify"
-  echo ""
-  failed=1
-fi
-if [ "$cov_rc" -ne 0 ]; then
-  echo ""
-  echo "pre-push BLOCKED: 'tests with coverage ($scope_label)' failed."
-  echo "  Reproduce:      node scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2$repro_filters test:coverage"
-  echo "  Skip this once: git push --no-verify"
-  echo ""
-  failed=1
-fi
-rm -f "$tc_log" "$tc_log.rc" "$tc_log.end"
-echo "pre-push: typecheck $((tc_end - par_start))s, tests with coverage $((cov_end - par_start))s, concurrent wall $(( (tc_end > cov_end ? tc_end : cov_end) - par_start ))s"
-[ "$failed" -eq 0 ] || exit 1
-
+run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
 end_ts=$(date +%s)
-echo "pre-push: all checks passed in $((end_ts - start_ts))s ($scope_label)"
+echo "pre-push: all local checks passed in $((end_ts - start_ts))s ($scope_label); package tests and coverage run in CI"

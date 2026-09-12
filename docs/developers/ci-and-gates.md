@@ -10,31 +10,38 @@ The rules below fall into four rough groups: the gate commands themselves (the s
 the pre-push hook), the CI job layout and scheduling, the pnpm filter traps, and the concurrency /
 machine-resource rules, plus one rule about migration-upgrade test coverage.
 
-## The gate command
+## The optional whole-workspace check
+
+Run focused behavior tests during implementation. Use this broader local command when investigating
+a failure or shared behavior, not as an automatic requirement for finishing a branch:
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 ```
 
-That is the shallow, whole-workspace check. Root `test` / `test:coverage` and the pre-push
-coverage phase cap package concurrency at two and enforce a 20-minute process deadline
+That is the shallow, whole-workspace check. Root `test` / `test:coverage` cap package concurrency
+at two and enforce a 20-minute process deadline
 (`scripts/run-with-deadline.mjs`). CI test jobs have a 15-minute job deadline; each light bin also
 caps package concurrency at two. Direct package commands retain their Vitest timers.
 
 ## The pre-push hook
 
-The pre-push hook (`.husky/pre-push`) is deeper but narrower: `pnpm reap`,
-`pnpm install --frozen-lockfile`, `format:check`, then `typecheck` and `test:coverage` over the
-CHANGED packages and their dependents (resolved by `scripts/changed-packages.mjs`, the same script
-CI's `changes` job uses).
+The pre-push hook (`.husky/pre-push`) checks sign-offs, runs
+`pnpm install --frozen-lockfile`, `format:check`, lint and the root guards with coverage, then
+`typecheck` over changed packages and their dependents. `scripts/changed-packages.mjs` resolves
+the scope for both the hook and CI. Package tests and coverage run in CI; the root guards stay local
+because they check the machinery that decides what runs. CI also runs mutation testing and
+`bundle-smoke`.
 
-A push that touches only the repository's own machinery — `scripts/`, `.husky/`, `.github/`, which
-no workspace member reads — is `scope=root`: lint, format:check and the repo-level Vitest project,
-no package typecheck or tests.
+A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
+guards. A documentation-only push stops after formatting. Deletion-only pushes run no checks.
+Unknown ranges keep the full local gate, including workspace typechecking. The hook no longer
+runs `pnpm reap`; run it manually before local database suites when needed.
 
-CI adds mutation testing and `bundle-smoke`, which nothing local runs. A green from any one of the
-three (the shallow gate, the pre-push hook, CI) is evidence about what it ran — not about the other
-two.
+Run the normal hook once through the push, then verify CI scope and required checks on the current
+head. A green hook proves only its own checks; it is not evidence of package tests or coverage.
+Owner decision 2026-09-12: stop duplicating mandatory package coverage locally before waiting for CI.
+The shell regressions in `scripts/pre-push.test.mjs` exercise scope and failure behavior.
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
@@ -59,7 +66,8 @@ an edit to that list, with the reason in the commit.
 
 ### CI's shards run `test:coverage`, not `test`
 
-Before calling a package green, run `pnpm --filter <pkg> test:coverage`. There is no single `test`
+Before calling a package green, verify its CI coverage result on the current head. Run
+`pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way file shards each with a `-merge` job that enforces the thresholds on
 the merged blob (#216), plus `test-fiscal-verifactu`, dedicated `test-bookings` and `test-sync`
@@ -124,9 +132,10 @@ accepts `pack*`).
 ### A scoped `pnpm` run that selects nothing REPORTS SUCCESS
 
 `No projects matched` and `None of the selected packages has a "test:coverage" script` both exit 0.
-Both gates first pipe the selection through `scripts/changed-packages.mjs runnable test:coverage`,
-which refuses an empty run unless every member is in `PACKAGES_WITHOUT_TESTS`
-(`scripts/changed-scope.mjs`). A green from that guard still does not mean a test ran.
+CI checks the selection with `scripts/changed-packages.mjs runnable test:coverage`; the hook uses
+`runnable typecheck`. The helper refuses an empty run unless every member is in
+`PACKAGES_WITHOUT_TESTS` (`scripts/changed-scope.mjs`). Every current workspace member has a
+`typecheck` script. A green selection guard alone does not mean a check ran.
 
 ### The workspace root is outside `pnpm -r`
 
@@ -143,21 +152,23 @@ runs `--frozen-lockfile`; the shallow gate does not.
 
 Not the schema-ownership or error-code-reachability guard suites, nor any e2e suite pinning a
 shared wire body with `toEqual`. SP-2b's `/hello` change passed `test sync-api` (11 tests) and
-broke two boot suites for two tasks. Run the package unfiltered before believing a pass, and the
-whole workspace when you touch a value more than one suite asserts.
+broke two boot suites for two tasks. A focused pass proves only the selected cases; CI supplies
+package-wide coverage. Run additional consumer tests locally when useful for investigating shared behavior.
 
 ### A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides it
 
 Adding a member to `migrations.manifest.json`, `GENERIC_PACKAGES` or `OWN_SHARD_PACKAGES` left
-tests in two OTHER packages red until an unrelated task ran them. Grep for tests that pin the list;
-run the whole workspace.
+tests in two OTHER packages red until an unrelated task ran them. Grep for tests that pin the list,
+run those guards, and verify CI selects every affected consumer. Use a broader local run when
+needed to investigate a failure.
 
 ### After a rebase + `--force-with-lease`, the hook can scope the WRONG package
 
 Restacking a dashboard-only branch, it printed `all checks passed (@waitron/till + dependents)`.
 Mechanism unconfirmed (plausibly the stale remote SHA git feeds a force-update). Confirm what
-changed with `git diff --name-only origin/main..HEAD` and run THAT package's `typecheck` +
-`test:coverage`; the PR's own CI scopes off the PR diff and is the trustworthy signal.
+changed with `git diff --name-only origin/main..HEAD`, check that the hook typechecked the actual
+changed packages, and run any missing typechecks. Verify CI’s package scope and coverage results
+on the current head; the PR’s own CI scopes off the PR diff.
 
 ### The pre-push log file can be days stale
 

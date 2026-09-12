@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 // un-reaped. Over many interrupted runs these accumulate and bloat the Docker daemon, which slows
 // container ops and adds host-side overhead — enough ambient load to tip the parallel `pnpm -r
 // test:coverage` over its PGlite `beforeAll` timeout and the `freePort`→bind race (EADDRINUSE). This
-// script is the compensating reaper (the pre-push hook's start, or the manual `pnpm reap`).
+// script is the compensating reaper (the manual `pnpm reap` before local database tests).
 //
 // SAFETY — two guards, because a running orphan and a running IN-USE container look identical:
 //  1. LABEL. It removes only containers carrying `com.waitron.reapable` (stamped by
@@ -96,7 +96,7 @@ export function reap({ exec, now = () => Date.now() }) {
 // hard stop (an Esc, a killed parent, a timeout signal). That can kill vitest's orchestrator while its
 // tinypool workers are reparented to launchd (ppid 1), where they keep spinning at ~100% CPU
 // indefinitely. `reap()` above only removes Docker containers, so nothing reaps these; this is the
-// compensating process reaper, run first by `pnpm reap` (and the pre-push hook's start).
+// compensating process reaper, run by `pnpm reap` before local database tests.
 //
 // SAFETY — two guards, mirroring the container reaper's label+age pair:
 //  1. PPID. Only processes whose parent is 1 (launchd, on macOS). A LIVE run's workers are parented to
