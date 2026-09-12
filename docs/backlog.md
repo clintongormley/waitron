@@ -34,6 +34,15 @@ belong to the later optional cloud/remote offering. Wording follow-up: the till 
 `person.suspended` as “Account suspended”; align its English and Spanish messages with the
 dashboard's Disabled terminology (`apps/till/src/i18n/strings.ts`).
 
+**User admin now uses the shared dashboard controls — LANDED #328** (2026-09-12). The admin list
+opens the shared modal and hamburger row menu; create and edit forms put one field per line with the
+contact details above a divider and Role/Status below, and say Disable/Disabled. A successful edit
+closes before the list refreshes, so a refresh that fails cannot leave a saved form open to be
+submitted twice. Account setup takes the PIN once, and Your profile opens the details editor with
+any missing required field marked. **Not verified:** the review reached the overlapping-dialog state
+by firing events from code, so nobody has shown that a real pointer can get there. This change left
+the list's existing in-browser paging and search alone — the replacement is the next item.
+
 **Shared database-backed table paging, search and sorting: separate PR, user admin first**
 (owner decision, 2026-09-12). Large lists should query the database from the first page, regardless
 of total row count. Extend `wt-data-table` with reusable paging, sorting and loading controls;
@@ -43,7 +52,8 @@ Search and sorting must cover the whole matching dataset, so you can find a user
 displayed page. Debounce typed searches, reset the page when filters change, ignore superseded
 responses and preserve passive live refreshes. Verify bounded responses with a large dataset and
 stable ordering across pages. Ship user admin as the first consumer, with the shared contract
-available to other tables. Keep this out of the current user-admin modal and account-setup UI PR.
+available to other tables. Deliberately kept out of #328, which left the in-browser list behaviour
+in place.
 
 **Dashboard login shortcuts — LANDED #305** (owner, 2026-09-10). The
 [implementation plan](superpowers/plans/2026-09-10-login-screen.md) covers separate authenticator
