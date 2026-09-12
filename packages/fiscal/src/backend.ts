@@ -309,10 +309,10 @@ export interface FiscalBackend {
    * simplified sales, at a customer's later request for a proper invoice naming them. Like
    * `recordSale`/`recordCorrection` it takes the transaction: atomicity between the substitution
    * sale and its fiscal record is the entire point. `sale` is the full invoice's OWN data — its own
-   * new number, its own POSITIVE total and breakdown, and (unlike every other method here) a
-   * NON-null `counterparty`, because a full invoice must always name its recipient — while
-   * `substitution.substitutedSaleIds` names the earlier simplified sales it replaces (one or many,
-   * the N:1 fan-out a correction's single `correctsSaleId` does not have).
+   * new number, its own POSITIVE total and breakdown, and a counterparty that is REQUIRED here
+   * rather than optional as it is on `recordSale`, because a full invoice must always name its
+   * recipient — while `substitution.substitutedSaleIds` names the earlier simplified sales it
+   * replaces (one or many, the N:1 fan-out a correction's single `correctsSaleId` does not have).
    *
    * A substitution is NOT a correction and issues no credit note: the replaced sales are neither
    * edited nor annulled, they remain recorded exactly once, and the regime avoids double-counting
@@ -323,8 +323,9 @@ export interface FiscalBackend {
    *
    * Regime-neutral in name and shape, like every method here (the guard in
    * ./no-regime-vocabulary.test.ts enforces it), and `SaleForFiscalRecord` is reused unchanged — its
-   * `counterparty` field, unused by the other methods, is finally the populated one here, with no
-   * new interface field.
+   * `counterparty` field is REQUIRED here (a substitution always names its recipient) and optional
+   * on `recordSale`, which reads and files one when a caller supplies it, with no new interface
+   * field on either.
    */
   recordSubstitution(
     tx: Transaction,

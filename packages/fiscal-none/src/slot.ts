@@ -6,7 +6,9 @@ import { NoneBackend } from "./backend.js";
  * `drain` — the submission pass — has no authority to contact, so it returns the empty `DrainResult`
  * (every counter zero, no next due time, nothing skipped) without touching its deps.
  *
- * No `provisioningSecret`: a venue under no fiscal obligation seals nothing at provision time.
+ * No `provisioningSecret`: a venue under no fiscal obligation seals nothing at provision time. No
+ * `venueFields` either: the legal name, the series codes and the operation description go nowhere
+ * near an authority here, so there is no filing format for them to violate and nothing to refuse.
  *
  * No provisioning seat either (so this module declares none on its descriptor): `invoice_series` is
  * a core table seeded by the generic venue plan's `create-series` action and, for a standby, carried

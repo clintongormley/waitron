@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import {
@@ -17,6 +17,7 @@ import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
+import { SERVER_FIELDS, type ServerField } from "../server-fields.js";
 
 /**
  * The wizard's field-heavy step: the tenant (country, tax id, legal name), its location (name,
@@ -28,7 +29,9 @@ import type { ProvisionBody } from "../api/client.js";
  * On `Next` it validates required fields, the tax identifier and postcode, postcode/province
  * agreement, supported fiscal jurisdiction, distinct series codes, and one or two invoice languages.
  * A failure shows a SINGLE `role="alert"` banner and marks the offending fields `invalid`, and nothing
- * is emitted. On success it
+ * is emitted. A field the SERVER refused is different: it is marked and carries its own sentence in
+ * the input's `error` slot, with focus moved to it and no banner — the banner region is for faults
+ * this form evaluated itself. On success it
  * emits the `venue` slice as a `setup-patch`, then a screen-agnostic `setup-advance` for the SHELL to
  * route: the venue→`cert`/`review` decision (live ES-common needs the AEAT cert; demo goes
  * straight to `review`) lives in `apps/setup/src/setup-app.ts`, which owns the merged draft — this
@@ -57,6 +60,35 @@ type TextField =
   | "tillName"
   | "seriesCode"
   | "rectificativeSeriesCode";
+
+/**
+ * The browser autofill purpose for each field, beside the semantic `name` the shared form contract
+ * asks for (`docs/developers/design-system.md` → Forms; `admin-screen.ts` renders the same pair from
+ * its own map). Every value here is `"off"`, and that is the decision, not an omission: each field
+ * on this screen describes the VENUE, while the browser's stored values describe the PERSON filling
+ * the form in. `address-line1` on `addressLine1` would invite the operator's own home address into
+ * the shop's registered address, and `organization` on `legalName` the company they work for rather
+ * than the one being registered — and these values are what the fiscal record puts on the wire
+ * verbatim. Without an explicit `"off"` a browser guesses a purpose from the field's name, which is
+ * exactly the guess this turns off. Kept per-field rather than one blanket attribute so a field that
+ * later does have a correct purpose is a one-line change with a visible reason.
+ */
+const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
+  country: "off",
+  taxId: "off",
+  legalName: "off",
+  name: "off",
+  operationDescription: "off",
+  addressLine1: "off",
+  addressLine2: "off",
+  postalCode: "off",
+  city: "off",
+  province: "off",
+  dayCutover: "off",
+  tillName: "off",
+  seriesCode: "off",
+  rectificativeSeriesCode: "off",
+};
 
 /** Everything a complete venue must carry — `addressLine2` alone may be blank (it becomes `null`). */
 const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
@@ -142,6 +174,13 @@ export class SetupVenueScreen extends LitElement {
    * operator can correct the offending detail and re-submit. `undefined` normally. */
   @property() errorMessage?: string;
 
+  /**
+   * One venue field the SERVER refused, named by `setup.request_invalid`'s `params.field` and routed
+   * back here by the shell. Marked invalid on arrival, with a sentence beside it, so an operator
+   * returning from a refused provision lands on the form with the offending field already flagged.
+   */
+  @property() invalidField?: string;
+
   /** The editable text fields. Defaults match the shell's seeded draft; seeding overlays what it holds. */
   @state() private values: Record<TextField, string> = {
     country: "ES",
@@ -168,15 +207,63 @@ export class SetupVenueScreen extends LitElement {
   /** True once a `Next` was rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
 
+  /**
+   * {@link SetupVenueScreen.invalidField} resolved to this form's own field key, held SEPARATELY
+   * from {@link SetupVenueScreen.invalid} and cleared the moment the operator edits that field
+   * ({@link SetupVenueScreen.#onField}). It is separate because `#next` rebuilds `invalid` from
+   * scratch on every press and returns early while that set is non-empty: a mark for a rule this
+   * form cannot evaluate, folded into that set, would survive every rebuild and block Next forever.
+   *
+   * The intersection with `{ key: TextField }` is not decoration: assigning `SERVER_FIELDS[…]` to it
+   * is what makes the compiler check that every key the shared map names is a real field on this
+   * form. Proven by mutation — adding a key to `ServerFieldKey` that this screen has no field for
+   * fails typecheck with "Type 'ServerFieldKey' is not assignable to type 'TextField'".
+   */
+  @state() private serverInvalid?: ServerField & { readonly key: TextField };
+
   /** Guards {@link SetupVenueScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
   /** True until the operator changes the invoice-language selection themselves. */
   #invoiceLocalesFollowAreaDefault = true;
 
-  override willUpdate(): void {
-    if (this.#seeded) return;
-    this.#seeded = true;
-    this.#seedFromDraft();
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!this.#seeded) {
+      this.#seeded = true;
+      this.#seedFromDraft();
+    }
+    // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
+    // the operator has already cleared by editing the field.
+    if (changed.has("invalidField")) {
+      this.serverInvalid =
+        this.invalidField === undefined ? undefined : SERVER_FIELDS[this.invalidField];
+    }
+  }
+
+  /**
+   * Move the keyboard focus to the field the server refused, once, when the shell hands it down. The
+   * form is roughly sixteen controls long and both series codes sit at the bottom of it, so without
+   * this the operator is dropped on a freshly-mounted form scrolled to the top with the marked field
+   * off-screen and nothing said about it — and a screen reader announces nothing at all, because no
+   * focus moves and this screen deliberately renders no banner for a marked field. `wt-input`
+   * delegates focus, so this lands on the native input and the browser scrolls it into view.
+   */
+  override updated(changed: PropertyValues<this>): void {
+    if (!changed.has("invalidField") || this.serverInvalid === undefined) return;
+    // Selected by the field's semantic `name`, not by its `data-test` hook: a test hook is not an
+    // identity a production code path may depend on (CLAUDE.md §3 → Forms), and the repo's other
+    // focus-the-refused-field does the same (`apps/dashboard/src/screens/login-screen.ts`).
+    const field = this.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete?: Promise<unknown> }
+    >(`wt-input[name=${this.serverInvalid.key}]`);
+    if (field === null) return;
+    // Awaiting the `wt-input`'s OWN first render, not just this screen's: a Lit child renders in a
+    // later microtask, so at this point the host exists but the native input focus is delegated to
+    // does not, and focusing the host would do nothing at all (measured — the first version of this
+    // left `shadowRoot.activeElement` null). The `isConnected` guard is the same sibling's: the
+    // screen can be torn down between the microtask being queued and it running.
+    void Promise.resolve(field.updateComplete).then(() => {
+      if (this.isConnected) field.focus();
+    });
   }
 
   /**
@@ -219,6 +306,8 @@ export class SetupVenueScreen extends LitElement {
 
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    // Editing the field the server refused retires that mark: the new value has not been refused.
+    if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
     const value = event.detail.value;
     if (key === "postalCode") {
       const pack = this.#pack();
@@ -388,15 +477,24 @@ export class SetupVenueScreen extends LitElement {
     dispatchSetupGoto(this, "admin");
   }
 
-  /** Renders one text field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
+  /**
+   * Renders one text field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. A
+   * field the SERVER refused is marked too, and carries its explanation in `wt-input`'s own `error`
+   * slot — which renders the sentence beside the field and wires `aria-describedby` to it, the
+   * shared form contract (`docs/developers/design-system.md` → Forms).
+   */
   #field(label: string, key: TextField, type = "text"): TemplateResult {
+    const refused = this.serverInvalid?.key === key ? this.serverInvalid : undefined;
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${label}
+      name=${key}
+      autocomplete=${FIELD_AUTOCOMPLETE[key]}
       data-test=${key}
       type=${type}
-      ?invalid=${this.invalid.has(key)}
+      ?invalid=${this.invalid.has(key) || refused !== undefined}
+      error=${refused === undefined ? "" : refused.message}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
     ></wt-input>`;

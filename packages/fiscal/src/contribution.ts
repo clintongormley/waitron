@@ -62,4 +62,18 @@ export interface FiscalContribution {
      * is minted — the vault row FK-restricts to it — and re-validates as defense-in-depth. */
     seal(deps: { db: Database; ring: KeyRing }, tenantId: string, raw: unknown): Promise<void>;
   };
+  /** The operator-typed venue fields this regime puts on the wire verbatim. The host collects them
+   * and does not know the regime's rules, so — exactly as `provisioningSecret` does for the signing
+   * certificate — it reaches them through this seat. `validate` throws `setup.request_invalid`
+   * naming ONE offending field and writes nothing; it is run BEFORE `provisionVenue` mints the
+   * unrepairable SIF and hash chain (CLAUDE.md §5). A regime that files nothing offers no seat and
+   * its venues are not checked, because there is no filing format to violate. */
+  readonly venueFields?: {
+    validate(venue: {
+      readonly legalName: string;
+      readonly seriesCode: string;
+      readonly rectificativeSeriesCode: string;
+      readonly operationDescription: string;
+    }): void;
+  };
 }

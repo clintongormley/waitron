@@ -407,6 +407,23 @@ export const en = {
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
   "sale.error": "Could not complete the sale, try again",
+  // A PERMANENT refusal, unlike `sale.error` above: the sale breaks a rule of the tax filing itself,
+  // so the same basket will be refused however many times it is rung up. Retrying is the one piece
+  // of advice that cannot work, so this says to stop and who to call instead. Raised for the codes
+  // till-api.ts answers 409 on the sale routes (`fiscal.record_invalid`,
+  // `fiscal.foreign_recipient_unsupported`).
+  //
+  // It says the till recorded nothing, NEVER that nothing was charged. Every settle path that shows
+  // this may already have taken the customer's money: `confirm-payment` and `collect-order` carry a
+  // manual bank-terminal (datáfono) charge the operator keyed in after the card went through, and
+  // `collect-card` reaches the fiscal record only AFTER the integrated terminal captured
+  // (`finalizeCapture`, `apps/server/src/till-sale.ts`). Telling that operator no money was taken
+  // would leave the customer charged for a sale the till has no record of, so the refund
+  // instruction is the sentence that has to be here. Cash is covered by the same wording: the till
+  // recorded nothing, so the drawer's money belongs to nobody yet. The siblings above deliberately
+  // make no claim about money at all.
+  "sale.refused":
+    "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
   // Counter receipt/drawer (§5): a failed reprint or a failed drawer-open is NON-FATAL — the ticket
   // stays on screen and the operator retries. `drawer.error` covers both a `drawer.no_printer` (no
   // receipt printer set on this till) and a transient failure, staying generic like the sale/table
@@ -419,6 +436,12 @@ export const en = {
   "held.product_gone": "A product was removed and dropped from the order",
   "held.stale": "That order is no longer available",
   "place.error": "Could not place the order, try again",
+  // `sale.refused`'s sibling for the one path that takes no tender: placing an order (and, in
+  // invoice-first mode, issuing its deferred invoice) can hit the same permanent fiscal refusal, but
+  // no money has changed hands, so this carries no sentence about charges or refunds — a refund
+  // instruction would be as wrong here as "nothing was charged" is on the settle paths.
+  "place.refused":
+    "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
   "station.advance_error": "Could not update the ticket, try again",
   // A failed per-user language write (PUT /api/session/locale) is non-fatal — the UI stays in the
   // current language and the operator can retry (per-user-language-preference, Task 9).
@@ -710,6 +733,8 @@ export const es: Record<StringKey, string> = {
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
+  "sale.refused":
+    "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "reprint.error": "No se pudo reimprimir el recibo, inténtalo de nuevo",
   "receipt.error": "No se pudo imprimir el recibo, inténtalo de nuevo",
   "payment_slip.error": "No se pudo imprimir el justificante de pago, inténtalo de nuevo",
@@ -718,6 +743,8 @@ export const es: Record<StringKey, string> = {
   "held.product_gone": "Se quitó un producto y se eliminó del pedido",
   "held.stale": "Ese pedido ya no está disponible",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
+  "place.refused":
+    "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja.",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
   "locale.save_failed": "No se pudo guardar tu idioma, inténtalo de nuevo",
   "station.collect_error": "No se pudo marcar el pedido como entregado, inténtalo de nuevo",

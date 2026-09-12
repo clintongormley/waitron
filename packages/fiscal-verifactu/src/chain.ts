@@ -5,11 +5,12 @@
 // importing from the file that documents the code a module throws.
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
+import { recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { AltaInput, AnulacionInput, Encadenamiento } from "@waitron/verifactu";
-import { buildAltaRecord, buildAnulacionRecord } from "@waitron/verifactu";
+import { buildAltaRecord, buildAnulacionRecord, validate } from "@waitron/verifactu";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
@@ -35,7 +36,10 @@ const MAX_APPEND_ATTEMPTS = 3;
  * exist before `appendToChain` runs. `saleId` travels alongside rather than living inside `input`:
  * it is this package's own foreign key onto core's `sales`, not an AEAT field, and keeping it out
  * of the arm that becomes `buildAltaRecord`/`buildAnulacionRecord`'s parameter stops it from ever
- * being accidentally hashed.
+ * being accidentally hashed. `saleId` and `tillId` are the BRANDED ids, not bare strings: every
+ * caller already holds genuine branded values, so typing them here drops two unchecked casts at the
+ * row insert. A brand is structurally still a string, so the never-inside-`input`, never-hashed
+ * property above is untouched by it — the brand narrows what may be assigned in, nothing else.
  *
  * `tillId` travels the same way, and for the same reason it is a real column: the immutable
  * `registros_facturacion.till_id` is an informational SNAPSHOT of where the sale rang (node-id
@@ -51,15 +55,15 @@ const MAX_APPEND_ATTEMPTS = 3;
 export type PendingRegistro =
   | {
       tipo: "alta";
-      saleId: string;
-      tillId: string;
+      saleId: SaleId;
+      tillId: TillId;
       entorno: Entorno;
       input: Omit<AltaInput, "Encadenamiento">;
     }
   | {
       tipo: "anulacion";
-      saleId: string;
-      tillId: string;
+      saleId: SaleId;
+      tillId: TillId;
       entorno: Entorno;
       input: Omit<AnulacionInput, "Encadenamiento">;
     };
@@ -215,6 +219,25 @@ async function attemptAppend(
       ? buildAltaRecord({ ...registro.input, Encadenamiento: encadenamiento })
       : buildAnulacionRecord({ ...registro.input, Encadenamiento: encadenamiento });
 
+  // Refuse a record AEAT could not accept BEFORE it reaches the append-only table. This is the one
+  // seam every record type passes through (alta and anulación, so sale, void, correction and
+  // substitution alike), and the first moment the COMPLETE record exists — the chain pointer and
+  // the huella are filled in above — so what is checked is what will be stored.
+  //
+  // Error severity only REFUSES. `validate`'s two warnings are the amount cross-checks, which AEAT
+  // accepts under its own ±10.00 tolerance (see validate.ts above CUOTA_TOTAL_MISMATCH); blocking a
+  // sale for one would refuse a record the authority would have taken. They are not discarded
+  // either — they are raised as an incident after the insert below, which is why `issues` is kept
+  // whole here rather than filtered in place.
+  const issues = validate(record);
+  const blocking = issues.filter((issue) => issue.severity === "error");
+  if (blocking.length > 0) {
+    throw new AppError("fiscal.record_invalid", {
+      fields: blocking.map((issue) => issue.field),
+      codes: blocking.map((issue) => issue.code),
+    });
+  }
+
   const row = toRegistroRow(record, {
     tenantId,
     tillId: registro.tillId,
@@ -240,6 +263,37 @@ async function attemptAppend(
     .update(cadenas)
     .set({ secuencia, ultimoRegistroId: inserted.id, ultimaHuella: row.huella })
     .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)));
+
+  // A warning does not block: AEAT accepts these under its own tolerance. But our totals
+  // disagreeing with our own VAT lines is a bug in the money while the venue keeps selling, so it
+  // is raised where a human can find it rather than left in a log line.
+  //
+  // AFTER the insert, not before: a losing attempt never reaches this line, so a record that was
+  // retried raises one incident rather than one per attempt. (Either placement would be discarded
+  // with the savepoint on a rollback — that is the savepoint's doing, not this ordering's.) On the
+  // caller's transaction, like every other `recordIncident` caller — an incident that committed
+  // while its sale rolled back would report a failure for a sale that never existed.
+  const warnings = issues.filter((issue) => issue.severity === "warning");
+  if (warnings.length > 0) {
+    await recordIncident(tx, {
+      tenantId,
+      tillId: registro.tillId,
+      saleId: registro.saleId,
+      error: new AppError("fiscal.record_totals_disagree", {
+        fields: warnings.map((issue) => issue.field),
+        codes: warnings.map((issue) => issue.code),
+      }),
+      severity: "warning",
+      // The record's own generation instant (`RecordInputBase.generadoEn`) — never `new Date()`.
+      // `backend.ts` fills it on all four call sites without ever reading a wall clock: one takes
+      // its own injected clock directly (`recordVoid`'s `now.instant`) and the other three take the
+      // caller's `sale.issuedAt`, which `packages/core` derived from ITS injected clock
+      // (`record-sale.ts`'s `now.instant`). Every other `detectedAt:` in production code is fed a
+      // clock the same way, and one wall-clock read here would stamp an incident at an instant
+      // nothing else in the transaction shares.
+      detectedAt: registro.input.generadoEn,
+    });
+  }
 
   return { id: inserted.id, secuencia, huella: row.huella };
 }

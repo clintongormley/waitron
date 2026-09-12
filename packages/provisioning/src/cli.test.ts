@@ -3,6 +3,11 @@ import type { ModuleConfig, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
+// The REAL Veri*Factu slot contribution, so the venue-field cases below run the regime's own rules
+// rather than a stub of them. A test file may name a regime package — `scripts/module-seams.test.ts`
+// scans shipped source only, and this package already declares it as a devDependency for
+// `venue-apply.e2e.test.ts`.
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 import { verifyPassword, verifyPin } from "@waitron/identity";
@@ -1197,6 +1202,65 @@ describe("runCli venue", () => {
     // The persisted config disables verifactu and enables `none`.
     expect(written?.overrides.get("fiscal-verifactu")).toBe(false);
     expect(written?.overrides.get("fiscal-none")).toBe(true);
+  });
+
+  /* `waitron-provision venue` prompts for the same four fields the setup wizard does — the legal
+   * name, both invoice series codes and the operation description — and then mints the tenant,
+   * node, SIF and hash chain from them. So it runs the regime's own rules on those fields through
+   * the SAME contract seat the wizard reaches (`FiscalContribution.venueFields`), and the tests
+   * below use the REAL Veri*Factu seat rather than a stub, so they fail if the rule and the CLI
+   * ever disagree about what is acceptable.
+   *
+   * Deletion-proof: remove the `selection.contribution?.venueFields?.validate(…)` call from
+   * `cli.ts` and the refusal case goes RED — the bad venue reaches `applyVenue` and is provisioned.
+   * A venue provisioned that way is unrepairable: every sale it later takes is refused at the
+   * chain-append seam, and re-running `venue` reuses the tenant rather than replacing it. */
+  const verifactuModules: readonly WaitronModule[] = [
+    fakeModule("core"),
+    fakeModule("fiscal-verifactu", { fiscal: FISCAL_SLOT }),
+  ];
+
+  it("refuses a venue whose series code the tax agency would reject, before opening a connection", async () => {
+    const h = harness({ env: VENUE_ENV, modules: verifactuModules });
+    // A space is not in `NumSerieFactura`'s character set, so every record this venue ever filed
+    // would carry an invoice number AEAT refuses.
+    const args = VENUE_ARGS.map((arg) => (arg === "A" ? "Serie A" : arg));
+
+    const code = await runCli([...args, "--yes"], h.deps);
+
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain('setup.request_invalid {"field":"seriesCode"}');
+    // The tenant, node, SIF and hash chain are unrepairable once minted (CLAUDE.md §5), so what
+    // matters is that the mint was never reached — and that no admin credential was spent getting
+    // there, which is why the seat runs before `resolveAdminUri`.
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.connect).not.toHaveBeenCalled();
+  });
+
+  it("names the OTHER series code when that is the bad one", async () => {
+    // Without this the refusal above could be wired to either code — or to any other string field
+    // — and still pass, while the field name the operator is shown pointed at the wrong box.
+    const h = harness({ env: VENUE_ENV, modules: verifactuModules });
+    const args = VENUE_ARGS.map((arg) => (arg === "R" ? "Serie R" : arg));
+
+    const code = await runCli([...args, "--yes"], h.deps);
+
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain(
+      'setup.request_invalid {"field":"rectificativeSeriesCode"}',
+    );
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
+  it("provisions normally when the same real seat accepts the fields", async () => {
+    // The control in the other direction: without it, a seat that refused EVERYTHING would pass
+    // both cases above. VENUE_ARGS's own codes (`A`, `R`) are legal, so this run reaches the apply.
+    const h = harness({ env: VENUE_ENV, modules: verifactuModules });
+
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+
+    expect(code).toBe(0);
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
   });
 
   it("reads the admin PIN echo-OFF from a prompt when WAITRON_ADMIN_PIN is unset, and never prints it", async () => {

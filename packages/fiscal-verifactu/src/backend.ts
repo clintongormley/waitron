@@ -247,16 +247,30 @@ export class VerifactuBackend implements FiscalBackend {
     }));
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
+    // An F1 (factura completa) must name its recipient, and an F2 must NOT carry one — so this
+    // block is filled in when `TipoFactura` below resolves to "F1" AND the recipient is Spanish,
+    // named by NIF. A foreign recipient is the deliberate exception, and `buildDestinatarios` is
+    // where that one decision lives: it refuses with `fiscal.foreign_recipient_unsupported` rather
+    // than guessing which AEAT identifier type a non-resident takes. Called with no country test of
+    // its own here on purpose — refusing by leaving the block unset would encode the same decision
+    // a second time, and would make "we do not support foreign customers yet" indistinguishable
+    // from "we built an F1 with no recipient at all". The chain's own record validation stays
+    // behind it as the backstop.
+    const destinatarios =
+      sale.counterparty !== null ? this.buildDestinatarios(sale.counterparty) : undefined;
+
     const input: Omit<AltaInput, "Encadenamiento"> = {
       IDEmisorFactura: sif.nif,
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
       NombreRazonEmisor: tenant.legalName,
-      // "F2" (factura simplificada) for a simplified/no-recipient invoice, "F1" (factura
-      // completa) once a real `Counterparty` is wired up. `counterparty === null` is the
-      // ordinary case at a till (`SaleForFiscalRecord.counterparty`'s own doc comment) — no task
-      // yet supplies a non-null one, so "F1" is unreachable through the real write path today.
+      // "F2" (factura simplificada) when no recipient is named, "F1" (factura completa) when one
+      // is. `packages/core` is the only production caller of this method and hardcodes
+      // `counterparty: null` (`record-sale.ts`, in its own comment on that field), so every sale
+      // filed through it today is an F2; the F1 arm is live, tested code awaiting the B2B caller
+      // that supplies a recipient.
       TipoFactura: sale.counterparty === null ? "F2" : "F1",
+      Destinatarios: destinatarios,
       DescripcionOperacion: sale.descriptionOfOperation,
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
@@ -776,25 +790,35 @@ export class VerifactuBackend implements FiscalBackend {
 
   /**
    * Maps the generic `Counterparty` onto an AEAT `Destinatario` (sf:PersonaFisicaJuridicaType) for
-   * an F3's mandatory recipient block. A domestic recipient is named by NIF — the case v1 supports,
-   * since an F3 canje exchanges tickets issued at a Spanish establishment.
+   * the mandatory recipient block of every record that names one — an F1 full invoice from
+   * `recordSale` and an F3 canje from `recordSubstitution` alike. A domestic recipient is named by
+   * NIF.
    *
-   * A FOREIGN recipient must instead be named via `IDOtro` (CodigoPais + IDType + ID), whose IDType
-   * vocabulary (PersonaFisicaJuridicaIDTypeType, 02-07) is not yet pinned to a primary source (plan
-   * §1.5, deferred to the asesor / the AEAT XSD). Rather than guess an IDType into an UNREPAIRABLE
-   * record (§5, CLAUDE.md §1), a non-`ES` recipient is refused here until that shape is confirmed — a
-   * DELIBERATE refusal, not a dead branch. It IS reachable through `packages/core` today:
-   * `record-substitution.ts` types `counterparty` as a REQUIRED, non-null field and does no
-   * `countryCode` gating of its own, so a non-`ES` recipient handed to core's `recordSubstitution`
-   * flows straight into this throw. The refusal is pinned at THIS layer by `backend.test.ts`'s
-   * "refuses a non-Spanish recipient until the foreign-recipient shape is confirmed" case; core adds
-   * no gate of its own, so there is nothing extra to test at the core layer.
+   * A FOREIGN recipient must instead be named via `IDOtro` (CodigoPais + IDType + ID), and which
+   * IDType a given non-resident takes is a fiscal decision nobody here has made. This is the ONE
+   * place that decision is encoded, for both callers: a non-`ES` recipient is refused with
+   * `fiscal.foreign_recipient_unsupported`, a DELIBERATE refusal rather than a dead branch, because
+   * `registros_facturacion` is append-only and hash-chained (CLAUDE.md §5) — a guessed IDType would
+   * be filed and could never be unfiled. The vocabulary itself is not restated here: the XSD
+   * enumerates it (`PersonaFisicaJuridicaIDTypeType`,
+   * `packages/verifactu/schemas/SuministroInformacion.xsd:894-927`) and which values AEAT admits,
+   * and when it demands a specific one, is an open question with the asesor
+   * (`docs/compliance/asesor-questions.md`, Q17(a), which quotes it in the source's own words).
+   *
+   * Reachable through `packages/core` today: `record-substitution.ts` types `counterparty` as a
+   * REQUIRED, non-null field with no `countryCode` gating of its own. `recordSale` reaches it the
+   * same way for any recipient-identified sale a future B2B caller supplies. Pinned at THIS layer
+   * by `backend.test.ts` on both paths; core adds no gate of its own, so there is nothing extra to
+   * test at the core layer.
    */
   private buildDestinatarios(counterparty: Counterparty): { IDDestinatario: Destinatario[] } {
     if (counterparty.countryCode !== "ES") {
-      throw new Error(
-        `VerifactuBackend.recordSubstitution: a non-Spanish recipient (${counterparty.countryCode}) is not yet supported — the foreign-recipient IDOtro/IDType shape awaits the asesor`,
-      );
+      // `countryCode` is a country code, not operator data, so it may travel in params — the
+      // registry's rule is that an operator's own values never do (they reach `waitron.log`, which
+      // the unauthenticated recovery page renders on the venue's LAN).
+      throw new AppError("fiscal.foreign_recipient_unsupported", {
+        countryCode: counterparty.countryCode,
+      });
     }
     return {
       IDDestinatario: [{ NombreRazon: counterparty.legalName, NIF: counterparty.taxId }],

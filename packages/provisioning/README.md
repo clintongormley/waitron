@@ -239,7 +239,11 @@ not the venue.
 other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a
 `--locale` count outside one-or-two (`provisioning.invalid_locales`) and equal standard and
 rectificative series codes (`provisioning.duplicate_series_code`) before any admin connection is
-opened; a concurrent run that races a conflicting row is caught as `provisioning.venue_conflict`.
+opened. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
+refuses a legal name or operation description carrying a character XML forbids, an operation
+description over 500 characters, and either series code outside AEAT's character set or longer than
+the 38-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
+races a conflicting row is caught as `provisioning.venue_conflict`.
 
 A worked invocation with the full option set is in
 [`apps/server/README.md`](../../apps/server/README.md#provisioning-a-venue).

@@ -51,7 +51,9 @@ export class SetupReviewScreen extends LitElement {
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
 
   /** A mapped server error routed back here — set by the shell when the POST was rejected with
-   * `setup.request_invalid`, so the operator sees why before re-provisioning. `undefined` normally. */
+   * `setup.request_invalid`, so the operator sees why before re-provisioning. `undefined` normally.
+   * Not every such refusal lands here: the four venue fields the fiscal regime refuses go back to
+   * the venue form with the field itself marked (`apps/setup/src/server-fields.ts`). */
   @property() errorMessage?: string;
 
   #provision(): void {

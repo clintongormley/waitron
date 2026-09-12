@@ -79,10 +79,10 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 Ranked 2026-09-12, with the reason for each place and the track it belongs to. Each item is its own
 brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish checking a fiscal record before it is written** (A1) — **in flight** on
-   `feat/fiscal-record-validation`; the design is approved and five of the plan's tasks are committed.
-   Wrong values otherwise land in an append-only hash-chained table that cannot be edited, and the
-   fields at risk are exactly the ones a setup operator types. Highest correctness risk in the tree.
+1. **Checking a fiscal record before it is written** (A1) — **done, awaiting land** on
+   `feat/fiscal-record-validation`. Wrong values would otherwise land in an append-only hash-chained
+   table that cannot be edited, and the fields at risk are exactly the ones a setup operator types.
+   Two follow-ups it uncovered are below (A1a, A1b); neither blocks the merge.
 
 2. **A box a real operator can set up without a terminal** (B1). After a re-image the box serves a
    NEW self-signed CA, the browser silently keeps trusting the old one, and "provision now" fails at
@@ -133,36 +133,117 @@ order; the small items at the end of each area live in Track C.
 
 **In flight:**
 
-- **`feat/fiscal-record-validation`** — A1, five implementation commits on 2026-09-12
-  ([design](superpowers/specs/2026-09-12-fiscal-record-validation-design.md), approved).
+- **`feat/fiscal-record-validation`** — A1, fifteen commits on 2026-09-12, reviewed and green
+  ([design](superpowers/specs/2026-09-12-fiscal-record-validation-design.md), approved). Ready to land.
 - **`ui-overhaul`** — a dashboard restyle: collapsible nav sections and group colours, the profile
   edited in a modal, calmer card actions, and the matching `design-system.md` rules, with touch-ups in
   the payments screens. Branched off `main` on 2026-09-12; no spec in the tree, the nearest plan is
   [UI navigation and controls](superpowers/plans/2026-09-06-ui-navigation-and-controls.md), whose own
   scope landed as #249.
 
-### A1. Checking a fiscal record before it is written — in flight
+### A1. Checking a fiscal record before it is written — done, awaiting land
 
 `packages/verifactu/src/validate.ts` holds AEAT's rules and no production file called it, confirmed by
 experiment (a series code of `Serie A` reached `registros_facturacion` as `Serie A/1`, which AEAT
-would reject). The design refuses a record AEAT could not accept at the chain seam and flags one whose
-numbers disagree with themselves; it adds a fiscal contribution seat for the operator's venue fields.
-Open in the design, not the plan: whether a guard that this stays wired belongs with the root guards,
-since an exported function with no caller is what a text-walking guard can see.
+would reject). What landed: a record AEAT could not accept is refused at the chain seam, before
+anything is written; one whose totals disagree with its own VAT lines is written, filed and flagged as
+an incident, because AEAT accepts those under a ±10 euro tolerance; the same rules reach the setup
+boundary and the `waitron-provision venue` command through a seat on the regime-neutral fiscal
+contract, so no host code imports a regime package; and the wizard now returns the operator to the
+refused field with a sentence saying what is wrong.
+
+**No root guard keeps the validator wired** — the design left that open and the answer was no. The
+guard is behavioural: the refusal at each seam is proven by deletion, and a root test pins the
+wizard's field list against the constant the regime itself loops over. A text-walking guard was
+rejected with a receipt: only two of the four field paths appear as string literals, so a scrape
+would find two, pass, and claim four.
+
+Three things the work uncovered, none of which anyone was looking for. The shared alta test fixture
+had drifted into describing a record AEAT would reject, so 42 tests went red-to-green across eight
+files when it was corrected. `recordSale` promoted a record to a full invoice whenever a sale carried
+a business customer but never named the recipient — a real latent defect, fixed here for a Spanish
+customer. And the new permanent refusal reached the till as "try again", which is the one instruction
+that cannot work; five handlers now say to stop and who to call.
+
+### A1c. Dead pointers to deleted test suites
+
+The per-package `errors.reachability.test.ts` suites were deleted on 2026-08-11, but roughly 37
+comments across 15 or more packages still cite them as the guard for error-code reachability. The
+real guard is `scripts/errors-reachable.test.ts`. Found while reviewing A1, and deliberately NOT
+swept there — fixing one of 37 makes the rot look addressed, and CLAUDE.md §1 says thin on touch
+rather than sweep. One pass, whenever somebody has the file open anyway.
+
+### A1a. A foreign business customer needs an identifier-type decision
+
+`recordSale` now names a Spanish recipient on a full invoice. A non-Spanish one is refused by name
+(`fiscal.foreign_recipient_unsupported`), deliberately: AEAT's `IDOtro` needs an `IDType` — NIF-IVA,
+passport, residence certificate and so on, enumerated at
+`packages/verifactu/schemas/SuministroInformacion.xsd:894-927` — and choosing wrongly files a record
+into an append-only table that can never be unfiled. Whoever wires up business-customer sales makes
+that call. No HTTP route supplies a counterparty today — core's `recordSale` hardcodes `null` and
+nothing calls `recordSubstitution` from a route — but `packages/core`'s substitution path types it as
+required, so the refusal is one route away, not one feature away.
+
+### A1b. The validator never checks the recipient's own identity — DONE in A1
+
+`validate` scanned the issuer's name and the operation description for characters XML forbids but
+did neither for `Destinatarios.IDDestinatario[].NombreRazon`, and applied no length rule to the
+recipient's NIF. The gap predates A1 (`git log -S`, #51) and was already reachable through core's
+`recordSubstitution`, whose recipient has always been required; A1 widened it to any F1 `recordSale`
+builds. Neither is reachable from an HTTP route yet, so the run-it review reproduced it by calling
+the backend directly: a customer named `Cliente<U+0007>SL` went through the new full-invoice path
+against real PostgreSQL, the sale COMMITTED, and the bell character was stored in the append-only
+record. Fixed on the same branch: every recipient's
+name is scanned and the issue names which one, and the recipient's NIF gets the same exactly-nine
+rule the issuer's does (`sf:NIFType` is the identical XSD type). Regression at the chain seam.
+
+### A1d. Four things the A1 review wave raised and did not fix
+
+Each was judged and deliberately left; none blocks the merge.
+
+- **The audited AEAT package's own shared record fixture is still a full invoice naming no
+  recipient.** `packages/verifactu/test/fixtures.ts`'s `ALTA_INPUT` is the exact shape A1 corrected
+  everywhere else. Not free to fix: it reproduces AEAT's own vector-1 hash, and the exact-XML
+  expectations in `xml/serialize.test.ts` would all move. Whoever touches it does so with those two
+  facts in hand.
+- **The venue-field check restates three rules the validator owns.** `packages/fiscal-verifactu`'s
+  `venue-fields.ts` copies the series-code character set, the description cap and the control-character
+  range out of `@waitron/verifactu`'s `validate.ts`, and a whole test file exists to keep the copy
+  honest. A reviewer proposed exporting `NUMSERIE_PATTERN`, `CONTROL_CHAR_PATTERN` and a named
+  description cap from the library's barrel instead, deleting both the copy and the guard. DEFERRED
+  on purpose (owner, 2026-09-12): it widens an audited fiscal library's public surface at the end of
+  a branch, and the drift guard already closes the risk — 34 tests, proven against fourteen
+  mutations. Revisit when something else needs those patterns.
+- **The till writes the same three-way error classification at five call sites.**
+  `apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown in five places; a
+  helper would collapse it. Cosmetic, and cheapest to do alongside the tip-collection work that
+  touches `#onPayTab` anyway.
+- **`setup.request_invalid`'s registry entry describes a surface it outgrew.**
+  `apps/server/src/errors.ts` calls it "currently the AEAT certificate seal" and then enumerates its
+  `field` param as `"certKind"` or `"pfxBase64"`. Both halves are stale: `parseVenue` raises the code
+  for every venue field it checks, through `invalidRequest` in `apps/server/src/setup-api.ts`, and A1
+  widened it again by making the provisioning CLI's venue-field seat a new thrower with its own field
+  names. The first half was already false before A1 — the sentence dates from #142 (`git log -S`) —
+  so A1 neither created nor fixed it, but A1 did add to what the second half leaves out. Two lines,
+  whenever somebody has that registry open.
 
 ### A2. The setup wizard
 
 Owner walkthrough 2026-09-12, none started. Detail for each under *Detail → Setup wizard*.
 
 - **Till name and the two series codes** — prefill the till name (or drop the question and let the
-  dashboard create registers), default the codes to `FS` and `FR`, drop all three from the demo path,
-  and refuse at the wizard and the server a code the fiscal record would later reject: charset, the
-  38-character base, the two must differ.
+  dashboard create registers), default the codes to `FS` and `FR`, and drop all three from the demo
+  path. The refusing half is DONE in A1: the server, the provisioning command and the wizard all
+  reject a code the fiscal record would later reject (charset, the 38-character base, the two must
+  differ), and the wizard marks the field. What is left here is the defaults and the demo path.
 - **"What this location does"** — a default, wording that says what the tax agency does with it, and
   a dashboard screen that can change it (nothing can today, though the wizard promises it).
 - **The demo path** asks for real business details; ask only for the operator and the location's name
   and address, generate a company tax ID, fill the rest with values they can change later.
-- **Per-field errors on the shop page** instead of one banner listing every possible problem.
+- **Per-field errors on the shop page** instead of one banner listing every possible problem. A1
+  built the per-field shape — the marked field, its own sentence in the input's `error` slot, focus
+  moved to it, no banner — for the four fields the fiscal regime refuses. What is left is the rules
+  the form evaluates itself, which still raise one banner listing everything.
 - **The certificate page** should show the export steps for the operator's own OS.
 - **A mistyped setup address gives a blank page** — redirect unknown paths to `/`, not a catch-all.
 - **Password and PIN reveal controls** on the first-operator screen, the dashboard's icon version.
@@ -299,7 +380,8 @@ Two halves, one branch each (owner decision 2026-09-12).
   document.
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
   cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
-  flattens every server code to one `sale.error` key, hiding `sale.empty_basket`.
+  flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
+  `sale.empty_basket`.
 
 ### A9. Product depth — after the primary works
 
@@ -709,7 +791,7 @@ partial scope; the detail for a live thread is in its track.
 | --- | --- | --- | --- |
 | 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons | `wt-select` (A7) |
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
-| 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | record validation before chaining (A1, in flight); F3 asesor/XSD confirmations; cert distribution to a promoted node |
+| 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
 | 5 | Identity | persons/sessions, PIN (+ per-device throttle), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
@@ -851,16 +933,17 @@ sessions on their next request); storage (a table in identity's own migration se
 and a classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
 `roleName`, `apps/dashboard/src/i18n/domain.ts:180`, custom ones will not be).
 
-### Incidents are written by four things and displayed by nothing (A5)
+### Incidents are written by several things and displayed by nothing (A5)
 
 `openIncidents` (`packages/core/src/incidents.ts`) is the only function that reads the `incidents`
 table, and nothing calls it — a whole-repo search outside tests finds only its definition and the
-barrel that exports it. The diagnostics screen is a live log tail, a different thing. Four producers
-write: the fiscal drain when AEAT rejects a record, the payments reconciler on drift, the Stripe
-device provider, and the card provider pool. `apps/server/src/pass.ts` names its intended audience as
+barrel that exports it. The diagnostics screen is a live log tail, a different thing. The producers
+that write: the fiscal drain when AEAT rejects a record, the payments reconciler on drift, the Stripe
+device provider, the card provider pool, and — since A1 — the chain-append seam when a record's
+totals disagree with its own VAT lines. `apps/server/src/pass.ts` names its intended audience as
 "an operator grepping `drain.complete` (or the `incidents` table directly)" — and a real venue's
 operator has no terminal. One surface serving every producer, which is why it is not folded into A1: a
-screen shaped around that branch's two arithmetic warnings would be the wrong shape for the four
+screen shaped around that branch's two arithmetic warnings would be the wrong shape for the ones
 already waiting.
 
 ### Logging, diagnostics & one-touch bug report (A9; Slice 1 landed #192)

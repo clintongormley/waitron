@@ -198,7 +198,9 @@ export class SetupApi {
   /**
    * `POST /setup-api/provision` — file the whole venue in one shot. On success the box restarts into
    * trading mode; any validation/state failure rejects with an {@link ApiError} the review step
-   * surfaces (its `params.field` marks the offending field on `setup.request_invalid`).
+   * surfaces (its `params.field` marks the offending field on `setup.request_invalid`) — except the
+   * four venue fields the fiscal regime refuses, which go back to the venue form with the field
+   * itself marked (`apps/setup/src/server-fields.ts`).
    */
   provision(body: ProvisionBody): Promise<ProvisionResult> {
     return this.#request<ProvisionResult>("/setup-api/provision", "POST", body);

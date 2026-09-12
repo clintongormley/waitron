@@ -1018,6 +1018,123 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 });
 
+// The regime's own rules on the fields the operator typed, reached through the contract seat
+// (`FiscalContribution.venueFields`) — the subject file imports no regime package. The rules
+// themselves are the regime's to test (`packages/fiscal-verifactu/src/venue-fields.test.ts`); what
+// belongs here is that the boundary RUNS them, threads the offending field name back, and mints
+// nothing when it refuses. Deletion-proof: drop the `contribution.venueFields?.validate(…)` call
+// from `parseProvisionPayload` and every refusal case below goes RED (the bad venue reaches
+// `provision`).
+describe("POST /setup-api/provision — the regime's rules on the operator's venue fields", () => {
+  it.each<[string, string, (body: Record<string, unknown>) => void]>([
+    [
+      "a series code with a space",
+      "seriesCode",
+      (b) => void (asRec(b.venue).seriesCode = "Serie A"),
+    ],
+    [
+      "a rectificative series code with a space",
+      "rectificativeSeriesCode",
+      (b) => void (asRec(b.venue).rectificativeSeriesCode = "Serie R"),
+    ],
+    [
+      "an operation description carrying a character XML forbids",
+      "location.operationDescription",
+      (b) => void (asRec(asRec(b.venue).location).operationDescription = "Barra\u0007principal"),
+    ],
+    // `legalName` is the one seat field nothing else pins. Crossing the two series codes makes a
+    // row above report the wrong field, and wiring either of them to the legal name turns the
+    // acceptance case below red (the demo venue's legal name has spaces, which a series code may
+    // not). The legal name is only checked for control characters, so without this row it could be
+    // wired to any other string field — `venue.location.name`, say — and every test would still
+    // pass while a legal name the tax agency rejects reached the till as a refused first sale.
+    [
+      "a legal name carrying a character XML forbids",
+      "legalName",
+      (b) => void (asRec(b.venue).legalName = "Waitron\u0007Dev SL"),
+    ],
+  ])("refuses %s, naming the field and provisioning nothing", async (_label, field, mutate) => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    mutate(body);
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toEqual({ code: "setup.request_invalid", params: { field } });
+    // The tenant, node, SIF and hash chain are unrepairable once minted (CLAUDE.md §5), so the
+    // property that matters is that the mint was never reached at all.
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  // The two routes SHARE `parseProvisionPayload`, so they now agree about which venues are
+  // acceptable. That agreement is the point: were the check on the provision route alone, an
+  // operator could pass the explicit fiscal test and then be refused at provisioning by the very
+  // same value — and the test would meanwhile have opened a live connection to the tax agency
+  // carrying a series code it rejects.
+  it("refuses the explicit fiscal test too, before any submission is attempted", async () => {
+    const app = new Hono();
+    const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
+    const { deps } = makeDeps({ runFiscalTest });
+    mountSetup(app, deps, noopLog);
+
+    // The certificate is supplied so the series code is the ONLY fault: without it the secret gate
+    // would refuse first, and the 400 would prove nothing about the venue-field seat.
+    const body: Record<string, unknown> = { ...liveBody(), aeatCert: CERT };
+    asRec(body.venue).seriesCode = "Serie A";
+    const res = await app.request("/setup-api/fiscal-test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toEqual({
+      code: "setup.request_invalid",
+      params: { field: "seriesCode" },
+    });
+    // The assertion carrying the value: no submission was attempted. The status alone would not
+    // distinguish this refusal from any other 400 on the route.
+    expect(runFiscalTest).not.toHaveBeenCalled();
+  });
+
+  // Pins the ORDER, which the call site's comment claims but nothing else checks: the venue-field
+  // seat runs BEFORE the provisioning-secret gate. This body is wrong in both ways at once — a bad
+  // series code and no certificate on a live (production) provision — so whichever check runs first
+  // decides the answer. Move the seat call below `secret!.validate(…)` in setup-api.ts and this goes
+  // RED with `setup.provisioning_secret_required`.
+  it("names the bad field ahead of the missing certificate when a live body is wrong in both ways", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = liveBody();
+    asRec(body.venue).seriesCode = "Serie A";
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toEqual({
+      code: "setup.request_invalid",
+      params: { field: "seriesCode" },
+    });
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("still provisions the ordinary demo venue, whose fields the regime accepts", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody());
+
+    expect(res.status).toBe(200);
+    expect(provision).toHaveBeenCalledOnce();
+    await tick();
+  });
+});
+
 // The upfront cert-shape validator (`parseAeatCert`/`validateAeatCert`) moved into the regime with the
 // cert itself (fiscal-none slice): its direct tests — including the empty-passphrase branch unreachable
 // through the endpoint — now live in `packages/fiscal-verifactu/src/provisioning-secret.test.ts`.

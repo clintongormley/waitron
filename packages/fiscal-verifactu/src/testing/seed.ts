@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
-import { nodeId as brandNodeId, tenantId, tillId as brandTillId } from "@waitron/shared";
-import type { NodeId, TenantId, TillId } from "@waitron/shared";
+import {
+  nodeId as brandNodeId,
+  saleId as brandSaleId,
+  tenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
+import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type { AltaInput, AnulacionInput, SistemaInformatico } from "@waitron/verifactu";
 import { registerSif } from "../registro-sif.js";
 import type { PendingRegistro } from "../chain.js";
@@ -259,7 +264,7 @@ export async function seedSale(
   db: Database | Transaction,
   till: SeededTill,
   invoiceNumber: number,
-): Promise<string> {
+): Promise<SaleId> {
   const { rows } = await db.execute<{ id: string }>(sql`
     insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
                        issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
@@ -272,7 +277,7 @@ export async function seedSale(
   `);
   const row = rows[0];
   if (row === undefined) throw new Error("seedSale inserted nothing");
-  return row.id;
+  return brandSaleId(row.id);
 }
 
 /**
@@ -290,7 +295,7 @@ export async function seedSale(
  */
 export function altaFor(
   tillId: TillId,
-  saleId: string,
+  saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
   // Defaulted, not required: this fixture has call sites across most of this package's test
@@ -303,13 +308,13 @@ export function altaFor(
     NumSerieFactura: `A/${invoiceNumber}`,
     FechaExpedicionFactura: new Date("2026-07-20T00:00:00+02:00"),
     NombreRazonEmisor: "Waitron SL",
-    TipoFactura: "F1",
+    TipoFactura: "F2",
     DescripcionOperacion: "Venta en establecimiento",
     Desglose: [
       {
         BaseImponibleOimporteNoSujeto: "102.02",
         CuotaRepercutida: "21.43",
-        TipoImpositivo: "21",
+        TipoImpositivo: "21.00",
         CalificacionOperacion: "S1",
       },
     ],
@@ -326,7 +331,7 @@ export function altaFor(
  * exactly as `altaFor`. Narrowed return type — see altaFor's doc comment for why. */
 export function anulacionFor(
   tillId: TillId,
-  saleId: string,
+  saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
   // Same default, same reason as altaFor's own entorno parameter above.

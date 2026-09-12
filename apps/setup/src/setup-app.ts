@@ -23,6 +23,7 @@ import type {
   SetupApi,
 } from "./api/client.js";
 import type { ConfigurationRequestDetail, RestoreRequestDetail } from "./events.js";
+import { SERVER_FIELDS } from "./server-fields.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
@@ -218,7 +219,9 @@ export class SetupApp extends LitElement {
 
   /**
    * A `setup.request_invalid` the server threw at provision time, routed back to the `review` screen
-   * as a banner naming the offending field. `undefined` normally; cleared before every new POST.
+   * as a banner naming the offending field — except the four venue fields the fiscal regime refuses,
+   * which go back to the venue form with the field marked (`server-fields.ts`, and
+   * {@link SetupApp.venueInvalidField} below). `undefined` normally; cleared before every new POST.
    */
   @state() private reviewError?: string;
 
@@ -228,6 +231,14 @@ export class SetupApp extends LitElement {
    * operator can correct the offending detail. `undefined` normally; cleared before every new POST.
    */
   @state() private venueError?: string;
+
+  /**
+   * The single venue field a `setup.request_invalid` named, when that field is one the venue form
+   * owns. Handed to the venue screen so it can mark the field and explain it; `undefined` normally,
+   * and cleared everywhere {@link SetupApp.venueError} is — a mark surviving into the next attempt
+   * would leave a field red on a value the operator has already corrected.
+   */
+  @state() private venueInvalidField?: string;
 
   /**
    * An adopt failure the server threw at connect time (C2b), routed back to the `connect` screen as a
@@ -316,6 +327,7 @@ export class SetupApp extends LitElement {
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();
     this.venueError = undefined;
+    this.venueInvalidField = undefined;
     this.reviewError = undefined;
     this.connectError = undefined;
     this.restoreError = undefined;
@@ -338,6 +350,7 @@ export class SetupApp extends LitElement {
     event.stopPropagation();
     if (this.screen !== "venue") return;
     this.venueError = undefined;
+    this.venueInvalidField = undefined;
     this.reviewError = undefined;
     this.screen =
       this.draft.mode === "live" &&
@@ -361,6 +374,7 @@ export class SetupApp extends LitElement {
     event.stopPropagation();
     this.reviewError = undefined;
     this.venueError = undefined;
+    this.venueInvalidField = undefined;
     this.provisionMessage = undefined;
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
@@ -387,8 +401,12 @@ export class SetupApp extends LitElement {
    *   `setup.provision_failed` is only that boundary's log tag, never a wire code). Re-POSTing the same
    *   data would just fail again, so route BACK to the `venue` form with a banner; the fix is editing,
    *   not retrying in place.
-   * - `setup.request_invalid` → back to `review` with a banner naming `params.field` (the field's own
-   *   screen already validates the same rule, so this is a belt-and-suspenders path).
+   * - `setup.request_invalid` naming one of the four fields the fiscal regime refuses
+   *   (`./server-fields.ts`) → back to `venue` with that field marked, explained and focused. Those
+   *   are rules the wizard cannot evaluate itself, so the operator is returned to the field rather
+   *   than shown a raw field path.
+   * - `setup.request_invalid` naming any other field → back to `review` with a banner naming
+   *   `params.field`. Those fields their own screen does validate, so this stays a fallback.
    * - `setup.provisioning_secret_required` → back to `cert` to add the certificate.
    * - `setup.already_provisioning` → an in-progress notice, no retry (a concurrent provision is
    *   running); offers a plain "Reload" so the operator isn't stranded on a dead-end alert.
@@ -418,6 +436,13 @@ export class SetupApp extends LitElement {
     switch (code) {
       case "setup.request_invalid": {
         const field = typeof error.params?.field === "string" ? error.params.field : undefined;
+        // The same list the venue form marks and explains from, so a path can never route back to a
+        // form that has nothing to say about it.
+        if (field !== undefined && Object.hasOwn(SERVER_FIELDS, field)) {
+          this.venueInvalidField = field;
+          this.screen = "venue";
+          return;
+        }
         this.reviewError =
           field === undefined
             ? "The box rejected the details. Check your entries, then provision again."
@@ -698,6 +723,7 @@ export class SetupApp extends LitElement {
           data-test="screen-venue"
           .draft=${this.draft}
           .errorMessage=${this.venueError}
+          .invalidField=${this.venueInvalidField}
         ></setup-venue-screen>`;
       case "cert":
         return html`<setup-cert-screen

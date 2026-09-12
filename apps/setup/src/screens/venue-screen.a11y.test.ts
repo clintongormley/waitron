@@ -27,6 +27,16 @@ describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  // A field the server refused is marked and explained beside itself, rather than as another banner.
+  it("has no violations with a server-refused field marked and explained", async () => {
+    const { host } = await mountWidget<SetupVenueScreen>(
+      "setup-venue-screen",
+      { invalidField: "seriesCode" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   // Fix (j): a routed server error AND a client-validation failure coincide — only the single client
   // alert renders, and it must stay a11y-clean.
   it("has no violations when a server error and a client error coincide (one alert)", async () => {

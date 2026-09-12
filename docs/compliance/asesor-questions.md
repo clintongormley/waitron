@@ -1038,7 +1038,10 @@ first real F3 is filed:
 
 - **(a)** the foreign-recipient path (`IDOtro` rather than a Spanish `NIF`) is **refused at the
   backend** today, because which `IDType` values AEAT expects for a non-resident, and when it demands
-  a specific one, is unconfirmed;
+  a specific one, is unconfirmed. That refusal is no longer specific to the F3: since
+  2026-09-12 it governs EVERY record that names a recipient, the F1 full invoice included, because
+  both paths build the recipient block through the same function
+  (`buildDestinatarios`, `packages/fiscal-verifactu/src/backend.ts`);
 - **(b)** whether an F3 must use a **dedicated series** distinct from ordinary/simplified invoices, or
   may share one, is unsourced — we reuse the `standard` series today;
 - **(c)** whether an F3 may substitute tickets that a **different SIF** of the same taxpayer issued

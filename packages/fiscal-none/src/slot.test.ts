@@ -35,4 +35,8 @@ describe("FISCAL_NONE_SLOT", () => {
   it("declares no provisioning secret", () => {
     expect(FISCAL_NONE_SLOT.provisioningSecret).toBeUndefined();
   });
+
+  it("offers no venue-field seat: there is no filing format to violate", () => {
+    expect(FISCAL_NONE_SLOT.venueFields).toBeUndefined();
+  });
 });

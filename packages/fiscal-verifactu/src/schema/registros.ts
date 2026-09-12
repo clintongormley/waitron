@@ -76,8 +76,9 @@ export const registrosFacturacion = pgTable(
     facturasRectificadas: jsonb("facturas_rectificadas"),
     facturasSustituidas: jsonb("facturas_sustituidas"),
     importeRectificacion: jsonb("importe_rectificacion"),
-    // The recipient block of an F3 canje (migration 0011), storing RegistroAlta["Destinatarios"].
-    // NULL on an ordinary F2 alta and on an anulación; set on a full invoice (F3, and later F1).
+    // The recipient block (migration 0011), storing RegistroAlta["Destinatarios"]. NULL on a
+    // simplified F2 alta and on an anulación; set on any record that names a recipient — an F3
+    // canje and an F1 full invoice alike.
     // `jsonb`, not `text`, for the same reason as the four rectificativa fields above and the
     // module-level note: it is NOT a huella input (huella.ts hashes 8 named fields, the recipient is
     // not among them — packages/verifactu/src/types.ts), only ever re-serialised into XML, so jsonb

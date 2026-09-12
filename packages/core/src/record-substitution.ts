@@ -60,8 +60,8 @@ export interface RecordSubstitutionInput {
   /**
    * The recipient — REQUIRED, because a full invoice must always name it (findings
    * §10.2, «siempre debe llevar el destinatario»). Written to the F3's `counterparty_*` columns and
-   * passed NON-null into the fiscal record, where it becomes the record's `Destinatarios` block —
-   * the one method whose `SaleForFiscalRecord.counterparty` is populated rather than null.
+   * passed NON-null into the fiscal record, where it becomes the record's `Destinatarios` block.
+   * `recordSale` files one too when it is given one; this is the path where it is never absent.
    */
   counterparty: Counterparty;
   /** The F3's OWN total — POSITIVE (an F3 restates the substituted operations; it is not a negative
@@ -349,7 +349,7 @@ export async function recordSubstitution(
   // its own fiscal fingerprint over the positive totals, `TipoFactura = F3`, the `FacturasSustituidas` block naming
   // each ticket's stored identity, and the `Destinatarios` block from `counterparty` — advances its
   // chain and inserts its pending-submission row, all on this transaction. `counterparty` is passed
-  // NON-null: an F3 is the one path that carries a recipient. A ticket the module never recorded
+  // NON-null: an F3 must always name one, where an ordinary sale may not. A ticket the module never recorded
   // makes this throw (`fiscal.sale_not_recorded`), rolling back everything above with nothing chained.
   const fiscal = await backend.recordSubstitution(
     tx,

@@ -602,6 +602,15 @@ unfiltered `main` run, not a wrong hook.
   there: the root project does not typecheck (§2), and a module tested only from there must be in the
   root `coverage.include` and excluded from its package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **A fixture no check reads is unverified data, and a green suite resting on it proves nothing about
+  the records production can build.** `@waitron/verifactu`'s `validate` had no production caller, so
+  the shared alta fixture had drifted into a record AEAT would reject — a full invoice naming no
+  recipient — with the whole `fiscal-verifactu` suite green on it. Cost: every operator-typed field
+  reached the append-only `registros_facturacion` unchecked, and the bad fixture had been masking a
+  real production defect (`recordSale` built an F1 and never filled in `Destinatarios`); correcting
+  it took 42 tests from red to green across eight files and left three red that were the bug. When a
+  fixture describes something an authority will judge, run the real check over it. Pointer:
+  `packages/fiscal-verifactu/src/chain.record-validation.test.ts`.
 - **Browser recovery tests read the native control inside a shared component.** A host's `checked`
   property can report the expected value while its inner checkbox remains visibly wrong. The printer
   follow-up review reproduced that split by preserving the emitted change while suppressing the host

@@ -60,7 +60,11 @@ declare module "@waitron/shared" {
      * The provision-time secret validator/sealer (`./provisioning-secret.ts`, relocated here in the
      * fiscal-none slice) throws this when the opaque AEAT-cert blob's `certKind`, `pfxBase64` or
      * `passphrase` is absent, the wrong type, or fails its shape check — naming the offending field,
-     * never its value. Declared here because this package now throws the code;
+     * never its value. `./venue-fields.ts` is the package's second thrower: it refuses a venue whose
+     * operator-typed fiscal text would build a record AEAT cannot accept, naming one of
+     * `legalName`, `seriesCode`, `rectificativeSeriesCode` or `location.operationDescription` (the
+     * request body's own spellings, listed as `VENUE_FISCAL_FIELD_PATHS`). Declared here because
+     * this package now throws the code;
      * `apps/server/src/errors.ts` keeps its own identical declaration for the setup surface's own
      * throwers (`setup-api.ts`'s venue/adopt field screens). The two declarations carry identical
      * params so TypeScript's declaration merging accepts both when `apps/server` compiles them
@@ -131,6 +135,40 @@ declare module "@waitron/shared" {
      * failure a human most needs explained in their own language.
      */
     "chain.append_contention": { tenantId: string; nodeId: string; attempts: number };
+
+    /**
+     * `attemptAppend` (./chain.ts) refused a record that `@waitron/verifactu`'s `validate` reports
+     * as one AEAT could not accept — a forbidden character in the invoice number, a control
+     * character in a free-text field, an out-of-range amount. Raised BEFORE the insert, so nothing
+     * is written and the chain head does not move: `registros_facturacion` is append-only and
+     * hash-chained, and a value written wrong there stays wrong (CLAUDE.md §5), so refusing a
+     * record is the only remedy that leaves the venue repairable.
+     *
+     * `fiscal.*` and English, not `verifactu.*` and not Spanish: this names OUR local refusal, not
+     * an AEAT wire state. The sibling distinction the registry already draws is
+     * `fiscal.sale_not_recorded` (ours) beside `fiscal.registro_rechazado` (AEAT's answer).
+     *
+     * Params carry the offending FIELD NAMES and the validator's own ISSUE CODES — never the
+     * offending values. The shared error boundary writes params into `waitron.log`, which the
+     * unauthenticated recovery page renders to anyone on the venue's LAN
+     * (`apps/server/src/recovery-surface.ts`), so an operator's data must never travel here.
+     * Both arrays, because one record can breach several rules at once and a human fixing the
+     * venue wants all of them, not the first.
+     */
+    "fiscal.record_invalid": { fields: string[]; codes: string[] };
+
+    /**
+     * `attemptAppend` (./chain.ts) wrote a record whose stated totals disagree with its own VAT
+     * breakdown by more than AEAT's ±10.00 euro tolerance. NEVER thrown — AEAT treats a breach as
+     * an admissible error and accepts the record, so refusing the sale would block a record the
+     * authority would have taken. Built only to hand its `.code`/`.params` to `@waitron/core`'s
+     * `recordIncident`, exactly as `fiscal.registro_rechazado` is used from the drainer.
+     *
+     * It is raised at all because our own totals disagreeing with our own lines is a bug in the
+     * money, happening while the venue keeps selling. Params carry the field names and issue codes,
+     * never the amounts (see `fiscal.record_invalid` for why params never carry values).
+     */
+    "fiscal.record_totals_disagree": { fields: string[]; codes: string[] };
 
     /**
      * Task 9's drainer (`./drain.ts`, `applyOutcome`). AEAT rejected this record outright
@@ -350,5 +388,32 @@ declare module "@waitron/shared" {
      * that one was.
      */
     "fiscal.substitution_unsupported": { saleId: string; tipoFactura: string };
+
+    /**
+     * Thrown by `buildDestinatarios` (./backend.ts) for a recipient whose country is not `ES`. AEAT
+     * names a foreign recipient through `IDOtro`, which carries an `IDType` this project has not
+     * chosen a value for: the vocabulary is enumerated by the XSD
+     * (`packages/verifactu/schemas/SuministroInformacion.xsd`, `PersonaFisicaJuridicaIDTypeType`)
+     * but which value AEAT admits for which non-resident is open with the asesor
+     * (`docs/compliance/asesor-questions.md`, Q17(a)). `registros_facturacion` is append-only and
+     * hash-chained (CLAUDE.md §5), so a guessed identifier type would be filed and could never be
+     * unfiled — the sale is refused instead.
+     *
+     * ONE code for both recipient-naming paths, because it is one decision: the F3 canje
+     * (`recordSubstitution`) and the F1 full invoice (`recordSale`) both reach it through
+     * `buildDestinatarios`. It is a PERMANENT refusal — retrying files nothing new — so the till
+     * gives it its own message rather than the generic "try again": stop, the venue's invoice
+     * settings need fixing, call whoever set the box up, and refund any card charge already taken on
+     * the terminal (`sale.refused` / `place.refused`, `apps/till/src/i18n/strings.ts`).
+     *
+     * `countryCode` is the recipient's country, not an operator's own text, so it may ride in
+     * params: the shared error boundary writes params into `waitron.log`, which the unauthenticated
+     * recovery page renders to anyone on the venue's LAN. The recipient's name and tax identifier
+     * are operator data and never appear here (see `fiscal.record_invalid` for the full reasoning).
+     *
+     * `fiscal.*` and English, matching this file's other regime-neutral-shaped codes: a fact about
+     * the record being built, not an AEAT wire state.
+     */
+    "fiscal.foreign_recipient_unsupported": { countryCode: string };
   }
 }

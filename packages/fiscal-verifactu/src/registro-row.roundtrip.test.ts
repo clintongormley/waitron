@@ -181,23 +181,31 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     expect(rebuilt.Destinatarios).toEqual(built.Destinatarios);
   });
 
-  it("round-trips an ordinary alta, leaving all four fields absent (not null)", async () => {
-    // The "absent" arm of every conditional spread: an ordinary F1 alta carries none of the four,
-    // and a rehydrated record must OMIT them, not set them to null — buildAltaRecord itself omits
-    // an absent field, so a `TipoRectificativa: null` on the rebuilt side would break the deep-equal
-    // against a record that has no such key at all.
+  it("round-trips an alta with none of the optional blocks, leaving all four fields absent (not null)", async () => {
+    // The "absent" arm of every conditional spread: an alta carrying none of the four must have
+    // them OMITTED when rehydrated, not set to null — buildAltaRecord itself omits an absent field,
+    // so a `TipoRectificativa: null` on the rebuilt side would break the deep-equal against a record
+    // that has no such key at all.
+    //
+    // F2, not F1: this record goes to the database only, never through `validate`, because it
+    // calls `buildAltaRecord` directly. A missing `Destinatarios` on an F1 is the fault the chain
+    // guard now refuses, so building one here would leave a fixture describing a record production
+    // code can no longer produce. The rate is written with its two decimals only so the literal
+    // matches what `buildAltaRecord` emits — it runs every rate through `formatAmountExact`, so a
+    // bare "21" would reach `validate` as "21.00" and raise nothing. The round-trip property this
+    // case exists for is unaffected by either value.
     const built = buildAltaRecord({
       IDEmisorFactura: TEST_NIF,
       NumSerieFactura: "A/9",
       FechaExpedicionFactura: new Date("2026-07-20T00:00:00+02:00"),
       NombreRazonEmisor: "Waitron SL",
-      TipoFactura: "F1",
+      TipoFactura: "F2",
       DescripcionOperacion: "Venta en establecimiento",
       Desglose: [
         {
           BaseImponibleOimporteNoSujeto: "102.02",
           CuotaRepercutida: "21.43",
-          TipoImpositivo: "21",
+          TipoImpositivo: "21.00",
           CalificacionOperacion: "S1",
         },
       ],
@@ -216,7 +224,7 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     expect("FacturasRectificadas" in rebuilt).toBe(false);
     expect("FacturasSustituidas" in rebuilt).toBe(false);
     expect("ImporteRectificacion" in rebuilt).toBe(false);
-    // The recipient's "absent" arm too: an ordinary alta (and the R5 above) stores a NULL
+    // The recipient's "absent" arm too: an alta with no recipient (and the R5 above) stores a NULL
     // `destinatarios`, and a rehydrated record must OMIT the key, never set it to null.
     expect("Destinatarios" in rebuilt).toBe(false);
   });

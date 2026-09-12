@@ -291,8 +291,9 @@ describe("recordSubstitution — refusals", () => {
   // contention. The chain-append path and the concurrency property are
   // `substitution-path.e2e.test.ts`'s real-PG job.
 
-  /** A minimal F3 `SaleForFiscalRecord` — POSITIVE total, and (unlike every other method's fixture)
-   * a NON-null counterparty, because a full invoice must always name its recipient. Its own fields
+  /** A minimal F3 `SaleForFiscalRecord` — POSITIVE total, and a NON-null counterparty, which the
+   * interface REQUIRES here and leaves optional on `recordSale`, because a full invoice must always
+   * name its recipient. Its own fields
    * are never read on the refusal paths that throw before assembling anything from `sale`, but a
    * well-formed value keeps the call type-correct. */
   function substitutionSale(overrides: Partial<SaleForFiscalRecord> = {}): SaleForFiscalRecord {
@@ -412,7 +413,10 @@ describe("recordSubstitution — refusals", () => {
           { substitutedSaleIds: [someTicket] },
         ),
       ),
-    ).rejects.toThrow(/non-Spanish/i);
+    ).rejects.toMatchObject({
+      code: "fiscal.foreign_recipient_unsupported",
+      params: { countryCode: "FR" },
+    });
   });
 });
 
@@ -470,6 +474,95 @@ describe("recordSale — invoice type selection", () => {
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.numSerieFactura, "A/999"));
     expect(row?.tipoFactura).toBe("F1");
+  });
+
+  /** Records one recipient-identified sale directly through the backend, bypassing
+   * `packages/core` for the same reason the F1 case above does: core always passes
+   * `counterparty: null` today, so this branch has no other caller. */
+  async function sellWithRecipient(
+    saleId: string,
+    invoiceNumber: number,
+    counterparty: { taxId: string; legalName: string; countryCode: string },
+  ): Promise<void> {
+    await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.insert(sales).values({
+        id: saleId,
+        tenantId,
+        tillId,
+        nodeId,
+        seriesId,
+        invoiceNumber,
+        issuedAt: "2026-03-01T12:05:00.000Z",
+        issuedOffsetMinutes: 60,
+        total: "0.00",
+        vatBreakdown: [],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      await backend.recordSale(tx, {
+        tenantId,
+        tillId,
+        nodeId,
+        saleId: brandSaleId(saleId),
+        seriesId,
+        seriesCode: "A",
+        invoiceNumber,
+        issuedAt: new Date("2026-03-01T12:05:00.000Z"),
+        offsetMinutes: 60,
+        descriptionOfOperation: "Venta en establecimiento",
+        total: decimal("12.10"),
+        vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+        counterparty,
+      });
+    });
+  }
+
+  it("names a Spanish recipient on the stored F1 record", async () => {
+    await sellWithRecipient("88888888-8888-4888-8888-888888888888", 998, {
+      taxId: "B12345678",
+      legalName: "Cliente SL",
+      countryCode: "ES",
+    });
+
+    const [row] = await pg.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.numSerieFactura, "A/998"));
+    expect(row?.destinatarios).toEqual({
+      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
+    });
+  });
+
+  /**
+   * Pins a DECISION: a foreign recipient is refused rather than guessed at, because a guessed AEAT
+   * identifier type would be filed into an append-only table and could never be unfiled (CLAUDE.md
+   * §5). The refusal is `buildDestinatarios`' own, explicit and named, and it is the SAME refusal
+   * the F3 canje path gets — one decision in one place, rather than one path refusing explicitly
+   * and the other by leaving the recipient block out and letting the chain guard notice. The
+   * vocabulary this is waiting on has one home (`buildDestinatarios`' doc comment) and is not
+   * restated here. If a future B2B task builds the `IDOtro` shape, this test is the one it must
+   * replace.
+   */
+  it("refuses a non-Spanish recipient rather than guessing an identifier type", async () => {
+    await expect(
+      sellWithRecipient("99999999-9999-4999-8999-999999999999", 997, {
+        taxId: "FR12345678901",
+        legalName: "Client SARL",
+        countryCode: "FR",
+      }),
+    ).rejects.toMatchObject({
+      code: "fiscal.foreign_recipient_unsupported",
+      params: { countryCode: "FR" },
+    });
+
+    const rows = await pg.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.numSerieFactura, "A/997"));
+    expect(rows).toEqual([]);
   });
 });
 

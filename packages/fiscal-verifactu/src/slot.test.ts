@@ -107,3 +107,29 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
     expect(readBack.certKind).toBe("sello");
   });
 });
+
+// The venue-field seat, pinned the same way and for the same reason as `provisioningSecret` above:
+// the rules themselves have their own suite (venue-fields.test.ts), so what is checked here is the
+// WIRING — that FISCAL_SLOT exposes the seat at all and forwards to the real validator. Without
+// this, deleting the seat from slot.ts would leave every other test green.
+describe("FISCAL_SLOT.venueFields", () => {
+  it("exposes the seat and forwards to the real validator", () => {
+    const seat = FISCAL_SLOT.venueFields;
+    expect(seat).toBeDefined();
+    const venue = {
+      legalName: "Waitron SL",
+      seriesCode: "Serie A",
+      rectificativeSeriesCode: "FR",
+      operationDescription: "Venta en establecimiento",
+    };
+    let error: unknown;
+    try {
+      seat!.validate(venue);
+    } catch (e) {
+      error = e;
+    }
+    expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
+      "seriesCode",
+    );
+  });
+});
