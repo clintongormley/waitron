@@ -407,6 +407,13 @@ export const en = {
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
   "sale.error": "Could not complete the sale, try again",
+  // A PERMANENT refusal, unlike `sale.error` above: the sale breaks a rule of the tax filing
+  // itself, so the same basket will be refused however many times it is rung up. Retrying is the
+  // one piece of advice that cannot work, so this says to stop and who to call instead. Raised for
+  // the codes till-api.ts answers 409 on the sale routes (`fiscal.record_invalid`,
+  // `fiscal.foreign_recipient_unsupported`).
+  "sale.refused":
+    "This sale cannot be filed with the tax agency. The venue's invoice settings need fixing — call whoever set this till up. Nothing was charged.",
   // Counter receipt/drawer (§5): a failed reprint or a failed drawer-open is NON-FATAL — the ticket
   // stays on screen and the operator retries. `drawer.error` covers both a `drawer.no_printer` (no
   // receipt printer set on this till) and a transient failure, staying generic like the sale/table
@@ -710,6 +717,8 @@ export const es: Record<StringKey, string> = {
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
+  "sale.refused":
+    "Esta venta no se puede registrar en Hacienda. Hay que corregir los datos de facturación del local — avisa a quien configuró esta caja. No se ha cobrado nada.",
   "reprint.error": "No se pudo reimprimir el recibo, inténtalo de nuevo",
   "receipt.error": "No se pudo imprimir el recibo, inténtalo de nuevo",
   "payment_slip.error": "No se pudo imprimir el justificante de pago, inténtalo de nuevo",

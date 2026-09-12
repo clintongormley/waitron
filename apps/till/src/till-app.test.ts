@@ -3948,6 +3948,51 @@ describe("till-app", () => {
     expect(el.shadowRoot!.textContent).not.toContain("sale.rejected"); // never leaks the raw code
   });
 
+  /* A sale the FISCAL FILING refuses is permanent: the same basket rung up again builds the same
+   * record and is refused again. The operator has no terminal — the till screen is their only
+   * window — so telling them to try again is the one piece of advice that cannot work. Deletion
+   * proof: drop the `isPermanentSaleRefusal(error)` arm from `#onConfirmPayment` and both cases
+   * below go red, showing the retry message instead. */
+  it.each([["fiscal.record_invalid"], ["fiscal.foreign_recipient_unsupported"]])(
+    "a permanent fiscal refusal (%s) says to stop, not to retry",
+    async (code) => {
+      const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue({ code }) });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.refused"));
+      // The retry message must NOT be what is shown — the whole point of the third key.
+      expect(banner.textContent).not.toContain(t("sale.error"));
+      expect(el.shadowRoot!.textContent).not.toContain(code); // never leaks the raw code
+      // Same non-fatal handling as every other refusal: still on the counter, basket intact.
+      expect(ticket(el)).toBeNull();
+      expect(c.store.lines).toHaveLength(1);
+    },
+  );
+
+  it("still says to retry when the refusal is an ordinary one", async () => {
+    // The control in the other direction: without it, wiring every refusal to `sale.refused` would
+    // pass the two cases above while telling an operator to stop for a fault a retry would clear.
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({ code: "sale.tender_shortfall" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.error"));
+    expect(banner.textContent).not.toContain(t("sale.refused"));
+  });
+
   it("clears a prior sale error when the next payment attempt starts", async () => {
     const recordSale = vi
       .fn()

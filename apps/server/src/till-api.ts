@@ -318,6 +318,12 @@ async function resolvePayReader(
  * `working_order.*`/`sale.*` entry here. (`order_prep.invalid_transition` is retired from this surface
  * with the KDS-1 rework — its throw sites are gone, so it is no longer mapped here; it stays REGISTERED
  * in `errors.ts`, never renamed, spec §6.)
+ *
+ * The two `fiscal.*` entries are the exception to "client faults only", and they are listed rather
+ * than left to the 400 default for that reason: neither is something the till sent wrong. They are
+ * the venue's own filing configuration (or an unsupported foreign customer) making this record
+ * one the tax agency could not accept, so they take the 409 "the state forbids it" family and the
+ * till renders them as a PERMANENT refusal — see each entry's own note below.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
@@ -352,6 +358,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // clean 400, not a `22P02` → 500.
   "shared.invalid_id": 400,
   "authorization.not_permitted": 403,
+  // A sale the FISCAL FILING itself refuses — the record would break a rule AEAT applies
+  // (`fiscal.record_invalid`, raised at the chain-append seam before anything is written), or it
+  // names a customer outside Spain, whose AEAT identifier type this version does not build
+  // (`fiscal.foreign_recipient_unsupported`). 409, the "the state forbids it" family this table
+  // already uses for the working-order codes: it is not a malformed request (400 would say the till
+  // sent something wrong) and not a server fault (500 would drop the structured code the till needs
+  // to tell the operator this is permanent). Both are PERMANENT for the same basket — retrying
+  // files nothing new — which is why the till renders them as `sale.refused`, not `sale.error`.
+  "fiscal.record_invalid": 409,
+  "fiscal.foreign_recipient_unsupported": 409,
   "working_order.not_found": 404,
   "working_order.not_open": 409,
   "working_order.not_placed": 409,

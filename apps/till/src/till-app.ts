@@ -119,6 +119,31 @@ function displayQuantity(product: TillProduct, quantity: string): string {
 }
 
 /**
+ * The sale refusals a retry can never clear. Both come from the FISCAL record the sale would file:
+ * `fiscal.record_invalid` is the chain-append guard refusing a record the tax agency could not
+ * accept (an invoice series code with a forbidden character, say — venue configuration, identical
+ * for every sale), and `fiscal.foreign_recipient_unsupported` is a customer outside Spain, whose
+ * identifier type this version does not build. The server answers 409 on both
+ * (`apps/server/src/till-api.ts`).
+ *
+ * They are separated from the ordinary `sale.error` because the advice differs and only one of the
+ * two is honest: ringing the same basket up again produces the same record and the same refusal, so
+ * an operator told to "try again" burns the queue learning nothing. `sale.refused` tells them to
+ * stop and who to call. A venue operator has no terminal and no log; the till screen is the only
+ * window they have.
+ */
+const PERMANENT_SALE_REFUSALS = new Set([
+  "fiscal.record_invalid",
+  "fiscal.foreign_recipient_unsupported",
+]);
+
+/** Whether a rejected sale request came back as one of {@link PERMANENT_SALE_REFUSALS}. */
+function isPermanentSaleRefusal(error: unknown): boolean {
+  const code = (error as { code?: string }).code;
+  return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
+}
+
+/**
  * The till's ROOT element — the capstone that turns the screens and widgets into a working POS.
  *
  * It owns the two things the whole flow shares: ONE {@link WorkingOrderStore} (the basket, which
@@ -1171,11 +1196,18 @@ export class TillApp extends LitElement {
       await this.#refreshHeldOrders();
     } catch (error) {
       // A rejected {code} must not lose the sale in progress: stay on the counter, basket intact, and
-      // surface a generic, non-fatal message — never the raw domain code. A NETWORK failure of the FISCAL
-      // request is `sale.unconfirmed` — the sale may have filed, so a human checks before retrying
-      // (§4.3); a network failure of the preliminary `#syncIfDirty` save filed nothing, so it stays the
-      // free-to-retry `sale.error`.
-      this.errorKey = reachedFiscal && isNetworkFailure(error) ? "sale.unconfirmed" : "sale.error";
+      // surface a generic, non-fatal message — never the raw domain code. Three outcomes, not two.
+      // A NETWORK failure of the FISCAL request is `sale.unconfirmed` — the sale may have filed, so
+      // a human checks before retrying (§4.3). A refusal from the FISCAL FILING itself
+      // (`isPermanentSaleRefusal`) is `sale.refused`: nothing was written and nothing ever will be
+      // for this basket, so the operator is told to stop and call for help rather than to retry.
+      // Everything else — including a network failure of the preliminary `#syncIfDirty` save, which
+      // filed nothing — stays the free-to-retry `sale.error`.
+      this.errorKey = isPermanentSaleRefusal(error)
+        ? "sale.refused"
+        : reachedFiscal && isNetworkFailure(error)
+          ? "sale.unconfirmed"
+          : "sale.error";
     } finally {
       // Re-enable Pay whichever way the sale settled: on success the counter is already gone (screen
       // is now `ticket`), on rejection the operator is back on the counter and may retry.

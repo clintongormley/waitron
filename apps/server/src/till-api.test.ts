@@ -764,6 +764,34 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
     expect(await res.json()).toMatchObject({ error: { code: "tenant.not_found" } });
   });
 
+  /* The two refusals the FISCAL FILING itself raises are not client faults, so they are listed in
+   * STATUS rather than left to the 400 default that says "the till sent something wrong". 409 is
+   * this table's "the state forbids it" family, and it keeps the structured code — which a 500
+   * would drop — so the till can tell the operator this one is permanent and to stop retrying
+   * (`apps/till/src/till-app.ts`, `sale.refused`). Delete either entry and its case here goes red
+   * with 400. */
+  it.each([["fiscal.record_invalid"], ["fiscal.foreign_recipient_unsupported"]])(
+    "answers %s with 409, keeping the code the till needs to say the refusal is permanent",
+    async (code) => {
+      const app = new Hono();
+      app.get("/refused", (c) =>
+        run(c, collect([]), () =>
+          Promise.reject(
+            code === "fiscal.record_invalid"
+              ? new AppError("fiscal.record_invalid", {
+                  fields: ["NumSerieFactura"],
+                  codes: ["NUMSERIE_CHARSET"],
+                })
+              : new AppError("fiscal.foreign_recipient_unsupported", { countryCode: "FR" }),
+          ),
+        ),
+      );
+      const res = await app.request("/refused");
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code } });
+    },
+  );
+
   it("maps a non-AppError to an opaque 500 server.internal and logs it at error", async () => {
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
     const app = new Hono();
