@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-// The three capability flags are a dashboard-LOCAL mirror (the #70 bundle rule forbids a runtime
+// The capability flags are a dashboard-LOCAL mirror (the #70 bundle rule forbids a runtime
 // `@waitron/layouts` import — its barrel drags `@waitron/db` into the browser bundle). The canvas
 // editor already keeps this mirror in card-contracts.ts, so this screen reuses it rather than
 // declaring a second copy; a profile's `capabilities` (opaque `string[]` on the wire) is rendered

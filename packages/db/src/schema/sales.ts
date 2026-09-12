@@ -56,9 +56,8 @@ export const tenderMethod = pgEnum("tender_method", [
  * is what lets an invoice be issued before payment settles: the sale carries no
  * payment fact that would be unknown at that moment.
  *
- * locale and invoice_locales are snapshotted as at issuance (spec §9), so a
- * receipt reprinted a year later reads identically to the one the customer
- * took, and a corrective invoice inherits the original list.
+ * locale and invoice_locales retain the language choices at issuance; a corrective invoice
+ * inherits that list. Optional receipt trim is rendered from the current layout.
  *
  * fiscal_backend and fiscal_state are strictly redundant with the module's own
  * tables and justified anyway (spec §6): they keep the foreign key pointing
@@ -275,6 +274,8 @@ export const tenders = pgTable(
     saleId: uuid("sale_id").notNull(),
     method: tenderMethod("method").notNull(),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    /** Cash handed over before change; amount remains the settled charge, including any tip. */
+    cashTendered: numeric("cash_tendered", { precision: 12, scale: 2 }),
     tipAmount: numeric("tip_amount", { precision: 12, scale: 2 }).notNull().default("0.00"),
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }).notNull(),
   },
@@ -289,6 +290,10 @@ export const tenders = pgTable(
     // tender was an artefact of spelling, never a decision, and `tip_amount <=
     // amount` cannot coexist with a negative amount.
     check("tenders_amount_ck", sql`${t.amount} > 0`),
+    check(
+      "tenders_cash_tendered_ck",
+      sql`${t.cashTendered} is null or (${t.method} = 'cash' and ${t.cashTendered} >= ${t.amount})`,
+    ),
     check("tenders_tip_amount_ck", sql`${t.tipAmount} >= 0 and ${t.tipAmount} <= ${t.amount}`),
   ],
 );

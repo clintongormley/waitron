@@ -104,8 +104,8 @@ export const workingOrders = pgTable(
     // UNIQUE here in this slice: the allocator (a later task) owns issuing distinct numbers per
     // node; this task lays the column the counter feeds.
     orderNumber: integer("order_number").notNull(),
-    // An optional operator-supplied label ("table 4", "blue umbrella") shown beside the number in
-    // the retrieve list. Nullable — most walk-up orders never get one.
+    // Optional operator label before issuance; filing freezes the table grouping here for receipts.
+    // Walk-up orders without a label or table keep NULL.
     label: text("label"),
     status: workingOrderStatus("status").notNull().default("open"),
     openedAt: timestamp("opened_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),

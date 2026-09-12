@@ -82,6 +82,7 @@ const jobs: PrintJobRow[] = [
     id: "j1",
     printerId: "p1",
     status: "failed",
+    canResend: false,
     attempts: 2,
     lastError: "printer offline",
     createdAt: "2026-08-25T14:00:00.000Z",

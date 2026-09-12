@@ -23,6 +23,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe("TillApi", () => {
   it("recordSale POSTs lines+tender+workingOrderId with credentials and returns the ticket payload", async () => {
     const ticket = {
+      orderLabel: null,
+      orderNumber: 1,
       invoiceNumber: "A/1",
       issuedAt: "2026-08-05T10:00:00.000Z",
       total: "3.00",
@@ -60,6 +62,8 @@ describe("TillApi", () => {
 
   it("pay POSTs id+lines(+tip+allowOffline) to /api/pay and returns the captured outcome with its ticket", async () => {
     const ticket = {
+      orderLabel: null,
+      orderNumber: 1,
       invoiceNumber: "A/1",
       issuedAt: "2026-08-06T10:00:00.000Z",
       total: "3.00",
@@ -183,6 +187,7 @@ describe("TillApi", () => {
       venueName: "Deli",
       nif: "B12345678",
       orderFlow: "prepay",
+      receiptPrintMode: "on_request",
       bumpMode: "line",
       fireControl: "waiter",
       cardProvider: "none",
@@ -800,6 +805,26 @@ describe("TillApi", () => {
     await expect(new TillApi("", fetchStub).reprintOrder("wo1")).rejects.toMatchObject({
       code: "working_order.not_found",
     });
+  });
+
+  it.each([
+    ["printReceipt", "/api/sales/wo1/receipt"],
+    ["printPaymentSlip", "/api/sales/wo1/payment-slip"],
+  ] as const)("%s POSTs an empty object to %s", async (method, path) => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api[method]("wo1")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      path,
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
   });
 
   it("fireCourse POSTs an empty object to the order+course fire route — the kitchen-fire release (empty 200 body)", async () => {
@@ -1649,6 +1674,22 @@ describe("TillApi", () => {
         }),
       }),
     );
+  });
+
+  it("splitTab POSTs selected lines and returns the detached check id", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ checkId: "check-1" }));
+    const result = await new TillApi("", fetchStub).splitTab("wo-7", [{ lineNo: 1 }]);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tabs/wo-7/split",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transfers: [{ lineNo: 1 }] }),
+      }),
+    );
+    expect(result).toEqual({ checkId: "check-1" });
   });
 
   it("moveTab surfaces { code } when the target table is occupied", async () => {

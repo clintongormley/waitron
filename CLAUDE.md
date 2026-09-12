@@ -204,6 +204,11 @@ unfiltered `main` run, not a wrong hook.
   explanations use `wt-help-tooltip`, whose button closes on outside click or Escape. Cost: the
   dashboard login exposed `wt-input-N` to password safes and disabled incomplete forms without saying
   what was missing (`ui-login`, owner review 2026-09-09).
+- **A replay reports the original transaction facts; side effects are gated separately.** Cash change
+  was returned as zero on a retry because the receipt reader treated displaying change as dispensing
+  it. Persist the tendered cash and reconstruct the same ticket; keep drawer opening on the fresh
+  settlement path. Regression: `apps/server/src/till-api.receipt.test.ts`, “replays and reprints the
+  original cash handed over and change”.
 - **A successful write followed by a failed refresh is a load failure, not a failed save.** Close
   the editor after the write succeeds, then refresh the list separately; retaining a create form with
   a save error invites a duplicate submission. The Venue operations regression resolves creation,

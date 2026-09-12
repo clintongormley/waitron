@@ -1,0 +1,2 @@
+ALTER TABLE "tenders" ADD COLUMN "cash_tendered" numeric(12, 2);--> statement-breakpoint
+ALTER TABLE "tenders" ADD CONSTRAINT "tenders_cash_tendered_ck" CHECK ("tenders"."cash_tendered" is null or ("tenders"."method" = 'cash' and "tenders"."cash_tendered" >= "tenders"."amount"));

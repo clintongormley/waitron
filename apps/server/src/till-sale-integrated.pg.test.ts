@@ -808,10 +808,9 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
       expect(out.outcome).toBe("captured");
       if (out.outcome !== "captured") throw new Error("unreachable");
-      // Replayed the winner's CASH ticket (total 1.50; a replay's `change` is the "0.00" default — the
-      // drawer was settled at the winner's own sale). STILL exactly one sale + registro, one CASH tender.
+      // A replay describes the same payment; it does not dispense the recorded change again.
       expect(out.ticket.total).toBe("1.50");
-      expect(out.ticket.tender).toEqual({ method: "cash", change: "0.00" });
+      expect(out.ticket.tender).toEqual({ method: "cash", change: "3.50" });
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50", tipAmount: "0.00" }]);

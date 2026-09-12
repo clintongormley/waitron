@@ -12,6 +12,8 @@ import type { TillSaleResult } from "./till-sale.js";
 // arms are exercised here — the one place every arm is covered.
 
 const TICKET: TillSaleResult = {
+  orderLabel: null,
+  orderNumber: 1,
   invoiceNumber: "A/1",
   issuedAt: "2026-08-06T10:00:00.000Z",
   total: "1.50",

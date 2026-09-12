@@ -7,7 +7,7 @@ import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { createPrinter, deactivatePrinter } from "./printers.js";
-import { enqueuePrintJob } from "./outbox.js";
+import { enqueuePrintJob, resendPrintJob } from "./outbox.js";
 import type { PrintConfig } from "./printers.js";
 import "./errors.js";
 
@@ -124,5 +124,105 @@ describe("enqueuePrintJob (never-block outbox)", () => {
       }
     });
     expect(code).toBe("printer.not_found");
+  });
+});
+
+describe("resendPrintJob", () => {
+  it.each(["done", "failed"] as const)(
+    "copies a terminal %s job byte-for-byte into a new queue entry",
+    async (status) => {
+      const cfg = await setup();
+      await withTenant(suite.db, cfg.tenantId, async (tx) => {
+        const printer = await createPrinter(tx, cfg, {
+          name: "Resend",
+          transport: "network_tcp",
+          host: "printer.local",
+        });
+        const payload = new Uint8Array([0, 27, 64, 255, 29, 86, 0]);
+        const original = await enqueuePrintJob(tx, cfg, printer.id, payload);
+        await tx
+          .update(printJobs)
+          .set({
+            status,
+            attempts: 5,
+            lastError: "paper",
+            deliveredAt: status === "done" ? new Date().toISOString() : null,
+          })
+          .where(eq(printJobs.id, original.jobId));
+        const [before] = await tx.select().from(printJobs).where(eq(printJobs.id, original.jobId));
+        const otherLocation = await tx.execute<{ id: string }>(
+          sql`insert into locations (tenant_id, name, invoice_locales, operation_description) values (${cfg.tenantId}, 'Other', array['es-ES'], 'Sale') returning id`,
+        );
+        const result = await resendPrintJob(
+          tx,
+          { ...cfg, locationId: otherLocation.rows[0]!.id },
+          original.jobId,
+        );
+        expect(result.jobId).not.toBe(original.jobId);
+        const [copy] = await tx.select().from(printJobs).where(eq(printJobs.id, result.jobId));
+        expect(copy).toMatchObject({
+          tenantId: cfg.tenantId,
+          locationId: cfg.locationId,
+          printerId: printer.id,
+          status: "queued",
+          attempts: 0,
+          lastError: null,
+          deliveredAt: null,
+          claimedAt: null,
+          claimedBy: null,
+        });
+        expect([...copy!.payload]).toEqual([...payload]);
+        expect(
+          (await tx.select().from(printJobs).where(eq(printJobs.id, original.jobId)))[0],
+        ).toEqual(before);
+      });
+    },
+  );
+
+  it.each([
+    ["queued", 0],
+    ["printing", 0],
+    ["failed", 4],
+  ] as const)("refuses a %s job that can still print automatically", async (status, attempts) => {
+    const cfg = await setup();
+    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      const printer = await createPrinter(tx, cfg, {
+        name: "Pending",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+      await tx.update(printJobs).set({ status, attempts }).where(eq(printJobs.id, original.jobId));
+      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+        code: "print_job.not_resendable",
+      });
+      expect(
+        await tx.select().from(printJobs).where(eq(printJobs.printerId, printer.id)),
+      ).toHaveLength(1);
+    });
+  });
+
+  it("refuses unknown and foreign-tenant jobs, and disabled printers", async () => {
+    const cfg = await setup();
+    const foreign = await setup();
+    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      const printer = await createPrinter(tx, cfg, {
+        name: "Disabled",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+      await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, original.jobId));
+      await expect(resendPrintJob(tx, cfg, randomUUID())).rejects.toMatchObject({
+        code: "print_job.not_found",
+      });
+      await expect(resendPrintJob(tx, foreign, original.jobId)).rejects.toMatchObject({
+        code: "print_job.not_found",
+      });
+      await deactivatePrinter(tx, cfg, printer.id);
+      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+        code: "printer.not_found",
+      });
+    });
   });
 });

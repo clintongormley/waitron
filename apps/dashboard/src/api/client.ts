@@ -682,7 +682,7 @@ export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
 
 /** One `GET /management-api/device-profiles` row — a reusable device profile (SP device-profile
  * feature): a named bundle of an assigned canvas (`canvasId`, `null` = fall back to the form-factor
- * default), a capability set (`integrated-card-payment`/`open-cash-drawer`/`act-as-kds`) and the
+ * default), a capability set (`integrated-card-payment`/`open-cash-drawer`/`act-as-kds`/`print-receipt`) and the
  * `formFactor` it targets. The server answers `{ deviceProfiles: [...] }` for the list and the bare
  * row elsewhere. `capabilities` crosses the boundary as `string[]` DELIBERATELY — the dashboard
  * renders it against a LOCAL flag mirror rather than importing `@waitron/layouts`' `CapabilityFlag`
@@ -1120,6 +1120,7 @@ export interface PrintJobPreview {
 /** One `GET /management-api/print-jobs` row — the dashboard's status read (recent activity, newest
  * first, no payload). Mirrors print-api.ts's projection; `deliveredAt` is set only once `done`. */
 export interface PrintJobRow {
+  canResend: boolean;
   id: string;
   printerId: string;
   status: PrintJobStatus;
@@ -2392,7 +2393,7 @@ export class DashboardApi {
   }
 
   // ── Printing (print agents + printers + jobs) ────────────────────────────────────────────────────
-  // The verbs the Impresoras screen drives, all printer.manage-gated server-side (the print-api.ts
+  // The verbs the Impresoras screen drives, gated by printer.manage, with print.resend for resends (the print-api.ts
   // management routes). Agents: `listAgents` reads the enrolled agents (newest first); `revokeAgent`
   // deactivates an agent and `allowAgent` reverses that (each 204). A print agent JOINS through the
   // shared join-and-accept mechanism above
@@ -2474,6 +2475,10 @@ export class DashboardApi {
    * `{ code: "printer.not_found" }`. */
   deactivatePrinter(id: string): Promise<void> {
     return this.#request<void>(`/management-api/printers/${id}/deactivate`, "POST");
+  }
+
+  resendPrintJob(id: string): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(`/management-api/print-jobs/${id}/resend`, "POST");
   }
 
   getPrintJobPreview(id: string): Promise<PrintJobPreview> {

@@ -98,3 +98,5 @@ export { cardProviderById, selectCardProviders } from "./card-provider.js";
 // this re-export is the runtime/TS surface only.
 export { cardReaders } from "./schema/card-readers.js";
 export { deviceCardReaders } from "./schema/device-card-readers.js";
+
+export { payments } from "./schema/payments.js";

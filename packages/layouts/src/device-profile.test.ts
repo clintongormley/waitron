@@ -95,10 +95,11 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
       for (const c of caps) expect(CAPABILITY_FLAGS).toContain(c);
     }
   });
-  it("gives the till the reader + drawer defaults and the kds act-as-kds", () => {
+  it("gives the till the reader + drawer + receipt defaults and the kds act-as-kds", () => {
     expect(DEFAULT_PROFILE_CAPABILITIES.till).toEqual([
       "integrated-card-payment",
       "open-cash-drawer",
+      "print-receipt",
     ]);
     expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds"]);
     expect(DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]).toEqual([]);

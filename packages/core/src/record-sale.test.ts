@@ -661,7 +661,7 @@ describe("recordSale — settlement modes", () => {
     // which is the whole reason `recordSale` calls `settleSale` rather than re-implementing it.
     const later = new Date(BASE.getTime() + 5 * 60_000);
     const tendersInput: RecordSaleTender[] = [
-      { method: "cash", amount: "6.31", tipAmount: "0.00", settledAt: BASE },
+      { method: "cash", amount: "6.31", cashTendered: "10.00", tipAmount: "0.00", settledAt: BASE },
       { method: "card", amount: "10.00", tipAmount: "1.90", settledAt: later },
     ];
     const backend = new FakeFiscalBackend(suite.db);
@@ -706,6 +706,7 @@ describe("recordSale — settlement modes", () => {
           method: r.method,
           amount: r.amount,
           tipAmount: r.tipAmount,
+          cashTendered: r.cashTendered,
           settledAt: new Date(r.settledAt).getTime(),
         }))
         .sort((x, y) => x.amount.localeCompare(y.amount));
@@ -716,6 +717,13 @@ describe("recordSale — settlement modes", () => {
       await suite.db.select().from(tenders).where(eq(tenders.saleId, b.saleId)),
     );
     expect(aTenders).toHaveLength(2);
+    expect(aTenders).toContainEqual({
+      method: "cash",
+      amount: "6.31",
+      cashTendered: "10.00",
+      tipAmount: "0.00",
+      settledAt: BASE.getTime(),
+    });
     expect(aTenders).toEqual(bTenders);
 
     // Settlements, modulo id/tenant_id/sale_id. Both stamp the LATEST tender's instant (decision 5),

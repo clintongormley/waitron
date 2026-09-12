@@ -116,6 +116,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
           saleId: input.saleId,
           method: tender.method as (typeof tenders.$inferInsert)["method"],
           amount: tender.amount,
+          cashTendered: tender.cashTendered,
           tipAmount: tender.tipAmount,
           settledAt: tender.settledAt!.toISOString(),
         })),

@@ -36,6 +36,7 @@ import {
   payWorkingOrderIntegrated,
   recordTillSale,
   reprintSale,
+  printSaleReceipt,
 } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
 import { enqueueManualDrawerOpen, resolveReceiptPrinter } from "./receipt-print.js";
@@ -87,6 +88,7 @@ import {
 } from "./working-order.js";
 import type { LineExtras, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
+import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
@@ -320,11 +322,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.throttled": 429,
   "person.not_found": 401,
   "person.suspended": 403,
-  // The handheld firewall (spec §5; owner reversal 2026-08-30): a handheld device tried a fiscal/cash
-  // action it may not perform — the INTEGRATED card reader (`POST /api/pay`), reprint, drawer, place,
-  // collect or cancel. (`POST /api/sales` is NOT here: a handheld settles cash or a manual card there,
-  // both node-keyed, record-sale.ts:79-82.) `assertNotHandheld` refuses it server-side even if the client
-  // is bypassed. 403: authenticated but forbidden.
+  // Authenticated device lacks the action capability or is excluded from the workflow.
   "device.forbidden_action": 403,
   // The SP-A.2 sale-time device gate (§16.4/§16.5): a sale route resolves its `till_id` from the
   // authenticated enrolled device (`requireSaleTillId`) — a SETUP precondition, not a per-sale block. A
@@ -632,44 +630,10 @@ function mountCourseVerb(
 }
 
 /**
- * Mounts the till's session, roster and boot-info routes on an existing Hono app. Log in / log out,
- * the pre-login staff roster and the public till info live here; Task 6 adds `GET /api/products` and
- * `POST /api/sales` to THIS same function, each handler wrapped in `run` (above) so the whole surface
- * maps errors identically.
- *
- * HANDHELD FIREWALL — the classification a NEW route inherits (spec §5, decision 0.1; owner reversal
- * 2026-08-30, widened same day). A `handheld` device may TAKE and FIRE orders, and may SETTLE a sale on
- * `POST /api/sales` for CASH or a MANUAL card tender — both file under the submitting NODE's SIF
- * (`nodeId`), not the till (record-sale.ts:79-82), so a handheld registro is indistinguishable from a
- * counter one; the manual card is the datáfono leg (a SEPARATE bank terminal the POS never talks to,
- * `recordManualCardPayment` makes no network call), so it needs no reader. What stays fenced is the
- * INTEGRATED card reader (`POST /api/pay`) and the deferred-settlement / amendment-log / drawer writers —
- * every other fiscal record, chain link, invoice number, cash-drawer row or amendment-log entry settles at
- * the fixed till. The fenced routes run `assertNotHandheld` right after `requireSession`; the sale route
- * and the rest run neither. When you add a route, decide which side it is on and, if it touches ANY
- * fiscal/cash write NOT reachable through the node-keyed sale path, FENCE it (fail-safe for fiscal — when
- * in doubt, fence). The full split:
- *
- *   FENCED (integrated card + deferred-settlement / cash / amendment-log writers — `assertNotHandheld`):
- *     POST /api/pay                        pay          — integrated-card reader settlement
- *     POST /api/sales/:id/reprint          reprint      — reprints a FILED fiscal ticket
- *     POST /api/drawer/open                drawer_open  — cash-drawer open + audit row
- *     POST /api/working-orders/:id/place   place        — Mode I files a deferred chained invoice
- *     POST /api/working-orders/:id/collect collect      — Mode T immediate sale / Mode I settlement
- *     POST /api/working-orders/:id/cancel  cancel       — appends `order_cancelled` to the amendment log
- *
- *   ALLOWED (order-taking, the node-keyed sale, floor-ops, reads, config — NO fenced fiscal/cash/amendment
- *     write): the session/locale/roster/boot routes; GET /api/products;
- *     POST /api/sales itself (a handheld settles cash or a manual card there — both file a chained registro
- *     under the node's SIF, no reader, exactly like a counter walk-up sale); the
- *     park/list/retrieve/edit/abandon working-order
- *     routes; send-to-prep and every kitchen/expo verb (fire/ready/away, per-line + whole-ticket bump,
- *     `GET /api/stations`+queues, `GET /api/expo/queue`); the NON-fiscal kitchen handover
- *     `POST /api/orders/:id/collect` (stamps only `collected_at`) and reprint `POST /api/orders/:id/reprint`
- *     (kitchen paper, files nothing); open-tab, add-round, void-line, serve/unserve line; table CRUD +
- *     status + FP-2 placement; and the tab move/join/merge/transfer verbs (all operate on OPEN,
- *     pre-placement tabs and write no fiscal record — verified in working-order.ts: `appendOrderAmendment`
- *     and `recordSale` are reached ONLY by `placeOrder`/`cancelPlacedOrder`/`collectOrder`).
+ * Mount the till routes with the shared error boundary. Handhelds can take orders and settle cash
+ * or manual-card sales. Integrated card payment, drawer opening and receipt printing require their
+ * corresponding device-profile capabilities. Placement, collection and cancellation retain the
+ * handheld restriction because they write the deferred-settlement or amendment workflow.
  */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The per-(device, person) wrong-PIN back-off (§5). Built ONCE here so its in-memory Map persists
@@ -855,7 +819,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // station-display screen reads it to show the per-course kitchen-fire action only for a
         // `kitchen` venue.
         const [loc] = await tx
-          .select({ bumpMode: locations.bumpMode, fireControl: locations.fireControl })
+          .select({
+            bumpMode: locations.bumpMode,
+            fireControl: locations.fireControl,
+            receiptPrintMode: locations.receiptPrintMode,
+          })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
         // The venue's ACTIVE kitchen courses (KDS-2 §5b), by `display_order` then name — the coursing
@@ -964,6 +932,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           issuer: row,
           bumpMode: loc?.bumpMode,
           fireControl: loc?.fireControl,
+          receiptPrintMode: loc?.receiptPrintMode,
           courses,
           receipt,
           canvas,
@@ -1036,6 +1005,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // The authored (or default) receipt trim (Task 8) — the till app threads it to its ticket view.
         // Rides this same unauthenticated boot fetch, so the till makes no second request.
         receipt: boot.receipt,
+        receiptPrintMode: boot.receiptPrintMode,
         // The calling device's resolved layout CANVAS (SP-B4), a bare `CanvasDef`, ALWAYS present so the
         // counter always has a canvas to render. For an enrolled device it is the profile's referenced
         // canvas if it resolves, else the built-in default for its form factor; for a cookieless request
@@ -1640,12 +1610,24 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // sale (unknown/open/foreign), or a till with no active printer, is a 200 NO-OP — the kitchen-reprint
   // shape. The `:id` is `isUuid`-screened first, refused as `working_order.not_found` (404, the honest
   // "no such order") rather than the `22P02` opaque 500 a malformed value would raise. Returns 200 empty.
+  for (const action of ["receipt", "payment-slip"] as const) {
+    app.post(`/api/sales/:id/${action}`, (c) =>
+      run(c, log, async () => {
+        await requireSession(deps, c);
+        await assertDeviceCapability(deps, c, "print-receipt", action);
+        const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+        if (action === "receipt")
+          await printSaleReceipt({ db: deps.db, backend: deps.backend }, deps.cfg, id, false);
+        else await printSalePaymentSlip(deps.db, deps.cfg, id);
+        return c.body(null, 200);
+      }),
+    );
+  }
+
   app.post("/api/sales/:id/reprint", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      // Handheld firewall (spec §5): a handheld may not reprint a fiscal ticket — refused
-      // `device.forbidden_action` (403) before the id parse. An ordinary till carries no device cookie.
-      await assertNotHandheld(deps, c, "reprint");
+      await assertDeviceCapability(deps, c, "print-receipt", "reprint");
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await reprintSale({ db: deps.db, backend: deps.backend }, deps.cfg, id);
       return c.body(null, 200);

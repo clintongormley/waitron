@@ -945,3 +945,61 @@ it("delivers enqueue and agent completion events with fresh printer aggregates",
     bus.close();
   }
 });
+
+describe("print job resend as the deployment role", () => {
+  it("requires print.resend and copies the original bytes without changing its history", async () => {
+    const app = mountApp(tenantA);
+    const printerId = await createUsbPrinter(app, randomUUID(), "Resend");
+    const originalId = await enqueue(
+      tenantA,
+      printerId,
+      new Uint8Array([0, 255, 27, 64, 29, 86, 0]),
+    );
+    await suite.admin.execute(
+      sql`update print_jobs set status = 'done', delivered_at = now() where id = ${originalId}`,
+    );
+    const path = `/management-api/print-jobs/${originalId}/resend`;
+    expect((await send(app, "POST", path)).status).toBe(401);
+    const denied = await send(app, "POST", path, { cookie: staffCookie });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "print.resend" } },
+    });
+    const response = await send(app, "POST", path, { cookie: managerCookie });
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    expect(jobId).not.toBe(originalId);
+    const rows = await suite.admin.execute<{
+      id: string;
+      status: string;
+      payload: string;
+      attempts: number;
+    }>(
+      sql`select id, status, encode(payload, 'hex') as payload, attempts from print_jobs where id in (${jobId}, ${originalId}) order by status::text`,
+    );
+    expect(rows.rows).toEqual([
+      { id: originalId, status: "done", payload: "00ff1b401d5600", attempts: 0 },
+      { id: jobId, status: "queued", payload: "00ff1b401d5600", attempts: 0 },
+    ]);
+    const listed = await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie });
+    const jobs = (await listed.json()) as { id: string; canResend: boolean }[];
+    expect(jobs.find((job) => job.id === originalId)?.canResend).toBe(true);
+    expect(jobs.find((job) => job.id === jobId)?.canResend).toBe(false);
+    const pending = await send(app, "POST", `/management-api/print-jobs/${jobId}/resend`, {
+      cookie: managerCookie,
+    });
+    expect(pending.status).toBe(409);
+    expect(await pending.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+    const foreign = await seedTenantWithLocation();
+    expect((await send(mountApp(foreign), "POST", path, { cookie: managerCookie })).status).toBe(
+      404,
+    );
+    expect(
+      (
+        await send(app, "POST", `/management-api/print-jobs/${randomUUID()}/resend`, {
+          cookie: managerCookie,
+        })
+      ).status,
+    ).toBe(404);
+  });
+});

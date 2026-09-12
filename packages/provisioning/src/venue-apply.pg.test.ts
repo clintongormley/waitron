@@ -187,7 +187,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
         name: "Mostrador",
         form_factor: "till",
         canvas_id: null,
-        capabilities: ["integrated-card-payment", "open-cash-drawer"],
+        capabilities: ["integrated-card-payment", "open-cash-drawer", "print-receipt"],
         inactivity_timeout_seconds: 300,
       },
       {

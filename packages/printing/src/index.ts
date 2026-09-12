@@ -20,7 +20,7 @@ export type {
   PrintTransport,
   UpdatePrinterInput,
 } from "./printers.js";
-export { enqueuePrintJob } from "./outbox.js";
+export { enqueuePrintJob, resendPrintJob, canResendPrintJob } from "./outbox.js";
 export { FEED_BEFORE_CUT, EscBuilder, esc } from "./escpos.js";
 export {
   MAX_DELIVERY_ATTEMPTS,

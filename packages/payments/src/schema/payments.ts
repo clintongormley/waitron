@@ -77,7 +77,7 @@ export const payments = pgTable(
      * standalone bank card terminal for an unintegrated (manual) tender. Nullable: only manual
      * mode, and some integrated adapters, populate it. A reconciliation hook, never validated. */
     externalRef: text("external_ref"),
-    /** Card-present facts for the customer receipt's card block — written once at capture by the
+    /** Card-present facts for the separate payment slip — written once at capture by the
      * provider that supplies them (SumUp), null for cash/manual/offline/failed. Plain text + CHECK,
      * not a pgEnum: adding an entry-mode value later must not hit the one-transaction ALTER TYPE
      * trap (CLAUDE.md §2). */

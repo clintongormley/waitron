@@ -145,8 +145,7 @@ async function enrolTillDeviceFixture(): Promise<{
     values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
     returning id`);
   const canvasId = prof.rows[0]!.id;
-  // The device profile carries the capabilities the firewall now reads (Task 9): both fenced flags, the
-  // values `DEFAULT_PROFILE_CAPABILITIES.till` seeds. Its canvas reference is the front-counter canvas —
+  // This fixture explicitly grants reader and drawer access. Its canvas reference is the front-counter canvas —
   // the device binds that canvas SOLELY through this profile (the direct device→canvas link was dropped
   // in the Task 10 cutover). A `till` profile AUTO-CREATES the register the device rings against (Task 7).
   const deviceProfileId = await seedDeviceProfile(
@@ -606,7 +605,7 @@ describe("assertDeviceCapability (real Postgres)", () => {
   });
 
   it("passes a device whose assigned PROFILE HAS the capability", async () => {
-    // The `till` fixture's profile declares BOTH flags (DEFAULT_PROFILE_CAPABILITIES.till).
+    // This till fixture explicitly declares reader and drawer capabilities.
     const { cfg, deviceId, token } = await enrolTillDeviceFixture();
     expect(
       await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),

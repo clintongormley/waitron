@@ -19,7 +19,15 @@ const cafe: TillProduct = {
   courseId: "postres",
 };
 
-const products: TillProduct[] = [cafe];
+const jamon: TillProduct = {
+  ...cafe,
+  id: "jamon",
+  descriptions: { es: "Jamón" },
+  pricingUnit: "weight",
+  unitPrice: "20.00",
+};
+
+const products: TillProduct[] = [cafe, jamon];
 
 // The venue's active courses, in display order (KDS-2 §5b) — the picker options + fire id→name source.
 const courses = [
@@ -876,16 +884,157 @@ describe("till-table-order-screen", () => {
     }
     const click = (el: TillTableOrderScreen, selector: string) =>
       el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+    const setSplitQuantity = async (el: TillTableOrderScreen, lineNo: number, value: string) => {
+      const field = el.shadowRoot!.querySelector<HTMLElement>(`[data-split-quantity="${lineNo}"]`)!;
+      const input = field.shadowRoot!.querySelector("input")!;
+      input.value = value;
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+      await el.updateComplete;
+    };
 
-    it("shows the four action verbs plus a disabled Split and a Back control", async () => {
+    it("shows all five action verbs with Split enabled and a Back control", async () => {
       const { el } = await mount({ lines: [pendingLine], tables: [] });
       await toMenu(el);
       for (const verb of ["move", "join", "merge", "transfer"]) {
         expect(el.shadowRoot!.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
       }
       const split = el.shadowRoot!.querySelector(`[data-action="split"]`)!;
-      expect(split.hasAttribute("disabled")).toBe(true);
+      expect(split.hasAttribute("disabled")).toBe(false);
       expect(el.shadowRoot!.querySelector("[data-action-back]")).not.toBeNull();
+    });
+
+    it("split → line selection → dispatches split-lines with whole-line entries", async () => {
+      const second = { ...pendingLine, lineNo: 2, productId: "agua", quantity: "1.000" };
+      const { el } = await mount({ lines: [pendingLine, second], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-split-lines]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-split-confirm]")!.hasAttribute("disabled")).toBe(
+        true,
+      );
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("split-lines", (event) => (captured = event as CustomEvent));
+      click(el, '[data-split-line="1"]');
+      click(el, '[data-split-line="2"]');
+      await el.updateComplete;
+      click(el, "[data-split-confirm]");
+      await el.updateComplete;
+
+      expect(captured!.composed).toBe(true);
+      expect(captured!.bubbles).toBe(true);
+      expect(captured!.detail).toEqual({ transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    });
+
+    it("split dispatches a mixed partial each quantity and whole weight line", async () => {
+      const each = { ...pendingLine, quantity: "4.000" };
+      const weight = {
+        ...pendingLine,
+        lineNo: 2,
+        productId: "jamon",
+        quantity: "0.750",
+        unitPriceGross: "20.00",
+      };
+      const { el } = await mount({ lines: [each, weight], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("split-lines", (event) => (captured = event as CustomEvent));
+      click(el, '[data-split-line="1"]');
+      click(el, '[data-split-line="2"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-split-inc="1"]')!.hasAttribute("disabled")).toBe(
+        true,
+      );
+      click(el, '[data-split-dec="1"]');
+      click(el, '[data-split-dec="1"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent).toBe("2");
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { value: string }>('[data-split-quantity="2"]')!
+          .value,
+      ).toBe("0.75");
+
+      click(el, "[data-split-confirm]");
+      await el.updateComplete;
+      expect(captured!.detail).toEqual({
+        transfers: [{ lineNo: 1, quantity: "2" }, { lineNo: 2 }],
+      });
+    });
+
+    it.each(["0", "0.751", "not-a-number"])(
+      "split refuses invalid or over-quantity weight input %s with field and form errors",
+      async (quantity) => {
+        const weight = {
+          ...pendingLine,
+          productId: "jamon",
+          quantity: "0.750",
+          unitPriceGross: "20.00",
+        };
+        const { el } = await mount({ lines: [weight], orderId: "wo-7" });
+        await toMenu(el);
+        click(el, '[data-action="split"]');
+        await el.updateComplete;
+        click(el, '[data-split-line="1"]');
+        await el.updateComplete;
+        await setSplitQuantity(el, 1, quantity);
+
+        let captured: Event | undefined;
+        el.addEventListener("split-lines", (event) => (captured = event));
+        click(el, "[data-split-confirm]");
+        await el.updateComplete;
+
+        expect(captured).toBeUndefined();
+        const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          '[data-split-quantity="1"]',
+        )!;
+        expect(field.error).toBe(t("table.split_quantity_weight_error"));
+        const summary = el.shadowRoot!.querySelector<
+          HTMLElement & { heading: string; errors: string[] }
+        >("wt-form-error-summary")!;
+        expect(summary.heading).toBe(t("form.error_heading"));
+        expect(summary.errors).toEqual([t("table.split_quantity_weight_error")]);
+      },
+    );
+
+    it("Back resets split quantities so a reselected dish defaults to its full quantity", async () => {
+      const each = { ...pendingLine, quantity: "4.000" };
+      const { el } = await mount({ lines: [each], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      click(el, '[data-split-line="1"]');
+      await el.updateComplete;
+      click(el, '[data-split-dec="1"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent).toBe("3");
+
+      click(el, "[data-action-back]");
+      await el.updateComplete;
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      click(el, '[data-split-line="1"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent).toBe("4");
+    });
+
+    it("split excludes modifier children and explains that dishes with options move together", async () => {
+      const modifier = { ...pendingLine, lineNo: 2, productId: null, quantity: "2.000" };
+      const { el } = await mount({ lines: [pendingLine, modifier], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector('[data-split-line="1"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-split-line="2"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-split-help]")!.textContent).toContain(
+        t("table.split_options_together"),
+      );
     });
 
     it("move → free-table picker → dispatches move-tab { toTableId } and closes", async () => {

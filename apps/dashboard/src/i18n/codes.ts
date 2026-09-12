@@ -355,6 +355,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That device is already registered as a printer",
     es: "Ese dispositivo ya está dado de alta como impresora",
   },
+  "print_job.not_resendable": {
+    en: "That job is still waiting to print or retry automatically",
+    es: "Ese trabajo sigue pendiente de impresión o reintento automático",
+  },
   "print_job.not_found": {
     en: "That print job no longer exists",
     es: "Ese trabajo de impresión ya no existe",

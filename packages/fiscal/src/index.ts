@@ -21,6 +21,7 @@ export type {
   Counterparty,
   DrainResult,
   FiscalBackend,
+  FiledReceipt,
   FiscalRecordRef,
   FiscalState,
   IntegrityIssue,

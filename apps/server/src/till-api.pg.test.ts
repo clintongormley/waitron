@@ -423,10 +423,7 @@ async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Pro
   return login.headers.get("set-cookie")!;
 }
 
-/** Insert a `device_profiles` row declaring both fenced flags (`integrated-card-payment` +
- *  `open-cash-drawer`, the `DEFAULT_PROFILE_CAPABILITIES.till` set) for the tenant and return its id, so
- *  a pay-capable till device can bind it and `assertDeviceCapability` reads the flag THROUGH the profile
- *  (Task 9). */
+/** Create a till profile with the reader and drawer capabilities needed by payment tests. */
 async function createTillProfile(cfg: TillConfig): Promise<string> {
   const prof = await suite.admin.execute<{ id: string }>(sql`
     insert into device_profiles (tenant_id, name, form_factor, capabilities)
@@ -836,15 +833,11 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     const replayTicket = await replay.json();
     expect(replayTicket.invoiceNumber).toBe(ticket.invoiceNumber);
     expect(replayTicket.total).toBe("3.00");
-    // Task 14: the replay reads the filed record back, so the reprinted ticket now carries the SAME
-    // mandatory Veri*Factu QR and the SAME authoritative desglose as the original — no longer a
-    // QR-less, recomputed ticket. `change` stays "0.00", still a documented limitation: the tendered
-    // cash is not persisted and the drawer change was handed over at the ORIGINAL sale. See
-    // `readSettledTicket`.
+    // A retry describes the same filed invoice and cash payment without dispensing change again.
     expect(replayTicket.qr).toBe(ticket.qr);
     expect(replayTicket.qr.length).toBeGreaterThan(0);
     expect(replayTicket.vatBreakdown).toEqual(ticket.vatBreakdown);
-    expect(replayTicket.tender).toEqual({ method: "cash", change: "0.00" });
+    expect(replayTicket.tender).toEqual({ method: "cash", change: "2.00" });
 
     // Still exactly ONE record — the replay filed nothing.
     const stillOne = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
@@ -1692,19 +1685,22 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
   });
 });
 
-// A handheld can file node-keyed cash and manual-card sales. Integrated payment, reprint,
-// drawer and prep mutation routes remain fenced even with a valid device cookie and operator session.
+// A handheld can file cash and manual-card sales. Receipt, integrated-payment and drawer actions
+// require their profile capabilities; prep mutations retain the handheld restriction.
 // Real PostgreSQL exercises device lookup and fiscal writes as app_user; PGlite's default
 // superuser cannot establish that the deployment role holds the required grants.
-describe("handheld firewall (a handheld may settle a cash or manual-card sale, but not integrated pay, reprint, open the drawer, place, collect, or cancel)", () => {
+describe("handheld sales and device capability gates", () => {
   /** Enrol a REAL handheld device in `cfg`'s tenant (no station — a handheld form factor binds none — it is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
    * token's scrypt hash actually verifies, so `tryReadDevice` resolves it to a genuine `handheld`
    * binding rather than folding into a miss. */
-  async function enrolHandheldCookie(cfg: TillConfig): Promise<string> {
+  async function enrolHandheldCookie(
+    cfg: TillConfig,
+    capabilities: string[] = [],
+  ): Promise<string> {
     // A handheld is DEFINED by a `phone-portrait`/`tablet-landscape` profile (Task 7) and, being
     // sale-capable, binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
-    const profileId = await seedProfileFF(cfg, "phone-portrait");
+    const profileId = await seedProfileFF(cfg, "phone-portrait", capabilities);
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
       name: "Waiter phone",
       profileId,
@@ -1727,6 +1723,41 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     expect(login.status).toBe(200);
     return login.headers.get("set-cookie")!.split(";")[0]!;
   }
+
+  it.each(["receipt", "reprint", "payment-slip"])(
+    "requires print-receipt for handheld %s requests and admits a device-less caller",
+    async (action) => {
+      const { cfg, available, operatorId } = await setupVenue();
+      const each = available.find((p) => p.pricingUnit === "each")!;
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const blockedDevice = await enrolHandheldCookie(cfg);
+      const allowedDevice = await enrolHandheldCookie(cfg, ["print-receipt"]);
+      const sessionPair = await loginOperator(app, cfg, operatorId);
+      const workingOrderId = randomUUID();
+      const sale = await app.request("/api/sales", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${sessionPair}; ${blockedDevice}` },
+        body: JSON.stringify({
+          workingOrderId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+          tender: { method: "cash", amount: "5.00" },
+        }),
+      });
+      expect(sale.status).toBe(200);
+      const route = `/api/sales/${workingOrderId}/${action}`;
+      const refused = await app.request(route, {
+        method: "POST",
+        headers: { cookie: `${sessionPair}; ${blockedDevice}` },
+      });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
+      for (const cookie of [`${sessionPair}; ${allowedDevice}`, sessionPair]) {
+        const accepted = await app.request(route, { method: "POST", headers: { cookie } });
+        expect(accepted.status).toBe(200);
+      }
+    },
+  );
 
   it("allows a handheld CASH sale (200) and files exactly one chained registro under the node/SIF — parity with a counter cash sale", async () => {
     const { cfg, available, operatorId } = await setupVenue();
@@ -1869,10 +1900,8 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     expect(res.status).toBe(200);
   });
 
-  // The SAME firewall fences the other fiscal/cash routes a handheld must never reach: paying over the
-  // integrated terminal, reprinting a filed sale's ticket, and opening the cash drawer. Each guard runs
-  // immediately after the route's `requireSession` — BEFORE the pay provider guard, the reprint id parse,
-  // and the drawer printer resolution — so an active handheld binding is refused 403 regardless of card
+  // Each device capability gate runs after requireSession and before provider, id, or printer checks.
+  // A handheld profile without the corresponding capability is refused regardless of card
   // config, order existence, or printer state. Plain `apiDeps(cfg)` (no card provider) suffices for the
   // pay case precisely because the guard short-circuits ahead of the provider check.
   it.each([

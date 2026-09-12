@@ -70,6 +70,8 @@ export interface TillInfo {
   venueName: string;
   nif: string;
   orderFlow: OrderFlow;
+  /** Whether issuance auto-enqueues the original receipt or leaves it for the completion prompt. */
+  receiptPrintMode: "auto" | "on_request" | "never";
   /**
    * The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`): `line` (per-line bump
    * only, the source of truth) or `ticket` (the display also offers a whole-ticket bump). Read once
@@ -603,43 +605,36 @@ export interface TillSaleLine {
 }
 
 /**
- * Card-present facts read back from the captured payment — the receipt's card block. Mirrors the
- * server's `CardDetails` (`packages/payments`): `scheme` as the provider names it, the masked `last4`,
- * the normalised `entryMode`, and the `authCode` (null when the transaction carried none).
- */
-export interface CardDetails {
-  scheme: string;
-  last4: string;
-  entryMode: "contactless" | "chip" | "swipe" | "unknown";
-  authCode: string | null;
-}
-
-/**
  * How a filed sale was paid, read back from the committed rows. Mirrors the server's `TenderBlock`
- * (`apps/server/src/till-sale.ts`): `cash` carries the change handed back; `card` carries the whole
- * charge (`charged` = total + tip), the `tip` ("0.00" when none), the `card` facts (null when the
- * provider supplied none), and the operator `reference` (null for an integrated capture).
+ * (`apps/server/src/till-sale.ts`): `unpaid` is an invoice issued before collection, `cash` carries
+ * the change handed back, and `card` carries the whole charge (`charged` = total + tip), the `tip`
+ * ("0.00" when none), and the operator `reference` (null for an integrated capture). Card-present
+ * identity belongs only to the separate payment slip.
  */
 export type TenderBlock =
+  | { method: "unpaid" }
   | { method: "cash"; change: string }
   | {
       method: "card";
       charged: string;
       tip: string;
-      card: CardDetails | null;
       reference: string | null;
     };
 
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
 export interface TillSaleResult {
+  /** Issuer identity stored with the filed invoice; immediate issuance responses may omit it. */
+  issuer?: { venueName: string; nif: string };
+  /** The table/operator label and venue order number printed on every document as its grouping key. */
+  orderLabel: string | null;
+  orderNumber: number;
   invoiceNumber: string;
   issuedAt: string;
   total: string;
   vatBreakdown: VatBreakdownEntry[];
   /** The filed line list (goods identification), rendered by the receipt instead of the client basket. */
   lines: TillSaleLine[];
-  /** How the sale was paid, read back from the committed tender (+ payment) rows. A `cash` block
-   * carries the change handed back; a `card` block carries the whole instrument charge — see
+  /** How the sale was paid, read back from the committed tender (+ payment) rows. See
    * {@link TenderBlock}. */
   tender: TenderBlock;
   qr: string;
@@ -1466,6 +1461,16 @@ export class TillApi {
     await this.#request<void>(`/api/sales/${workingOrderId}/reprint`, "POST", {});
   }
 
+  /** Print the ORIGINAL receipt offered at invoice issuance. */
+  async printReceipt(workingOrderId: string): Promise<void> {
+    await this.#request<void>(`/api/sales/${workingOrderId}/receipt`, "POST", {});
+  }
+
+  /** Print the separate card-payment slip for the filed sale's integrated capture, when one exists. */
+  async printPaymentSlip(workingOrderId: string): Promise<void> {
+    await this.#request<void>(`/api/sales/${workingOrderId}/payment-slip`, "POST", {});
+  }
+
   /**
    * Manually open the cash drawer (counter receipt/drawer §3d/§5 + cash-drawer-authorization §5) →
    * `POST /api/drawer/open` — the ticket screen's "Abrir cajón" lever, for a no-sale open (giving
@@ -1973,6 +1978,11 @@ export class TillApi {
     transfers: readonly TabTransfer[],
   ): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/transfer`, "POST", { toTabId, transfers });
+  }
+
+  /** Carve selected items from a table tab into a detached check, ready for the existing pay path. */
+  splitTab(orderId: string, transfers: readonly TabTransfer[]): Promise<{ checkId: string }> {
+    return this.#request<{ checkId: string }>(`/api/tabs/${orderId}/split`, "POST", { transfers });
   }
 
   /**

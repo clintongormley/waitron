@@ -1070,29 +1070,17 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
   real-time push; station-kind threshold defaults; an unbumped-since-fire neglect metric; a shared
   flash helper.
 
-**Receipts, duplicates & card payments — SPECCED 2026-09-12, ready for a plan.** Design:
-[2026-09-12-receipts-payment-slips-and-duplicates-design.md](superpowers/specs/2026-09-12-receipts-payment-slips-and-duplicates-design.md).
-Legal groundwork verbatim in [compliance/verifactu-findings.md §15](compliance/verifactu-findings.md)
-(RD 1619/2012 arts. 1, 4, 11, 14; TRLGDCU art. 63; DGT 1693-02; the Gipuzkoa TicketBAI answer on what a
-duplicate is); open advisor question [Q19](compliance/asesor-questions.md). What the spec settles:
+**Receipts, duplicates & card payments — IMPLEMENTED ON BRANCH 2026-09-12; awaiting `finish-branch`.** Design:
+[2026-09-12-receipts-payment-slips-and-duplicates-design.md](superpowers/specs/2026-09-12-receipts-payment-slips-and-duplicates-design.md);
+[implementation plan](superpowers/plans/2026-09-12-receipts-payment-slips-and-duplicates.md).
 
-- **Take the card details OFF the fiscal ticket.** This REVERSES the landed card-receipt work
-  ([2026-09-11 design](superpowers/specs/2026-09-11-card-receipt-tender-details-design.md), rendered at
-  `apps/server/src/receipt-ticket.ts` ~line 305). Nothing legal forced it on and nothing legal forbids
-  it — §15.5 — so this is a product call: the invoice documents the operation, not the payment.
-- **Offer a separate, non-fiscal payment slip after a card payment** — the slip a normal POS emits, one
-  per capture. It must carry **no** invoice number, series or QR, so it can never read as a factura.
-  This is also what would give each payer their own proof when several people pay one bill.
-- **Mark a reprint «duplicado»** (RD 1619/2012 art. 14.4). Today `enqueueReceiptReprint` deliberately
-  re-renders byte-identically to the first print — the exact property art. 14.4 forbids. Needs a
-  decision on the failed-first-print case: if the customer never received the original, is the second
-  print a duplicate or the original? (Q19(d)).
-- **Several guests wanting their own fiscal receipt** — split by item. The art. 14.2.a) *duplicado*
-  route is NOT built: blocked on Q19, and must not be built on our own reading.
-- **Handhelds may print**, gated on a new `print-receipt` device-profile capability replacing the
-  hardcoded `assertNotHandheld` firewall — which is what capability flags were introduced to generalise.
-- **Split checks get the origin table's label**, so one table's bills are identifiable at the printer.
-  They carry none today (`createOpenOrder(tx, cfg, checkId, [], null)`).
+The branch moves card identity to a separate payment slip, distinguishes original and duplicate receipt actions, adds permission-gated queue resends, enables printing through a device-profile capability, and connects split-by-item payment with stored grouping labels. Invoice-first placement always prints the original bill; collection offers duplicates.
+
+Implementation exposed lost cash-change facts on replay. The approved correction adds `cash_tendered` beside the settled tender amount, reads the issuer from the filed fiscal record, and freezes grouping when the invoice files. Optional header and footer use the current layout; no receipt snapshot is stored.
+
+Local validation passed: the full workspace lint, typecheck, formatting and test gate, plus affected-package coverage. Branch review and CI remain part of `finish-branch`.
+
+Legal groundwork and the unresolved multi-recipient route remain in [findings §15](compliance/verifactu-findings.md) and [advisor Q19](compliance/asesor-questions.md).
 
 Named out of scope in the spec, each its own future item: **bilingual receipts** (`invoice_locales` is
 configured and snapshotted but rendered by NEITHER document — its own slice covering both); making
@@ -1105,12 +1093,7 @@ Dependency note for the money-split-on-one-bill case (still unbuilt): it needs a
 el momento de realizarse la operación») constrains how long an invoice may sit open waiting for the last
 payer.
 
-**Split-bill UI (TS-5 finish) — server done, till button is a placeholder.** `splitOffCheck` and
-`POST /api/tabs/:id/split` are landed and fiscally proven on real Postgres
-(`apps/server/src/split-bill.fiscal.test.ts`: one tab → 3 checks → exactly 3 chained registros,
-contiguous numbers). The till still shows `"table.action_split": "Split (soon)"`
-(`apps/till/src/i18n/strings.ts`). This is the cheapest complete answer to "three guests each want a
-receipt", so it ranks ahead of the duplicado work.
+**Split-bill UI (TS-5 finish) — included in the receipts branch above.** The till selects whole items or quantities and calls the existing split operation. The server retains its one-tab-to-separate-checks fiscal tests and stamps each check with the origin’s grouping label.
 
 **SumUp printer-cradle experiment (owner-raised 2026-09-12) — hardware not yet owned.** Whether the
 Solo's printer cradle auto-prints a card slip on a **Cloud-API-initiated** checkout is unknown and
@@ -1914,7 +1897,7 @@ genuinely-decision-bearing.
 
 **SumUp:**
 
-- **Card-payment proof on the receipt — LANDED #315.** A card sale now prints the card block (scheme,
+- **Card-payment proof on the receipt — LANDED #315.** Historical behavior; the receipts branch above moves these card facts to a separate slip. A card sale now prints the card block (scheme,
   masked PAN `**** NNNN`, entry mode, auth code, and a `Propina`/`Cobrado` pair when a tip rode on the
   card) below `TOTAL`, replacing the bogus `Efectivo`/`Cambio 0,00` a card sale printed before. Optional
   `CardDetails` on the `PaymentResult` contract; SumUp fills it from the transaction it already fetches;

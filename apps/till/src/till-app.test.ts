@@ -116,6 +116,8 @@ const openTable: TableState = {
 };
 
 const saleResult: TillSaleResult = {
+  orderLabel: null,
+  orderNumber: 1,
   invoiceNumber: "F-0001",
   issuedAt: "2026-08-05T10:00:00.000Z",
   total: "3.00",
@@ -135,6 +137,7 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
+  receiptPrintMode: "auto" as const,
   // The venue's KDS whole-ticket bump mode (KDS-1 §2e); `line` is the default (per-line bump only), so
   // the station-screen tests that don't drive it exercise the per-line path. A test overrides it.
   bumpMode: "line" as const,
@@ -182,9 +185,9 @@ const till = {
     ],
   } satisfies CanvasDef,
   // The device's CAPABILITY set (device-profile §5.3, Task 9) — relocated OFF the canvas onto the device
-  // profile, now an explicit `/api/till` payload sibling. `[]` by default (nothing capability-gated
-  // shows); a KDS boot below supplies `["act-as-kds"]` so its kds-board card renders.
-  capabilities: [] as CapabilityFlag[],
+  // profile, now an explicit `/api/till` payload sibling. The default till profile can print receipts;
+  // a KDS boot below supplies `["act-as-kds"]` so its kds-board card renders.
+  capabilities: ["print-receipt"] as CapabilityFlag[],
   // The device profile's inactivity auto-logout in seconds (installable-till Task 9), or null for the
   // app default (no idle logout). `null` by default; the session-activity suite drives it to a number.
   inactivityTimeoutSeconds: null as number | null,
@@ -347,6 +350,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     // Counter receipt/drawer (§5): the ticket screen's reprint + manual drawer-open levers. Default
     // resolved; the failure tests override them to reject.
     reprint: vi.fn().mockResolvedValue(undefined),
+    printReceipt: vi.fn().mockResolvedValue(undefined),
+    printPaymentSlip: vi.fn().mockResolvedValue(undefined),
     openDrawer: vi.fn().mockResolvedValue(undefined),
     // Cash-drawer-authorization (§5): the eligible supervisors the override dialog picks from, fetched
     // only when a gated 403 sends the operator into the override flow. Default roster of one.
@@ -386,6 +391,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     joinTable: vi.fn().mockResolvedValue(undefined),
     mergeTabs: vi.fn().mockResolvedValue(undefined),
     transferLines: vi.fn().mockResolvedValue(undefined),
+    splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     setServiceZone: vi.fn(),
@@ -1493,6 +1499,92 @@ describe("till-app", () => {
     // A successful reprint stays on the ticket with no error banner (non-fiscal, non-fatal).
     expect(ticket(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it.each(["on_request", "never"] as const)(
+    "%s offers an original at completion and switches to duplicate reprint after it succeeds",
+    async (receiptPrintMode) => {
+      const printReceipt = vi.fn().mockResolvedValue(undefined);
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode }),
+        printReceipt,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      const workingOrderId = c.store.id;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
+
+      emit(ticket(el)!, "print-receipt");
+      await flush(el);
+      expect(printReceipt).toHaveBeenCalledWith(workingOrderId);
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+    },
+  );
+
+  it("invoice-first collection offers a duplicate because the original printed at placement", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        orderFlow: "invoice_first",
+        receiptPrintMode: "on_request",
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+
+    emit(c, "place-order");
+    await flush(el);
+    emit(c, "collect-order", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+  });
+
+  it("a card completion can request its separate payment slip", async () => {
+    const filed: TillSaleResult = {
+      ...saleResult,
+      tender: { method: "card", charged: "3.50", tip: "0.50", reference: null },
+    };
+    const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue(filed),
+      printPaymentSlip,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    const workingOrderId = c.store.id;
+    emit(c, "confirm-payment", { method: "card", amount: "3.00" });
+    await flush(el);
+
+    emit(ticket(el)!, "payment-slip");
+    await flush(el);
+    expect(printPaymentSlip).toHaveBeenCalledWith(workingOrderId);
+    expect(ticket(el)).not.toBeNull();
+  });
+
+  it("an enrolled device without print-receipt gets no receipt or payment-slip actions", async () => {
+    const filed: TillSaleResult = {
+      ...saleResult,
+      tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
+    };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [] }),
+      recordSale: vi.fn().mockResolvedValue(filed),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "card", amount: "3.00" });
+    await flush(el);
+
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=open-drawer]")).not.toBeNull();
   });
 
   it("open-drawer (from the ticket view) calls TillApi.openDrawer with no argument", async () => {
@@ -2732,14 +2824,14 @@ describe("till-app", () => {
       listMyAbsences: vi.fn().mockResolvedValue([]),
     });
     const c = await toCounter(el);
-    // `diag` is a MODULE SINGLETON shared across every test (login itself records a `nav`), so scope the
-    // assertion to events appended after this baseline rather than the total length (which leaks).
-    const before = diag.snapshot().length;
+    // `diag` is a MODULE SINGLETON with a bounded buffer shared across every test. Read the latest
+    // matching event because appending at capacity leaves the snapshot length unchanged.
     emit(c, "show-schedule");
     await flush(el);
     const nav = diag
       .snapshot()
-      .slice(before)
+      .slice()
+      .reverse()
       .find((e) => e.event === "nav");
     expect(nav?.fields.screen).toBe("schedule");
   });
@@ -3645,6 +3737,64 @@ describe("till-app", () => {
         expect(transferLines).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }]);
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
+      });
+
+      it("split-lines switches pay and later receipt actions to the detached check", async () => {
+        const splitTab = vi.fn().mockResolvedValue({ checkId: "wo-check" });
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTablesState = vi.fn().mockResolvedValue([openTable]);
+        const recordSale = vi.fn().mockResolvedValue(saleResult);
+        const reprint = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({
+          getTablesState,
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+          splitTab,
+          recordSale,
+          reprint,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
+        await flush(el);
+
+        expect(splitTab).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }]);
+        expect(getTabLines).toHaveBeenLastCalledWith("wo-check");
+        expect(tableOrder(el)!.orderId).toBe("wo-check");
+        expect(getTablesState).toHaveBeenCalledTimes(2);
+
+        emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "10.00" });
+        await flush(el);
+        expect(recordSale).toHaveBeenCalledWith(
+          [],
+          { method: "cash", amount: "10.00" },
+          "wo-check",
+        );
+        emit(ticket(el)!, "reprint");
+        await flush(el);
+        expect(reprint).toHaveBeenCalledWith("wo-check");
+      });
+
+      it("a modifier-dish partial split refusal keeps the origin open and explains the full-line rule", async () => {
+        const splitTab = vi.fn().mockRejectedValue({ code: "tab.transfer_modifier_line" });
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+          splitTab,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "split-lines", { transfers: [{ lineNo: 1, quantity: "1" }] });
+        await flush(el);
+
+        expect(splitTab).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }]);
+        expect(tableOrder(el)!.orderId).toBe("wo-7");
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+        expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+          t("table.split_modifier_error"),
+        );
       });
 
       it("a failed table action surfaces a non-fatal banner, leaving the screen up", async () => {

@@ -103,7 +103,7 @@ export interface PaymentResult {
    * awaits `forward()`. `settledAt` carries the acceptance time, so the sale chains immediately. */
   offline?: boolean;
   settledAt: Date | null;
-  /** Card facts for a card-present capture — the receipt's card block. Present only on a `captured`
+  /** Card facts for a card-present capture, rendered on the separate payment slip. Present only on a `captured`
    * result whose provider can supply them; undefined for cash, manual, offline, failed, reversals. */
   card?: CardDetails;
 }

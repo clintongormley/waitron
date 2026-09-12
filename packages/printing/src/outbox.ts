@@ -7,6 +7,7 @@ import { AppError } from "@waitron/shared";
 import { printJobs, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintConfig } from "./printers.js";
+import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 
 /**
  * Enqueue one outbox job (printing subsystem, §3b) — the NEVER-BLOCK guarantee (CLAUDE.md §5). This
@@ -64,4 +65,31 @@ export async function enqueuePrintJob(
     })
     .returning({ id: printJobs.id });
   return { jobId: job!.id };
+}
+
+/** Jobs still eligible for automatic delivery must finish before an operator can resend them. */
+export function canResendPrintJob(job: { status: string; attempts: number }): boolean {
+  return (
+    job.status === "done" || (job.status === "failed" && job.attempts >= MAX_DELIVERY_ATTEMPTS)
+  );
+}
+
+/** Resend the opaque document to its original printer and location, preserving delivery history. */
+export async function resendPrintJob(
+  tx: Transaction,
+  cfg: PrintConfig,
+  jobId: string,
+): Promise<{ jobId: string }> {
+  const [job] = await tx
+    .select()
+    .from(printJobs)
+    .where(and(eq(printJobs.tenantId, cfg.tenantId), eq(printJobs.id, jobId)));
+  if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
+  if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });
+  return enqueuePrintJob(
+    tx,
+    { tenantId: cfg.tenantId, locationId: job.locationId },
+    job.printerId,
+    job.payload,
+  );
 }

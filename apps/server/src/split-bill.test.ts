@@ -20,7 +20,14 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable, setTableStatus } from "./tables.js";
-import { joinTable, openTab, splitOffCheck, unjoinTable } from "./working-order.js";
+import {
+  createOpenOrder,
+  joinTable,
+  openTab,
+  splitOffCheck,
+  unjoinTable,
+} from "./working-order.js";
+import { readReceiptOrder } from "./receipt-order.js";
 import "./errors.js";
 
 // PGlite is enough HERE: the check being table-less and the line partition are plain row state a single
@@ -116,6 +123,56 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
+describe("receipt order grouping", () => {
+  it("uses a detached order's label and number, including an absent label", async () => {
+    const { cfg } = await setupVenue();
+    for (const label of ["Blue umbrella", null]) {
+      await asApp(cfg, async (tx) => {
+        const id = randomUUID();
+        const { orderNumber } = await createOpenOrder(tx, cfg, id, [], label);
+        expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: label, orderNumber });
+      });
+    }
+  });
+
+  it("uses a delivery table and prefers a seated table when both exist", async () => {
+    const { cfg, tableId, tableId2 } = await setupVenue();
+    await asApp(cfg, async (tx) => {
+      const id = randomUUID();
+      const { orderNumber } = await createOpenOrder(tx, cfg, id, [], "Operator label", {
+        deliveryTableId: tableId,
+      });
+      expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: "T1", orderNumber });
+      await tx.update(diningTables).set({ tabId: id }).where(eq(diningTables.id, tableId2));
+      expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: "T2", orderNumber });
+    });
+  });
+
+  it("uses the same table for a joined tab regardless of query order", async () => {
+    const { cfg, tableId, tableId2 } = await setupVenue();
+    const { tabId, orderNumber } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
+    expect(await asApp(cfg, (tx) => readReceiptOrder(tx, cfg, tabId))).toEqual({
+      orderLabel: tableId < tableId2 ? "T1" : "T2",
+      orderNumber,
+    });
+  });
+
+  it("refuses a missing order and another tenant's order", async () => {
+    const { cfg, tableId } = await setupVenue();
+    const other = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    for (const id of [randomUUID(), tabId]) {
+      await expect(
+        asApp(other.cfg, (tx) => readReceiptOrder(tx, other.cfg, id)),
+      ).rejects.toMatchObject({
+        code: "working_order.not_found",
+        params: { workingOrderId: id },
+      });
+    }
+  });
+});
+
 describe("splitOffCheck", () => {
   it("spins selected items into a NEW open check that no table points at (detached)", async () => {
     const { cfg, aguaId, jamonId, tableId } = await setupVenue();
@@ -138,6 +195,7 @@ describe("splitOffCheck", () => {
       const [check] = await tx
         .select({
           status: workingOrders.status,
+          label: workingOrders.label,
           nodeId: workingOrders.nodeId,
           tillId: workingOrders.tillId,
         })
@@ -168,6 +226,7 @@ describe("splitOffCheck", () => {
     });
 
     expect(state.check?.status).toBe("open");
+    expect(state.check?.label).toBe("T1");
     // Inherits the origin's node/till (createOpenOrder stamps them from cfg).
     expect(state.check?.nodeId).toBe(cfg.nodeId);
     expect(state.check?.tillId).toBe(cfg.tillId);

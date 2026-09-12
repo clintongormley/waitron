@@ -6,7 +6,7 @@ import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
-import type { CardDetails, TillSaleLine, TillSaleResult } from "../api/client.js";
+import type { TillSaleLine, TillSaleResult } from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
@@ -36,6 +36,7 @@ const LABEL = {
   nif: "NIF",
   invoice: "Factura",
   date: "Fecha",
+  order: "Pedido",
   base: "Base",
   vat: "IVA",
   total: "TOTAL",
@@ -48,17 +49,6 @@ const LABEL = {
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
-
-/**
- * Spanish labels for a card tender's entry mode, printed on the second card line (design §3b). No
- * entry for `"unknown"` — that line drops the entry-mode fragment entirely rather than printing a
- * placeholder. Kept identical to `apps/server/src/receipt-ticket.ts`'s `ENTRY_MODE_LABEL`.
- */
-const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
-  contactless: "Sin contacto",
-  chip: "Chip",
-  swipe: "Banda",
-};
 
 /**
  * The multiplication sign for a per-option-quantity badge (`×2`). The SAME `×` (U+00D7) the printed
@@ -115,14 +105,14 @@ function issueDate(iso: string, locale: string): string {
 
 /**
  * The tender block (design §3b), the allowed operational extra alongside `result.total`. Cash shows
- * what was tendered (= total + change) and the change; card shows the scheme + masked PAN, an
- * entry-mode·auth second line (present only when at least one of the two exists), an operator manual
- * reference, and — only when a tip rode on the card — what was charged (total + tip) and the tip
- * itself. Mirrors `apps/server/src/receipt-ticket.ts`'s identical branch over the same `TenderBlock`,
- * kept in lock-step by convention (the paper must never carry FEWER tender elements than the screen).
+ * nothing before payment; cash shows what was tendered (= total + change) and the change; card shows
+ * only its tender kind, an operator manual reference and, when a tip rode on the card, the charged
+ * total and tip. Card-present identity lives on the separate payment slip. Mirrors the paper
+ * renderer's identical `TenderBlock` branch.
  */
 function renderTender(result: TillSaleResult, locale: string) {
   const t = result.tender;
+  if (t.method === "unpaid") return nothing;
   if (t.method === "cash") {
     return html`
       <div class="tender-row">
@@ -135,27 +125,8 @@ function renderTender(result: TillSaleResult, locale: string) {
       </div>
     `;
   }
-  // `·` is U+00B7 (middle dot) — matches the paper receipt's separator.
-  const second =
-    t.card === null
-      ? ""
-      : [
-          ENTRY_MODE_LABEL[t.card.entryMode],
-          t.card.authCode === null ? undefined : `Aut ${t.card.authCode}`,
-        ]
-          .filter((x) => x !== undefined)
-          .join(" · ");
   return html`
-    ${
-      t.card === null
-        ? html`<div class="tender-row"><span>${LABEL.card}</span></div>`
-        : html`
-            <div class="tender-row">
-              <span>${LABEL.card} ${t.card.scheme} **** ${t.card.last4}</span>
-            </div>
-            ${second !== "" ? html`<div class="tender-row"><span>${second}</span></div>` : nothing}
-          `
-    }
+    <div class="tender-row"><span>${LABEL.card}</span></div>
     ${
       t.reference !== null
         ? html`<div class="tender-row"><span>Ref. ${t.reference}</span></div>`
@@ -360,7 +331,7 @@ export class TillTicketView extends LitElement {
 
   /** The filed sale to render. Set before the element connects; the render reads it directly. */
   @property({ attribute: false }) result!: TillSaleResult;
-  /** The issuer identity legally printed on the ticket — from `GET /api/till` (`venueName` + `nif`). */
+  /** Current boot issuer, used when an immediate ticket response has no filed issuer identity. */
   @property({ attribute: false }) issuer!: TicketIssuer;
   /**
    * The locale the receipt is RENDERED in — the money, date and product names (see the class doc's
@@ -378,6 +349,10 @@ export class TillTicketView extends LitElement {
    * Undefined (an older server, or a tenant that never opened the editor) renders no trim at all.
    */
   @property({ attribute: false }) receipt?: ReceiptConfig;
+  /** True only while the issuance-time original action remains available on this completion screen. */
+  @property({ type: Boolean }) originalReceiptAvailable = false;
+  /** Whether this caller may request receipt and payment-slip print jobs. */
+  @property({ type: Boolean }) canPrintReceipt = true;
 
   /** Announce that the operator wants to start the next sale. The parent (Task 19) swaps the screen. */
   #newSale(): void {
@@ -395,6 +370,14 @@ export class TillTicketView extends LitElement {
     this.dispatchEvent(new CustomEvent("reprint", { bubbles: true, composed: true }));
   }
 
+  #printReceipt(): void {
+    this.dispatchEvent(new CustomEvent("print-receipt", { bubbles: true, composed: true }));
+  }
+
+  #printPaymentSlip(): void {
+    this.dispatchEvent(new CustomEvent("payment-slip", { bubbles: true, composed: true }));
+  }
+
   /**
    * Announce that the operator wants to OPEN THE CASH DRAWER (counter receipt/drawer §5) — a no-sale kick
    * (giving change, a cash count). Presentational, exactly like {@link #reprint}: the view dispatches the
@@ -407,8 +390,10 @@ export class TillTicketView extends LitElement {
 
   override render() {
     const r = this.result;
+    const issuer = r.issuer ?? this.issuer;
     const locale = this.invoiceLocale;
     const svg = qrSvg(r.qr);
+    const orderGroup = `${r.orderLabel === null ? "" : `${r.orderLabel} · `}${LABEL.order} ${r.orderNumber}`;
     return html`
       <article class="ticket">
         ${
@@ -419,13 +404,13 @@ export class TillTicketView extends LitElement {
             : nothing
         }
         <header class="issuer">
-          <p class="venue">${this.issuer.venueName}</p>
+          <p class="venue">${issuer.venueName}</p>
           ${
             this.receipt?.headerSubtitle
               ? html`<p class="header-subtitle">${this.receipt.headerSubtitle}</p>`
               : nothing
           }
-          <p class="nif">${LABEL.nif}: ${this.issuer.nif}</p>
+          <p class="nif">${LABEL.nif}: ${issuer.nif}</p>
         </header>
 
         <div class="meta">
@@ -436,6 +421,9 @@ export class TillTicketView extends LitElement {
           <div class="meta-row">
             <span class="meta-label">${LABEL.date}</span>
             <span>${issueDate(r.issuedAt, locale)}</span>
+          </div>
+          <div class="meta-row order-group">
+            <span>${orderGroup}</span>
           </div>
         </div>
 
@@ -511,15 +499,42 @@ export class TillTicketView extends LitElement {
       </article>
 
       <div class="receipt-actions">
-        <wt-button
-          class="reprint"
-          variant="secondary"
-          size="lg"
-          data-test="reprint"
-          @click=${() => this.#reprint()}
-        >
-          ${t("action.reprint")}
-        </wt-button>
+        ${
+          this.canPrintReceipt
+            ? this.originalReceiptAvailable
+              ? html`<wt-button
+                  class="print-receipt"
+                  variant="secondary"
+                  size="lg"
+                  data-test="print-receipt"
+                  @click=${() => this.#printReceipt()}
+                >
+                  ${t("action.print_receipt")}
+                </wt-button>`
+              : html`<wt-button
+                  class="reprint"
+                  variant="secondary"
+                  size="lg"
+                  data-test="reprint"
+                  @click=${() => this.#reprint()}
+                >
+                  ${t("action.reprint")}
+                </wt-button>`
+            : nothing
+        }
+        ${
+          this.canPrintReceipt && r.tender.method === "card"
+            ? html`<wt-button
+                class="payment-slip"
+                variant="secondary"
+                size="lg"
+                data-test="payment-slip"
+                @click=${() => this.#printPaymentSlip()}
+              >
+                ${t("action.payment_slip")}
+              </wt-button>`
+            : nothing
+        }
         <wt-button
           class="open-drawer"
           variant="secondary"
