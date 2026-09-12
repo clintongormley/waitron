@@ -306,8 +306,24 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           ...(reference !== undefined ? { reference } : {}),
         },
       );
-      const [inserted] = await gated(sessionId, (tx) =>
-        tx
+      // A disconnect can commit between the pre-check above and this insert (the provider round-trip
+      // holds no transaction), leaving the just-paired reader's provider with NO sealed credential.
+      // Re-check the credential is STILL present in the same transaction as the insert and refuse if
+      // it is gone, so we never insert an ACTIVE reader whose provider is disconnected. A residual
+      // sub-millisecond window between this re-check and the commit is accepted; the common case (a
+      // disconnect that has already committed) is closed.
+      const inserted = await gated(sessionId, async (tx) => {
+        const [cred] = await tx
+          .select({ purpose: tenantCredentials.purpose })
+          .from(tenantCredentials)
+          .where(
+            and(
+              eq(tenantCredentials.tenantId, deps.cfg.tenantId),
+              eq(tenantCredentials.purpose, seat.credentialPurpose),
+            ),
+          );
+        if (cred === undefined) return undefined;
+        const [row] = await tx
           .insert(cardReaders)
           .values({
             tenantId: deps.cfg.tenantId,
@@ -315,9 +331,27 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             providerRef: result.providerRef,
             name,
           })
-          .returning({ id: cardReaders.id }),
-      );
-      return c.json({ id: inserted!.id, status: result.status }, 201);
+          .returning({ id: cardReaders.id });
+        return row;
+      });
+      if (inserted === undefined) {
+        // The provider was disconnected mid-add. Best-effort unpair the vendor reader we just paired
+        // so it is not stranded; a remove failure is swallowed (the row was never inserted, and the
+        // operator's next action is to reconnect and add again).
+        await seat.readers
+          .remove(
+            {
+              db: deps.db,
+              ring: deps.ring,
+              tenantId: deps.cfg.tenantId,
+              ...(deps.fetch ? { fetch: deps.fetch } : {}),
+            },
+            result.providerRef,
+          )
+          .catch(() => {});
+        throw new AppError("reader.provider_disconnected", { providerId });
+      }
+      return c.json({ id: inserted.id, status: result.status }, 201);
     }),
   );
 
@@ -355,26 +389,20 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const readerId = requireUuidParam(c.req.param("id"), "CardReaderId");
-      // Retire = UPDATE `active=false, retired_at=now()` (the row is KEPT so historical payments still
-      // resolve its name; `app_user` holds no DELETE on `card_readers`). By-id, tenant-scoped: another
-      // tenant's reader id is `reader.not_found`.
+      // Load the reader BY ID, tenant-scoped but WITHOUT requiring `active` — a retry after a failed
+      // vendor unpair must still find the (already-retired) row and re-attempt the provider call.
+      // Another tenant's reader id is `reader.not_found` (by-id isolation, CLAUDE.md §3).
       const reader = await gated(sessionId, async (tx) => {
         const [row] = await tx
-          .update(cardReaders)
-          .set({ active: false, retiredAt: sql`now()` })
-          .where(
-            and(
-              eq(cardReaders.tenantId, deps.cfg.tenantId),
-              eq(cardReaders.id, readerId),
-              eq(cardReaders.active, true),
-            ),
-          )
-          .returning({ provider: cardReaders.provider, providerRef: cardReaders.providerRef });
+          .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
+          .from(cardReaders)
+          .where(and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, readerId)));
         if (row === undefined) throw new AppError("reader.not_found", { id: readerId });
         return row;
       });
       // Tell the provider to forget the reader (SumUp deletes it; Stripe is a no-op) — a round-trip,
-      // so it runs after the row is retired and outside any transaction.
+      // so it runs outside any transaction. Do it BEFORE flipping the row so a vendor failure leaves
+      // the reader still active and the whole retire retryable; a retry re-runs the vendor call.
       const seat = cardProviderById(deps.providers, reader.provider);
       await seat.readers.remove(
         {
@@ -384,6 +412,16 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           ...(deps.fetch ? { fetch: deps.fetch } : {}),
         },
         reader.providerRef,
+      );
+      // Only once the vendor has forgotten it do we retire the row = UPDATE `active=false,
+      // retired_at=now()` (the row is KEPT so historical payments still resolve its name; `app_user`
+      // holds no DELETE on `card_readers`). Idempotent: a retry after the vendor already succeeded
+      // simply re-sets the same values.
+      await gated(sessionId, (tx) =>
+        tx
+          .update(cardReaders)
+          .set({ active: false, retiredAt: sql`now()` })
+          .where(and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, readerId))),
       );
       return c.body(null, 204);
     }),

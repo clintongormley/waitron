@@ -603,3 +603,130 @@ describe("disconnect", () => {
     expect(await sealedStripe(venue)).toBeNull();
   });
 });
+
+describe("add reader — races with a concurrent disconnect", () => {
+  it("does NOT leave an active reader whose provider was disconnected mid-add", async () => {
+    // The add's provider round-trip (`seat.readers.add`) runs OUTSIDE any transaction. If a disconnect
+    // commits between the pre-check and the final INSERT, the provider now holds no sealed credential,
+    // so inserting an ACTIVE reader would strand a row whose provider is gone. The insert transaction
+    // re-checks the credential and refuses (`reader.provider_disconnected`), best-effort unpairing the
+    // just-paired vendor reader. Reproduces the Codex run-it probe (retained
+    // /tmp/review-5510d4be-probes.pg.test.ts): pause the add, disconnect, resume the add.
+    const venue = await seedVenue();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((r) => {
+      entered = r;
+    });
+    const hold = new Promise<void>((r) => {
+      release = r;
+    });
+    const removed: string[] = [];
+    const ref = nextRef();
+    const seat: CardProviderContribution = {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        add: async () => {
+          entered();
+          await hold;
+          return { providerRef: ref, status: "paired" as const };
+        },
+        remove: async (_deps, providerRef) => {
+          removed.push(providerRef);
+        },
+      },
+    };
+    const app = new Hono();
+    mountPaymentsApi(
+      app,
+      {
+        db: suite.admin,
+        cfg: cfgOf(venue),
+        ring: RING,
+        environment: "preproduction",
+        pool,
+        providers: [seat],
+      },
+      noopLog,
+    );
+    expect((await connectStripe(app, venue)).status).toBe(200);
+
+    const adding = send(app, "POST", "/management-api/payments/readers", {
+      cookie: venue.managerCookie,
+      body: { providerId: "stripe", name: "Barra 1", reference: nextRef() },
+    });
+    await started; // the add is paused inside seat.readers.add
+    const disconnected = await send(
+      app,
+      "POST",
+      "/management-api/payments/providers/stripe/disconnect",
+      { cookie: venue.managerCookie },
+    );
+    release();
+    const added = await adding;
+
+    // The disconnect wins (204); the add refuses rather than inserting an orphaned active reader.
+    expect(disconnected.status).toBe(204);
+    expect(added.status).toBe(409);
+    expect((await added.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "reader.provider_disconnected" },
+    });
+    // No reader row was inserted, and the just-paired vendor reader was best-effort unpaired.
+    const readers = (await (
+      await send(app, "GET", "/management-api/payments/readers", { cookie: venue.managerCookie })
+    ).json()) as unknown[];
+    expect(readers).toEqual([]);
+    expect(removed).toEqual([ref]);
+  });
+});
+
+describe("retire reader — retryable after a failed vendor unpair", () => {
+  it("re-attempts the vendor removal on a retry and 204s (retirement is idempotent)", async () => {
+    // Retire tells the provider to forget the reader. If that vendor call fails, a naive retire that
+    // had already flipped `active=false` would 404 on the retry (the row is no longer active) and
+    // never re-call the vendor, stranding the reader paired forever. Retirement looks the row up by
+    // id WITHOUT requiring active, so a retry finds the already-handled row and completes the vendor
+    // removal. Reproduces the Codex run-it probe's {first:500, retry:404, removes:1} finding.
+    const venue = await seedVenue();
+    let removes = 0;
+    const seat: CardProviderContribution = {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        remove: async () => {
+          removes += 1;
+          if (removes === 1) throw new Error("temporary provider outage");
+        },
+      },
+    };
+    const app = new Hono();
+    mountPaymentsApi(
+      app,
+      {
+        db: suite.admin,
+        cfg: cfgOf(venue),
+        ring: RING,
+        environment: "preproduction",
+        pool,
+        providers: [seat],
+      },
+      noopLog,
+    );
+    await connectStripe(app, venue);
+    const reader = (await (await addReader(app, venue, nextRef())).json()) as { id: string };
+
+    const first = await send(app, "POST", `/management-api/payments/readers/${reader.id}/retire`, {
+      cookie: venue.managerCookie,
+    });
+    // The vendor call failed, so the first attempt is a server fault (not a clean 204).
+    expect(first.status).toBe(500);
+
+    const retry = await send(app, "POST", `/management-api/payments/readers/${reader.id}/retire`, {
+      cookie: venue.managerCookie,
+    });
+    expect(retry.status).toBe(204);
+    // The vendor removal was re-attempted on the retry (2 calls total) and succeeded.
+    expect(removes).toBe(2);
+  });
+});
