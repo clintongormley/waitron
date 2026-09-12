@@ -43,6 +43,26 @@ any missing required field marked. **Not verified:** the review reached the over
 by firing events from code, so nobody has shown that a real pointer can get there. This change left
 the list's existing in-browser paging and search alone — the replacement is the next item.
 
+**Three user and profile follow-ups from the owner's walkthrough** (2026-09-12, not started).
+
+1. *Keep the display name in step with the person's name as it is typed.* Today the create form
+   copies only the FIRST names into Display name, and stops copying the moment anyone edits that box
+   (`apps/dashboard/src/widgets/person-form.ts`); the admin's Edit user form and Your profile copy
+   nothing at all (`apps/dashboard/src/widgets/person-edit.ts`,
+   `apps/dashboard/src/screens/profile-screen.ts`). Wanted in all three: while someone types, if
+   Display name is empty or still reads exactly the first names and last names joined by a space,
+   rewrite it to the new joined pair. A display name somebody has actually typed themselves is left
+   alone.
+
+2. *Your profile calls the display name just “Name”.* It shows and edits the same `displayName`
+   value that the admin screens label “Display name” / “Nombre visible” — the profile screen uses the
+   `profile.name` string, which is “Name” / “Nombre” (`apps/dashboard/src/i18n/strings.ts`). One
+   field should carry one label, in both languages.
+
+3. *The admin's Edit user form has no Language.* A person's stored interface language (`locale`) can
+   only be chosen on Your profile, so an admin setting someone else up cannot pick the language that
+   person will first see. Add the same chooser to the admin editor.
+
 **Shared database-backed table paging, search and sorting: separate PR, user admin first**
 (owner decision, 2026-09-12). Large lists should query the database from the first page, regardless
 of total row count. Extend `wt-data-table` with reusable paging, sorting and loading controls;
