@@ -1070,6 +1070,52 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
   real-time push; station-kind threshold defaults; an unbumped-since-fire neglect metric; a shared
   flash helper.
 
+**Receipts, duplicates & card payments (owner-raised 2026-09-11/12) — NEEDS A BRAINSTORM, then one slice.**
+The legal groundwork is done and recorded verbatim in
+[compliance/verifactu-findings.md §15](compliance/verifactu-findings.md) (RD 1619/2012 arts. 1, 4, 11,
+14; TRLGDCU art. 63; DGT 1693-02), and the open legal question is
+[asesor-questions.md Q19](compliance/asesor-questions.md). Four owner decisions taken 2026-09-12, none
+yet designed:
+
+- **Take the card details OFF the fiscal ticket.** This REVERSES the landed card-receipt work
+  ([2026-09-11 design](superpowers/specs/2026-09-11-card-receipt-tender-details-design.md), rendered at
+  `apps/server/src/receipt-ticket.ts` ~line 305). Nothing legal forced it on and nothing legal forbids
+  it — §15.5 — so this is a product call: the invoice documents the operation, not the payment.
+- **Offer a separate, non-fiscal payment slip after a card payment** — the slip a normal POS emits, one
+  per capture. It must carry **no** invoice number, series or QR, so it can never read as a factura.
+  This is also what would give each payer their own proof when several people pay one bill.
+- **Mark a reprint «duplicado»** (RD 1619/2012 art. 14.4). Today `enqueueReceiptReprint` deliberately
+  re-renders byte-identically to the first print — the exact property art. 14.4 forbids. Needs a
+  decision on the failed-first-print case: if the customer never received the original, is the second
+  print a duplicate or the original? (Q19(d)).
+- **Several guests wanting their own fiscal receipt.** Either split by item (built — see below) or the
+  art. 14.2.a) *duplicado* route with a per-person base/cuota split. Blocked on Q19; do not build (B)
+  on our own reading.
+
+Dependency note: the money-split-on-one-bill case ALSO needs a multi-tender pay path — `settleSale`
+already accepts `tenders[]`, but `payWorkingOrder` takes a single `tender` and `readTenderBlock` assumes
+exactly one per sale (`apps/server/src/till-sale.ts`). Art. 11.1 («expedidas en el momento de realizarse
+la operación») constrains how long an invoice may sit open waiting for the last payer.
+
+**Split-bill UI (TS-5 finish) — server done, till button is a placeholder.** `splitOffCheck` and
+`POST /api/tabs/:id/split` are landed and fiscally proven on real Postgres
+(`apps/server/src/split-bill.fiscal.test.ts`: one tab → 3 checks → exactly 3 chained registros,
+contiguous numbers). The till still shows `"table.action_split": "Split (soon)"`
+(`apps/till/src/i18n/strings.ts`). This is the cheapest complete answer to "three guests each want a
+receipt", so it ranks ahead of the duplicado work.
+
+**SumUp printer-cradle experiment (owner-raised 2026-09-12) — hardware not yet owned.** Whether the
+Solo's printer cradle auto-prints a card slip on a **Cloud-API-initiated** checkout is unknown and
+cannot be settled from the API: SumUp's published OpenAPI (SHA-256 prefix `5f752211d29897ad`) contains
+**zero** occurrences of `print`, and `CreateReaderCheckoutRequest` has no receipt or print option — so
+we can neither request a print nor suppress one. Run it as one experiment in the
+[Solo runbook](research/2026-09-10-sumup-solo-experiments.md), stating the failing case first (*the
+cradle stays silent and the only paper is ours*), with a standalone-mode payment as the control in the
+other direction. If it DOES auto-print, it supplies the per-payer payment slip above for free. Also
+unread: `GET /v1.1/receipts/{transaction_id}`, which returns `acquirer_data` (`tid`,
+`authorization_code`, `return_code`, `local_time`) and an untyped `emv_data` — richer than the four
+fields the adapter keeps today, and available on every reader model.
+
 **Pricing adjustments (owner-added 2026-09-03):** two related, unbuilt capabilities on the
 ordering/sale flow, both gated on the already-anticipated **discount permission** (the "discount gate"
 noted under *What's built → Identity* remaining — decide the authorised-role rule and whether a

@@ -744,6 +744,37 @@ which one matters to the sweep.
 
 ---
 
+## 5d. Does a printer-equipped reader print a slip on an API checkout? (PENDING — hardware not owned, added 2026-09-12)
+
+**Not runnable on the current Solo** — it has no printer. Run it if a Solo + Printer (or any
+printer-equipped SumUp) is acquired, before deciding whether the cradle can supply the per-payer
+payment slip the receipts work needs (backlog → *Receipts, duplicates & card payments*).
+
+**Why it cannot be answered from the API.** SumUp's published OpenAPI file (same file as §Provenance,
+SHA-256 prefix `5f752211d29897ad`, re-fetched 2026-09-12 and byte-identical) contains **zero**
+occurrences of `print`. `CreateReaderCheckoutRequest` has exactly nine properties — `aade`, `affiliate`,
+`card_type`, `description`, `installments`, `return_url`, `tip_rates`, `tip_timeout`, `total_amount` —
+none of them about receipts or printing, and there is no printer or peripheral endpoint. So printing is
+decided by device firmware alone: **we can neither request a print nor suppress one.**
+
+**Failing case, stated first:** the cradle stays silent and the only paper produced is our own receipt
+printer's.
+
+1. Pair the printer-equipped reader to the Cloud API exactly as the Solo is paired (§0).
+2. Run the §0.6 €1 control checkout through `POST /readers/{id}/checkout`. Record whether the cradle
+   printed, and if so photograph the slip — specifically whether it carries anything resembling an
+   invoice number, a series or a QR.
+3. **Control in the other direction:** take the same €1 payment in the reader's own standalone mode. If
+   *that* does not print either, the printer is unpaired or broken and step 2 measured nothing.
+
+**Either answer is useful.** Prints → the per-payer card slip comes free with the hardware, and the
+fiscal ticket still comes off our own printer (a cradle slip can never be a factura: no series, no
+number, no QR, no line items, no per-rate base — see
+[compliance/verifactu-findings.md §15](../compliance/verifactu-findings.md)). Does not print → we build
+the slip ourselves, and `GET /v1.1/receipts/{transaction_id}` is the richer source for it
+(`acquirer_data` carries `tid`, `authorization_code`, `return_code`, `local_time`; `emv_data` is
+declared as a bare `type: object` with `example: {}`, so its contents need a live read).
+
 ## 6. After the run
 
 1. Revoke the API key and the affiliate key (0.2). Delete `~/.sumup-experiments/env`.

@@ -678,6 +678,60 @@ warn and whether the system should refuse to trade rather than accumulate unsend
 
 ---
 
+### Q19. Several guests, one table — separate facturas, or one factura with *duplicados*? (added 2026-09-12)
+
+> **Bounded search 2026-09-12 found nothing on point.** A full-text search of PETETE for `comensales`
+> in DESCRIPCION-HECHOS returns **zero** documents across the whole 1997–2026 corpus (positive control:
+> `restaurante` in the same field returns 3 pages). The nearest doctrine is **1693-02**, which gives the
+> *destinatario* test but is a consulta **general** on the **repealed** RD 2402/1985 — see
+> [verifactu-findings.md §15.2](verifactu-findings.md). This is genuinely unaddressed; do not treat the
+> *comunidad de vecinos* answer as settling a restaurant table.
+
+**Why it matters.** It decides what the till prints when a table splits, and the two candidate designs
+are very different amounts of work. RD 1619/2012 **art. 14.1** allows only one original per invoice, and
+**art. 14.2.a)** permits *duplicados* only where *«en una misma entrega de bienes o prestación de
+servicios concurriesen varios destinatarios»*, each copy then having to carry *«la porción de base
+imponible y de cuota repercutida a cada uno de ellos»* and the word *«duplicado»* (art. 14.4).
+
+Two readings, and we need to know which is right before building:
+
+- **(A) Each guest's consumption is its own operation** → N independent facturas simplificadas, one per
+  guest. This is what the software already does (`splitOffCheck`), and it needs no duplicados at all.
+- **(B) The table is one operation with several *destinatarios*** → one original plus *duplicados*
+  under art. 14.2.a). Note the friction: a factura simplificada is not otherwise required to show the
+  **cuota** (art. 7.1.f), yet 14.2.a) demands a per-person base **and cuota** split — so this route
+  forces figures onto a simplified ticket that art. 7 does not contemplate.
+
+Note also that in (B) the guests are anonymous: a factura simplificada identifies no recipient at all,
+so there is nothing on the document that says who each *duplicado* belongs to.
+
+> **(a)** En un establecimiento de hostelería que expide **facturas simplificadas**, cuando varios
+> clientes comparten mesa y desean cada uno su propio justificante, ¿es conforme a derecho expedir una
+> **factura simplificada independiente por cada cliente**, documentando cada una los consumos que se le
+> imputan, considerando a cada cliente destinatario de su propia operación? ¿O debe entenderse que
+> existe una sola operación con varios destinatarios?
+>
+> **(b)** Si se entiende que hay una sola operación con varios destinatarios, ¿es el cauce del artículo
+> 14.2.a) del RD 1619/2012 (original más ejemplares duplicados, con la porción de base imponible y de
+> cuota repercutida de cada uno y la mención «duplicado») aplicable a una **factura simplificada**, que
+> conforme al artículo 7.1.f) no está obligada a consignar la cuota ni identifica al destinatario?
+>
+> **(c)** ¿Qué criterio debe seguir el establecimiento para determinar el **destinatario** cuando no
+> hay contrato expreso — el criterio de 1693-02 («quienes están obligados frente al sujeto pasivo a
+> efectuar el pago»), de modo que el reparto acordado entre los comensales determina la pluralidad de
+> destinatarios? ¿Basta la petición del cliente?
+>
+> **(d)** Cuando se **reimprime** una factura simplificada ya expedida (por pérdida del original, o
+> porque la impresión inicial falló), ¿debe llevar el ejemplar la mención **«duplicado»** del artículo
+> 14.4? ¿Y si la impresión original **nunca llegó a entregarse** al cliente — sigue siendo un duplicado,
+> o es el original?
+>
+> **(e)** ¿Es admisible entregar, además de la factura simplificada, un **justificante de pago con
+> tarjeta** separado y sin valor fiscal (sin número de factura, sin serie y sin código QR), uno por cada
+> pago recibido? ¿Existe algún requisito formal que evite que se confunda con una factura?
+
+---
+
 ## SEPARATE — for a lawyer, not the asesor fiscal
 
 ### Q9. Who signs the declaración responsable for source-available software?

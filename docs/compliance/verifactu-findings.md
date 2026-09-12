@@ -914,6 +914,174 @@ above is citable.**
 
 ---
 
+## 15. Splitting a bill, duplicates, and the card slip (added 2026-09-12)
+
+**Why this was checked.** Card payments run through the SumUp Solo, which has no printer, so the card
+details were put on the fiscal ticket ([§14](#14-factura-simplificada-content), design
+[2026-09-11-card-receipt-tender-details-design.md](../superpowers/specs/2026-09-11-card-receipt-tender-details-design.md)).
+The owner then asked what happens when three guests split one bill — three copies of the invoice, one
+each, or something else — and whether a card slip is legally required at all. Answered on primary
+source: BOE consolidated texts fetched 2026-09-12, and the DGT consulta read on PETETE itself.
+
+### 15.1 Only ONE original per invoice, and a reprint is a *duplicado*
+
+**RD 1619/2012 art. 14** (BOE-A-2012-14696, consolidated), in full:
+
+> «**1.** Los empresarios y profesionales o sujetos pasivos sólo podrán expedir **un original de cada
+> factura**.
+> **2.** La expedición de ejemplares duplicados de los originales de las facturas únicamente será
+> admisible en los siguientes casos:
+> **a)** Cuando en una misma entrega de bienes o prestación de servicios concurriesen **varios
+> destinatarios**. En este caso, deberá consignarse en el original y en cada uno de los duplicados **la
+> porción de base imponible y de cuota repercutida a cada uno de ellos**.
+> **b)** En los supuestos de **pérdida del original** por cualquier causa.
+> **3.** Los ejemplares duplicados a que se refiere el apartado anterior de este artículo tendrán la
+> misma eficacia que los correspondientes documentos originales.
+> **4.** En cada uno de los ejemplares duplicados deberá hacerse constar la expresión «**duplicado**».»
+
+Three consequences, each load-bearing for the till:
+
+- **Printing the same invoice twice for two payers is not permitted** — not as two originals (14.1),
+  and not as unmarked copies (14.4).
+- **A reprint is a duplicado.** The reprint path exists for the 14.2.b) case (the customer lost the
+  ticket). It must therefore carry the word «duplicado». **Today it does not:**
+  `enqueueReceiptReprint` (`apps/server/src/receipt-print.ts`) re-renders through the same
+  `readSettledTicket` path deliberately so that *"a reprint is byte-identical to the first print by
+  construction"* (`apps/server/src/till-sale.ts` ~line 217) — which is exactly the property art. 14.4
+  forbids. Grep receipt: no `duplicado`/`duplicate` token anywhere in `receipt-ticket.ts`,
+  `receipt-print.ts` or `till-sale.ts` as of this date.
+- **The multi-recipient duplicate must carry a per-person split of base AND cuota** (14.2.a) — note
+  `cuota`, which a factura simplificada does *not* otherwise have to show (art. 7.1.f, §14).
+
+### 15.2 Who counts as a *destinatario* — the test, from DGT doctrine
+
+**DGT consulta 1693-02** (7 nov 2002, SG de Impuestos sobre el Consumo). A residents' association had
+works done, contracted through its president; the invoices went to the president; a member asked
+whether she could demand a duplicate:
+
+> «3.- A tales efectos, y según **reiterada doctrina de este Centro directivo**, se debe considerar
+> **destinatario** de las operaciones aquél **para quien el empresario o profesional realiza la entrega
+> de bienes o prestación de servicios** gravada por el Impuesto y que **ocupa la posición de acreedor
+> en la obligación** (relación jurídica) en la que el referido empresario o profesional es deudor […]
+> Asimismo, **cuando no resulte con claridad de los contratos suscritos, se considerará que las
+> operaciones gravadas se realizan para quienes, con arreglo a derecho, están obligados frente al
+> sujeto pasivo a efectuar el pago de la contraprestación** de las mismas […]
+> 4.- Por lo expuesto, el destinatario de las obras efectuadas es la comunidad de vecinos […] **No
+> existiendo, por tanto, una pluralidad de destinatarios, la expedición de ejemplares duplicados no
+> puede exigirse** […]»
+
+**The operative test: absent a clear contract, the recipient is whoever is legally obliged to pay.**
+Applied to a table of three, that is a question about what the guests agreed with the restaurant, not
+about how the money physically arrives — which is why "three cards were tapped" does not by itself
+create three recipients.
+
+**Provenance and limits, stated so nobody over-reads this.** 1693-02 is a consulta **general**, NOT
+vinculante, and it construes **RD 2402/1985 art. 5.2**, the *repealed* predecessor of today's art. 14.
+The two texts differ: the 1985 version required «duplicado» *y la razón de su expedición* and had no
+base/cuota split; today's art. 14.2.a) adds the split and art. 14.4 drops the reason. So the
+*destinatario* test is what carries forward (the DGT calls it "reiterada doctrina", i.e. settled and
+repeatedly restated); the mechanics are today's article, not the 1985 one. **It has never been applied
+to restaurant diners by the DGT:** a full-text search of PETETE for `comensales` in
+DESCRIPCION-HECHOS returns **zero** documents across the whole 1997–2026 corpus (control: `restaurante`
+in the same field returns 3 pages, so the query shape is sound). The split-bill case is genuinely
+unaddressed in published doctrine — see [asesor-questions.md](asesor-questions.md) Q17.
+
+### 15.3 The deli qualifies for facturas simplificadas twice over
+
+**RD 1619/2012 art. 4.1 and 4.2:**
+
+> «**1.** La obligación de expedir factura podrá ser cumplida mediante la expedición de **factura
+> simplificada** y copia de esta en cualquiera de los siguientes supuestos: **a)** Cuando su importe no
+> exceda de **400 euros**, Impuesto sobre el Valor Añadido incluido, o **b)** cuando deba expedirse una
+> factura rectificativa.
+> **2.** Sin perjuicio de lo dispuesto en el apartado anterior, los empresarios o profesionales podrán
+> igualmente expedir factura simplificada […] cuando su importe no exceda de **3.000 euros**, Impuesto
+> sobre el Valor Añadido incluido, en las operaciones que se describen a continuación:
+> **a)** Ventas al por menor […]
+> **e)** **Servicios de hostelería y restauración prestados por restaurantes, bares, cafeterías,
+> horchaterías, chocolaterías y establecimientos similares, así como el suministro de bebidas o comidas
+> para consumir en el acto.** […]»
+
+Eat-in is 4.2.e), takeaway is 4.2.a) — both in the €3,000 list. Splitting a bill only ever *lowers*
+the per-invoice amount, so it cannot push a check over a threshold.
+
+### 15.4 Issue AND deliver, at the moment of the operation
+
+**Art. 1:** «Los empresarios o profesionales están obligados a **expedir y entregar**, en su caso,
+factura u otros justificantes por las operaciones que realicen […]» — see also [§9](#9-issuing-and-delivering-are-separate-obligations).
+
+**Art. 11.1:** «Las facturas deberán ser expedidas **en el momento de realizarse la operación**. No
+obstante, cuando el destinatario de la operación sea un empresario o profesional que actúe como tal,
+las facturas deberán expedirse antes del día 16 del mes siguiente […]»
+
+For an ordinary consumer the invoice is issued **when the sale happens**. That constrains any future
+"one invoice, several card captures taken over some minutes" design: the invoice cannot sit open
+indefinitely waiting for the last payer.
+
+### 15.5 There is no legal duty to hand the customer a CARD SLIP
+
+- **Not fiscal.** The mandatory contents of a factura simplificada (art. 7.1, quoted in [§14](#14-factura-simplificada-content))
+  contain no payment-instrument element, and the Veri\*Factu registro de alta has no payment field at
+  all — grep receipt: `formapago|mediopago|paymentmethod` over `packages/verifactu/src` and
+  `packages/fiscal-verifactu/src` returns nothing, and `buildAltaRecord`
+  (`packages/verifactu/src/records.ts`) builds IDFactura / Desglose / ImporteTotal / Encadenamiento
+  with no such element.
+- **Not payment-services law.** **RDL 19/2018** (BOE-A-2018-16036, the PSD2 transposition) contains
+  **zero** occurrences of `justificante`, `resguardo` or `comprobante` (control: 347 occurrences of
+  «servicios de pago», so the text loaded). Its information duties fall on the payment service
+  provider, not the merchant.
+- **Card-scheme rules are contractual, not law** — not read at source; out of scope here.
+
+**Correction to an earlier reading (2026-09-11).** A search summary was relayed as "Banco de España
+treats the TPV slip as optional". The BdE page does **not** say that. It is consumer advice about
+whether the *customer* should accept a copy a shop offers, and is silent on any merchant duty. What it
+does confirm, in its own words, is the two-document distinction: *«La "copia" es el resguardo del
+terminal punto de venta (TPV)»* versus *«Guarda el ticket de compra del comercio»*. This is the §1
+compress-a-quote-into-a-claim defect; the block quote above is what is citable.
+
+### 15.6 Consumers have a RIGHT to the invoice on paper
+
+**RDLeg 1/2007 (TRLGDCU) art. 63.3** (BOE-A-2007-20555, apartado añadido por Ley 3/2014):
+
+> «En los contratos con consumidores y usuarios, estos tendrán **derecho a recibir la factura en
+> papel**. En su caso, la expedición de la **factura electrónica** estará condicionada a que el
+> empresario haya obtenido previamente el **consentimiento expreso** del consumidor. La solicitud del
+> consentimiento deberá precisar la forma en la que se procederá a recibir la factura electrónica, así
+> como la posibilidad de que el destinatario que haya dado su consentimiento pueda revocarlo […] El
+> derecho del consumidor y usuario a recibir la factura en papel **no podrá quedar condicionado al pago
+> de cantidad económica alguna**.»
+
+And art. 63.1: «se entregará **recibo justificante, copia o documento acreditativo** con las
+condiciones esenciales de la operación […]» — which the factura simplificada itself satisfies; it does
+not independently require a card slip.
+
+**Consequence for the product.** An emailed/SMS receipt can never be the default and can never replace
+paper without prior express, revocable consent, and paper can never be charged for. Any "we'll text you
+the receipt instead" flow is opt-in only. Today this is moot — grep receipt: there is **no** electronic
+receipt path in `apps/server/src` or `packages/printing/src`; every receipt is ESC/POS on paper.
+
+**Where `receipt_print_mode` sits against this.** The enum is `auto | on_request | never`
+(`packages/db/src/schema/tenants.ts`), and only `auto` auto-prints (`receipt-print.ts` §1). The saving
+grace is that the reprint route carries **no** mode gate — *"a reprint is ALWAYS available"* — so a
+customer who asks can always be handed paper under any mode. A venue running `never` nonetheless
+issues invoices it never delivers, which is in tension with art. 1's «expedir **y entregar**». That is
+an operator configuration choice, not a code defect; flagged for the asesor, not fixed here.
+
+### 15.7 What this settles for the till
+
+- **Guests who split by ITEM** are each the recipient of their own operation → **N separate facturas
+  simplificadas**, each with its own number, QR, legend and chained registro. Already built and proven
+  on real Postgres (`apps/server/src/split-bill.fiscal.test.ts`); only the till button is still a
+  `Split (soon)` placeholder (`apps/till/src/i18n/strings.ts`).
+- **Guests who split the MONEY on one bill** are one operation. Either one invoice (with the payments
+  as separate tenders, which the pay path does not yet support — `payWorkingOrder` takes a single
+  `tender`), or the art. 14.2.a) duplicado route with a per-person base/cuota split. Open — Q17.
+- **The card slip is a product choice, not a legal one**, so it can be moved off the fiscal ticket
+  freely.
+- **The reprint must say «duplicado»** — a real, currently-unmet obligation.
+
+---
+
 ## Sources
 
 | Source | Type |
@@ -926,7 +1094,11 @@ above is citable.**
 | AEAT `Veri-Factu_Descripcion_SWeb.pdf` v1.0.3 | primary |
 | LGT art. 201 bis (introduced by Ley 11/2021) | primary |
 | LGT art. 29.2.j) (Ley 58/2003) — quoted in the developer FAQ, §8 above | primary |
-| BOE-A-2012-14696 — RD 1619/2012 (ROF), arts. 2, 6.5, 7 (7.1/7.2/7.5), 9, 11, 18 | primary |
+| BOE-A-2012-14696 — RD 1619/2012 (ROF), arts. 1, 2, 4, 6.5, 7 (7.1/7.2/7.5), 9, 11, 13, 14, 18 | primary — arts. 1, 4, 11, 13, 14 read verbatim from the BOE consolidated page 2026-09-12 (§15) |
+| BOE-A-2007-20555 — RDLeg 1/2007 (TRLGDCU), art. 63 (63.1 y 63.3) | primary — read verbatim from the BOE consolidated page 2026-09-12 (§15.6) |
+| BOE-A-2018-16036 — RDL 19/2018 (servicios de pago, PSD2) | primary — read as a NEGATIVE result: zero occurrences of justificante/resguardo/comprobante, control 347 on «servicios de pago» (§15.5) |
+| DGT consulta general **1693-02** (7 nov 2002) — concepto de *destinatario*; duplicados sólo con pluralidad de destinatarios | primary (DGT) — read on PETETE itself 2026-09-12 and cross-checked word-for-word against a legal-database reproduction; construes the REPEALED RD 2402/1985 art. 5.2 (§15.2) |
+| Banco de España, Portal del Cliente Bancario, blog «Pago con tarjeta: ¿Quieres copia?» (4 mar 2021) | secondary (supervisor consumer guidance) — read at source 2026-09-12; says nothing about any MERCHANT duty (§15.5) |
 | BOE-A-1992-28740 — LIVA (Ley 37/1992), arts. 78.Tres.2º (base imponible), 80.Uno.2º / 80.Cuatro (modificación) | primary — art. 78.Tres.2º via AEAT Manual práctico IVA 2025 (official); art. 80 via secondary summary, NOT read at source (§12) |
 | DGT consulta general **2174-03** (11 dic 2003) — propinas de restaurante fuera de la base imponible del IVA | primary (DGT) — read via legal-database reproduction; PETETE unreachable by tool (TLS), §11 |
 | DGT consultas vinculantes **V3095-17** (29 nov 2017), **V1808-22** (29 jul 2022) — propinas/donativos fuera de la base imponible; propina cobrada por la empresa = ingreso IS + rendimiento del trabajo | primary (DGT) — read via legal-database reproduction; PETETE unreachable by tool (TLS), §11 |
@@ -935,5 +1107,16 @@ AEAT sede FAQ pages stamped *"Actualizadas a 5 de diciembre de 2025"*. Several A
 could not be read by normal fetching (FlateDecode/font encoding) and were extracted locally —
 findings resting on those are text-verified rather than model-summarised. The DGT consultas in §11
 were verified against faithful legal-database reproductions because `petete.tributos.hacienda.gob.es`
-failed TLS chain validation on every fetch — the substance is corroborated across four sources and two
-binding consultas, but a human should confirm the exact wording on PETETE.
+failed TLS chain validation when they were written — the substance is corroborated across four sources
+and two binding consultas, but a human should still confirm their exact wording on PETETE.
+
+**PETETE is reachable again as of 2026-09-12** — the TLS failure did not recur. Its search is a plain
+form POST to `/consultas/do/search` (fields `NMCMP_n`/`OPCMP_n`/`VLCMP_n`, where `NMCMP_n` is one of
+`NUM-CONSULTA`, `FECHA-SALIDA`, `NORMATIVA`, `CUESTION-PLANTEADA`, `DESCRIPCION-HECHOS`, `FreeText`,
+`CRITERIO`); full documents come from `/consultas/do/document` with the result row's numeric `doc` id,
+and that endpoint returns **401 unless the request carries `X-Requested-With: XMLHttpRequest`**. Two
+traps measured while using it: the free-text field **ignores phrase quoting** (it ORs the words, so a
+quoted phrase returns broad noise), and a "no results" answer is only meaningful beside a positive
+control in the same field — §15.2 records one. §11's consultas were NOT re-read on PETETE in that pass;
+only 1693-02 was, and it matched its reproduction exactly, which is one data point in favour of the
+reproductions the older sections rest on.
