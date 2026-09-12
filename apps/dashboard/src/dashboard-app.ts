@@ -7,6 +7,8 @@ import { baseStyles, UrlStateController } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeOf } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
@@ -69,13 +71,18 @@ import {
  * purchase invoices, author ingredients and product recipes, manage enrolled devices, manage printing
  * (agents + printers + status), see today's business overview, or review sales & takings over a date
  * range. Exactly one permitted destination shows at a time. Non-staff sessions restore a permitted
- * path or fall back to overview; staff sessions can open their schedule and profile. Logged-in faces share logout
+ * path or fall back to overview; staff sessions can open their schedule. Logged-in faces share logout
  * and language controls, with navigation available to non-staff sessions.
+ *
+ * "Your profile" is NOT one of these — it isn't a destination you navigate to (it has no sidebar
+ * entry, and swapping the main content for it made an already-narrow page fight the shell's own
+ * width and left nobody able to explain why nothing in the sidebar was ever highlighted while
+ * viewing it). It's a modal ({@link profileOpen}) that opens over whichever face is current,
+ * closes back to it, and is reachable from any of them via the banner button.
  */
 type CoreScreen =
   | "login"
   | "my-schedule"
-  | "profile"
   | "overview"
   | "sales"
   | "staff"
@@ -478,6 +485,12 @@ export class DashboardApp extends LitElement {
    * ANY nav item — or clicking the scrim — sets it back to `false`. */
   @state() private drawerOpen = false;
 
+  /** Whether the "Your profile" modal is open over the current `screen` — see the note on
+   * {@link CoreScreen} for why this is not itself a screen. Driven by the URL's `dashboard=profile`
+   * (so it survives refresh/deep-link — `#applyRequestedScreen`/`#writeCurrentUrl` keep the two in
+   * sync) as well as `#openProfile`/`#closeProfile` for in-session opens and closes. */
+  @state() private profileOpen = false;
+
   /** Manually-collapsed nav groups (headerless groups are never collapsible, so never appear here).
    * A group in this set still renders expanded if it contains the CURRENT screen — collapsing "Team"
    * and then navigating to Staff should not hide the page you are already on. */
@@ -723,7 +736,7 @@ export class DashboardApp extends LitElement {
     // naming an enabled module's own screen id is recognised while a disabled module's is not.
     // The per-permission gate is applied on top, in `#nav` and `#permittedScreen`.
     this.#activate(me.modules);
-    this.screen = this.#permittedScreen(this.#url.read("dashboard"));
+    this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
     this.onboardingIntent = me.onboardingIntent;
@@ -731,7 +744,7 @@ export class DashboardApp extends LitElement {
     this.sessionIdleTimeoutSeconds = me.sessionIdleTimeoutSeconds ?? 30 * 60;
     this.#scheduleSessionExpiry(remainingSeconds);
     this.#broadcastSessionDeadline(Date.now() + remainingSeconds * 1000);
-    this.#writeScreenUrl(this.screen, true);
+    this.#writeCurrentUrl(true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
   }
 
@@ -838,7 +851,7 @@ export class DashboardApp extends LitElement {
         };
     await this.#probeSession(preference);
     if (accountSetup && this.sessionRole !== undefined && this.isConnected) {
-      this.#selectScreen("profile");
+      this.#openProfile();
     }
   }
 
@@ -949,6 +962,7 @@ export class DashboardApp extends LitElement {
             ></dashboard-language-chooser>
           </div>
         </div>
+        ${this.#renderProfileModal()}
       </div>
     `;
   }
@@ -984,10 +998,7 @@ export class DashboardApp extends LitElement {
       ${
         authenticated
           ? html`<div class="banner-actions">
-              <wt-button
-                variant="secondary"
-                data-test="profile"
-                @click=${() => this.#selectScreen("profile")}
+              <wt-button variant="secondary" data-test="profile" @click=${() => this.#openProfile()}
                 >${t("profile.title")}</wt-button
               >
               <wt-button
@@ -1015,9 +1026,9 @@ export class DashboardApp extends LitElement {
   /** A URL selects a destination only within the authenticated person's visible navigation — the core
    * nav items (gated by role), or an ACTIVE module's screen id whose `requiresPermission` the session
    * holds. A module that is enabled (active) but whose permission the person lacks is denied here, just
-   * as it is hidden from the nav — the two gates agree. */
+   * as it is hidden from the nav — the two gates agree. `requested` is never "profile" — see
+   * `#applyRequestedScreen`, which intercepts that value before this ever sees it. */
   #permittedScreen(requested: string | null): ScreenId {
-    if (requested === "profile") return "profile";
     if (this.sessionRole === "staff") return "my-schedule";
     const item = NAV_GROUPS.flatMap((group) => group.items).find(
       (entry) => entry.screen === requested,
@@ -1047,10 +1058,43 @@ export class DashboardApp extends LitElement {
     );
   }
 
+  /** Resolves BOTH `screen` and `profileOpen` from a requested URL value. "profile" means the
+   * modal is open, never a `screen` itself — the underlying face falls back to this person's
+   * ordinary default (my-schedule for staff, otherwise `#permittedScreen`'s own fallback), the
+   * same as if nothing had been requested, since "profile" was never one of the destinations it
+   * resolves against anyway. */
+  #applyRequestedScreen(requested: string | null): void {
+    this.profileOpen = requested === "profile";
+    this.screen = this.#permittedScreen(this.profileOpen ? null : requested);
+  }
+
+  /** Writes the CURRENT screen/profile state to the URL — "profile" while the modal is open (so
+   * refresh and deep-links keep working), otherwise the underlying screen. */
+  #writeCurrentUrl(replace: boolean): void {
+    if (this.profileOpen) this.#url.write({ dashboard: "profile" }, replace);
+    else this.#writeScreenUrl(this.screen, replace);
+  }
+
+  /** Opens the profile modal over whatever is current — a real navigation (PUSHed, like selecting
+   * any nav item), so the browser's Back button closes it. */
+  #openProfile(): void {
+    this.profileOpen = true;
+    this.#url.write({ dashboard: "profile" }, false);
+    this.drawerOpen = false;
+  }
+
+  /** Closes the profile modal via the UI (Cancel/Escape/wt-close) — REPLACES the current entry
+   * with the underlying screen's URL rather than leaving "profile" as its own stop in Back-button
+   * history; a Back-button-driven close instead goes through `#onHistory` below. */
+  #closeProfile(): void {
+    this.profileOpen = false;
+    this.#writeScreenUrl(this.screen, true);
+  }
+
   readonly #onHistory = (): void => {
     if (this.screen === "login" || this.sessionRole === undefined) return;
-    this.screen = this.#permittedScreen(this.#url.read("dashboard"));
-    this.#writeScreenUrl(this.screen, true);
+    this.#applyRequestedScreen(this.#url.read("dashboard"));
+    this.#writeCurrentUrl(true);
     this.drawerOpen = false;
     diag.record("info", "nav", { screen: this.screen });
   };
@@ -1140,6 +1184,43 @@ export class DashboardApp extends LitElement {
     `;
   }
 
+  /** "Your profile" as a modal over whichever face is current — see the note on {@link CoreScreen}
+   * for why it isn't a screen itself. `<dashboard-profile-screen>` only mounts while `profileOpen`
+   * is true, so a session that never opens it never pays for the `getProfile`/`getLocales`/
+   * `getGoogleConfig` calls its `connectedCallback` makes. It carries its OWN edit modal for each
+   * field/action (see profile-screen.ts), so opening one nests inside this one — deliberate: the
+   * outer modal is a page, the inner one is the small form for whatever you're changing on it, the
+   * same relationship a list screen has with its own per-row edit modal. */
+  #renderProfileModal(): TemplateResult {
+    return html`
+      <wt-modal
+        heading=${t("profile.title")}
+        .open=${this.profileOpen}
+        @wt-close=${(e: Event) => {
+          // wt-close is composed+bubbling, and profile-screen's OWN nested edit modal (opened from
+          // inside this one) dispatches the same event type — without this check, closing THAT
+          // inner modal also closed this outer one, since the event bubbles straight through it.
+          if (e.target !== e.currentTarget) return;
+          this.#closeProfile();
+        }}
+      >
+        ${
+          this.profileOpen
+            ? html`<dashboard-profile-screen
+                .api=${this.api}
+                @profile-updated=${() => void this.#probeSession()}
+              ></dashboard-profile-screen>`
+            : nothing
+        }
+        <wt-form-actions slot="footer">
+          <wt-button slot="cancel" data-test="close-profile" @click=${() => this.#closeProfile()}
+            >${t("action.close")}</wt-button
+          >
+        </wt-form-actions>
+      </wt-modal>
+    `;
+  }
+
   /**
    * The mounted logged-in face for the current `screen`. Reached only from the chrome branch of
    * {@link DashboardApp.render}, where `screen` is never `login`, so `overview` is the default: it is
@@ -1147,11 +1228,6 @@ export class DashboardApp extends LitElement {
    * that branch covered rather than leaving an unreachable exhaustive `default`.
    */
   #renderScreen(): TemplateResult {
-    if (this.screen === "profile")
-      return html`<dashboard-profile-screen
-        .api=${this.api}
-        @profile-updated=${() => void this.#probeSession()}
-      ></dashboard-profile-screen>`;
     // An active module owns its own screen — paint it before the core switch.
     const mod = this.#activeScreens.get(this.screen);
     if (mod) return mod.handle.render();

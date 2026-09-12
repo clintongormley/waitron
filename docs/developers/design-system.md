@@ -539,6 +539,38 @@ the sidebar while editing" confusion, since the page never stopped being the pag
 buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
 above for the close-event race a shared, reused modal needs to guard against.
 
+**A screen that isn't itself a navigable destination is the whole page in a modal, not just its
+edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the
+banner on any face — `dashboard-app.ts` treats it as a boolean (`profileOpen`), never a `screen`,
+and wraps the whole thing (the view-mode cards from above, not only the per-field edit modals) in
+one outer `wt-modal` that opens over whichever face is current and closes back to it. This is what
+the "one action opens a wt-modal" rule above already gives you, applied one level up: the page's
+own per-field edits still open THEIR OWN modal exactly as documented, which now nests inside the
+outer one — the same relationship a list has with its own per-row edit modal, just with the list
+itself also being a modal here since it has no page of its own to be a list ON. Two things this
+nesting makes non-optional, not just good practice:
+
+- **`wt-close` is `composed: true` and bubbles**, and two modals in the same ancestry both listen
+  for it — without a target === currentTarget guard, dismissing the INNER modal also dismisses the
+  outer one, since its close event bubbles straight through it on its way up. Both modals in this
+  pair guard for exactly this (`dashboard-app.ts`'s outer one and `profile-screen.ts`'s own inner
+  one, even though nothing nests inside IT today) — reproduced live: Cancel on the inner "Your
+  details" form dropped all the way back to the page behind Your profile, not back to Your
+  profile's own view.
+- **Mount the inner content only while the outer modal is actually open.** `dashboard-profile-screen`
+  fetches on `connectedCallback` (`getProfile`/`getLocales`/`getGoogleConfig`); mounting it
+  unconditionally alongside the modal (rather than gated on the SAME `profileOpen` the modal's own
+  `.open` reads) would make every session pay for those calls on every page load, whether or not
+  anyone ever opens their profile.
+
+Reachability by URL still matters here even though it isn't a real destination: `/manage/profile`
+opens the modal on load, with the underlying face resolving to this person's ordinary default
+(never a page literally named "profile" — `#permittedScreen` never sees that value, since
+`#applyRequestedScreen` intercepts it first) — closing the modal REPLACES the URL with that
+underlying face's own path, so "profile" never lingers as its own stop in Back-button history.
+Opening it (banner button, or the auto-open after account setup) PUSHes instead, the same as
+selecting a real nav item, so the browser's own Back button closes it like any other navigation.
+
 ### Card action buttons: calm at rest, accented on hover
 
 A card or row's action button (Edit, Change, Add, Remove, Set up, Disable, Replace, Confirm) stays

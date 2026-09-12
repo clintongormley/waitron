@@ -71,14 +71,6 @@ export class ProfileScreen extends LitElement {
       :host {
         display: block;
       }
-      .profile {
-        max-width: 36rem;
-      }
-      .profile > h1 {
-        margin: 0 0 var(--wt-space-6);
-        font-size: var(--wt-font-size-xl);
-        font-weight: var(--wt-font-weight-bold);
-      }
       section {
         margin-block: var(--wt-space-6);
       }
@@ -804,7 +796,12 @@ export class ProfileScreen extends LitElement {
       <wt-modal
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
-        @wt-close=${() => {
+        @wt-close=${(e: Event) => {
+          // wt-close is composed+bubbling; this modal has no nested modal of its own today, but
+          // guarding target===currentTarget keeps it correct if one is ever added inside it — see
+          // the matching guard on dashboard-app.ts's outer profile modal, added after exactly this
+          // bug: closing the INNER modal was also closing the outer one it bubbled through.
+          if (e.target !== e.currentTarget) return;
           if (this.#closingModal) {
             this.#closingModal = false;
             return;
@@ -850,7 +847,6 @@ export class ProfileScreen extends LitElement {
   override render() {
     const p = this.profile;
     return html`<div class="profile">
-      <h1>${t("profile.title")}</h1>
       ${this.saved ? html`<p role="status">${t("profile.saved")}</p>` : nothing}
       ${
         p === null

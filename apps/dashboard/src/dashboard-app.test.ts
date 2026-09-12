@@ -202,8 +202,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
 }
 
 it.each(["staff", "supervisor", "manager", "admin"])(
-  "makes Your profile reachable for %s, including by URL",
+  "makes Your profile reachable for %s as a modal over their ordinary landing face, by URL",
   async (role) => {
+    // "Your profile" is not itself a face — /manage/profile opens it as a modal OVER whatever the
+    // person would normally land on, since it has no sidebar entry to be "the current page" for.
     history.replaceState(null, "", "/manage/profile");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -227,12 +229,27 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=profile]")).not.toBeNull();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(modal.open).toBe(true);
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
     if (role === "staff") expect(el.shadowRoot!.querySelector("nav")).toBeNull();
-    const profile = el.shadowRoot!.querySelector("dashboard-profile-screen")!;
-    await profile.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(profile.shadowRoot!.querySelector("[data-test=close-profile]")).toBeNull();
+    // The URL still says "profile" (deep-linking still works), but the person's ordinary default
+    // is what's actually mounted underneath — never a page called "profile".
+    expect(new URL(location.href).pathname).toBe("/manage/profile");
+    expect(
+      el.shadowRoot!.querySelector(
+        role === "staff" ? "dashboard-my-schedule-screen" : "dashboard-overview-screen",
+      ),
+    ).not.toBeNull();
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await flush(el);
+    expect(modal.open).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).toBeNull();
+    // Closing replaces the URL with the underlying page's own — "profile" leaves no Back-button stop.
+    expect(new URL(location.href).pathname).toBe(
+      role === "staff" ? "/manage/my-schedule" : "/manage/overview",
+    );
   },
 );
 
@@ -781,6 +798,81 @@ describe("dashboard-app", () => {
       }),
     );
     await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
+  });
+
+  it("opens profile from any screen without navigating away, and returns to exactly that screen on close", async () => {
+    // The whole point of profile being a modal: opening it from Catalogue must not lose Catalogue —
+    // no nav item should light up for it (it has none), and closing must land back on Catalogue,
+    // not some generic default the way a real navigation away-and-back would.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(modal.open).toBe(true);
+    // Catalogue is still mounted behind the modal — profile opened OVER it, not instead of it.
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+    expect(new URL(location.href).pathname).toBe("/manage/profile");
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await flush(el);
+    expect(modal.open).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+  });
+
+  it("closing profile-screen's OWN nested edit modal does not also close the outer profile modal", async () => {
+    // wt-close is composed+bubbling. profile-screen's per-field edit modal is nested inside the
+    // outer profile modal, and both listen for that same event type — without a target===
+    // currentTarget guard, dismissing the inner one also dismissed the outer one, since its event
+    // bubbles straight through it. Reproduced live: Cancel on "Your details" dropped all the way
+    // back to the page behind Your profile, not back to Your profile's own view.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getProfile: vi.fn().mockResolvedValue({
+          displayName: "Alex",
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email: "alex@example.com",
+          pendingEmail: null,
+          locale: "en-GB",
+          hasPassword: true,
+          hasTotp: false,
+          hasGoogle: false,
+          passkeys: [],
+        }),
+      }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const outerModal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(outerModal.open).toBe(true);
+
+    const profileScreen = el.shadowRoot!.querySelector("dashboard-profile-screen")!;
+    await new Promise((r) => setTimeout(r, 0));
+    await profileScreen.updateComplete;
+    profileScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-details]")!.click();
+    await profileScreen.updateComplete;
+    const innerModal = profileScreen.shadowRoot!.querySelector("wt-modal")!;
+    expect(innerModal.open).toBe(true);
+
+    profileScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    await profileScreen.updateComplete;
+    await flush(el);
+    expect(innerModal.open).toBe(false);
+    expect(outerModal.open).toBe(true); // the bug: this used to also be false
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
   });
 
@@ -1748,15 +1840,26 @@ describe("dashboard-app", () => {
   });
 
   it("keeps the shell within one screen height so the sidebar and content scroll independently, not the page", async () => {
-    // A screen taller than the viewport (the profile screen, with several cards) used to grow the
-    // whole page past one screen while the sidebar capped itself to exactly one screen height —
-    // the sidebar then visibly stopped short of the page's real bottom. Bounding the shell to the
-    // viewport and letting both panes scroll internally fixes that; this proves it by measuring the
-    // actual rendered geometry in a real browser, not by inspecting styles.
+    // A screen taller than the viewport used to grow the whole page past one screen while the
+    // sidebar capped itself to exactly one screen height — the sidebar then visibly stopped short
+    // of the page's real bottom. Bounding the shell to the viewport and letting both panes scroll
+    // internally fixes that; this proves it by measuring the actual rendered geometry in a real
+    // browser, not by inspecting styles. A long staff list stands in for "content taller than the
+    // viewport" (profile — the original repro — is a modal now, independent of this mechanism).
     await page.viewport(1000, 600);
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue(
+          Array.from({ length: 30 }, (_, i) => ({
+            ...people[0]!,
+            personId: `p${i}`,
+            displayName: `Person ${i}`,
+          })),
+        ),
+      }),
+    });
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
     const shell = el.shadowRoot!.querySelector(".shell")!;
     expect(shell.getBoundingClientRect().height).toBeLessThanOrEqual(600);
