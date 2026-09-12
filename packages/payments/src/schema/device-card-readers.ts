@@ -18,6 +18,11 @@ export const deviceCardReaders = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.tenantId, t.deviceId] }),
+    // `restrict`, deliberately — NOT `cascade` like the sibling state-config table `payment_policy`.
+    // A device's default-reader mapping must not silently vanish if a tenant row is deleted, and it
+    // is consistent with `card_readers` (restrict-and-kept, so historical payments still resolve a
+    // reader's name). One tenant per database means a tenant delete does not happen in normal
+    // operation anyway; if it ever must, the mappings are cleared explicitly first.
     foreignKey({
       columns: [t.tenantId],
       foreignColumns: [tenants.id],

@@ -1027,9 +1027,11 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   it("naming ANOTHER tenant's reader is reader.not_found (by-id isolation, never chargeable)", async () => {
     // The by-id read scopes to the till's tenant (CLAUDE.md §3), so a reader id that belongs to a
     // different tenant is not readable here — refused `reader.not_found`, never charged. Proven by
-    // deleting the `eq(card_readers.tenantId, cfg.tenantId)` predicate in `resolvePayReader` locally:
-    // the read then LEAKS the foreign reader and this test goes green-should-be-red (captured), which
-    // restoring the predicate turns back to the 404 asserted here.
+    // deleting the `eq(card_readers.tenantId, cfg.tenantId)` predicate in `resolvePayReader` locally
+    // and running this test: the read then LEAKS the foreign reader, the isolation assertion fails,
+    // and the request returns 500 (the payment's composite FK to `card_readers` rejects the
+    // cross-tenant reader) rather than the 404 asserted here — restoring the predicate turns it back
+    // to 404. (Observed 2026-09-12, re-running the run-it probe.)
     const { cfg: a, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const { cfg: b } = await setupVenue(); // a SECOND tenant, whose reader tenant A must not reach
