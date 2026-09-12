@@ -1577,8 +1577,10 @@ jobs:
   # "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
   # of `ci` (needs `ci`, `if:` reads `needs.ci.result`) rather than merely absent.
   #
-  # A fresh runner: it re-does checkout and the buildx/qemu setup. amd64 comes back from the image
-  # job's amd64 smoke build over the shared GHA cache scope; only arm64 is really built, under QEMU.
+  # A fresh runner: it re-does checkout and the buildx setup, and builds the same single platform the
+  # image job's smoke build did minutes earlier in the same run. It LOOKS FOR that build's layers in
+  # the shared GHA cache scope — `cache-to` carries `ignore-error`, so a green smoke job is not on
+  # its own proof the export landed.
   publish:
     needs: [changes, ci]
     # `needs: ci` already enforces GitHub's implicit success(); the explicit `needs.ci.result` keeps
@@ -1592,12 +1594,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # arm64 is emulated. Registered BEFORE the builder, which probes the platforms it can serve
-      # when it is created.
-      - uses: docker/setup-qemu-action@v3
-
-      # The default builder uses the `docker` driver, which supports neither a GHA cache export nor
-      # a multi-platform manifest.
+      # The default builder uses the `docker` driver, which does not serve the `cache-to: type=gha`
+      # export below.
       - uses: docker/setup-buildx-action@v3
 
       - name: Work out the tags to publish
@@ -1633,15 +1631,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # amd64 comes back from the image job's smoke-build cache; only arm64 is really built, under
-      # QEMU, because a small ARM box is a target (spec §10). `cache-to` STAYS: the smoke build was
-      # amd64-only, so nothing has yet cached the arm64 layers this build produces.
+      # Single platform: amd64 is what every box runs. A second one costs twice over — the runner is
+      # x86, so it is built under QEMU, and `mode=max` then exports its layers into a cache at the
+      # ceiling (CLAUDE.md §2). Pay that on a release tag, not on every merge to `main` — and re-add
+      # `docker/setup-qemu-action` when you do, since buildx alone registers no binfmt handler and an
+      # emulated stage would fail at its first `RUN`.
       - name: Publish to GHCR
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
@@ -1654,7 +1654,7 @@ jobs:
           context: .
           file: deploy/Dockerfile
           target: print-agent
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.agent_tags }}
           build-args: WAITRON_BUILD_ID=${{ github.sha }}

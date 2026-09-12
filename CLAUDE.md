@@ -130,6 +130,18 @@ Traps, each of which cost a round trip:
 - **A cheap job can still be the critical path.** `mutation-verifactu` was ungated because a mutant
   is cheap; on run 30650089655 it was 3m26s of a 4m8s run. Sort a run's jobs by duration before
   calling a job cheap enough to leave ungated.
+- **The GHA cache is a shared per-repository budget and this repo sits AT it**, so a new
+  `cache-to: type=gha,mode=max` exporter does not merely cost its own bytes — it competes for space
+  against every other job's entries, and GitHub reclaims by evicting the least recently used.
+  Docker layers are what fill it here: measured 2026-09-12, the total was at GitHub's 10 GB limit
+  and image blobs were roughly nine tenths of it, leaving the Playwright browser download and the
+  pnpm store caches that the test jobs restore to share the remainder. That is the second reason
+  `publish` dropped arm64 (`linux/amd64` alone, ci.yml): an emulated second platform's `mode=max`
+  export put a second set of image layers in on every merge to `main`. The total is
+  `gh api repos/:owner/:repo/actions/cache/usage`, but it answers only "how full" — for WHICH
+  entries a new export competes with, list them with sizes and last-access times
+  (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and
+  name them before adding the export.
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`** (measured on pnpm
   9.15.0), and all feature work here happens in one. Verify anything touching the filter in a clone or
   on a real PR.

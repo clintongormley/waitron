@@ -177,6 +177,10 @@ lives there, so `docker volume` is still the whole of a box's life.
   `ghcr.io/…/waitron-print-agent:{sha-<7>,main[,<version>]}` built from the same `steps.tags` logic
   (a shared helper computes both repos' tag lists from one ref parse). Same `platforms:
   linux/amd64,linux/arm64`, same cache scope.
+
+  > **2026-09-12 — arm64 dropped** (branch `chore/amd64-only-image`). Both images now publish
+  > `linux/amd64` alone. The same-as-the-app-image relationship still holds; only the value changed.
+  > Reasons and measurements: [node-containers design](2026-09-08-node-containers-design.md) §10.
 - **`try-branch.sh`:** build both targets from the git context and set both `WAITRON_IMAGE` and
   `WAITRON_PRINT_AGENT_IMAGE` inline on the `compose up`, so a branch's agent is testable on a box the
   same way the app is.
