@@ -390,6 +390,79 @@ bar in the layout. The two primitives get there differently:
 If you build a primitive with an optional slot that carries its own spacing, use one of these two
 patterns rather than reserving space unconditionally.
 
+## Page composition
+
+The rules above cover individual primitives; a screen built only from them with no further
+guidance drifts into an unstructured stack of label/value pairs. These rules cover how to arrange
+primitives into a settings- or detail-style screen. `wt-data-table` and `wt-tabs` (see "Tabbed
+management pages" below) already carry their own composition guidance — this section is for
+everything else, built from `wt-card`, `wt-input`, and `wt-button`.
+
+### Group related fields into cards
+
+One `wt-card` per logical group. Give the group a small label above the card — not inside it —
+`--wt-font-size-sm`, bold, uppercase, `--wt-color-text-muted`. Inside the card, each field is a
+row: label on top, value below, both left-aligned:
+
+- field label: `--wt-font-size-sm`, normal weight, `--wt-color-text-muted`
+- field value: `--wt-font-size-md`, bold, `--wt-color-text`
+
+A group label and a field label are both small and muted; only the group label is bold and
+uppercase. That distinction is the entire signal separating "this is a section" from "this is a
+field" — apply it consistently or it stops working.
+
+Separate rows inside a card with a `--wt-color-border` hairline; the last row carries none.
+
+### One action per row or card — matching what it actually opens
+
+Never give a row a generic "edit this" affordance (a chevron, an icon) when the action actually
+opens something bigger than that one field, and never give a card a single action when each row
+inside it does something different. Four shapes cover what's needed so far:
+
+- **A card edited as one form** (e.g. name, phone, email and language together): one "Edit" action
+  in a footer below every row, not per-row. The footer sits below the last row, separated by the
+  same hairline border the rows use.
+- **A field whose value can't be shown** (a password, a PIN): don't render a fake masked value —
+  there's nothing real to show. Put the label and its one action ("Change") on the same row.
+- **A repeatable list** (passkeys today; the same shape applies to printers, staff, devices): each
+  item is its own row carrying its own action ("Remove"), and an "Add" action sits in the same
+  footer position the single-form case uses for "Edit".
+- **A purely informational card** (a status sentence, nothing to edit): just the sentence, muted,
+  with no action — unless there's actually something to configure, in which case that's the
+  card's one action.
+
+### Button variant discipline
+
+`secondary` (outlined) is the default for everyday actions. `primary` (filled) is reserved for the
+one main call-to-action on a screen — most settings screens have none. `danger` (red) is only for
+an action that removes or disables something; "Change password" is not destructive and stays
+`secondary`.
+
+### Spacing rhythm
+
+Using the existing `--wt-space-*` scale:
+
+- `--wt-space-6` between the page title and the first group label
+- `--wt-space-5` between one card and the next group label (i.e. between whole sections)
+- `--wt-space-2` between a group label and its card
+- row padding inside a card: `--wt-space-3` vertical, `--wt-space-4` horizontal
+
+### Typography roles
+
+| Role | Token(s) | Example |
+| --- | --- | --- |
+| Page title | `--wt-font-size-xl`, bold | "Your profile" |
+| Group label | `--wt-font-size-sm`, bold, uppercase, muted | "YOUR DETAILS" |
+| Field label | `--wt-font-size-sm`, normal weight, muted | "Name" |
+| Field value | `--wt-font-size-md`, bold | "Clinton Gormley" |
+
+`wt-button` carries its own type sizing through its `size` property — these roles cover page text,
+not button labels.
+
+The till and kitchen-display surfaces reuse the same tokens but have their own constraints (touch
+targets, glanceability at a distance) that these rules don't yet cover; treat them separately
+rather than assuming this composition applies unchanged.
+
 ## Event discipline
 
 Custom events crossing a shadow boundary are `composed: true`, so a native event re-emitted
