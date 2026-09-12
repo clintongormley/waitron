@@ -505,6 +505,11 @@ unfiltered `main` run, not a wrong hook.
 
 ## 4. Testing
 
+- **Test public recovery links through the real boot modes that serve them.** Mounting a route on a
+  bare Hono app cannot establish that trading or recovery boot installs it. B1's standalone route
+  tests passed while the real trading listener returned 404; the boot regressions now request the
+  guide and certificate aliases (`apps/server/src/boot.test.ts`, `node-entry.test.ts`).
+
 - **Test provider HTTP refusals through the real client, as well as a throwing fake seat.** The
   SumUp unpair route's fake proved that a thrown error preserved the local reader, but the HTTP
   client silently accepted 401/403/409. The reader-deletion regressions now reject those responses

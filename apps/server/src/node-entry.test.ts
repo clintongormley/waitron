@@ -847,6 +847,9 @@ describe("serveRecovery", () => {
       const res = await fetch(`http://127.0.0.1:${port}/`);
       expect(res.status).toBe(200);
       expect(await res.text()).toContain("module.config_invalid");
+      const trust = await fetch(`http://127.0.0.1:${port}/setup/trust`);
+      expect(trust.status).toBe(200);
+      expect(await trust.text()).toContain("Connect to this Waitron box");
 
       // The retry, over a REAL socket: the body must arrive in full BEFORE `onRetry` (which exits
       // the process in production) runs. A test through `app.request()` cannot see this ordering at

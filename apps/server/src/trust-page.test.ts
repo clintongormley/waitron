@@ -37,3 +37,56 @@ describe("renderTrustPage", () => {
     expect(CA_FILENAME).toBe("waitron-ca.crt");
   });
 });
+
+it("covers common operating systems, browser stores and replacement certificates", () => {
+  const html = renderTrustPage({
+    reachUrls: [],
+    caAvailable: true,
+    caDownloadPath: "/ca.crt",
+    httpsUrl: "https://waitron.local",
+  });
+  for (const name of [
+    "macOS",
+    "Windows",
+    "Linux",
+    "Android",
+    "iPhone",
+    "iPad",
+    "Chrome",
+    "Edge",
+    "Firefox",
+    "Safari",
+  ])
+    expect(html).toContain(name);
+  expect(html).toContain("re-imaged");
+  expect(html).toContain("fully quit");
+  expect(html).toContain("old certificate");
+  expect(html).toContain("HTTPS");
+});
+
+it("gives operator-certificate guidance without referring to missing instructions", () => {
+  const html = renderTrustPage({
+    reachUrls: [],
+    caAvailable: false,
+    caDownloadPath: "/ca.crt",
+    httpsUrl: "https://waitron.local",
+  });
+  expect(html).not.toContain("3. Open Waitron");
+  expect(html).not.toContain("The instructions above include replacement");
+  expect(html).toContain("If this box was re-imaged");
+  expect(html).toContain("whoever installed");
+});
+
+it("does not describe a plain HTTP recovery destination as secure", () => {
+  const html = renderTrustPage({
+    reachUrls: ["http://waitron.local"],
+    caAvailable: false,
+    caDownloadPath: "/ca.crt",
+    httpsUrl: "http://waitron.local",
+    qrSvg: "<svg></svg>",
+  });
+  expect(html).toContain('href="http://waitron.local">Continue to Waitron</a>');
+  expect(html).not.toContain("secure site");
+  expect(html).not.toContain("secure box address");
+  expect(html).not.toContain("Install the certificate on that device first");
+});

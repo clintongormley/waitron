@@ -59,7 +59,7 @@ describe("landing app", () => {
     }
   });
 
-  // The page's "Continue to the secure site" hand-off — the whole reason the landing page carries
+  // The page's "Continue to Waitron" hand-off — the whole reason the landing page carries
   // `httpsUrl`: the visitor follows it AFTER trusting the CA, escaping the HTTPS interstitial.
   it("renders the HTTPS hand-off link", async () => {
     const dir = stateDirWithCa();
@@ -72,14 +72,13 @@ describe("landing app", () => {
       });
       const html = await (await app.request("http://waitron.local/")).text();
       expect(html).toContain('href="https://waitron.local:8080"');
-      expect(html).toMatch(/Continue to the secure site/i);
+      expect(html).toMatch(/Continue to Waitron/i);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  // Operator-cert box: no box CA. The page omits the download link (shows the operator-cert note) and
-  // the download route 404s `no_box_ca` — the same all-errors-collapse posture as discovery-api.
+  // Missing CA files remove the download offer and return the same no_box_ca response.
   it("omits the download link and 404s /ca.crt when there is no box CA", async () => {
     const dir = stateDirWithoutCa();
     try {
@@ -125,4 +124,25 @@ describe("landing app", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
+
+it("serves the discovery guide and certificate paths as aliases on the landing app", async () => {
+  const dir = stateDirWithCa();
+  try {
+    const app = buildLandingApp({
+      stateDir: dir,
+      reachUrls: [],
+      httpsUrl: "https://waitron.local",
+      log: () => {},
+    });
+    const page = await app.request("http://waitron.local/setup/trust");
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Connect to this Waitron box");
+    const cert = await app.request("http://waitron.local/setup-api/ca.crt");
+    expect(cert.status).toBe(200);
+    expect(cert.headers.get("cache-control")).toBe("no-store");
+    expect(await cert.text()).toContain("BEGIN CERTIFICATE");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

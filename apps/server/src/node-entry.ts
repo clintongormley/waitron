@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 import pg from "pg";
 import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
@@ -12,6 +12,7 @@ import { manifestSets } from "@waitron/migrations";
 // and `EntryDeps` has a field of the same name.
 import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning";
 import {
+  BOX_HOSTNAME,
   DEFAULT_MIGRATIONS_ROOT,
   DEFAULT_MEDIA_ROOT,
   DEFAULT_STATE_ROOT,
@@ -20,7 +21,7 @@ import {
   type LandingListenerConfig,
 } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
-import { parseBoxAddresses } from "./box-reach.js";
+import { listBoxIpv4, parseBoxAddresses } from "./box-reach.js";
 import {
   DEFAULT_HTTP_HOST,
   DEFAULT_HTTP_LANDING_PORT,
@@ -42,6 +43,7 @@ import { BOOT_INCOMPLETE, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
 import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
+import { mountDiscovery } from "./discovery-api.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { classifyBootFailure } from "./boot-failure.js";
 import { redactSecrets } from "./redact-secrets.js";
@@ -139,21 +141,38 @@ export function serveRecovery(
 ): Promise<ReturnType<typeof serve>> {
   return new Promise((resolve, reject) => {
     const tls = recoveryTlsFiles(opts.stateDir);
-    const server = serve(buildServeOptions({ fetch: app.fetch, port: opts.port }, tls), (info) => {
-      opts.log("warn", "recovery.listening", { port: info.port, tls: tls !== undefined });
-      // Best-effort, exactly as in trading mode: `startLandingListener` swallows its own bind failure
-      // and returns undefined when there is nothing to serve (no minted leaf, or the port disabled),
-      // so a missing or unbindable landing page never takes the recovery page down. Started only after
-      // the HTTPS bind succeeds so the two do not race for the same port.
-      const startLanding = opts.startLanding ?? startLandingListener;
-      const landing = opts.landing ? startLanding(opts.landing, opts.log) : undefined;
-      if (landing !== undefined) {
-        // The recovery server outlives everything until the process exits (production never closes it),
-        // so this fires only on a deliberate teardown — a test, or a future shutdown path.
-        server.on("close", () => void landing.close().catch(() => {}));
-      }
-      resolve(server);
-    });
+    const surface = new Hono();
+    mountDiscovery(
+      surface,
+      {
+        stateDir: opts.stateDir,
+        hostname: BOX_HOSTNAME,
+        port: opts.port,
+        secure: tls !== undefined,
+        listIpv4: () => opts.landing?.boxAddresses ?? listBoxIpv4(),
+        discoveryEnabled: false,
+      },
+      opts.log,
+    );
+    surface.route("/", app);
+    const server = serve(
+      buildServeOptions({ fetch: surface.fetch, port: opts.port }, tls),
+      (info) => {
+        opts.log("warn", "recovery.listening", { port: info.port, tls: tls !== undefined });
+        // Best-effort, exactly as in trading mode: `startLandingListener` swallows its own bind failure
+        // and returns undefined when there is nothing to serve (no minted leaf, or the port disabled),
+        // so a missing or unbindable landing page never takes the recovery page down. Started only after
+        // the HTTPS bind succeeds so the two do not race for the same port.
+        const startLanding = opts.startLanding ?? startLandingListener;
+        const landing = opts.landing ? startLanding(opts.landing, opts.log) : undefined;
+        if (landing !== undefined) {
+          // The recovery server outlives everything until the process exits (production never closes it),
+          // so this fires only on a deliberate teardown — a test, or a future shutdown path.
+          server.on("close", () => void landing.close().catch(() => {}));
+        }
+        resolve(server);
+      },
+    );
     server.on("error", (error: NodeJS.ErrnoException) => {
       reject(new AppError("server.listen_failed", { port: opts.port, code: error.code ?? "" }));
     });

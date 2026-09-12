@@ -36,3 +36,10 @@ export const statusStyles = css`
     color: var(--wt-color-text-muted);
   }
 `;
+
+/** Native help links use the themed foreground color inside each screen's shadow root. */
+export const helpLinkStyles = css`
+  a {
+    color: var(--wt-color-primary);
+  }
+`;

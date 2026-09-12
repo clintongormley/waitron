@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 // Side-effect imports register the screen custom elements this shell only names as tags below.
 import "./screens/role-screen.js";
+import "./screens/connection-screen.js";
 import "./screens/connect-screen.js";
 import "./screens/restore-screen.js";
 import "./screens/live-source-screen.js";
@@ -27,8 +28,9 @@ import { SERVER_FIELDS } from "./server-fields.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
- * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The first screen is `mode`,
- * which offers the four product journeys:
+ * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The first screen checks the
+ * connection and offers certificate help.
+ * The following `mode` screen offers the four product journeys:
  *
  * - Demo or Prepare → `admin` (first operator) → `venue` (tenant + location + series) → `review`
  *   (confirm + POST) → `provisioning` (in flight) → `done` (restarting).
@@ -38,6 +40,7 @@ import { SERVER_FIELDS } from "./server-fields.js";
  * - Join or recover → `role`, whose mirror branch opens `connect` and backup branch opens `restore`.
  */
 export type Screen =
+  | "connection"
   | "role"
   | "connect"
   | "restore"
@@ -164,9 +167,8 @@ const ADOPT_GENERIC_ERROR =
  * the merged draft ({@link SetupApp.#onAdvance}), so the venue screen need not read `mode` to route.
  *
  * On boot it reads `GET /setup-api/status` ({@link SetupApp.#boot}) to learn the box's `environment`,
- * so the wizard can warn before provisioning a real `production` venue. That read is fully wrapped: a
- * failure must never stop the shell from rendering (the `apps/till` `#boot` unhandled-rejection
- * defect, `docs/backlog.md`), so the wizard simply comes up with no environment known.
+ * so the wizard can warn before provisioning a real `production` venue. A failed read keeps the
+ * connection screen visible with help and a retry, without collecting credentials.
  */
 @customElement("setup-app")
 export class SetupApp extends LitElement {
@@ -188,8 +190,11 @@ export class SetupApp extends LitElement {
    * attribute string. */
   @property({ attribute: false }) api!: SetupApi;
 
-  /** Which screen is showing. Defaults to `mode`, the four-choice onboarding entry point. */
-  @state() private screen: Screen = "mode";
+  /** Certificate setup precedes collecting credentials and business details. */
+  @state() private screen: Screen = "connection";
+  @state() private connectionError?: string;
+  @state() private connectionChecking = false;
+  #connectionGeneration = 0;
 
   /**
    * The box's stamped deployment environment, read from `GET /setup-api/status` on boot. `undefined`
@@ -286,21 +291,43 @@ export class SetupApp extends LitElement {
     void this.#boot();
   }
 
-  /**
-   * Read the box's environment so the wizard can warn before a real production filing. Fully wrapped:
-   * a failed/unreachable status read must not stop the shell rendering — the wizard comes up with no
-   * environment known and the operator can still proceed (the `apps/till` `#boot` follow-up,
-   * `docs/backlog.md`). The `isConnected` guard keeps a teardown mid-fetch from writing state onto a
-   * detached element.
-   */
+  /** Late initial reads must not overwrite a newer user-initiated connection check. */
   async #boot(): Promise<void> {
+    const generation = ++this.#connectionGeneration;
     try {
-      const status = await this.api.getStatus();
-      if (!this.isConnected) return;
+      const [status, discovery] = await Promise.all([
+        this.api.getStatus(),
+        this.api.getDiscovery(),
+      ]);
+      if (!this.isConnected || generation !== this.#connectionGeneration) return;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
+      // Availability describes the box, not whether this browser has installed its CA.
+      if (this.screen === "connection" && !discovery.caDownloadAvailable) this.screen = "mode";
     } catch {
-      // Leave `environment` undefined — a failed status read is never a reason to block setup.
+      if (this.isConnected && generation === this.#connectionGeneration)
+        this.connectionError =
+          "We could not read the box's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
+    }
+  }
+
+  async #continueConnection(): Promise<void> {
+    if (this.connectionChecking) return;
+    const generation = ++this.#connectionGeneration;
+    this.connectionChecking = true;
+    this.connectionError = undefined;
+    try {
+      const status = await this.api.getStatus();
+      if (!this.isConnected || generation !== this.#connectionGeneration) return;
+      this.environment = status.environment;
+      this.developmentMode = status.developmentMode === true;
+      this.screen = "mode";
+    } catch {
+      if (this.isConnected && generation === this.#connectionGeneration)
+        this.connectionError =
+          "We could not read the box's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
+    } finally {
+      if (generation === this.#connectionGeneration) this.connectionChecking = false;
     }
   }
 
@@ -487,7 +514,8 @@ export class SetupApp extends LitElement {
         this.provisionCanRetry = true;
         return;
       default:
-        this.provisionMessage = "Provisioning failed. You can try again.";
+        this.provisionMessage =
+          "Provisioning failed. Check that the box is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.";
         this.provisionCanRetry = true;
         return;
     }
@@ -677,6 +705,13 @@ export class SetupApp extends LitElement {
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
+      case "connection":
+        return html`<setup-connection-screen
+          data-test="screen-connection"
+          .errorMessage=${this.connectionError}
+          .checking=${this.connectionChecking}
+          @connection-continue=${() => void this.#continueConnection()}
+        ></setup-connection-screen>`;
       case "role":
         return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
       case "restore":

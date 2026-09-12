@@ -34,9 +34,17 @@ later (to update, say) does nothing destructive, and in particular it never mint
 `POSTGRES_PASSWORD` — the cluster keeps the first one, so a regenerated `.env` would lock the app out
 of its own database.
 
-It finishes by printing — and, when a monitor is attached, showing on the console — a QR of
-`https://waitron.local`. That URL resolves only once the app is serving, so the whole instruction to
-the restaurant is: open it on your phone, and if it does not load, wait a minute.
+It finishes by printing a setup address and QR code, also shown on an attached monitor:
+`http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's
+connection certificate, then continue to the secure site. The guide covers common operating systems
+and browsers, including replacing the old certificate after a re-image and fully quitting the browser.
+If the name does not resolve, use the box's numeric network address at the same path.
+
+A browser may upgrade HTTP to HTTPS before the guide opens. Both listeners serve the guide and
+certificate downloads at matching paths, but HTTPS can still show a certificate warning. Use the
+browser's option to visit the local HTTP site if offered, or transfer the certificate from another
+device that can reach the box. Opening the wizard directly also offers certificate help before you
+enter setup details. Its Continue button checks communication with the box, not installed trust.
 
 On a box that already has a checkout of this repository, run the script directly instead of piping it
 through `bash`:
@@ -53,6 +61,11 @@ dev stack (`docker-compose.yml`, started by `wa-wt`, which sets `COMPOSE_PROJECT
 two collide, and a `docker compose up` here would reconcile that running project instead. Pass
 `COMPOSE_PROJECT_NAME=waitron-<something>` when exercising this file on such a machine; on a box the
 collision cannot arise.
+
+If HTTP is disabled, use the installer's **Secure help** address, `https://waitron.local/setup/trust`.
+The main listener serves this guide during setup, trading, pending adoption and boot recovery.
+While the listener presents your own TLS certificate, the guide directs you to whoever installed
+it. It does not offer the box's fallback CA, which cannot certify that connection.
 
 ## Updating and operating
 

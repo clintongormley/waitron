@@ -7,55 +7,30 @@ import { caCertPath } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 
-/**
- * The one HTTP surface onboarding slice 3 adds: it lets a device on the LAN discover and trust this
- * box before any venue is bound. Three UNAUTHENTICATED routes (like setup mode and `/media`, none of
- * these is secret): the self-signed CA download, a machine-readable discovery document, and a
- * server-rendered trust page carrying an inline SVG QR. Everything IO-touching is injected
- * (`listIpv4`, `renderQrSvg`) so the suite runs on a bare `new Hono()` + a temp state dir.
- *
- * The CA is the one slice 2a minted and persisted; its path is FIXED at `<stateDir>/tls/ca.crt`,
- * never derived from the request, so no crafted URL can point the read anywhere else. A box running
- * an operator-supplied certificate has no such file — every CA-touching route treats "cannot read the
- * CA" uniformly as "no box CA", the same all-errors-collapse posture `caExists` below encodes.
- */
+/** Public certificate files use a fixed state path; requests never choose a filesystem location. */
 export interface DiscoveryDeps {
   /** The persisted state dir (config.stateDir); the CA lives at <stateDir>/tls/ca.crt (2a). */
   stateDir: string;
   hostname: string; // "waitron.local"
   port: number; // config.httpPort
-  secure: boolean; // config.tls !== undefined || the box mints its own (setup mode → true)
+  secure: boolean;
+  /** Machine discovery is restricted to setup; certificate help remains public in every mode. */
+  discoveryEnabled?: boolean;
+  /** False when the listener presents operator TLS, even if a fallback CA exists on disk. */
+  serveBoxCa?: boolean;
   /** Injected for tests. */
   listIpv4?: () => string[];
   /** Injected for tests; default `QRCode.toString(text, { type: "svg", margin: 1 })`. */
   renderQrSvg?: (text: string) => Promise<string>;
 }
 
-/** This origin's CA download path — the route this API registers and advertises in its discovery
- *  document, and the link it passes to the shared trust page. The plain-HTTP landing origin (Task 3)
- *  serves the same page with a different path, which is why `renderTrustPage` takes it as a parameter. */
+/** Existing discovery clients keep this path; /ca.crt also survives an HTTP-to-HTTPS upgrade. */
 const CA_DOWNLOAD_PATH = "/setup-api/ca.crt";
 
-/**
- * The default QR renderer — the real `qrcode` path, exercised only when `renderQrSvg` is NOT injected.
- * Every test in this task injects a fast stub, so this right-hand side runs only under a full boot
- * (Task 4), which is where it is measured — left to the `apps/server` coverage aggregate rather than
- * pinned by a real-`qrcode` unit test, the same real-only-path posture `box-reach.ts`'s `listBoxIpv4`
- * and `boot.ts` record. `qrcode` is CJS, hence the default import.
- */
 const defaultRenderQrSvg = (text: string): Promise<string> =>
   QRCode.toString(text, { type: "svg", margin: 1 });
 
-/**
- * Mount the three discovery routes on an existing Hono app. Registered by Task 4's boot wiring in the
- * setup branch, alongside `mountSetup`.
- *
- *   - `GET /setup-api/ca.crt` → the persisted CA as a downloadable attachment (200), or a
- *     `no_box_ca` 404 JSON when the box runs an operator-supplied certificate.
- *   - `GET /setup-api/discovery` → the `ReachInfo` fields plus whether the CA is downloadable.
- *   - `GET /setup/trust` → a self-contained trust page: reach URLs, the CA link (or the operator-cert
- *     note), concise per-OS trust steps, and the inline SVG QR of the IP-QR target.
- */
+/** Mount public certificate help/downloads and, when enabled, setup's discovery document. */
 export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): void {
   const caPath = caCertPath(deps.stateDir);
   const renderQrSvg = deps.renderQrSvg ?? defaultRenderQrSvg;
@@ -71,26 +46,27 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       listIpv4: deps.listIpv4,
     });
 
-  // Does the box have its own CA to serve? These read-on-every-page-view routes (`/discovery`,
-  // `/trust`) collapse ENOENT (operator-cert box) and any other read failure alike to `false`: a
-  // page view is not a deliberate download, so it just shows "no box CA" rather than logging. The
-  // download route below is the deliberate action, so it distinguishes the two error classes.
+  // Page views omit unavailable downloads; explicit downloads log unexpected read failures.
   const caExists = (): Promise<boolean> =>
-    access(caPath).then(
-      () => true,
-      () => false,
-    );
+    deps.serveBoxCa === false
+      ? Promise.resolve(false)
+      : access(caPath).then(
+          () => true,
+          () => false,
+        );
 
-  app.get(CA_DOWNLOAD_PATH, async (c) => {
+  app.on("GET", [CA_DOWNLOAD_PATH, "/ca.crt"], async (c) => {
+    if (deps.serveBoxCa === false) {
+      return c.json(
+        { error: "no_box_ca", message: "No box CA is available for this connection." },
+        404,
+      );
+    }
     let pem: string;
     try {
       pem = await readFile(caPath, "utf8");
     } catch (error) {
-      // ENOENT is the ordinary case — this box uses an operator-supplied certificate, so there is no
-      // box CA to hand out; unlogged, like a missing image in `media-api.ts`. Any OTHER read failure
-      // (EACCES, EISDIR, …) of this box-owned path is a misconfiguration worth one line, but STILL the
-      // same `no_box_ca` 404 to the LAN caller: this route never 500s and never leaks fs detail on a
-      // download. Same ENOENT-vs-other split, and same "log but don't leak", as `media-api.ts`.
+      // Missing files need no operator log. Other read failures are logged without exposing paths.
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT") {
         // `code` is optional on the ERROR TYPE, but every fs read failure this route can hit (EISDIR,
@@ -102,7 +78,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       return c.json(
         {
           error: "no_box_ca",
-          message: "This box uses an operator-supplied certificate; no CA download is needed.",
+          message: "No box CA is available for this connection.",
         },
         404,
       );
@@ -114,14 +90,16 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
     });
   });
 
-  app.get("/setup-api/discovery", async (c) => {
-    const reach = getReach();
-    return c.json({
-      ...reach,
-      caDownloadAvailable: await caExists(),
-      caDownloadPath: CA_DOWNLOAD_PATH,
+  if (deps.discoveryEnabled !== false) {
+    app.get("/setup-api/discovery", async (c) => {
+      const reach = getReach();
+      return c.json({
+        ...reach,
+        caDownloadAvailable: await caExists(),
+        caDownloadPath: CA_DOWNLOAD_PATH,
+      });
     });
-  });
+  }
 
   app.get("/setup/trust", async (c) => {
     const reach = getReach();

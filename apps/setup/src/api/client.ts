@@ -190,6 +190,10 @@ export class SetupApi {
     this.#fetchImpl = fetchImpl;
   }
 
+  getDiscovery(): Promise<{ caDownloadAvailable: boolean }> {
+    return this.#request("/setup-api/discovery", "GET");
+  }
+
   /** `GET /setup-api/status` — the box's environment + outstanding steps, read on boot. */
   getStatus(): Promise<SetupStatus> {
     return this.#request<SetupStatus>("/setup-api/status", "GET");

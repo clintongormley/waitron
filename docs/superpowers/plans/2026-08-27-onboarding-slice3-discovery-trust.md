@@ -1,5 +1,13 @@
 # Onboarding Slice 3: Discovery + CA-serving (mDNS · `/setup-api/ca.crt` · IP-QR · trust page) — Implementation Plan
 
+> **2026-09-12 update:** [B1's design](../specs/2026-09-12-box-trust-onboarding-design.md)
+> supersedes this plan's setup-only guide/download mounting and missing-CA wording. Public help and
+> certificate aliases now precede the setup, trading, adoption and recovery routes. Machine discovery
+> remains setup-only. Operator TLS suppresses the fallback CA even when its file exists; a missing CA
+> alone does not establish that the box uses an operator certificate. The implementation below is the
+> historical slice-3 plan.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make a freshly-installed box **discoverable and trustable on the LAN** without any appliance OS: the server advertises `waitron.local` over mDNS from inside its own process, serves its self-signed **CA for download** (`GET /setup-api/ca.crt`, the cert 2a minted into the state dir), publishes machine-readable **discovery info** (`GET /setup-api/discovery`), and renders a **minimal trust page** (`GET /setup/trust`) with per-OS CA-trust steps and an **IP-QR** fallback for when `.local` does not resolve (iOS).

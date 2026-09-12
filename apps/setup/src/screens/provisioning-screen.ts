@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
-import { actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
+import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
 import { dispatchProvisionRequested } from "../events.js";
 
 /**
@@ -26,6 +26,7 @@ import { dispatchProvisionRequested } from "../events.js";
 @customElement("setup-provisioning-screen")
 export class SetupProvisioningScreen extends LitElement {
   static override styles = [
+    helpLinkStyles,
     baseStyles,
     statusStyles,
     errorStyles,
@@ -64,6 +65,13 @@ export class SetupProvisioningScreen extends LitElement {
         <wt-card>
           <h1>Provisioning</h1>
           <p class="error" role="alert" data-test="error">${this.message}</p>
+          <p>
+            If the browser shows a certificate warning, or this box was re-imaged,
+            <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
+              >open certificate and connection help</a
+            >
+            in a new tab. Your entries stay in this tab until you close or reload it.
+          </p>
           ${
             this.canRetry
               ? html`<div class="actions">
