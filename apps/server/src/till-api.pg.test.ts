@@ -28,6 +28,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { MANUAL_PROVIDER, SimulatorPaymentProvider } from "@waitron/payments";
+import { CARD_PROVIDERS } from "@waitron/composition";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -309,7 +310,9 @@ function fakePool(cfg: TillConfig, providerDb: Database, client: FakeStripe): Ca
   };
 }
 
-/** `apiDeps` plus a `CardProviderPool`, for the `POST /api/pay` reader-routing tests. */
+/** `apiDeps` plus a `CardProviderPool`, for the `POST /api/pay` reader-routing tests. Threads the
+ * real composition list so the pay path resolves a reader's provider `credentialPurpose` from its
+ * seat, exactly as boot does. */
 function apiDepsWithPool(cfg: TillConfig, pool: CardProviderPool): TillApiDeps {
   return {
     db: suite.admin,
@@ -319,6 +322,7 @@ function apiDepsWithPool(cfg: TillConfig, pool: CardProviderPool): TillApiDeps {
     secureCookies: false,
     venueLocale: cfg.locale,
     pool,
+    providers: CARD_PROVIDERS,
   };
 }
 

@@ -20,8 +20,8 @@ import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalo
 import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from "@waitron/layouts";
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { PaymentProvider } from "@waitron/payments";
-import { cardReaders, deviceCardReaders } from "@waitron/payments";
+import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
+import { cardProviderById, cardReaders, deviceCardReaders } from "@waitron/payments";
 import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -151,6 +151,14 @@ export interface TillApiDeps {
    */
   pool?: CardProviderPool;
   /**
+   * The card-provider composition list (`CARD_PROVIDERS`), threaded from `boot.ts`. The pay path reads
+   * a reader's provider `credentialPurpose` from its seat here rather than duplicating a provider →
+   * purpose map. OPTIONAL only so the hermetic session/park suites that never reach the reader-pay
+   * path need not build one; a live boot always supplies it, and the pre-check that uses it only runs
+   * once a reader row has resolved (which those suites never seed).
+   */
+  providers?: readonly CardProviderContribution[];
+  /**
    * Whether this host runs in DEV mode (SP-C, `config.devMode`) — the switch the per-tab device
    * override header (`x-waitron-dev-device`) gates on. Boot wires `config.devMode`; forwarded to the
    * device guards (`tryReadDevice`/`requireSaleTillId`/`assertNotHandheld`/`assertDeviceCapability`)
@@ -210,21 +218,6 @@ function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_termin
 }
 
 /**
- * The vault credential purpose a reader's provider seals under — the value the seat declares as its
- * `credentialPurpose` (`payments.sumup` / `payments.stripe`). Kept here so the pay path can PRE-CHECK
- * that the provider is connected before it drives the reader: both provider adapters SWALLOW a
- * deferred credential-read failure into a payment DECLINE (`collect`'s own try/catch), so a naive
- * charge on a disconnected provider would report a misleading decline instead of the actionable
- * `reader.provider_disconnected`. The purposes are stable strings (never renamed, like error codes),
- * so a small map here is cheaper than threading the whole seat registry onto this surface.
- */
-function credentialPurposeForReader(provider: string): string | undefined {
-  if (provider === "sumup") return "payments.sumup";
-  if (provider === "stripe") return "payments.stripe";
-  return undefined;
-}
-
-/**
  * The `card_readers` row a `/api/pay` charge routes to (Task 12), resolved as the app role under the
  * till's tenant. The reader is `body.readerId` when the caller named one (Task 17's picker), else the
  * paying DEVICE's default (`device_card_readers`). A device with neither → `reader.not_found`. The
@@ -273,9 +266,11 @@ async function resolvePayReader(
     // pre-check a disconnected provider would answer a misleading "declined" (200) instead of the
     // actionable `reader.provider_disconnected` (409). Metadata read only — the purpose, never the
     // ciphertext — scoped by the explicit `tenant_id` predicate (CLAUDE.md §3), the same pre-check the
-    // payments-management surface makes before add-reader.
-    const purpose = credentialPurposeForReader(reader.provider);
-    if (purpose !== undefined) {
+    // payments-management surface makes before add-reader. The seat declares its own credential
+    // purpose (`CardProviderContribution.credentialPurpose`), read from the composition list boot
+    // threads in, so there is no provider → purpose map to keep in step with the seats.
+    if (deps.providers !== undefined) {
+      const purpose = cardProviderById(deps.providers, reader.provider).credentialPurpose;
       const [cred] = await tx
         .select({ purpose: tenantCredentials.purpose })
         .from(tenantCredentials)

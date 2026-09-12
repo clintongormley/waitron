@@ -16,6 +16,7 @@ import {
   cardReaders,
   deviceCardReaders,
   type CardProviderContribution,
+  type CardProviderRuntimeDeps,
 } from "@waitron/payments";
 import {
   deleteCredential,
@@ -134,6 +135,16 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       });
       return fn(tx);
     });
+
+  // The runtime context every provider seat call takes — this tenant's db handle, the vault key ring,
+  // the tenant id, and the test-injected fetch when present. Built identically at each reader call
+  // (add / status / remove), so it lives in one place.
+  const runtimeDeps = (): CardProviderRuntimeDeps => ({
+    db: deps.db,
+    ring: deps.ring,
+    tenantId: deps.cfg.tenantId,
+    ...(deps.fetch ? { fetch: deps.fetch } : {}),
+  });
 
   // ── List every provider and whether it is connected (payments.manage) ────────────────────────────
   app.get("/management-api/payments/providers", (c) =>
@@ -294,12 +305,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // Relay to the seat (pairs SumUp / verifies Stripe) OUTSIDE any transaction — a provider
       // round-trip. The seat reads the sealed credential itself.
       const result = await seat.readers.add(
-        {
-          db: deps.db,
-          ring: deps.ring,
-          tenantId: deps.cfg.tenantId,
-          ...(deps.fetch ? { fetch: deps.fetch } : {}),
-        },
+        runtimeDeps(),
         {
           name,
           ...(code !== undefined ? { code } : {}),
@@ -340,12 +346,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // operator's next action is to reconnect and add again).
         await seat.readers
           .remove(
-            {
-              db: deps.db,
-              ring: deps.ring,
-              tenantId: deps.cfg.tenantId,
-              ...(deps.fetch ? { fetch: deps.fetch } : {}),
-            },
+            runtimeDeps(),
             result.providerRef,
           )
           .catch(() => {});
@@ -372,12 +373,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       });
       const seat = cardProviderById(deps.providers, reader.provider);
       const status = await seat.readers.status(
-        {
-          db: deps.db,
-          ring: deps.ring,
-          tenantId: deps.cfg.tenantId,
-          ...(deps.fetch ? { fetch: deps.fetch } : {}),
-        },
+        runtimeDeps(),
         reader.providerRef,
       );
       return c.json(status);
@@ -405,12 +401,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // the reader still active and the whole retire retryable; a retry re-runs the vendor call.
       const seat = cardProviderById(deps.providers, reader.provider);
       await seat.readers.remove(
-        {
-          db: deps.db,
-          ring: deps.ring,
-          tenantId: deps.cfg.tenantId,
-          ...(deps.fetch ? { fetch: deps.fetch } : {}),
-        },
+        runtimeDeps(),
         reader.providerRef,
       );
       // Only once the vendor has forgotten it do we retire the row = UPDATE `active=false,

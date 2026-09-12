@@ -1859,6 +1859,7 @@ export async function startServer(
       secureCookies,
       cardProvider,
       pool: cardPool,
+      providers: CARD_PROVIDERS,
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
