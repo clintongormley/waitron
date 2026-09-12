@@ -113,7 +113,10 @@ describe("your profile", () => {
     const { el, api } = await mount({
       getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null, lastNames: " " }),
     });
-    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
+    // The details card (and its Edit button) stays visible behind the modal — see "renders the
+    // details card behind the edit modal, not in place of it" below — so what actually proves the
+    // edit form opened automatically is the modal itself being open with the incomplete fields shown.
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
     for (const [name, key] of [
       ["firstNames", "form.first_names_required"],
       ["lastNames", "form.last_names_required"],
@@ -146,6 +149,42 @@ describe("your profile", () => {
       el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="privacy-notice"]')!.href,
     ).toBe("https://restaurant.example/privacy");
     await expectNoA11yViolations(host);
+  });
+  it("opens Edit in a modal over the details card, not in place of it", async () => {
+    const { el } = await mount();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(modal.open).toBe(false);
+    await click(el, "edit-details");
+    expect(modal.open).toBe(true);
+    // The card (and its own Edit button) is still there behind the modal — this is the whole point
+    // of the modal pattern: editing overlays the page rather than replacing it.
+    expect(el.shadowRoot!.textContent).toContain("alex@example.com");
+    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).not.toBeNull();
+    await click(el, "cancel");
+    expect(modal.open).toBe(false);
+  });
+  it("a stale close from the previous modal never reopens or reverts a newer one", async () => {
+    // The native <dialog> underlying wt-modal fires its "close" event asynchronously relative to
+    // the property change that triggers it. If that event from an EARLIER close (Cancel, or a
+    // successful Save) arrives after a NEWER edit has already opened, it must not stomp the newer
+    // one back to view. Reproduced only under real timing load — this simulates the race
+    // deterministically by dispatching the delayed event by hand, rather than depending on luck.
+    const { el } = await mount();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await click(el, "edit-details");
+    // Cancel, then immediately open a different edit — both BEFORE Lit has rendered either
+    // transition, so the real "close" event this Cancel will eventually cause has not fired yet
+    // (its flag is still armed) by the time "remove" is already the current mode.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-passkey]")!.click();
+    await flush(el);
+    expect(modal.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-input[name=currentPassword]")).not.toBeNull();
+    // The delayed "close" this Cancel caused, arriving only now — it must not undo "remove".
+    modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(modal.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-input[name=currentPassword]")).not.toBeNull();
   });
   it("hides the change-password action for an account with no password", async () => {
     const { el, host } = await mount({

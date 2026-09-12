@@ -145,11 +145,13 @@ export class ProfileScreen extends LitElement {
       }
       /* A card action stays visually calm (the shared secondary look) until you interact with it —
          width-driven, so ch is the right unit (same reasoning as dashboard-app.ts's own
-         --dashboard-sidebar-width), sized to fit "Disable"/"Replace", the longest labels here. The
-         colour appears only via wt-button's exposed button part on hover, never at rest, so a row
-         of these reads as one calm set of actions rather than a wall of solid colour. */
+         --dashboard-sidebar-width). 12ch comfortably clears "Disable"/"Replace"/"Confirm", the
+         longest labels here, so EVERY action clamps to the same width regardless of its own text —
+         8ch used to just barely fit the longest ones, so they still set their own (wider) width
+         instead of sharing one. The colour appears only via wt-button's exposed button part on
+         hover, never at rest, so a row of these reads as one calm, evenly-sized set of actions. */
       .card-action {
-        min-width: 8ch;
+        min-width: 12ch;
       }
       .card-action.accent-primary::part(button):hover {
         border-color: var(--wt-color-primary);
@@ -278,6 +280,18 @@ export class ProfileScreen extends LitElement {
       email: this.profile!.email ?? "",
       locale: this.profile!.locale ?? this.venueLocale,
     };
+  }
+  // A native <dialog>'s "close" event lands asynchronously relative to the property change that
+  // triggers it — Cancel or a successful Save call #closeModal() here, which sets this flag before
+  // switching back to view; if a NEW #edit() (opening a different mode) runs before that pending
+  // "close" event actually arrives, the flag — not any timing assumption — is what tells the
+  // @wt-close handler this specific close was already applied, so it must not stomp the newer mode.
+  // Reproduced by tracing #edit() call order under real load: "remove" mode was correctly entered,
+  // then a delayed close from the PRIOR "save and return to view" reset it straight back to "view".
+  #closingModal = false;
+  #closeModal(): void {
+    this.#closingModal = true;
+    this.#edit("view");
   }
   private get needsCredentials(): boolean {
     return (
@@ -443,7 +457,7 @@ export class ProfileScreen extends LitElement {
         await this.api.confirmProfileEmail(f.setupCode);
       }
       if (!this.isConnected) return;
-      this.#edit("view");
+      this.#closeModal();
       this.saved = true;
       await this.#load();
       this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
@@ -487,317 +501,361 @@ export class ProfileScreen extends LitElement {
       name: this.fields.passkeyName.trim(),
     });
   }
+  #modalHeading(): string {
+    switch (this.mode) {
+      case "view":
+        return "";
+      case "codes":
+        return t("profile.recovery_codes");
+      case "details":
+        return t("profile.details");
+      case "password":
+        return t("profile.change_password");
+      case "pin":
+        return t("profile.change_pin");
+      case "totp":
+        return t("profile.setup_authenticator");
+      case "recovery":
+        return t("profile.replace_recovery_codes");
+      case "google":
+        return t("profile.google_login");
+      case "disable-totp":
+        return t("profile.disable_authenticator");
+      case "unlink-google":
+        return t("profile.unlink_google");
+      case "passkey":
+        return t("staff.add_passkey");
+      case "email":
+        return t("profile.confirm_email");
+      case "remove":
+        return t("profile.remove_passkey");
+    }
+  }
+  #renderDetails(p: OwnProfile) {
+    return html`
+      <div class="group">
+        <h2 class="group-label">${t("profile.details")}</h2>
+        <wt-card raised>
+          <div class="row">
+            <span class="field-label">${t("profile.name")}</span>
+            <span class="field-value">${p.displayName}</span>
+          </div>
+          <div class="row">
+            <span class="field-label">${t("person.first_names")}</span>
+            <span class="field-value">${p.firstNames ?? "—"}</span>
+          </div>
+          <div class="row">
+            <span class="field-label">${t("person.last_names")}</span>
+            <span class="field-value">${p.lastNames ?? "—"}</span>
+          </div>
+          <div class="row">
+            <span class="field-label">${t("person.telephone")}</span>
+            <span class="field-value"
+              >${p.telephone ?? "—"} ${p.telephone ? t("profile.phone_unverified") : ""}</span
+            >
+          </div>
+          <div class="row">
+            <span class="field-label">${t("login.email")}</span>
+            <span class="field-value">${p.email ?? "—"}</span>
+          </div>
+          ${
+            p.pendingEmail === null
+              ? nothing
+              : html`<div class="action-row">
+                  <div class="text">
+                    <span class="field-label">${t("profile.pending_email")}</span>
+                    <span class="field-value">${p.pendingEmail}</span>
+                  </div>
+                  <wt-button
+                    data-test="confirm-email"
+                    class="card-action accent-primary"
+                    @click=${() => this.#edit("email")}
+                    >${t("action.confirm")}</wt-button
+                  >
+                </div>`
+          }
+          <div class="row">
+            <span class="field-label">${t("profile.language")}</span>
+            <span class="field-value"
+              >${this.locales.find((l) => l.code === (p.locale ?? this.venueLocale))?.label}</span
+            >
+          </div>
+          <div class="card-footer">
+            <wt-button
+              data-test="edit-details"
+              class="card-action accent-primary"
+              ?disabled=${this.busy}
+              @click=${() => this.#edit("details")}
+              >${t("action.edit")}</wt-button
+            >
+          </div>
+        </wt-card>
+      </div>
+      <div class="group">
+        <h2 class="group-label">${t("profile.security")}</h2>
+        <wt-card raised>
+          <div class="action-row">
+            <div class="text">
+              <span class="field-value">${t("login.password")}</span>
+              ${p.hasPassword ? nothing : html`<span class="field-meta">${t("profile.password_recovery")}</span>`}
+            </div>
+            ${
+              p.hasPassword
+                ? html`<wt-button
+                    data-test="change-password"
+                    class="card-action accent-primary"
+                    aria-label=${t("profile.change_password")}
+                    ?disabled=${this.busy}
+                    @click=${() => this.#edit("password")}
+                    >${t("action.change")}</wt-button
+                  >`
+                : nothing
+            }
+          </div>
+          <div class="action-row">
+            <span class="field-value">${t("person.pin")}</span>
+            <wt-button
+              data-test="change-pin"
+              class="card-action accent-primary"
+              aria-label=${t("profile.change_pin")}
+              ?disabled=${this.busy}
+              @click=${() => this.#edit("pin")}
+              >${t("action.change")}</wt-button
+            >
+          </div>
+        </wt-card>
+      </div>
+      <div class="group">
+        <h2 class="group-label">${t("profile.passkeys")}</h2>
+        <wt-card raised>
+          ${
+            p.passkeys.length === 0
+              ? html`<p class="hint">${t("profile.no_passkeys")}</p>`
+              : p.passkeys.map(
+                  (key, index) =>
+                    html`<div class="action-row">
+                      <div class="text">
+                        <span class="field-value"
+                          >${key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1))}</span
+                        >
+                        <span class="field-meta"
+                          >${new Date(key.createdAt).toLocaleDateString()}</span
+                        >
+                      </div>
+                      ${p.hasPassword ? html`<wt-button data-test="remove-passkey" class="card-action accent-danger" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_name").replace("{name}", key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1)))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
+                    </div>`,
+                )
+          }
+          <div class="card-footer">
+            <wt-button
+              data-test="add-passkey"
+              class="card-action accent-primary"
+              ?disabled=${this.busy}
+              @click=${() => this.#edit("passkey")}
+              >${t("action.add")}</wt-button
+            >
+          </div>
+        </wt-card>
+      </div>
+      <div class="group">
+        <h2 class="group-label">${t("profile.authenticator")}</h2>
+        <wt-card raised>
+          <p class="hint">
+            ${p.hasTotp ? t("profile.authenticator_enabled") : t("profile.authenticator_hint")}
+          </p>
+          <div class="card-footer">
+            ${
+              p.hasTotp
+                ? html`<wt-button
+                      data-test="recovery-codes"
+                      class="card-action"
+                      aria-label=${t("profile.replace_recovery_codes")}
+                      @click=${() => this.#edit("recovery")}
+                      >${t("action.replace")}</wt-button
+                    ><wt-button
+                      data-test="disable-authenticator"
+                      class="card-action accent-danger"
+                      @click=${() => this.#edit("disable-totp")}
+                      >${t("action.disable")}</wt-button
+                    >`
+                : html`<wt-button
+                    data-test="setup-authenticator"
+                    class="card-action accent-primary"
+                    aria-label=${t("profile.setup_authenticator")}
+                    @click=${() => this.#edit("totp")}
+                    >${t("action.setup")}</wt-button
+                  >`
+            }
+          </div>
+        </wt-card>
+      </div>
+      <div class="group">
+        <h2 class="group-label">${t("profile.google_login")}</h2>
+        <wt-card raised>
+          <p class="hint">
+            ${
+              p.hasGoogle
+                ? t("profile.google_linked")
+                : this.googleConfigured
+                  ? t("profile.google_hint")
+                  : t("profile.google_unavailable")
+            }
+          </p>
+          ${
+            p.hasGoogle || this.googleConfigured
+              ? html`<div class="card-footer">
+                  ${
+                    p.hasGoogle
+                      ? html`<wt-button
+                          data-test="unlink-google"
+                          class="card-action accent-danger"
+                          @click=${() => this.#edit("unlink-google")}
+                          >${t("action.remove")}</wt-button
+                        >`
+                      : html`<wt-button
+                          data-test="setup-google"
+                          class="card-action accent-primary"
+                          aria-label=${t("profile.setup_google")}
+                          ?disabled=${this.busy}
+                          @click=${() => this.#edit("google")}
+                          >${t("action.setup")}</wt-button
+                        >`
+                  }
+                </div>`
+              : nothing
+          }
+        </wt-card>
+      </div>
+      ${
+        this.privacyNoticeUrl === ""
+          ? nothing
+          : html`<section>
+              <a
+                data-test="privacy-notice"
+                href=${this.privacyNoticeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                >${t("account.privacy_notice")}</a
+              >
+            </section>`
+      }
+    `;
+  }
+  #renderCodesBody() {
+    return html`
+      <p>${t("profile.recovery_codes_once")}</p>
+      <pre data-test="recovery-code-list">${this.recoveryCodes.join("\n")}</pre>
+    `;
+  }
+  #renderEditBody(p: OwnProfile) {
+    return html`
+      ${
+        this.mode === "details"
+          ? html`${this.#input("firstNames", "person.first_names", "text", "given-name")}${this.#input("lastNames", "person.last_names", "text", "family-name")}${this.#input("displayName", "profile.name", "text", "nickname")}${this.#input("email", "login.email", "email", "email")}${this.#input("telephone", "person.telephone", "text", "tel", false)}
+              <label
+                >${t("profile.language")} *<select
+                  name="locale"
+                  required
+                  .value=${this.fields.locale}
+                  @change=${(event: Event) => this.#changeLocale(event)}
+                >
+                  ${this.locales.map((locale) => html`<option value=${locale.code} ?selected=${locale.code === this.fields.locale}>${locale.label}</option>`)}
+                </select></label
+              >`
+          : nothing
+      }
+      ${
+        this.needsCredentials
+          ? html`<p class="hint">${t("profile.confirm_identity")}</p>
+              ${this.#input("currentPassword", "profile.current_password", "password", "current-password")}${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
+          : nothing
+      }
+      ${this.mode === "passkey" ? this.#input("passkeyName", "profile.passkey_name", "text", "off", false) : nothing}
+      ${this.mode === "password" ? html`${this.#input("password", "account.new_password", "password", "new-password")}${this.#input("confirmPassword", "account.confirm_password", "password", "new-password")}` : nothing}
+      ${this.mode === "pin" ? html`${this.#input("pin", "account.new_pin", "password", "off")}${this.#input("confirmPin", "account.confirm_pin", "password", "off")}` : nothing}
+      ${
+        this.mode === "email"
+          ? html`<p class="hint">${t("profile.email_code_hint")}</p>
+              ${this.#input("setupCode", "profile.email_code", "text", "one-time-code")}`
+          : nothing
+      }
+      ${
+        this.mode === "totp" && this.totpSetup !== null
+          ? html`
+              <p>${t("profile.authenticator_scan")}</p>
+              <img
+                class="authenticator-qr"
+                data-test="authenticator-qr"
+                src=${this.totpQr}
+                alt=${t("profile.authenticator_qr_alt")}
+              />
+              <details data-test="authenticator-key-fallback">
+                <summary>${t("profile.authenticator_cannot_scan")}</summary>
+                <p>${t("profile.authenticator_secret")}: <code>${this.totpSetup.secret}</code></p>
+              </details>
+              ${this.#input("setupCode", "profile.totp", "text", "one-time-code")}
+            `
+          : nothing
+      }
+    `;
+  }
+  #renderModal(p: OwnProfile) {
+    return html`
+      <wt-modal
+        heading=${this.#modalHeading()}
+        .open=${this.mode !== "view"}
+        @wt-close=${() => {
+          if (this.#closingModal) {
+            this.#closingModal = false;
+            return;
+          }
+          this.#edit("view");
+        }}
+      >
+        <wt-form-error-summary
+          heading=${t("form.error_heading")}
+          .errors=${[...new Set([...Object.values(this.errors), this.error].filter(Boolean))]}
+        ></wt-form-error-summary>
+        <div class="fields">
+          ${this.mode === "codes" ? this.#renderCodesBody() : this.mode === "view" ? nothing : this.#renderEditBody(p)}
+        </div>
+        <wt-form-actions slot="footer">
+          <wt-button
+            slot="cancel"
+            data-test="cancel"
+            ?disabled=${this.busy}
+            @click=${() => this.#closeModal()}
+            >${this.mode === "codes" ? t("action.done") : t("action.cancel")}</wt-button
+          >
+          ${
+            this.mode === "codes"
+              ? html`<wt-button
+                  variant="primary"
+                  data-test="download-recovery-codes"
+                  @click=${() => this.#downloadRecoveryCodes()}
+                  >${t("action.download")}</wt-button
+                >`
+              : html`<wt-button
+                  variant="primary"
+                  data-test="save"
+                  ?disabled=${this.busy}
+                  @click=${() => void this.#save()}
+                  >${t(this.mode === "remove" ? "action.remove" : "action.save")}</wt-button
+                >`
+          }
+        </wt-form-actions>
+      </wt-modal>
+    `;
+  }
   override render() {
     const p = this.profile;
     return html`<div class="profile">
       <h1>${t("profile.title")}</h1>
-      <wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${[...new Set([...Object.values(this.errors), this.error].filter(Boolean))]}
-      ></wt-form-error-summary>
       ${this.saved ? html`<p role="status">${t("profile.saved")}</p>` : nothing}
       ${
         p === null
           ? html`<wt-button @click=${() => void this.#load()}>${t("profile.reload")}</wt-button>`
-          : this.mode === "view"
-            ? html`
-                <div class="group">
-                  <h2 class="group-label">${t("profile.details")}</h2>
-                  <wt-card raised>
-                    <div class="row">
-                      <span class="field-label">${t("profile.name")}</span>
-                      <span class="field-value">${p.displayName}</span>
-                    </div>
-                    <div class="row">
-                      <span class="field-label">${t("person.first_names")}</span>
-                      <span class="field-value">${p.firstNames ?? "—"}</span>
-                    </div>
-                    <div class="row">
-                      <span class="field-label">${t("person.last_names")}</span>
-                      <span class="field-value">${p.lastNames ?? "—"}</span>
-                    </div>
-                    <div class="row">
-                      <span class="field-label">${t("person.telephone")}</span>
-                      <span class="field-value"
-                        >${p.telephone ?? "—"}
-                        ${p.telephone ? t("profile.phone_unverified") : ""}</span
-                      >
-                    </div>
-                    <div class="row">
-                      <span class="field-label">${t("login.email")}</span>
-                      <span class="field-value">${p.email ?? "—"}</span>
-                    </div>
-                    ${
-                      p.pendingEmail === null
-                        ? nothing
-                        : html`<div class="action-row">
-                            <div class="text">
-                              <span class="field-label">${t("profile.pending_email")}</span>
-                              <span class="field-value">${p.pendingEmail}</span>
-                            </div>
-                            <wt-button
-                              data-test="confirm-email"
-                              class="card-action accent-primary"
-                              @click=${() => this.#edit("email")}
-                              >${t("action.confirm")}</wt-button
-                            >
-                          </div>`
-                    }
-                    <div class="row">
-                      <span class="field-label">${t("profile.language")}</span>
-                      <span class="field-value"
-                        >${this.locales.find((l) => l.code === (p.locale ?? this.venueLocale))?.label}</span
-                      >
-                    </div>
-                    <div class="card-footer">
-                      <wt-button
-                        data-test="edit-details"
-                        class="card-action accent-primary"
-                        ?disabled=${this.busy}
-                        @click=${() => this.#edit("details")}
-                        >${t("action.edit")}</wt-button
-                      >
-                    </div>
-                  </wt-card>
-                </div>
-                <div class="group">
-                  <h2 class="group-label">${t("profile.security")}</h2>
-                  <wt-card raised>
-                    <div class="action-row">
-                      <div class="text">
-                        <span class="field-value">${t("login.password")}</span>
-                        ${p.hasPassword ? nothing : html`<span class="field-meta">${t("profile.password_recovery")}</span>`}
-                      </div>
-                      ${
-                        p.hasPassword
-                          ? html`<wt-button
-                              data-test="change-password"
-                              class="card-action accent-primary"
-                              aria-label=${t("profile.change_password")}
-                              ?disabled=${this.busy}
-                              @click=${() => this.#edit("password")}
-                              >${t("action.change")}</wt-button
-                            >`
-                          : nothing
-                      }
-                    </div>
-                    <div class="action-row">
-                      <span class="field-value">${t("person.pin")}</span>
-                      <wt-button
-                        data-test="change-pin"
-                        class="card-action accent-primary"
-                        aria-label=${t("profile.change_pin")}
-                        ?disabled=${this.busy}
-                        @click=${() => this.#edit("pin")}
-                        >${t("action.change")}</wt-button
-                      >
-                    </div>
-                  </wt-card>
-                </div>
-                <div class="group">
-                  <h2 class="group-label">${t("profile.passkeys")}</h2>
-                  <wt-card raised>
-                    ${
-                      p.passkeys.length === 0
-                        ? html`<p class="hint">${t("profile.no_passkeys")}</p>`
-                        : p.passkeys.map(
-                            (key, index) =>
-                              html`<div class="action-row">
-                                <div class="text">
-                                  <span class="field-value"
-                                    >${key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1))}</span
-                                  >
-                                  <span class="field-meta"
-                                    >${new Date(key.createdAt).toLocaleDateString()}</span
-                                  >
-                                </div>
-                                ${p.hasPassword ? html`<wt-button data-test="remove-passkey" class="card-action accent-danger" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_name").replace("{name}", key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1)))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
-                              </div>`,
-                          )
-                    }
-                    <div class="card-footer">
-                      <wt-button
-                        data-test="add-passkey"
-                        class="card-action accent-primary"
-                        ?disabled=${this.busy}
-                        @click=${() => this.#edit("passkey")}
-                        >${t("action.add")}</wt-button
-                      >
-                    </div>
-                  </wt-card>
-                </div>
-                <div class="group">
-                  <h2 class="group-label">${t("profile.authenticator")}</h2>
-                  <wt-card raised>
-                    <p class="hint">
-                      ${p.hasTotp ? t("profile.authenticator_enabled") : t("profile.authenticator_hint")}
-                    </p>
-                    <div class="card-footer">
-                      ${
-                        p.hasTotp
-                          ? html`<wt-button
-                                data-test="recovery-codes"
-                                class="card-action"
-                                aria-label=${t("profile.replace_recovery_codes")}
-                                @click=${() => this.#edit("recovery")}
-                                >${t("action.replace")}</wt-button
-                              ><wt-button
-                                data-test="disable-authenticator"
-                                class="card-action accent-danger"
-                                @click=${() => this.#edit("disable-totp")}
-                                >${t("action.disable")}</wt-button
-                              >`
-                          : html`<wt-button
-                              data-test="setup-authenticator"
-                              class="card-action accent-primary"
-                              aria-label=${t("profile.setup_authenticator")}
-                              @click=${() => this.#edit("totp")}
-                              >${t("action.setup")}</wt-button
-                            >`
-                      }
-                    </div>
-                  </wt-card>
-                </div>
-                <div class="group">
-                  <h2 class="group-label">${t("profile.google_login")}</h2>
-                  <wt-card raised>
-                    <p class="hint">
-                      ${
-                        p.hasGoogle
-                          ? t("profile.google_linked")
-                          : this.googleConfigured
-                            ? t("profile.google_hint")
-                            : t("profile.google_unavailable")
-                      }
-                    </p>
-                    ${
-                      p.hasGoogle || this.googleConfigured
-                        ? html`<div class="card-footer">
-                            ${
-                              p.hasGoogle
-                                ? html`<wt-button
-                                    data-test="unlink-google"
-                                    class="card-action accent-danger"
-                                    @click=${() => this.#edit("unlink-google")}
-                                    >${t("action.remove")}</wt-button
-                                  >`
-                                : html`<wt-button
-                                    data-test="setup-google"
-                                    class="card-action accent-primary"
-                                    aria-label=${t("profile.setup_google")}
-                                    ?disabled=${this.busy}
-                                    @click=${() => this.#edit("google")}
-                                    >${t("action.setup")}</wt-button
-                                  >`
-                            }
-                          </div>`
-                        : nothing
-                    }
-                  </wt-card>
-                </div>
-                ${
-                  this.privacyNoticeUrl === ""
-                    ? nothing
-                    : html`<section>
-                        <a
-                          data-test="privacy-notice"
-                          href=${this.privacyNoticeUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          >${t("account.privacy_notice")}</a
-                        >
-                      </section>`
-                }
-              `
-            : this.mode === "codes"
-              ? html`<section>
-                  <h2>${t("profile.recovery_codes")}</h2>
-                  <p>${t("profile.recovery_codes_once")}</p>
-                  <pre data-test="recovery-code-list">${this.recoveryCodes.join("\n")}</pre>
-                  <wt-form-actions>
-                    <wt-button slot="cancel" data-test="cancel" @click=${() => this.#edit("view")}
-                      >${t("action.done")}</wt-button
-                    >
-                    <wt-button
-                      variant="primary"
-                      data-test="download-recovery-codes"
-                      @click=${() => this.#downloadRecoveryCodes()}
-                      >${t("action.download")}</wt-button
-                    >
-                  </wt-form-actions>
-                </section>`
-              : html`<section class="fields">
-                  <h2>
-                    ${t(this.mode === "details" ? "profile.details" : this.mode === "password" ? "profile.change_password" : this.mode === "pin" ? "profile.change_pin" : this.mode === "totp" ? "profile.setup_authenticator" : this.mode === "recovery" ? "profile.replace_recovery_codes" : this.mode === "google" ? "profile.google_login" : this.mode === "disable-totp" ? "profile.disable_authenticator" : this.mode === "unlink-google" ? "profile.unlink_google" : this.mode === "passkey" ? "staff.add_passkey" : this.mode === "email" ? "profile.confirm_email" : "profile.remove_passkey")}
-                  </h2>
-                  ${
-                    this.mode === "details"
-                      ? html`${this.#input("firstNames", "person.first_names", "text", "given-name")}${this.#input("lastNames", "person.last_names", "text", "family-name")}${this.#input("displayName", "profile.name", "text", "nickname")}${this.#input("email", "login.email", "email", "email")}${this.#input("telephone", "person.telephone", "text", "tel", false)}
-                          <label
-                            >${t("profile.language")} *<select
-                              name="locale"
-                              required
-                              .value=${this.fields.locale}
-                              @change=${(event: Event) => this.#changeLocale(event)}
-                            >
-                              ${this.locales.map((locale) => html`<option value=${locale.code} ?selected=${locale.code === this.fields.locale}>${locale.label}</option>`)}
-                            </select></label
-                          >`
-                      : nothing
-                  }
-                  ${
-                    this.needsCredentials
-                      ? html`<p class="hint">${t("profile.confirm_identity")}</p>
-                          ${this.#input("currentPassword", "profile.current_password", "password", "current-password")}${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
-                      : nothing
-                  }
-                  ${this.mode === "passkey" ? this.#input("passkeyName", "profile.passkey_name", "text", "off", false) : nothing}
-                  ${this.mode === "password" ? html`${this.#input("password", "account.new_password", "password", "new-password")}${this.#input("confirmPassword", "account.confirm_password", "password", "new-password")}` : nothing}
-                  ${this.mode === "pin" ? html`${this.#input("pin", "account.new_pin", "password", "off")}${this.#input("confirmPin", "account.confirm_pin", "password", "off")}` : nothing}
-                  ${
-                    this.mode === "email"
-                      ? html`<p class="hint">${t("profile.email_code_hint")}</p>
-                          ${this.#input("setupCode", "profile.email_code", "text", "one-time-code")}`
-                      : nothing
-                  }
-                  ${
-                    this.mode === "totp" && this.totpSetup !== null
-                      ? html`
-                          <p>${t("profile.authenticator_scan")}</p>
-                          <img
-                            class="authenticator-qr"
-                            data-test="authenticator-qr"
-                            src=${this.totpQr}
-                            alt=${t("profile.authenticator_qr_alt")}
-                          />
-                          <details data-test="authenticator-key-fallback">
-                            <summary>${t("profile.authenticator_cannot_scan")}</summary>
-                            <p>
-                              ${t("profile.authenticator_secret")}:
-                              <code>${this.totpSetup.secret}</code>
-                            </p>
-                          </details>
-                          ${this.#input("setupCode", "profile.totp", "text", "one-time-code")}
-                        `
-                      : nothing
-                  }
-                  <wt-form-actions
-                    ><wt-button
-                      slot="cancel"
-                      data-test="cancel"
-                      ?disabled=${this.busy}
-                      @click=${() => this.#edit("view")}
-                      >${t("action.cancel")}</wt-button
-                    >
-                    <wt-button
-                      variant="primary"
-                      data-test="save"
-                      ?disabled=${this.busy}
-                      @click=${() => void this.#save()}
-                      >${t(this.mode === "remove" ? "action.remove" : "action.save")}</wt-button
-                    >
-                  </wt-form-actions>
-                </section>`
+          : html`${this.#renderDetails(p)}${this.#renderModal(p)}`
       }
     </div>`;
   }

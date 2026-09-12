@@ -248,10 +248,13 @@ export class DashboardApp extends LitElement {
       }
 
       /* Group header: small caps, like a card's group-label (see profile-screen.ts) — makes it
-         unmistakably a label rather than a fainter link, which plain small+muted text didn't. */
+         unmistakably a label rather than a fainter link, which plain small+muted text didn't. Uses
+         the primary accent rather than muted grey so it doesn't read as the same weight of "quiet"
+         as a resting nav item beneath it — headers aren't clickable, so sharing the accent hue with
+         the current-page indicator doesn't create the same false affordance it would on an item. */
       .nav-group {
         margin: var(--wt-space-3) 0 var(--wt-space-1);
-        color: var(--wt-color-text-muted);
+        color: var(--wt-color-primary);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;

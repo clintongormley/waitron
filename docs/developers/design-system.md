@@ -180,6 +180,35 @@ and Save on the right:
 </wt-modal>
 ```
 
+**A page with a persistent view and one reused `wt-modal` for every edit action** (a settings-style
+screen editing itself, as opposed to a list opening a modal per row) has one more thing to get
+right: the underlying native `<dialog>`'s `close` event lands asynchronously relative to the
+`open` property change that triggers it. If your own code (Cancel, or a successful Save) already
+switched to a different mode/state *before* that pending `close` event arrives — because the
+caller opened a new edit right after closing the old one — a plain `@wt-close=${() =>
+closeHandler()}` will stomp the newer state back to closed. Reproduced only under real timing load
+(passed reliably in isolation, failed intermittently in the full suite) — arm a flag when *you*
+close the modal programmatically, and have the `wt-close` handler consume-and-ignore it once,
+rather than unconditionally acting on every `wt-close`:
+
+```ts
+#closingModal = false;
+#closeModal(): void {
+  this.#closingModal = true;
+  this.#edit("view");
+}
+// in the template:
+// @wt-close=${() => {
+//   if (this.#closingModal) { this.#closingModal = false; return; }
+//   this.#edit("view");
+// }}
+```
+
+See `apps/dashboard/src/screens/profile-screen.ts` (`#closeModal`) for the full pattern and
+`profile-screen.test.ts`'s "a stale close from the previous modal never reopens or reverts a newer
+one" for how to reproduce the race deterministically (dispatch the delayed `wt-close` by hand
+rather than depending on timing luck).
+
 Set `open` to show or close the modal. Handle button clicks in your form and listen for `wt-close`
 to handle dismissal, including Escape. The native dialog keeps focus inside while open and
 returns focus to its trigger on close. Use `wt-dialog` for a compact confirmation.
@@ -467,6 +496,15 @@ inside it does something different. Four shapes cover what's needed so far:
 - **A purely informational card** (a status sentence, nothing to edit): just the sentence, muted,
   with no action — unless there's actually something to configure, in which case that's the
   card's one action.
+
+Every one of these actions opens a `wt-modal`, not an inline mode-swap that replaces the whole
+page — the view stays on screen, dimmed behind the modal, exactly like a list opening its "Edit"
+modal per row (`person-edit.ts`). This fixes two things an inline swap gets wrong on a page built
+from these cards: the edit form no longer needs to fit the page's own (narrower) width, since a
+modal sizes itself independently; and there's no more "why doesn't the current page highlight in
+the sidebar while editing" confusion, since the page never stopped being the page. See "Card action
+buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
+above for the close-event race a shared, reused modal needs to guard against.
 
 ### Card action buttons: calm at rest, accented on hover
 
