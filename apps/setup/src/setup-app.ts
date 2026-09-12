@@ -22,6 +22,7 @@ import type {
   ConfigurationPreview,
   ProvisionBody,
   SetupApi,
+  VenueDefaults,
 } from "./api/client.js";
 import type { ConfigurationRequestDetail, RestoreRequestDetail } from "./events.js";
 import { SERVER_FIELDS } from "./server-fields.js";
@@ -195,6 +196,8 @@ export class SetupApp extends LitElement {
   @state() private connectionError?: string;
   @state() private connectionChecking = false;
   #connectionGeneration = 0;
+  @state() private venueDefaults: VenueDefaults = {};
+
 
   /**
    * The box's stamped deployment environment, read from `GET /setup-api/status` on boot. `undefined`
@@ -289,6 +292,16 @@ export class SetupApp extends LitElement {
 
   override firstUpdated(): void {
     void this.#boot();
+    void this.#loadVenueDefaults();
+  }
+
+  async #loadVenueDefaults(): Promise<void> {
+    try {
+      const defaults = await this.api.getVenueDefaults();
+      if (this.isConnected) this.venueDefaults = defaults;
+    } catch {
+      // Prepare and Live can still collect an explicit description when defaults cannot be read.
+    }
   }
 
   /** Late initial reads must not overwrite a newer user-initiated connection check. */
@@ -338,6 +351,26 @@ export class SetupApp extends LitElement {
    */
   #onPatch(event: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>): void {
     event.stopPropagation();
+    const mode = event.detail.patch.mode;
+    if (
+      mode !== undefined &&
+      this.draft.mode !== undefined &&
+      mode !== this.draft.mode &&
+      (mode === "demo" || this.draft.mode === "demo")
+    ) {
+      const venue = { ...this.draft.venue, location: { ...this.draft.venue?.location } };
+      delete venue.taxId;
+      delete venue.legalName;
+      delete venue.tillName;
+      delete venue.seriesCode;
+      delete venue.rectificativeSeriesCode;
+      delete venue.location.operationDescription;
+      delete venue.location.dayCutover;
+      delete venue.location.invoiceLocales;
+      this.draft = { ...this.draft, venue };
+      delete this.draft.configurationImport;
+      this.fiscalTestStatus = undefined;
+    }
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
   }
 
@@ -673,6 +706,10 @@ export class SetupApp extends LitElement {
     // the shell knowing which one is mounted.
     return html`<div
       class="wizard"
+      @setup-defaults-requested=${(event: CustomEvent) => {
+        event.stopPropagation();
+        void this.#loadVenueDefaults();
+      }}
       @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
       @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
       @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
@@ -757,6 +794,7 @@ export class SetupApp extends LitElement {
         return html`<setup-venue-screen
           data-test="screen-venue"
           .draft=${this.draft}
+          .defaults=${this.venueDefaults}
           .errorMessage=${this.venueError}
           .invalidField=${this.venueInvalidField}
         ></setup-venue-screen>`;

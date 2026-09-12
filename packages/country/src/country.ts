@@ -42,6 +42,8 @@ export interface CountryPack {
   readonly administrativeAreas: readonly AdministrativeArea[];
   readonly fiscalJurisdictions: readonly FiscalJurisdiction[];
   readonly defaultFiscalJurisdictionId?: string;
+  /** Made-up identity for disposable Demo onboarding; never for Prepare or Live. */
+  readonly demo?: { createCompanyTaxId(): string };
   readonly taxIdentifier?: ValueValidator<string>;
   readonly postalCode?: ValueValidator<"postal-code">;
   readonly telephone?: ValueValidator<string>;

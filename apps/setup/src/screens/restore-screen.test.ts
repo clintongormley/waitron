@@ -15,7 +15,11 @@ describe("SetupRestoreScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=error]")?.getAttribute("role")).toBe("alert");
+    const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await summary.updateComplete;
+    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("[required]")).toHaveLength(4);
   });
 

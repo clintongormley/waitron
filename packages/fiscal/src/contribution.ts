@@ -69,6 +69,8 @@ export interface FiscalContribution {
    * unrepairable SIF and hash chain (CLAUDE.md §5). A regime that files nothing offers no seat and
    * its venues are not checked, because there is no filing format to violate. */
   readonly venueFields?: {
+    readonly defaults?: { readonly operationDescription: string };
+    validateOperationDescription(description: string): void;
     validate(venue: {
       readonly legalName: string;
       readonly seriesCode: string;

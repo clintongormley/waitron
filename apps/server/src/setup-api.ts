@@ -479,6 +479,23 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // log. Fires once, not per request, so the catch-all below stays silent under browser load.
   log("info", "setup.mode_active", { environment: deps.environment });
 
+  app.get("/setup-api/venue-defaults", (c) =>
+    c.json(
+      Object.fromEntries(
+        ALL_MODULES.flatMap(({ fiscal }) =>
+          fiscal?.venueFields?.defaults === undefined
+            ? []
+            : [
+                [
+                  fiscal.id,
+                  { operationDescription: fiscal.venueFields.defaults.operationDescription },
+                ],
+              ],
+        ),
+      ),
+    ),
+  );
+
   app.get("/setup-api/status", async (c) => {
     let operation: Awaited<ReturnType<SetupOperationStore["read"]>> | undefined;
     let operationBlocked = false;
@@ -891,17 +908,24 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     });
   });
 
-  // The root catch-all, registered LAST and matching everything, so it answers only the paths
-  // `/setup-api/status`, `/setup-api/provision` and `/setup-api/adopt` (above) and any earlier route
-  // (e.g. `/health`, or the setup branch's discovery/CA/trust routes registered before this mount)
-  // did not claim. When a built wizard dir is configured (slice 2c), serve it as that catch-all via
-  // `mountSpa` — basePath "" = origin root, exactly like the till: the root "/" serves index.html and
-  // real files under the dir serve their bytes, while a stray unmatched path 404s (mountSpa has no
-  // SPA history fallback — the wizard is an in-memory-state SPA, so a reload only ever lands on "/").
-  // Absent a configured dir serve the inline placeholder shell (dev, and any box whose wizard bundle
-  // was not built in). Boot has already `assertBuiltApp`-checked a configured dir holds an
-  // `index.html`, so `mountSpa` here never becomes a catch-all that 404s the root itself.
+  // Setup has no URL routes. Registered after the API handlers, this redirects missing browser
+  // navigation while preserving missing assets and API responses.
   if (deps.setupAppDir !== undefined) {
+    app.use("*", async (c, next) => {
+      await next();
+      const segments = c.req.path.split("/").filter(Boolean);
+      const first = segments[0] ?? "";
+      if (
+        c.req.method === "GET" &&
+        c.res.status === 404 &&
+        (c.req.header("Accept") ?? "").includes("text/html") &&
+        first !== "assets" &&
+        first !== "api" &&
+        !first.endsWith("-api") &&
+        !segments.some((segment) => segment.includes("."))
+      )
+        c.res = c.redirect("/", 302);
+    });
     mountSpa(app, { root: deps.setupAppDir, basePath: "" }, log);
   } else {
     app.get("*", (c) =>

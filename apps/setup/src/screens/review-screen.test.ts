@@ -132,3 +132,23 @@ describe("setup-review-screen", () => {
     expect(await goto).toEqual({ screen: "venue" });
   });
 });
+
+it("shows the generated demo choices and full location details for review", async () => {
+  const draft = fullDraft();
+  draft.mode = "demo";
+  draft.venue!.tillName = "Caja 1";
+  Object.assign(draft.venue!.location!, {
+    operationDescription: "Venta en establecimiento",
+    dayCutover: "04:00",
+    addressLine1: "Calle Mayor 1",
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+  });
+  const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+  expect(text(el, "[data-test=demo-defaults]")).toContain("generated");
+  expect(text(el, "[data-test=summary-operationDescription]")).toBe("Venta en establecimiento");
+  expect(text(el, "[data-test=summary-tillName]")).toBe("Caja 1");
+  expect(text(el, "[data-test=summary-address]")).toContain("Calle Mayor 1");
+  expect(text(el, "[data-test=summary-dayCutover]")).toBe("04:00");
+});

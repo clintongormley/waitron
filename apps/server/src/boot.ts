@@ -99,6 +99,7 @@ import { mountPrintApi } from "./print-api.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
+import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
@@ -2001,6 +2002,7 @@ export async function startServer(
   // database work at boot.
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, till.tenantId, config.devMode || till.practiceMode === true);
+  mountLocationSettingsApi(app, { db, cfg: till, fiscal: enabledFiscal }, log);
   mountManagementApi(
     app,
     {

@@ -25,7 +25,11 @@ describe("SetupLiveSourceScreen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=import]")!.click();
     await el.updateComplete;
     expect(requested).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await summary.updateComplete;
+    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("[data-test=field-error]")).toHaveLength(2);
     expect(el.shadowRoot!.querySelector("input[type=file]")?.getAttribute("name")).toBe(
       "configuration-export",

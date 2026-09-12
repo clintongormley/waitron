@@ -40,6 +40,7 @@ import "./screens/dashboard-sales-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
 import "./screens/receipt-screen.js";
+import "./screens/location-settings-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
 import "./screens/kitchen-screen.js";
@@ -90,6 +91,7 @@ type CoreScreen =
   | "staff"
   | "catalogue"
   | "receipt"
+  | "location-settings"
   | "statuses"
   | "floor"
   | "kitchen"
@@ -186,6 +188,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: "gear",
     items: [
       { screen: "receipt", labelKey: "nav.receipt" },
+      { screen: "location-settings", labelKey: "nav.location_settings", requiresManager: true },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "printing-rules", labelKey: "nav.printing_rules" },
@@ -1317,6 +1320,10 @@ export class DashboardApp extends LitElement {
         ></dashboard-staff-screen>`;
       case "catalogue":
         return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
+      case "location-settings":
+        return html`<dashboard-location-settings-screen
+          .api=${this.api}
+        ></dashboard-location-settings-screen>`;
       case "receipt":
         return html`<dashboard-receipt-screen .api=${this.api}></dashboard-receipt-screen>`;
       case "statuses":

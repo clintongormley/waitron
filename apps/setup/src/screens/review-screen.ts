@@ -73,6 +73,7 @@ export class SetupReviewScreen extends LitElement {
       <wt-card>
         <h1>Review and provision</h1>
         <p>Check the details below, then provision this box.</p>
+        ${this.draft.mode === "demo" ? html`<p data-test="demo-defaults">Waitron generated a demo tax ID and supplied the business and invoice defaults below. Demo does not submit invoices to the tax agency.</p>` : nothing}
         <dl>
           <dt>Mode</dt>
           <dd data-test="summary-mode">${this.draft.mode ?? "—"}</dd>
@@ -84,6 +85,18 @@ export class SetupReviewScreen extends LitElement {
           <dd data-test="summary-legalName">${venue?.legalName ?? "—"}</dd>
           <dt>Location</dt>
           <dd data-test="summary-location">${location?.name ?? "—"}</dd>
+          <dt>Address</dt>
+          <dd data-test="summary-address">
+            ${[location?.addressLine1, location?.addressLine2, location?.postalCode, location?.city, location?.province].filter(Boolean).join(", ") || "—"}
+          </dd>
+          <dt>Invoice languages</dt>
+          <dd data-test="summary-invoiceLocales">${location?.invoiceLocales?.join(", ") ?? "—"}</dd>
+          <dt>Invoice operation description</dt>
+          <dd data-test="summary-operationDescription">${location?.operationDescription ?? "—"}</dd>
+          <dt>Business day cutover</dt>
+          <dd data-test="summary-dayCutover">${location?.dayCutover ?? "—"}</dd>
+          <dt>Till</dt>
+          <dd data-test="summary-tillName">${venue?.tillName ?? "—"}</dd>
           <dt>Invoice series</dt>
           <dd data-test="summary-seriesCode">${venue?.seriesCode ?? "—"}</dd>
           <dt>Rectificative series</dt>

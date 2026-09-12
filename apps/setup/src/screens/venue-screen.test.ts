@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./venue-screen.js";
 import type { SetupVenueScreen } from "./venue-screen.js";
 import type { DeepPartial } from "../setup-app.js";
+import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import type { ProvisionBody } from "../api/client.js";
 
 type Emitted = { kind: "patch" | "goto" | "advance"; detail: unknown };
@@ -191,9 +192,16 @@ describe("setup-venue-screen", () => {
   it("emits the same screen-agnostic advance for a demo draft (no in-screen routing)", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
+      defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
     });
     const events = collect(host);
-    await fillValid(el);
+    for (const [field, value] of Object.entries({
+      name: "Calle Mayor",
+      addressLine1: "Calle Mayor 1",
+      postalCode: "28013",
+      city: "Madrid",
+    }))
+      await type(el, field, value);
     q(el, "[data-test=next]")!.click();
     expect(events.at(-1)).toEqual({ kind: "advance", detail: null });
     expect(events.some((e) => e.kind === "goto")).toBe(false);
@@ -201,7 +209,7 @@ describe("setup-venue-screen", () => {
 
   it("seeds the editable fields from the draft so Back-then-forward is non-destructive", async () => {
     const draft: DeepPartial<ProvisionBody> = {
-      mode: "demo",
+      mode: "prepare",
       venue: {
         country: "ES",
         taxId: "B12345674",
@@ -277,7 +285,11 @@ describe("setup-venue-screen", () => {
     await el.updateComplete;
     expect(events).toEqual([]);
     expect(q(el, "[data-test=error]")).not.toBeNull();
-    expect(q(el, "[data-test=error]")!.getAttribute("role")).toBe("alert");
+    const summary = q(el, "[data-test=error]") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await summary.updateComplete;
+    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
     expect(q(el, "[data-test=seriesCode]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=rectificativeSeriesCode]")!.hasAttribute("invalid")).toBe(true);
   });
@@ -348,12 +360,19 @@ describe("setup-venue-screen", () => {
     });
     q(el, "[data-test=next]")!.click(); // empty form → client validation fails → showError
     await el.updateComplete;
-    const alerts = el.shadowRoot!.querySelectorAll("[role=alert]");
+    const summary = q(el, "wt-form-error-summary") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await summary.updateComplete;
+    const alerts = [
+      ...el.shadowRoot!.querySelectorAll("[role=alert]"),
+      ...summary.shadowRoot!.querySelectorAll("[role=alert]"),
+    ];
     expect(alerts.length).toBe(1);
     // The single region is the client banner; the stale server banner is suppressed.
     expect(q(el, "[data-test=error]")).not.toBeNull();
     expect(q(el, "[data-test=server-error]")).toBeNull();
-    expect(alerts[0]!.textContent).toContain("Check the highlighted fields");
+    expect(alerts[0]!.textContent).toContain("There is a problem with this form");
   });
 
   it("blocks Next when no invoice locale is selected", async () => {
@@ -498,4 +517,157 @@ describe("setup-venue-screen", () => {
     q(el, "[data-test=back]")!.click();
     expect(events).toEqual([{ kind: "goto", detail: { screen: "admin" } }]);
   });
+});
+
+describe("A2 shop form", () => {
+  const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
+  it("prefills the first till and invoice series, using the fiscal description default", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults });
+    for (const [field, value] of Object.entries({
+      tillName: "Caja 1",
+      seriesCode: "FS",
+      rectificativeSeriesCode: "FR",
+      dayCutover: "04:00",
+      operationDescription: "Venta en establecimiento",
+    })) {
+      expect((q(el, `[data-test=${field}]`) as HTMLInputElement).value).toBe(value);
+    }
+  });
+  it("collects only a location name and address in Demo, generating a valid company identity", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "demo" },
+      defaults,
+    });
+    const events = collect(host);
+    for (const field of [
+      "taxId",
+      "legalName",
+      "operationDescription",
+      "dayCutover",
+      "tillName",
+      "seriesCode",
+      "rectificativeSeriesCode",
+      "locale-es-ES",
+    ])
+      expect(q(el, `[data-test=${field}]`)).toBeNull();
+    for (const [field, value] of Object.entries({
+      name: "Calle Mayor",
+      addressLine1: "Calle Mayor 1",
+      postalCode: "28013",
+      city: "Madrid",
+    }))
+      await type(el, field, value);
+    q(el, "[data-test=next]")!.click();
+    expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
+    const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
+    expect(venue.taxId).toMatch(/^B[0-9]{8}$/);
+    expect(venue.legalName).toBe("Calle Mayor");
+    expect(venue.seriesCode).toBe("FS");
+    expect(venue.rectificativeSeriesCode).toBe("FR");
+    expect(venue.location.operationDescription).toBe("Venta en establecimiento");
+    const validation = getVenueSetupCountryPack("ES")!.taxIdentifier!.validate(venue.taxId);
+    expect(validation).toEqual({ valid: true, normalized: venue.taxId, kind: "entity" });
+    const returned = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "demo", venue },
+      defaults,
+    });
+    const replay = collect(returned.host);
+    q(returned.el, "[data-test=next]")!.click();
+    expect((replay[0]!.detail as { patch: ProvisionBody }).patch.venue).toEqual(venue);
+  });
+  it("explains each missing text field and provides help and visible required markers", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults });
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    for (const field of ["taxId", "legalName", "name", "addressLine1", "postalCode", "city"]) {
+      const input = q(el, `[data-test=${field}]`)!;
+      expect(input.getAttribute("error")).not.toBe("");
+      expect(input.hasAttribute("required")).toBe(true);
+      expect(input.querySelector("wt-help-tooltip")).not.toBeNull();
+    }
+    expect(q(el, "wt-form-error-summary")).not.toBeNull();
+    expect(q(el, "wt-form-actions")).not.toBeNull();
+  });
+});
+
+it.each(["prepare", "live"] as const)(
+  "never calls the company identity generator in %s",
+  async (mode) => {
+    const generator = vi.spyOn(getVenueSetupCountryPack("ES")!.demo!, "createCompanyTaxId");
+    try {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft: { mode } });
+      await type(el, "postalCode", "28013");
+      q(el, "[data-test=next]")!.click();
+      expect(generator).not.toHaveBeenCalled();
+      expect((q(el, "[data-test=taxId]") as HTMLInputElement).value).toBe("");
+    } finally {
+      generator.mockRestore();
+    }
+  },
+);
+it("keeps edited descriptions when defaults arrive late", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  await type(el, "operationDescription", "Venta de comidas");
+  el.defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
+  await el.updateComplete;
+  expect((q(el, "[data-test=operationDescription]") as HTMLInputElement).value).toBe(
+    "Venta de comidas",
+  );
+});
+it("offers a retry when Demo defaults are unavailable, without generating a partial venue", async () => {
+  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo" },
+  });
+  const events = collect(host);
+  for (const [field, value] of Object.entries({
+    name: "Calle Mayor",
+    addressLine1: "Calle Mayor 1",
+    postalCode: "28013",
+    city: "Madrid",
+  }))
+    await type(el, field, value);
+  q(el, "[data-test=next]")!.click();
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(q(el, "[data-test=retry-defaults]")).not.toBeNull();
+});
+it("maps a Demo legal-name refusal to the visible location name", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo" },
+    invalidField: "legalName",
+  });
+  const name = q(el, "[data-test=name]")!;
+  expect(name.hasAttribute("invalid")).toBe(true);
+  expect(name.getAttribute("error")).toContain("characters");
+});
+
+it("explains an unsupported Demo province instead of asking to reload defaults", async () => {
+  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo" },
+    defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
+  });
+  const events = collect(host);
+  for (const [field, value] of Object.entries({
+    name: "Local",
+    addressLine1: "Calle Mayor 1",
+    postalCode: "35001",
+    city: "Las Palmas",
+  }))
+    await type(el, field, value);
+  q(el, "[data-test=next]")!.click();
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(q(el, "#province-error")!.textContent).toContain("not available");
+  expect(q(el, "[data-test=retry-defaults]")).toBeNull();
+});
+
+it("derives invoice language from the retained province after leaving Demo", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: {
+      mode: "prepare",
+      venue: { country: "ES", location: { province: "Barcelona", postalCode: "08001" } },
+    },
+  });
+  expect((q(el, "[data-test=locale-ca-ES]") as HTMLInputElement).checked).toBe(true);
+  expect((q(el, "[data-test=locale-es-ES]") as HTMLInputElement).checked).toBe(false);
 });

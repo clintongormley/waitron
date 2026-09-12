@@ -1199,16 +1199,29 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     expect(text).not.toContain("needs setup"); // NOT the inline placeholder shell
   });
 
-  it("404s a stray unmatched path (mountSpa's no-SPA-fallback contract, exactly as the till)", async () => {
-    // A behaviour CHANGE from the inline placeholder — which answered every path with 200 HTML — worth
-    // pinning: `mountSpa` serves index.html only at the base-path root and 404s anything that is not a
-    // real file under the dir (spa-api.ts: "the existence check is what stops a stray unmatched path
-    // from being answered with HTML"). The wizard is an in-memory-state SPA (no client-side URL
-    // routing), so a reload only ever lands on "/", exactly like the till at the origin root.
+  it.each(["/manage", "/anything/else"])(
+    "redirects setup navigation %s to the root",
+    async (path) => {
+      const app = new Hono();
+      mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
+      const res = await app.request(path, { headers: { Accept: "text/html" } });
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe("/");
+    },
+  );
+
+  it.each([
+    "/assets/missing.js",
+    "/missing.js",
+    "/setup-api/missing",
+    "/management-api/missing",
+    "/api/missing",
+  ])("keeps missing files and API paths as 404: %s", async (path) => {
     const app = new Hono();
     mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
-    const res = await app.request("/anything/else");
+    const res = await app.request(path, { headers: { Accept: "text/html" } });
     expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
   });
 
   it("falls back to the inline placeholder for a stray path when setupAppDir is absent (unchanged)", async () => {
@@ -1735,5 +1748,15 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
     expect(adopt).not.toHaveBeenCalled();
+  });
+});
+
+it("serves fiscal-owned venue defaults without exposing provider secrets", async () => {
+  const app = new Hono();
+  mountSetup(app, { environment: "preproduction" }, noopLog);
+  const response = await app.request("/setup-api/venue-defaults");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    verifactu: { operationDescription: "Venta en establecimiento" },
   });
 });

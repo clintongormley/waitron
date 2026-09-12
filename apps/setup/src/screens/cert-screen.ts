@@ -4,6 +4,11 @@ import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import { passwordIcon } from "../password-icon.js";
+import { certificateExportHelp } from "../certificate-export-help.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -62,6 +67,15 @@ export class SetupCertScreen extends LitElement {
     errorStyles,
     actionsStyles,
     css`
+      a {
+        color: var(--wt-color-text);
+      }
+      details {
+        margin-block: var(--wt-space-3);
+      }
+      summary {
+        cursor: pointer;
+      }
       :host {
         display: block;
       }
@@ -210,8 +224,15 @@ export class SetupCertScreen extends LitElement {
           A live Spanish venue files invoices to AEAT with a certificate. Upload the certificate
           file and enter its passphrase.
         </p>
+        ${certificateExportHelp(navigator.userAgent)}
         <label class="field file" ?invalid=${this.invalid.has("pfx")}>
-          <span>Certificate file (.pfx or .p12)</span>
+          <span
+            >Certificate file (.pfx or .p12) *
+            <wt-help-tooltip aria-label="Help with certificate file"
+              >Choose the exported signing certificate, including its private key, so this box can
+              sign fiscal records.</wt-help-tooltip
+            ></span
+          >
           <input
             name="certificate-file"
             type="file"
@@ -246,10 +267,14 @@ export class SetupCertScreen extends LitElement {
           type=${this.passphraseVisible ? "text" : "password"}
           required
           data-test="passphrase"
+          error=${this.invalid.has("passphrase") ? "Enter the certificate passphrase." : ""}
           ?invalid=${this.invalid.has("passphrase")}
           .value=${this.passphrase}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPassphrase(e)}
         >
+          <wt-help-tooltip slot="help" aria-label="Help with certificate passphrase"
+            >Enter the password you chose when exporting this certificate file.</wt-help-tooltip
+          >
           <wt-button
             slot="end"
             variant="ghost"
@@ -258,7 +283,7 @@ export class SetupCertScreen extends LitElement {
               this.passphraseVisible ? "Hide certificate passphrase" : "Show certificate passphrase"
             }
             @click=${() => (this.passphraseVisible = !this.passphraseVisible)}
-            >${this.passphraseVisible ? "Hide" : "Show"}</wt-button
+            >${passwordIcon(this.passphraseVisible)}</wt-button
           >
         </wt-input>
         ${
@@ -269,9 +294,16 @@ export class SetupCertScreen extends LitElement {
             : nothing
         }
         <label class="field select">
-          <span>Certificate type</span>
+          <span
+            >Certificate type *
+            <wt-help-tooltip aria-label="Help with certificate type"
+              >Select whether this is a company seal or representative certificate, matching the
+              certificate you exported.</wt-help-tooltip
+            ></span
+          >
           <select
             name="certificate-kind"
+            required
             data-test="certKind"
             @change=${(e: Event) => this.#onCertKind(e)}
           >
@@ -285,21 +317,21 @@ export class SetupCertScreen extends LitElement {
         </label>
         ${
           this.showError || this.fileReadFailed
-            ? html`<p class="error" role="alert" data-test="error">
-                ${
-                  this.fileReadFailed
-                    ? "We couldn't read that file. Please choose the certificate file again."
-                    : "Choose the certificate file and enter its passphrase."
-                }
-              </p>`
+            ? html`<wt-form-error-summary
+                data-test="error"
+                heading="There is a problem with this form"
+                .errors=${this.fileReadFailed ? ["We couldn't read that file. Please choose the certificate file again."] : [...this.invalid].map((field) => (field === "pfx" ? "Choose the certificate file." : "Enter the certificate passphrase."))}
+              ></wt-form-error-summary>`
             : nothing
         }
-        <div class="actions">
-          <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}>Back</wt-button>
+        <wt-form-actions>
+          <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+            >Back</wt-button
+          >
           <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
             >Next</wt-button
           >
-        </div>
+        </wt-form-actions>
       </wt-card>
     `;
   }

@@ -117,7 +117,11 @@ describe("setup-admin-screen", () => {
     await el.updateComplete;
     expect(events).toEqual([]);
     expect(q(el, "[data-test=error]")).not.toBeNull();
-    expect(q(el, "[data-test=error]")!.getAttribute("role")).toBe("alert");
+    const summary = q(el, "[data-test=error]") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await summary.updateComplete;
+    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
     // The blank fields are marked invalid; the filled one is not.
     expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=pin]")!.hasAttribute("invalid")).toBe(true);
@@ -252,3 +256,27 @@ it("Enter advances the admin step using current shadow input values", async () =
     { kind: "goto", detail: { screen: "venue" } },
   ]);
 });
+
+it.each(["password", "pin"])(
+  "reveals and hides the native %s without changing its value or advancing",
+  async (key) => {
+    const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    const events = collect(host);
+    await type(el, key, "123456");
+    const input = q(el, `[data-test=${key}]`)!;
+    const toggle = input.querySelector<HTMLElement>(`[data-test=toggle-${key}]`);
+    expect(toggle).not.toBeNull();
+    expect(toggle!.querySelector("svg")).not.toBeNull();
+    expect(toggle!.getAttribute("aria-label")).toBe(key === "pin" ? "Show PIN" : "Show password");
+    toggle!.click();
+    await el.updateComplete;
+    await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(input.shadowRoot!.querySelector("input")!.type).toBe("text");
+    expect(input.shadowRoot!.querySelector("input")!.value).toBe("123456");
+    toggle!.click();
+    await el.updateComplete;
+    await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(input.shadowRoot!.querySelector("input")!.type).toBe("password");
+    expect(events).toEqual([]);
+  },
+);

@@ -113,7 +113,11 @@ describe("setup-connect-screen", () => {
       await el.updateComplete;
       expect(events).toEqual([]);
       expect(q(el, "[data-test=error]")).not.toBeNull();
-      expect(q(el, "[data-test=error]")!.getAttribute("role")).toBe("alert");
+      const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      await summary.updateComplete;
+      expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
       expect(q(el, `[data-test=${field}]`)!.hasAttribute("invalid")).toBe(true);
     },
   );
@@ -147,7 +151,14 @@ describe("setup-connect-screen", () => {
     });
     q(el, "[data-test=connect]")!.click(); // empty form → client validation fails
     await el.updateComplete;
-    const alerts = el.shadowRoot!.querySelectorAll("[role=alert]");
+    const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await summary.updateComplete;
+    const alerts = [
+      ...el.shadowRoot!.querySelectorAll("[role=alert]"),
+      ...summary.shadowRoot!.querySelectorAll("[role=alert]"),
+    ];
     expect(alerts.length).toBe(1);
     expect(q(el, "[data-test=error]")).not.toBeNull();
     expect(q(el, "[data-test=server-error]")).toBeNull();

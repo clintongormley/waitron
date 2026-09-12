@@ -15,6 +15,20 @@
 // key added to `en` without a Spanish sibling is a compile error, which is the
 // guard that keeps the two in step.
 export const en = {
+  "nav.location_settings": "Location invoices",
+  "location_settings.title": "Location invoices",
+  "location_settings.description": "Invoice operation description",
+  "location_settings.help":
+    "This text is copied onto future fiscal records for this location. Existing records keep their original description.",
+  "location_settings.help_label": "Help with the operation description",
+  "location_settings.required": "Enter the invoice operation description.",
+  "location_settings.invalid":
+    "The description was rejected. Use at most 500 characters and remove hidden control characters.",
+  "location_settings.load_error": "The location settings could not be loaded.",
+  "location_settings.save_error": "The description could not be saved. Try again.",
+  "location_settings.saved": "Saved. Future records will use this description.",
+  "location_settings.retry": "Retry",
+
   "action.close": "Close",
   "action.delete": "Delete",
   "action.add": "Add",
@@ -985,6 +999,20 @@ export type StringKey = keyof typeof en;
 // Partial): every base key must be translated, so an untranslated addition fails
 // typecheck rather than silently falling through to English at runtime.
 export const es: Record<StringKey, string> = {
+  "nav.location_settings": "Facturación del local",
+  "location_settings.title": "Facturación del local",
+  "location_settings.description": "Descripción de la operación",
+  "location_settings.help":
+    "Este texto se copia en los futuros registros fiscales de este local. Los registros existentes conservan su descripción original.",
+  "location_settings.help_label": "Ayuda sobre la descripción de la operación",
+  "location_settings.required": "Introduce la descripción de la operación.",
+  "location_settings.invalid":
+    "La descripción no es válida. Usa como máximo 500 caracteres y elimina los caracteres de control ocultos.",
+  "location_settings.load_error": "No se ha podido cargar la configuración del local.",
+  "location_settings.save_error": "No se ha podido guardar la descripción. Inténtalo de nuevo.",
+  "location_settings.saved": "Guardado. Los futuros registros usarán esta descripción.",
+  "location_settings.retry": "Reintentar",
+
   "action.close": "Cerrar",
   "action.delete": "Eliminar",
   "action.add": "Añadir",

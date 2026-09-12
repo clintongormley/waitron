@@ -415,6 +415,11 @@ unfiltered `main` run, not a wrong hook.
   multi-tenant DB (till-reroute S3). The per-task review and four quality lenses all reasoned it "safe
   under one-tenant-per-db"; only the run-it seat, which RAN a two-tenant probe as `app_user`
   (rolsuper=f), caught it — reading missed it, running caught it (§1, §4).
+- **A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries.**
+  The permission check returns the session's tenant; it does not compare it with the configured tenant.
+  A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
+  them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, “refuses a manager session
+  belonging to another tenant”.
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Nothing is
   deployed; schema changes drop and recreate. A backfill for an empty database is code to maintain
   that buys nothing — and the first draft of the settlement design carried one that could only ever

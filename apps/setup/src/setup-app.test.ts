@@ -22,6 +22,9 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       environment: "preproduction",
       needs: ["venue"],
     } satisfies SetupStatus),
+    getVenueDefaults: vi
+      .fn()
+      .mockResolvedValue({ verifactu: { operationDescription: "Venta en establecimiento" } }),
     provision: vi.fn().mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
     adopt: vi.fn().mockResolvedValue({
       adopted: true,
@@ -1153,5 +1156,51 @@ describe("assembleBody", () => {
       aeatCert: { pfxBase64: "", passphrase: "", certKind: "sello" },
     });
     expect("aeatCert" in body).toBe(false);
+  });
+});
+
+describe("A2 mode boundaries", () => {
+  it.each(["prepare", "live"] as const)(
+    "discards Demo business identity when switching to %s, keeping the operator and address",
+    async (mode) => {
+      const el = await mountSetupApp();
+      patch(el, {
+        mode: "demo",
+        venue: {
+          taxId: "B12345674",
+          legalName: "Demo company",
+          tillName: "Caja 1",
+          seriesCode: "FS",
+          rectificativeSeriesCode: "FR",
+          admin: { displayName: "Ada" },
+          location: {
+            name: "Calle Mayor",
+            addressLine1: "Calle Mayor 1",
+            operationDescription: "Demo description",
+            invoiceLocales: ["es-ES"],
+            dayCutover: "04:00",
+          },
+        },
+      });
+      patch(el, { mode });
+      const draft = readDraft(el);
+      expect(draft.venue?.taxId).toBeUndefined();
+      expect(draft.venue?.legalName).toBeUndefined();
+      expect(draft.venue?.location?.operationDescription).toBeUndefined();
+      expect(draft.venue?.admin?.displayName).toBe("Ada");
+      expect(draft.venue?.location?.addressLine1).toBe("Calle Mayor 1");
+    },
+  );
+  it("passes fiscal defaults from the server to the shop form", async () => {
+    const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
+    const el = await mountSetupApp(
+      stubApi({ getVenueDefaults: vi.fn().mockResolvedValue(defaults) }),
+    );
+    await flush(el);
+    goto(el, "venue");
+    await flush(el);
+    expect(((await screenHost(el, "venue")) as unknown as { defaults: unknown }).defaults).toEqual(
+      defaults,
+    );
   });
 });

@@ -26,6 +26,8 @@ export type FetchLike = typeof fetch;
  * warn loudly before provisioning a real `production` venue; `needs` lists the outstanding setup
  * steps (today only `"venue"`).
  */
+export type VenueDefaults = Readonly<Record<string, { readonly operationDescription: string }>>;
+
 export interface SetupStatus {
   provisioned: boolean;
   environment: "production" | "preproduction";
@@ -192,6 +194,10 @@ export class SetupApi {
 
   getDiscovery(): Promise<{ caDownloadAvailable: boolean }> {
     return this.#request("/setup-api/discovery", "GET");
+  }
+
+  getVenueDefaults(): Promise<VenueDefaults> {
+    return this.#request<VenueDefaults>("/setup-api/venue-defaults", "GET");
   }
 
   /** `GET /setup-api/status` — the box's environment + outstanding steps, read on boot. */

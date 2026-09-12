@@ -76,8 +76,11 @@ export function validateVenueFiscalFields(venue: VenueFiscalFields): void {
     if (code.length > MAX_BASE_CODE_LENGTH) refuse(field);
   }
   if (CONTROL_CHARS.test(venue.legalName)) refuse("legalName");
-  if (CONTROL_CHARS.test(venue.operationDescription)) refuse("location.operationDescription");
-  if (venue.operationDescription.length > DESCRIPTION_MAX) {
+  validateOperationDescription(venue.operationDescription);
+}
+
+export function validateOperationDescription(description: string): void {
+  if (CONTROL_CHARS.test(description) || description.length > DESCRIPTION_MAX) {
     refuse("location.operationDescription");
   }
 }
