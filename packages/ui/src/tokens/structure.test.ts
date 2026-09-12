@@ -37,6 +37,7 @@ test("defines the structural contract", () => {
     "--wt-font-size-lg",
     "--wt-tap-min",
     "--wt-opacity-disabled",
+    "--wt-opacity-hover",
     "--wt-dialog-max-width",
   ]) {
     expect(token(el, name), `${name} should be defined`).not.toBe("");
@@ -54,6 +55,15 @@ test("disabled opacity is a valid, visibly-dimmed opacity value", () => {
   // just dimmed), and 1 would give disabled controls no visual distinction at all.
   const el = mount();
   const opacity = Number(token(el, "--wt-opacity-disabled"));
+  expect(opacity).toBeGreaterThan(0);
+  expect(opacity).toBeLessThan(1);
+});
+
+test("hover opacity is a valid, visibly-dimmed opacity value", () => {
+  // Same reasoning as the disabled-opacity test above: strictly between 0 and 1 so a hovered
+  // control stays visible (not hidden) but visibly distinct from its resting state.
+  const el = mount();
+  const opacity = Number(token(el, "--wt-opacity-hover"));
   expect(opacity).toBeGreaterThan(0);
   expect(opacity).toBeLessThan(1);
 });

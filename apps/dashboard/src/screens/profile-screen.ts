@@ -9,6 +9,7 @@ import { toDataURL } from "qrcode";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
@@ -72,7 +73,11 @@ export class ProfileScreen extends LitElement {
       }
       .profile {
         max-width: 36rem;
-        margin-inline: auto;
+      }
+      .profile > h1 {
+        margin: 0 0 var(--wt-space-6);
+        font-size: var(--wt-font-size-xl);
+        font-weight: var(--wt-font-weight-bold);
       }
       section {
         margin-block: var(--wt-space-6);
@@ -81,20 +86,66 @@ export class ProfileScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
       }
-      .passkey {
+      .group {
+        margin-bottom: var(--wt-space-5);
+      }
+      .group-label {
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--wt-color-text-muted);
+      }
+      .row,
+      .action-row {
+        padding-block: var(--wt-space-3);
+      }
+      .row:not(:first-child),
+      .action-row:not(:first-child) {
+        border-top: 1px solid var(--wt-color-border);
+      }
+      .row {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+      .action-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-4);
-        margin-bottom: var(--wt-space-3);
       }
-      .hint,
-      dt {
+      .action-row .text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        min-width: 0;
+      }
+      .field-label {
+        font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
-      dd {
-        margin: 0 0 var(--wt-space-3);
+      .field-value {
+        font-weight: var(--wt-font-weight-bold);
         overflow-wrap: anywhere;
+      }
+      .field-meta {
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-normal);
+        color: var(--wt-color-text-muted);
+      }
+      .card-footer {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+        padding-top: var(--wt-space-3);
+        border-top: 1px solid var(--wt-color-border);
+      }
+      .hint {
+        margin: 0;
+        color: var(--wt-color-text-muted);
       }
       select {
         width: 100%;
@@ -434,135 +485,194 @@ export class ProfileScreen extends LitElement {
           ? html`<wt-button @click=${() => void this.#load()}>${t("profile.reload")}</wt-button>`
           : this.mode === "view"
             ? html`
-                <section>
-                  <h2>${t("profile.details")}</h2>
-                  <dl>
-                    <dt>${t("profile.name")}</dt>
-                    <dd>${p.displayName}</dd>
-                    <dt>${t("person.first_names")}</dt>
-                    <dd>${p.firstNames ?? "—"}</dd>
-                    <dt>${t("person.last_names")}</dt>
-                    <dd>${p.lastNames ?? "—"}</dd>
-                    <dt>${t("person.telephone")}</dt>
-                    <dd>
-                      ${p.telephone ?? "—"} ${p.telephone ? t("profile.phone_unverified") : ""}
-                    </dd>
-                    <dt>${t("login.email")}</dt>
-                    <dd>${p.email ?? "—"}</dd>
+                <div class="group">
+                  <h2 class="group-label">${t("profile.details")}</h2>
+                  <wt-card raised>
+                    <div class="row">
+                      <span class="field-label">${t("profile.name")}</span>
+                      <span class="field-value">${p.displayName}</span>
+                    </div>
+                    <div class="row">
+                      <span class="field-label">${t("person.first_names")}</span>
+                      <span class="field-value">${p.firstNames ?? "—"}</span>
+                    </div>
+                    <div class="row">
+                      <span class="field-label">${t("person.last_names")}</span>
+                      <span class="field-value">${p.lastNames ?? "—"}</span>
+                    </div>
+                    <div class="row">
+                      <span class="field-label">${t("person.telephone")}</span>
+                      <span class="field-value"
+                        >${p.telephone ?? "—"}
+                        ${p.telephone ? t("profile.phone_unverified") : ""}</span
+                      >
+                    </div>
+                    <div class="row">
+                      <span class="field-label">${t("login.email")}</span>
+                      <span class="field-value">${p.email ?? "—"}</span>
+                    </div>
                     ${
                       p.pendingEmail === null
                         ? nothing
-                        : html`<dt>${t("profile.pending_email")}</dt>
-                            <dd>
-                              ${p.pendingEmail}
-                              <wt-button
-                                data-test="confirm-email"
-                                @click=${() => this.#edit("email")}
-                                >${t("profile.confirm_email")}</wt-button
-                              >
-                            </dd>`
+                        : html`<div class="action-row">
+                            <div class="text">
+                              <span class="field-label">${t("profile.pending_email")}</span>
+                              <span class="field-value">${p.pendingEmail}</span>
+                            </div>
+                            <wt-button
+                              data-test="confirm-email"
+                              variant="primary"
+                              @click=${() => this.#edit("email")}
+                              >${t("profile.confirm_email")}</wt-button
+                            >
+                          </div>`
                     }
-                    <dt>${t("profile.language")}</dt>
-                    <dd>
-                      ${this.locales.find((l) => l.code === (p.locale ?? this.venueLocale))?.label}
-                    </dd>
-                  </dl>
-                  <wt-button
-                    data-test="edit-details"
-                    ?disabled=${this.busy}
-                    @click=${() => this.#edit("details")}
-                    >${t("action.edit")}</wt-button
-                  >
-                </section>
-                <section>
-                  <h2>${t("login.password")}</h2>
-                  ${p.hasPassword ? html`<wt-button data-test="change-password" ?disabled=${this.busy} @click=${() => this.#edit("password")}>${t("profile.change_password")}</wt-button>` : html`<p>${t("profile.password_recovery")}</p>`}
-                </section>
-                <section>
-                  <h2>${t("person.pin")}</h2>
-                  <wt-button
-                    data-test="change-pin"
-                    ?disabled=${this.busy}
-                    @click=${() => this.#edit("pin")}
-                    >${t("profile.change_pin")}</wt-button
-                  >
-                </section>
-                <section>
-                  <h2>${t("profile.passkeys")}</h2>
-                  ${
-                    p.passkeys.length === 0
-                      ? html`<p class="hint">${t("profile.no_passkeys")}</p>`
-                      : p.passkeys.map(
-                          (key, index) =>
-                            html`<div class="passkey">
-                              <span
-                                >${key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1))}
-                                · ${new Date(key.createdAt).toLocaleDateString()}</span
-                              >
-                              ${p.hasPassword ? html`<wt-button data-test="remove-passkey" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_name").replace("{name}", key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1)))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
-                            </div>`,
-                        )
-                  }
-                  <wt-button
-                    data-test="add-passkey"
-                    ?disabled=${this.busy}
-                    @click=${() => this.#edit("passkey")}
-                    >${t("staff.add_passkey")}</wt-button
-                  >
-                </section>
-                <section>
-                  <h2>${t("profile.authenticator")}</h2>
-                  <p class="hint">
-                    ${p.hasTotp ? t("profile.authenticator_enabled") : t("profile.authenticator_hint")}
-                  </p>
-                  ${
-                    p.hasTotp
-                      ? html`<wt-button
-                            data-test="recovery-codes"
-                            @click=${() => this.#edit("recovery")}
-                            >${t("profile.replace_recovery_codes")}</wt-button
-                          ><wt-button
-                            data-test="disable-authenticator"
-                            variant="danger"
-                            @click=${() => this.#edit("disable-totp")}
-                            >${t("profile.disable_authenticator")}</wt-button
-                          >`
-                      : html`<wt-button
-                          data-test="setup-authenticator"
-                          @click=${() => this.#edit("totp")}
-                          >${t("profile.setup_authenticator")}</wt-button
-                        >`
-                  }
-                </section>
-                <section>
-                  <h2>${t("profile.google_login")}</h2>
-                  <p class="hint">
+                    <div class="row">
+                      <span class="field-label">${t("profile.language")}</span>
+                      <span class="field-value"
+                        >${this.locales.find((l) => l.code === (p.locale ?? this.venueLocale))?.label}</span
+                      >
+                    </div>
+                    <div class="card-footer">
+                      <wt-button
+                        data-test="edit-details"
+                        variant="primary"
+                        ?disabled=${this.busy}
+                        @click=${() => this.#edit("details")}
+                        >${t("action.edit")}</wt-button
+                      >
+                    </div>
+                  </wt-card>
+                </div>
+                <div class="group">
+                  <h2 class="group-label">${t("profile.security")}</h2>
+                  <wt-card raised>
+                    <div class="action-row">
+                      <div class="text">
+                        <span class="field-value">${t("login.password")}</span>
+                        ${p.hasPassword ? nothing : html`<span class="field-meta">${t("profile.password_recovery")}</span>`}
+                      </div>
+                      ${
+                        p.hasPassword
+                          ? html`<wt-button
+                              data-test="change-password"
+                              variant="primary"
+                              ?disabled=${this.busy}
+                              @click=${() => this.#edit("password")}
+                              >${t("profile.change_password")}</wt-button
+                            >`
+                          : nothing
+                      }
+                    </div>
+                    <div class="action-row">
+                      <span class="field-value">${t("person.pin")}</span>
+                      <wt-button
+                        data-test="change-pin"
+                        variant="primary"
+                        ?disabled=${this.busy}
+                        @click=${() => this.#edit("pin")}
+                        >${t("profile.change_pin")}</wt-button
+                      >
+                    </div>
+                  </wt-card>
+                </div>
+                <div class="group">
+                  <h2 class="group-label">${t("profile.passkeys")}</h2>
+                  <wt-card raised>
                     ${
-                      p.hasGoogle
-                        ? t("profile.google_linked")
-                        : this.googleConfigured
-                          ? t("profile.google_hint")
-                          : t("profile.google_unavailable")
+                      p.passkeys.length === 0
+                        ? html`<p class="hint">${t("profile.no_passkeys")}</p>`
+                        : p.passkeys.map(
+                            (key, index) =>
+                              html`<div class="action-row">
+                                <div class="text">
+                                  <span class="field-value"
+                                    >${key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1))}</span
+                                  >
+                                  <span class="field-meta"
+                                    >${new Date(key.createdAt).toLocaleDateString()}</span
+                                  >
+                                </div>
+                                ${p.hasPassword ? html`<wt-button data-test="remove-passkey" variant="danger" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_name").replace("{name}", key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1)))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
+                              </div>`,
+                          )
                     }
-                  </p>
-                  ${
-                    p.hasGoogle
-                      ? html`<wt-button
-                          data-test="unlink-google"
-                          variant="danger"
-                          @click=${() => this.#edit("unlink-google")}
-                          >${t("profile.unlink_google")}</wt-button
-                        >`
-                      : this.googleConfigured
-                        ? html`<wt-button
-                            data-test="setup-google"
-                            ?disabled=${this.busy}
-                            @click=${() => this.#edit("google")}
-                            >${t("profile.setup_google")}</wt-button
-                          >`
+                    <div class="card-footer">
+                      <wt-button
+                        data-test="add-passkey"
+                        variant="primary"
+                        ?disabled=${this.busy}
+                        @click=${() => this.#edit("passkey")}
+                        >${t("staff.add_passkey")}</wt-button
+                      >
+                    </div>
+                  </wt-card>
+                </div>
+                <div class="group">
+                  <h2 class="group-label">${t("profile.authenticator")}</h2>
+                  <wt-card raised>
+                    <p class="hint">
+                      ${p.hasTotp ? t("profile.authenticator_enabled") : t("profile.authenticator_hint")}
+                    </p>
+                    <div class="card-footer">
+                      ${
+                        p.hasTotp
+                          ? html`<wt-button
+                                data-test="recovery-codes"
+                                @click=${() => this.#edit("recovery")}
+                                >${t("profile.replace_recovery_codes")}</wt-button
+                              ><wt-button
+                                data-test="disable-authenticator"
+                                variant="danger"
+                                @click=${() => this.#edit("disable-totp")}
+                                >${t("profile.disable_authenticator")}</wt-button
+                              >`
+                          : html`<wt-button
+                              data-test="setup-authenticator"
+                              variant="primary"
+                              @click=${() => this.#edit("totp")}
+                              >${t("profile.setup_authenticator")}</wt-button
+                            >`
+                      }
+                    </div>
+                  </wt-card>
+                </div>
+                <div class="group">
+                  <h2 class="group-label">${t("profile.google_login")}</h2>
+                  <wt-card raised>
+                    <p class="hint">
+                      ${
+                        p.hasGoogle
+                          ? t("profile.google_linked")
+                          : this.googleConfigured
+                            ? t("profile.google_hint")
+                            : t("profile.google_unavailable")
+                      }
+                    </p>
+                    ${
+                      p.hasGoogle || this.googleConfigured
+                        ? html`<div class="card-footer">
+                            ${
+                              p.hasGoogle
+                                ? html`<wt-button
+                                    data-test="unlink-google"
+                                    variant="danger"
+                                    @click=${() => this.#edit("unlink-google")}
+                                    >${t("profile.unlink_google")}</wt-button
+                                  >`
+                                : html`<wt-button
+                                    data-test="setup-google"
+                                    variant="primary"
+                                    ?disabled=${this.busy}
+                                    @click=${() => this.#edit("google")}
+                                    >${t("profile.setup_google")}</wt-button
+                                  >`
+                            }
+                          </div>`
                         : nothing
-                  }
-                </section>
+                    }
+                  </wt-card>
+                </div>
                 ${
                   this.privacyNoticeUrl === ""
                     ? nothing

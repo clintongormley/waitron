@@ -249,6 +249,35 @@ export class DashboardApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      /* A flat nav row, not a button: no border/background box, so a list of ~20 of these reads as
+         navigation rather than a stack of buttons. The selected-item treatment (accent edge + bold
+         coloured text, no fill) mirrors wt-tabs' own selected state — same idiom, vertical instead
+         of horizontal. */
+      .nav-item {
+        display: block;
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: none;
+        border-inline-start: 3px solid transparent;
+        background: transparent;
+        color: var(--wt-color-text);
+        font: inherit;
+        font-weight: var(--wt-font-weight-normal);
+        text-align: start;
+        cursor: pointer;
+      }
+
+      .nav-item:hover {
+        background: var(--wt-color-surface);
+      }
+
+      .nav-item[aria-current="page"] {
+        border-inline-start-color: var(--wt-color-primary);
+        color: var(--wt-color-primary);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       /* The content column beside the sidebar. */
       .main {
         flex: 1 1 auto;
@@ -965,8 +994,10 @@ export class DashboardApp extends LitElement {
    * sales, the two reporting faces) leads with no header, then the Menu / Service / Team / Purchasing /
    * Configuration groups, each headed by an `<h2 class="nav-group">`. Each active MODULE contribution
    * appends its own item into the group whose `id` matches its `screen.group`, sorted by `order`.
-   * The ACTIVE face is `variant="primary"` + `aria-current="page"`; the rest are `variant="secondary"`.
-   * Every item keeps its stable `data-test="nav-<screen>"` id. */
+   * Each item is a plain `.nav-item` button, not `wt-button` — a nav list of ~20 rows reads as
+   * navigation, not a stack of buttons. The active face carries `aria-current="page"`, which is
+   * what `.nav-item[aria-current="page"]` styles from. Every item keeps its stable
+   * `data-test="nav-<screen>"` id. */
   #nav(): TemplateResult {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
@@ -982,25 +1013,27 @@ export class DashboardApp extends LitElement {
               )
               .map(
                 (item) =>
-                  html`<wt-button
+                  html`<button
+                    type="button"
                     class="nav-item"
-                    variant=${this.screen === item.screen ? "primary" : "secondary"}
                     aria-current=${this.screen === item.screen ? "page" : nothing}
                     data-test="nav-${item.screen}"
                     @click=${() => this.#selectScreen(item.screen)}
-                    >${t(item.labelKey)}</wt-button
-                  >`,
+                  >
+                    ${t(item.labelKey)}
+                  </button>`,
               )}
             ${(this.#navGroups.get(group.id) ?? []).map(
               (c) =>
-                html`<wt-button
+                html`<button
+                  type="button"
                   class="nav-item"
-                  variant=${this.screen === c.screen.id ? "primary" : "secondary"}
                   aria-current=${this.screen === c.screen.id ? "page" : nothing}
                   data-test="nav-${c.screen.id}"
                   @click=${() => this.#selectScreen(c.screen.id)}
-                  >${tKit(c.screen.navLabelKey)}</wt-button
-                >`,
+                >
+                  ${tKit(c.screen.navLabelKey)}
+                </button>`,
             )}
           `,
         )}

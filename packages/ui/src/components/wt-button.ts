@@ -43,6 +43,14 @@ export class WtButton extends LitElement {
         ${disabledStyles}
       }
 
+      /* Every variant gets the same feedback: a plain opacity dip. Anything variant-specific (a
+         background swap, a border-colour change) would need a distinct value per variant to stay
+         visible in both themes — --wt-color-surface and --wt-color-surface-raised are identical in
+         the light theme today, so a background-based hover treatment would be invisible there. */
+      button:hover:not(:disabled) {
+        opacity: var(--wt-opacity-hover);
+      }
+
       :host([size="sm"]) button {
         min-height: var(--wt-space-6);
         padding: var(--wt-space-1) var(--wt-space-3);

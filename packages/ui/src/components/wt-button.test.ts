@@ -1,4 +1,5 @@
 import { expect, test, afterEach } from "vitest";
+import { userEvent } from "@vitest/browser/context";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-button.js";
 
@@ -75,6 +76,25 @@ test("primary variant paints from the primary token", async () => {
   host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
   const inner = el.shadowRoot!.querySelector("button")!;
   expect(getComputedStyle(inner).backgroundColor).toBe("rgb(1, 2, 3)");
+});
+
+test("dims on hover via the hover-opacity token, and stops dimming on unhover", async () => {
+  const el = await mount("<wt-button>x</wt-button>");
+  host.style.setProperty("--wt-opacity-hover", "0.6");
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(inner).opacity).toBe("1");
+  await userEvent.hover(inner);
+  expect(getComputedStyle(inner).opacity).toBe("0.6");
+  await userEvent.unhover(inner);
+  expect(getComputedStyle(inner).opacity).toBe("1");
+});
+
+test("does not dim on hover while disabled", async () => {
+  const el = await mount("<wt-button disabled>x</wt-button>");
+  host.style.setProperty("--wt-opacity-hover", "0.6");
+  const inner = el.shadowRoot!.querySelector("button")!;
+  await userEvent.hover(inner);
+  expect(getComputedStyle(inner).opacity).not.toBe("0.6");
 });
 
 test("loading disables the button, marks it busy and shows a spinner", async () => {

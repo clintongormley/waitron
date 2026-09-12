@@ -147,6 +147,27 @@ describe("your profile", () => {
     ).toBe("https://restaurant.example/privacy");
     await expectNoA11yViolations(host);
   });
+  it("hides the change-password action for an account with no password", async () => {
+    const { el, host } = await mount({
+      getProfile: vi.fn().mockResolvedValue({
+        displayName: "Alex",
+        firstNames: "Alex",
+        lastNames: "Rivera",
+        telephone: null,
+        email: "alex@example.com",
+        pendingEmail: null,
+        locale: "en-GB",
+        hasPassword: false,
+        hasTotp: false,
+        hasGoogle: false,
+        passkeys: [],
+      }),
+    });
+    expect(el.shadowRoot!.querySelector('[data-test="change-password"]')).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("profile.password_recovery"));
+    expect(el.shadowRoot!.textContent).toContain(t("login.password"));
+    await expectNoA11yViolations(host);
+  });
   it("shows a passkey's name and keeps a numbered fallback for unnamed keys", async () => {
     const { el, api } = await mount();
     expect(el.shadowRoot!.textContent).toContain("Passkey 1");

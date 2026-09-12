@@ -144,6 +144,7 @@ export const en = {
   // Login screen
   "profile.title": "Your profile",
   "profile.details": "Your details",
+  "profile.security": "Security",
   "profile.name": "Name",
   "profile.language": "Language",
   "profile.saved": "Your changes have been saved.",
@@ -1098,6 +1099,7 @@ export const es: Record<StringKey, string> = {
   "email.open_link": "Abrir enlace de cuenta",
   "profile.title": "Tu perfil",
   "profile.details": "Tus datos",
+  "profile.security": "Seguridad",
   "profile.name": "Nombre",
   "profile.language": "Idioma",
   "profile.saved": "Se han guardado tus cambios.",
