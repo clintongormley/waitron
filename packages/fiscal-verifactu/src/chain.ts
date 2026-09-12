@@ -5,8 +5,9 @@
 // importing from the file that documents the code a module throws.
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
+import { recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { AltaInput, AnulacionInput, Encadenamiento } from "@waitron/verifactu";
 import { buildAltaRecord, buildAnulacionRecord, validate } from "@waitron/verifactu";
@@ -220,10 +221,13 @@ async function attemptAppend(
   // substitution alike), and the first moment the COMPLETE record exists — the chain pointer and
   // the huella are filled in above — so what is checked is what will be stored.
   //
-  // Error severity only. `validate`'s two warnings are the amount cross-checks, which AEAT accepts
-  // under its own ±10.00 tolerance (see validate.ts above CUOTA_TOTAL_MISMATCH); blocking a sale
-  // for one would refuse a record the authority would have taken.
-  const blocking = validate(record).filter((issue) => issue.severity === "error");
+  // Error severity only REFUSES. `validate`'s two warnings are the amount cross-checks, which AEAT
+  // accepts under its own ±10.00 tolerance (see validate.ts above CUOTA_TOTAL_MISMATCH); blocking a
+  // sale for one would refuse a record the authority would have taken. They are not discarded
+  // either — they are raised as an incident after the insert below, which is why `issues` is kept
+  // whole here rather than filtered in place.
+  const issues = validate(record);
+  const blocking = issues.filter((issue) => issue.severity === "error");
   if (blocking.length > 0) {
     throw new AppError("fiscal.record_invalid", {
       fields: blocking.map((issue) => issue.field),
@@ -256,6 +260,29 @@ async function attemptAppend(
     .update(cadenas)
     .set({ secuencia, ultimoRegistroId: inserted.id, ultimaHuella: row.huella })
     .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)));
+
+  // A warning does not block: AEAT accepts these under its own tolerance. But our totals
+  // disagreeing with our own VAT lines is a bug in the money while the venue keeps selling, so it
+  // is raised where a human can find it rather than left in a log line.
+  //
+  // AFTER the insert, not before: this attempt is the one that won (a retried attempt never
+  // reaches here), so the incident cannot outlive a rolled-back savepoint. On the caller's
+  // transaction, like every other `recordIncident` caller — an incident that committed while its
+  // sale rolled back would report a failure for a sale that never existed.
+  const warnings = issues.filter((issue) => issue.severity === "warning");
+  if (warnings.length > 0) {
+    await recordIncident(tx, {
+      tenantId,
+      tillId: registro.tillId as TillId,
+      saleId: registro.saleId as SaleId,
+      error: new AppError("fiscal.record_totals_disagree", {
+        fields: warnings.map((issue) => issue.field),
+        codes: warnings.map((issue) => issue.code),
+      }),
+      severity: "warning",
+      detectedAt: new Date(),
+    });
+  }
 
   return { id: inserted.id, secuencia, huella: row.huella };
 }

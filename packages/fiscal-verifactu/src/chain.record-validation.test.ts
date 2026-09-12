@@ -4,6 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
 import { asAppUser, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { decimal } from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { VerifactuBackend } from "./backend.js";
@@ -109,5 +110,66 @@ describe("a record AEAT could not accept never enters the chain", () => {
       code: "fiscal.record_invalid",
       params: { fields: ["NumSerieFacturaAnulada"] },
     });
+  });
+});
+
+describe("a record whose totals disagree with themselves is written, filed and flagged", () => {
+  /** A sale whose stated total is far from its own VAT lines, breaching the 10.00 tolerance
+   * without breaking any FORMAT rule — the only way to reach a warning without also reaching an
+   * error, which Task 1's guard would refuse.
+   *
+   * `settlement: "deferred"` matters and is not incidental: `saleInput`'s default is an IMMEDIATE
+   * settlement whose tender matches its original total, and `settleSale` throws
+   * `sale.tender_shortfall` when the tendered sum disagrees with the due amount — so an immediate
+   * fixture would abort in settlement, before the fiscal record is ever built, and this suite
+   * would be testing nothing. A deferred sale still writes the sale and the fiscal record. */
+  function mismatchedSale() {
+    return {
+      ...saleInput({ tenantId, tillId, nodeId, seriesId }),
+      total: decimal("9999.00"),
+      settlement: { kind: "deferred" } as const,
+    };
+  }
+
+  it("records the sale rather than refusing it", async () => {
+    await useSeriesCode("FS");
+    const { saleId } = await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return recordSale(tx, backend, mismatchedSale());
+    });
+    expect(saleId).toBeDefined();
+
+    const registros = await pg.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.tenantId, tenantId));
+    expect(registros).toHaveLength(1);
+  });
+
+  it("raises a warning incident against that sale", async () => {
+    await useSeriesCode("FS");
+    const { saleId } = await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return recordSale(tx, backend, mismatchedSale());
+    });
+
+    const rows = await pg.db.execute<{ code: string; severity: string; sale_id: string }>(
+      sql`select code, severity, sale_id from incidents where tenant_id = ${tenantId}`,
+    );
+    expect(rows.rows).toEqual([
+      expect.objectContaining({
+        code: "fiscal.record_totals_disagree",
+        severity: "warning",
+        sale_id: saleId,
+      }),
+    ]);
+  });
+
+  it("leaves a well-formed sale with no incident at all", async () => {
+    await useSeriesCode("FS");
+    await sell();
+
+    const rows = await pg.db.execute(sql`select 1 from incidents where tenant_id = ${tenantId}`);
+    expect(rows.rows).toEqual([]);
   });
 });

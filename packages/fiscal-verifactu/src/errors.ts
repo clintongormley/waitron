@@ -154,6 +154,19 @@ declare module "@waitron/shared" {
     "fiscal.record_invalid": { fields: string[]; codes: string[] };
 
     /**
+     * `attemptAppend` (./chain.ts) wrote a record whose stated totals disagree with its own VAT
+     * breakdown by more than AEAT's ±10.00 euro tolerance. NEVER thrown — AEAT treats a breach as
+     * an admissible error and accepts the record, so refusing the sale would block a record the
+     * authority would have taken. Built only to hand its `.code`/`.params` to `@waitron/core`'s
+     * `recordIncident`, exactly as `fiscal.registro_rechazado` is used from the drainer.
+     *
+     * It is raised at all because our own totals disagreeing with our own lines is a bug in the
+     * money, happening while the venue keeps selling. Params carry the field names and issue codes,
+     * never the amounts (see `fiscal.record_invalid` for why params never carry values).
+     */
+    "fiscal.record_totals_disagree": { fields: string[]; codes: string[] };
+
+    /**
      * Task 9's drainer (`./drain.ts`, `applyOutcome`). AEAT rejected this record outright
      * (`resolveEstadoEfectivo` returned `"rejected"`) — never constructed as a thrown `AppError`
      * (rejection is an ordinary, expected outcome the drainer resolves and moves on from, not a
