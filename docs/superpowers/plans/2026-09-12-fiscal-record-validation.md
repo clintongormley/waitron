@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-12-fiscal-record-validation-design.md`
 
+**This plan was reviewed against the code before execution**, and the review found that the change turns much of the existing suite red for a reason nobody had noticed. Task 1 step 5 is that finding; read it before starting Task 1.
+
 ## Global Constraints
 
 - **Error params never carry an operator's value.** The shared error boundary writes an `AppError`'s params into `waitron.log`, which the unauthenticated recovery page renders to anyone on the venue's LAN. Field NAMES and issue CODES only (CLAUDE.md §3).
@@ -17,8 +19,9 @@
 - **Every file that throws a code imports its registry** — `import "./errors.js"` as a bare side-effect import.
 - **No file under `apps/server/src` may import `@waitron/verifactu` or `@waitron/fiscal-verifactu`.** `scripts/module-seams.test.ts` pins that allowlist as EMPTY; it may shrink, never grow. This is why Task 3 exists.
 - **A new code is registered by declaration merging** in the throwing package's own `errors.ts` (`declare module "@waitron/shared"`), never by editing `packages/shared`.
+- **Never rewrite a test to match new code.** If a test goes red, work out which of the two is wrong. Task 1 step 5 is a case where the FIXTURE is wrong; it is the only one this plan sanctions, and it says why.
 - **Every commit is `git commit -s`** — CI's `dco` job walks the whole PR range.
-- **Per-task verification is the changed package's `test:coverage` plus `pnpm lint`, `pnpm typecheck` and `pnpm format:check`** — not the whole workspace. `packages/fiscal-verifactu` and `packages/core` sit at the high coverage bar (statements 98 / lines 98 / functions 98 / branches 95).
+- **Per-task verification is the changed package's `test:coverage` plus `pnpm lint`, `pnpm typecheck` and `pnpm format:check`** — not the whole workspace. `packages/fiscal-verifactu` and `packages/core` sit at the high coverage bar (statements 98 / lines 98 / functions 98 / branches 95); `apps/server` and `apps/setup` at the 90/90/85/85 floor.
 - **Before the browser-mode task (Task 5), check what else is testing on this machine** (`memory_pressure | grep free`, `ps -axo rss,command | sort -nr | head`) — the four browser packages run real headless Chromium.
 
 ---
@@ -27,27 +30,30 @@
 
 **Files:**
 - Modify: `packages/fiscal-verifactu/src/errors.ts` (add the `fiscal.record_invalid` declaration)
-- Modify: `packages/fiscal-verifactu/src/chain.ts:11-12` (import), `:213-217` (the check)
+- Modify: `packages/fiscal-verifactu/src/chain.ts` — the `@waitron/verifactu` value import (line 12), and the check immediately after `const record = …` (line 213)
+- Modify: `packages/fiscal-verifactu/src/testing/seed.ts` — `altaFor` (step 5)
 - Test: `packages/fiscal-verifactu/src/chain.record-validation.test.ts` (create)
 
 **Interfaces:**
-- Consumes: `validate`, `ValidationIssue` from `@waitron/verifactu` (already exported from its barrel).
+- Consumes: `validate`, `ValidationIssue` from `@waitron/verifactu` (exported from its barrel, `index.ts:12` and `:27`).
 - Produces: the error code `fiscal.record_invalid` with params `{ fields: string[]; codes: string[] }`. Task 2 adds a second behaviour at the same seam and relies on the `validate(record)` call sitting after the record is built.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/fiscal-verifactu/src/chain.record-validation.test.ts`:
+Create `packages/fiscal-verifactu/src/chain.record-validation.test.ts`. The harness below is the one `packages/fiscal-verifactu/src/write-path.e2e.test.ts` uses — open that file first and follow it rather than inventing a variation.
 
 ```ts
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import { appendToChain } from "./chain.js";
 import { VerifactuBackend } from "./backend.js";
 import { registrosFacturacion } from "./schema/registros.js";
+import { anulacionFor } from "./testing/seed.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
@@ -105,8 +111,13 @@ describe("a record AEAT could not accept never enters the chain", () => {
       .where(eq(registrosFacturacion.tenantId, tenantId));
     expect(registros).toEqual([]);
 
-    // The chain head must not have advanced either: a refused record leaves the node exactly
-    // where it was, so the next legitimate sale is still the chain's first record.
+    // The sale itself must be gone too — `recordSale` writes the sale and the fiscal record in ONE
+    // transaction, so a refusal that left a sale behind would be a sale with no fiscal record.
+    const soldRows = await pg.db.select().from(sales).where(eq(sales.tenantId, tenantId));
+    expect(soldRows).toEqual([]);
+
+    // And the chain head must not have advanced: a refused record leaves the node exactly where it
+    // was, so the next legitimate sale is still the chain's first record.
     const heads = await pg.db.execute<{ secuencia: number }>(
       sql`select secuencia from cadenas where tenant_id = ${tenantId} and node_id = ${nodeId}`,
     );
@@ -125,27 +136,37 @@ describe("a record AEAT could not accept never enters the chain", () => {
     expect(registro?.numSerieFactura).toBe("FS/1");
   });
 
-  it("refuses a void as well, so the guard covers anulación and not only alta", async () => {
-    await useSeriesCode("FS");
-    const { saleId } = await sell();
-    await useSeriesCode("Serie A");
+  // The anulación arm reaches `validate` through the SAME `const record =` line as every alta, but
+  // "the same line" is an argument, not evidence, so it gets its own case. It cannot be provoked
+  // through `recordVoid`: that rebuilds its identity from the original alta's stored columns
+  // (backend.ts), and after this guard exists the original is always valid. So the record is
+  // appended directly, which is also the only way to reach the anulación branch with a bad value.
+  it("refuses an anulación whose voided invoice number is illegal", async () => {
+    const bad = anulacionFor(tillId, "00000000-0000-4000-8000-000000000001", 1);
+    const registro = {
+      ...bad,
+      input: { ...bad.input, NumSerieFacturaAnulada: "Serie A/1" },
+    };
 
-    // recordVoid rebuilds its identity from the ORIGINAL alta's stored columns, so the stale
-    // "FS/1" travels with it and the void itself stays valid. Re-reading the series is what a
-    // future change might introduce; this case pins that the anulación arm reaches validate at
-    // all by asserting the void still succeeds against a legal stored identity.
     await expect(
-      withTenant(pg.db, tenantId, (tx) => backend.recordVoid(tx, saleId, "staff error")),
-    ).resolves.toMatchObject({ state: "pending" });
+      withTenant(pg.db, tenantId, (tx) => appendToChain(tx, tenantId, nodeId, registro)),
+    ).rejects.toMatchObject({
+      code: "fiscal.record_invalid",
+      params: { fields: ["NumSerieFacturaAnulada"] },
+    });
   });
 });
 ```
 
-- [ ] **Step 2: Run it and watch the first two cases fail**
+`anulacionFor`'s parameter list is `(tillId, saleId, invoiceNumber, …)` — open `packages/fiscal-verifactu/src/testing/seed.ts` and pass exactly what it declares, including any argument that feeds `generadoEn` (a missing one produces `Invalid date supplied` from `formatDateTime`, which is a fixture mistake and not a finding).
 
-Run: `cd packages/fiscal-verifactu && pnpm exec vitest run src/chain.record-validation.test.ts`
+The R5 (correction) and F3 (substitution) arms are deliberately not given their own refusal cases: all three alta-shaped arms build their record through the one `const record = registro.tipo === "alta" ? buildAltaRecord(…)` expression, so a case per arm would re-test the same line. What differs between them — which `TipoFactura` and which extra fields each carries — is covered by `correction-path.e2e.test.ts` and `canje-path.e2e.test.ts`, which must stay green.
 
-Expected: the first two cases FAIL — the sale resolves instead of rejecting, and `registros_facturacion` holds a row with `num_serie_factura = "Serie A/1"`. The third and fourth cases pass already. That contrast is the point: it reproduces the defect before fixing it.
+- [ ] **Step 2: Run it and watch the right cases fail**
+
+Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/chain.record-validation.test.ts`
+
+Expected: cases 1, 2 and 4 FAIL (the sale resolves instead of rejecting; `registros_facturacion` holds a row with `num_serie_factura = "Serie A/1"`; the anulación appends happily). Case 3 passes already. That contrast reproduces the defect before fixing it.
 
 - [ ] **Step 3: Register the error code**
 
@@ -176,7 +197,7 @@ In `packages/fiscal-verifactu/src/errors.ts`, inside the existing `declare modul
 
 - [ ] **Step 4: Add the check at the seam**
 
-In `packages/fiscal-verifactu/src/chain.ts`, extend the existing `@waitron/verifactu` value import on line 12:
+In `packages/fiscal-verifactu/src/chain.ts`, extend the existing `@waitron/verifactu` value import (line 12):
 
 ```ts
 import { buildAltaRecord, buildAnulacionRecord, validate } from "@waitron/verifactu";
@@ -202,26 +223,53 @@ Then, immediately after the `const record = …` assignment and before `const ro
   }
 ```
 
-- [ ] **Step 5: Run the tests and watch all four pass**
+- [ ] **Step 5: Fix the shared test fixture the guard has just exposed**
 
-Run: `cd packages/fiscal-verifactu && pnpm exec vitest run src/chain.record-validation.test.ts`
+**Read this whole step before running anything.** Turning the guard on makes much of this package's existing suite fail — **measured before the plan was written: 12 of 20 tests in `src/chain.test.ts` alone**. That is not the change breaking the suite. It is the guard finding that the shared alta fixture has been building records AEAT would reject, for as long as it has existed, because nothing validated.
 
-Expected: PASS, 4 tests.
+`altaFor` in `packages/fiscal-verifactu/src/testing/seed.ts` produces two error-severity issues:
 
-- [ ] **Step 6: Prove the guard by deletion**
+- `TipoImpositivo: "21"` — the validator requires exactly two decimal places (`TIPO_RANGE`). The real write path never produces this: it comes from `decimal(line.vatRate)`, which carries `"21.00"`.
+- `TipoFactura: "F1"` with no `Destinatarios` — a full invoice must name its recipient (`DESTINATARIOS_REQUIRED`). The real till path emits `"F2"` for a simplified sale, which needs no recipient (`backend.ts`, the `counterparty === null` line).
 
-Comment out the `if (blocking.length > 0) { … }` block and re-run the same file. Expected: the first two cases go RED and the message names `fiscal.record_invalid` as the missing rejection. Restore the block and confirm green again. Record in the commit message that this was done — a guard nobody has seen fail is a claim, not a guard (CLAUDE.md §1).
+So the fixture describes a record the production code cannot generate. Fix the fixture, do not weaken the guard and do not rewrite the tests that use it:
 
-- [ ] **Step 7: Run the package's own gate**
+```ts
+    TipoFactura: "F2",
+```
+```ts
+        TipoImpositivo: "21.00",
+```
 
-Run: `pnpm --filter @waitron/fiscal-verifactu test:coverage && pnpm lint && pnpm typecheck && pnpm format:check`
+Two consequences to expect, neither of which is a problem:
 
-Expected: all pass, coverage still at or above statements 98 / lines 98 / functions 98 / branches 95. If the new `if` branch drops branch coverage, the deletion test above is the case that covers it — check it is running, do not lower the threshold.
+- **Every huella in those tests changes.** `TipoFactura` is one of the hashed fields (`packages/verifactu/src/huella.ts`). No test asserts a literal 64-character hash — they recompute and compare — so relational assertions survive. If one does assert a literal, that is a test to update with its new value, and the commit must say so.
+- **`anulacionFor` needs no change.** `validate` returns early for an anulación before the alta-only rules, so the anulación fixture was always valid.
 
-- [ ] **Step 8: Commit**
+Nine test files use these fixtures (`chain.test.ts`, `chain.concurrency.test.ts`, `chain.node-rekey.concurrency.test.ts`, `chain.pglite-cannot-test-contention.test.ts`, `verify.test.ts`, `restore.test.ts`, `restore.pg.test.ts`, `replication-fidelity.pg.test.ts`, `write-path.e2e.test.ts`). Run the whole package after the fixture change, not one file.
+
+If a test still fails after this fixture fix, STOP and report it rather than adjusting anything else. A second invalid fixture is a finding worth the owner seeing, not a thing to quietly patch.
+
+- [ ] **Step 6: Run the package's whole suite**
+
+Run: `pnpm --filter @waitron/fiscal-verifactu test:coverage`
+
+Expected: PASS, including the four new cases. Note in the task report how many tests changed from red to green after step 5 — that number is the receipt for the fixture claim.
+
+- [ ] **Step 7: Prove the guard by deletion**
+
+Comment out the `if (blocking.length > 0) { … }` block and re-run `src/chain.record-validation.test.ts`. Expected: cases 1, 2 and 4 go RED naming the missing `fiscal.record_invalid`. Restore the block and confirm green again. Record in the commit message that this was done — a guard nobody has seen fail is a claim, not a guard (CLAUDE.md §1).
+
+- [ ] **Step 8: Repo gate for this package**
+
+Run: `pnpm lint && pnpm typecheck && pnpm format:check`
+
+If the new `if` branch drops branch coverage below 95, the deletion test above is what covers it — check it runs, do not lower the threshold.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add packages/fiscal-verifactu/src/errors.ts packages/fiscal-verifactu/src/chain.ts packages/fiscal-verifactu/src/chain.record-validation.test.ts
+git add packages/fiscal-verifactu/src/errors.ts packages/fiscal-verifactu/src/chain.ts packages/fiscal-verifactu/src/chain.record-validation.test.ts packages/fiscal-verifactu/src/testing/seed.ts
 git commit -s -m "Refuse a record AEAT could not accept before it enters the chain
 
 The Veri*Factu record validator had no caller, so a series code with a space in
@@ -229,7 +277,12 @@ it reached registros_facturacion as \"Serie A/1\" and would have been rejected b
 AEAT after the record was already immutable. attemptAppend now runs validate on
 the built record and throws fiscal.record_invalid on any error-severity issue,
 before the insert and before the chain head moves. Proven by deletion: removing
-the check turns the two reproduction cases red."
+the check turns the reproduction cases red.
+
+Turning the guard on also showed that the shared alta test fixture had been
+building records AEAT would reject — a full invoice naming no recipient, and a
+VAT rate written without its decimals, neither of which the real write path can
+produce. The fixture is corrected here; that is the guard doing its job."
 ```
 
 ---
@@ -242,7 +295,7 @@ the check turns the two reproduction cases red."
 - Test: `packages/fiscal-verifactu/src/chain.record-validation.test.ts` (extend)
 
 **Interfaces:**
-- Consumes: `recordIncident` from `@waitron/core`; `fiscal.record_invalid` and the `validate` call site from Task 1.
+- Consumes: `recordIncident` from `@waitron/core` (already a dependency — `drain.ts` and `reconcile.ts` import it); `fiscal.record_invalid` and the `validate` call site from Task 1.
 - Produces: the error code `fiscal.record_totals_disagree` with params `{ fields: string[]; codes: string[] }`, written into an `incidents` row rather than thrown.
 
 - [ ] **Step 1: Write the failing test**
@@ -251,12 +304,21 @@ Append to `packages/fiscal-verifactu/src/chain.record-validation.test.ts`:
 
 ```ts
 describe("a record whose totals disagree with themselves is written, filed and flagged", () => {
-  /** The amount cross-checks compare `ImporteTotal` against the desglose's own lines with a 10.00
-   * tolerance. A sale whose stated total is far from its lines breaches it without breaking any
-   * FORMAT rule, which is the only way to reach a warning without also reaching an error. */
+  /** A sale whose stated total is far from its own VAT lines, breaching the 10.00 tolerance
+   * without breaking any FORMAT rule — the only way to reach a warning without also reaching an
+   * error, which Task 1's guard would refuse.
+   *
+   * `settlement: "deferred"` matters and is not incidental: `saleInput`'s default is an IMMEDIATE
+   * settlement whose tender matches its original total, and `settleSale` throws
+   * `sale.tender_shortfall` when the tendered sum disagrees with the due amount — so an immediate
+   * fixture would abort in settlement, before the fiscal record is ever built, and this suite
+   * would be testing nothing. A deferred sale still writes the sale and the fiscal record. */
   function mismatchedSale() {
-    const base = saleInput({ tenantId, tillId, nodeId, seriesId });
-    return { ...base, total: decimal("9999.00") };
+    return {
+      ...saleInput({ tenantId, tillId, nodeId, seriesId }),
+      total: decimal("9999.00"),
+      settlement: { kind: "deferred" } as const,
+    };
   }
 
   it("records the sale rather than refusing it", async () => {
@@ -292,16 +354,28 @@ describe("a record whose totals disagree with themselves is written, filed and f
       }),
     ]);
   });
+
+  it("leaves a well-formed sale with no incident at all", async () => {
+    await useSeriesCode("FS");
+    await sell();
+
+    const rows = await pg.db.execute(sql`select 1 from incidents where tenant_id = ${tenantId}`);
+    expect(rows.rows).toEqual([]);
+  });
 });
 ```
 
-Add `decimal` to the file's imports from `@waitron/shared` (the same helper `backend.test.ts` uses for its `total`/`vatBreakdown` fixtures).
+Add `decimal` to the imports from `@waitron/shared`.
 
-- [ ] **Step 2: Run it and watch both cases fail**
+Expect exactly ONE incident, not two: at these amounts `CuotaTotal` still agrees with the desglose, so only `IMPORTE_TOTAL_MISMATCH` fires. If two arrive, the fixture moved both totals — say so rather than loosening the assertion.
 
-Run: `cd packages/fiscal-verifactu && pnpm exec vitest run src/chain.record-validation.test.ts -t "disagree"`
+- [ ] **Step 2: Run it and watch the middle case fail**
 
-Expected: the first case may already pass (nothing refuses a warning today), the second FAILS with an empty `incidents` table. If the FIRST case fails, stop: it means the mismatched fixture is also breaking a format rule and is being refused by Task 1's guard. Adjust the fixture so only the tolerance is breached, and say in the commit what you changed and why.
+Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/chain.record-validation.test.ts -t "disagree"`
+
+Expected: the first and third cases pass (nothing refuses a warning today, and nothing raises one either); the second FAILS with an empty `incidents` table.
+
+If the FIRST case fails with `fiscal.record_invalid`, the fixture is breaking a format rule as well and is being refused by Task 1's guard — adjust the amounts until only the tolerance is breached, and say in the commit what you changed. If it fails with `sale.tender_shortfall`, the `settlement: "deferred"` line was lost.
 
 - [ ] **Step 3: Register the code**
 
@@ -324,7 +398,7 @@ In `packages/fiscal-verifactu/src/errors.ts`, beside Task 1's entry:
 
 - [ ] **Step 4: Raise the incident after the insert**
 
-In `packages/fiscal-verifactu/src/chain.ts`, add the import:
+In `packages/fiscal-verifactu/src/chain.ts`, add:
 
 ```ts
 import { recordIncident } from "@waitron/core";
@@ -372,23 +446,17 @@ Then, AFTER the `registrosFacturacion` insert and the `cadenas` update, immediat
 
 Add `SaleId`, `TillId` to the existing `import type { NodeId, TenantId } from "@waitron/shared"` line. `PendingRegistro` carries `saleId` and `tillId` as plain `string` on both arms, which is why the casts are here rather than a signature change — note that in the commit.
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Run the file, then the package**
 
-Run: `cd packages/fiscal-verifactu && pnpm exec vitest run src/chain.record-validation.test.ts`
+Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/chain.record-validation.test.ts` then `pnpm --filter @waitron/fiscal-verifactu test:coverage`
 
-Expected: PASS, 6 tests.
+Expected: PASS, 7 tests in the new file, package green.
 
-- [ ] **Step 6: Check the dependency is legitimate**
+- [ ] **Step 6: Repo gate**
 
-Run: `grep -n '"@waitron/core"' packages/fiscal-verifactu/package.json`
+Run: `pnpm lint && pnpm typecheck && pnpm format:check`
 
-Expected: already listed (`reconcile.ts` imports `recordIncident` from it). If it is NOT listed, stop and report — adding a dependency edge from the regime to core is a decision for the owner, not a step in this task.
-
-- [ ] **Step 7: Package gate**
-
-Run: `pnpm --filter @waitron/fiscal-verifactu test:coverage && pnpm lint && pnpm typecheck && pnpm format:check`
-
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/fiscal-verifactu/src/errors.ts packages/fiscal-verifactu/src/chain.ts packages/fiscal-verifactu/src/chain.record-validation.test.ts
@@ -408,22 +476,13 @@ displays incidents yet — that gap is its own backlog item."
 - Modify: `packages/fiscal/src/contribution.ts` (add the seat to the interface)
 - Create: `packages/fiscal-verifactu/src/venue-fields.ts`
 - Create: `packages/fiscal-verifactu/src/venue-fields.test.ts`
+- Create: `packages/fiscal-verifactu/src/venue-fields.charset.test.ts`
 - Modify: `packages/fiscal-verifactu/src/slot.ts` (fill the seat)
+- Modify: `packages/fiscal-none/src/slot.ts` (comment), `packages/fiscal-none/src/slot.test.ts` (assert no seat)
 
 **Interfaces:**
-- Consumes: nothing from Tasks 1-2.
-- Produces: `FiscalContribution.venueFields?: { validate(venue: VenueFiscalFields): void }`, where
-
-```ts
-export interface VenueFiscalFields {
-  readonly legalName: string;
-  readonly seriesCode: string;
-  readonly rectificativeSeriesCode: string;
-  readonly operationDescription: string;
-}
-```
-
-  `validate` throws `setup.request_invalid` with `{ field }` naming ONE field path, using the same paths `parseVenue` already uses: `"legalName"`, `"seriesCode"`, `"rectificativeSeriesCode"`, `"location.operationDescription"`. Task 4 calls it; Task 5 maps those paths to screens.
+- Consumes: `MAX_BASE_CODE_LENGTH` from `./reserved-series.js` (exported, equals 38).
+- Produces: `FiscalContribution.venueFields?: { validate(venue): void }` taking `{ legalName, seriesCode, rectificativeSeriesCode, operationDescription }`, throwing `setup.request_invalid` with `{ field }` naming ONE field path using the paths `parseVenue` already uses: `"legalName"`, `"seriesCode"`, `"rectificativeSeriesCode"`, `"location.operationDescription"`. Task 4 calls it; Task 5 maps those paths to screens.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -457,9 +516,7 @@ describe("validateVenueFiscalFields", () => {
   it("refuses the rectificative code by its own name, not the standard one's", () => {
     expect(() =>
       validateVenueFiscalFields({ ...GOOD, rectificativeSeriesCode: "Rectificativa A" }),
-    ).toThrow(
-      expect.objectContaining({ params: { field: "rectificativeSeriesCode" } }),
-    );
+    ).toThrow(expect.objectContaining({ params: { field: "rectificativeSeriesCode" } }));
   });
 
   it("refuses a series code too long to survive a restore's installation suffix", () => {
@@ -474,12 +531,18 @@ describe("validateVenueFiscalFields", () => {
   });
 
   it("refuses a control character in the legal name", () => {
-    expect(() => validateVenueFiscalFields({ ...GOOD, legalName: "WaitronSL" })).toThrow(
+    expect(() => validateVenueFiscalFields({ ...GOOD, legalName: "Waitron\u0001SL" })).toThrow(
       expect.objectContaining({ params: { field: "legalName" } }),
     );
   });
 
-  it("refuses an operation description past AEAT's 500-character cap", () => {
+  it("refuses a control character in the operation description", () => {
+    expect(() =>
+      validateVenueFiscalFields({ ...GOOD, operationDescription: "Venta\u0001aqui" }),
+    ).toThrow(expect.objectContaining({ params: { field: "location.operationDescription" } }));
+  });
+
+  it("refuses an operation description past AEAT's 500-character cap, at the boundary", () => {
     expect(() =>
       validateVenueFiscalFields({ ...GOOD, operationDescription: "x".repeat(501) }),
     ).toThrow(expect.objectContaining({ params: { field: "location.operationDescription" } }));
@@ -487,12 +550,16 @@ describe("validateVenueFiscalFields", () => {
       validateVenueFiscalFields({ ...GOOD, operationDescription: "x".repeat(500) }),
     ).not.toThrow();
   });
+
+  it("accepts a tab, which XML permits and the validator allows", () => {
+    expect(() => validateVenueFiscalFields({ ...GOOD, legalName: "Waitron\tSL" })).not.toThrow();
+  });
 });
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `cd packages/fiscal-verifactu && pnpm exec vitest run src/venue-fields.test.ts`
+Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/venue-fields.test.ts`
 
 Expected: FAIL — `Cannot find module './venue-fields.js'`.
 
@@ -501,8 +568,9 @@ Expected: FAIL — `Cannot find module './venue-fields.js'`.
 Create `packages/fiscal-verifactu/src/venue-fields.ts`:
 
 ```ts
-// Side-effect only: `setup.request_invalid` is declared by apps/server, and this file throws it —
-// see ./errors.ts for this package's own contributions and why the registry is reached this way.
+// Side-effect only: this file throws `setup.request_invalid`, which ./errors.ts declares on the
+// shared registry for this package — see that file for the code and the reasoning, and
+// ./errors.reachability.test.ts for the check that keeps it reachable from the package barrel.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { MAX_BASE_CODE_LENGTH } from "./reserved-series.js";
@@ -522,13 +590,16 @@ export interface VenueFiscalFields {
 }
 
 /** The character set `@waitron/verifactu`'s own validator applies to `NumSerieFactura`. Restated
- * here rather than imported because that module exports the whole-record validator and not its
- * individual patterns; `./venue-fields.pins-validate.test.ts` is what keeps the two in step. */
+ * here rather than imported, because that module exports the whole-record validator and not its
+ * individual patterns; ./venue-fields.charset.test.ts is what keeps the two in step. */
 const NUMSERIE_CHARSET = /^[A-Za-z0-9/_.-]+$/;
 /** AEAT's cap on DescripcionOperacion, as `validate` applies it. */
 const DESCRIPTION_MAX = 500;
-/** Anything `validate` rejects as an XML control character. */
-const CONTROL_CHARS = /[ --]/;
+/** The C0 control characters XML forbids. Tab, line feed and carriage return are deliberately NOT
+ * in the range — XML permits those three — which is why this is not a blanket `\x00-\x1F`. Same
+ * pattern as `CONTROL_CHAR_PATTERN` in `packages/verifactu/src/validate.ts`. */
+// eslint-disable-next-line no-control-regex -- deliberately matching control characters
+const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 
 function refuse(field: string): never {
   throw new AppError("setup.request_invalid", { field });
@@ -557,26 +628,29 @@ export function validateVenueFiscalFields(venue: VenueFiscalFields): void {
 }
 ```
 
+The `eslint-disable-next-line no-control-regex` comment is required, not decorative: `js.configs.recommended` enables that rule as an error, which is why `validate.ts` carries the identical disable. Without it `pnpm lint` fails.
+
 - [ ] **Step 4: Run the test**
 
-Run: `cd packages/fiscal-verifactu && pnpm exec vitest run src/venue-fields.test.ts`
+Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/venue-fields.test.ts`
 
-Expected: PASS, 6 tests.
+Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Pin the restated rules against the real validator**
+- [ ] **Step 5: Pin the restated charset against the real validator**
 
-The charset and the cap above are restated, so they can drift from `@waitron/verifactu`'s own. Create `packages/fiscal-verifactu/src/venue-fields.pins-validate.test.ts`:
+Create `packages/fiscal-verifactu/src/venue-fields.charset.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { validate } from "@waitron/verifactu";
-import { buildAltaRecord } from "@waitron/verifactu";
-import { SISTEMA } from "../test/fixtures.js";
+import { buildAltaRecord, validate } from "@waitron/verifactu";
 import type { AltaInput } from "@waitron/verifactu";
+import { TEST_SISTEMA } from "./testing/seed.js";
 import { validateVenueFiscalFields } from "./venue-fields.js";
 
-/** One alta built around a candidate invoice number, so the record validator's own verdict can be
- * compared with what the boundary check said about the series code it came from. */
+/** One alta built around a candidate invoice number, so the record validator's own verdict on the
+ * CHARACTER SET can be compared with what the boundary check said about the series code it came
+ * from. `F2` and no `TipoImpositivo` keep every other rule satisfied, so the only issue this
+ * record can produce is the one under test. */
 function recordFor(numSerie: string) {
   const input: AltaInput = {
     IDEmisorFactura: "89890001K",
@@ -595,7 +669,7 @@ function recordFor(numSerie: string) {
     CuotaTotal: "12.35",
     ImporteTotal: "123.45",
     Encadenamiento: { PrimerRegistro: "S" },
-    SistemaInformatico: SISTEMA,
+    SistemaInformatico: TEST_SISTEMA,
     generadoEn: new Date("2024-01-01T19:20:30+01:00"),
     offsetMinutes: 60,
   };
@@ -609,18 +683,19 @@ const GOOD = {
   operationDescription: "Venta en establecimiento",
 };
 
-describe("the boundary check agrees with the record validator", () => {
-  it.each(["Serie A", "Série A", "FAC 1", "FS"])(
+// The LENGTH rules deliberately DISAGREE and are not compared here: the boundary refuses a base
+// over 38 characters so a cold restore's `-<installation number>` suffix still fits, while the
+// record validator accepts NumSerieFactura up to 60. A future reader must not "fix" that.
+describe("the restated character set matches the record validator's", () => {
+  it.each(["Serie A", "Série A", "FAC 1", "FS", "A-2026", "A/B"])(
     "gives the same verdict as validate() for %j",
     (code) => {
-      const boundaryRefused = (() => {
-        try {
-          validateVenueFiscalFields({ ...GOOD, seriesCode: code });
-          return false;
-        } catch {
-          return true;
-        }
-      })();
+      let boundaryRefused = false;
+      try {
+        validateVenueFiscalFields({ ...GOOD, seriesCode: code });
+      } catch {
+        boundaryRefused = true;
+      }
       const validatorRefused = validate(recordFor(`${code}/1`)).some(
         (issue) => issue.field === "NumSerieFactura" && issue.severity === "error",
       );
@@ -629,6 +704,8 @@ describe("the boundary check agrees with the record validator", () => {
   );
 });
 ```
+
+`TEST_SISTEMA` comes from this package's own `./testing/seed.js` — do NOT deep-import another package's `test/` directory (`packages/verifactu/test/fixtures.ts` has a `SISTEMA`, but reaching into it would be a new cross-package test dependency).
 
 Run it. Expected: PASS. If a case disagrees, the restated charset in `venue-fields.ts` is wrong — fix `venue-fields.ts`, never the expectation.
 
@@ -655,9 +732,9 @@ In `packages/fiscal/src/contribution.ts`, inside `interface FiscalContribution`,
 
 The shape is restated structurally rather than importing `VenueFiscalFields`, because `@waitron/fiscal` is the regime-neutral contract and must not depend on a regime package.
 
-- [ ] **Step 7: Fill the seat**
+- [ ] **Step 7: Fill the seat, and assert the other regime offers none**
 
-In `packages/fiscal-verifactu/src/slot.ts`, add the import and the seat:
+In `packages/fiscal-verifactu/src/slot.ts`:
 
 ```ts
 import { validateVenueFiscalFields } from "./venue-fields.js";
@@ -670,7 +747,13 @@ import { validateVenueFiscalFields } from "./venue-fields.js";
   venueFields: { validate: validateVenueFiscalFields },
 ```
 
-`packages/fiscal-none/src/slot.ts` gets NO seat — its comment already explains the same for `provisioningSecret`; extend that sentence to name `venueFields` too.
+`packages/fiscal-none/src/slot.ts` gets NO seat: extend its existing "No `provisioningSecret`" sentence to name `venueFields` too, with the reason (a venue under no fiscal obligation has no filing format to violate). Then add the assertion beside the sibling one in `packages/fiscal-none/src/slot.test.ts`:
+
+```ts
+  it("offers no venue-field seat: there is no filing format to violate", () => {
+    expect(FISCAL_NONE_SLOT.venueFields).toBeUndefined();
+  });
+```
 
 - [ ] **Step 8: Package gates**
 
@@ -679,7 +762,7 @@ Run: `pnpm --filter @waitron/fiscal-verifactu test:coverage && pnpm --filter @wa
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/fiscal/src/contribution.ts packages/fiscal-verifactu/src/venue-fields.ts packages/fiscal-verifactu/src/venue-fields.test.ts packages/fiscal-verifactu/src/venue-fields.pins-validate.test.ts packages/fiscal-verifactu/src/slot.ts packages/fiscal-none/src/slot.ts
+git add packages/fiscal/src/contribution.ts packages/fiscal-verifactu/src/venue-fields.ts packages/fiscal-verifactu/src/venue-fields.test.ts packages/fiscal-verifactu/src/venue-fields.charset.test.ts packages/fiscal-verifactu/src/slot.ts packages/fiscal-none/src/slot.ts packages/fiscal-none/src/slot.test.ts
 git commit -s -m "Add a fiscal contribution seat for the operator's venue fields
 
 The host collects the legal name, the two series codes and the operation
@@ -694,24 +777,29 @@ files nothing offers none."
 ### Task 4: Refuse at the setup boundary
 
 **Files:**
-- Modify: `apps/server/src/setup-api.ts:404-414` (call the seat)
-- Test: `apps/server/src/setup-api.venue-fields.test.ts` (create)
+- Modify: `apps/server/src/setup-api.ts` — `parseProvisionPayload`, right after `const contribution = selection.contribution;`
+- Test: `apps/server/src/setup-api.test.ts` (extend — do NOT create a new suite)
 
 **Interfaces:**
 - Consumes: `FiscalContribution.venueFields` from Task 3.
 - Produces: a `POST /setup-api/provision` that answers 400 `setup.request_invalid` with `params.field` for a bad venue field. Task 5 consumes those field paths.
 
+**What the harness is.** `apps/server/src/setup-api.test.ts` is the sibling suite, and it is NOT end-to-end against a database: `makeDeps()` makes `provision` a `vi.fn()` spy and `db` a stub. So the "nothing was provisioned" property is expressed as `expect(deps.provision).not.toHaveBeenCalled()` — which the suite already does elsewhere — and NOT by counting tenant rows. Its helpers are `postProvision(app, body)` and `demoBody()`. Read them before writing.
+
 - [ ] **Step 1: Write the failing test**
 
-Create `apps/server/src/setup-api.venue-fields.test.ts`, modelled on the existing setup-api suites in this directory — open one first and follow its harness exactly rather than inventing a new one:
+Add to `apps/server/src/setup-api.test.ts`, following that file's existing `makeDeps` / `postProvision` / `demoBody` shape exactly:
 
 ```ts
-import { describe, expect, it } from "vitest";
-// Follow the sibling suite's imports for the app factory and the provision-body fixture.
-
 describe("the venue's fiscal fields are refused at the boundary", () => {
   it("refuses a series code with a forbidden character, naming the field", async () => {
-    const res = await provisionWith({ venue: { seriesCode: "Serie A" } });
+    const { app } = makeApp();
+    const body = demoBody();
+    const res = await postProvision(app, {
+      ...body,
+      venue: { ...body.venue, seriesCode: "Serie A" },
+    });
+
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({
       error: { code: "setup.request_invalid", params: { field: "seriesCode" } },
@@ -719,30 +807,36 @@ describe("the venue's fiscal fields are refused at the boundary", () => {
   });
 
   it("provisions nothing when it refuses", async () => {
-    await provisionWith({ venue: { seriesCode: "Serie A" } });
-    // The tenant, the node and the SIF are all unrepairable once minted (CLAUDE.md §5), so the
-    // property that matters is that none of them exists after a refusal.
-    expect(await tenantCount()).toBe(0);
+    const { app, deps } = makeApp();
+    const body = demoBody();
+    await postProvision(app, { ...body, venue: { ...body.venue, seriesCode: "Serie A" } });
+
+    // The tenant, node and SIF are all unrepairable once minted (CLAUDE.md §5), so the property
+    // that matters is that the mint was never reached at all.
+    expect(deps.provision).not.toHaveBeenCalled();
   });
 
-  it("accepts the same venue with a legal series code", async () => {
-    const res = await provisionWith({ venue: { seriesCode: "FS" } });
+  it("still accepts the ordinary demo venue", async () => {
+    const { app, deps } = makeApp();
+    const res = await postProvision(app, demoBody());
+
     expect(res.status).toBe(200);
+    expect(deps.provision).toHaveBeenCalled();
   });
 });
 ```
 
-Write `provisionWith` and `tenantCount` against whatever the sibling suite already provides; do not build a second harness. If no sibling covers the provision route end to end, say so in the task report rather than inventing one — that is a finding, not a blocker to work around silently.
+`makeApp()` stands for however that file builds its app and deps together — use its real name and shape.
 
 - [ ] **Step 2: Run it and watch the first two fail**
 
-Run: `pnpm --filter @waitron/server exec vitest run src/setup-api.venue-fields.test.ts`
+Run: `pnpm --filter @waitron/server exec vitest run src/setup-api.test.ts -t "fiscal fields"`
 
 Expected: the first two FAIL — the provision succeeds with `Serie A`.
 
 - [ ] **Step 3: Call the seat**
 
-In `apps/server/src/setup-api.ts`, in the function that resolves the contribution, immediately after `const contribution = selection.contribution;`:
+In `apps/server/src/setup-api.ts`, in `parseProvisionPayload`, immediately after `const contribution = selection.contribution;`:
 
 ```ts
   // The regime's own rules on the fields the operator typed, reached through the contract seat —
@@ -756,34 +850,35 @@ In `apps/server/src/setup-api.ts`, in the function that resolves the contributio
   });
 ```
 
+The optional chaining is what makes a `fiscal-none` venue skip the check, which is the spec's §9 open point — it needs no separate host-side branch.
+
 - [ ] **Step 4: Run the tests**
 
-Run: `pnpm --filter @waitron/server exec vitest run src/setup-api.venue-fields.test.ts`
+Run: `pnpm --filter @waitron/server exec vitest run src/setup-api.test.ts`
 
-Expected: PASS, 3 tests.
+Expected: PASS, whole file.
 
 - [ ] **Step 5: Confirm the seam guard is still green**
 
-Run: `pnpm exec vitest run --project main scripts/module-seams.test.ts`
+Run: `pnpm exec vitest run scripts/module-seams.test.ts` from the repo root.
 
-Expected: PASS, and specifically the case asserting the `apps/server/src` regime allowlist is EMPTY. This is the check that proves Task 4 went through the seat rather than reaching for the regime; if it fails, the fix is the import, never the allowlist.
+Expected: PASS, including the case asserting the `apps/server/src` regime allowlist is EMPTY. This is the check that proves Task 4 went through the seat rather than reaching for the regime; if it fails, the fix is the import, never the allowlist.
 
 - [ ] **Step 6: Package gate**
 
 Run: `pnpm --filter @waitron/server test:coverage && pnpm lint && pnpm typecheck && pnpm format:check`
 
-`apps/server` sits at the 90/90/85/85 floor, not the high bar.
-
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/server/src/setup-api.ts apps/server/src/setup-api.venue-fields.test.ts
+git add apps/server/src/setup-api.ts apps/server/src/setup-api.test.ts
 git commit -s -m "Refuse a venue whose fiscal fields AEAT would reject
 
 The provision route now runs the regime's venue-field rules through the contract
 seat before anything is minted, so a series code with a space is refused with the
-field named instead of surfacing as a refused sale at the till. The module-seams
-guard stays green: this file still imports no regime package."
+field named instead of surfacing as a refused sale at the till. A regime that
+offers no seat skips the check by optional chaining. The module-seams guard stays
+green: this file still imports no regime package."
 ```
 
 ---
@@ -791,67 +886,104 @@ guard stays green: this file still imports no regime package."
 ### Task 5: The wizard marks the field and returns the operator to it
 
 **Files:**
-- Modify: `apps/setup/src/setup-app.ts:417-424` (route these field paths to the venue screen)
-- Modify: `apps/setup/src/screens/venue-screen.ts` (accept an externally-marked field)
+- Modify: `apps/setup/src/setup-app.ts` — the `case "setup.request_invalid"` arm in `#mapProvisionError` (around line 419), plus new state
+- Modify: `apps/setup/src/screens/venue-screen.ts` — a new `invalidField` property, its clearing rule, and per-field messages
 - Test: `apps/setup/src/setup-app.test.ts`, `apps/setup/src/screens/venue-screen.test.ts` (extend both)
 
 **Interfaces:**
 - Consumes: the field paths Task 3 produces — `"legalName"`, `"seriesCode"`, `"rectificativeSeriesCode"`, `"location.operationDescription"`.
 - Produces: nothing later tasks depend on.
 
+**The real helper names** (the plan's first draft invented three that do not exist — use these):
+- `mountSetupApp(api: SetupApi = stubApi())` — `apps/setup/src/setup-app.test.ts`
+- `stubApi({ provision: vi.fn().mockRejectedValue({ code, params }) })`, then `provisionRequest(el)`, then `await flush(el)` — the established rejection shape in that file
+- `mountWidget<SetupVenueScreen>("setup-venue-screen", { … })` returning `{ el, host }` — `apps/setup/src/widgets/test-helpers.ts`
+- `screen` and any new state are `@state() private`, so assert through the DOM (`[data-test=screen-venue]`) or use the `(el as unknown as { … })` cast that file already uses for `readDraft`.
+
 - [ ] **Step 0: Check the machine before a browser run**
 
 Run: `memory_pressure | grep free` and `ps -axo rss,command | sort -nr | head`
 
-`apps/setup` runs Vitest in real headless Chromium. Scale concurrency to what is actually free; if another session is already running browser suites or a whole-workspace run, wait rather than adding to it.
+`apps/setup` runs Vitest in real headless Chromium. Scale to what is free; if another session is already running browser suites or a whole-workspace run, wait rather than adding to it.
 
 - [ ] **Step 1: Write the failing tests**
 
-In `apps/setup/src/setup-app.test.ts`, add:
+In `apps/setup/src/setup-app.test.ts`, following the existing rejection test's shape:
 
 ```ts
 it("sends the operator back to the venue form with the field marked, not to review", async () => {
-  const app = await mountApp();
-  await provisionRejecting(app, {
-    code: "setup.request_invalid",
-    params: { field: "seriesCode" },
-  });
+  const el = await mountSetupApp(
+    stubApi({
+      provision: vi.fn().mockRejectedValue({
+        code: "setup.request_invalid",
+        params: { field: "seriesCode" },
+      }),
+    }),
+  );
+  await provisionRequest(el);
+  await flush(el);
 
-  expect(app.screen).toBe("venue");
-  expect(app.venueInvalidField).toBe("seriesCode");
+  expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
+  const venue = el.shadowRoot!.querySelector("setup-venue-screen")!;
+  expect(venue.getAttribute("invalidfield") ?? (venue as never as { invalidField?: string }).invalidField).toBe("seriesCode");
 });
 
-it("still routes an unknown field to review, as before", async () => {
-  const app = await mountApp();
-  await provisionRejecting(app, {
-    code: "setup.request_invalid",
-    params: { field: "mode" },
-  });
+it("still routes a field the venue form does not own to review", async () => {
+  const el = await mountSetupApp(
+    stubApi({
+      provision: vi.fn().mockRejectedValue({
+        code: "setup.request_invalid",
+        params: { field: "mode" },
+      }),
+    }),
+  );
+  await provisionRequest(el);
+  await flush(el);
 
-  expect(app.screen).toBe("review");
+  expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
 });
 ```
 
-In `apps/setup/src/screens/venue-screen.test.ts`, add:
+In `apps/setup/src/screens/venue-screen.test.ts`:
 
 ```ts
 it("marks the field the server named and explains what is wrong with it", async () => {
-  const screen = await mountVenueScreen({ invalidField: "seriesCode" });
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    invalidField: "seriesCode",
+  });
 
-  const input = screen.shadowRoot!.querySelector("[data-test=seriesCode]")!;
+  const input = el.shadowRoot!.querySelector("[data-test=seriesCode]")!;
   expect(input.hasAttribute("invalid")).toBe(true);
-  const message = screen.shadowRoot!.querySelector("[data-test=seriesCode-field-error]");
+  const message = el.shadowRoot!.querySelector("[data-test=seriesCode-field-error]");
   expect(message?.textContent).toContain("letters, numbers");
+});
+
+it("clears the server's mark once the operator edits that field, so Next works again", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    invalidField: "seriesCode",
+    // plus whatever properties the sibling tests set to make a COMPLETE, valid venue — otherwise
+    // Next is blocked by this screen's own validation and this test proves nothing.
+  });
+
+  const input = el.shadowRoot!.querySelector("[data-test=seriesCode]")!;
+  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "FS" }, bubbles: true, composed: true }));
+  await el.updateComplete;
+
+  expect(input.hasAttribute("invalid")).toBe(false);
+
+  const advanced = new Promise((resolve) => el.addEventListener("setup-advance", resolve, { once: true }));
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
+  await expect(advanced).resolves.toBeDefined();
 });
 ```
 
-Follow each file's existing mount helper rather than adding another; `venue-screen.test.ts` already mounts this screen with properties.
+The second case is the one that matters most: without a clearing rule the server's mark either blocks Next forever or never goes away.
 
 - [ ] **Step 2: Run both and watch them fail**
 
 Run: `pnpm --filter @waitron/setup exec vitest run src/setup-app.test.ts src/screens/venue-screen.test.ts`
 
-Expected: FAIL — the app routes to `review`, and the venue screen has no `invalidField` property.
+Expected: FAIL — the app routes to review, and the venue screen has no `invalidField` property.
 
 - [ ] **Step 3: Route the venue field paths back to the venue screen**
 
@@ -861,9 +993,10 @@ In `apps/setup/src/setup-app.ts`, replace the `case "setup.request_invalid"` arm
       case "setup.request_invalid": {
         const field = typeof error.params?.field === "string" ? error.params.field : undefined;
         // A field the venue form owns goes BACK to that form with the field marked. The rest keep
-        // the review-screen banner: the comment above this method used to say the field's own
-        // screen already validates the same rule, which was true of every field the boundary could
-        // reject until the fiscal regime's venue-field seat was added.
+        // the review-screen banner. This method's own comment used to call that banner a
+        // belt-and-suspenders path because "the field's own screen already validates the same
+        // rule" — true of every field the boundary could reject until the fiscal regime's
+        // venue-field seat was added, and no longer true of these four.
         if (field !== undefined && VENUE_FORM_FIELDS.has(field)) {
           this.venueInvalidField = field;
           this.venueError = undefined;
@@ -879,6 +1012,8 @@ In `apps/setup/src/setup-app.ts`, replace the `case "setup.request_invalid"` arm
       }
 ```
 
+Update that method's doc comment to match — leaving it claiming the old behaviour is the §1 defect class.
+
 Add near the module's other constants:
 
 ```ts
@@ -892,26 +1027,34 @@ const VENUE_FORM_FIELDS = new Set([
 ]);
 ```
 
-And the state it sets, beside the existing `venueError`:
+And the state, beside the existing `venueError`:
 
 ```ts
   @state() private venueInvalidField?: string;
 ```
 
-Pass it to the venue screen wherever that screen is rendered, as `.invalidField=${this.venueInvalidField}`.
+Clear it everywhere `this.venueError = undefined` already appears (the goto handler, the advance handler, and the venue submit path) — a stale mark surviving into the next attempt is exactly the bug the second test catches. Pass it to the venue screen where that screen is rendered: `.invalidField=${this.venueInvalidField}`.
 
-- [ ] **Step 4: Mark the field on the venue screen**
+- [ ] **Step 4: Mark the field on the venue screen, and let it clear**
 
-In `apps/setup/src/screens/venue-screen.ts`, add the property:
+In `apps/setup/src/screens/venue-screen.ts`:
 
 ```ts
   /** A field the SERVER rejected, named by `setup.request_invalid`'s `params.field`. Marked
-   * invalid on mount alongside anything this screen's own `#next` found, so an operator returning
-   * from a refused provision lands on the form with the offending field already flagged. */
+   * invalid on arrival so an operator returning from a refused provision lands on the form with
+   * the offending field already flagged. Cleared as soon as they edit that field — see `#onField`,
+   * without which `#next`'s `invalid.size > 0` early return would block Next forever. */
   @property() invalidField?: string;
 ```
 
-Map the server's field paths to this screen's own keys and fold them into the existing `invalid` set, and render a message beside the field. The existing `#field` helper already renders `?invalid=${this.invalid.has(key)}`; add the explanatory text per field, which is what the design asks for and what the shared form contract requires (`docs/developers/design-system.md` → Forms):
+Hold the server's mark in its own state rather than seeding `this.invalid` directly — `#next()` rebuilds `this.invalid` from scratch and returns early while it is non-empty, so a mark folded into that set would never clear:
+
+```ts
+  /** The server-marked field, as this screen's own key, until the operator edits it. */
+  @state() private serverInvalid?: TextField;
+```
+
+Set it from `invalidField` when the property changes (`willUpdate`), mapping the server's path to this screen's key; clear it in `#onField` when the edited key matches. Render `?invalid=${this.invalid.has(key) || this.serverInvalid === key}` and the message beside the field:
 
 ```ts
 /** The server's field paths, mapped to this screen's own field keys. */
@@ -932,6 +1075,8 @@ const FIELD_MESSAGES: Partial<Record<TextField, string>> = {
 };
 ```
 
+Give the message element `data-test="${key}-field-error"`, matching how `cert-screen.ts` names its own field errors.
+
 - [ ] **Step 5: Run both test files**
 
 Run: `pnpm --filter @waitron/setup exec vitest run src/setup-app.test.ts src/screens/venue-screen.test.ts`
@@ -950,8 +1095,9 @@ git commit -s -m "Return the operator to the field the box rejected
 
 A venue field refused by the fiscal regime's seat now reopens the venue form with
 that field marked and a sentence saying what is wrong with it, instead of a review
-screen banner quoting a raw field path. Fields the venue form does not own keep
-the old banner."
+screen banner quoting a raw field path. The mark clears when the operator edits
+that field, so Next is not blocked by a rule this screen cannot evaluate. Fields
+the venue form does not own keep the old banner."
 ```
 
 ---
@@ -959,21 +1105,21 @@ the old banner."
 ### Task 6: Whole-workspace verification and the backlog
 
 **Files:**
-- Modify: `docs/backlog.md`
+- Modify: `docs/backlog.md`, possibly `CLAUDE.md`
 
 - [ ] **Step 1: Run the full gate**
 
 Run: `pnpm lint && pnpm typecheck && pnpm format:check && pnpm test`
 
-This is the one moment the whole workspace runs — Task 3 changed `packages/fiscal`'s contract, which more than one package asserts against.
+This is the one moment the whole workspace runs — Task 3 changed `packages/fiscal`'s contract, which more than one package asserts against, and Task 1 changed a fixture nine test files share.
 
 - [ ] **Step 2: Update the backlog in the same change that made it stale**
 
-The entry beginning "**Nothing checks a fiscal record against AEAT's rules before it is chained or sent**" is what this branch fixes. Rewrite it to say what landed, keeping the experiment that established the problem (the sabotage and its control) — that receipt is why the rule exists and outlives the fix. Leave the incidents-surface entry alone; it is a separate branch.
+Rewrite the entry beginning "**Nothing checks a fiscal record against AEAT's rules before it is chained or sent**" to say what landed. Keep the experiment that established the problem (the sabotage and its control) — that receipt is why the rule exists and outlives the fix. **Add what the fix itself found**: the shared alta fixture had been building records AEAT would reject, so the guard's very first act was to expose test data nobody could have trusted. Leave the incidents-surface entry alone; it is a separate branch.
 
-- [ ] **Step 3: Add the rule to CLAUDE.md §1 or §5 if it earns a place**
+- [ ] **Step 3: Consider a CLAUDE.md entry, honestly**
 
-Judge honestly against §7's own bar: an entry is the rule, one line on what it cost, and a pointer. The candidate is that an exported check with no caller reads exactly like a check that runs. If the deletion tests in Tasks 1 and 3 already make that unrepeatable, no entry is needed — a written rule with a guard behind it does not need a paragraph as well.
+Judge against §7's own bar: an entry is the rule, one line on what it cost, and a pointer. The candidate rule is that an exported check with no caller reads exactly like a check that runs — and that a test fixture nothing validates drifts into describing impossible data. If the deletion tests in Tasks 1 and 3 make that unrepeatable, no entry is needed; a written rule with a guard behind it does not need a paragraph as well. Decide, and say which way in the commit.
 
 - [ ] **Step 4: Commit**
 
@@ -988,10 +1134,25 @@ Do NOT open the PR from inside a task. Report completion; the driver runs `/fini
 
 ---
 
+## Review record
+
+This plan was reviewed with fresh context against the code before execution. Eight findings were fixed into it, rather than left for an implementer to hit:
+
+1. The guard turns much of the existing suite red because the shared alta fixture builds an invalid record — Task 1 step 5, with the measured receipt (12 of 20 in `chain.test.ts`).
+2. Task 2's original fixture aborted in settlement with `sale.tender_shortfall` before ever reaching the chain — now a deferred sale.
+3. The control-character regex was raw bytes and lacked the `eslint-disable no-control-regex` the rule requires — now escaped, with the disable.
+4. `SISTEMA` is not exported from `fiscal-verifactu`'s test fixtures — now `TEST_SISTEMA` from the package's own `testing/seed.ts`.
+5. `apps/server/src/setup-api.test.ts` stubs `provision`, so "nothing was provisioned" is a spy assertion, not a row count — Task 4 rewritten against the real harness.
+6. `vitest run --project main` fails: the root config defines no named projects.
+7. Task 5 named three helpers that do not exist — replaced with the real ones, and private `@state` is asserted through the DOM.
+8. The server's field mark had no clearing rule, which would have blocked Next forever — now specified, with a test.
+
+Also corrected: the anulación case proved nothing (now a direct `appendToChain` call), the refusal test did not check the `sales` row, the charset pins-test overclaimed agreement where the length rules deliberately differ, `venue-fields.ts`'s registry comment named the wrong declaring file, and `fiscal-none` had no assertion that it offers no seat.
+
 ## Self-review
 
-**Spec coverage.** §3 layer 1 → Task 1. §6 warnings → Task 2. §4 layer 2 → Tasks 3 and 4. §5 layer 3 → Task 5. §7 testing → the test steps in every task, with the deletion proof in Task 1 step 6 and Task 3 step 5's agreement check. §8 not-in-scope → no task touches the drain. §9's open point about a guard is answered in Task 6 step 3 rather than left hanging.
+**Spec coverage.** §3 layer 1 → Task 1. §6 warnings → Task 2. §4 layer 2 → Tasks 3 and 4. §5 layer 3 → Task 5. §7 testing → the test steps in every task, with the deletion proof at Task 1 step 7 and the charset agreement check at Task 3 step 5. §8 not-in-scope → no task touches the drain. §9's open points → the guard question is decided in Task 6 step 3; the `fiscal-none` question is answered by the optional chaining in Task 4 step 3 and asserted in Task 3 step 7.
 
 **One spec point deliberately narrowed.** §4 lists the tax identifier among the fields the boundary seat covers. It is NOT in Task 3, because the country pack already validates it in the browser and again at the server boundary (`validateSpanishNif`, run from `setup-api.ts`), so a second check would duplicate a working one. The record validator's own `NIF_LENGTH` check still backstops it at the chain seam via Task 1.
 
-**Naming consistency.** `validateVenueFiscalFields` (Task 3) is what `slot.ts` fills `venueFields.validate` with and what Task 4 calls through the seat; `VENUE_FORM_FIELDS` (Task 5) lists exactly the four paths Task 3 can throw.
+**Naming consistency.** `validateVenueFiscalFields` (Task 3) is what `slot.ts` fills `venueFields.validate` with and what Task 4 calls through the seat; `VENUE_FORM_FIELDS` (Task 5) lists exactly the four paths Task 3 can throw; `SERVER_FIELD_KEYS` maps those same four to the venue screen's own keys.
