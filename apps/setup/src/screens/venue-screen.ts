@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import {
@@ -83,6 +83,38 @@ const LOCALE_LABELS: Readonly<Record<string, string>> = {
   "en-GB": "English",
 };
 
+/** Both invoice series codes carry the same rule, so they carry the same sentence. */
+const SERIES_CODE_MESSAGE =
+  "Use letters, numbers, and the characters / _ . and - only, up to 38 characters.";
+
+/**
+ * The venue fields the SERVER can refuse: each keyed by the path the server names it by, carrying
+ * this form's own field key and what to tell the operator. The server names the operation
+ * description by its position in the request body (`location.operationDescription`) while this form
+ * calls it `operationDescription`, so the two spellings are reconciled here rather than assumed
+ * equal; a path missing from this map marks nothing, because it belongs to another screen.
+ *
+ * The rules themselves belong to the fiscal regime
+ * (`packages/fiscal-verifactu/src/venue-fields.ts`) and this form cannot evaluate them, so each
+ * sentence says what the operator should DO — never the rule or the pattern behind it.
+ */
+const SERVER_FIELDS: Readonly<
+  Record<string, { readonly key: TextField; readonly message: string }>
+> = {
+  legalName: {
+    key: "legalName",
+    message:
+      "The tax agency will not accept this name. Remove any hidden characters — typing it out instead of pasting it usually clears them.",
+  },
+  seriesCode: { key: "seriesCode", message: SERIES_CODE_MESSAGE },
+  rectificativeSeriesCode: { key: "rectificativeSeriesCode", message: SERIES_CODE_MESSAGE },
+  "location.operationDescription": {
+    key: "operationDescription",
+    message:
+      "Keep this to 500 characters or fewer, and remove any hidden characters — typing it out instead of pasting it usually clears them.",
+  },
+};
+
 @customElement("setup-venue-screen")
 export class SetupVenueScreen extends LitElement {
   static override styles = [
@@ -142,6 +174,13 @@ export class SetupVenueScreen extends LitElement {
    * operator can correct the offending detail and re-submit. `undefined` normally. */
   @property() errorMessage?: string;
 
+  /**
+   * One venue field the SERVER refused, named by `setup.request_invalid`'s `params.field` and routed
+   * back here by the shell. Marked invalid on arrival, with a sentence beside it, so an operator
+   * returning from a refused provision lands on the form with the offending field already flagged.
+   */
+  @property() invalidField?: string;
+
   /** The editable text fields. Defaults match the shell's seeded draft; seeding overlays what it holds. */
   @state() private values: Record<TextField, string> = {
     country: "ES",
@@ -168,15 +207,31 @@ export class SetupVenueScreen extends LitElement {
   /** True once a `Next` was rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
 
+  /**
+   * {@link SetupVenueScreen.invalidField} resolved to this form's own field key, held SEPARATELY
+   * from {@link SetupVenueScreen.invalid} and cleared the moment the operator edits that field
+   * ({@link SetupVenueScreen.#onField}). It is separate because `#next` rebuilds `invalid` from
+   * scratch on every press and returns early while that set is non-empty: a mark for a rule this
+   * form cannot evaluate, folded into that set, would survive every rebuild and block Next forever.
+   */
+  @state() private serverInvalid?: { readonly key: TextField; readonly message: string };
+
   /** Guards {@link SetupVenueScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
   /** True until the operator changes the invoice-language selection themselves. */
   #invoiceLocalesFollowAreaDefault = true;
 
-  override willUpdate(): void {
-    if (this.#seeded) return;
-    this.#seeded = true;
-    this.#seedFromDraft();
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!this.#seeded) {
+      this.#seeded = true;
+      this.#seedFromDraft();
+    }
+    // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
+    // the operator has already cleared by editing the field.
+    if (changed.has("invalidField")) {
+      this.serverInvalid =
+        this.invalidField === undefined ? undefined : SERVER_FIELDS[this.invalidField];
+    }
   }
 
   /**
@@ -219,6 +274,8 @@ export class SetupVenueScreen extends LitElement {
 
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    // Editing the field the server refused retires that mark: the new value has not been refused.
+    if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
     const value = event.detail.value;
     if (key === "postalCode") {
       const pack = this.#pack();
@@ -388,15 +445,22 @@ export class SetupVenueScreen extends LitElement {
     dispatchSetupGoto(this, "admin");
   }
 
-  /** Renders one text field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
+  /**
+   * Renders one text field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. A
+   * field the SERVER refused is marked too, and carries its explanation in `wt-input`'s own `error`
+   * slot — which renders the sentence beside the field and wires `aria-describedby` to it, the
+   * shared form contract (`docs/developers/design-system.md` → Forms).
+   */
   #field(label: string, key: TextField, type = "text"): TemplateResult {
+    const refused = this.serverInvalid?.key === key ? this.serverInvalid : undefined;
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${label}
       data-test=${key}
       type=${type}
-      ?invalid=${this.invalid.has(key)}
+      ?invalid=${this.invalid.has(key) || refused !== undefined}
+      error=${refused === undefined ? "" : refused.message}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
     ></wt-input>`;

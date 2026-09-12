@@ -403,6 +403,74 @@ describe("setup-venue-screen", () => {
     expect(events.some((e) => e.kind === "advance")).toBe(true);
   });
 
+  // The server refuses a venue whose fiscal text fields would produce a record the tax agency cannot
+  // accept, naming ONE field. This screen cannot evaluate that rule itself, so the shell hands the
+  // field down as `invalidField` and it is marked on sight with a sentence saying what is wrong.
+  // Prove-by-deletion: drop the `this.serverInvalid === key` term from `#field` and this flips red.
+  it("marks the field the server refused and explains what is wrong with it", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "seriesCode",
+    });
+    const input = q(el, "[data-test=seriesCode]")!;
+    await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(input.hasAttribute("invalid")).toBe(true);
+    // The explanation renders BESIDE the field (inside `wt-input`, which owns the
+    // `aria-describedby` association), not as another page-level banner.
+    expect(input.shadowRoot!.querySelector("[data-error]")!.textContent).toContain(
+      "letters, numbers",
+    );
+    expect(q(el, "[data-test=legalName]")!.hasAttribute("invalid")).toBe(false);
+  });
+
+  // The server names the operation description by its nested request path; this screen calls the same
+  // field `operationDescription`. The explicit map is what keeps the two spellings in step.
+  it("maps the server's nested field path onto this form's own field", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "location.operationDescription",
+    });
+    const input = q(el, "[data-test=operationDescription]")!;
+    await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(input.hasAttribute("invalid")).toBe(true);
+    expect(input.shadowRoot!.querySelector("[data-error]")!.textContent).toContain(
+      "500 characters",
+    );
+  });
+
+  it("marks nothing for a field path this form does not recognise", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "taxId",
+    });
+    expect(q(el, "[data-test=taxId]")!.hasAttribute("invalid")).toBe(false);
+  });
+
+  // The one that matters most. `#next` rebuilds its own invalid set from scratch and returns early
+  // while that set is non-empty, so the server's mark is held SEPARATELY and cleared the moment the
+  // operator edits the field it names — otherwise the form stays permanently red on a field this
+  // screen has no rule for. Prove-by-deletion: drop the clear at the top of `#onField` and this flips
+  // red on the "not marked after editing" assertion.
+  it("clears the server's mark once the operator edits that field, and Next still advances", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "seriesCode",
+    });
+    const events = collect(host);
+    // Fill every other field with a valid value, leaving the refused one untouched, so the clear can
+    // only have come from editing the field the server named.
+    for (const [key, value] of Object.entries(VALID)) {
+      if (key === "seriesCode") continue;
+      await type(el, key, value);
+    }
+    expect(q(el, "[data-test=seriesCode]")!.hasAttribute("invalid")).toBe(true);
+
+    await type(el, "seriesCode", "FA");
+    expect(q(el, "[data-test=seriesCode]")!.hasAttribute("invalid")).toBe(false);
+    expect((q(el, "[data-test=seriesCode]") as unknown as { error: string }).error).toBe("");
+
+    // And the form is genuinely submittable, so the assertion above is not passing on a dead form.
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events.some((e) => e.kind === "advance")).toBe(true);
+  });
+
   it("steps back to admin without emitting a patch", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);

@@ -544,6 +544,60 @@ describe("setup-app", () => {
     expect(await screenText(el, "review", "[data-test=error]")).toContain("taxId");
   });
 
+  // Task 5: the four venue text fields the fiscal regime refuses are fields the venue FORM owns, and
+  // that form cannot evaluate the rule itself — so the refusal goes back to the form with the field
+  // marked, not to a review-screen banner quoting a raw field path. Prove-by-deletion: drop the
+  // `VENUE_FORM_FIELDS` branch and this flips red (the shell lands on review).
+  it.each(["legalName", "seriesCode", "rectificativeSeriesCode", "location.operationDescription"])(
+    "sends a %s refusal back to the venue form with the field marked",
+    async (field) => {
+      const provision = vi
+        .fn()
+        .mockRejectedValue({ code: "setup.request_invalid", params: { field } });
+      const el = await mountSetupApp(stubApi({ provision }));
+      provisionRequest(el);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).toBeNull();
+      const venue = await screenHost(el, "venue");
+      expect((venue as unknown as { invalidField?: string }).invalidField).toBe(field);
+      // No stale banner beside the marked field — the field's own explanation is the message now.
+      expect(venue.shadowRoot!.querySelector("[data-test=server-error]")).toBeNull();
+    },
+  );
+
+  // A field the venue form does not own still gets the old review banner: there is nowhere better to
+  // send the operator, and every other collecting screen validates its own fields already.
+  it("still routes a field the venue form does not own to the review banner", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValue({ code: "setup.request_invalid", params: { field: "mode" } });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(await screenText(el, "review", "[data-test=error]")).toContain("mode");
+  });
+
+  // A mark must not outlive the attempt that produced it: the operator navigating away and back, or
+  // firing a fresh provision, starts clean. Prove-by-deletion: drop the clear in `#onGoto` and the
+  // second mount still carries `seriesCode`.
+  it("drops the server's field mark when the operator navigates away and back", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValue({ code: "setup.request_invalid", params: { field: "seriesCode" } });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    const marked = await screenHost(el, "venue");
+    expect((marked as unknown as { invalidField?: string }).invalidField).toBe("seriesCode");
+    goto(el, "admin");
+    await el.updateComplete;
+    goto(el, "venue");
+    await el.updateComplete;
+    const venue = await screenHost(el, "venue");
+    expect((venue as unknown as { invalidField?: string }).invalidField).toBeUndefined();
+  });
+
   it("maps a fieldless setup.request_invalid to a generic review banner", async () => {
     const provision = vi.fn().mockRejectedValue({ code: "setup.request_invalid", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
