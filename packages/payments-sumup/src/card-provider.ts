@@ -26,8 +26,8 @@ const PROVIDER_ID = "sumup";
 const CREDENTIAL_PURPOSE = "payments.sumup";
 
 /** The literal an operator seals for an absent affiliate field, matching
- * `sumupClientOptionsFrom`'s NO_AFFILIATE convention: a `-` in either affiliate slot means "no
- * affiliate", and the create call omits the `affiliate` block. */
+ * the NO_AFFILIATE convention `optionsFromSealed` below applies: a `-` in either affiliate slot
+ * means "no affiliate", and the create call omits the `affiliate` block. */
 const NO_AFFILIATE = "-";
 
 /** `memberships()` reads `GET /v0.1/memberships`, which does not carry a merchant code, so `connect`
@@ -67,8 +67,8 @@ export async function sumupClientForTenant(deps: {
   });
 }
 
-/** Turn a decrypted `payments.sumup` payload into client options — the read-site validation the
- * server's `sumupClientOptionsFrom` does. A `-` in either affiliate slot (or an absent slot) means
+/** Turn a decrypted `payments.sumup` payload into client options, validating it at the read site.
+ * A `-` in either affiliate slot (or an absent slot) means
  * no affiliate. A payload missing `apiKey` or `merchantCode` cannot build a client, so it is
  * rejected here rather than reaching the network with an undefined bearer or merchant. */
 export function optionsFromSealed(

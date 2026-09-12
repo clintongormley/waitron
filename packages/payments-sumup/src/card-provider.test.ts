@@ -10,7 +10,7 @@ import { SUMUP_CARD_PROVIDER, deferredClient, optionsFromSealed } from "./card-p
 
 // PGlite (superuser, one backend) is the right target: the seat reads a sealed credential and maps
 // SumUp REST calls through an injected `fetch`, so nothing here depends on the deployment role or on
-// concurrency. Mirrors apps/server's sumup-account.test.ts seeded-credential shape.
+// concurrency. It seeds a sealed `payments.sumup` credential the seat then reads.
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
