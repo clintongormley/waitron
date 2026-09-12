@@ -13,6 +13,8 @@ never dials the printer, preserving the same flow for a cloud primary and an on-
 Accept literal IPv4/IPv6 addresses and ports 1–65535. Reject URLs, hostnames, multicast/unspecified
 addresses, IPv4-mapped/scoped IPv6 and malformed input. Hold at most eight concurrent targets in memory for 30 seconds,
 deduplicate host/port, and prune expired entries; no database migration or persistent configuration.
+A person with printer.manage may request byte-free connections to any accepted unicast address,
+including public, loopback and link-local addresses; the check is not restricted to private subnets.
 Agent replies carry the remaining duration; agents measure that duration using their own clock,
 so server/agent clock skew does not skip or prolong cached checks. The dashboard retains the
 server's request timestamp for matching fresh inventory.

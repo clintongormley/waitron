@@ -1,3 +1,4 @@
+// Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
 import { createPrinterProbes } from "./printer-probes.js";
 import type { Hono } from "hono";

@@ -807,6 +807,47 @@ describe("printers-screen", () => {
 
   // ── Printers: discovered-device registration (central printer provisioning §10) ────────────────────────────
 
+  it("Enter checks the address once while pending and allows retry after rejection", async () => {
+    let reject!: (reason: unknown) => void;
+    const probePrinterAddress = vi.fn().mockImplementation(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ probePrinterAddress }),
+    });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    const control = q(el, "[data-test=probe-host]") as import("@waitron/ui").WtInput;
+    await control.updateComplete;
+    const input = control.shadowRoot!.querySelector("input")!;
+    input.value = "192.168.20.247";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(probePrinterAddress).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard("{Enter}");
+    q(el, "[data-test=probe-printer]")!.click();
+    expect(probePrinterAddress).toHaveBeenCalledExactlyOnceWith({
+      host: "192.168.20.247",
+      port: 9100,
+    });
+    expect(q(el, "[data-test=probe-printer]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
+      true,
+    );
+    reject({ code: "printer.probe_busy" });
+    await flush(el);
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(probePrinterAddress).toHaveBeenCalledTimes(2);
+    reject({ code: "printer.probe_busy" });
+    await flush(el);
+  });
+
   it("checks an explicit printer address while automatic discovery is running, then offers Add", async () => {
     const requestedAt = Date.now();
     const device: DiscoveredPrinter = {

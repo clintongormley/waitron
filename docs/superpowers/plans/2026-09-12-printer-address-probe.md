@@ -63,3 +63,18 @@ status; its apparent success was not a passing typecheck. The response type now 
 shared `NetworkProbe` type, and the cast is removed. The fail-fast command
 `pnpm --filter @waitron/server typecheck && TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run src/print-api.test.ts`
 passed, including all 50 route tests. The normal hook is retried without bypassing any step.
+
+## Review after the dashboard restyle
+
+Main advanced with an overlapping dashboard strings change (#333), so the branch was rebased onto
+`b16bd492` and reviewed again in a fresh isolated candidate. The second review identified a missing
+failover test: removing the server-binding guard still passed the previous agent suite. A new test
+first probes through A, promotes B, and asserts that B receives no old probe or scanned row. Deleting
+the guard now fails at the unexpected probe call; the intact 38-test agent suite passes.
+
+A real-input browser test now checks Enter, repeated submission while pending and retry after a
+rejection. Removing the Enter handler fails at zero requests instead of one. The design explicitly
+states the permitted unicast address space, and the route retains a concise error-registry invariant.
+The review's requested host-level deduplication was declined: the server queue already normalizes and
+deduplicates its eight targets; malformed injected arrays remain bounded but are not promised to be
+salvaged beyond the cap. The historical Epson/dns-sd receipt remains in the cited central-printer design.
