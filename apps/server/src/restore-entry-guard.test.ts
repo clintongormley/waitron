@@ -59,11 +59,11 @@ describe("assertSafeEntryName", () => {
     });
   });
 
-  it("passes a normal media entry and returns a path under the root", async () => {
-    const dest = mkdtempSync(join(tmpdir(), "restore-guard-ok-media-"));
-    const target = await assertSafeEntryName("media/abc123.jpg", dest);
+  it("passes a normal source entry and returns a path under the root", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "restore-guard-ok-source-"));
+    const target = await assertSafeEntryName("documents/abc123.bin", dest);
     expect(target.startsWith(dest + sep)).toBe(true);
-    expect(target).toBe(join(dest, "media", "abc123.jpg"));
+    expect(target).toBe(join(dest, "documents", "abc123.bin"));
   });
 
   it("passes a normal secrets entry and returns a path under the root", async () => {

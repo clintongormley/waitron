@@ -37,7 +37,6 @@ import { locateSharedContainer } from "./testing/locate-shared-container.js";
 // The suite owns baseline clones and empty targets so pg_restore sees a fresh database.
 const execFileAsync = promisify(execFile);
 const RECOVERY_KEY = "s3cr3t-recovery-key-for-fiscal-restore-e2e";
-const MEDIA_NAME = "deadbeefdeadbeefdeadbeefdeadbeef.jpg";
 const BASELINE_MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 const HUELLA = "A".repeat(64);
 const noopLog: Logger = () => {};
@@ -153,15 +152,14 @@ async function makeFreshTarget(): Promise<string> {
   return databaseUrl(adminUri, name);
 }
 
-async function arrangeDirs(): Promise<{ mediaDir: string; stateDir: string }> {
-  const mediaDir = await mkdtemp(join(scratchRoot, "media-"));
+async function arrangeDirs(): Promise<{ stateDir: string }> {
   const stateDir = await mkdtemp(join(scratchRoot, "state-"));
-  return { mediaDir, stateDir };
+  return { stateDir };
 }
 
 async function restoreDepsFor(
   targetUrl: string,
-  dirs: { mediaDir: string; stateDir: string },
+  dirs: { stateDir: string },
   artifact = artifactPath,
 ): Promise<RestoreDeps> {
   return {
@@ -179,11 +177,7 @@ async function restoreDepsFor(
   };
 }
 
-async function drive(
-  targetUrl: string,
-  dirs: { mediaDir: string; stateDir: string },
-  artifact = artifactPath,
-) {
+async function drive(targetUrl: string, dirs: { stateDir: string }, artifact = artifactPath) {
   return restoreFromArtifact(await restoreDepsFor(targetUrl, dirs, artifact));
 }
 
@@ -304,7 +298,6 @@ beforeAll(async () => {
       const entries: ArchiveEntry[] = [
         { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
         { name: "db.dump", bytes: dumpBytes },
-        { name: `media/${MEDIA_NAME}`, bytes: BASELINE_MEDIA },
         {
           name: "secrets/trading.env",
           bytes: Buffer.from(

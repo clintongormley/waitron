@@ -347,6 +347,7 @@ export function validateConfigurationBundle(
 }
 
 /** Apply the validated allowlist inside the caller's venue transaction. */
+/** Runs in the provisioning transaction as the table owner; imports replace immutable byte rows too. */
 export async function importConfigurationTables(
   tx: Transaction,
   bundle: ConfigurationBundle,

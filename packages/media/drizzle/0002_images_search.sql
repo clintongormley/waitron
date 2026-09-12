@@ -36,15 +36,22 @@ LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
   END::regconfig
 $$;
 --> statement-breakpoint
+CREATE FUNCTION media_text_vector(language text, value text) RETURNS tsvector
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
+  -- Exact tokens retain stopwords; stems share their positions so quoted phrases still match.
+  SELECT (to_tsvector(public.media_text_config(language), value)::text || ' ' ||
+          to_tsvector('pg_catalog.simple', value)::text)::tsvector
+$$;
+--> statement-breakpoint
 CREATE FUNCTION media_search_vector(names jsonb, alt_text jsonb, labels text[]) RETURNS tsvector
 LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE AS $$
 DECLARE result tsvector := ''::tsvector; translation record;
 BEGIN
   FOR translation IN SELECT * FROM jsonb_each_text(names) ORDER BY key LOOP
-    result := result || setweight(to_tsvector(public.media_text_config(translation.key), translation.value), 'A');
+    result := result || setweight(public.media_text_vector(translation.key, translation.value), 'A');
   END LOOP;
   FOR translation IN SELECT * FROM jsonb_each_text(alt_text) ORDER BY key LOOP
-    result := result || setweight(to_tsvector(public.media_text_config(translation.key), translation.value), 'C');
+    result := result || setweight(public.media_text_vector(translation.key, translation.value), 'C');
   END LOOP;
   RETURN result || setweight(to_tsvector('pg_catalog.simple', array_to_string(labels, ' ')), 'B');
 END
@@ -52,10 +59,36 @@ $$;
 --> statement-breakpoint
 CREATE FUNCTION media_search_query(query text) RETURNS tsquery
 LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE AS $$
-DECLARE result tsquery := websearch_to_tsquery('pg_catalog.simple', query); language text;
+DECLARE
+  result tsquery := websearch_to_tsquery('pg_catalog.simple', query);
+  language text;
+  term text;
+  target tsquery;
+  expanded tsquery;
+  stem tsquery;
+  alternatives tsquery[];
+  replacements tsquery[] := ARRAY[]::tsquery[];
+  term_index integer := 0;
 BEGIN
-  FOREACH language IN ARRAY ARRAY['ar','hy','eu','ca','da','nl','en','et','fi','fr','de','el','hi','hu','id','ga','it','lt','ne','no','pt','ro','ru','sr','es','sv','ta','tr','yi'] LOOP
-    result := result || websearch_to_tsquery(public.media_text_config(language), query);
+  FOREACH term IN ARRAY tsvector_to_array(to_tsvector('pg_catalog.simple', query)) LOOP
+    target := quote_literal(term)::tsquery;
+    expanded := target;
+    alternatives := ARRAY[target];
+    FOREACH language IN ARRAY ARRAY['ar','hy','eu','ca','da','nl','en','et','fi','fr','de','el','hi','hu','id','ga','it','lt','ne','no','pt','ro','ru','sr','es','sv','ta','tr','yi'] LOOP
+      stem := plainto_tsquery(public.media_text_config(language), term);
+      IF numnode(stem) > 0 AND NOT (stem = ANY(alternatives)) THEN
+        expanded := expanded || stem;
+        alternatives := array_append(alternatives, stem);
+      END IF;
+    END LOOP;
+    term_index := term_index + 1;
+    -- The text parser cannot emit these control-character lexemes. Placeholders prevent a
+    -- later input term from rewriting stems already expanded for an earlier term.
+    result := ts_rewrite(result, target, quote_literal(chr(1) || term_index::text)::tsquery);
+    replacements := array_append(replacements, expanded);
+  END LOOP;
+  FOR term_index IN 1..cardinality(replacements) LOOP
+    result := ts_rewrite(result, quote_literal(chr(1) || term_index::text)::tsquery, replacements[term_index]);
   END LOOP;
   RETURN result;
 END

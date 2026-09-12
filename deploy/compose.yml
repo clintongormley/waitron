@@ -50,7 +50,6 @@ services:
     volumes:
       - state:/var/lib/waitron/state
       - logs:/var/lib/waitron/logs
-      - media:/var/lib/waitron/media
       - backups:/var/lib/waitron/backups
     # EITHER endpoint returning 200 is healthy, because neither exists in both modes: /health is 503
     # by design on a setup box (no duty loop means not trading-healthy) and /setup-api/status is
@@ -210,7 +209,6 @@ volumes:
   db:
   state:
   logs:
-  media:
   backups:
   mailpit:
   print_agent:

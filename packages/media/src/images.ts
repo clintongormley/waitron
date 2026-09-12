@@ -328,7 +328,7 @@ export async function listImages(
   const nameMatch = query
     ? sql`media_search_vector(m.names, '{}'::jsonb, '{}'::text[]) @@ ${search}`
     : sql`false`;
-  const name = sql`lower(coalesce(nullif(btrim(m.names ->> ${language}), ''), m.names ->> ${config.defaultLanguage}, '')) collate "C"`;
+  const name = sql`lower(coalesce(nullif(btrim(m.names ->> ${language}), ''), m.names ->> ${config.defaultLanguage}, '')) collate pg_catalog."und-x-icu"`;
   const order =
     sort === "relevance"
       ? sql`${nameMatch} desc, ${rank} desc`

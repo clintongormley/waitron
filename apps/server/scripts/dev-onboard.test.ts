@@ -127,12 +127,7 @@ describe("devOnboard against real Postgres", () => {
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     // loadConfig resolves the whole server config. Placeholder roots: loadConfig only uses them as
     // string fallbacks, never stats them (same as dev-setup.test.ts).
-    const config = loadConfig(
-      written,
-      "/dev/null/migrations",
-      "/dev/null/media",
-      "/dev/null/state",
-    );
+    const config = loadConfig(written, "/dev/null/migrations", "/dev/null/state");
     expect(config.environment).toBe("preproduction");
     expect(config.devMode).toBe(true);
     expect(config.httpPort).toBe(8080);

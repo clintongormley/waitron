@@ -197,27 +197,17 @@ describe("devSetup against real Postgres", () => {
 
   let envDir: string;
   let envPath: string;
-  let mediaDir: string;
   let first: DevSetupResult;
-  const priorMediaDir = process.env.WAITRON_MEDIA_DIR;
 
   beforeAll(async () => {
     envDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-"));
     envPath = join(envDir, ".env");
-    // devSetup now seeds media through the whole demo restaurant, resolving `WAITRON_MEDIA_DIR ||
-    // DEFAULT_MEDIA_ROOT`. Point it at a throwaway dir so the seed never writes PNGs into the repo's
-    // source tree (apps/server/src/media, the from-source DEFAULT_MEDIA_ROOT).
-    mediaDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-media-"));
-    process.env.WAITRON_MEDIA_DIR = mediaDir;
     // The FIRST run: a fresh database with no `.env` — provisions.
     first = await devSetup({ databaseUrl: suite.pg.uri, envPath, stateDir: envDir, log: () => {} });
   }, 180_000);
 
   afterAll(async () => {
-    if (priorMediaDir === undefined) delete process.env.WAITRON_MEDIA_DIR;
-    else process.env.WAITRON_MEDIA_DIR = priorMediaDir;
     if (envDir !== undefined) await rm(envDir, { recursive: true, force: true });
-    if (mediaDir !== undefined) await rm(mediaDir, { recursive: true, force: true });
   });
 
   async function tillsCount(): Promise<number> {
@@ -301,12 +291,7 @@ describe("devSetup against real Postgres", () => {
     // loadTillConfig — a throw here would be server.config_missing / server.till_config_* (the
     // codes dev-setup's whole purpose is to make impossible). Placeholder roots: loadConfig only
     // uses them as string fallbacks, never stats them.
-    const config = loadConfig(
-      written,
-      "/dev/null/migrations",
-      "/dev/null/media",
-      "/dev/null/state",
-    );
+    const config = loadConfig(written, "/dev/null/migrations", "/dev/null/state");
     expect(config.environment).toBe("preproduction");
     expect(config.httpPort).toBe(8080);
     // dev-setup ALWAYS provisions a venue, so `loadConfig` resolves the five ids into `config.till`

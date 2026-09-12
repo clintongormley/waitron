@@ -14,6 +14,24 @@ import {
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 describe("site content languages", () => {
+  it.each(["", "invalid_locale", "und"])(
+    "uses the shared fallback for an absent setting and invalid preference %j",
+    async (fallbackLanguage) => {
+      const tenantId = await seedTenant(suite.db);
+      await withTenant(suite.db, tenantId, async (tx) => {
+        expect(await readContentLanguages(tx, tenantId, fallbackLanguage)).toEqual({
+          defaultLanguage: "en",
+          languages: ["en"],
+        });
+        await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr"] });
+        expect(await readContentLanguages(tx, tenantId, fallbackLanguage)).toEqual({
+          defaultLanguage: "fr",
+          languages: ["fr"],
+        });
+      });
+    },
+  );
+
   it("recognizes regional translation keys consistently when changing the default", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, async (tx) => {

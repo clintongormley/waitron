@@ -122,6 +122,7 @@ export class ImageLibrary extends LitElement {
   } | null = null;
   @state() private invalid = false;
   @state() private saveError: string | null = null;
+  @state() private duplicateImage: LibraryImage | null = null;
   @state() private deletion: { image: LibraryImage; uses: ImageUsage[] } | null = null;
   @state() private deleteError = false;
   @state() private busy = false;
@@ -216,6 +217,7 @@ export class ImageLibrary extends LitElement {
     };
     this.invalid = false;
     this.saveError = null;
+    this.duplicateImage = null;
   }
   #closeEditor(): void {
     if (!this.busy) this.editor = null;
@@ -250,8 +252,10 @@ export class ImageLibrary extends LitElement {
       ],
     };
     try {
-      if (editor.image === null) await this.api.uploadImage(editor.file!, metadata);
-      else await this.api.updateImage(editor.image.id, metadata);
+      if (editor.image === null) {
+        const result = await this.api.uploadImage(editor.file!, metadata);
+        this.duplicateImage = result.created ? null : result.image;
+      } else await this.api.updateImage(editor.image.id, metadata);
       this.editor = null;
     } catch (error) {
       this.saveError = codeOf(error);
@@ -458,6 +462,23 @@ export class ImageLibrary extends LitElement {
             : nothing
         }
       </div>
+      ${
+        this.duplicateImage
+          ? html`<div role="status" data-test="duplicate-upload">
+              <p>
+                ${t("image.duplicate_reused")}
+                <strong>${this.#text(this.duplicateImage.names)}</strong>.
+                ${t("image.duplicate_metadata_kept")}
+              </p>
+              <wt-button
+                data-test="edit-duplicate"
+                variant="secondary"
+                @click=${() => this.#edit(this.duplicateImage)}
+                >${t("image.edit")}</wt-button
+              >
+            </div>`
+          : nothing
+      }
       ${this.loadError ? html`<p role="alert" class="error">${t("image.load_error")} <wt-button variant="secondary" @click=${() => void this.#load()}>${t("image.retry")}</wt-button></p>` : nothing}
       ${this.deleteError && this.deletion === null ? html`<p role="alert" class="error">${t("image.delete_error")}</p>` : nothing}
       <div class="grid">

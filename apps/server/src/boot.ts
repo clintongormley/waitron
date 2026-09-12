@@ -242,25 +242,15 @@ interface BootTeardown {
 export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.meta.url));
 
 /**
- * The default local store for product images, computed exactly as `DEFAULT_MIGRATIONS_ROOT` above:
- * beside the bundle (`<dist>/media`) for a built artefact, or `apps/server/src/media` run from
- * source. `WAITRON_MEDIA_DIR` overrides it (config.ts), and deployment (#9) sets it explicitly to a
- * durable path; this default only has to exist so a from-source dev boot has somewhere to write.
- * Threaded into `loadConfig` as the `defaultMediaRoot` argument, the same way this file supplies
- * `DEFAULT_MIGRATIONS_ROOT`.
- */
-export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url));
-
-/**
  * The default persisted store for the box's self-signed cert PEMs and generated secrets, computed
- * exactly as `DEFAULT_MEDIA_ROOT` above: beside the bundle (`<dist>/state`) for a built artefact, or
+ * beside the server entry point: beside the bundle (`<dist>/state`) for a built artefact, or
  * `apps/server/src/state` run from source. The setup branch below materialises the box's self-signed
  * cert + secrets here on first setup boot (`ensureBoxSecrets`, `box-secrets.ts`) and serves the setup
  * surface over HTTPS from them; leaf renewal/rotation is later work. `WAITRON_STATE_DIR`
  * overrides it (config.ts), and deployment (#9) sets a durable, protected path; this default only has
  * to exist so a from-source dev boot has somewhere to write. The dev default is gitignored
  * (`apps/server/src/state/`) because it holds SECRETS. Threaded into `loadConfig` as the
- * `defaultStateRoot` argument, the same way this file supplies `DEFAULT_MEDIA_ROOT`.
+ * `defaultStateRoot` argument.
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
@@ -734,7 +724,7 @@ export async function startServer(
   // Config is loaded FIRST so `config.logDir` + the rotation knobs are available when the file sink is
   // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
   // escapes here (§8) before any logger, pool or listener exists.
-  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
+  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
   // The addresses this box tells the LAN to reach it on — the leaf's iPAddress SANs, the discovery
   // document's IP URLs (and the QR built from them) and the mDNS answers. One resolver, so all three
   // read the same list on any single call: the operator's `WAITRON_BOX_ADDRESSES` when set, else the
@@ -1053,7 +1043,6 @@ export async function startServer(
                   artifact: candidate.artifact,
                   recoveryKey: candidate.recoveryKey,
                   databaseUrl: config.migrationsDatabaseUrl,
-                  mediaDir: config.mediaDir,
                   stateDir: config.stateDir,
                   stagingDir: join(config.stateDir, "restore-staging"),
                   migrationsRoot: config.migrationsRoot,
@@ -2161,7 +2150,6 @@ export async function startServer(
     modules: ALL_MODULES,
     environment: config.environment,
     stateDir: config.stateDir,
-    mediaDir: config.mediaDir,
     jitterSeed: till.nodeId,
     // The venue's real wall clock (tz + business-day cutover), tenant-scoped and keyed by this node —
     // the same read `report-api` uses, so an `at: "auto"` / wall-clock schedule fires in the venue's

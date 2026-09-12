@@ -83,12 +83,6 @@ async function makeStateDir(): Promise<string> {
   return dir;
 }
 
-async function makeMediaDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "waitron-bsup-media-"));
-  stateDirs.push(dir);
-  return dir;
-}
-
 async function makeDestDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "waitron-bsup-dest-"));
   stateDirs.push(dir);
@@ -112,7 +106,7 @@ function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
   };
 }
 
-function makeSupervisor(refs: Refs, stateDir: string, mediaDir: string): BackupSupervisor {
+function makeSupervisor(refs: Refs, stateDir: string): BackupSupervisor {
   return new BackupSupervisor({
     buildConfig: async () => refs.config,
     isManagedByEnvironment: () => refs.managed,
@@ -121,7 +115,6 @@ function makeSupervisor(refs: Refs, stateDir: string, mediaDir: string): BackupS
     modules: ALL_MODULES,
     environment: "production",
     stateDir,
-    mediaDir,
     jitterSeed: "seed",
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
     log: (level, event) => refs.logs.push({ level, event }),
@@ -184,7 +177,7 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       logs: [],
       managed: false,
     };
-    const sup = makeSupervisor(refs, await makeStateDir(), await makeMediaDir());
+    const sup = makeSupervisor(refs, await makeStateDir());
     try {
       await sup.reload();
       await waitForArchive(dest);
@@ -206,7 +199,7 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       logs: [],
       managed: false,
     };
-    const sup = makeSupervisor(refs, await makeStateDir(), await makeMediaDir());
+    const sup = makeSupervisor(refs, await makeStateDir());
     try {
       await sup.reload();
       await waitForArchive(destA);
@@ -233,7 +226,7 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       logs: [],
       managed: false,
     };
-    const sup = makeSupervisor(refs, await makeStateDir(), await makeMediaDir());
+    const sup = makeSupervisor(refs, await makeStateDir());
     try {
       await sup.reload();
       await waitForArchive(dest);
@@ -274,7 +267,7 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       logs: [],
       managed: false,
     };
-    const sup = makeSupervisor(refs, await makeStateDir(), await makeMediaDir());
+    const sup = makeSupervisor(refs, await makeStateDir());
     try {
       await sup.reload();
       // Wait for the fan-out to have RUN and failed (the measurement's control: false-because-failed,
@@ -310,7 +303,6 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       modules: ALL_MODULES,
       environment: "production",
       stateDir: await makeStateDir(),
-      mediaDir: await makeMediaDir(),
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
       log: (level, event) => refs.logs.push({ level, event }),
@@ -346,7 +338,7 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       logs: [],
       managed: false,
     };
-    const sup = makeSupervisor(refs, await makeStateDir(), await makeMediaDir());
+    const sup = makeSupervisor(refs, await makeStateDir());
     try {
       await sup.reload();
       expect(sup.current().enabled).toBe(false);
@@ -377,7 +369,6 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       modules: ALL_MODULES,
       environment: "production",
       stateDir: await makeStateDir(),
-      mediaDir: await makeMediaDir(),
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
       log: () => {},
@@ -414,7 +405,6 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       modules: ALL_MODULES,
       environment: "production",
       stateDir: await makeStateDir(),
-      mediaDir: await makeMediaDir(),
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
       log: (level, event) => refs.logs.push({ level, event }),
@@ -455,7 +445,7 @@ describe("BackupSupervisor lifecycle (real Postgres, owner read connection)", ()
       logs: [],
       managed: false,
     };
-    const sup = makeSupervisor(refs, await makeStateDir(), await makeMediaDir());
+    const sup = makeSupervisor(refs, await makeStateDir());
     try {
       await sup.reload();
       expect(refs.logs.some((l) => l.event === "backup.disabled_probe_failed")).toBe(true);

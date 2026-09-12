@@ -20,7 +20,7 @@ function api() {
   return {
     listImages: vi.fn().mockResolvedValue({ images: [image], total: 1 }),
     listLabels: vi.fn().mockResolvedValue({ labels: image.labels }),
-    uploadImage: vi.fn().mockResolvedValue({ image }),
+    uploadImage: vi.fn().mockResolvedValue({ image, created: true }),
     updateImage: vi.fn().mockResolvedValue({ image }),
     deleteImage: vi.fn().mockResolvedValue({ deleted: true, uses: [] }),
     getImage: vi.fn().mockResolvedValue({ image, uses: [] }),
@@ -122,7 +122,7 @@ it("refreshes image ordering passively after content-language settings change", 
   await el.updateComplete;
   field("image-labels", "Draft label");
   background.listImages.mockResolvedValue({
-    images: [{ ...image, id: "two", names: { es: "Primero" } }, image],
+    images: [{ ...image, id: "two", names: { es: "First" } }, image],
     total: 2,
   });
   liveData.invalidate([{ type: "content_languages" }]);
@@ -172,6 +172,49 @@ it("requires file and default-language name and alt text, keeping optional trans
     altText: { es: "Pan recién hecho" },
     labels: ["Food", "Summer menu"],
   });
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull());
+  expect(el.shadowRoot!.querySelector("[data-test=duplicate-upload]")).toBeNull();
+});
+
+it("explains when a duplicate photo reuses the existing image and keeps its metadata", async () => {
+  const client = api();
+  client.uploadImage.mockResolvedValue({ image, created: false });
+  await mount(client);
+  click("[data-test=upload]");
+  await el.updateComplete;
+  const transfer = new DataTransfer();
+  transfer.items.add(new File(["same photo"], "bread.jpg", { type: "image/jpeg" }));
+  const file = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  file.files = transfer.files;
+  file.dispatchEvent(new Event("change"));
+  field("name-es", "Different name");
+  field("alt-es", "Different alt text");
+  field("image-labels", "Different label");
+  await el.updateComplete;
+  click("[data-test=save]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=duplicate-upload]")).not.toBeNull(),
+  );
+  const notice = el.shadowRoot!.querySelector("[data-test=duplicate-upload]")!;
+  expect(notice.getAttribute("role")).toBe("status");
+  expect(notice.textContent).toContain("Pan");
+  expect(notice.textContent).toContain("name, alt text and labels are unchanged");
+  expect(client.updateImage).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelectorAll("[data-image=one]")).toHaveLength(1);
+  click("[data-test=edit-duplicate]");
+  await el.updateComplete;
+  expect(
+    (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement & { value: string })
+      .value,
+  ).toBe("Pan");
+  expect(
+    (el.shadowRoot!.querySelector("wt-input[name=alt-es]") as HTMLElement & { value: string })
+      .value,
+  ).toBe("Pan recién hecho");
+  expect(
+    (el.shadowRoot!.querySelector("wt-input[name=image-labels]") as HTMLElement & { value: string })
+      .value,
+  ).toBe("Food, Summer menu");
 });
 
 it("sends search, label, and sort to the server", async () => {

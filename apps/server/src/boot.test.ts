@@ -176,11 +176,6 @@ const TILL_ENV = {
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
-// Every successful boot in this suite writes its media directory here (an existing temp dir, so the
-// recursive `mkdirSync` boot performs is a no-op) rather than into `boot.ts`'s own default — which,
-// run from SOURCE, resolves to `apps/server/src/media` and would pollute the checkout on every run.
-// Created synchronously so the `KEY_ENV` const below can reference it; torn down in `afterAll`.
-const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-boot-media-"));
 // Every trading boot in this suite carries a `modules.json` that resolves the fiscal slot to Veri*Factu
 // (disabling the no-regime `fiscal-none`) — the shape a real ES provision persists. `ALL_MODULES` now
 // holds TWO fiscal-slot members, so the default-on set (an absent file) would enable both and boot would
@@ -200,7 +195,6 @@ const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  WAITRON_MEDIA_DIR: MEDIA_ROOT,
   WAITRON_STATE_DIR: TRADING_STATE_DIR,
   // The passkey Relying Party ID + origin, now REQUIRED by `loadConfig` in production — every
   // real-host boot in this suite that sets `WAITRON_ENV: "production"` would otherwise throw
@@ -311,10 +305,9 @@ beforeAll(async () => {
 // must not be followed by an `rm(undefined)` reported as a second failure beside the real one.
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  // `MEDIA_ROOT` and `TRADING_STATE_DIR` are created synchronously at module load (always defined), so
+  // `TRADING_STATE_DIR` is created synchronously at module load (always defined), so
   // no undefined guard — `force: true` also absorbs the case where a boot's own nested subdir was
   // already removed.
-  await rm(MEDIA_ROOT, { recursive: true, force: true });
   await rm(TRADING_STATE_DIR, { recursive: true, force: true });
 });
 
@@ -2111,26 +2104,17 @@ describe("startServer, against a real container as the deployment role", () => {
   // Exercise the module route through trading boot, including bytes, CORS and rejected names.
   it("serves database image bytes through the public route on a running server", async () => {
     const port = await freePort();
-    const mediaDir = join(MEDIA_ROOT, "created-at-boot", "product-images");
-    expect(existsSync(mediaDir)).toBe(false);
-    expect(isAbsolute(mediaDir)).toBe(true);
-
     const server = await startServer({
       ...KEY_ENV,
       DATABASE_URL: databaseUrl,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      // Overrides KEY_ENV's own MEDIA_ROOT with the fresh nested path this test asserts on.
-      WAITRON_MEDIA_DIR: mediaDir,
       WAITRON_MIN_TICK_MS: "50",
       WAITRON_MAX_TICK_MS: "200",
       WAITRON_SKIP_RETRY_MS: "100",
     });
 
     try {
-      // Serving database images does not create a filesystem media store.
-      expect(existsSync(mediaDir)).toBe(false);
-
       const imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       const imageName = await withTenant(
         suite.admin,

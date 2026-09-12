@@ -36,7 +36,6 @@ export async function stageRestoreRequest(
 export interface StagedRestoreDeps {
   stateDir: string;
   databaseUrl: string;
-  mediaDir: string;
   migrationsRoot: string | null;
   log: Logger;
 }
@@ -80,7 +79,6 @@ export async function runStagedRestore(
       artifact,
       recoveryKey,
       databaseUrl: deps.databaseUrl,
-      mediaDir: deps.mediaDir,
       stateDir: deps.stateDir,
       stagingDir: join(deps.stateDir, "restore-staging"),
       migrationsRoot: deps.migrationsRoot,

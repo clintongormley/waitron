@@ -71,7 +71,7 @@ const HOSTNAME = only(
 // A provisioned box's own URL, from `instance.env`. The image never carries one.
 const DATABASE_URL = "postgres://waitron_app:pw@127.0.0.1:5432/waitron";
 const load = (env: Record<string, string | undefined>) =>
-  loadConfig(env, "/opt/waitron/drizzle", "/opt/waitron/media", "/opt/waitron/state");
+  loadConfig(env, "/opt/waitron/drizzle", "/opt/waitron/state");
 
 /** `@waitron/shared`'s `AppError` shape, duck-typed: the root project cannot import the package. */
 function thrown(run: () => unknown): { code?: unknown; params?: { variable?: unknown } } {
@@ -273,4 +273,11 @@ describe("every copy of the box's hostname", () => {
     // The URL in the QR code the restaurant actually scans.
     expect(only(WAITRON_SH, /BOX_URL="([^"]+)"/, "waitron.sh BOX_URL")).toBe(`https://${HOSTNAME}`);
   });
+});
+
+it("stores image-library bytes in the database without a separate image volume", () => {
+  expect(IMAGE_ENV).not.toHaveProperty("WAITRON_MEDIA_DIR");
+  expect(DOCKERFILE).not.toContain("/var/lib/waitron/media");
+  expect(COMPOSE).not.toContain("media:/var/lib/waitron/media");
+  expect(COMPOSE).not.toMatch(/^ {2}media:$/m);
 });

@@ -2,6 +2,7 @@ import type { Transaction } from "@waitron/db";
 import {
   AppError,
   contentLanguageCode,
+  FALLBACK_LOCALE,
   resolveContentText,
   type ContentLanguages,
 } from "@waitron/shared";
@@ -67,7 +68,13 @@ export async function readContentLanguages(
     .from(contentLanguages)
     .where(eq(contentLanguages.tenantId, tenantId));
   if (row) return row;
-  const defaultLanguage = contentLanguageCode(fallbackLanguage);
+  let defaultLanguage: string;
+  try {
+    defaultLanguage = contentLanguageCode(fallbackLanguage);
+  } catch {
+    // A missing setting must not turn a malformed display preference into a sale failure.
+    defaultLanguage = contentLanguageCode(FALLBACK_LOCALE);
+  }
   return { defaultLanguage, languages: [defaultLanguage] };
 }
 

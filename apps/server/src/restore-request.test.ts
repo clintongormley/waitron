@@ -77,7 +77,6 @@ describe("staged restore requests", () => {
         {
           stateDir,
           databaseUrl: "postgres://migrator",
-          mediaDir: join(stateDir, "media"),
           migrationsRoot: "/migrations",
           log: vi.fn(),
         },
@@ -112,7 +111,6 @@ describe("staged restore requests", () => {
         {
           stateDir,
           databaseUrl: "postgres://migrator",
-          mediaDir: join(stateDir, "media"),
           migrationsRoot: "/migrations",
           log: vi.fn(),
         },

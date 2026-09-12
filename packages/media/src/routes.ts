@@ -145,7 +145,10 @@ export const MEDIA_ROUTES: ModuleRoutes = {
               { maxUploadBytes, fallbackLanguage },
             );
           });
-          return c.json({ image: result.image }, result.created ? 201 : 200);
+          return c.json(
+            { image: result.image, created: result.created },
+            result.created ? 201 : 200,
+          );
         }),
     );
     app.patch("/management-api/images/:id", (c) =>

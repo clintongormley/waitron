@@ -55,7 +55,10 @@ export class ImageApi {
       passive: this.passive,
     });
   }
-  uploadImage(file: File, metadata: ImageMetadata): Promise<{ image: LibraryImage }> {
+  uploadImage(
+    file: File,
+    metadata: ImageMetadata,
+  ): Promise<{ image: LibraryImage; created: boolean }> {
     const form = new FormData();
     form.set("file", file);
     form.set("names", JSON.stringify(metadata.names));

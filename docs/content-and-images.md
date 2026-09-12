@@ -60,7 +60,7 @@ than fit on the current page.
 In a product editor, select **Choose image** to open the same library, then select **Use image** on
 the photograph you want. Save the product to keep the association. You can reuse one photograph on
 several products. Uploading the same file again finds the existing image and keeps its existing
-names, alt text and labels.
+names, alt text and labels. A notice identifies the reused image and lets you open it for editing.
 
 Choose **Edit image** in the library to add translations or change its labels. Editing this shared
 record changes the metadata wherever that photograph is reused.

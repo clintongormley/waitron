@@ -2,6 +2,8 @@ import { makeT, registerCatalogue, registerCodeMessages } from "@waitron/dashboa
 const en = {
   "nav.images": "Image library",
   "image.upload": "Upload photo",
+  "image.duplicate_reused": "Existing photo reused:",
+  "image.duplicate_metadata_kept": "Its name, alt text and labels are unchanged.",
   "image.edit": "Edit image",
   "image.name": "Name",
   "image.alt": "Alt text",
@@ -45,6 +47,8 @@ const en = {
 const es: Record<keyof typeof en, string> = {
   "nav.images": "Biblioteca de imágenes",
   "image.upload": "Subir foto",
+  "image.duplicate_reused": "Se ha reutilizado la foto existente:",
+  "image.duplicate_metadata_kept": "Su nombre, texto alternativo y etiquetas no han cambiado.",
   "image.edit": "Editar imagen",
   "image.name": "Nombre",
   "image.alt": "Texto alternativo",

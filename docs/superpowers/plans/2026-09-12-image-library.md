@@ -4,7 +4,8 @@
 
 Content-language configuration, editing and fallback, the media module, image management and product
 selection are implemented in the `image-library` branch. Workspace validation is complete; the
-branch is ready for `finish-branch`. No branch review, pull request or merge is claimed here.
+branch is in `finish-branch`. The isolated Claude review is complete and its fixes are being
+validated before push and CI. No merge is claimed here.
 
 The steps below are the implementation sequence. The recorded checks at the end describe focused
 runs during development, not a final check of every later edit.
@@ -83,3 +84,40 @@ in scope after that prerequisite.
   defaults while retaining the missing-description id fallback.
 - Comparing successful package results with every workspace manifest left no coverage package
   outstanding. `git diff --check` passed. Whole-branch review and CI belong to `finish-branch`.
+
+## Finish-branch review, 2026-09-12
+
+Rebased onto `4602cb4c064087844d0716b2ff3fa7ea31b41ba8`; retained both sides of additive imports,
+translation strings and backlog updates. The Claude run-it seat reviewed the complete candidate
+at `db1b29ad` in an independent temporary clone, taking 175 seconds. Artifacts are retained under
+`/tmp/waitron-image-review-vob96yy6/`: `brief.md`, `report.md`, `report.md.timing`,
+`report.md.usage` and `triage.md`.
+
+Accepted fixes:
+
+- Expand search terms across language dictionaries while preserving exclusions, OR and quoted
+  phrases. Real-Postgres tests exercise search, ranking, labels, pagination and tenant boundaries.
+- Sort accented names alphabetically; the application-role regression first placed Éclair after
+  Zest, then passed for both sort directions across pages.
+- For missing content settings, a malformed display preference uses the shared default. Three
+  regressions first threw `content.language_invalid`; authored content settings still take priority.
+- Remove the obsolete filesystem image restore path, its config and deployment volume. Images
+  restore through the database; secret-file traversal and symlink assertions remain exercised.
+- Report duplicate photo reuse and unchanged metadata, with an action to edit the existing image.
+
+The claim that listing SQL had no executed coverage was rejected: existing PGlite tests already
+run that SQL with the actual migrations. The missing real-Postgres listing coverage was accepted.
+The byte-table DELETE grant was not widened: configuration import uses the table-owner transaction,
+now stated at the function boundary; application-role byte immutability remains intentional.
+
+The reviewer did not run the populated-image restore or configuration round trip; driver server
+checks cover them. The reviewer also did not establish deployed reachability of a malformed locale
+with no settings, or mutate the boot wiring for contributed translation gaps. Those limits remain
+explicit; the fallback read itself now has a reproducer and fix. No finding requires an owner decision.
+
+Review-fix focused receipts: 13 real-Postgres search tests and 24 PGlite image tests; 23 image-library
+browser tests and five route tests; 224 restore/config/backup tests across ten server files, including
+all four real database restores. The rebased dashboard suite passed 1,709 tests, till passed 1,394,
+and the catalogue, recipes, venue-service and dashboard-modules suites also passed. Final static,
+root and full server/media checks are running before push; the normal pre-push coverage gate and
+CI still follow.

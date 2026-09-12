@@ -70,7 +70,6 @@ const TILL_ENV = {
 };
 
 // Filesystem paths are isolated under this suite's temporary root and removed in afterAll.
-const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-media-"));
 // A `modules.json` that resolves the two-member fiscal slot to Veri*Factu (disabling the no-regime
 // `fiscal-none`), the shape a real ES provision persists. Every trading/mirror boot here reaches
 // `makeFiscalBackend`, which would refuse `module.fiscal_slot_ambiguous` under the default-on both-enabled
@@ -90,7 +89,6 @@ const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  WAITRON_MEDIA_DIR: MEDIA_ROOT,
   WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
   WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
@@ -179,7 +177,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  rmSync(MEDIA_ROOT, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 

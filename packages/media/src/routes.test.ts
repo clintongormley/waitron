@@ -59,6 +59,27 @@ function body() {
   return form;
 }
 describe("image routes", () => {
+  it("identifies reused uploads and returns their original metadata unchanged", async () => {
+    const { app, headers } = await fixture();
+    const created = await app.request("/management-api/images", {
+      method: "POST",
+      headers,
+      body: body(),
+    });
+    const first = (await created.json()) as { created: boolean; image: Record<string, unknown> };
+    const duplicate = body();
+    duplicate.set("names", JSON.stringify({ fr: "Nouveau nom" }));
+    duplicate.set("altText", JSON.stringify({ fr: "Autre description" }));
+    duplicate.set("labels", JSON.stringify(["Other"]));
+    const reused = await app.request("/management-api/images", {
+      method: "POST",
+      headers,
+      body: duplicate,
+    });
+    expect(reused.status).toBe(200);
+    expect(await reused.json()).toEqual({ created: false, image: first.image });
+    expect(first.created).toBe(true);
+  });
   it("uploads, searches, serves public bytes, edits and deletes a photo", async () => {
     const { app, headers } = await fixture();
     const created = await app.request("/management-api/images", {

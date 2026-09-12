@@ -172,8 +172,8 @@ component rules harden around the dashboard alone.
 - **`image-library`** (2026-09-12) implements configurable content languages and a shared photo
   library with translations, labels, search, product reuse and deletion blocked by existing uses.
   Receipt languages stay separate. Image bytes now use the media module's Postgres tables;
-  workspace lint, type checking, formatting and all package coverage checks pass. Ready for
-  `finish-branch`; this work has not landed.
+  initial workspace validation passed. The `finish-branch` review is complete; its search,
+  restore and feedback fixes are in final validation before push and CI. This work has not landed.
   [Design](superpowers/specs/2026-09-12-image-library-design.md),
   [plan and focused checks](superpowers/plans/2026-09-12-image-library.md),
   [operator guide](content-and-images.md).

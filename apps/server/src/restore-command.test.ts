@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
-import { DEFAULT_MEDIA_ROOT, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
+import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
 import type { RestoreDeps } from "./restore.js";
 import { runRestore } from "./restore-command.js";
@@ -104,7 +104,7 @@ describe("waitron-restore restore", () => {
       restore: async (args) => {
         received = args;
         // Exercise the `log` seam too: `restoreFromArtifact` reports progress through it
-        // (`restore.db.staged`, `restore.media.done`, ...), and this confirms those structured
+        // (`restore.db.staged`, `restore.secrets.done`, ...), and this confirms those structured
         // lines actually reach the operator via `out`, formatted, with no secret riding along.
         args.log("info", "restore.db.staged", { bytes: 123 });
       },
@@ -113,7 +113,6 @@ describe("waitron-restore restore", () => {
     expect(received).toBeDefined();
     expect(received?.recoveryKey).toBe(RECOVERY_KEY);
     expect(received?.databaseUrl).toBe(DATABASE_URL);
-    expect(received?.mediaDir).toBe(DEFAULT_MEDIA_ROOT);
     expect(received?.stateDir).toBe(DEFAULT_STATE_ROOT);
     expect(received?.stagingDir).toBe(join(DEFAULT_STATE_ROOT, "restore-staging"));
     expect(received?.migrationsRoot).toBe(DEFAULT_MIGRATIONS_ROOT);
@@ -182,10 +181,9 @@ describe("waitron-restore restore", () => {
     ]);
   });
 
-  it("resolves overridden media/state/migrations dirs and environment from env, like boot does", async () => {
+  it("resolves overridden state/migrations dirs and environment from env, like boot does", async () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-overrides-"));
     const artifactPath = await makeArtifact(dir);
-    const mediaDir = join(dir, "media");
     const stateDir = join(dir, "state");
     let received: RestoreDeps | undefined;
     const code = await runRestore({
@@ -193,7 +191,6 @@ describe("waitron-restore restore", () => {
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
         WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
-        WAITRON_MEDIA_DIR: mediaDir,
         WAITRON_STATE_DIR: stateDir,
         WAITRON_MIGRATIONS_DIR: "/custom/migrations",
         WAITRON_ENV: "production",
@@ -204,7 +201,6 @@ describe("waitron-restore restore", () => {
       },
     });
     expect(code).toBe(0);
-    expect(received?.mediaDir).toBe(resolve(mediaDir));
     expect(received?.stateDir).toBe(resolve(stateDir));
     expect(received?.stagingDir).toBe(join(resolve(stateDir), "restore-staging"));
     expect(received?.migrationsRoot).toBe("/custom/migrations");

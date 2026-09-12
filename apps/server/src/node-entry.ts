@@ -14,7 +14,6 @@ import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning"
 import {
   BOX_HOSTNAME,
   DEFAULT_MIGRATIONS_ROOT,
-  DEFAULT_MEDIA_ROOT,
   DEFAULT_STATE_ROOT,
   startLandingListener,
   startServer,
@@ -492,7 +491,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     await (deps.runStagedRestore ?? runStagedRestore)({
       stateDir: deps.stateDir,
       databaseUrl: urls.migrationsDatabaseUrl,
-      mediaDir: resolveConfigDir(deps.baseEnv.WAITRON_MEDIA_DIR, DEFAULT_MEDIA_ROOT),
       migrationsRoot: deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT,
       log: deps.log,
     });

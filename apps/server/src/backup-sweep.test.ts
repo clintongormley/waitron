@@ -327,21 +327,19 @@ describe("runOnce (fan-out)", () => {
 // through as `"unknown"` rather than as a raw message that could carry the connection string.
 describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
   let staging: string;
-  let mediaDir: string;
   let stateDir: string;
   beforeEach(async () => {
     staging = await mkdtemp(join(tmpdir(), "backup-loop-staging-"));
-    mediaDir = await mkdtemp(join(tmpdir(), "backup-loop-media-"));
     stateDir = await makeStateDir();
   });
   afterEach(async () => {
-    for (const d of [staging, mediaDir, stateDir])
+    for (const d of [staging, stateDir])
       if (d !== undefined) await rm(d, { recursive: true, force: true });
   });
 
   // Mirrors the `deps()` helper in the runOnce block: the constant loop fields in one place
   // (including the BR-2 archive deps — a `db` stand-in for backup reads, the module set, the
-  // media resolver and state dir, and the injected manifest builder so the loop never needs a
+  // state directory, and the injected manifest builder so the loop never needs a
   // real journal), with the per-test signal/sleep/log (and optional runDump/now) supplied as
   // overrides. `signal`/`sleep`/`log` are required here because every loop test drives its own
   // AbortController through them.
@@ -351,7 +349,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     db: NO_DB,
     modules: ALL_MODULES,
     environment: "preproduction",
-    resolvers: { media: mediaDir },
+    resolvers: {},
     stateDir,
     buildManifest: fixedManifest,
     databaseUrl: "postgres://x",
@@ -676,15 +674,13 @@ const suite = useTemplateDb({ template: "manifest" });
 // `TESTCONTAINERS_RYUK_DISABLED=true` (§4).
 describe("runOnce with the real buildManifest (useTemplateDb)", () => {
   let staging: string;
-  let mediaDir: string;
   let stateDir: string;
   beforeEach(async () => {
     staging = await mkdtemp(join(tmpdir(), "backup-real-staging-"));
-    mediaDir = await mkdtemp(join(tmpdir(), "backup-real-media-"));
     stateDir = await makeStateDir();
   });
   afterEach(async () => {
-    for (const d of [staging, mediaDir, stateDir])
+    for (const d of [staging, stateDir])
       if (d !== undefined) await rm(d, { recursive: true, force: true });
   });
 
@@ -695,7 +691,7 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
       db: suite.admin, // owner read of the drizzle journal, which has no app_user SELECT grant
       modules: ALL_MODULES,
       environment: "preproduction",
-      resolvers: { media: mediaDir },
+      resolvers: {},
       stateDir,
       // buildManifest intentionally OMITTED so the real default runs.
       databaseUrl: suite.pg.uri,

@@ -80,13 +80,9 @@ export interface ServerConfig {
   /** Undefined means "let the neutral layer apply its own seven days" — not zero. */
   settlementLagMs: number | undefined;
   migrationsRoot: string;
-  /** Filesystem destination used by the archive restore machinery for media/ entries. The image
-   * library stores its bytes in Postgres. Resolved to an absolute path; an unset or empty
-   * WAITRON_MEDIA_DIR uses defaultMediaRoot rather than resolving to the working directory. */
-  mediaDir: string;
   /**
    * The persisted directory the box owns its self-signed cert PEMs and generated secrets under —
-   * resolved to an ABSOLUTE path at load (`resolve`) exactly like `mediaDir`, so later slices (3, 4)
+   * resolved to an ABSOLUTE path at load (`resolve`) so callers
    * that materialise and read those files join onto a settled base, not one whose meaning shifts with
    * the process's cwd. `WAITRON_STATE_DIR` overrides the boot-computed `defaultStateRoot` threaded
    * into `loadConfig` (see `boot.ts`); an unset OR EMPTY value falls back to that default via
@@ -294,7 +290,7 @@ function required(env: Env, variable: string): string {
  * Resolve a directory-valued config variable the ONE way `loadConfig` here and `runRestore`
  * (`restore-command.ts`) both need: an unset OR empty `raw` (`isUnset`) falls back to `fallback`,
  * and a genuinely-set value is made absolute via `resolve` — never `resolve("")`, which is cwd (the
- * "empty value is a valid value" trap, CLAUDE.md §3). Shared so the two callers' `mediaDir`/`stateDir`
+ * "empty value is a valid value" trap, CLAUDE.md §3). Shared so the callers' `stateDir`
  * handling cannot drift. NOT used for `migrationsRoot`, which is deliberately stored VERBATIM (no
  * `resolve`) in both callers — see its own `isUnset` fallback in `loadConfig`.
  */
@@ -642,7 +638,6 @@ function paymentTestProviders(env: Env): boolean {
 export function loadConfig(
   env: Env,
   defaultMigrationsRoot: string,
-  defaultMediaRoot: string,
   defaultStateRoot: string,
 ): ServerConfig {
   const minTickMs = positiveInt(env, "WAITRON_MIN_TICK_MS", DEFAULT_MIN_TICK_MS);
@@ -713,7 +708,6 @@ export function loadConfig(
     });
   }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
-  const mediaDir = env.WAITRON_MEDIA_DIR;
   const stateDir = env.WAITRON_STATE_DIR;
   const logDir = env.WAITRON_LOG_DIR;
   // The effective (absolute) state dir, computed once so `logDir`'s default reads the SAME value the
@@ -807,12 +801,7 @@ export function loadConfig(
     skipRetryMs,
     settlementLagMs: optionalPositiveInt(env, "WAITRON_SETTLEMENT_LAG_MS"),
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
-    // `resolve` is applied ONLY to a genuinely-set value: an unset OR empty `WAITRON_MEDIA_DIR`
-    // takes `defaultMediaRoot`, never `resolve("")` — which is cwd, the "empty value is a valid
-    // value" trap (CLAUDE.md §3). Same `isUnset` fallback `migrationsRoot` above uses.
-    mediaDir: resolveConfigDir(mediaDir, defaultMediaRoot),
-    // Same isUnset fallback + resolve-only-a-real-value shape mediaDir uses (CLAUDE.md §3): an unset
-    // OR empty WAITRON_STATE_DIR takes `defaultStateRoot`, never `resolve("")` (which is cwd).
+    // Unset or empty values use the default, never the current working directory.
     stateDir: resolvedStateDir,
     // The operator's override for the addresses the box advertises; undefined leaves every consumer
     // on `listBoxIpv4`. Validated at load (`parseBoxAddresses`) so a typo fails boot rather than
