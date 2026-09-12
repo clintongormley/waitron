@@ -1359,6 +1359,56 @@ export interface BackupApplyBody {
   retention: { count: number; days: number };
 }
 
+// ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
+// LOCAL copies of the generic payments routes' JSON shapes (`apps/server/src/payments-api.ts`),
+// deliberately NOT imported from `@waitron/payments`/a provider package/`@waitron/db` — a runtime
+// import would drag their barrels and Node builtins into the browser bundle (the #70 rule the printing
+// shapes above follow). A secret NEVER crosses these: connect returns only the merchant name, and the
+// provider list carries connection STATE, no ciphertext. If the server shapes change these follow, and
+// a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
+
+/** One `GET /management-api/payments/providers` row. `state` is the credential-connection fact the
+ * route computes ("connected" when a sealed credential exists for the provider's purpose, else
+ * "not_connected"); there is NO persisted merchant name, so a reloaded connected provider shows
+ * "connected", never "connected as X" (Task 11 ruling). The wire also carries the provider's
+ * credential/reader field descriptors, which the generic screen ignores — it mounts each provider's
+ * own panel (`CARD_PROVIDER_PANELS`) for the forms — so they are omitted here. */
+export interface PaymentProviderRow {
+  providerId: string;
+  state: "connected" | "not_connected";
+}
+
+/** One `GET /management-api/payments/readers` row. `active` is false for a retired reader (the row is
+ * kept so historical payments still resolve its name); `deviceCount` is how many devices name it as
+ * their default. `provider` is the provider token ("sumup"/"stripe"), resolved to a display name via
+ * the matching panel's `displayNameKey`. */
+export interface ReaderRow {
+  id: string;
+  provider: string;
+  name: string;
+  active: boolean;
+  deviceCount: number;
+}
+
+/** A reader's live status as `GET /management-api/payments/readers/:id/status` returns it — loaded
+ * lazily per row. `online` is device connectivity; `pairingStatus` (SumUp) is pairing completion,
+ * DISTINCT from connectivity (a reader can be paired yet briefly offline). */
+export interface ReaderStatusView {
+  online: boolean;
+  detail?: string;
+  pairingStatus?: "processing" | "paired";
+}
+
+/** The `POST /management-api/payments/readers` body. Every provider sends `providerId` + `name` plus
+ * its own field(s) — SumUp a `code`, Stripe a `reference` — so the extra fields are a string index.
+ * The generic screen never calls this (each provider's add-reader panel does, through the request
+ * primitive); it exists so the client surface is complete. */
+export interface AddReaderInput {
+  providerId: string;
+  name: string;
+  [field: string]: string;
+}
+
 export class DashboardApi {
   readonly liveData = new LiveData();
   #background?: DashboardApi;
@@ -2872,5 +2922,68 @@ export class DashboardApi {
    * retention; returns the fresh status. Archives taken before the rotate still need the OLD key. */
   rotateBackupKey(body: { recoveryKey: string }): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/rotate", "POST", body);
+  }
+
+  // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
+  // The verbs the generic Payments screen drives, all payments.manage-gated server-side
+  // (`apps/server/src/payments-api.ts`). The per-provider connect + add-reader forms are NOT here — a
+  // provider's own panel (`CARD_PROVIDER_PANELS`) owns those and talks to the routes through the shared
+  // request primitive — so the screen's client covers only the provider-neutral reads and actions:
+  // list providers/readers, a reader's lazy status, disconnect a provider, retire a reader.
+
+  /** `GET /management-api/payments/providers` — every card provider and its connection state. */
+  listPaymentProviders(): Promise<PaymentProviderRow[]> {
+    return this.#request<PaymentProviderRow[]>("/management-api/payments/providers", "GET");
+  }
+
+  /** `POST /management-api/payments/providers/:id/connect` — verify the typed credential, seal it,
+   * return the merchant name to confirm (NEVER a secret). The generic screen does not call this; a
+   * provider's connect panel does. Kept for a complete client surface. */
+  connectPaymentProvider(
+    id: string,
+    payload: Record<string, string>,
+  ): Promise<{ merchantName: string }> {
+    return this.#request<{ merchantName: string }>(
+      `/management-api/payments/providers/${id}/connect`,
+      "POST",
+      payload,
+    );
+  }
+
+  /** `POST /management-api/payments/providers/:id/disconnect` — drop the sealed credential. Answers an
+   * empty 204; rejects `{ code: "payment.provider_in_use" }` while any active reader still uses it (the
+   * operator retires those first), `{ code: "payment.provider_unknown" }` on a bad id. */
+  disconnectPaymentProvider(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/payments/providers/${id}/disconnect`, "POST");
+  }
+
+  /** `GET /management-api/payments/readers` — this tenant's card readers by name (active AND retired,
+   * so the surface can show a retired one). Each carries its provider, active flag and device count. */
+  listReaders(): Promise<ReaderRow[]> {
+    return this.#request<ReaderRow[]>("/management-api/payments/readers", "GET");
+  }
+
+  /** `POST /management-api/payments/readers` — add a reader (create returns the minted id + status at
+   * 201). The generic screen does not call this; a provider's add-reader panel does. Kept for a
+   * complete client surface. */
+  addReader(input: AddReaderInput): Promise<{ id: string; status: string }> {
+    return this.#request<{ id: string; status: string }>(
+      "/management-api/payments/readers",
+      "POST",
+      input,
+    );
+  }
+
+  /** `GET /management-api/payments/readers/:id/status` — a reader's live status, loaded lazily per row.
+   * An unknown/foreign reader rejects `{ code: "reader.not_found" }`. */
+  readerStatus(id: string): Promise<ReaderStatusView> {
+    return this.#request<ReaderStatusView>(`/management-api/payments/readers/${id}/status`, "GET");
+  }
+
+  /** `POST /management-api/payments/readers/:id/retire` — retire a reader (soft: `active = false`,
+   * the row is KEPT so historical payments still resolve its name). Answers an empty 204; an
+   * unknown/already-retired id rejects `{ code: "reader.not_found" }`. */
+  retireReader(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/payments/readers/${id}/retire`, "POST");
   }
 }

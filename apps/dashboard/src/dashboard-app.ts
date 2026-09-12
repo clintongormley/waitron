@@ -51,6 +51,7 @@ import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
 import "./screens/email-screen.js";
+import "./screens/payments-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
 import {
   consumeGoogleLoginPreference,
@@ -94,7 +95,8 @@ type CoreScreen =
   | "device-profiles"
   | "diagnostics"
   | "backup"
-  | "email";
+  | "email"
+  | "payments";
 
 /** A destination the shell can show: a core face, or an active module's own screen id. The `& {}` keeps
  * the `CoreScreen` literal autocomplete while still admitting any module id string — the one spelling
@@ -174,6 +176,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "printing-rules", labelKey: "nav.printing_rules" },
+      { screen: "payments", labelKey: "nav.payments", requiresManager: true },
       { screen: "canvas-editor", labelKey: "nav.canvases" },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
@@ -1079,6 +1082,12 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-backup-screen .api=${this.api}></dashboard-backup-screen>`;
       case "email":
         return html`<dashboard-email-screen .api=${this.api}></dashboard-email-screen>`;
+      case "payments":
+        return html`<dashboard-payments-screen
+          .api=${this.api}
+          .request=${this.request}
+          .mode=${this.onboardingIntent}
+        ></dashboard-payments-screen>`;
       default:
         return html`<dashboard-overview-screen .api=${this.api}></dashboard-overview-screen>`;
     }

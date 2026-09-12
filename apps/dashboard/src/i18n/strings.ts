@@ -127,6 +127,7 @@ export const en = {
   "nav.diagnostics": "Diagnostics",
   "nav.backup": "Backups",
   "nav.email": "Test inbox",
+  "nav.payments": "Card payments",
   // Account email
   "email.title": "Account email",
   "email.local_capture":
@@ -908,6 +909,37 @@ export const en = {
   "device_profiles.inactivity_timeout_label": "Auto-logout after (minutes)",
   // NOTE: the empty-name banner pseudo-code (device_profiles.err_no_name) and the server's
   // device_profile.* rejections live in i18n/codes.ts's CODE_MESSAGES, resolved via codeMessage().
+  // Card payments (the generic Payments screen). Each provider's OWN copy (SumUp/Stripe field labels,
+  // pairing steps) lives in that provider's panel strings and is merged into this catalogue when the
+  // screen mounts the panel; the error CODES live in i18n/codes.ts. These keys are the screen's own
+  // provider-neutral chrome.
+  "payments.title": "Card payments",
+  "payments.providers_heading": "Providers",
+  "payments.readers_heading": "Card readers",
+  "payments.state.connected": "Connected",
+  "payments.state.not_connected": "Not connected",
+  "payments.state.simulator": "Simulator",
+  "payments.simulator_banner":
+    "This venue is running in demo mode — card payments are simulated and no real cards are charged.",
+  "payments.connect": "Connect",
+  "payments.disconnect": "Disconnect",
+  "payments.disconnect_confirm": "Tap again to disconnect",
+  "payments.no_providers": "No payment providers are available.",
+  "payments.add_reader": "Add reader",
+  "payments.readers_empty": "No card readers yet.",
+  "payments.reader_col_name": "Name",
+  "payments.reader_col_provider": "Provider",
+  "payments.reader_col_status": "Status",
+  "payments.reader_col_default_count": "Default for devices",
+  "payments.reader_col_actions": "Actions",
+  "payments.reader_status_online": "Online",
+  "payments.reader_status_offline": "Offline",
+  "payments.reader_status_loading": "Checking…",
+  "payments.reader_status_unknown": "Unknown",
+  "payments.reader_pairing_processing": "Pairing…",
+  "payments.reader_retired": "Retired",
+  "payments.retire": "Retire",
+  "payments.retire_confirm": "Tap again to retire",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1024,6 +1056,7 @@ export const es: Record<StringKey, string> = {
   "nav.diagnostics": "Diagnóstico",
   "nav.backup": "Copias de seguridad",
   "nav.email": "Bandeja de pruebas",
+  "nav.payments": "Pagos con tarjeta",
   "email.title": "Correo de cuentas",
   "email.local_capture":
     "Los mensajes se guardan en este equipo. No se envía ningún correo a Internet.",
@@ -1748,6 +1781,33 @@ export const es: Record<StringKey, string> = {
   "device_profiles.form_factor.kds": "Pantalla de cocina",
   "device_profiles.inactivity_timeout_label": "Cierre de sesión automático (minutos)",
   // (device_profiles.err_no_name y device_profile.* viven en i18n/codes.ts — ver la nota en `en`.)
+  "payments.title": "Pagos con tarjeta",
+  "payments.providers_heading": "Proveedores",
+  "payments.readers_heading": "Lectores de tarjetas",
+  "payments.state.connected": "Conectado",
+  "payments.state.not_connected": "Sin conectar",
+  "payments.state.simulator": "Simulador",
+  "payments.simulator_banner":
+    "Este local funciona en modo de demostración: los pagos con tarjeta se simulan y no se cobra ninguna tarjeta real.",
+  "payments.connect": "Conectar",
+  "payments.disconnect": "Desconectar",
+  "payments.disconnect_confirm": "Toca de nuevo para desconectar",
+  "payments.no_providers": "No hay proveedores de pago disponibles.",
+  "payments.add_reader": "Añadir lector",
+  "payments.readers_empty": "Todavía no hay lectores de tarjetas.",
+  "payments.reader_col_name": "Nombre",
+  "payments.reader_col_provider": "Proveedor",
+  "payments.reader_col_status": "Estado",
+  "payments.reader_col_default_count": "Predeterminado en dispositivos",
+  "payments.reader_col_actions": "Acciones",
+  "payments.reader_status_online": "En línea",
+  "payments.reader_status_offline": "Sin conexión",
+  "payments.reader_status_loading": "Comprobando…",
+  "payments.reader_status_unknown": "Desconocido",
+  "payments.reader_pairing_processing": "Emparejando…",
+  "payments.reader_retired": "Retirado",
+  "payments.retire": "Retirar",
+  "payments.retire_confirm": "Toca de nuevo para retirar",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
