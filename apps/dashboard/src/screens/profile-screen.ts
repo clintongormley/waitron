@@ -167,6 +167,10 @@ export class ProfileScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
+      .error {
+        color: var(--wt-color-danger);
+        margin-top: var(--wt-space-3);
+      }
       select {
         width: 100%;
         min-height: var(--wt-tap-min);
@@ -237,14 +241,16 @@ export class ProfileScreen extends LitElement {
   #announceTab(): void {
     this.dispatchEvent(
       new CustomEvent("profile-tab-change", {
-        detail: { tab: this.activeTab },
+        detail: { tab: this.activeTab, ready: this.profile !== null },
         bubbles: true,
         composed: true,
       }),
     );
   }
-  /** Called by dashboard-app.ts's relocated Edit button (see #announceTab above). */
+  /** Called by dashboard-app.ts's relocated Edit button (see #announceTab above). Guarded here too,
+   * independent of that button's own disabled state, since #edit() dereferences `this.profile!`. */
   editDetails(): void {
+    if (this.profile === null) return;
     this.#edit("details");
   }
 
@@ -253,6 +259,7 @@ export class ProfileScreen extends LitElement {
       await Promise.all([
         this.#queries.watch("getProfile", [], (value) => {
           this.profile = value;
+          this.#announceTab();
         }),
         this.#queries.watch("getGoogleConfig", [], (value) => {
           this.googleConfigured = value.configured;
@@ -572,7 +579,7 @@ export class ProfileScreen extends LitElement {
         ]}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#selectTab(event)}
       >
-        <div slot="details" class="tab-panel">
+        <div slot="details">
           <div class="row">
             <span class="field-label">${t("profile.name")}</span>
             <span class="field-value">${p.displayName}</span>
@@ -618,7 +625,7 @@ export class ProfileScreen extends LitElement {
             >
           </div>
         </div>
-        <div slot="security" class="tab-panel">
+        <div slot="security">
           <div class="action-row">
             <div class="text">
               <span class="field-value">${t("login.password")}</span>
@@ -737,6 +744,7 @@ export class ProfileScreen extends LitElement {
                 ? html`<wt-button
                     data-test="unlink-google"
                     class="card-action accent-danger"
+                    aria-label=${t("profile.unlink_google")}
                     @click=${() => this.#edit("unlink-google")}
                     >${t("action.remove")}</wt-button
                   >`
@@ -886,7 +894,13 @@ export class ProfileScreen extends LitElement {
       ${this.saved ? html`<p role="status">${t("profile.saved")}</p>` : nothing}
       ${
         p === null
-          ? html`<wt-button @click=${() => void this.#load()}>${t("profile.reload")}</wt-button>`
+          ? html`
+              <!-- The error summary lives inside #renderModal below, which never renders while
+                   profile is still null — an initial load failure needs its own visible text, or
+                   the caught error (#load()'s catch sets it) has nowhere to show. -->
+              ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
+              <wt-button @click=${() => void this.#load()}>${t("profile.reload")}</wt-button>
+            `
           : html`${this.#renderDetails(p)}${this.#renderModal(p)}`
       }
     </div>`;

@@ -80,7 +80,7 @@ import {
  * entry, and swapping the main content for it made an already-narrow page fight the shell's own
  * width and left nobody able to explain why nothing in the sidebar was ever highlighted while
  * viewing it). It's a modal ({@link profileOpen}) that opens over whichever face is current,
- * closes back to it, and is reachable from any of them via the banner button.
+ * closes back to it, and is reachable from any of them via the banner's account menu.
  */
 type CoreScreen =
   | "login"
@@ -260,9 +260,9 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-1);
       }
 
-      /* Group header: a toggle button (collapses/expands its own items), small caps like a card's
-         group-label (see profile-screen.ts) — makes it unmistakably a label rather than a fainter
-         link, which plain small+muted text didn't. Uses the primary accent rather than muted grey so
+      /* Group header: a toggle button (collapses/expands its own items), small caps (uppercase,
+         letter-spacing) — makes it unmistakably a label rather than a fainter link, which plain
+         small+muted text didn't. Uses the primary accent rather than muted grey so
          it doesn't read as the same weight of "quiet" as a resting nav item beneath it; sharing the
          accent hue with the current-page indicator is fine here because a header is never itself the
          current page, so there's no ambiguity about what the colour is pointing at. */
@@ -508,6 +508,12 @@ export class DashboardApp extends LitElement {
    * in THIS shell's modal footer (alongside Close), not inside profile-screen.ts: Security has no
    * equivalent single action, so the footer only shows Edit while "details" is active. */
   @state() private profileTab: "details" | "security" = "details";
+
+  /** Whether profile-screen.ts has actually loaded its data yet (same `profile-tab-change` event —
+   * see {@link profileTab}). The Edit button lives outside the `p === null` render guard that used
+   * to keep an in-card Edit button from existing before load completed, so this is what disables
+   * it until there is real data for `editDetails()` to read. */
+  @state() private profileReady = false;
 
   /** Manually-collapsed nav groups (headerless groups are never collapsible, so never appear here).
    * A group in this set still renders expanded if it contains the CURRENT screen — collapsing "Team"
@@ -987,7 +993,8 @@ export class DashboardApp extends LitElement {
 
   /** The dashboard's stable identity chrome: logo + tenant legal name on every face, with session
    * actions only after authentication. The narrow-screen navigation toggle stays at the leading
-   * edge; Logout occupies the trailing edge in both desktop and narrow layouts. */
+   * edge; the account menu (Account settings, Log out) occupies the trailing edge in both desktop
+   * and narrow layouts. */
   #banner(authenticated: boolean, hasNav: boolean): TemplateResult {
     return html`<header class="brand-banner" data-test="brand-banner">
       <div class="brand-identity">
@@ -1018,7 +1025,7 @@ export class DashboardApp extends LitElement {
           ? html`<div class="banner-actions">
               <wt-row-actions
                 icon="person"
-                iconSize="lg"
+                .iconSize=${"lg"}
                 label=${t("nav.account_menu")}
                 data-test="account-menu"
               >
@@ -1089,12 +1096,26 @@ export class DashboardApp extends LitElement {
   }
 
   /** Resolves BOTH `screen` and `profileOpen` from a requested URL value. "profile" means the
-   * modal is open, never a `screen` itself — the underlying face falls back to this person's
-   * ordinary default (my-schedule for staff, otherwise `#permittedScreen`'s own fallback), the
-   * same as if nothing had been requested, since "profile" was never one of the destinations it
-   * resolves against anyway. */
+   * modal is open, never a `screen` itself, so it overlays whatever screen is already showing
+   * rather than replacing it — UNLESS there isn't one yet (`screen` is still its pre-login
+   * "login" default: a first boot, or a direct deep-link straight to `/manage/profile`), where it
+   * falls back to this person's ordinary default (my-schedule for staff, otherwise
+   * `#permittedScreen`'s own fallback). Leaving an ALREADY-resolved screen alone matters because
+   * this method also runs on every session re-probe (`#applyMe`), including the one a successful
+   * profile save triggers via `profile-updated` — at that point the url still reads "profile" (the
+   * modal has not closed), and re-resolving would silently fall through to the #permittedScreen(null)
+   * default and discard whatever screen the modal was actually opened over. One thing this trades
+   * away: a re-probe while the modal is open still reconciles the active module set (`#activate`,
+   * called earlier in `#applyMe`), but no longer re-gates the PRESERVED `screen` id through
+   * `#permittedScreen` — so if a module is disabled server-side in the exact window the profile
+   * modal is open, `this.screen` can keep naming that now-inactive module until the next real
+   * navigation. `#renderScreen` falls through to the overview default rather than crashing, but
+   * `#closeProfile` would still write the dead id into the URL. Narrow (needs a server-side
+   * permission change inside one profile-modal session) and not new — `#applyRequestedScreen` did
+   * not exist before this modal did, so there was no prior behaviour to preserve here. */
   #applyRequestedScreen(requested: string | null): void {
     this.profileOpen = requested === "profile";
+    if (this.profileOpen && this.screen !== "login") return;
     this.screen = this.#permittedScreen(this.profileOpen ? null : requested);
   }
 
@@ -1239,8 +1260,11 @@ export class DashboardApp extends LitElement {
             ? html`<dashboard-profile-screen
                 .api=${this.api}
                 @profile-updated=${() => void this.#probeSession()}
-                @profile-tab-change=${(e: CustomEvent<{ tab: "details" | "security" }>) => {
+                @profile-tab-change=${(
+                  e: CustomEvent<{ tab: "details" | "security"; ready: boolean }>,
+                ) => {
                   this.profileTab = e.detail.tab;
+                  this.profileReady = e.detail.ready;
                 }}
               ></dashboard-profile-screen>`
             : nothing
@@ -1254,6 +1278,7 @@ export class DashboardApp extends LitElement {
               ? html`<wt-button
                   data-test="edit-profile-details"
                   variant="primary"
+                  ?disabled=${!this.profileReady}
                   @click=${() =>
                     this.renderRoot
                       .querySelector<ProfileScreen>("dashboard-profile-screen")

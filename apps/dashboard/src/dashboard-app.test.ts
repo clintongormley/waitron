@@ -4,6 +4,7 @@ import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
+import type { ProfileScreen } from "./screens/profile-screen.js";
 import { diag } from "./diagnostics.js";
 
 /**
@@ -832,6 +833,157 @@ describe("dashboard-app", () => {
     expect(modal.open).toBe(false);
     expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
     expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+  });
+
+  it("keeps the underlying screen after saving your profile — a save re-probes the session while the URL still says profile", async () => {
+    // profile-screen's "profile-updated" (dispatched on a successful save) re-probes the session,
+    // which resolves the screen from the CURRENT url — still "profile" at that point, since the
+    // modal has not closed. #applyRequestedScreen("profile") must leave the underlying screen
+    // alone rather than falling through #permittedScreen(null) to the "overview" default: it did
+    // exactly that here before the fix, so closing after a save silently landed on Overview
+    // instead of Catalogue, even though the modal itself looked untouched throughout.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getProfile: vi.fn().mockResolvedValue({
+          displayName: "Alex",
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email: "alex@example.com",
+          pendingEmail: null,
+          locale: "en-GB",
+          hasPassword: true,
+          hasTotp: false,
+          hasGoogle: false,
+          passkeys: [],
+        }),
+        saveProfile: vi.fn().mockResolvedValue({ emailVerificationSent: false }),
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [{ code: "en-GB", label: "English" }],
+          venueDefault: "en-GB",
+        }),
+      }),
+    });
+    await flush(el);
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const profileScreen = el.shadowRoot!.querySelector("dashboard-profile-screen")!;
+    await new Promise((r) => setTimeout(r, 0));
+    await profileScreen.updateComplete;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-profile-details"]')!.click();
+    await profileScreen.updateComplete;
+
+    profileScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await flush(el);
+    await flush(el); // the save's own profile-updated -> #probeSession() round trip
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+  });
+
+  it("disables the relocated Edit button until profile data has actually loaded, and never throws if clicked early", async () => {
+    // Edit used to live INSIDE profile-screen.ts's own render, which only ever ran once
+    // `profile !== null` — so the button and its data always existed together. Moving it into
+    // dashboard-app.ts's own footer decoupled the two: without this, the footer button renders
+    // (and is clickable) the instant the modal opens, before getProfile() has resolved, and
+    // editDetails() dereferences `this.profile!.displayName` — a real crash on a slow load or a
+    // fast double click.
+    let resolveProfile!: (value: unknown) => void;
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getProfile: vi.fn(() => new Promise((resolve) => (resolveProfile = resolve))),
+      }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const editButton = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-test="edit-profile-details"]',
+    )!;
+    expect(editButton.disabled).toBe(true);
+    // The public entry point itself is also guarded, independent of the button's disabled state.
+    const profileScreen = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen")!;
+    expect(() => profileScreen.editDetails()).not.toThrow();
+
+    resolveProfile({
+      displayName: "Alex",
+      firstNames: "Alex",
+      lastNames: "Rivera",
+      telephone: null,
+      email: "alex@example.com",
+      pendingEmail: null,
+      locale: "en-GB",
+      hasPassword: true,
+      hasTotp: false,
+      hasGoogle: false,
+      passkeys: [],
+    });
+    await flush(el);
+    await flush(el);
+    expect(editButton.disabled).toBe(false);
+  });
+
+  it("resets both the active tab and the Edit button's readiness on a fresh reopen, not stale state from the previous visit", async () => {
+    // `<dashboard-profile-screen>` is destroyed and recreated on every open/close
+    // (`${this.profileOpen ? html\`<dashboard-profile-screen...\` : nothing}`), and both
+    // `profileTab` and `profileReady` only ever reset via that fresh instance's own
+    // `connectedCallback` re-announcing "details"/not-ready. Nothing else in dashboard-app.ts
+    // resets them on close — if that announce were ever lost, a reopen would carry over the
+    // PREVIOUS visit's tab and (more seriously) its readiness, showing an enabled Edit button over
+    // data that has not loaded yet for the new visit.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getProfile: vi.fn().mockResolvedValue({
+          displayName: "Alex",
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email: "alex@example.com",
+          pendingEmail: null,
+          locale: "en-GB",
+          hasPassword: true,
+          hasTotp: false,
+          hasGoogle: false,
+          passkeys: [],
+        }),
+      }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const editButton = () =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        '[data-test="edit-profile-details"]',
+      );
+    expect(editButton()!.disabled).toBe(false);
+
+    // Switch to Security — Edit disappears (Security has no equivalent single action) — then close.
+    const profileScreen = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen")!;
+    const wtTabs = profileScreen.shadowRoot!.querySelector("wt-tabs")!;
+    wtTabs.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "security" } }));
+    await profileScreen.updateComplete;
+    await flush(el);
+    expect(editButton()).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await flush(el);
+
+    // Reopen: a fresh profile-screen instance loads fresh — Edit is back on "details" (present,
+    // not carried over as hidden from the previous visit's Security tab) and, once its own load
+    // resolves, enabled — never inheriting the previous visit's readiness by accident.
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    expect(editButton()).not.toBeNull();
+    expect(editButton()!.disabled).toBe(false);
   });
 
   it("closing profile-screen's OWN nested edit modal does not also close the outer profile modal", async () => {
@@ -1750,6 +1902,8 @@ describe("dashboard-app", () => {
     await flush(el);
     const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
     const desktopWidth = sidebar().getBoundingClientRect().width;
+    const width = window.innerWidth,
+      height = window.innerHeight;
     try {
       await commands.setViewportSize(400, 800);
       for (let i = 0; i < 100 && !sidebar().hasAttribute("inert"); i++) {
@@ -1764,7 +1918,7 @@ describe("dashboard-app", () => {
       await el.updateComplete;
       expect(sidebar().getBoundingClientRect().width).toBeCloseTo(widthBeforeToggle, 0);
     } finally {
-      await commands.setViewportSize(1280, 800);
+      await commands.setViewportSize(width, height);
     }
   });
 
@@ -1778,6 +1932,8 @@ describe("dashboard-app", () => {
     });
     await flush(el);
     const venueName = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="venue-name"]')!;
+    const width = window.innerWidth,
+      height = window.innerHeight;
     try {
       await commands.setViewportSize(390, 800);
       const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
@@ -1788,7 +1944,7 @@ describe("dashboard-app", () => {
       expect(rect.width).toBeGreaterThan(20);
       expect(rect.height).toBeLessThan(100);
     } finally {
-      await commands.setViewportSize(1280, 800);
+      await commands.setViewportSize(width, height);
     }
   });
 
@@ -1910,28 +2066,34 @@ describe("dashboard-app", () => {
     // internally fixes that; this proves it by measuring the actual rendered geometry in a real
     // browser, not by inspecting styles. A long staff list stands in for "content taller than the
     // viewport" (profile — the original repro — is a modal now, independent of this mechanism).
+    const width = window.innerWidth,
+      height = window.innerHeight;
     await page.viewport(1000, 600);
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({
-        listStaff: vi.fn().mockResolvedValue(
-          Array.from({ length: 30 }, (_, i) => ({
-            ...people[0]!,
-            personId: `p${i}`,
-            displayName: `Person ${i}`,
-          })),
-        ),
-      }),
-    });
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
-    await flush(el);
-    const shell = el.shadowRoot!.querySelector(".shell")!;
-    expect(shell.getBoundingClientRect().height).toBeLessThanOrEqual(600);
-    const sidebar = el.shadowRoot!.querySelector(".sidebar")!;
-    const main = el.shadowRoot!.querySelector(".main")!;
-    expect(
-      Math.abs(sidebar.getBoundingClientRect().bottom - main.getBoundingClientRect().bottom),
-    ).toBeLessThan(2);
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          listStaff: vi.fn().mockResolvedValue(
+            Array.from({ length: 30 }, (_, i) => ({
+              ...people[0]!,
+              personId: `p${i}`,
+              displayName: `Person ${i}`,
+            })),
+          ),
+        }),
+      });
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
+      await flush(el);
+      const shell = el.shadowRoot!.querySelector(".shell")!;
+      expect(shell.getBoundingClientRect().height).toBeLessThanOrEqual(600);
+      const sidebar = el.shadowRoot!.querySelector(".sidebar")!;
+      const main = el.shadowRoot!.querySelector(".main")!;
+      expect(
+        Math.abs(sidebar.getBoundingClientRect().bottom - main.getBoundingClientRect().bottom),
+      ).toBeLessThan(2);
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   it("a staff session gets no hamburger toggle (its only face is self-service, so no drawer)", async () => {

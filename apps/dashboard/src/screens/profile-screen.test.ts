@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { ProfileScreen } from "./profile-screen.js";
 import "./profile-screen.js";
 
@@ -158,6 +159,16 @@ describe("your profile", () => {
       el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="privacy-notice"]')!.href,
     ).toBe("https://restaurant.example/privacy");
     await expectNoA11yViolations(host);
+  });
+  it("shows why the initial load failed, not just a bare Reload button", async () => {
+    // The error summary now lives inside the per-field edit modal (#renderModal), which never
+    // renders at all while profile is still null — so an initial load failure used to leave the
+    // caught error (set in #load()'s catch) with nowhere to display.
+    const { el } = await mount({
+      getProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    expect(el.shadowRoot!.querySelector("wt-button")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(codeMessage("server.internal"));
   });
   it("opens Edit in a modal over the details card, not in place of it", async () => {
     const { el } = await mount();
