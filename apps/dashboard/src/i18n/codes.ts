@@ -570,6 +570,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That payment provider is not available",
     es: "Ese proveedor de pagos no está disponible",
   },
+  "payment.provider_duplicate": {
+    en: "There is a problem with the payment provider setup",
+    es: "Hay un problema con la configuración del proveedor de pagos",
+  },
   "payment.pairing_expired": {
     en: "The reader did not pair in time — start the pairing again",
     es: "El lector no se emparejó a tiempo; vuelve a iniciar el emparejamiento",

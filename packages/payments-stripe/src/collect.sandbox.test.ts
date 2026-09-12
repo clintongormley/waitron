@@ -84,7 +84,6 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
-      resolveReader: () => Promise.resolve(readerId),
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
     // Kick collect, then present a test card on the simulated reader so the action resolves — a
@@ -95,6 +94,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
+      readerRef: readerId,
     });
     await new Promise((r) => setTimeout(r, 1500));
     await stripe.testHelpers.terminal.readers.presentPaymentMethod(readerId);
@@ -125,7 +125,6 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
-      resolveReader: () => Promise.resolve(readerId),
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
     const collecting = provider.collect({
@@ -133,6 +132,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
+      readerRef: readerId,
     });
     await new Promise((r) => setTimeout(r, 1500));
     await stripe.testHelpers.terminal.readers.presentPaymentMethod(readerId);

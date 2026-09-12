@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import type { TenantId, TillId } from "@waitron/shared";
 import { connectedCardProviderSweep, withPendingSweep } from "./boot.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { PassReport } from "./pass.js";
@@ -74,6 +73,40 @@ describe("withPendingSweep", () => {
     )(new Date());
     expect(sim).toHaveBeenCalledTimes(1);
     expect(stripe).toHaveBeenCalledTimes(1);
+  });
+
+  it("one provider's resolvePending throwing does NOT stop the others being swept (T12b)", async () => {
+    // The sweep loop is per-provider fault-isolated: provider A's `resolvePending` rejecting must not
+    // skip provider B. Before, one throwing sweep could abort the pass; each is now wrapped so B still
+    // runs and its failure is logged on its own.
+    const empty: ForwardResult = { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
+    const aThrows = vi.fn(async () => {
+      throw new Error("A boom");
+    });
+    const bSweeps = vi.fn(async () => empty);
+    const log = vi.fn();
+
+    const report = await withPendingSweep(
+      async () => REPORT,
+      async () => [fakeProvider("providerA", aThrows), fakeProvider("providerB", bSweeps)],
+      log,
+    )(new Date());
+
+    expect(report).toBe(REPORT);
+    expect(aThrows).toHaveBeenCalledTimes(1);
+    // B is swept EVEN THOUGH A threw first.
+    expect(bSweeps).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
+      provider: "providerA",
+      error: "Error: A boom",
+    });
+    expect(log).toHaveBeenCalledWith("info", "resolve_pending.complete", {
+      provider: "providerB",
+      captured: 0,
+      failed: 0,
+      incidentsRaised: 0,
+      nextDueAt: null,
+    });
   });
 
   it("logs nextDueAt as null when a sweep reports nothing pending", async () => {
@@ -154,19 +187,16 @@ const CONTRIBUTIONS = [
   { providerId: "sumup", credentialPurpose: "payments.sumup" as const },
 ];
 
-/** Records every `pool.get` call and the reader resolver it was handed, and returns a fake provider
- * named after the requested id. */
+/** Records every `pool.get` call and returns a fake provider named after the requested id. The
+ * provider carries no reader (the reader is a per-collect input), so `get` takes only a provider id. */
 function recordingPool(): {
   pool: CardProviderPool;
   gets: string[];
-  resolvers: ((t: TenantId, i: TillId) => Promise<string>)[];
 } {
   const gets: string[] = [];
-  const resolvers: ((t: TenantId, i: TillId) => Promise<string>)[] = [];
   const pool: CardProviderPool = {
-    get: (providerId, resolveReader) => {
+    get: (providerId) => {
       gets.push(providerId);
-      resolvers.push(resolveReader);
       return Promise.resolve(
         fakeProvider(providerId, async () => ({
           nextDueAt: null,
@@ -178,7 +208,7 @@ function recordingPool(): {
     },
     evict: () => {},
   };
-  return { pool, gets, resolvers };
+  return { pool, gets };
 }
 
 describe("connectedCardProviderSweep", () => {
@@ -231,35 +261,5 @@ describe("connectedCardProviderSweep", () => {
 
     expect(gets).toEqual([]); // no connected pooled provider
     expect(providers).toEqual([simulator]);
-  });
-
-  it("hands pool.get a reader resolver that THROWS if ever called (a sweep must never collect)", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
-      putCredential(tx, ring, {
-        tenantId,
-        purpose: "payments.sumup",
-        value: {
-          apiKey: "sup_sk_x",
-          merchantCode: "MABC123",
-          affiliateAppId: "-",
-          affiliateKey: "-",
-        },
-      }),
-    );
-    const { pool, resolvers } = recordingPool();
-
-    await connectedCardProviderSweep({
-      db: suite.db,
-      tenantId,
-      pool,
-      contributions: CONTRIBUTIONS,
-      simulator: undefined,
-    })();
-
-    expect(resolvers).toHaveLength(1);
-    expect(() => resolvers[0]!("t" as TenantId, "i" as TillId)).toThrow(
-      /must never resolve a reader/,
-    );
   });
 });

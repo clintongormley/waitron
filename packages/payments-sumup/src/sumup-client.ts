@@ -7,6 +7,20 @@ import type {
   TransactionQuery,
 } from "./client.js";
 
+/**
+ * A DEFINITE reader-pairing refusal from SumUp — a 4xx on `pairReader` (an invalid, expired or
+ * already-used pairing code, the common operator mistake). Distinct from the generic 5xx/transport
+ * `Error` the client throws when the outcome is UNKNOWN, so the seat maps only this to the
+ * operator-actionable `payment.pairing_refused` and lets a real fault stay a 500. Carries SumUp's
+ * problem `title` for the installer's log only — never a secret (the title is a status phrase, not a
+ * request echo), and never rendered to the box operator, who sees the fixed `codes.ts` copy. */
+export class SumUpPairingRefused extends Error {
+  constructor(readonly title: string) {
+    super(`sumup pairReader refused: ${title}`);
+    this.name = "SumUpPairingRefused";
+  }
+}
+
 export interface SumUpClientOptions {
   apiKey: string;
   merchantCode: string;
@@ -154,13 +168,25 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         pairing_code: p.pairingCode,
         name: p.name,
       });
-      const data = r.json as { id: string; status: string };
+      // A 4xx is a DEFINITE refusal (bad/expired/used pairing code). Throw so the route never inserts
+      // a `card_readers` row with a null `provider_ref` (a NOT-NULL violation → opaque 500); the seat
+      // maps this to the actionable `payment.pairing_refused`. The old code returned the error body
+      // here, so `{ id, status }` came back undefined and the null ref reached the insert.
+      if (r.status >= 400) throw new SumUpPairingRefused(problemTitle(r.json));
+      const data = r.json as { id?: unknown; status?: unknown };
+      // A 2xx with a malformed body cannot yield a usable reader id either — refuse rather than seal
+      // an undefined ref.
+      if (typeof data.id !== "string" || typeof data.status !== "string")
+        throw new SumUpPairingRefused("malformed reader response");
       return { id: data.id, status: data.status };
     },
     async getReader(readerId: string) {
       const r = await call("GET", `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`);
-      if (r.status === 404) return null;
-      const data = r.json as { id: string; status: string };
+      // 404 (and any other 4xx: an unknown/removed reader) → null, never an object with undefined
+      // fields — the seat treats null as "cannot confirm pairing" and leaves `pairingStatus` unset.
+      if (r.status >= 400) return null;
+      const data = r.json as { id?: unknown; status?: unknown };
+      if (typeof data.id !== "string" || typeof data.status !== "string") return null;
       return { id: data.id, status: data.status };
     },
     async readerStatus(readerId: string) {
@@ -182,6 +208,9 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
     },
     async memberships() {
       const r = await call("GET", "/v0.1/memberships");
+      // A 4xx (a bad key) has no `items` — throw a clear error rather than reading `.items` off an
+      // error body (a confusing TypeError). `connect` catches this as a rejected credential.
+      if (r.status >= 400) throw new Error(`sumup GET memberships: HTTP ${r.status}`);
       const items = (r.json as { items: { resource_id: string; resource: { name: string } }[] })
         .items;
       return items.map((i) => ({ merchantCode: i.resource_id, name: i.resource.name }));

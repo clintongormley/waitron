@@ -3,6 +3,7 @@ import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
+import { isAppError } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { SUMUP_CARD_PROVIDER, deferredClient, optionsFromSealed } from "./card-provider.js";
@@ -213,7 +214,6 @@ describe("SUMUP_CARD_PROVIDER.build", () => {
       tenantId,
       nodeId: "node-1",
       environment: "preproduction",
-      resolveReader: () => Promise.resolve("rdr_1"),
       incidents,
     });
     expect(provider.provider).toBe("sumup");
@@ -266,6 +266,43 @@ describe("SUMUP_CARD_PROVIDER.readers", () => {
     await expect(
       SUMUP_CARD_PROVIDER.readers.add(await readerDeps(fetch), { name: "Counter" }),
     ).rejects.toThrow(/pairing code/);
+  });
+
+  it("add maps a 4xx pairing refusal to payment.pairing_refused (never a null-ref reader)", async () => {
+    // A bad, expired or already-used pairing code (the common operator mistake) is a SumUp 4xx. The
+    // seat must surface the actionable `payment.pairing_refused` — carrying only the providerId, never
+    // the code or SumUp's body — so the route never inserts a `card_readers` row with a null
+    // `provider_ref` (which would be a NOT-NULL violation → opaque 500).
+    const seen: Seen[] = [];
+    const fetch = routedFetch(
+      {
+        "POST /v0.1/merchants/MABC123/readers": () =>
+          json(409, { title: "pairing code already used" }),
+      },
+      seen,
+    );
+    const error = await SUMUP_CARD_PROVIDER.readers
+      .add(await readerDeps(fetch), { name: "Counter", code: "USED1234" })
+      .catch((e: unknown) => e);
+    expect(isAppError(error)).toBe(true);
+    if (isAppError(error)) {
+      expect(error.code).toBe("payment.pairing_refused");
+      expect(error.params).toEqual({ providerId: "sumup" });
+    }
+  });
+
+  it("add lets a 5xx (an UNKNOWN outcome) propagate as a fault, not as payment.pairing_refused", async () => {
+    // A 5xx / transport failure means we do not know whether the reader paired — that is a genuine
+    // fault (an opaque 500 to the caller), never the operator-actionable pairing refusal, which is
+    // reserved for a DEFINITE 4xx. The seat must re-throw it unchanged.
+    const fetch = routedFetch({
+      "POST /v0.1/merchants/MABC123/readers": () => json(503, { title: "upstream down" }),
+    });
+    const error = await SUMUP_CARD_PROVIDER.readers
+      .add(await readerDeps(fetch), { name: "Counter", code: "ABC12345" })
+      .catch((e: unknown) => e);
+    expect(isAppError(error)).toBe(false);
+    expect(String(error)).toMatch(/HTTP 503/);
   });
 
   it("status maps an online reader and its detail", async () => {

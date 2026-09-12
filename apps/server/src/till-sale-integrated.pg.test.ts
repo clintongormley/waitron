@@ -203,10 +203,9 @@ function integratedDeps(
     db: app,
     tenantId: cfg.tenantId,
     nodeId: cfg.nodeId,
-    resolveReader: () => Promise.resolve("reader_1"),
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
   });
-  return { deps: { db: app, backend, clock, provider }, client };
+  return { deps: { db: app, backend, clock, provider, readerRef: "reader_1" }, client };
 }
 
 /** A provider that runs `onCollect` (to simulate a concurrent settle) then returns a canned result —
@@ -868,10 +867,15 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
         db: app,
         tenantId: cfg.tenantId,
         nodeId: cfg.nodeId,
-        resolveReader: () => Promise.resolve("reader_1"),
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });
-      const deps: IntegratedPayDeps = { db: app, backend: fake, clock, provider };
+      const deps: IntegratedPayDeps = {
+        db: app,
+        backend: fake,
+        clock,
+        provider,
+        readerRef: "reader_1",
+      };
 
       const out = await payWorkingOrderIntegrated(deps, cfg, {
         id: randomUUID(),

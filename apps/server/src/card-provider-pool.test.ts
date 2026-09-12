@@ -4,7 +4,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
-import type { TenantId, TillId } from "@waitron/shared";
+import type { TenantId } from "@waitron/shared";
 import type { CardProviderContribution, IncidentSink, PaymentProvider } from "@waitron/payments";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
@@ -25,8 +25,6 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
 });
 const ring = loadKeyRing(KEY_ENV);
-
-const resolveReader: (tenantId: TenantId, tillId: TillId) => Promise<string> = async () => "rdr_1";
 
 const incidents: IncidentSink = async () => true;
 
@@ -114,8 +112,8 @@ describe("createCardProviderPool", () => {
       incidents,
     });
 
-    const first = await pool.get("sumup", resolveReader);
-    const second = await pool.get("sumup", resolveReader);
+    const first = await pool.get("sumup");
+    const second = await pool.get("sumup");
 
     expect(second).toBe(first);
     expect(build).toHaveBeenCalledTimes(1);
@@ -133,15 +131,15 @@ describe("createCardProviderPool", () => {
       incidents,
     });
 
-    const first = await pool.get("sumup", resolveReader);
+    const first = await pool.get("sumup");
     // Negative control: a second get with NO evict in between must still be the cached instance —
     // if this failed too, the later rebuild would prove nothing about evict specifically.
-    const stillCached = await pool.get("sumup", resolveReader);
+    const stillCached = await pool.get("sumup");
     expect(stillCached).toBe(first);
     expect(build).toHaveBeenCalledTimes(1);
 
     pool.evict("sumup");
-    const rebuilt = await pool.get("sumup", resolveReader);
+    const rebuilt = await pool.get("sumup");
 
     expect(rebuilt).not.toBe(first);
     expect(build).toHaveBeenCalledTimes(2);
@@ -158,7 +156,7 @@ describe("createCardProviderPool", () => {
       incidents,
     });
 
-    await expect(pool.get("redsys", resolveReader)).rejects.toMatchObject({
+    await expect(pool.get("redsys")).rejects.toMatchObject({
       code: "payment.provider_unknown",
     });
   });
@@ -179,10 +177,10 @@ describe("createCardProviderPool", () => {
       incidents,
     });
 
-    await expect(pool.get("sumup", resolveReader)).rejects.toThrow("build failed (attempt 1)");
+    await expect(pool.get("sumup")).rejects.toThrow("build failed (attempt 1)");
     // A failed build must not be cached: the next get calls build again rather than replaying (or
     // silently swallowing) the earlier failure.
-    await expect(pool.get("sumup", resolveReader)).rejects.toThrow("build failed (attempt 2)");
+    await expect(pool.get("sumup")).rejects.toThrow("build failed (attempt 2)");
     expect(build).toHaveBeenCalledTimes(2);
   });
 
@@ -198,11 +196,11 @@ describe("createCardProviderPool", () => {
       incidents,
     });
 
-    const provider = await pool.get("sumup", resolveReader);
+    const provider = await pool.get("sumup");
 
     expect(provider).toBeInstanceOf(SumUpCloudProvider);
     expect(provider.provider).toBe("sumup");
-    expect(await pool.get("sumup", resolveReader)).toBe(provider);
+    expect(await pool.get("sumup")).toBe(provider);
   });
 
   it("is a real AppError with a code, not just an object shape", async () => {
@@ -217,7 +215,7 @@ describe("createCardProviderPool", () => {
     });
 
     try {
-      await pool.get("sumup", resolveReader);
+      await pool.get("sumup");
       expect.unreachable("expected pool.get to throw");
     } catch (error) {
       expect(isAppError(error)).toBe(true);

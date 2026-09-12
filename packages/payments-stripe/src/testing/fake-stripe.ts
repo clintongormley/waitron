@@ -26,6 +26,11 @@ export class FakeStripe implements StripeClient {
    * random `paymentRef` (the `payments` row's own idempotency anchor). This field is how a test
    * proves that derivation. Mirrors `lastRefund`. */
   lastCreateIntent: { amount: Decimal; currency: string; idempotencyKey: string } | undefined;
+  /** Every reader id `processPaymentIntent` has driven, in call order. Recorded because WHICH reader
+   * a sale charged is otherwise unobservable, and that is exactly what the reader-ref-per-collect
+   * guard needs: one shared, cached provider must route each sale to its OWN reader, so a test asserts
+   * this list holds the distinct refs the two sales chose (not the first one twice). */
+  processedReaders: string[] = [];
   private outcome: Outcome = "succeeded";
   private nextRefundFails = false;
   private nextPollThrows = false;
@@ -60,6 +65,7 @@ export class FakeStripe implements StripeClient {
   // `_params` above.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
   processPaymentIntent(readerId: string, _paymentIntentId: string): Promise<void> {
+    this.processedReaders.push(readerId);
     this.readerAction.set(readerId, this.outcome);
     this.outcome = "succeeded"; // reset to the default after one use
     return Promise.resolve();

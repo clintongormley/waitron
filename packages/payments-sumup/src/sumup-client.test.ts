@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import { sumupClient } from "./sumup-client.js";
+import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 
 // `sumup-client.ts` is COVERAGE-excluded (the real HTTP boundary), not import-excluded: this test
 // still runs and pins the one behaviour a live SumUp outage makes fiscal-critical — a hung call must
@@ -263,6 +263,20 @@ describe("sumupClient reader management", () => {
       pairing_code: "ABC12345",
       name: "Counter",
     });
+  });
+
+  it("throws SumUpPairingRefused on a 4xx (bad/expired/used code), carrying the problem title", async () => {
+    // The 4xx is a DEFINITE refusal — the old code returned the error body, so `{ id, status }` came
+    // back undefined and a null provider_ref reached the DB insert. Now it throws a distinguishable
+    // error the seat maps to `payment.pairing_refused`; the title is a status phrase, never a secret.
+    const s = stub(() => ({ status: 409, body: { title: "pairing code already used" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    const error = await client
+      .pairReader({ pairingCode: "USED1234", name: "Counter" })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SumUpPairingRefused);
+    if (error instanceof SumUpPairingRefused) expect(error.title).toBe("pairing code already used");
   });
 
   it("gets a single reader by id", async () => {

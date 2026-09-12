@@ -113,7 +113,6 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
-      resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
 
@@ -123,6 +122,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
+      readerRef: "reader_1",
     });
     expect(paid.provider).toBe("stripe");
     expect(paid.state).toBe("captured");
@@ -174,7 +174,6 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
-      resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const args = {
@@ -182,6 +181,7 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
+      readerRef: "reader_1",
     };
 
     const first = await provider.collect(args);

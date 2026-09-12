@@ -74,7 +74,8 @@ const PAYMENTS_MANAGE: Permission = "payments.manage";
  *    the form must pick one, relayed with its `{ merchants }` list).
  *  - Disconnect: `payment.provider_in_use` (409 — an active reader still uses the provider).
  *  - Readers / device default: `reader.provider_disconnected` (409 — a reader op on a provider with no
- *    sealed credential), `reader.not_found` (404 — a reader id that is not this tenant's), and
+ *    sealed credential), `payment.pairing_refused` (422 — SumUp refused the pairing code: bad, expired
+ *    or already used), `reader.not_found` (404 — a reader id that is not this tenant's), and
  *    `device.not_found` (404 — a device id that is not this tenant's).
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -89,6 +90,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.credential_environment_mismatch": 422,
   "payment.provider_merchant_ambiguous": 409,
   "payment.provider_in_use": 409,
+  "payment.pairing_refused": 422,
   "reader.provider_disconnected": 409,
   "reader.not_found": 404,
   "device.not_found": 404,

@@ -206,7 +206,6 @@ describe("STRIPE_CARD_PROVIDER.build", () => {
       tenantId,
       nodeId: "11111111-1111-4111-8111-111111111111",
       environment: "preproduction",
-      resolveReader: () => Promise.resolve("rdr_1"),
       incidents,
     });
     expect(provider.provider).toBe("stripe");

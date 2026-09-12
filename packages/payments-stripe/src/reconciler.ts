@@ -49,7 +49,7 @@ export interface StripeReconcilerOptions {
   /** The tenant's own Stripe account surfaces. A FUNCTION, not fixed clients: a reconciler is built
    * once and swept across many tenants, while the accounts are standalone (one per merchant, no
    * Connect), so the resolved account IS the tenant scoping the report source's contract demands.
-   * Mirrors `StripeTerminalProviderOptions.resolveReader`; provisioning stays deferred. */
+   * Provisioning stays deferred. */
   resolveAccount: (tenantId: TenantId) => Promise<StripeReconcileAccount>;
   /** How long the processor may legitimately take to report a settlement. Defaults to the neutral
    * layer's own seven days. */

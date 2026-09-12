@@ -29,7 +29,6 @@ export async function setup(suite: PgliteSuite, tune?: (f: FakeSumUp) => void) {
       db: suite.db,
       tenantId,
       nodeId: NODE,
-      resolveReader: () => Promise.resolve("rdr_1"),
       incidents: () => Promise.resolve(true),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
@@ -39,6 +38,8 @@ export async function setup(suite: PgliteSuite, tune?: (f: FakeSumUp) => void) {
     tillId: brandTillId(t.tillId),
     workingOrderId: brandWorkingOrderId(t.workingOrderId),
     amount: decimal("12.50"),
+    // The chosen reader's vendor ref is now a per-collect input, not baked into the provider.
+    readerRef: "rdr_1",
   };
   const row = async (ref: string) => {
     const r = await withTenant(suite.db, t.tenantId, (tx) =>

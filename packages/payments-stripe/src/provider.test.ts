@@ -39,7 +39,6 @@ function providerFor(client: StripeClient, tenantId: TenantId): StripeTerminalPr
     db: pg.db,
     tenantId,
     nodeId: TEST_NODE_ID,
-    resolveReader: () => Promise.resolve("reader_1"),
     poll: { maxAttempts: 3, intervalMs: 0, sleep: noSleep },
   });
 }
@@ -50,6 +49,8 @@ async function collectParams(nif = freshNif()) {
     tillId: brandTillId(s.tillId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     amount: decimal("12.10"),
+    // The chosen reader's vendor ref is a per-collect input now, not baked into the provider.
+    readerRef: "reader_1",
     _seeded: s,
   };
 }
@@ -103,6 +104,17 @@ describe("StripeTerminalProvider.collect", () => {
     expect(result.settledAt).toBeNull();
     const row = await rowFor(p._seeded.tenantId, result.paymentRef);
     expect(row?.state).toBe("failed");
+  });
+
+  it("throws when no readerRef is supplied — a Terminal collect cannot proceed without a reader", async () => {
+    // The reader is a per-collect input now; a collect with none is a host wiring error, not a
+    // decline. Thrown after the tenant check, before the network — no `attempting` row, no charge.
+    const p = await collectParams();
+    const { readerRef, ...noReader } = p;
+    void readerRef;
+    await expect(providerFor(new FakeStripe(), p.tenantId).collect(noReader)).rejects.toThrow(
+      /readerRef/,
+    );
   });
 
   it("times out: a stalled reader is cancelled and the payment fails", async () => {
@@ -167,7 +179,6 @@ describe("StripeTerminalProvider.collect", () => {
       db: pg.db,
       tenantId: p.tenantId,
       nodeId: TEST_NODE_ID,
-      resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0 }, // no sleep override -> default setTimeout(0)
     });
     const result = await provider.collect(p);
@@ -375,7 +386,6 @@ describe("StripeTerminalProvider.forward", () => {
       db: pg.db,
       tenantId: brandTenantId(randomUUID()),
       nodeId: TEST_NODE_ID,
-      resolveReader: () => Promise.resolve("reader_1"),
     });
     expect(await provider.forward(new Date("2026-07-24T10:00:00Z"))).toEqual({
       nextDueAt: null,
@@ -393,7 +403,6 @@ describe("StripeTerminalProvider.resolvePending", () => {
       db: pg.db,
       tenantId: brandTenantId(randomUUID()),
       nodeId: TEST_NODE_ID,
-      resolveReader: () => Promise.resolve("reader_1"),
     });
     expect(await provider.resolvePending(new Date("2026-07-24T10:00:00Z"))).toEqual({
       nextDueAt: null,

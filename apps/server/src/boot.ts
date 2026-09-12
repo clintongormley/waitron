@@ -383,13 +383,6 @@ export function withPendingSweep(
   };
 }
 
-/** Passed to `pool.get` when a provider is fetched ONLY to sweep its `resolvePending`: that sweep
- * never collects a sale, so it must never resolve a reader. A throw here surfaces a bug (a sweep that
- * unexpectedly tried to collect) rather than hiding it behind a silent reader lookup. */
-function sweepNeverResolvesReader(): Promise<string> {
-  throw new Error("resolvePending must never resolve a reader");
-}
-
 /**
  * The per-pass enumerator `withPendingSweep` calls: the demo/prepare simulator (if one was built),
  * plus every pooled card provider this tenant has a SEALED CREDENTIAL for — the same
@@ -428,7 +421,10 @@ export function connectedCardProviderSweep(deps: {
       });
       for (const c of deps.contributions) {
         if (!held.has(c.credentialPurpose)) continue;
-        out.push(await deps.pool.get(c.providerId, sweepNeverResolvesReader));
+        // The sweep only drives `resolvePending`, which touches no reader, so `get` needs no reader:
+        // the provider carries none (the reader is a per-collect input), so fetching one to sweep is
+        // exactly the same cached instance the pay path uses.
+        out.push(await deps.pool.get(c.providerId));
       }
     }
     return out;

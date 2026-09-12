@@ -203,7 +203,6 @@ export function createStripeCardProvider(
         db: deps.db,
         tenantId: deps.tenantId,
         nodeId: deps.nodeId,
-        resolveReader: deps.resolveReader,
       });
     },
 

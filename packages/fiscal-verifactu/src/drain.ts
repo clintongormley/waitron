@@ -93,8 +93,7 @@ export interface DrainDeps {
    * presenter — so a single injected client submitted every tenant's records under whichever
    * tenant's seal the host happened to construct it from.
    *
-   * Mirrors `StripeReconcilerOptions.resolveAccount` and
-   * `StripeTerminalProviderOptions.resolveReader`, which are functions of `tenantId` for exactly
+   * Mirrors `StripeReconcilerOptions.resolveAccount`, a function of `tenantId` for exactly
    * this reason. A deployment that establishes it may lawfully submit for many issuers under one
    * certificate returns the same client for every tenant; a fixed client could not express the
    * other answer at all.

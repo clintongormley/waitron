@@ -4,7 +4,7 @@
 import "./errors.js";
 import type { Database } from "@waitron/db";
 import type { KeyRing, Purpose } from "@waitron/credentials";
-import { AppError, type TenantId, type TillId } from "@waitron/shared";
+import { AppError, type TenantId } from "@waitron/shared";
 import type { PaymentProvider } from "./provider.js";
 import type { IncidentSink } from "./reconcile.js";
 
@@ -90,8 +90,6 @@ export interface CardProviderBuildDeps {
   tenantId: TenantId;
   nodeId: string;
   environment: "preproduction" | "production";
-  /** The pool supplies this so the built provider resolves each sale's chosen reader ref. */
-  resolveReader: (tenantId: TenantId, tillId: TillId) => Promise<string>;
   /** Where a provider raises `payment.pending_outcome_unactionable` (SumUp's resolvePending). */
   incidents: IncidentSink;
 }
@@ -102,7 +100,7 @@ export interface CardProviderRuntimeDeps {
   fetch?: typeof fetch;
 }
 
-/** Indexes a module list by `providerId` for the registry (Task 9) and the pool (Task 10). Throws
+/** Indexes a module list by `providerId` for the provider registry and the connection pool. Throws
  * `payment.provider_duplicate` rather than letting a later entry silently shadow an earlier one. */
 export function selectCardProviders(
   list: readonly CardProviderContribution[],

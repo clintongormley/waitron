@@ -274,8 +274,11 @@ const RING = loadKeyRing({
 });
 
 /**
- * A FAKE `CardProviderPool` that returns a `StripeTerminalProvider` over `FakeStripe` for any provider
- * id, resolving the reader ref the pay path passes it (`() => providerRef`). The provider is given its
+ * A FAKE `CardProviderPool` matching the PRODUCTION pool's shape: ONE cached `StripeTerminalProvider`
+ * over `FakeStripe` per provider id, and `get` takes only a provider id — no reader. The reader a sale
+ * charges is a per-collect input (`CollectParams.readerRef`), so one cached provider serves every
+ * reader on the vendor; caching here (rather than a fresh provider per `get`) is what lets the
+ * two-readers-one-provider regression below prove the ref is not baked in. The provider is given its
  * OWN `providerDb` handle (a `PROBE_ROLE` connection the test opens/closes), since the provider's
  * `payments`-ledger writes run at whatever role THAT handle carries (see `PROBE_ROLE` above) — the
  * routes' own DB ops still run through `withTenant` + `asAppUser` off `suite.admin`. This stands in for
@@ -283,20 +286,26 @@ const RING = loadKeyRing({
  * genuinely round-trips the adapter without a network.
  */
 function fakePool(cfg: TillConfig, providerDb: Database, client: FakeStripe): CardProviderPool {
+  const cache = new Map<string, StripeTerminalProvider>();
   return {
-    get: (_providerId, resolveReader) =>
-      Promise.resolve(
-        new StripeTerminalProvider({
+    get: (providerId) => {
+      let provider = cache.get(providerId);
+      if (provider === undefined) {
+        provider = new StripeTerminalProvider({
           client,
           db: providerDb,
           tenantId: cfg.tenantId,
           nodeId: cfg.nodeId,
-          resolveReader,
           // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
           poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
-        }),
-      ),
-    evict: () => {},
+        });
+        cache.set(providerId, provider);
+      }
+      return Promise.resolve(provider);
+    },
+    evict: (providerId) => {
+      cache.delete(providerId);
+    },
   };
 }
 
@@ -918,6 +927,94 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect((await payRes.json()).outcome).toBe("captured");
       // The OVERRIDE reader was charged and stamped, not the default.
       expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(other.id);
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("two active readers on ONE provider: two sales route each to its OWN providerRef (not the first)", async () => {
+    // The reader-ref-per-collect guard. Before the fix, the pool cached ONE provider per id and baked
+    // the FIRST sale's reader resolver into it, discarding every later sale's reader — so a venue with
+    // two readers on one provider charged every sale after the first on the first reader. Now the ref
+    // is a per-collect input, so one shared cached provider drives each sale's own reader. `FakeStripe`
+    // records the reader id `processPaymentIntent` drove, in order — assert the two DISTINCT refs.
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const client = new FakeStripe();
+      const app = new Hono();
+      // One pool, one FakeStripe: the pay path calls `pool.get("stripe")` for BOTH sales and must get
+      // the SAME cached provider, so the only thing distinguishing the two collects is `readerRef`.
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
+      const cookie = await loginSession(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      await connectStripe(cfg);
+      const readerA = await seedReader(cfg, { name: "Reader A" });
+      const readerB = await seedReader(cfg, { name: "Reader B" });
+
+      const pay = async (readerId: string): Promise<void> => {
+        const res = await app.request("/api/pay", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+          body: JSON.stringify({
+            id: randomUUID(),
+            readerId,
+            lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect((await res.json()).outcome).toBe("captured");
+      };
+
+      await pay(readerA.id);
+      await pay(readerB.id);
+
+      // Each sale drove ITS reader's vendor ref — not readerA's twice (the bug's signature).
+      expect(client.processedReaders).toEqual([readerA.providerRef, readerB.providerRef]);
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("a resolvePending sweep tick BEFORE the first sale does not break the subsequent sale (no 500)", async () => {
+    // Regression for the sweep-poisons-the-pool defect: the boot sweep fetches each provider via
+    // `pool.get(providerId)` and runs `resolvePending`. The pay path then fetches the SAME cached
+    // instance. Before the fix, the sweep baked a THROWING reader resolver into that instance, so the
+    // next card sale 500'd (`collect` called the resolver before its own try). With the reader now a
+    // per-collect input, the swept instance and the pay instance are one and the same and the sale
+    // captures cleanly.
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const pool = fakePool(cfg, providerDb, new FakeStripe());
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(cfg, pool), noopLog);
+      const cookie = await loginSession(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      await connectStripe(cfg);
+      const reader = await seedReader(cfg);
+      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+
+      // The sweep tick: fetch the provider (no reader) and resolve pending — exactly what
+      // `connectedCardProviderSweep` does. This caches the provider; it must NOT poison it.
+      const swept = await pool.get("stripe");
+      await swept.resolvePending(new Date());
+
+      const workingOrderId = randomUUID();
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          id: workingOrderId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        }),
+      });
+
+      expect(payRes.status).toBe(200); // not a 500
+      expect((await payRes.json()).outcome).toBe("captured");
+      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(reader.id);
     } finally {
       await providerDb.close();
     }

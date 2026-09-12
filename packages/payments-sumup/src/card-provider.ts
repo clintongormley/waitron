@@ -14,7 +14,7 @@ import type {
   ReaderStatus,
 } from "@waitron/payments";
 import type { SumUpClient } from "./client.js";
-import { sumupClient } from "./sumup-client.js";
+import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 import type { SumUpClientOptions } from "./sumup-client.js";
 import { SumUpCloudProvider } from "./provider.js";
 // Registers `payment.provider_merchant_ambiguous` (the one SumUp-specific code this seat throws) on
@@ -198,7 +198,6 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
       db: deps.db,
       tenantId: deps.tenantId,
       nodeId: deps.nodeId,
-      resolveReader: deps.resolveReader,
       incidents: deps.incidents,
     });
   },
@@ -209,7 +208,18 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
       // its absence is a caller-contract violation, not a runtime condition an operator can act on.
       if (input.code === undefined) throw new Error("sumup readers.add requires a pairing code");
       const client = await sumupClientForTenant(deps);
-      const reader = await client.pairReader({ pairingCode: input.code, name: input.name });
+      let reader: { id: string; status: string };
+      try {
+        reader = await client.pairReader({ pairingCode: input.code, name: input.name });
+      } catch (error) {
+        // A 4xx from SumUp (a bad, expired or already-used pairing code — the common operator mistake)
+        // is the actionable `payment.pairing_refused`, NEVER an opaque 500. The route only inserts the
+        // `card_readers` row after this returns a real `providerRef`, so a refusal writes no null-ref
+        // row. A 5xx/transport failure is an UNKNOWN outcome — it stays a fault, not a refusal.
+        if (error instanceof SumUpPairingRefused)
+          throw new AppError("payment.pairing_refused", { providerId: PROVIDER_ID });
+        throw error;
+      }
       return { providerRef: reader.id, status: pairingStatus(reader.status) };
     },
 

@@ -375,6 +375,12 @@ export type IntegratedPayOutcome =
  */
 export type IntegratedPayDeps = TillSaleDeps & {
   provider: PaymentProvider;
+  /** The chosen reader's VENDOR reference (SumUp's paired-reader id, Stripe's Terminal reader id),
+   * passed into `provider.collect` as `readerRef` for THIS sale so one pooled, cached provider drives
+   * whichever reader the operator picked. `undefined` for a provider that uses no server-side reader
+   * (the demo/prepare simulator, `stripe_on_device`). Distinct from `readerId`, which is our own
+   * `card_readers.id` row key. */
+  readerRef?: string;
   /** The `card_readers.id` the pay routed to (Task 12), stamped onto the payment when it is associated
    * with the sale so a payment records the reader it settled on. `undefined` for the demo/prepare
    * simulator (no reader), which leaves `payments.reader_id` NULL. */
@@ -1024,6 +1030,9 @@ export async function payWorkingOrderIntegrated(
     tillId: cfg.tillId,
     workingOrderId: brandWorkingOrderId(req.id),
     amount: addDecimal(baseAmount, tip),
+    // The chosen reader's vendor reference for THIS sale (till-api resolved it); a reader-less
+    // provider (simulator) leaves it undefined and ignores it.
+    ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
     allowOffline: req.allowOffline,
     simulationOutcome: req.simulationOutcome,
   });

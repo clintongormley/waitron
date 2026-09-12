@@ -1,6 +1,6 @@
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
-import type { TenantId, TillId } from "@waitron/shared";
+import type { TenantId } from "@waitron/shared";
 import {
   cardProviderById,
   type CardProviderContribution,
@@ -13,12 +13,14 @@ import type { DeploymentEnvironment } from "./config.js";
  * One live `PaymentProvider` per `providerId`, built from the tenant's sealed vault credential on
  * first use and dropped on `evict` so a dashboard credential change takes effect without a
  * restart — `get` after an eviction rebuilds from whatever is sealed now, never the stale instance.
+ *
+ * The provider carries NO reader: which reader a sale charges is a per-collect input
+ * (`CollectParams.readerRef`), so one cached provider serves every reader on the same vendor. That
+ * is why `get` takes only a `providerId` — a cache hit must not discard a caller's reader, because
+ * there is no reader to discard.
  */
 export interface CardProviderPool {
-  get(
-    providerId: string,
-    resolveReader: (tenantId: TenantId, tillId: TillId) => Promise<string>,
-  ): Promise<PaymentProvider>;
+  get(providerId: string): Promise<PaymentProvider>;
   evict(providerId: string): void;
 }
 
@@ -37,7 +39,7 @@ export function createCardProviderPool(deps: {
   const cache = new Map<string, PaymentProvider>();
 
   return {
-    async get(providerId, resolveReader) {
+    async get(providerId) {
       const cached = cache.get(providerId);
       if (cached !== undefined) return cached;
 
@@ -51,7 +53,6 @@ export function createCardProviderPool(deps: {
         tenantId: deps.tenantId,
         nodeId: deps.nodeId,
         environment: deps.environment,
-        resolveReader,
         incidents: deps.incidents,
       });
       cache.set(providerId, provider);

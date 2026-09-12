@@ -143,7 +143,8 @@ export interface TillApiDeps {
   cardProvider?: PaymentProvider;
   /**
    * The card-provider pool (`boot.ts`, one live provider per id, DB-free at construction). `/api/pay`
-   * resolves the sale's reader, then `pool.get(row.provider, …)` for the provider that drives it.
+   * resolves the sale's reader, then `pool.get(row.provider)` for the provider that drives it — the
+   * reader's own ref rides into `collect` per sale, so the pooled provider carries no reader.
    * OPTIONAL only so the hermetic session/park suites that never reach the reader-pay path need not
    * build one; a live boot always supplies it, and the pay route only dereferences it after a reader
    * row resolves (which those suites never seed).
@@ -1254,18 +1255,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (deps.pool === undefined) {
         throw new Error("/api/pay: card provider pool not configured");
       }
-      // The pool builds (or returns cached) the reader's provider, resolving THIS reader's `providerRef`
-      // for each collect. A genuine decline / network stall is returned as DATA (200) by
-      // `payWorkingOrderIntegrated`, never thrown — only a real fault becomes a 500.
-      const provider = await deps.pool.get(reader.provider, () =>
-        Promise.resolve(reader.providerRef),
-      );
+      // The pool builds (or returns cached) the reader's provider. The provider carries NO reader:
+      // this sale's chosen reader travels as a per-collect input (`readerRef` below), so one cached
+      // provider serves every reader on the same vendor. A genuine decline / network stall is returned
+      // as DATA (200) by `payWorkingOrderIntegrated`, never thrown — only a real fault becomes a 500.
+      const provider = await deps.pool.get(reader.provider);
       const outcome = await payWorkingOrderIntegrated(
         {
           db: deps.db,
           backend: deps.backend,
           clock: deps.clock,
           provider,
+          // The chosen reader's vendor reference — passed into `provider.collect` as `readerRef` for
+          // THIS sale, so the shared cached provider charges the reader the operator picked.
+          readerRef: reader.providerRef,
           // Stamp the resolved reader on the captured payment (via `associatePaymentWithSale`).
           readerId: reader.id,
         },
