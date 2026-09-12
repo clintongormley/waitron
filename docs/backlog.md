@@ -130,6 +130,41 @@ What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, 
 `apps/server`, `packages/printing`'s dashboard side, `packages/payments*`. Numbered in priority
 order; the small items at the end of each area live in Track C.
 
+**Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
+shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
+document is the contract, and it grows as we go: each screen tends to raise a question the rules do
+not answer yet, and the answer is written down there in the same change rather than left in the
+screen. Owner decision 2026-09-12: **this work runs on Sonnet.** It is screenshot-driven iteration
+with the owner looking at each step, not a write-a-plan-and-dispatch job.
+
+Done so far: the dashboard shell itself — the sidebar, the banner and the account menu — plus
+**Account settings** (Your profile) and the **user administration** section (#333; what changed is
+under A7).
+
+Still to do, roughly in the order a venue meets them. As each one lands, add the rule it taught to
+`design-system.md`:
+
+1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
+2. **Catalogue and product depth** — `catalogue-screen.ts`, `recipe-screen.ts`, `purchases-screen.ts`.
+3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319 and
+   #327 reworked these recently, so read them against the rules before changing anything.
+4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
+   `packages/payments-sumup`. #333 changed only their row menus.
+5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
+   `kitchen-screen.ts`, `service-status-screen.ts`.
+6. **The two editors** — `canvas-editor-screen.ts`, `receipt-screen.ts`.
+7. **Workforce** — `roster-screen.ts`, `my-schedule-screen.ts`, `planned-actual-screen.ts`,
+   `approvals-screen.ts`.
+8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
+   `packages/bookings/src/dashboard/`. #333 touched only the venue-operations row menu.
+9. **Operator utilities** — `backup-screen.ts`, `diagnostics-screen.ts`, `email-screen.ts`.
+10. **Login** — `login-screen.ts`, which already carries the owner's own review from 2026-09-09
+    (CLAUDE.md §3, the `ui-login` findings). Fold those corrections in rather than restyle it twice.
+
+The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
+shared components. Whether they follow in this pass or later is open — decide it before the
+component rules harden around the dashboard alone.
+
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
 `packages/verifactu/src/validate.ts` holds AEAT's rules and no production file called it, confirmed by
@@ -327,10 +362,11 @@ profile re-probed the session and silently reset the screen behind the modal to 
 the modal dropped you there instead of where you had been; and Edit was clickable before the profile
 data had loaded. The rules went into [design-system.md](developers/design-system.md) and CLAUDE.md §3.
 
-Left open by that branch: nothing was deliberately deferred — the review findings were applied — but
-the restyle was only ever checked in screenshots on a desktop browser. Nobody has walked it on the
-real box or a phone, so the narrow-viewport banner and drawer are unverified on hardware; that walk
-belongs with the display walkthrough in [ui-review.md](ui-review.md).
+Left open by that branch: no review finding was deferred — they were all applied — but the restyle
+was only ever checked in screenshots on a desktop browser. Nobody has walked it on the real box or a
+phone, so the narrow-viewport banner and drawer are unverified on hardware; that walk belongs with
+the display walkthrough in [ui-review.md](ui-review.md). The rest of the dashboard's screens are the
+ongoing overhaul listed at the top of Track A.
 
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
