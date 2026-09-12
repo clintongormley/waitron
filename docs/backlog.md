@@ -1676,6 +1676,59 @@ Square/CSV import remains its separate backlog item. Live-system training with a
 issue/cancel is outside this onboarding scope. The compliance track records the remaining question
 about distributing a separate preparation environment; this planning pass is not legal clearance.
 
+**Setup wizard follow-ups from the owner's walkthrough** (2026-09-12, not started). Five things the
+wizard makes harder than it needs to be; each one names what it does today.
+
+1. *The certificate page tells a Spanish operator nothing about getting the file.* It says only
+   “Upload the certificate file and enter its passphrase” and accepts `.pfx` / `.p12`
+   (`apps/setup/src/screens/cert-screen.ts`). Getting to that file means exporting it from wherever
+   the FNMT certificate was installed — the Windows certificate store, the macOS Keychain, or
+   Firefox's own store — and each is a different sequence of dialogs the operator has to know
+   already. Wanted: work out which system the browser is running on and show the steps for that one,
+   with the others available behind a link; screenshots if they can be kept current (a stale
+   screenshot of somebody else's operating system is worse than none, so decide who updates them).
+
+2. *A mistyped address during setup gives a blank page.* The setup box serves the wizard at the
+   origin root with no history fallback, so anything that is not a real file under the built bundle
+   answers a bare 404 with an empty body — `/manage`, for instance, which is the dashboard's address
+   once the box is trading (`mountSpa` in `apps/server/src/spa-api.ts`, mounted by
+   `apps/server/src/setup-api.ts` with no `navigationPath`; the comment there records the choice,
+   since the wizard keeps its state in memory and a reload only ever lands on “/”). Wanted: send the
+   browser to “/” instead. A redirect, not a catch-all that serves `index.html` for every path — that
+   would also hide a genuinely missing asset behind a page that looks fine. Leave the API routes and
+   anything under `/assets/` answering as they do now.
+
+3. *The first operator's Password and PIN boxes have no way to see what was typed.* The admin step
+   renders both as plain password fields (`apps/setup/src/screens/admin-screen.ts`), while the same
+   wizard's certificate passphrase already carries a reveal control in `wt-input`'s `end` slot
+   (`cert-screen.ts`) and the dashboard carries the icon version of it with an action-specific
+   accessible label (`apps/dashboard/src/screens/login-screen.ts`, design system → Forms). Add the
+   dashboard's icon control to both boxes, and use the icon in the certificate screen too so the
+   wizard does not show two different reveal buttons.
+
+4. *Every form mistake on the shop page produces the same sentence.* Whatever is wrong, the banner
+   reads “Check the highlighted fields: use a valid tax ID and postal code, make sure the province
+   matches, pick one or two invoice languages, and use different invoice series” — one fixed string
+   listing every possible problem (`apps/setup/src/screens/venue-screen.ts`). The bad fields are
+   marked with an `invalid` flag and nothing else: no field carries a message saying what is wrong
+   with it. That is the shared form contract the dashboard already follows (explanatory text beside
+   every bad field plus one summary, CLAUDE.md §3), so the fix is to say per field what failed — a
+   tax ID that is not a valid one for the country, a postal code that does not sit in the chosen
+   province, too few or too many invoice languages, two identical series codes — and leave the
+   summary as a summary.
+
+5. *The demo path demands real business details nobody will use.* Reaching a demo box means filling
+   in the whole shop form: country, tax ID, legal name, location name, what the location does,
+   address, postal code, city, province, business day cutover, till name and two invoice series codes
+   are all required, the tax ID has to pass the country's own validity check, and the postal code has
+   to match the chosen province (`REQUIRED_TEXT_FIELDS` and `#next` in `venue-screen.ts`). So
+   somebody trying Waitron out has to invent a valid Spanish NIF. Wanted for demo only: ask for the
+   operator's own details (the admin step, unchanged) plus the location's name and address, and fill
+   everything else with sensible made-up values the operator can change later. Live and Prepare keep
+   asking for everything. The design question is where the filled-in values come from — the screen
+   skipping fields, or the shell patching defaults into the draft — and how the review step shows
+   what was chosen for them.
+
 **Constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid real-cert):**
 
 - **A setup box's `/health` returns 503 by design** (no duty loop → not trading-healthy); a
