@@ -44,6 +44,11 @@ test("defines the structural contract", () => {
   }
 });
 
+test("dialog max width is 48rem, capped at 90% of the viewport", () => {
+  const el = mount();
+  expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
+});
+
 test("minimum tap target is at least 44px", () => {
   const el = mount();
   const tap = parseInt(token(el, "--wt-tap-min"), 10);

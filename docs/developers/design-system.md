@@ -107,7 +107,7 @@ screen can layer its own hover accent onto specific buttons — `wt-button.foo::
 — without changing what a variant looks like everywhere else `wt-button` is used. See "Card action
 buttons" under "Page composition" below for the pattern this exists for.
 
-`--wt-dialog-max-width` (`min(90vw, 32rem)`) exists so `wt-dialog` never spells out a literal
+`--wt-dialog-max-width` (`min(90vw, 48rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
 through a token.
