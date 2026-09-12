@@ -87,30 +87,26 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    box's CA while the browser trusted the old one, and the provisioning error offered no recovery
    instructions.
 
-2. **A printer on another subnet cannot be added at all** (A3). #319 removed the manual host:port form
-   and neither discovery pass crosses a subnet, which is exactly the owner's home setup. Small, and it
-   blocks real use today.
-
-3. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
+2. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
    run; the box and sale path worked.
 
-4. **Somewhere for things that went wrong to show up** (A5). The `incidents` table has several
+3. **Somewhere for things that went wrong to show up** (A5). The `incidents` table has several
    producers and no reader, and the dashboard has no notification surface. A rejected filing, a payment drift, a
    stalled print agent and a failed or stale backup are all invisible; several other items end "…waits
    for the notification surface".
 
-5. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
+4. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
    standalone primary's only off-box copy. Only `LocalFsBackend` exists.
 
-6. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
+5. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut.
 
-7. **The two remaining by-id read classes** (C1) — request-supplied table ids and the `ticket_items`
+6. **The two remaining by-id read classes** (C1) — request-supplied table ids and the `ticket_items`
    reads. Same class as the cross-tenant leak the run-it seat caught on till-reroute S3; CLAUDE.md §3
    makes it a rule.
 
-8. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
+7. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
 
 Then the on-prem mirror, then the cloud primary — under *Afterwards*. Everything else ranks beneath
 these.
@@ -264,15 +260,26 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
-**In flight:** `feat/printer-address-probe` implements Check address through the print agents,
-with IPv4/IPv6 and port validation, bounded TCP checks, fresh-result feedback and Add again.
-Affected coverage and the whole-workspace tests pass. Physical network
-and paper checks below remain outstanding.
+**Check a known address — LANDED #335 (2026-09-12).** The Add printer dialog now takes an IP
+address and port and asks the approved print agents to try it, so a printer the two discovery passes
+cannot see (they do not cross a subnet) can still be added, including reactivating a disabled one.
+The check opens a TCP connection and sends no bytes; the server keeps at most eight targets for
+30 seconds and each agent works out the remaining time against its own clock.
 [Design](superpowers/specs/2026-09-12-printer-address-probe-design.md) ·
 [Validation](superpowers/plans/2026-09-12-printer-address-probe.md).
 
-- **A printer on another subnet cannot be added** — a configurable extra-subnet list or a "probe this
-  address" button; build one first.
+- **Nobody has yet typed a real printer's address into it.** Everything proven so far is loopback
+  sockets and browser tests. The owner's home is the case that motivated it — the box sits on
+  192.168.10.x and both printers on 192.168.20.x, so the port-9100 sweep lists neither — and it is
+  the first thing to try: add the Epson TM-T88III at 192.168.20.247:9100 from the dashboard and
+  print to it.
+- **No promise about how long a check takes end to end.** The dialog polls and reports a fresh
+  result, but nothing bounds the round trip from pressing the button to an answer; the agent only
+  picks the request up on its next job pull.
+- **Two review suggestions were deliberately not taken** and would be relitigated otherwise:
+  renaming the new error code (codes name the domain concept and are never renamed once shipped),
+  and deduplicating targets in the agent host (the issuing server already normalises and
+  deduplicates its bounded list of eight).
 - **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
   reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
   discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
@@ -863,7 +870,7 @@ partial scope; the detail for a live thread is in its track.
 **Cross-cutting infra:** replication (native Postgres logical replication since #280) · membership,
 promotion and rejoin (the arc is complete) · backup and restore (BR-1..BR-4 plus the wizard) · SIF
 topology (`#33`, `node_id` re-key) · the module system (#212–#262; country packs #292) · the printing
-subsystem (`@waitron/printing` plus the db-free `@waitron/print-agent`, #282–#327) · the layout
+subsystem (`@waitron/printing` plus the db-free `@waitron/print-agent`, #282–#335) · the layout
 designer and device profiles (#194–#234, #246, #269) · CI and test infra (scoped CI, pre-push hook,
 shared-container tests, job-sharding, root scope) · localisation (per-user `persons.locale`, live
 language switch, venue-default derivation) · logging and diagnostics (Slice 1, #192).
