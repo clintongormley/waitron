@@ -63,6 +63,14 @@ The review also prompted the demo reset instructions and the adjacent dated Stri
 correction. The approved defaults-retention, zero-battery and single-page Stripe behavior remain.
 Review report, usage and triage: `/private/tmp/waitron-reader-review-d7q0hk9m/`.
 
+A required rebase over shared translation files prompted a second review. It found that local
+Enable could revive an unpaired reader. The failing server and Chromium regressions led to an
+`unpaired_at` marker and a `canEnable` list flag; verified adoption clears the marker. A real
+PostgreSQL regression also reproduced Enable racing a concurrent unpair, so local mutations lock
+the reader before deciding from its state. Dashboard deletion controls now fail for successful
+pairing reopening discovery and for stale status successes or failures replacing newer results.
+The second report and controls are retained in `/private/tmp/waitron-reader-final-review-w38utwod/`.
+
 
 The next full-gate attempt stopped before the WireGuard change-feed test body: Testcontainers timed
 out waiting for a published port. `docker inspect c58e09f22340` showed PostgreSQL healthy and

@@ -1,0 +1,1 @@
+ALTER TABLE "card_readers" ADD COLUMN "unpaired_at" timestamp with time zone;

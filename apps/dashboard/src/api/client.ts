@@ -1389,6 +1389,7 @@ export interface ReaderRow {
   provider: string;
   name: string;
   active: boolean;
+  canEnable: boolean;
   deviceCount: number;
 }
 

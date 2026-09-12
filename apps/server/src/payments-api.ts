@@ -166,7 +166,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   const readerWhere = (id: string) =>
     and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, id));
   const requireReader = async (tx: Transaction, id: string) => {
-    const [reader] = await tx.select().from(cardReaders).where(readerWhere(id));
+    // Local mutations decide from the locked row, so Enable cannot race a committed unpair.
+    const [reader] = await tx.select().from(cardReaders).where(readerWhere(id)).for("update");
     if (reader === undefined) throw new AppError("reader.not_found", { id });
     return reader;
   };
@@ -215,7 +216,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const listed = await seat.readers.list(runtimeDeps());
       if (!listed.some((reader) => reader.providerRef === providerRef))
         throw new AppError("reader.not_listed", { providerId });
-      // Re-read after the network call; adoption creates nothing at the provider to roll back.
+      // Re-read after the network call; as in pairing below, the residual disconnect window remains.
+      // Adoption creates nothing at the provider to roll back.
       const row = await gated(sessionId, async (tx) => {
         await requireConnected(tx, seat);
         const [saved] = await tx
@@ -223,7 +225,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .values({ tenantId: deps.cfg.tenantId, provider: providerId, providerRef, name })
           .onConflictDoUpdate({
             target: [cardReaders.tenantId, cardReaders.provider, cardReaders.providerRef],
-            set: { name, active: true, disabledAt: null },
+            set: { name, active: true, disabledAt: null, unpairedAt: null },
           })
           .returning({ id: cardReaders.id });
         return saved!;
@@ -254,8 +256,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const id = requireUuidParam(c.req.param("id"), "CardReaderId");
         await gated(sessionId, async (tx) => {
           const reader = await requireReader(tx, id);
-          if (action === "enable")
+          if (action === "enable") {
             await requireConnected(tx, cardProviderById(deps.providers, reader.provider));
+            if (reader.unpairedAt !== null)
+              throw new AppError("reader.not_listed", { providerId: reader.provider });
+          }
           await tx
             .update(cardReaders)
             .set({
@@ -383,6 +388,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             provider: cardReaders.provider,
             name: cardReaders.name,
             active: cardReaders.active,
+            canEnable: sql<boolean>`${cardReaders.unpairedAt} is null`,
           })
           .from(cardReaders)
           .where(eq(cardReaders.tenantId, deps.cfg.tenantId))
@@ -433,12 +439,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         ...(code !== undefined ? { code } : {}),
         ...(reference !== undefined ? { reference } : {}),
       });
-      // A disconnect can commit between the pre-check above and this insert (the provider round-trip
-      // holds no transaction), leaving the just-paired reader's provider with NO sealed credential.
-      // Re-check the credential is STILL present in the same transaction as the insert and refuse if
-      // it is gone, so we never insert an ACTIVE reader whose provider is disconnected. A residual
-      // sub-millisecond window between this re-check and the commit is accepted; the common case (a
-      // disconnect that has already committed) is closed.
+      // Re-check after the provider round-trip. This refuses an already-committed disconnect;
+      // without a shared lock, a disconnect between this read and commit remains an accepted window.
       const inserted = await gated(sessionId, async (tx) => {
         const [cred] = await tx
           .select({ purpose: tenantCredentials.purpose })
@@ -507,7 +509,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, (tx) =>
         tx
           .update(cardReaders)
-          .set({ active: false, disabledAt: sql`now()` })
+          .set({ active: false, disabledAt: sql`now()`, unpairedAt: sql`now()` })
           .where(readerWhere(id)),
       );
       return c.body(null, 204);

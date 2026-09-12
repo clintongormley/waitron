@@ -39,8 +39,15 @@ const PROVIDERS: PaymentProviderRow[] = [
 ];
 
 const READERS: ReaderRow[] = [
-  { id: "r-1", provider: "acme", name: "Front counter", active: true, deviceCount: 2 },
-  { id: "r-2", provider: "acme", name: "Terrace", active: false, deviceCount: 0 },
+  {
+    id: "r-1",
+    provider: "acme",
+    name: "Front counter",
+    active: true,
+    canEnable: true,
+    deviceCount: 2,
+  },
+  { id: "r-2", provider: "acme", name: "Terrace", active: false, canEnable: true, deviceCount: 0 },
 ];
 
 function stubApi(): DashboardApi {

@@ -146,10 +146,24 @@ const printers: Printer[] = [
 ];
 
 const readers: ReaderRow[] = [
-  { id: "r1", provider: "acme", name: "Front counter", active: true, deviceCount: 1 },
-  { id: "r2", provider: "zeta", name: "Bar", active: true, deviceCount: 0 },
+  {
+    id: "r1",
+    provider: "acme",
+    name: "Front counter",
+    active: true,
+    canEnable: true,
+    deviceCount: 1,
+  },
+  { id: "r2", provider: "zeta", name: "Bar", active: true, canEnable: true, deviceCount: 0 },
   // Retired: must be excluded from the picker's options (the printer picker's "active only" idiom).
-  { id: "r3", provider: "acme", name: "Old terminal", active: false, deviceCount: 0 },
+  {
+    id: "r3",
+    provider: "acme",
+    name: "Old terminal",
+    active: false,
+    canEnable: true,
+    deviceCount: 0,
+  },
 ];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {

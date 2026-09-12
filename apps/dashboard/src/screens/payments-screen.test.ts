@@ -50,7 +50,14 @@ const PROVIDERS: PaymentProviderRow[] = [
 ];
 
 const READERS: ReaderRow[] = [
-  { id: "r-1", provider: "acme", name: "Front counter", active: true, deviceCount: 2 },
+  {
+    id: "r-1",
+    provider: "acme",
+    name: "Front counter",
+    active: true,
+    canEnable: true,
+    deviceCount: 2,
+  },
 ];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -180,6 +187,78 @@ describe("payments-screen", () => {
     q(el, "[data-test=fake-added-acme]")!.click();
     await flush(el);
     expect(api.listReaders).toHaveBeenCalled();
+  });
+
+  it("keeps discovery closed when successful pairing also emits close", async () => {
+    const panel = {
+      ...PANELS[0]!,
+      renderAddReader: (ctx: Parameters<CardProviderPanel["renderAddReader"]>[0]) =>
+        html`<button
+          data-test="pair-success-and-close"
+          @click=${() => {
+            ctx.onAdded();
+            ctx.onClose();
+          }}
+        >
+          Done
+        </button>`,
+    };
+    const { el, api } = await mount(stubApi(), { panels: [panel] });
+    q(el, "[data-test=add-reader-acme]")!.click();
+    await flush(el);
+    q(el, "[data-test=pair-new-reader]")!.click();
+    await flush(el);
+    q(el, "[data-test=pair-success-and-close]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=reader-discovery]")).toBeNull();
+    expect(api.availableReaders).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["success", "failure"])("ignores a superseded status read's late %s", async (outcome) => {
+    let resolveOld!: (value: ReaderStatusView) => void;
+    let rejectOld!: () => void;
+    const oldStatus = new Promise<ReaderStatusView>((resolve, reject) => {
+      resolveOld = resolve;
+      rejectOld = () => reject(new Error("old read"));
+    });
+    let reads = 0;
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi
+          .fn()
+          .mockResolvedValueOnce([...READERS, { ...READERS[0], id: "other" }])
+          .mockResolvedValue(READERS),
+        readerStatus: vi.fn((id: string) =>
+          id === "r-1" && reads++ === 0
+            ? oldStatus
+            : Promise.resolve({ online: true, batteryPercent: 90 }),
+        ),
+      }),
+    );
+    qCell(el, "[data-test=disable-other]")!.click();
+    await flush(el);
+    expect(qCell(el, "[data-test=reader-battery-r-1]")!.textContent).toBe("90%");
+    if (outcome === "success") resolveOld({ online: false, batteryPercent: 10 });
+    else rejectOld();
+    await flush(el);
+    expect(qCell(el, "[data-test=reader-battery-r-1]")!.textContent).toBe("90%");
+    expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Online");
+  });
+
+  it("does not offer Enable for an unpaired reader", async () => {
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi
+          .fn()
+          .mockResolvedValue([{ ...READERS[0], active: false, canEnable: false }]),
+      }),
+    );
+    const filter = q(el, "select[name=reader-status-filter]") as HTMLSelectElement;
+    filter.value = "disabled";
+    filter.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Disabled");
+    expect(qCell(el, "[data-test=enable-r-1]")).toBeNull();
   });
 
   it("shows the simulator banner in demo mode", async () => {

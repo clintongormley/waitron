@@ -940,6 +940,96 @@ describe("reader adoption and local management", () => {
     ).toEqual([{ active: false }]);
   });
 
+  it("refuses local enable after unpair until the provider lists the reader for adoption again", async () => {
+    const venue = await seedVenue();
+    let paired = true;
+    let listings = 0;
+    const app = mountApp(venue, [
+      discoverySeat(
+        async () => {
+          listings++;
+          return paired ? [vendor] : [];
+        },
+        async () => {
+          paired = false;
+        },
+      ),
+    ]);
+    await connectStripe(app, venue);
+    const { id } = (await (await addReader(app, venue, vendor.providerRef)).json()) as {
+      id: string;
+    };
+    const opts = { cookie: venue.managerCookie };
+    expect((await send(app, "POST", `${base}/readers/${id}/unpair`, opts)).status).toBe(204);
+    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
+    const enabled = await send(app, "POST", `${base}/readers/${id}/enable`, opts);
+    expect(enabled.status).toBe(422);
+    expect(await enabled.json()).toEqual({
+      error: { code: "reader.not_listed", params: { providerId: "stripe" } },
+    });
+    expect(listings).toBe(0);
+    expect(await (await send(app, "GET", `${base}/readers`, opts)).json()).toEqual([
+      { id, provider: "stripe", name: "Barra 1", active: false, canEnable: false, deviceCount: 0 },
+    ]);
+    paired = true;
+    const adopted = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    expect(await adopted.json()).toEqual({ id, status: "paired" });
+    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
+    expect((await send(app, "POST", `${base}/readers/${id}/enable`, opts)).status).toBe(204);
+    expect(listings).toBe(1);
+    expect(await (await send(app, "GET", `${base}/readers`, opts)).json()).toEqual([
+      { id, provider: "stripe", name: "Counter", active: true, canEnable: true, deviceCount: 0 },
+    ]);
+  });
+
+  it("does not enable across a concurrent committed unpair", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+    await connectStripe(app, venue);
+    const { id } = (await (await addReader(app, venue, vendor.providerRef)).json()) as {
+      id: string;
+    };
+    let release!: () => void;
+    let updated!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ready = new Promise<void>((resolve) => {
+      updated = resolve;
+    });
+    const unpairWrite = withTenant(suite.admin, venue.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(
+        sql`update card_readers set active = false, disabled_at = now(), unpaired_at = now() where tenant_id = ${venue.tenantId} and id = ${id}`,
+      );
+      updated();
+      await hold;
+    });
+    try {
+      await ready;
+      const enabling = send(app, "POST", `${base}/readers/${id}/enable`, {
+        cookie: venue.managerCookie,
+      });
+      let waiting = false;
+      for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
+        const locks = await suite.admin.execute<{ waiting: boolean }>(
+          sql`select exists(select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like '%card_readers%') as waiting`,
+        );
+        waiting = locks.rows[0]!.waiting;
+        if (!waiting) await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waiting).toBe(true);
+      release();
+      await unpairWrite;
+      expect((await enabling).status).toBe(422);
+      const rows = await suite.admin.execute(sql`select active from card_readers where id=${id}`);
+      expect(rows.rows).toEqual([{ active: false }]);
+    } finally {
+      release();
+      await unpairWrite;
+    }
+  });
+
   it.each(["adopt", "rename"] as const)(
     "refuses an empty %s name at the server boundary",
     async (action) => {

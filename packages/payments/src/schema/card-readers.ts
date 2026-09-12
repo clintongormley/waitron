@@ -24,6 +24,8 @@ export const cardReaders = pgTable(
       .defaultNow(),
     // Set when `active` flips false; the row is kept so historical payments still resolve a name.
     disabledAt: timestamp("disabled_at", { withTimezone: true, mode: "string" }),
+    // Local Enable cannot restore a registration we removed at the provider; verified adoption can.
+    unpairedAt: timestamp("unpaired_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
     foreignKey({

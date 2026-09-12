@@ -218,6 +218,13 @@ is shown only where the seat supports it: the contribution declares `readers.can
 SumUp, **false for Stripe**, whose `remove` is already a documented no-op because a Stripe Terminal
 reader stays registered at Stripe. A menu item that does nothing is worse than an absent one.
 
+**2026-09-12 review correction:** a successful Unpair also records `unpaired_at`. Local Enable
+refuses that row, and the dashboard omits Enable through the list response's `canEnable` flag.
+Adoption clears the marker only after the provider lists the reference again. This preserves
+Enable's local-only behavior without offering it as a way to restore a removed provider registration.
+Local mutations lock the reader while reading its state so Enable also refuses a concurrent unpair.
+The timestamp is added by generated migration `0008_reader_unpair_state`.
+
 **Wording** matches the printers screen exactly: **Disable** / **Disabled** / **Add again**. The
 `payments.retire*` strings are replaced — these are UI strings, not error codes, so renaming is free
 (the never-rename rule covers error codes only).

@@ -509,6 +509,10 @@ unfiltered `main` run, not a wrong hook.
   SumUp unpair route's fake proved that a thrown error preserved the local reader, but the HTTP
   client silently accepted 401/403/409. The reader-deletion regressions now reject those responses
   and separately retain the already-absent 404 retry (`packages/payments-sumup/src/sumup-client.test.ts`).
+- **Local reactivation cannot restore a removed provider registration.** Reader Enable initially
+  accepted a row after Unpair had removed it at SumUp. Successful unpair now records a local marker
+  which only provider-verified adoption clears; the concurrent Enable/unpair regression locks the
+  reader before deciding (`apps/server/src/payments-api.pg.test.ts`).
 - **Source scanners check filesystem type as well as the filename suffix.** Vitest stores failure
   screenshots in directories named `*.test.ts`; treating those directories as TypeScript files made
   the vocabulary guard throw `EISDIR` after browser failures. Keep real nested source files in scope;

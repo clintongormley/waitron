@@ -499,14 +499,18 @@ export class PaymentsScreen extends LitElement {
               @click=${(event: Event) => this.#openEditor(reader, "details", event)}
               >${t("payments.details")}</wt-button
             >
-            <wt-button
-              variant="secondary"
-              data-test=${`${reader.active ? "disable" : "enable"}-${reader.id}`}
-              ?disabled=${this.busy}
-              @click=${() => void this.#mutate(() => (reader.active ? this.api.disableReader(reader.id) : this.api.enableReader(reader.id)))}
-            >
-              ${t(reader.active ? "payments.disable" : "payments.enable")}</wt-button
-            >
+            ${
+              reader.active || reader.canEnable
+                ? html`<wt-button
+                    variant="secondary"
+                    data-test=${`${reader.active ? "disable" : "enable"}-${reader.id}`}
+                    ?disabled=${this.busy}
+                    @click=${() => void this.#mutate(() => (reader.active ? this.api.disableReader(reader.id) : this.api.enableReader(reader.id)))}
+                  >
+                    ${t(reader.active ? "payments.disable" : "payments.enable")}</wt-button
+                  >`
+                : nothing
+            }
             ${
               this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
                 ? html` <wt-button
