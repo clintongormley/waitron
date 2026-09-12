@@ -79,10 +79,11 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 Ranked 2026-09-12, with the reason for each place and the track it belongs to. Each item is its own
 brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **A box a real operator can set up without a terminal** (B1). After a re-image the box serves a
-   NEW self-signed CA, the browser silently keeps trusting the old one, and "provision now" fails at
-   TLS with no in-page remedy. Cost: a full box-setup dead-end on 2026-09-11. Everything else about the
-   box works, so this is what stands between us and an installable product.
+1. **A box a real operator can set up without a terminal** (B1) — **in flight** on
+   `feat/box-trust-onboarding`; certificate guidance and connection checks are implemented, with
+   the physical OS/browser trust walkthrough still open. This addresses the 2026-09-11 setup
+   dead-end: a re-image replaced the box's CA while the browser trusted the old one, and the
+   provisioning error offered no recovery instructions.
 
 2. **The setup wizard asks the wrong things** (A2) — the till name, the two series codes and "what
    this location does" want defaults and explanations, and the demo path should not demand real
@@ -444,15 +445,19 @@ carries amd64 alone); the backup + recovery-key wizard (#295); guided node onboa
 Proven end to end 2026-09-09: blank box → phone setup → provision → trading over HTTPS → enrolled
 till → a recorded preproduction sale.
 
-### B1. Onboarding must surface the CA-trust step — top of the track
+### B1. Onboarding must surface the CA-trust step — in flight
 
-The plain-HTTP landing page on :80 serves and links `/ca.crt`, but nothing routes the operator through
-trusting it, and the provisioning failure path says only "Provisioning failed. You can try again."
-Two traps the fix has to survive: modern browsers auto-upgrade a typed `http://<host>` to HTTPS, so
-telling an operator to open `http://<host>/ca.crt` lands them on the app instead (`curl` works; a
-browser flow needs the trust page reached before any HTTPS visit, or a QR/`file:` hand-off); and
-re-imaging leaves the OLD CA in the operator's OS keychain, so the recovery needed deleting that entry
-AND fully quitting Chrome. No box screen says any of this. Its own spec and branch.
+`feat/box-trust-onboarding` adds certificate guidance before collecting setup details, connection
+retry/help, matching download/help paths over HTTP and HTTPS, and an installer QR pointing at the
+guide. It covers macOS, Windows, Linux, ChromeOS, Android and iPhone/iPad, with browser-specific
+instructions. [Design](superpowers/specs/2026-09-12-box-trust-onboarding-design.md),
+[plan and validation](superpowers/plans/2026-09-12-box-trust-onboarding.md).
+
+Still to walk on real devices: installing the certificate, reopening without a warning, then replacing
+it after a re-image. Track each OS/browser in [ui-review.md](ui-review.md). Browser rendering and a
+successful API request do not verify an OS trust installation. The original Mac/Chrome incident
+needed removal of the old CA and a full browser quit; HTTPS-only browser policy can still prevent
+opening HTTP before any Waitron page runs.
 
 ### B2. Backups that leave the box
 

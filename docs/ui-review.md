@@ -55,7 +55,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 
 | # | Area | App | Status | Corrections logged |
 | --- | --- | --- | --- | --- |
-| 1 | First-run setup & onboarding wizard | setup | ⬜ | inactive in trading mode — may skip or review separately |
+| 1 | First-run setup & onboarding wizard | setup | ⬜ | B1 connection flow implemented on its feature branch; device trust walkthrough and A2 wizard corrections open |
 | 2 | Till login & shift start (PIN) | till | 🔍 | shown 2026-09-01 — see candidates below, awaiting owner |
 | 3 | Counter / walk-up sales — menu, basket, modifiers, notes/doneness, park/retrieve, pay, receipt | till | 🔍 | shown 2026-09-01 — candidates below, awaiting owner |
 | 4 | Tables & tabs — floor view, open / move / join / merge / transfer / split | till | ⬜ | |
@@ -140,3 +140,29 @@ Much more polished than the login screen (proper top bar, product grid, basket c
       tab should carry the venue name.
 - [x] The counter uses the same language-name and bottom-right placement decision as login.
       Implementation is covered by the general corrections above.
+
+
+### B1 — certificate installation and recovery, 2026-09-12
+
+Implementation: `feat/box-trust-onboarding`. The guide and built wizard were exercised in Chromium,
+Firefox and WebKit on macOS, including HTTP/HTTPS certificate downloads, keyboard disclosure and
+390/1280-pixel layouts. Those runs used isolated profiles with the fixture certificate error ignored;
+they verify rendering and navigation, not system trust. Setup accessibility checks cover light and
+dark themes. [Design and source boundaries](superpowers/specs/2026-09-12-box-trust-onboarding-design.md).
+
+For each row, install the box's current certificate through the displayed settings, close/reopen the
+browser without a warning, complete the setup connection check, then repeat after a re-image using
+the old-certificate recovery instructions. Record the actual OS and browser versions when run.
+
+| Device | Browsers to walk | First trust installation | Replacement after re-image |
+| --- | --- | --- | --- |
+| macOS | Safari, Chrome, Edge, Firefox | Pending | Pending |
+| Windows | Edge, Chrome, Firefox | Pending | Pending |
+| Linux | Chrome/Chromium, Edge, Firefox | Pending | Pending |
+| ChromeOS | Chrome | Pending | Pending |
+| Android | Chrome, Edge, Firefox, Samsung Internet | Pending | Pending |
+| iPhone/iPad | Safari, Chrome, Edge, Firefox | Pending | Pending |
+
+Also walk a browser with HTTPS-only navigation enabled. The guide documents the browser's HTTP
+exception where available, or certificate transfer from another reachable device; it does not claim
+that an HTTP link overrides browser or administrator policy.

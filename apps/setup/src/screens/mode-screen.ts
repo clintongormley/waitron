@@ -4,12 +4,12 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import { actionsStyles } from "../form-styles.js";
+import { helpLinkStyles, actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 
 /**
- * The wizard's first step: welcome the operator, warn that the browser's certificate warning is
- * expected, and offer the four top-level onboarding journeys. Demo, Prepare and Go live enter fresh
+ * After the connection step, offer the four top-level onboarding journeys and retain a link to
+ * certificate help. Demo, Prepare and Go live enter fresh
  * primary provisioning; Join or recover opens the existing-restaurant subchooser.
  *
  * The choice is irreversible one way — a live box files real invoices to AEAT and can never become a
@@ -26,6 +26,7 @@ import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 @customElement("setup-mode-screen")
 export class SetupModeScreen extends LitElement {
   static override styles = [
+    helpLinkStyles,
     baseStyles,
     actionsStyles,
     css`
@@ -157,7 +158,8 @@ export class SetupModeScreen extends LitElement {
           into everyday trading mode.
         </p>
         <p class="cert-note">
-          The browser security warning is expected — this box uses its own certificate.
+          A certificate warning needs attention before you continue.
+          <a href="/setup/trust" target="_blank" rel="noopener">Open certificate help</a>.
         </p>
         ${
           this.environment

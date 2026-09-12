@@ -20,6 +20,7 @@ afterEach(() => {
  */
 function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): SetupApi {
   return {
+    getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({
       provisioned: false,
       environment: "preproduction",
@@ -54,7 +55,7 @@ async function mountSetupApp(api: SetupApi = stubApi()): Promise<SetupApp> {
   const el = document.createElement("setup-app") as SetupApp;
   el.api = api;
   host.appendChild(el);
-  await el.updateComplete;
+  await flush(el);
   return el;
 }
 
@@ -142,6 +143,83 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
 }
 
 describe("setup-app", () => {
+  it("ignores an old failed boot read after a newer connection check succeeds", async () => {
+    let rejectOld!: (error: Error) => void;
+    const getStatus = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectOld = reject;
+          }),
+      )
+      .mockResolvedValue({ environment: "production", needs: ["venue"] });
+    const el = await mountSetupApp(stubApi({ getStatus }));
+    const host = await screenHost(el, "connection");
+    host.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await flush(el);
+    rejectOld(new TypeError("old network failure"));
+    await flush(el);
+    goto(el, "connection");
+    await flush(el);
+    expect(
+      (await screenHost(el, "connection")).shadowRoot!.querySelector("[role=alert]"),
+    ).toBeNull();
+  });
+
+  it("preserves the draft and opens connection help separately after a failed provision", async () => {
+    const el = await mountSetupApp(
+      stubApi({ provision: vi.fn().mockRejectedValue(new TypeError("network")) }),
+    );
+    patch(el, { venue: { legalName: "La Mesa" } });
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "provisioning");
+    const link = host.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=trust-help]")!;
+    expect(link.getAttribute("href")).toBe("/setup/trust");
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toContain("noopener");
+    expect(readDraft(el).venue?.legalName).toBe("La Mesa");
+  });
+
+  it("starts certificate setup before collecting details on a box with its own CA", async () => {
+    const getDiscovery = vi.fn().mockResolvedValue({ caDownloadAvailable: true });
+    const el = await mountSetupApp(stubApi({ getDiscovery }));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
+    const host = await screenHost(el, "connection");
+    expect(
+      host
+        .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=trust-help]")
+        ?.getAttribute("href"),
+    ).toBe("/setup/trust");
+    host.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
+  });
+
+  it("keeps the connection step open when the check fails and allows a fresh check", async () => {
+    const getStatus = vi.fn().mockRejectedValue(new TypeError("network"));
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus,
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const host = await screenHost(el, "connection");
+    host.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
+    expect((await screenHost(el, "connection")).shadowRoot!.textContent).toContain(
+      "could not read",
+    );
+    getStatus.mockResolvedValue({ environment: "preproduction", needs: ["venue"] });
+    host.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
+  });
+
   it("renders the four-choice onboarding screen on boot", async () => {
     const el = await mountSetupApp();
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
@@ -180,10 +258,10 @@ describe("setup-app", () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
-    // The shell rendered its first screen despite the rejection, and no environment is shown on it.
-    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
-    const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
+    // A failed boot still renders an actionable screen without inventing an environment.
+    const connection = await screenHost(el, "connection");
+    expect(connection.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+    expect(connection.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
   });
 
   it("#goto flips the visible screen", async () => {
@@ -327,6 +405,7 @@ describe("setup-app", () => {
   it("skips certificate and fiscal services in the development onboarding target", async () => {
     const el = await mountSetupApp(
       stubApi({
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
         getStatus: vi.fn().mockResolvedValue({
           provisioned: false,
           environment: "preproduction",

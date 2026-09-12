@@ -183,3 +183,13 @@ describe("SetupApi", () => {
     });
   });
 });
+
+it("reads certificate availability from the real discovery path", async () => {
+  const paths: string[] = [];
+  const api = new SetupApi("", async (input) => {
+    paths.push(String(input));
+    return new Response(JSON.stringify({ caDownloadAvailable: true }));
+  });
+  expect(await api.getDiscovery()).toEqual({ caDownloadAvailable: true });
+  expect(paths).toEqual(["/setup-api/discovery"]);
+});

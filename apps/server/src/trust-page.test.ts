@@ -37,3 +37,29 @@ describe("renderTrustPage", () => {
     expect(CA_FILENAME).toBe("waitron-ca.crt");
   });
 });
+
+it("covers common operating systems, browser stores and replacement certificates", () => {
+  const html = renderTrustPage({
+    reachUrls: [],
+    caAvailable: true,
+    caDownloadPath: "/ca.crt",
+    httpsUrl: "https://waitron.local",
+  });
+  for (const name of [
+    "macOS",
+    "Windows",
+    "Linux",
+    "Android",
+    "iPhone",
+    "iPad",
+    "Chrome",
+    "Edge",
+    "Firefox",
+    "Safari",
+  ])
+    expect(html).toContain(name);
+  expect(html).toContain("re-imaged");
+  expect(html).toContain("fully quit");
+  expect(html).toContain("old certificate");
+  expect(html).toContain("HTTPS");
+});

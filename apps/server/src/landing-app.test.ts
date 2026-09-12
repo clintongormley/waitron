@@ -126,3 +126,24 @@ describe("landing app", () => {
     }
   });
 });
+
+it("serves the same guide and download paths before and after an HTTPS upgrade", async () => {
+  const dir = stateDirWithCa();
+  try {
+    const app = buildLandingApp({
+      stateDir: dir,
+      reachUrls: [],
+      httpsUrl: "https://waitron.local",
+      log: () => {},
+    });
+    const page = await app.request("http://waitron.local/setup/trust");
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Connect to this Waitron box");
+    const cert = await app.request("http://waitron.local/setup-api/ca.crt");
+    expect(cert.status).toBe(200);
+    expect(cert.headers.get("cache-control")).toBe("no-store");
+    expect(await cert.text()).toContain("BEGIN CERTIFICATE");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -31,9 +31,7 @@ export interface DiscoveryDeps {
   renderQrSvg?: (text: string) => Promise<string>;
 }
 
-/** This origin's CA download path — the route this API registers and advertises in its discovery
- *  document, and the link it passes to the shared trust page. The plain-HTTP landing origin (Task 3)
- *  serves the same page with a different path, which is why `renderTrustPage` takes it as a parameter. */
+/** Existing discovery clients keep this path; /ca.crt also survives an HTTP-to-HTTPS upgrade. */
 const CA_DOWNLOAD_PATH = "/setup-api/ca.crt";
 
 /**
@@ -81,7 +79,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       () => false,
     );
 
-  app.get(CA_DOWNLOAD_PATH, async (c) => {
+  app.on("GET", [CA_DOWNLOAD_PATH, "/ca.crt"], async (c) => {
     let pem: string;
     try {
       pem = await readFile(caPath, "utf8");

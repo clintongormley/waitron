@@ -148,7 +148,9 @@ print_links() {
 
   Waitron is ready.
 
-  Set up:        ${BOX_URL}
+  Start here:    http://waitron.local/setup/trust
+  Install this box's certificate before entering setup details.
+  After a re-image, follow the guide to replace the old certificate.
   Once set up:
     Till         ${BOX_URL}
     Dashboard    ${BOX_URL}/manage
@@ -156,7 +158,7 @@ print_links() {
     Print agent  http://waitron.local:9110
 
 EOF
-  if command -v qrencode >/dev/null 2>&1; then qrencode -t ANSIUTF8 "$BOX_URL"; echo; fi
+  if command -v qrencode >/dev/null 2>&1; then qrencode -t ANSIUTF8 "http://waitron.local/setup/trust"; echo; fi
 }
 
 # Show the ready banner on stdout, and — on a headless box wired to a monitor — also on the physical

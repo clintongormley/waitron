@@ -137,3 +137,12 @@ it("logs a non-ENOENT ca.crt read failure and still answers 404 no_box_ca", asyn
   expect(await res.json()).toMatchObject({ error: "no_box_ca" });
   expect(events.some((e) => e.level === "error" && e.event === "setup.ca_read_failed")).toBe(true);
 });
+
+it("keeps a certificate download on its route when HTTP is upgraded to HTTPS", async () => {
+  const app = appFor(await stateDirWithCa());
+  const res = await app.request("https://waitron.local/ca.crt");
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toContain("application/x-x509-ca-cert");
+  expect(res.headers.get("cache-control")).toBe("no-store");
+  expect(await res.text()).toContain("BEGIN CERTIFICATE");
+});

@@ -5,26 +5,9 @@ import type { Logger } from "./logger.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 
 /**
- * The plain-HTTP trust/landing surface (Task 3): the ONE page a phone reaches by typing the box's
- * bare address before it trusts the box's self-signed CA. It is a SEPARATE, plain-HTTP listener from
- * the HTTPS app (`boot.ts` binds it on `config.landingPort`, default 80) because the browser's
- * certificate interstitial fires on the untrusted HTTPS origin before any of our JS runs — so the
- * "download and trust the CA" instructions have to live on an origin the browser does not block.
- *
- * Two UNAUTHENTICATED routes, mirroring the HTTPS `discovery-api.ts` but with the CA served from
- * `/ca.crt` on THIS origin (so the page's own download link resolves without a trust step, which is
- * the whole point):
- *
- *   - `GET /`       → the shared trust page (`renderTrustPage`), `Cache-Control: no-cache`, and
- *                     crucially NO `Strict-Transport-Security` — HSTS on this plain-HTTP origin would
- *                     pin the browser to HTTPS and strand the phone back on the interstitial it came
- *                     here to escape.
- *   - `GET /ca.crt` → the persisted CA as a downloadable attachment (200), or a `no_box_ca` 404 when
- *                     the box runs an operator-supplied certificate (no CA to hand out).
- *
- * This surface NEVER redirects: a redirect to the HTTPS origin would land the phone straight back on
- * the interstitial. The hand-off to HTTPS is a plain link on the page (`httpsUrl`), which the visitor
- * follows only after trusting the CA.
+ * Public certificate help on the separate HTTP listener. It never redirects to HTTPS;
+ * browsers may still upgrade navigation themselves, so the HTTPS listener mirrors these paths.
+ * It serves public help and CA downloads, with no application forms or write routes.
  */
 export interface LandingDeps {
   /** The persisted state dir (config.stateDir); the CA lives at `<stateDir>/tls/ca.crt`. */
@@ -36,9 +19,7 @@ export interface LandingDeps {
   log: Logger;
 }
 
-/** This origin's CA download path. The plain-HTTP landing origin serves the CA at the ROOT-level
- *  `/ca.crt`, not the HTTPS-only `/setup-api/ca.crt`, which is why `renderTrustPage` takes the path as
- *  a parameter (see its header). */
+/** Keep the established agent-download path as well as the HTTPS discovery alias. */
 const CA_DOWNLOAD_PATH = "/ca.crt";
 
 /**
@@ -59,20 +40,18 @@ export function buildLandingApp(deps: LandingDeps): Hono {
       () => false,
     );
 
-  app.get("/", async (c) => {
+  app.on("GET", ["/", "/setup/trust"], async (c) => {
     const html = renderTrustPage({
       reachUrls: deps.reachUrls,
       caAvailable: await caExists(),
       caDownloadPath: CA_DOWNLOAD_PATH,
       httpsUrl: deps.httpsUrl,
     });
-    // `no-cache` so a box that later mints/rotates its CA is not shown a stale "no CA" page from a
-    // cache. NO `Strict-Transport-Security`: this is the plain-HTTP escape hatch from the HTTPS
-    // interstitial, and HSTS would pin the browser back to HTTPS. This surface never redirects.
+    // A re-image must not leave a cached guide. HTTPS navigation remains an explicit link here.
     return c.html(html, 200, { "Cache-Control": "no-cache" });
   });
 
-  app.get(CA_DOWNLOAD_PATH, async (c) => {
+  app.on("GET", [CA_DOWNLOAD_PATH, "/setup-api/ca.crt"], async (c) => {
     let pem: string;
     try {
       pem = await readFile(caPath, "utf8");
