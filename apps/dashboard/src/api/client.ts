@@ -2323,26 +2323,20 @@ export class DashboardApi {
 
   /** `PATCH /management-api/devices/:id/hardware` — set a device's static hardware bindings (SP-A.2
    * §16.3, device.manage-gated): its receipt printer (`receiptPrinterId`, a tenant printer's id or
-   * `null` to clear), cash-drawer flag (`hasCashDrawer`), card provider (`cardProvider`,
-   * `none`/`stripe_terminal`/`stripe_on_device`) and the provider's reader id (`cardReaderId`, or
-   * `null`). Only a NAMED field is written. Returns the updated device's hardware (200). An unknown
-   * `cardProvider` rejects `{ code: "management.request_invalid" }`; a `receiptPrinterId` naming no
-   * printer of this tenant rejects `{ code: "device.binding_invalid" }`; an unknown device rejects
-   * `{ code: "device.not_found" }` (404). */
+   * `null` to clear) and cash-drawer flag (`hasCashDrawer`). Only a NAMED field is written. Returns the
+   * updated device's hardware (200). A `receiptPrinterId` naming no printer of this tenant rejects
+   * `{ code: "device.binding_invalid" }`; an unknown device rejects `{ code: "device.not_found" }`
+   * (404). (The card reader default lives in `device_card_readers`, not on the device.) */
   patchDeviceHardware(
     id: string,
     patch: {
       receiptPrinterId?: string | null;
       hasCashDrawer?: boolean;
-      cardProvider?: string;
-      cardReaderId?: string | null;
     },
   ): Promise<{
     id: string;
     receiptPrinterId: string | null;
     hasCashDrawer: boolean;
-    cardProvider: string;
-    cardReaderId: string | null;
   }> {
     return this.#request(`/management-api/devices/${id}/hardware`, "PATCH", patch);
   }

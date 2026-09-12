@@ -1,7 +1,7 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -21,14 +21,6 @@ import type {
   Station,
   Till,
 } from "../api/client.js";
-
-/** The card-payment providers the per-device hardware editor offers, in render order — mirrors the
- * `devices.card_provider` text column's accepted values and the server's `CARD_PROVIDERS` screen. `none`
- * leads (a device with no integrated card terminal, the column default), then the two Stripe
- * integrations: `stripe_terminal` (a separate Stripe Terminal reader, which carries its own reader id)
- * and `stripe_on_device` (Tap to Pay on the device itself, no separate reader id). The server stores
- * the string as-is and re-validates it; the picker constrains the choice to these three. */
-const CARD_PROVIDERS: readonly string[] = ["none", "stripe_terminal", "stripe_on_device"];
 
 /**
  * Which binding the accept dialog must ask for, given the chosen profile's form factor. A
@@ -55,15 +47,11 @@ function bindingOf(formFactor: FormFactor): "station" | "register" | "none" {
 interface HardwareEdit {
   receiptPrinterId: string;
   hasCashDrawer: boolean;
-  cardProvider: string;
-  cardReaderId: string;
 }
 
 const DEFAULT_HARDWARE: HardwareEdit = {
   receiptPrinterId: "",
   hasCashDrawer: false,
-  cardProvider: "none",
-  cardReaderId: "",
 };
 
 /**
@@ -272,12 +260,6 @@ export class DevicesScreen extends LitElement {
     )) {
       const id = select.dataset.test!.slice("hw-printer-".length);
       select.value = this.#hardwareFor(id).receiptPrinterId;
-    }
-    for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
-      '[data-test^="hw-card-provider-"]',
-    )) {
-      const id = select.dataset.test!.slice("hw-card-provider-".length);
-      select.value = this.#hardwareFor(id).cardProvider;
     }
     // The accept dialog's three pickers, same post-render reconciliation as the selects above: their
     // <option> children are rendered in the same pass, and the binding picker is a DIFFERENT element
@@ -526,9 +508,8 @@ export class DevicesScreen extends LitElement {
   }
 
   /** Save device `id`'s edited hardware through the PATCH, then reflect the server's stored values in the
-   * edit entry so the controls show what actually took. An empty printer / reader clears to `null`; the
-   * reader is sent only while the provider is a Stripe Terminal reader (else the field is hidden). A
-   * rejection becomes the `errorKey` banner (the `#revoke` idiom). */
+   * edit entry so the controls show what actually took. An empty printer clears to `null`. A rejection
+   * becomes the `errorKey` banner (the `#revoke` idiom). */
   async #saveHardware(id: string): Promise<void> {
     this.errorKey = null;
     const hw = this.#hardwareFor(id);
@@ -536,19 +517,12 @@ export class DevicesScreen extends LitElement {
       const updated = await this.api.patchDeviceHardware(id, {
         receiptPrinterId: hw.receiptPrinterId === "" ? null : hw.receiptPrinterId,
         hasCashDrawer: hw.hasCashDrawer,
-        cardProvider: hw.cardProvider,
-        cardReaderId:
-          hw.cardProvider === "stripe_terminal" && hw.cardReaderId.trim() !== ""
-            ? hw.cardReaderId.trim()
-            : null,
       });
       this.hardwareEdits = {
         ...this.hardwareEdits,
         [id]: {
           receiptPrinterId: updated.receiptPrinterId ?? "",
           hasCashDrawer: updated.hasCashDrawer,
-          cardProvider: updated.cardProvider,
-          cardReaderId: updated.cardReaderId ?? "",
         },
       };
     } catch (error) {
@@ -580,18 +554,11 @@ export class DevicesScreen extends LitElement {
     return formatIsoMinute(iso);
   }
 
-  /** The localised label for a card provider (`none`/`stripe_terminal`/`stripe_on_device`). */
-  #cardProviderName(provider: string): string {
-    if (provider === "stripe_terminal") return t("devices.card_provider_stripe_terminal");
-    if (provider === "stripe_on_device") return t("devices.card_provider_stripe_on_device");
-    return t("devices.card_provider_none");
-  }
-
   /** The per-device hardware editor (SP-A.2 §16.3): a receipt-printer picker (the venue's ACTIVE
-   * printers plus a "none" clear option), a has-cash-drawer switch, a card-provider picker, a
-   * card-reader-id field only when the provider is a Stripe Terminal reader, and a Save that PATCHes.
-   * The printer list is DELIBERATELY not filtered to a location (the deli is single-location); the
-   * server's own binding check is the authority regardless. */
+   * printers plus a "none" clear option), a has-cash-drawer switch, and a Save that PATCHes. The
+   * printer list is DELIBERATELY not filtered to a location (the deli is single-location); the
+   * server's own binding check is the authority regardless. (The card reader default is edited on the
+   * Payments/Devices screen, not here.) */
   #renderHardware(device: DeviceRow): TemplateResult {
     const hw = this.#hardwareFor(device.id);
     const activePrinters = this.printers.filter((p) => p.active);
@@ -618,39 +585,6 @@ export class DevicesScreen extends LitElement {
           this.#setHardware(device.id, { hasCashDrawer: e.detail.checked });
         }}
       ></wt-switch>
-      <label class="field"
-        >${t("devices.card_provider")}
-        <select
-          data-test="hw-card-provider-${device.id}"
-          @change=${(e: Event) => {
-            e.stopPropagation();
-            this.#setHardware(device.id, { cardProvider: (e.target as HTMLSelectElement).value });
-          }}
-        >
-          ${CARD_PROVIDERS.map(
-            (provider) =>
-              html`<option value=${provider}>${this.#cardProviderName(provider)}</option>`,
-          )}
-        </select>
-      </label>
-      ${
-        hw.cardProvider === "stripe_terminal"
-          ? html`<wt-input
-              @keydown=${(e: KeyboardEvent) =>
-                submitOnEnter(
-                  e,
-                  this.shadowRoot!.querySelector<HTMLElement>(`[data-test=hw-save-${device.id}]`),
-                )}
-              label=${t("devices.card_reader")}
-              data-test="hw-card-reader-${device.id}"
-              .value=${hw.cardReaderId}
-              @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                e.stopPropagation();
-                this.#setHardware(device.id, { cardReaderId: e.detail.value });
-              }}
-            ></wt-input>`
-          : nothing
-      }
       <wt-button
         variant="secondary"
         size="sm"

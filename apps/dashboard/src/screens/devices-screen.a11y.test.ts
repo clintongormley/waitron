@@ -150,8 +150,6 @@ function stubApi(pairingOpen = false): DashboardApi {
       id: "d1",
       receiptPrinterId: null,
       hasCashDrawer: false,
-      cardProvider: "stripe_terminal",
-      cardReaderId: null,
     }),
   } as unknown as DashboardApi;
 }
@@ -172,25 +170,6 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       theme,
     );
     await flush(el);
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders a row's hardware editor with the Stripe Terminal reader field accessibly", async () => {
-    const { el, host } = await mountWidget<DevicesScreen>(
-      "dashboard-devices-screen",
-      { api: stubApi() },
-      theme,
-    );
-    await flush(el);
-    // Switch the active row's card-provider to a Stripe Terminal reader — the card-reader-id field
-    // joins the receipt-printer / cash-drawer / card-provider controls, so the whole hardware editor
-    // state is in the a11y tree.
-    const provider = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=hw-card-provider-d1]",
-    )!;
-    provider.value = "stripe_terminal";
-    provider.dispatchEvent(new Event("change"));
-    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 

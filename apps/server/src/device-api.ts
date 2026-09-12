@@ -26,16 +26,9 @@ import { bindingFkField } from "./device.js";
 import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
-import {
-  requireBodyUuid,
-  requireEnum,
-  requireNullableBodyUuid,
-  requireNullableString,
-  requireString,
-} from "@waitron/server-kit";
+import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
 import { isUuid } from "./till-session.js";
-import { CARD_PROVIDERS } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
@@ -334,8 +327,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         tillId: device.tillId,
         receiptPrinterId: device.receiptPrinterId,
         hasCashDrawer: device.hasCashDrawer,
-        cardProvider: device.cardProvider,
-        cardReaderId: device.cardReaderId,
       });
     }),
   );
@@ -513,10 +504,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   );
 
   // ── Set a device's static hardware bindings (device.manage) ──────────────────────────────────────
-  // The per-device hardware editor's write (Task 14): the receipt printer, its cash-drawer flag, the
-  // card provider and the provider's reader id — the SP-A.2 §16.3 static hardware that used to be
-  // stamped on the pairing code and now lives on the enrolled device. A PATCH: each field is optional
-  // and only a NAMED field is written, so the editor can send just what it changed.
+  // The per-device hardware editor's write (Task 14): the receipt printer and its cash-drawer flag —
+  // the SP-A.2 §16.3 static hardware that used to be stamped on the pairing code and now lives on the
+  // enrolled device. A PATCH: each field is optional and only a NAMED field is written, so the editor
+  // can send just what it changed. (The card reader default now lives in `device_card_readers`.)
   app.patch("/management-api/devices/:id/hardware", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -526,20 +517,14 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
       // Read via `readJsonBody` (empty/malformed/`null` → `{}`, never an opaque 500), then screen each
       // NAMED field to its column shape before it reaches the DB (never a downstream 22xxx 500):
-      // `receiptPrinterId`/`cardReaderId` accept an explicit `null` to CLEAR them; `hasCashDrawer` must
-      // be a boolean; `cardProvider` is the ONE value-domain screen — an unknown provider is
-      // `management.request_invalid` (the column is plain `text`, so the route is its authority).
+      // `receiptPrinterId` accepts an explicit `null` to CLEAR it; `hasCashDrawer` must be a boolean.
       const body = await readJsonBody<{
         receiptPrinterId?: unknown;
         hasCashDrawer?: unknown;
-        cardProvider?: unknown;
-        cardReaderId?: unknown;
       }>(c);
       const set: {
         receiptPrinterId?: string | null;
         hasCashDrawer?: boolean;
-        cardProvider?: string;
-        cardReaderId?: string | null;
       } = {};
       if ("receiptPrinterId" in body) {
         set.receiptPrinterId = requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId");
@@ -549,12 +534,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           throw new AppError("management.request_invalid", { field: "hasCashDrawer" });
         }
         set.hasCashDrawer = body.hasCashDrawer;
-      }
-      if ("cardProvider" in body) {
-        set.cardProvider = requireEnum(body.cardProvider, "cardProvider", CARD_PROVIDERS);
-      }
-      if ("cardReaderId" in body) {
-        set.cardReaderId = requireNullableString(body.cardReaderId, "cardReaderId");
       }
       // A PATCH that names no hardware field changes nothing — a request-shape fault rather than an
       // empty `UPDATE … SET` (invalid SQL). The editor always names the hardware it manages.
@@ -571,8 +550,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         id: string;
         receiptPrinterId: string | null;
         hasCashDrawer: boolean;
-        cardProvider: string;
-        cardReaderId: string | null;
       }[];
       try {
         updated = await gated(sessionId, (tx) =>
@@ -580,8 +557,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             id: devices.id,
             receiptPrinterId: devices.receiptPrinterId,
             hasCashDrawer: devices.hasCashDrawer,
-            cardProvider: devices.cardProvider,
-            cardReaderId: devices.cardReaderId,
           }),
         );
       } catch (error) {

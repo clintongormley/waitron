@@ -65,13 +65,6 @@ export const devices = pgTable(
     // Static hardware binding (SP-A.2 §16.3): whether this device has a cash drawer. DEFAULT false so an
     // existing device carries no drawer until configured.
     hasCashDrawer: boolean("has_cash_drawer").notNull().default(false),
-    // Static hardware binding (SP-A.2 §16.3): the card-payment provider for this device. DEFAULT 'none'
-    // (no integrated card). A plain text config token, NOT a credential — the reader's secrets stay in
-    // the vault, never here.
-    cardProvider: text("card_provider").notNull().default("none"),
-    // Static hardware binding (SP-A.2 §16.3): the provider's reader identifier for this device. NULLABLE
-    // (no integrated reader). A public identifier, NOT a credential — credentials stay in the vault.
-    cardReaderId: text("card_reader_id"),
     // The human label ("Pantalla Cocina"), shown in device management.
     label: text("label").notNull(),
     // scrypt hash of the device token (hashSecret, secret-hash.ts). Never the plaintext token.

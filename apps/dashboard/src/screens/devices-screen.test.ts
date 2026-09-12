@@ -147,16 +147,12 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
         patch: {
           receiptPrinterId?: string | null;
           hasCashDrawer?: boolean;
-          cardProvider?: string;
-          cardReaderId?: string | null;
         },
       ) =>
         Promise.resolve({
           id,
           receiptPrinterId: patch.receiptPrinterId ?? null,
           hasCashDrawer: patch.hasCashDrawer ?? false,
-          cardProvider: patch.cardProvider ?? "none",
-          cardReaderId: patch.cardReaderId ?? null,
         }),
     ),
     ...overrides,
@@ -183,13 +179,6 @@ function pickSelect(el: DevicesScreen, testId: string, value: string): void {
 function toggleCashDrawer(el: DevicesScreen, testId: string, checked: boolean): void {
   q(el, `[data-test=${testId}]`)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
-  );
-}
-
-/** Type into a card-reader wt-input by dispatching its composed `wt-change` (the wt-input contract). */
-function typeCardReader(el: DevicesScreen, testId: string, value: string): void {
-  q(el, `[data-test=${testId}]`)!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
 
@@ -694,24 +683,7 @@ describe("devices-screen", () => {
 
   // ── Per-device hardware editor (Task 14) ───────────────────────────────────────────────────────
 
-  // The card-reader field shows ONLY once the provider is a Stripe Terminal reader; a provider that
-  // needs no separate reader (stripe_on_device / none) hides it.
-  it("shows a row's card-reader field only for the stripe_terminal provider", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    expect(q(el, "[data-test=hw-card-reader-d1]")).toBeNull(); // default provider 'none'
-    pickSelect(el, "hw-card-provider-d1", "stripe_terminal");
-    await el.updateComplete;
-    expect(q(el, "[data-test=hw-card-reader-d1]")).toBeTruthy();
-
-    pickSelect(el, "hw-card-provider-d1", "stripe_on_device");
-    await el.updateComplete;
-    expect(q(el, "[data-test=hw-card-reader-d1]")).toBeNull();
-  });
-
-  // A row's hardware editor PATCHes the full hardware set and reflects the server's stored values.
+  // A row's hardware editor PATCHes the receipt printer + cash drawer and reflects the stored values.
   // Proven by deletion: drop the patchDeviceHardware call and the API is never hit.
   it("saves a row's edited hardware and reflects the update", async () => {
     const api = stubApi();
@@ -720,9 +692,6 @@ describe("devices-screen", () => {
 
     pickSelect(el, "hw-printer-d1", "pr1");
     toggleCashDrawer(el, "hw-cash-drawer-d1", true);
-    pickSelect(el, "hw-card-provider-d1", "stripe_terminal");
-    await el.updateComplete;
-    typeCardReader(el, "hw-card-reader-d1", "reader-9");
     await el.updateComplete;
     q(el, "[data-test=hw-save-d1]")!.click();
     await flush(el);
@@ -730,18 +699,13 @@ describe("devices-screen", () => {
     expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
       receiptPrinterId: "pr1",
       hasCashDrawer: true,
-      cardProvider: "stripe_terminal",
-      cardReaderId: "reader-9",
     });
-    // The controls reflect what took: the reconciled selects show the saved values.
+    // The controls reflect what took: the reconciled select shows the saved value.
     expect((q(el, "[data-test=hw-printer-d1]") as HTMLSelectElement).value).toBe("pr1");
-    expect((q(el, "[data-test=hw-card-provider-d1]") as HTMLSelectElement).value).toBe(
-      "stripe_terminal",
-    );
   });
 
-  // A save with the editor left at its defaults sends the cleared hardware: no printer / reader (null),
-  // no cash drawer, provider 'none'. Covers the ""→null / non-terminal-reader→null mapping.
+  // A save with the editor left at its defaults sends the cleared hardware: no printer (null) and no
+  // cash drawer. Covers the ""→null printer mapping.
   it("saves cleared hardware (nulls) when the editor is left at its defaults", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
@@ -753,8 +717,6 @@ describe("devices-screen", () => {
     expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
       receiptPrinterId: null,
       hasCashDrawer: false,
-      cardProvider: "none",
-      cardReaderId: null,
     });
   });
 

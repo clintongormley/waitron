@@ -889,10 +889,6 @@ export interface DeviceIdentity {
   receiptPrinterId?: string | null;
   /** Whether this device has a cash drawer (§16.3). */
   hasCashDrawer?: boolean;
-  /** The card-payment provider config token (§16.3), `"none"` for no integrated card. */
-  cardProvider?: string;
-  /** The provider's reader identifier (§16.3); `null` when none. A public id, NOT a credential. */
-  cardReaderId?: string | null;
 }
 
 /**

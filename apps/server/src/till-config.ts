@@ -21,31 +21,6 @@ import { isUnset } from "./env-value.js";
 export type OrderFlow = (typeof orderFlow.enumValues)[number];
 
 /**
- * The value domain for a device's card-payment hardware column (`devices.card_provider`): `none` is
- * a device with no integrated terminal (cash + the manual "datáfono" card tender only),
- * `stripe_terminal` a server-side Stripe reader, `stripe_on_device` the handheld Tap-to-Pay flow, and
- * `sumup_cloud` a SumUp Cloud reader. The env `WAITRON_TILL_CARD_PROVIDER` selection that once rode on
- * `TillConfig` is gone (a card sale now routes to its reader's provider through the pool — Task 12);
- * this type survives only as the accepted set for the per-device hardware column, which `device-api.ts`
- * validates and Task 13 removes with the column.
- */
-export type CardProvider = "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud";
-
-/**
- * The card-provider value domain the per-device hardware PATCH (`device-api.ts`'s `requireEnum`)
- * validates the `devices.card_provider` column against. `satisfies readonly CardProvider[]` binds it
- * to the type: a member that is not a `CardProvider` — or a `CardProvider` missing from the list —
- * fails to compile. (The env card selection that also read this is gone — Task 12; the column and this
- * const go together in Task 13.)
- */
-export const CARD_PROVIDERS = [
-  "none",
-  "stripe_terminal",
-  "stripe_on_device",
-  "sumup_cloud",
-] as const satisfies readonly CardProvider[];
-
-/**
  * The deployed till's identity, resolved once at boot from the environment provisioning stamped it
  * with. The four fiscal ids are branded (a bare uuid string cannot be passed where one of these is
  * expected), and `locationId` rides alongside because the sale path needs it: `recordTillSale`

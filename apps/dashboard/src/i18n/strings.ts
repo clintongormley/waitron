@@ -369,11 +369,6 @@ export const en = {
   "devices.receipt_printer": "Receipt printer",
   "devices.receipt_printer_none": "— no printer —",
   "devices.has_cash_drawer": "Cash drawer",
-  "devices.card_provider": "Card payments",
-  "devices.card_provider_none": "None",
-  "devices.card_provider_stripe_terminal": "Stripe Terminal reader",
-  "devices.card_provider_stripe_on_device": "Tap to Pay on device",
-  "devices.card_reader": "Card reader ID",
   "devices.label": "Label",
   "devices.pairing_title": "Allow new devices",
   "devices.pairing_hint":
@@ -1255,11 +1250,6 @@ export const es: Record<StringKey, string> = {
   "devices.receipt_printer": "Impresora de tickets",
   "devices.receipt_printer_none": "— sin impresora —",
   "devices.has_cash_drawer": "Cajón portamonedas",
-  "devices.card_provider": "Pagos con tarjeta",
-  "devices.card_provider_none": "Ninguno",
-  "devices.card_provider_stripe_terminal": "Lector Stripe Terminal",
-  "devices.card_provider_stripe_on_device": "Tap to Pay en el dispositivo",
-  "devices.card_reader": "ID del lector de tarjeta",
   "devices.label": "Etiqueta",
   "devices.pairing_title": "Permitir dispositivos nuevos",
   "devices.pairing_hint":
