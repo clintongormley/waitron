@@ -1,5 +1,10 @@
 # `fiscal-none` Module Implementation Plan
 
+> **2026-09-12:** this document refers to `.github/instructions/waitron.instructions.md`, which has
+> been deleted. Its rules moved to `docs/developers/conventions-ui.md`, `conventions-data.md` and
+> `testing-guide.md` — sweep those instead. The original is still readable with
+> `git show f5941462:.github/instructions/waitron.instructions.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a second fiscal module (`@waitron/fiscal-none`, the no-regime / UK case) that fills the `FiscalBackend` slot with a backend recording nothing, proving the fiscal slot is genuinely swappable, and complete the runtime-duty and provisioning-input seats SP-3c deferred so `apps/server` imports no regime package.

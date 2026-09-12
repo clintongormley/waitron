@@ -35,8 +35,9 @@ describe("the source glob itself", () => {
 
 /**
  * Blanks `/* ... *\/` block comments to equivalent whitespace (preserving line numbers) and drops
- * trailing `// ...` line comments. It STRIPS comments because its forbidden set is ENGLISH regime
- * vocabulary a comment legitimately cites — unlike packages/db/src/english-only.ts, which since
+ * trailing `// ...` line comments. It STRIPS comments because its forbidden set is regime
+ * vocabulary in EITHER language (chain/hash/fingerprint, huella/cadena/encadenamiento, aeat/sif/...)
+ * which a comment legitimately cites — unlike packages/db/src/english-only.ts, which since
  * 2026-09-07 SCANS comment prose and blanks only quotations (Spanish must not appear in a generic
  * comment at all, whereas the English word `chain` must be allowed to). The problem here: a
  * legitimate citation of the regime's own authority inside a COMMENT (`clock.ts`'s

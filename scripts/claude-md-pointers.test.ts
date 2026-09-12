@@ -81,14 +81,16 @@ function backtickedPaths(markdown: string): string[] {
   return [...targets];
 }
 
-/** Every file whose pointers this guard is responsible for. */
+/**
+ * Every file whose pointers this guard is responsible for — CLAUDE.md and every topic file it defers
+ * to, design-system.md included. An earlier version excluded design-system.md silently while the test
+ * was still named "every topic file"; it had no broken pointers at the time, so the exclusion hid
+ * nothing and nothing kept it that way.
+ */
 function governedFiles(): { name: string; markdown: string }[] {
   return [
     { name: "CLAUDE.md", markdown: readFileSync(CLAUDE_MD, "utf8") },
-    ...TOPIC_FILES.filter((f) => f !== "docs/developers/design-system.md").map((f) => ({
-      name: f,
-      markdown: readFileSync(join(ROOT, f), "utf8"),
-    })),
+    ...TOPIC_FILES.map((f) => ({ name: f, markdown: readFileSync(join(ROOT, f), "utf8") })),
   ];
 }
 
@@ -121,12 +123,16 @@ describe("CLAUDE.md pointers", () => {
   it("points only at files that exist, in CLAUDE.md and every topic file", () => {
     const missing: string[] = [];
     for (const { name, markdown } of governedFiles()) {
-      for (const target of [...markdownLinkTargets(markdown), ...backtickedPaths(markdown)]) {
-        // A topic file's links are relative to docs/developers/, CLAUDE.md's to the repo root.
-        const base = name === "CLAUDE.md" ? ROOT : join(ROOT, "docs/developers");
-        if (!existsSync(join(base, target)) && !existsSync(join(ROOT, target))) {
-          missing.push(`${name} -> ${target}`);
-        }
+      // A markdown link resolves the way a reader following it resolves it: relative to the file's
+      // OWN directory. Accepting a repo-root fallback here would pass a link that 404s on GitHub —
+      // `docs/developers/x.md` written inside docs/developers/ resolves to docs/developers/docs/…
+      const dir = join(ROOT, name, "..");
+      for (const target of markdownLinkTargets(markdown)) {
+        if (!existsSync(join(dir, target))) missing.push(`${name} -> ${target} (link)`);
+      }
+      // A backticked path is a citation, root-relative by this repository's convention.
+      for (const target of backtickedPaths(markdown)) {
+        if (!existsSync(join(ROOT, target))) missing.push(`${name} -> ${target} (path)`);
       }
     }
     expect(missing, `pointers to files that do not exist:\n${missing.join("\n")}`).toEqual([]);

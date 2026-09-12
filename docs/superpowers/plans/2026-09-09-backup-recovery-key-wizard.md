@@ -1,5 +1,10 @@
 # Backup + recovery-key wizard — Implementation Plan
 
+> **2026-09-12:** this document refers to `.github/instructions/waitron.instructions.md`, which has
+> been deleted. Its rules moved to `docs/developers/conventions-ui.md`, `conventions-data.md` and
+> `testing-guide.md` — sweep those instead. The original is still readable with
+> `git show f5941462:.github/instructions/waitron.instructions.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give a non-technical operator a guided way to turn backups on, mint and record a recovery key, and set a schedule + retention policy — applied live without a box restart — closing the gap where a fresh box takes no backups until someone hand-edits an env file.

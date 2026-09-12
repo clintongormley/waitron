@@ -1,5 +1,10 @@
 # SP-3c — Module-owned gated provisioning — Implementation Plan
 
+> **2026-09-12:** this document refers to `.github/instructions/waitron.instructions.md`, which has
+> been deleted. Its rules moved to `docs/developers/conventions-ui.md`, `conventions-data.md` and
+> `testing-guide.md` — sweep those instead. The original is still readable with
+> `git show f5941462:.github/instructions/waitron.instructions.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Put every provisioning-time fiscal seam (venue seed, standalone node re-seed, standby reservation and establishment) and the till's fiscal-backend choice behind two typed module seats, so that swapping the fiscal module later touches only the composition list.

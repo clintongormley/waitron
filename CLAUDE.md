@@ -485,9 +485,11 @@ would otherwise relitigate.
 The receipt goes in the matching topic file under `docs/developers/`. That split is what keeps this
 file loadable: it is read into every session, so a paragraph here is paid for on every turn of every
 session, while a paragraph in a topic file is paid for only when somebody needs it.
-`scripts/claude-md-pointers.test.ts` fails if a path this file names — as a markdown link or as a
-backticked path — does not exist, if a topic file goes missing, or if this file grows past its
-budget.
+`scripts/claude-md-pointers.test.ts` fails if a topic file goes missing, if this file grows past its
+budget, or if a path it names does not exist — every markdown link, and backticked paths under
+`apps/`, `packages/`, `docs/`, `scripts/`, `deploy/`, `bench/`, `.github/` or `.husky/`. It does NOT
+check a root-level filename such as `eslint.config.js`, nor a bare directory: the guard is narrower
+than "every pointer", which is exactly the hedge the rule above asks for.
 
 **Do not add:** one-off bugs with no reusable shape, anything the code or types already state plainly,
 or the narrative of what a session did — that belongs in the commit or the PR thread. **A count is a
@@ -495,8 +497,8 @@ receipt that goes stale**, so describe the property, not the number. **If a guar
 guard and stop** — do not also explain what the guard checks, because the failing test says that
 better and never goes stale. **The exception is a guard that is WEAKER than its name suggests**: one
 that reads text rather than running code, or that covers only part of what a reader would assume.
-Say so in the same line, because a failing test cannot tell you about the case it never checks — the
-first pass of this split dropped exactly three such hedges.
+Say so in the same line: a hedge is the one thing a failing test can never restore, because the case
+it never checks is the case you needed to know about.
 
 **Prune as well as append.** A superseded rule teaches a session to work around something that no
 longer exists; delete it and say so in the commit. Natural moments: while addressing review findings,

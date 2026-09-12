@@ -270,7 +270,8 @@ an unclassified driver error in whatever query first touched the changed schema.
 The permission check returns the session's tenant; it does not compare it with the configured tenant.
 A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
 them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, "refuses a manager session
-belonging to another tenant".
+belonging to another tenant". Printer routes enforce the same check; their regression is
+`apps/server/src/print-api.pg.test.ts`, "refuses another tenant's manager…".
 
 **Carried from the retired Copilot instructions file** (deleted 2026-09-12; read it with
 `git show f5941462:.github/instructions/waitron.instructions.md`). What was checked before deleting it: Copilot's automatic review was removed from
@@ -289,17 +290,23 @@ zone in `eslint.config.js` scoped to `packages/verifactu/**/*.ts` — if a PR to
 needs to loosen or work around that rule, treat it as a design question to raise, not a lint config
 nit to wave through.
 
-## Two more packages are Spanish by design, and one guard runs in the opposite direction
+## Two more packages are Spanish by design, and one guard runs on a different axis
 
 `packages/reporting` (the modelo-303 form, Spain's VAT return) is Spanish by design, alongside
 `packages/verifactu`, `packages/fiscal-verifactu` and `packages/workforce-es`. Since 2026-09-07 the
 English-only guard (`scripts/english-only.test.ts`) scans comment prose as well as identifiers in
 the generic packages, leaving only `«…»` quotes and backtick citations exempt.
-`packages/fiscal/src/no-regime-vocabulary.test.ts` enforces the opposite direction: its forbidden set
-is ENGLISH regime vocabulary, so a regime word such as "chain" or "hash" written in English inside
-`packages/fiscal` is what it refuses. (Verified against the guard itself, which strips comments
-precisely because its forbidden set is English regime vocabulary a comment legitimately cites.) A PR introducing a Spanish
-identifier into a generic package, an English regime term into `packages/fiscal`, one that adds a
+`packages/fiscal/src/no-regime-vocabulary.test.ts` enforces a different axis — a domain's vocabulary
+rather than a language. Its forbidden set is regime vocabulary in ANY language: English (`chain`,
+`hash`, `fingerprint`) and Spanish alike (`huella`, `cadena`, `encadenamiento`, `registro`,
+`incidencia`), plus the regime's proper nouns (`verifactu`, `ticketbai`, `sif`, `csv`, `aeat`). What
+it refuses inside `packages/fiscal` is naming a regime mechanism at all, however it is spelled. It
+strips comments first, so a comment citing AEAT is fine while `export const aeatEndpoint` fails.
+Read the `FORBIDDEN` list in that file, not its header comment, which says "ENGLISH regime
+vocabulary" and is wrong — half the list is Spanish. Measured 2026-09-12 on a copy of
+`packages/fiscal/src`: planting `export const huellaValue = 1;` and `export const cadenaValue = 1;`
+each turned the suite red. A PR introducing a Spanish
+identifier into a generic package, a regime term in any language into `packages/fiscal`, one that adds a
 module's word to the base list instead of the module's own declaration, or one that drops a generic
 package from `GENERIC_PACKAGES` (and its pin) to make a scan pass, is a design question to raise,
 not a nit to wave through.
