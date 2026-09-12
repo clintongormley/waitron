@@ -778,11 +778,11 @@ unchanged, so no new H2 receipt
      (b) **owner copy decision:** the Spanish form-factor label differs across two pickers
      (`canvas_editor.form_factor.till` = "TPV" vs `device_profiles.form_factor.till` = "Caja
      registradora"); (c) `WAITRON_TILL_TILL_ID`/provisioning still seeds a "Caja 1" register while a
-     till enrol auto-creates its own — dedupe deferred by the decision doc; (d) the hardware PATCH
-     validates `card_provider` and `card_reader_id` independently — the "reader id only for
-     `stripe_terminal`" rule lives only in the dashboard UI; move it server-side if it is a real
-     invariant; (e) the device-management routes build their `devices ⨝ device_profiles` read inline
-     in the HTTP layer — a `listDevices` store verb would restore the layer.
+     till enrol auto-creates its own — dedupe deferred by the decision doc; (d) the device-management
+     routes build their `devices ⨝ device_profiles` read inline in the HTTP layer — a `listDevices`
+     store verb would restore the layer. (The former hardware-PATCH `card_provider`/`card_reader_id`
+     validation follow-up is gone: this slice moved the reader default to `device_card_readers` and
+     dropped both columns from `devices` in `0017_drop_device_card_columns.sql`.)
    - *Test-infra follow-ups (from #286, the two-node cluster flake this slice's push surfaced):* the
      heavy two-node replication suites (`replication-fidelity`, `replication-subscribe`,
      `replication-over-tunnel`, `replication-arc`) hung for 300s under the full local run.
