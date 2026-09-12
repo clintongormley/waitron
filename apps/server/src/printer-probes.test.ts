@@ -13,11 +13,10 @@ describe("printer address requests", () => {
       expiresAt: 31000,
     });
     now = 2000;
+    expect(probes.current()).toEqual([{ host: "192.168.20.247", port: 9100, expiresInMs: 29000 }]);
     expect(probes.add({ host: "2001:0db8::1", port: 9200 }).host).toBe("2001:db8::1");
     now = 31000;
-    expect(probes.current()).toEqual([
-      { host: "2001:db8::1", port: 9200, requestedAt: 2000, expiresAt: 32000 },
-    ]);
+    expect(probes.current()).toEqual([{ host: "2001:db8::1", port: 9200, expiresInMs: 1000 }]);
     now = 32000;
     expect(probes.current()).toEqual([]);
   });

@@ -5,8 +5,8 @@ import "@waitron/shared";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. The convention is
- * the DOMAIN CONCEPT, lowercase and dot-namespaced — `server.*` here because these are facts about
- * the process itself, not about a sale, a payment or a credential.
+ * the DOMAIN CONCEPT, lowercase and dot-namespaced; `server.*` is reserved for facts about the
+ * process itself. Application-owned operations retain their domain prefixes.
  *
  * Reachability: every file that throws one of these imports "./errors.js" directly, and this
  * package has no public barrel to keep them reachable from — it is an application, not a library.
@@ -15,7 +15,8 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** The short-lived printer address queue has no free slot; retry after a request expires. */
+    /** This server owns the transient printer-discovery queue; the printing module owns persisted printers.
+     * No free probe slot; retry after a request expires. */
     "printer.probe_busy": Record<string, never>;
     "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */

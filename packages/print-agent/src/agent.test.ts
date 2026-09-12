@@ -399,42 +399,47 @@ describe("createAgent — inventory, discovery and resolve", () => {
       scanned: unknown[];
     };
 
-  it("probes explicit addresses independently of a failed scan and stops at expiry", async () => {
-    const target = { host: "192.168.20.247", port: 9100, expiresAt: 30000 };
-    const found = { transport: "network_tcp" as const, host: target.host, port: target.port };
-    const probeNetwork = vi.fn().mockResolvedValue([found]);
-    const host = fakeHost({
-      config: CONFIG,
-      token: "a1.s",
-      probeNetwork,
-      scan: async () => {
-        throw new Error("no Bluetooth");
-      },
-    });
-    let now = 1000;
-    host.now = () => now;
-    const c = client({
-      pullJobs: vi.fn().mockResolvedValue(
-        okR({
-          nodeId: "n1",
-          servers: [],
-          jobs: [],
-          discoveryUntil: 90000,
-          networkProbes: [target],
-        }),
-      ),
-    });
-    const agent = createAgent({ host, client: c });
-    await agent.runOnce();
-    expect(probeNetwork).not.toHaveBeenCalled();
-    await agent.runOnce();
-    expect(probeNetwork).toHaveBeenCalledWith([target]);
-    expect(inventoryOf(c, 1).scanned).toEqual([found]);
-    now = 30000;
-    await agent.runOnce();
-    expect(probeNetwork).toHaveBeenCalledTimes(1);
-    expect(inventoryOf(c, 2).scanned).toEqual([]);
-  });
+  it.each([0, 100_000, -100_000])(
+    "probes explicit addresses independently of a failed scan and stops at expiry (clock offset %s ms)",
+    async (offset) => {
+      const target = { host: "192.168.20.247", port: 9100, expiresInMs: 29000 };
+      const found = { transport: "network_tcp" as const, host: target.host, port: target.port };
+      const probeNetwork = vi.fn().mockResolvedValue([found]);
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        probeNetwork,
+        scan: async () => {
+          throw new Error("no Bluetooth");
+        },
+      });
+      let now = 1000 + offset;
+      host.now = () => now;
+      const c = client({
+        pullJobs: vi.fn().mockResolvedValue(
+          okR({
+            nodeId: "n1",
+            servers: [],
+            jobs: [],
+            discoveryUntil: 90000,
+            networkProbes: [target],
+          }),
+        ),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      expect(probeNetwork).not.toHaveBeenCalled();
+      vi.mocked(c.pullJobs).mockResolvedValue(failR({ kind: "unreachable", detail: "offline" }));
+      await agent.runOnce();
+      expect(agent.status.phase).toBe("unreachable");
+      expect(probeNetwork).toHaveBeenCalledWith([target]);
+      expect(inventoryOf(c, 1).scanned).toEqual([found]);
+      now = 30000 + offset;
+      await agent.runOnce();
+      expect(probeNetwork).toHaveBeenCalledTimes(1);
+      expect(inventoryOf(c, 2).scanned).toEqual([]);
+    },
+  );
 
   it("a rejected address probe does not block pulling and delivering a print job", async () => {
     const host = fakeHost({
@@ -453,7 +458,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
             servers: [],
             jobs: [],
             discoveryUntil: null,
-            networkProbes: [{ host: "10.0.0.1", port: 9100, expiresAt: 30000 }],
+            networkProbes: [{ host: "10.0.0.1", port: 9100, expiresInMs: 30000 }],
           }),
         )
         .mockResolvedValue(

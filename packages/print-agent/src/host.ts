@@ -70,11 +70,11 @@ export interface PairResult {
   error?: string;
 }
 
-/** A manager-requested address check, valid only until the server's expiry instant. */
+/** A manager-requested address check, carrying the server's remaining lifetime. */
 export interface NetworkProbe {
   host: string;
   port: number;
-  expiresAt: number;
+  expiresInMs: number;
 }
 
 export interface Host {

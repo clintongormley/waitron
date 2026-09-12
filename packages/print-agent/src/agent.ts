@@ -51,7 +51,7 @@ export function createAgent(opts: AgentOptions): Agent {
   // tick actively scans (and posts the results) only while `host.now()` is still under it; 0 means no
   // window, so an initial tick and a closed window both skip the scan.
   let discoveryUntil = 0;
-  let networkProbes: NetworkProbe[] = [];
+  let networkProbes: { target: NetworkProbe; expiresAt: number }[] = [];
   let probeServer: string | undefined;
   let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
   let lastPhaseLine = "";
@@ -263,7 +263,7 @@ export function createAgent(opts: AgentOptions): Agent {
     }
     const targets =
       current === probeServer
-        ? networkProbes.filter((target) => host.now() < target.expiresAt)
+        ? networkProbes.filter((probe) => host.now() < probe.expiresAt).map((probe) => probe.target)
         : [];
     if (targets.length) {
       try {
@@ -307,7 +307,12 @@ export function createAgent(opts: AgentOptions): Agent {
     r.merge(pulled.value.servers);
     // Carry the window forward so the NEXT tick knows whether to scan; a null reply closes it (0).
     discoveryUntil = pulled.value.discoveryUntil ?? 0;
-    networkProbes = pulled.value.networkProbes ?? [];
+    // A remote server's epoch deadline cannot be compared with this host's clock.
+    const receivedAt = host.now();
+    networkProbes = (pulled.value.networkProbes ?? []).map((target) => ({
+      target,
+      expiresAt: receivedAt + target.expiresInMs,
+    }));
     probeServer = current;
     // Tick-local, reset every tick (never `lastError` itself mid-loop): did ANY send fail this tick?
     let anyFailed = false;

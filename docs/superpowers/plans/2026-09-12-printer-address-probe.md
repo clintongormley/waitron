@@ -34,3 +34,25 @@ Design: [Check a printer address](../specs/2026-09-12-printer-address-probe-desi
   Dashboard and print-agent application builds passed. Lint passed across the repository, and the
   final dashboard edits also passed focused lint. The root `pnpm typecheck` and
   `pnpm format:check` passed after all implementation changes.
+
+## Finish-branch review
+
+Rebased onto `5a0bcb28` (#332); resolved the comment-only print-agent test-config conflict using
+main's wording and retained its development-launcher coverage exclusion.
+
+The Claude run-it review reproduced a clock-skew defect: an agent 100 seconds ahead skipped a
+request, while one 100 seconds behind retained it past its intended lifetime. Both driver regressions
+failed before the fix and pass with server-supplied remaining durations translated to local agent
+deadlines. The agent still drops expired cached requests even when a subsequent pull fails.
+
+The permission test now sends a valid address body for staff as well as managers. Deleting the
+probe route's permission check returns 200 instead of the expected 403. The real TCP-refusal test
+freezes deadline timers; swallowing its socket-error event now fails by timeout, so deadline expiry
+cannot satisfy the refusal assertion. Registry ownership is explicit, and the stale route-count
+comment is removed. The existing active/disabled browser regression covers the review's unverified
+Add again concern; whole-workspace type checking covers required Host implementations.
+
+The post-rebase whole-repository gate passed. Review corrections passed the 93-test agent package
+(with coverage), 102 server/helper/route/integration tests and five TCP tests. Affected package
+typechecks and both server/print-agent application builds passed. The normal pre-push hook supplies
+the final affected-package coverage gate before the PR.

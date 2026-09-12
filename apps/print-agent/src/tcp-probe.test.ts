@@ -18,7 +18,7 @@ it("connects to a reachable address without sending bytes, and reports a refused
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("No TCP port");
-  const target = { host: "127.0.0.1", port: address.port, expiresAt: Date.now() + 30000 };
+  const target = { host: "127.0.0.1", port: address.port, expiresInMs: 30000 };
   try {
     expect(await probeNetwork([target])).toEqual([
       { transport: "network_tcp", host: target.host, port: target.port },
@@ -28,7 +28,14 @@ it("connects to a reachable address without sending bytes, and reports a refused
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
-  expect(await connectTcp(target.host, target.port, 100)).toBe(false);
+  // Freeze the deadline: a timeout cannot masquerade as a refused connection.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    expect(await connectTcp(target.host, target.port, 100)).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("destroys a silent socket when its deadline expires", async () => {
@@ -49,7 +56,7 @@ it("contains a synchronous dial failure", async () => {
 describe("probe target boundary", () => {
   it("caps fan-out and excludes non-IP or malformed targets before opening sockets", async () => {
     const connect = vi.fn().mockResolvedValue(true);
-    const target = { host: "192.168.20.247", port: 9100, expiresAt: 30000 };
+    const target = { host: "192.168.20.247", port: 9100, expiresInMs: 30000 };
     const invalid = [
       { ...target, host: "http://printer" },
       { ...target, host: "printer.local" },
@@ -74,7 +81,7 @@ describe("probe target boundary", () => {
       .mockResolvedValueOnce(false)
       .mockResolvedValue(true);
     const result = await probeNetwork(
-      [1, 2, 3].map((n) => ({ host: `10.0.0.${n}`, port: 9100, expiresAt: 30000 })),
+      [1, 2, 3].map((n) => ({ host: `10.0.0.${n}`, port: 9100, expiresInMs: 30000 })),
       connect,
     );
     expect(result).toEqual([{ transport: "network_tcp", host: "10.0.0.3", port: 9100 }]);

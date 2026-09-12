@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
-interface NetworkProbe {
+interface PrinterAddressProbe {
   host: string;
   port: number;
   requestedAt: number;
@@ -11,13 +11,18 @@ interface NetworkProbe {
 
 /** Requests are transient and bounded independently of the broader discovery window. */
 export function createPrinterProbes(now: () => number = Date.now): {
-  add(input: unknown): NetworkProbe;
-  current(): NetworkProbe[];
+  add(input: unknown): PrinterAddressProbe;
+  current(): { host: string; port: number; expiresInMs: number }[];
 } {
-  const targets = new Map<string, NetworkProbe>();
-  const current = (): NetworkProbe[] => {
-    for (const [key, target] of targets) if (target.expiresAt <= now()) targets.delete(key);
-    return [...targets.values()];
+  const targets = new Map<string, PrinterAddressProbe>();
+  const current = (): { host: string; port: number; expiresInMs: number }[] => {
+    const instant = now();
+    for (const [key, target] of targets) if (target.expiresAt <= instant) targets.delete(key);
+    return [...targets.values()].map(({ host, port, expiresAt }) => ({
+      host,
+      port,
+      expiresInMs: expiresAt - instant,
+    }));
   };
   return {
     current,

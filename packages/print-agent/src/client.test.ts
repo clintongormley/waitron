@@ -293,14 +293,22 @@ describe("createClient — pullJobs", () => {
   });
 
   it("decodes bounded address probes without letting a malformed target block jobs", async () => {
-    const target = { host: "192.168.20.247", port: 9100, expiresAt: 30000 };
+    const target = { host: "192.168.20.247", port: 9100, expiresInMs: 30000 };
     const fetchImpl = vi.fn().mockResolvedValue(
       reply(200, {
         nodeId: "n",
         servers: [],
         jobs: [],
         discoveryUntil: null,
-        networkProbes: [target, null, { ...target, port: 0 }, { ...target, expiresAt: "later" }],
+        networkProbes: [
+          target,
+          null,
+          { ...target, port: 0 },
+          { ...target, expiresInMs: "later" },
+          { ...target, expiresInMs: 0 },
+          { ...target, expiresInMs: -1 },
+          { ...target, expiresInMs: 30_001 },
+        ],
       }),
     );
     const result = await createClient({ fetch: fetchImpl }).pullJobs("http://s", "tok", {

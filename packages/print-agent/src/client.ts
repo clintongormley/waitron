@@ -258,11 +258,13 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
       !Number.isInteger(target.port) ||
       target.port < 1 ||
       target.port > 65535 ||
-      typeof target.expiresAt !== "number" ||
-      !Number.isFinite(target.expiresAt)
+      typeof target.expiresInMs !== "number" ||
+      !Number.isFinite(target.expiresInMs) ||
+      target.expiresInMs <= 0 ||
+      target.expiresInMs > 30_000
     )
       continue;
-    networkProbes.push({ host: target.host, port: target.port, expiresAt: target.expiresAt });
+    networkProbes.push({ host: target.host, port: target.port, expiresInMs: target.expiresInMs });
   }
   return {
     nodeId: b.nodeId,

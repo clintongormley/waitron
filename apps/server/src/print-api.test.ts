@@ -671,7 +671,12 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       expiresAt: expect.any(Number),
     });
     const reply = await pull(app, token);
-    expect(reply).toMatchObject({ networkProbes: [target] });
+    expect(reply).toMatchObject({
+      networkProbes: [{ host: target.host, port: target.port, expiresInMs: expect.any(Number) }],
+    });
+    const [probe] = (reply as { networkProbes: { expiresInMs: number }[] }).networkProbes;
+    expect(probe!.expiresInMs).toBeGreaterThan(0);
+    expect(probe!.expiresInMs).toBeLessThanOrEqual(30_000);
   });
 
   it("returns discoveryUntil after a discovery window is opened", async () => {

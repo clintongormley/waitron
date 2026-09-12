@@ -394,11 +394,7 @@ describe("Print API over real Postgres (as the app role)", () => {
   });
 
   it("the discovery routes require printer.manage — 401 unauth, 403 staff, 2xx manager (gate proven by deletion)", async () => {
-    // Design §11: the discovered list and the discovery WINDOW are readable/openable only with a
-    // `printer.manage` session (the agent setup page stays LAN + unauthenticated, but these operator
-    // surfaces are gated). Both routes funnel through print-api's shared `gated` helper, so deleting the
-    // `authorizeManager(...)` call from it flips every staff case below from 403 to a 2xx, turning the
-    // 403 assertions red; restoring it turns them green. Proven as the app role on real Postgres.
+    // All discovery surfaces require printer.manage, including an address check with a valid body.
     const app = mountApp(tenantA);
     const routes = [
       { method: "POST", path: "/management-api/printer-discovery/start" },
@@ -407,8 +403,9 @@ describe("Print API over real Postgres (as the app role)", () => {
     ] as const;
 
     for (const { method, path } of routes) {
+      const body = path.endsWith("/probe") ? { host: "192.168.20.247", port: 9100 } : undefined;
       // Unauthenticated → 401 (no session) BEFORE any window mutation or DB read.
-      const unauth = await send(app, method, path);
+      const unauth = await send(app, method, path, { body });
       expect(unauth.status).toBe(401);
       expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
@@ -416,7 +413,7 @@ describe("Print API over real Postgres (as the app role)", () => {
 
       // Staff session → 403 (`printer.manage` refused) — a staff clerk cannot open a discovery window
       // or read the discovered list.
-      const staff = await send(app, method, path, { cookie: staffCookie });
+      const staff = await send(app, method, path, { cookie: staffCookie, body });
       expect(staff.status).toBe(403);
       expect((await staff.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "authorization.not_permitted" },
@@ -425,7 +422,7 @@ describe("Print API over real Postgres (as the app role)", () => {
       // Manager session → 200 (the gate admits it).
       const manager = await send(app, method, path, {
         cookie: managerCookie,
-        ...(path.endsWith("/probe") ? { body: { host: "192.168.20.247", port: 9100 } } : {}),
+        body,
       });
       expect(manager.status).toBe(200);
     }
