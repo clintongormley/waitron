@@ -26,6 +26,14 @@ and onboarding wipes the throwaway application database, preserves the shared de
 rebuilds the selected target. Use `wa-wt reset demo [name]` or `wa-wt reset onboarding [name]` to
 rebuild without changing target. In demo mode the till re-enrols itself on first load after that — no
 code, no approval step.
+
+The print agent starts with the stack and connects to the local server on port 8080. It waits for
+the server to listen, then uses HTTP or HTTPS to match the development box. With HTTPS, it reads
+the public CA from the shared box state, so you do not need a working port 80 listener. Its token
+and configuration live in the box state's `print-agent/` directory; switching worktrees retains
+them, while resetting the target clears them with the database. Once the box is provisioned as
+the primary, the agent enrols automatically. You can check its status at <http://localhost:9110>.
+
 `/health` reports `ok:false` on the dev venue because the fiscal drain has no AEAT credentials; the
 till and API serve normally regardless.
 
