@@ -88,33 +88,30 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    box's CA while the browser trusted the old one, and the provisioning error offered no recovery
    instructions.
 
-2. **Setup wizard A2** is implemented and reviewed on `setup-wizard`. It needs
-   green PR checks and landing before the next box walkthrough.
-
-3. **A printer on another subnet cannot be added at all** (A3). #319 removed the manual host:port form
+2. **A printer on another subnet cannot be added at all** (A3). #319 removed the manual host:port form
    and neither discovery pass crosses a subnet, which is exactly the owner's home setup. Small, and it
    blocks real use today.
 
-4. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
+3. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
    run; the box and sale path worked.
 
-5. **Somewhere for things that went wrong to show up** (A5). The `incidents` table has several
+4. **Somewhere for things that went wrong to show up** (A5). The `incidents` table has several
    producers and no reader, and the dashboard has no notification surface. A rejected filing, a payment drift, a
    stalled print agent and a failed or stale backup are all invisible; several other items end "…waits
    for the notification surface".
 
-6. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
+5. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
    standalone primary's only off-box copy. Only `LocalFsBackend` exists.
 
-7. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
+6. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut.
 
-8. **The two remaining by-id read classes** (C1) — request-supplied table ids and the `ticket_items`
+7. **The two remaining by-id read classes** (C1) — request-supplied table ids and the `ticket_items`
    reads. Same class as the cross-tenant leak the run-it seat caught on till-reroute S3; CLAUDE.md §3
    makes it a rule.
 
-9. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
+8. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
 
 Then the on-prem mirror, then the cloud primary — under *Afterwards*. Everything else ranks beneath
 these.
@@ -243,22 +240,26 @@ Each was judged and deliberately left; none blocks the merge.
 
 ### A2. The setup wizard
 
-Implemented and reviewed on `setup-wizard` (2026-09-12), awaiting PR checks and landing. Changed-package
-coverage and the implementation's complete repository gate passed. [Design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) ·
+Landed in #334 (2026-09-12). [Design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) ·
 [Plan](superpowers/plans/2026-09-12-setup-wizard-a2.md).
 
-- First till defaults to `Caja 1`, series to `FS` and `FR`, and business day cutover to `04:00`.
-  The fiscal contribution supplies `Venta en establecimiento` as the operation-description default.
-- Demo asks for the operator and the location name/address, generates a company tax ID, and shows
-  its supplied settings on Review. Moving from Demo to Prepare or Live clears the generated identity.
-- Shop errors explain the individual fields; setup inputs have help, shared form summaries/actions,
-  and the operator's Password and PIN use the dashboard-style icon reveal control.
-- Certificate export help starts with the detected Windows, macOS or Firefox guide and keeps the
-  alternatives available. Instructions link to FNMT's guidance.
-- Unknown setup browser navigation redirects to `/`; missing files and API routes retain their responses.
-- The dashboard's **Location invoices** screen edits the operation description for future records,
-  with fiscal validation, configuration permission and explicit tenant checks.
-- Corrected the stale `setup.request_invalid` registry description tracked under A1.
+**Still open after #334**, each one something the branch consciously did not take:
+
+- *The certificate export help has never been followed on a real machine.* Nobody exported a
+  certificate through Windows', macOS' or Firefox's own certificate store while reading the new
+  guidance, so the instructions are unverified against the thing they describe. Fold this into the
+  device walkthrough (item 1 of *What to work on next*) and tick it off per operating system in
+  [ui-review.md](ui-review.md).
+- *Switching setup mode does not clean up what the server already holds.* #334 clears the browser's
+  own record that a certificate import was requested, and nothing more. If someone fills in Demo,
+  Prepare or Live far enough that the server has stored part of that answer and then switches mode,
+  what the server kept is untested — write a test that stages configuration in one mode, switches,
+  and asserts what survives.
+- *The setup app's catch-all redirect was not proven by deleting it.* Unknown setup addresses now go
+  to `/` while real files and API routes keep their own responses. The reviews checked this by
+  running the route tests and the full server suites, not by removing each exclusion one at a time
+  and watching a test fail, and no separate probe confirmed the trading app is untouched by the
+  redirect. That is weaker evidence than this repository normally accepts for a guard.
 
 The original walkthrough is retained under *Detail → Setup wizard*.
 
@@ -610,7 +611,12 @@ image constraints under *Detail → Box image*.
   retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with
   "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); a test PostgreSQL
   container with no published port (2026-09-12 — capture `docker inspect` and check the Docker
-  Desktop VM's ephemeral ports); bookings' browser freeze, never reproduced locally after #291.
+  Desktop VM's ephemeral ports); bookings' browser freeze, never reproduced locally after #291. A
+  fourth, from #334's validation run (2026-09-12): the service-status browser suite failed with
+  Playwright's "Frame was detached" during a whole-workspace run, and then passed both on its own
+  (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
+  and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
+  rather than re-running to green.
 - **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`);
   if it flakes on `test-server` it needs a `--shard`-compatible isolation.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
@@ -876,8 +882,9 @@ The long form for tracked items, so the tracks above stay readable.
 
 ### Setup wizard — what the walkthrough found (A2)
 
-Owner walkthrough 2026-09-12. These findings record the behavior before A2.
-The [A2 design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) describes the changes on `setup-wizard`.
+Owner walkthrough 2026-09-12. **All five findings below closed with #334**; they are kept only
+because the reasoning behind each choice is worth having when the wizard next changes. What is still
+open is under *A2* in Track A, not here.
 
 1. *The certificate page tells a Spanish operator nothing about getting the file.* It says only
    "Upload the certificate file and enter its passphrase" and accepts `.pfx` / `.p12`
@@ -911,8 +918,7 @@ The [A2 design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) describe
    the digits (`packages/country-es/src/spain.ts`), and the owner's example `B-4943574-6` comes back
    valid, `entity`, normalised to `B49435746` — the shape a restaurant holds. A generated number is
    safe only because a demo box files nothing, so the generator must never be reachable from Prepare or
-   Live. Open: whether the screen skips fields or the shell patches defaults into the draft, and how
-   the review step shows what was chosen.
+   Live.
 
 **Till name and the two series codes** (owner asked what they are and what may be typed, 2026-09-12):
 
@@ -945,11 +951,12 @@ copied onto every filed record as AEAT's `DescripcionOperacion` (at most 500 cha
 characters). The wording invites a description of the business ("Deli and coffee shop") where AEAT
 wants the transaction — our fixture has the right shape, "Venta en establecimiento"
 (`apps/server/src/testing/venue-fixtures.ts`). It is a constant filed on every sale, so it should be
-Spanish regardless of invoice languages — a setting with a default. And nothing can change it after
-setup except the Prepare-to-Live transfer, so the wizard's "You can change these later" is false for
-this field. Design question: the default is not a country fact — `DescripcionOperacion` is a
-Veri\*Factu field — so it probably belongs to the fiscal contribution, which A1's venue-field seat
-now provides.
+Spanish regardless of invoice languages — a setting with a default. Both halves of that were settled
+by #334: the default comes from the fiscal contribution rather than from the country, because
+`DescripcionOperacion` is a Veri\*Factu field and not a country fact; and a manager can now change it
+after setup on the dashboard's **Location invoices** screen, which applies to records filed from then
+on and leaves records already filed alone. So the wizard's "You can change these later" is no longer
+false for this field.
 
 ### Roles the admin can edit (A7)
 
