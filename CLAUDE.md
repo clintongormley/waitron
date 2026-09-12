@@ -761,7 +761,7 @@ Opus 4.8 is the default and drives everything the owner reads (spec, plan, execu
 Fable 5.1 is opt-in for the brainstorm plus two short dispatched reads (a spec touching §5, fix
 round five) and never drives execution — a hook denies it; dispatched seats run on Opus 5; Codex
 (`gpt-6-astra` at medium effort — measured against Sol on one commit with one bounded brief: faster,
-fewer tokens, and it found the real defect that Sol at low missed; the process log is the tripwire)
+fewer tokens, and it found the real defect that Sol at low missed)
 holds exactly one seat **in a Claude-driven session** — when Codex drives, the roles reverse and
 Codex implements while Claude reviews (owner, 2026-09-12), so a Codex implementation is not a rule
 violation; ask who is driving. That one seat is `/finish-branch`'s run-it reviewer, dispatched through
