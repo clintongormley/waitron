@@ -112,6 +112,26 @@ it("reports a rejected session before rejecting the request", async () => {
   expect(onError).toHaveBeenCalledWith("management_session.expired");
 });
 
+it("carries the envelope's error params through on the rejection", async () => {
+  const merchants = [
+    { code: "M1", name: "Deli One" },
+    { code: "M2", name: "Deli Two" },
+  ];
+  const fetchImpl = vi
+    .fn<FetchLike>()
+    .mockResolvedValue(
+      jsonResponse(
+        { error: { code: "payment.provider_merchant_ambiguous", params: { merchants } } },
+        409,
+      ),
+    );
+  const request = createRequest({ fetchImpl });
+
+  await expect(
+    request("/management-api/payments/providers/sumup/connect", "POST", {}),
+  ).rejects.toEqual({ code: "payment.provider_merchant_ambiguous", params: { merchants } });
+});
+
 it("rejects with server.internal when a non-2xx envelope names no code", async () => {
   const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({}, 500));
   const request = createRequest({ fetchImpl });

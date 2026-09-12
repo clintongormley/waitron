@@ -1,34 +1,70 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 
+// Two projects share one coverage report: the server suites run in Node (real Postgres / PGlite), and
+// the dashboard panel's Lit widgets run in real headless Chromium (mirrors packages/bookings). Run Node
+// first so Chromium does not compete with this package's PostgreSQL work.
 export default defineConfig({
   test: {
-    globals: true,
-    // globalSetup boots ONE shared Postgres container and migrates the `core_payments` template
-    // every real-PG suite clones (~26ms) instead of each file booting and migrating its own
-    // (~1.5s). See src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent
-    // run now fails the whole package (that file's header explains the broadening).
-    globalSetup: ["./src/testing/global-setup.ts"],
-    // The hermetic suites boot PGlite (a WASM PostgreSQL) and apply migrations, and the real-PG
-    // suites clone the shared container's migrated template (globalSetup, above); Vitest's 5s
-    // default testTimeout is a live risk for both. Each per-suite cost is paid in a beforeAll —
-    // the PGlite WASM boot, or the real-PG ~26ms clone — so hookTimeout stays generous for the
-    // PGlite boot. The container boot/pull is NOT in a beforeAll: it moved to globalSetup, which
-    // vitest does not bound by hookTimeout. testTimeout covers the ordinary risk within a single
-    // `it`.
-    testTimeout: 120_000,
-    hookTimeout: 180_000,
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/**/*.sandbox.test.ts"],
-    // Keep singleFork (unchanged from this package's original config, #22). Its relevant consequence
-    // for the shared-container migration: only ONE test file runs at a time, so the shared cluster's
-    // single 100-connection budget is a non-issue and needs no `maxForks` cap — unlike packages/db,
-    // which runs multi-fork and caps forks at 4 for exactly that budget.
-    poolOptions: { forks: { singleFork: true } },
+    projects: [
+      {
+        test: {
+          name: "node",
+          sequence: { groupOrder: 0 },
+          globals: true,
+          // globalSetup boots ONE shared Postgres container and migrates the `core_payments` template
+          // every real-PG suite clones (~26ms) instead of each file booting and migrating its own
+          // (~1.5s). See src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent
+          // run now fails the whole project (that file's header explains the broadening).
+          globalSetup: ["./src/testing/global-setup.ts"],
+          include: ["src/**/*.test.ts"],
+          exclude: [
+            ...configDefaults.exclude,
+            "**/.stryker-tmp/**",
+            "src/**/*.sandbox.test.ts",
+            // The dashboard panel is browser-mode; it runs in the project below, never boots Docker.
+            "src/dashboard/**",
+          ],
+          // The hermetic suites boot PGlite (a WASM PostgreSQL) and apply migrations, and the real-PG
+          // suites clone the shared container's migrated template (globalSetup); Vitest's 5s default
+          // testTimeout is a live risk for both. The container boot/pull is NOT in a beforeAll: it moved
+          // to globalSetup, which vitest does not bound by hookTimeout.
+          testTimeout: 120_000,
+          hookTimeout: 180_000,
+          // Keep singleFork (#22): only ONE test file runs at a time, so the shared cluster's single
+          // 100-connection budget is a non-issue and needs no `maxForks` cap.
+          poolOptions: { forks: { singleFork: true } },
+        },
+      },
+      {
+        // The browser / Lit project — mirrors packages/ui and packages/bookings: real headless Chromium
+        // via Playwright, NO globalSetup (a browser test must never boot Docker). Scoped to the
+        // `./dashboard` sub-path.
+        test: {
+          name: "browser",
+          sequence: { groupOrder: 1 },
+          globals: true,
+          include: ["src/dashboard/**/*.test.ts"],
+          exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+          browser: {
+            enabled: true,
+            provider: "playwright",
+            headless: true,
+            fileParallelism: false,
+            instances: [{ browser: "chromium" }],
+          },
+        },
+      },
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,
         "src/index.ts",
+        // Re-export barrel: no imperative code, on which v8 reports phantom uncovered branches.
+        "src/dashboard/index.ts",
+        // Test-only mount/cleanup helper (the ui and bookings packages exclude their own the same way).
+        "src/dashboard/test-helpers.ts",
         // The real Stripe SDK boundary — a thin call-mapping wrapper exercised only by the nightly
         // sandbox suite (real test-mode), never the hermetic run. Its logic is the SDK's; excluding
         // it keeps the branch metric on our own logic (the provider, client.ts's `toMinorUnits`,

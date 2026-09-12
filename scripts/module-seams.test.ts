@@ -130,8 +130,20 @@ describe("apps/server imports the Spanish regime only from the deferred runtime 
  * is forbidden as a bare PREFIX (the `imports()` helper matches `from "<pkg>`), which also catches the
  * browser sub-path `@waitron/bookings/dashboard` — the app must import NEITHER; the registry, a different
  * specifier (`@waitron/dashboard-modules`), is the only path in. The app imports none of these today.
+ *
+ * The card-provider PANELS (Task 14) join the rule: `@waitron/payments-sumup` and
+ * `@waitron/payments-stripe` are reached only through `@waitron/dashboard-modules`'s
+ * `CARD_PROVIDER_PANELS` (the browser twin of the server card-provider seam below). The `/dashboard`
+ * subpath is what `dashboard-modules` imports; `apps/dashboard` imports neither the subpath nor the
+ * root — the prefix match catches both.
  */
-const APP_FORBIDDEN = ["@waitron/composition", "@waitron/module", "@waitron/bookings"];
+const APP_FORBIDDEN = [
+  "@waitron/composition",
+  "@waitron/module",
+  "@waitron/bookings",
+  "@waitron/payments-sumup",
+  "@waitron/payments-stripe",
+];
 
 describe("apps/dashboard reaches UI modules only via the registry, never a module or the composition list", () => {
   const files = sourceFiles(join(REPO_ROOT, "apps/dashboard/src"));
@@ -147,6 +159,12 @@ describe("apps/dashboard reaches UI modules only via the registry, never a modul
       const bad = join(dir, "bad.ts");
       writeFileSync(bad, 'import { BOOKINGS_DASHBOARD } from "@waitron/bookings/dashboard";\n');
       expect(imports(bad, APP_FORBIDDEN)).toEqual(["@waitron/bookings"]);
+      const badProvider = join(dir, "bad-provider.ts");
+      writeFileSync(
+        badProvider,
+        'import { SUMUP_PANEL } from "@waitron/payments-sumup/dashboard";\n',
+      );
+      expect(imports(badProvider, APP_FORBIDDEN)).toEqual(["@waitron/payments-sumup"]);
       const good = join(dir, "good.ts");
       writeFileSync(good, 'import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";\n');
       expect(imports(good, APP_FORBIDDEN)).toEqual([]);

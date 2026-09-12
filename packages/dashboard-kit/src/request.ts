@@ -56,10 +56,17 @@ export function createRequest(
     }
     const res = await fetchImpl(baseUrl + path, init);
     if (!res.ok) {
-      const envelope = (await res.json()) as { error?: { code?: string } };
+      const envelope = (await res.json()) as {
+        error?: { code?: string; params?: Record<string, unknown> };
+      };
       const code = envelope.error?.code ?? "server.internal";
       opts.onError?.(code);
-      throw { code };
+      // Carry the envelope's `params` through so a caller that needs a code's structured detail can
+      // read it (the SumUp connect form reads `payment.provider_merchant_ambiguous`'s `merchants`
+      // list to offer a picker). Attached ONLY when present, so a code-only rejection stays the bare
+      // `{ code }` every existing consumer branches on (`codeOf` reads `.code`).
+      const params = envelope.error?.params;
+      throw params === undefined ? { code } : { code, params };
     }
     const text = await res.text();
     if (!passive) opts.onSuccess?.(path);
