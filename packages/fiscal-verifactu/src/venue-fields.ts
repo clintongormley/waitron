@@ -20,15 +20,20 @@ export interface VenueFiscalFields {
   readonly operationDescription: string;
 }
 
-/** The character set `@waitron/verifactu`'s own validator applies to `NumSerieFactura`. Restated
- * here rather than imported, because that module exports the whole-record validator and not its
- * individual patterns; ./venue-fields.charset.test.ts is what keeps the two in step. */
+/* The next three constants restate rules `@waitron/verifactu` owns, rather than importing them:
+ * that module exports the whole-record validator and not its individual patterns. Nothing in the
+ * type system keeps a restatement honest, so ./venue-fields.charset.test.ts runs each of the three
+ * against `validate`'s own verdict on a real record and compares them. Every case in its tables is
+ * there because some narrowing or widening of these three flips it — measured by making each of
+ * those changes and watching a case go red. */
+
+/** The character set the validator applies to `NumSerieFactura` (`NUMSERIE_PATTERN`). */
 const NUMSERIE_CHARSET = /^[A-Za-z0-9/_.-]+$/;
 /** AEAT's cap on DescripcionOperacion, as `validate` applies it. */
 const DESCRIPTION_MAX = 500;
-/** The C0 control characters XML forbids. Tab, line feed and carriage return are deliberately NOT
- * in the range — XML permits those three — which is why this is not a blanket `\x00-\x1F`. Same
- * pattern as `CONTROL_CHAR_PATTERN` in `packages/verifactu/src/validate.ts`. */
+/** The C0 control characters XML forbids (`CONTROL_CHAR_PATTERN`). Tab, line feed and carriage
+ * return are deliberately NOT in the range — XML permits those three — which is why this is not a
+ * blanket `\x00-\x1F`. */
 // eslint-disable-next-line no-control-regex -- deliberately matching control characters
 const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 
