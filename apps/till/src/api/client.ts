@@ -97,6 +97,21 @@ export interface TillInfo {
    */
   courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
+  /**
+   * The paying device's DEFAULT reader's own row id (Task 17), or absent when it has none (or a local
+   * simulator is in play — {@link cardProvider} `"simulator"` shadows any real reader). `cardProvider`
+   * alone only names a provider TYPE, and a venue can have more than one active reader on the same
+   * provider, so this is what lets the till look the default reader's NAME up in {@link activeReaders}
+   * rather than guessing from the provider string.
+   */
+  defaultReaderId?: string;
+  /**
+   * The venue's ACTIVE card readers (Task 12/17) — `[{ id, name, provider(mapped) }]`, `[]` when none
+   * are configured. Feeds the payment-time reader picker (`<till-reader-picker>`) so it needs no
+   * second fetch; a reader whose raw provider does not map to the till's union is dropped server-side
+   * rather than leaked here.
+   */
+  activeReaders: TillActiveReader[];
   tipsEnabled: boolean;
   receipt: ReceiptConfig;
   /**
@@ -153,6 +168,20 @@ export interface TillCourse {
   id: string;
   name: string;
   displayOrder: number;
+}
+
+/**
+ * One ACTIVE card reader as the boot payload carries it (Task 12/17) — its row id (what `POST
+ * /api/pay`'s `readerId` names), operator-facing `name`, and its provider mapped to the till's
+ * closed union. A LOCAL mirror of the server's trimmed reader shape, NOT imported (the bundle rule).
+ * `provider` is narrower than {@link TillInfo.cardProvider}'s own union — a reader is always a real
+ * integrated terminal, never `"none"`/`"simulator"`/`"stripe_on_device"` (a device-local Tap-to-Pay
+ * mode has no reader ROW to list).
+ */
+export interface TillActiveReader {
+  id: string;
+  name: string;
+  provider: "stripe_terminal" | "sumup_cloud";
 }
 
 /** One `GET /api/staff` roster entry — no PIN, role or status (the server strips them). */
@@ -1402,7 +1431,9 @@ export class TillApi {
    * record; `lines` is the walk-up basket to price and file, IGNORED server-side for a
    * retrieved/placed order (it files its own stored locked lines). `tip` is the till-entered gross
    * tip (clamped to none when the till has tips disabled); `allowOffline` is per-transaction staff
-   * consent to accept the card offline if the network is down. Unlike `recordSale`, the outcome is
+   * consent to accept the card offline if the network is down. `readerId` (Task 17's picker) names
+   * the reader to collect on when the operator picked one other than the device default; omitted, the
+   * server falls back to the paying device's own default reader. Unlike `recordSale`, the outcome is
    * always a 200 — see {@link PayOutcome}'s own doc for why a decline is data, not a throw.
    */
   pay(req: {
@@ -1412,6 +1443,7 @@ export class TillApi {
     tip?: string;
     allowOffline?: boolean;
     simulationOutcome?: "captured" | "declined";
+    readerId?: string;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,

@@ -56,6 +56,7 @@ import type {
   TableServiceStatus,
   TableState,
   TicketState,
+  TillActiveReader,
   TillCourse,
   TillInfo,
   TillMenu,
@@ -544,6 +545,12 @@ export class TillApp extends LitElement {
   /** Whether the till prompts for a tip on an integrated-card collection (Task 9), read once from
    * `GET /api/till` alongside {@link cardProvider}. Defaults `false`, same reasoning. */
   @state() private tipsEnabled = false;
+  /** The venue's ACTIVE card readers (Task 17), read once from `GET /api/till` alongside
+   * {@link cardProvider} — threaded to `till-tender-pay`'s reader picker. `[]` until boot resolves. */
+  @state() private activeReaders: TillActiveReader[] = [];
+  /** The paying device's DEFAULT reader id (Task 17), read once from `GET /api/till` alongside
+   * {@link cardProvider} — names the reader `till-tender-pay` shows before the operator picks one. */
+  @state() private defaultReaderId?: string;
   /**
    * Where the CURRENT basket sits in a Mode-I/T order's life: `"order"` (composing/placing, the
    * default) or `"collect"` (this basket's order was placed and now awaits its tender). Ignored by
@@ -806,6 +813,10 @@ export class TillApp extends LitElement {
       this.courses = till.courses;
       this.cardProvider = till.cardProvider;
       this.tipsEnabled = till.tipsEnabled;
+      // `?? []` handles an older server that omits `activeReaders` (the field is typed present) —
+      // same defensive shape as `receipt`'s own `?? {}` two lines below.
+      this.activeReaders = till.activeReaders ?? [];
+      this.defaultReaderId = till.defaultReaderId;
       // The authored NON-FISCAL receipt trim (receipt editor), threaded to the ticket. `?? {}` handles
       // an older server that omits `receipt` (the field is typed present).
       this.receipt = till.receipt ?? {};
@@ -1213,6 +1224,9 @@ export class TillApp extends LitElement {
         ...(detail.simulationOutcome === undefined
           ? {}
           : { simulationOutcome: detail.simulationOutcome }),
+        // The operator's picked reader (Task 17's picker), if any — omitted so the server falls back
+        // to the paying device's own default reader.
+        ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
@@ -2448,6 +2462,8 @@ export class TillApp extends LitElement {
         .cardProvider=${this.cardProvider}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
+        .activeReaders=${this.activeReaders}
+        .defaultReaderId=${this.defaultReaderId}
       ></till-counter-screen>`;
     }
     // The station (kds-board) + table-order props the card-grid now consumes (SP-B2.2 Tasks 3-4). Field
@@ -2470,6 +2486,8 @@ export class TillApp extends LitElement {
       .cardProvider=${this.cardProvider}
       .tipsEnabled=${this.tipsEnabled}
       .cardOutcome=${this.cardOutcome}
+      .activeReaders=${this.activeReaders}
+      .defaultReaderId=${this.defaultReaderId}
       .api=${this.api}
       .fireControl=${this.fireControl}
       .zones=${this.zones}

@@ -921,10 +921,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // its card-collect route comes from the paying device's DEFAULT reader (`device_card_readers`
         // → `card_readers`), mapped to the till's union. A cookieless request or a device with no
         // default reader carries no provider here (→ `"none"` below). Read in THIS same boot tx.
+        // `defaultReaderId` rides alongside it (Task 17): `cardProvider` alone only names a PROVIDER
+        // TYPE, and a venue can have more than one active reader on the same provider, so the till
+        // needs the actual row id to look its NAME up in `activeReaders` below and pre-select it in
+        // the picker.
         let defaultReaderProvider: "sumup_cloud" | "stripe_terminal" | undefined;
+        let defaultReaderId: string | undefined;
         if (device != null) {
           const [reader] = await tx
-            .select({ provider: cardReaders.provider })
+            .select({ id: cardReaders.id, provider: cardReaders.provider })
             .from(deviceCardReaders)
             .innerJoin(
               cardReaders,
@@ -940,8 +945,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 eq(cardReaders.active, true),
               ),
             );
-          defaultReaderProvider =
-            reader === undefined ? undefined : tillProviderForReader(reader.provider);
+          if (reader !== undefined) {
+            const provider = tillProviderForReader(reader.provider);
+            if (provider !== undefined) {
+              defaultReaderProvider = provider;
+              defaultReaderId = reader.id;
+            }
+          }
         }
         // The venue's ACTIVE readers for Task 17's picker — id + name + mapped provider, no secrets.
         // A reader whose provider does not map (should not happen) is dropped rather than leaked.
@@ -964,6 +974,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           capabilities,
           inactivityTimeoutSeconds,
           defaultReaderProvider,
+          defaultReaderId,
           activeReaders,
         };
       });
@@ -1016,6 +1027,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         cardProvider: (deps.cardProvider?.provider === "simulator"
           ? "simulator"
           : (boot.defaultReaderProvider ?? "none")) satisfies TillCardProvider,
+        // The DEFAULT reader's row id (Task 17), so the till can look its NAME up in `activeReaders`
+        // below rather than guessing from `cardProvider` alone (a venue can have more than one active
+        // reader on the same provider). Absent under practice mode's local simulator, like the real
+        // lookup it would otherwise shadow, and whenever the device has no default reader.
+        defaultReaderId:
+          deps.cardProvider?.provider === "simulator" ? undefined : boot.defaultReaderId,
         // The venue's ACTIVE card readers (Task 12) — `[{ id, name, provider(mapped) }]` — for Task
         // 17's reader picker, so it needs no second fetch. `[]` when none are configured.
         activeReaders: boot.activeReaders,

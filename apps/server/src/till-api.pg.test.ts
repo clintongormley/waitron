@@ -1151,10 +1151,14 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         cardProvider: string;
+        defaultReaderId: string;
         activeReaders: { id: string; name: string; provider: string }[];
       };
       // "stripe" → "stripe_terminal" (the till's closed union), never the raw seat id.
       expect(body.cardProvider).toBe("stripe_terminal");
+      // The default reader's OWN id (Task 17) — needed to name it in `activeReaders` below, since
+      // `cardProvider` alone only names the provider TYPE, not which reader on it is the default.
+      expect(body.defaultReaderId).toBe(reader.id);
       expect(body.activeReaders).toEqual([
         { id: reader.id, name: "Front counter", provider: "stripe_terminal" },
       ]);
@@ -1173,7 +1177,9 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
 
       const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
       expect(res.status).toBe(200);
-      expect((await res.json()).cardProvider).toBe("none");
+      const body = await res.json();
+      expect(body.cardProvider).toBe("none");
+      expect(body.defaultReaderId).toBeUndefined();
     } finally {
       await providerDb.close();
     }
@@ -1203,8 +1209,11 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
 
       const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
       expect(res.status).toBe(200);
+      const body = await res.json();
       // Practice mode wins over any configured reader.
-      expect((await res.json()).cardProvider).toBe("simulator");
+      expect(body.cardProvider).toBe("simulator");
+      // The real reader's id stays hidden too — there is no reader behind the local simulator.
+      expect(body.defaultReaderId).toBeUndefined();
     } finally {
       await providerDb.close();
     }
