@@ -8,8 +8,7 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 > on-prem mirror and the cloud primary stay on the list, but they come afterwards. Three build tracks
 > replace the six push steps and the four file-ownership tracks: **A — UI and application**,
 > **B — infrastructure**, **C — smaller items**. Landed work is one line with its PR number as a
-> locator; what a review seat caught and how something was proven stay in the PR thread and
-> `~/workspace/tools/process-log.md`.
+> locator; what a review seat caught and how something was proven stay in the PR thread.
 
 **Companion documents, not duplicated here:**
 
@@ -1171,4 +1170,4 @@ Update it in the change that makes it stale (CLAUDE.md §7). In particular:
   file. A merge deletes the branch the in-flight rows named, so refresh them then.
 - When a question is closed on primary source, say so and stop calling it blocked.
 - Delete finished items. If an entry is growing proof-of-work (test counts, grep receipts, "proven by
-  deletion", what a review seat caught), that belongs in the PR thread and the process log, not here.
+  deletion", what a review seat caught), that belongs in the PR thread, not here.
