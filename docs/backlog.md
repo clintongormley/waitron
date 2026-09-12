@@ -164,6 +164,14 @@ steps take owner sign-off at land):
    nobody has, but the operator has no terminal to read a pull error on; **(c)** the app and
    print-agent images share one GHA cache scope, which Docker documents as letting the second
    overwrite the first's cache — pre-existing, never measured here.
+   **NOT YET EXERCISED, as of 2026-09-12.** `publish` is gated on `code == true`, and #325 touched
+   only `.github/`, `CLAUDE.md` and `docs/` — so its own merge run skipped both `image` and
+   `publish` (run `34690854803`), and `ghcr.io/clintongormley/waitron:main` still carries the
+   two-platform manifest #323 published. The changed step first runs on the next merge to `main`
+   that touches code; the check then is `docker manifest inspect ghcr.io/clintongormley/waitron:main`
+   (and `-print-agent`), which should list one `linux/amd64` entry and no `arm64`. What DID run on
+   the merge is the ungated `lint` job, which carries the repo-level Vitest project and so the
+   41-case guard over `ci.yml`'s job wiring.
    Proven end to end on 2026-09-09: a blank box → phone setup → provision → trading over HTTPS
    → enrolled till → a recorded preproduction sale (design §11). **A first real-hardware bringup
    (2026-09-10) surfaced and fixed two box bugs — #302:** the setup→trading self-restart hung
