@@ -323,8 +323,9 @@ export interface FiscalBackend {
    *
    * Regime-neutral in name and shape, like every method here (the guard in
    * ./no-regime-vocabulary.test.ts enforces it), and `SaleForFiscalRecord` is reused unchanged — its
-   * `counterparty` field, unused by the other methods, is finally the populated one here, with no
-   * new interface field.
+   * `counterparty` field is REQUIRED here (a substitution always names its recipient) and optional
+   * on `recordSale`, which reads and files one when a caller supplies it, with no new interface
+   * field on either.
    */
   recordSubstitution(
     tx: Transaction,

@@ -265,10 +265,11 @@ async function attemptAppend(
   // disagreeing with our own VAT lines is a bug in the money while the venue keeps selling, so it
   // is raised where a human can find it rather than left in a log line.
   //
-  // AFTER the insert, not before: this attempt is the one that won (a retried attempt never
-  // reaches here), so the incident cannot outlive a rolled-back savepoint. On the caller's
-  // transaction, like every other `recordIncident` caller — an incident that committed while its
-  // sale rolled back would report a failure for a sale that never existed.
+  // AFTER the insert, not before: a losing attempt never reaches this line, so a record that was
+  // retried raises one incident rather than one per attempt. (Either placement would be discarded
+  // with the savepoint on a rollback — that is the savepoint's doing, not this ordering's.) On the
+  // caller's transaction, like every other `recordIncident` caller — an incident that committed
+  // while its sale rolled back would report a failure for a sale that never existed.
   const warnings = issues.filter((issue) => issue.severity === "warning");
   if (warnings.length > 0) {
     await recordIncident(tx, {
@@ -280,7 +281,11 @@ async function attemptAppend(
         codes: warnings.map((issue) => issue.code),
       }),
       severity: "warning",
-      detectedAt: new Date(),
+      // The record's own generation instant, taken from the injected clock by `backend.ts` on all
+      // four call sites (`RecordInputBase.generadoEn`) — never `new Date()`. Every other
+      // `detectedAt:` in production code takes an injected clock, and one wall-clock read here
+      // would stamp an incident at an instant nothing else in the transaction shares.
+      detectedAt: registro.input.generadoEn,
     });
   }
 

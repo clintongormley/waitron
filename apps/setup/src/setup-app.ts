@@ -219,7 +219,9 @@ export class SetupApp extends LitElement {
 
   /**
    * A `setup.request_invalid` the server threw at provision time, routed back to the `review` screen
-   * as a banner naming the offending field. `undefined` normally; cleared before every new POST.
+   * as a banner naming the offending field — except the four venue fields the fiscal regime refuses,
+   * which go back to the venue form with the field marked (`server-fields.ts`, and
+   * {@link SetupApp.venueInvalidField} below). `undefined` normally; cleared before every new POST.
    */
   @state() private reviewError?: string;
 

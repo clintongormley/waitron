@@ -95,8 +95,10 @@ describe("a record AEAT could not accept never enters the chain", () => {
   // The anulación arm reaches `validate` through the SAME `const record =` line as every alta, but
   // "the same line" is an argument, not evidence, so it gets its own case. It cannot be provoked
   // through `recordVoid`: that rebuilds its identity from the original alta's stored columns
-  // (backend.ts), and after this guard exists the original is always valid. So the record is
-  // appended directly, which is also the only way to reach the anulación branch with a bad value.
+  // (backend.ts), and for a record written AFTER this guard exists those columns are valid. (A
+  // database already holding a bad record written before the guard is the exception, and it is a
+  // one-way door: such a record can no longer be annulled at all.) So the record is appended
+  // directly, which is also the only way to reach the anulación branch with a bad value.
   it("refuses an anulación whose voided invoice number is illegal", async () => {
     const bad = anulacionFor(tillId, "00000000-0000-4000-8000-000000000001", 1, 1);
     const registro = {
@@ -122,7 +124,13 @@ describe("a record whose totals disagree with themselves is written, filed and f
    * settlement whose tender matches its original total, and `settleSale` throws
    * `sale.tender_shortfall` when the tendered sum disagrees with the due amount — so an immediate
    * fixture would abort in settlement, before the fiscal record is ever built, and this suite
-   * would be testing nothing. A deferred sale still writes the sale and the fiscal record. */
+   * would be testing nothing. A deferred sale still writes the sale and the fiscal record.
+   *
+   * It also depends on `saleInput` supplying NO `vatBreakdown`: `recordSale` cross-checks a
+   * SUPPLIED breakdown against the stated total and throws `sale.total_mismatch`
+   * (`packages/core/src/record-sale.ts`) before the fiscal record is built, so a fixture that
+   * passed one would abort there and this suite would again be testing nothing. The breakdown this
+   * case needs is the DERIVED one, which cannot disagree with itself. */
   function mismatchedSale() {
     return {
       ...saleInput({ tenantId, tillId, nodeId, seriesId }),

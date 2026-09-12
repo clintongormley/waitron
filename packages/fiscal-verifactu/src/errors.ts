@@ -60,7 +60,11 @@ declare module "@waitron/shared" {
      * The provision-time secret validator/sealer (`./provisioning-secret.ts`, relocated here in the
      * fiscal-none slice) throws this when the opaque AEAT-cert blob's `certKind`, `pfxBase64` or
      * `passphrase` is absent, the wrong type, or fails its shape check — naming the offending field,
-     * never its value. Declared here because this package now throws the code;
+     * never its value. `./venue-fields.ts` is the package's second thrower: it refuses a venue whose
+     * operator-typed fiscal text would build a record AEAT cannot accept, naming one of
+     * `legalName`, `seriesCode`, `rectificativeSeriesCode` or `location.operationDescription` (the
+     * request body's own spellings, listed as `VENUE_FISCAL_FIELD_PATHS`). Declared here because
+     * this package now throws the code;
      * `apps/server/src/errors.ts` keeps its own identical declaration for the setup surface's own
      * throwers (`setup-api.ts`'s venue/adopt field screens). The two declarations carry identical
      * params so TypeScript's declaration merging accepts both when `apps/server` compiles them
