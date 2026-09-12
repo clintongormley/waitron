@@ -33,3 +33,22 @@ The workspace run completed every package, including those outside the changed s
 Certificate guide selection is covered in
 Chromium; the export steps were checked against FNMT's linked documentation rather than executed
 against personal certificates in the operating-system stores.
+
+## Branch review
+
+Rebased onto `5a0bcb288491db0419801bdd3a91965b01e8aa0a`, retaining #330's initial connection
+screen and discovery request alongside A2's defaults. The combined setup suite passed 303 tests.
+One Claude Opus 5 run-it review took 375 seconds and reproduced no critical or important defect.
+Its deletion test caught removal of the new route's tenant comparison; its browser probe confirmed
+that a generated Demo identity does not survive navigation into Live.
+
+The accepted accessibility finding now has a failing-then-passing browser assertion: Next focuses
+the existing explanation when Demo defaults are unavailable. A new real-PostgreSQL regression records
+a sale, edits the description through the management route, records another sale, and reads both
+fiscal records. The earlier record retains its text and the later one receives the edit; all 11
+location-settings route tests pass. The reported `/manage` prose is within the explicitly historical
+walkthrough, and GET-only redirects match the browser-navigation requirement.
+
+Server-staged configuration cleanup across mode changes was not exercised by this review; A2 clears
+the local import request flag and does not claim to remove the server artifact. Physical certificate
+export remains unverified as stated above.

@@ -198,7 +198,6 @@ export class SetupApp extends LitElement {
   #connectionGeneration = 0;
   @state() private venueDefaults: VenueDefaults = {};
 
-
   /**
    * The box's stamped deployment environment, read from `GET /setup-api/status` on boot. `undefined`
    * until the read resolves (and if it fails) — the `mode`/`review` screens read it to warn loudly

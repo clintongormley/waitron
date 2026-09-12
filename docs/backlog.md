@@ -88,8 +88,8 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    box's CA while the browser trusted the old one, and the provisioning error offered no recovery
    instructions.
 
-2. **Setup wizard A2** is implemented and validated on `setup-wizard`, ready for `finish-branch`. It needs
-   branch finishing and landing before the next box walkthrough.
+2. **Setup wizard A2** is implemented and reviewed on `setup-wizard`. It needs
+   green PR checks and landing before the next box walkthrough.
 
 3. **A printer on another subnet cannot be added at all** (A3). #319 removed the manual host:port form
    and neither discovery pass crosses a subnet, which is exactly the owner's home setup. Small, and it
@@ -216,8 +216,8 @@ Each was judged and deliberately left; none blocks the merge.
 
 ### A2. The setup wizard
 
-Implemented and validated on `setup-wizard` (2026-09-12), ready for `finish-branch`. Changed-package
-coverage and the complete repository gate passed. [Design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) ·
+Implemented and reviewed on `setup-wizard` (2026-09-12), awaiting PR checks and landing. Changed-package
+coverage and the implementation's complete repository gate passed. [Design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) ·
 [Plan](superpowers/plans/2026-09-12-setup-wizard-a2.md).
 
 - First till defaults to `Caja 1`, series to `FS` and `FR`, and business day cutover to `04:00`.

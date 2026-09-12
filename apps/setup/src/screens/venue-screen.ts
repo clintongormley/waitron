@@ -412,7 +412,10 @@ export class SetupVenueScreen extends LitElement {
    * proven by deletion: drop the equality block and the "same series code blocks Next" test flips red.
    */
   #next(): void {
-    if (this.#demo && this.values.operationDescription === "") return;
+    if (this.#demo && this.values.operationDescription === "") {
+      this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
+      return;
+    }
     if (this.#demo) this.values = { ...this.values, legalName: this.values.name };
     const invalid = new Set<TextField | "invoiceLocales">();
     for (const key of REQUIRED_TEXT_FIELDS) {
@@ -567,7 +570,9 @@ export class SetupVenueScreen extends LitElement {
 
         ${
           this.#demo && this.values.operationDescription === ""
-            ? html`<p role="alert">Demo invoice settings have not loaded yet.</p>
+            ? html`<p role="alert" tabindex="-1" data-test="defaults-error">
+                  Demo invoice settings have not loaded yet.
+                </p>
                 <wt-button
                   data-test="retry-defaults"
                   @click=${() => this.dispatchEvent(new CustomEvent("setup-defaults-requested", { bubbles: true, composed: true }))}

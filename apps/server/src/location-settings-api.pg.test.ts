@@ -6,6 +6,9 @@ import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import type { TrustedClock } from "@waitron/fiscal";
+import { recordTillSale } from "./till-sale.js";
 
 // PostgreSQL exercises the route as app_user and two tenants, including its configuration grant.
 const suite = useTemplateDb({ template: "manifest" });
@@ -34,6 +37,57 @@ const request = (cookie: string, operationDescription: unknown) => ({
   body: JSON.stringify({ operationDescription }),
 });
 describe("location invoice settings", () => {
+  it("uses an edited description for the next fiscal record while retaining the earlier record", async () => {
+    const clock: TrustedClock = {
+      now: () => ({
+        instant: new Date(),
+        offsetMinutes: 0,
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      }),
+      anchor: () => {
+        throw new Error("This test supplies an anchored clock");
+      },
+      currentAnchor: () => null,
+    };
+    const backend = new VerifactuBackend({
+      clock,
+      db: suite.admin,
+      environment: "preproduction",
+      deploymentEnvironment: "preproduction",
+      resolveClient: () => Promise.reject(new Error("A local sale must not contact AEAT")),
+    });
+    const sell = () =>
+      recordTillSale({ db: suite.admin, backend, clock }, venue.cfg, {
+        lines: [{ productId: venue.cafeId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      });
+    await sell();
+    try {
+      expect(
+        (
+          await app().request(
+            "/management-api/location-settings",
+            request(venue.managerCookie, "  Venta de comidas  "),
+          )
+        ).status,
+      ).toBe(204);
+      await sell();
+      const descriptions = await suite.admin.execute<{ description: string }>(sql`
+        select descripcion_operacion as description from registros_facturacion
+        where tenant_id = ${venue.cfg.tenantId}
+        order by secuencia`);
+      expect(descriptions.rows).toEqual([
+        { description: "Venta en establecimiento" },
+        { description: "  Venta de comidas  " },
+      ]);
+    } finally {
+      await suite.admin.execute(
+        sql`update locations set operation_description = 'Venta en establecimiento' where id = ${venue.cfg.locationId}`,
+      );
+    }
+  });
   it("requires a session and configuration permission for reads and writes", async () => {
     for (const method of ["GET", "PUT"]) {
       const headers = { "content-type": "application/json" };

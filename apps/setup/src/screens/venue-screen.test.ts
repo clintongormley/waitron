@@ -630,6 +630,7 @@ it("offers a retry when Demo defaults are unavailable, without generating a part
   await el.updateComplete;
   expect(events).toEqual([]);
   expect(q(el, "[data-test=retry-defaults]")).not.toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(q(el, "[role=alert]"));
 });
 it("maps a Demo legal-name refusal to the visible location name", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
