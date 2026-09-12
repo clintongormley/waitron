@@ -7,7 +7,7 @@ and Print Queue otherwise. A selected tab takes precedence over these defaults, 
 updates, and travels in `/manage/printers/view/<key>` for browser navigation.
 
 Print Queue includes every queued, printing and failed job, plus the latest 100 completed jobs
-selected by delivery time. Rows remain ordered by creation time, newest first. Each status has
+selected by delivery time, with missing delivery times ordered last. Rows remain ordered by creation time, newest first. Each status has
 text and a coloured dot: grey for queued, blue for printing, green for done and red for failed.
 The endpoint keeps its existing tenant filter and omits job payloads.
 
@@ -20,9 +20,9 @@ requests, renews the window while open, and closes it when dismissed or when you
 Open and close requests execute in order so a slow opening request cannot reopen the window after
 you close the dialog. The Scan button starts a ten-second listening indication and can be used
 again afterwards. Automatic join reads use the passive API client. Renewal uses an authenticated
-`POST /management-api/pairing-mode/renew` that authorizes without extending the session; the
+`POST /management-api/pairing-mode/renew` that opens or extends the window while authorizing without extending the session; the
 background client also avoids reporting user activity to the dashboard shell. Pairing remains the existing venue-wide window shared with device setup; this
-change does not introduce a separate print-agent window or change number matching.
+change does not introduce a separate print-agent window or change number matching. The dialog retains the recent refused-request count so you can see earlier attempts to join.
 
 Use **Disable**, **Disabled**, and **Enable** for retained agents. Printer Disable retains the
 registration, and discovery offers it as **Add again**. This preserves settings, routing references,

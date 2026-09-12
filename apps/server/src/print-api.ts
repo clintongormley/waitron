@@ -800,7 +800,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .select({ id: printJobs.id })
           .from(printJobs)
           .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.status, "done")))
-          .orderBy(desc(printJobs.deliveredAt), desc(printJobs.id))
+          .orderBy(sql`${printJobs.deliveredAt} desc nulls last`, desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
         return tx
           .select({

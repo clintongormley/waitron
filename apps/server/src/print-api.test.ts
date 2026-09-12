@@ -1259,6 +1259,10 @@ describe("mountPrintApi — management: recent jobs", () => {
     await suite.db
       .execute(sql`insert into print_jobs (id, tenant_id, location_id, printer_id, payload)
       values (${foreignJob}, ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'))`);
+    await suite.db.execute(sql`
+      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
+      select ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'), 'done', '2199-01-01'
+      from generate_series(1, 101)`);
     const foreignPreview = await send(
       app,
       "GET",
@@ -1336,6 +1340,30 @@ describe("mountPrintApi — management: recent jobs", () => {
       const created = jobs.map((job) => Date.parse(job.createdAt));
       expect(created).toEqual([...created].sort((a, b) => b - a));
       expect(jobs.every((job) => !("payload" in job))).toBe(true);
+    } finally {
+      await suite.db.execute(sql`delete from print_jobs where printer_id = ${printerId}`);
+    }
+  });
+
+  it("does not let missing completion timestamps hide recently delivered jobs", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    try {
+      await suite.db.execute(sql`
+        insert into print_jobs (tenant_id, location_id, printer_id, payload, status)
+        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done'
+        from generate_series(1, 101)`);
+      const completed = await suite.db.execute<{ id: string }>(sql`
+        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
+        values (${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done', '2099-01-01')
+        returning id`);
+      const response = await send(app, "GET", "/management-api/print-jobs", {
+        cookie: managerCookie,
+      });
+      expect(response.status).toBe(200);
+      const rows = (await response.json()) as { id: string; status: string }[];
+      expect(rows.some((row) => row.id === completed.rows[0]!.id)).toBe(true);
+      expect(rows.filter((row) => row.status === "done")).toHaveLength(100);
     } finally {
       await suite.db.execute(sql`delete from print_jobs where printer_id = ${printerId}`);
     }

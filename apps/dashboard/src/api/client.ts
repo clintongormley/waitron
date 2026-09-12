@@ -2197,7 +2197,7 @@ export class DashboardApi {
     return this.#request<{ openUntil: string }>("/management-api/pairing-mode", "POST");
   }
 
-  /** Renew an open dialog's pairing window without extending its authenticated session. */
+  /** Open or extend the window for an open dialog without extending its authenticated session. */
   renewPairingMode(): Promise<{ openUntil: string }> {
     return this.#request<{ openUntil: string }>("/management-api/pairing-mode/renew", "POST");
   }

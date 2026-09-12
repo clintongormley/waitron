@@ -477,7 +477,7 @@ design-review section apply.
   use Scan with a spinner. The queue includes all unfinished jobs plus 100 recent completions.
   Retained registrations use Disable/Disabled wording. Design and validation scope:
   [printer configuration tabs](superpowers/specs/2026-09-12-printer-configuration-tabs.md).
-  *Follow-ups (2026-09-11):* Delete now requires confirmation. The printer table defaults to Active,
+  *Follow-ups (2026-09-11):* Disabling a printer requires confirmation. The printer table defaults to Active,
   with Disabled and All filters; Add printer offers a disabled discovered device as **Add again**,
   restoring the same registration, settings and pending jobs. Named `wt-switch` controls replace
   the native hardware/routing toggles. Table-cell styles use shadow parts. Job-statistics timestamps

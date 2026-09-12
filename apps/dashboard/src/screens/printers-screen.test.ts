@@ -2075,3 +2075,64 @@ it("ignores an old agent scan after closing and reopening the modal", async () =
   await flush(el);
   expect(q(el, "[data-test=join-row-old-request]")).toBeNull();
 });
+
+it("starts a fresh agent read immediately after reopening, without overlapping its new read", async () => {
+  let finishOld!: (rows: JoinRequestRow[]) => void;
+  let finishNew!: (rows: JoinRequestRow[]) => void;
+  const oldRead = new Promise<JoinRequestRow[]>((resolve) => {
+    finishOld = resolve;
+  });
+  const newRead = new Promise<JoinRequestRow[]>((resolve) => {
+    finishNew = resolve;
+  });
+  const api = stubApi({
+    joinRequests: vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(oldRead)
+      .mockReturnValueOnce(newRead)
+      .mockResolvedValue([]),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-new-agent]")!.click();
+    await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    expect(api.joinRequests).toHaveBeenCalledTimes(3);
+    finishOld([{ ...pending[0]!, id: "old-request" }]);
+    await flush(el);
+    await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+    expect(api.joinRequests).toHaveBeenCalledTimes(3);
+    finishNew([{ ...pending[0]!, id: "new-request" }]);
+    await flush(el);
+    expect(q(el, "[data-test=join-row-new-request]")).not.toBeNull();
+    expect(q(el, "[data-test=join-row-old-request]")).toBeNull();
+  } finally {
+    el.remove();
+    vi.useRealTimers();
+  }
+});
+
+it("does not open pairing when the screen leaves before the queued open starts", async () => {
+  const api = stubApi();
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=open-add-agent]")!.click();
+  el.remove();
+  await vi.waitFor(() => expect(api.closePairingMode).toHaveBeenCalledOnce());
+  expect(api.openPairingMode).not.toHaveBeenCalled();
+});
+
+it("retains the refused-request hint when pairing opens automatically", async () => {
+  const api = stubApi({ pairingMode: vi.fn().mockResolvedValue({ ...SHUT, refusedRecently: 2 }) });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  expect(text(el, "[data-test=pairing-refused]")).toContain("2");
+});

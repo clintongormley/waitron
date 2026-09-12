@@ -155,37 +155,40 @@ describe("the pairing-mode control", () => {
     expect(mode.isOpen()).toBe(false);
   });
 
-  it("renews the window without extending the session, while a manual open extends it", async () => {
-    const venue = await setupVenue(suite.admin);
-    const sessionId = venue.managerCookie.split("=")[1]!;
-    let clock = Date.now();
-    const mode = createPairingMode({ now: () => clock });
-    const app = mountApp(venue.cfg, mode);
-    mode.open();
-    clock += 60_000;
-    await suite.admin.execute(sql`
+  it.each([false, true])(
+    "renews the window without extending the session (initially open: %s), while a manual open extends it",
+    async (initiallyOpen) => {
+      const venue = await setupVenue(suite.admin);
+      const sessionId = venue.managerCookie.split("=")[1]!;
+      let clock = Date.now();
+      const mode = createPairingMode({ now: () => clock });
+      const app = mountApp(venue.cfg, mode);
+      if (initiallyOpen) mode.open();
+      clock += 60_000;
+      await suite.admin.execute(sql`
       update management_sessions set last_seen_at = now() - interval '10 minutes'
       where id = ${sessionId}`);
-    const session = () =>
-      withTenant(suite.admin, venue.cfg.tenantId, (tx) =>
-        resolveManagementSession(tx, sessionId, { touch: false }),
-      );
-    const before = await session();
-    const renewed = await send(app, "POST", "/management-api/pairing-mode/renew", {
-      cookie: venue.managerCookie,
-    });
-    expect(renewed.status).toBe(200);
-    expect(await renewed.json()).toEqual({
-      openUntil: new Date(clock + PAIRING_WINDOW_MS).toISOString(),
-    });
-    expect((await session()).expiresAt).toBe(before.expiresAt);
+      const session = () =>
+        withTenant(suite.admin, venue.cfg.tenantId, (tx) =>
+          resolveManagementSession(tx, sessionId, { touch: false }),
+        );
+      const before = await session();
+      const renewed = await send(app, "POST", "/management-api/pairing-mode/renew", {
+        cookie: venue.managerCookie,
+      });
+      expect(renewed.status).toBe(200);
+      expect(await renewed.json()).toEqual({
+        openUntil: new Date(clock + PAIRING_WINDOW_MS).toISOString(),
+      });
+      expect((await session()).expiresAt).toBe(before.expiresAt);
 
-    const manual = await send(app, "POST", "/management-api/pairing-mode", {
-      cookie: venue.managerCookie,
-    });
-    expect(manual.status).toBe(200);
-    expect(Date.parse((await session()).expiresAt)).toBeGreaterThan(Date.parse(before.expiresAt));
-  });
+      const manual = await send(app, "POST", "/management-api/pairing-mode", {
+        cookie: venue.managerCookie,
+      });
+      expect(manual.status).toBe(200);
+      expect(Date.parse((await session()).expiresAt)).toBeGreaterThan(Date.parse(before.expiresAt));
+    },
+  );
 
   it("refuses renewal after the management session expires without opening the window", async () => {
     const venue = await setupVenue(suite.admin);

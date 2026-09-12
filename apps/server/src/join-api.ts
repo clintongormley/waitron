@@ -219,7 +219,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   app.post("/management-api/pairing-mode/renew", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Automatic renewal must still authorize the caller without counting as human activity.
+      // A dialog can reopen a lapsed window, but renewal never counts as human session activity.
       await withPassiveManagementRead(() =>
         gated(sessionId, "device.manage", async () => undefined),
       );

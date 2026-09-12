@@ -775,3 +775,6 @@ This is a **verification task, not a code task** — it cannot run in CI, and it
 
 **Ordering note for the executor:** Tasks 1→2→3→4 are a hard chain (schema → verb → codes → route). Task 5 depends on Task 1 (the `nodeId` column) and Task 3 (no — it reuses `agent.not_found`). Tasks 6→7 are a chain and depend on Task 4 existing (the route they call). Task 8 depends on Tasks 4–5 (the endpoints). Task 9 is last, on the box.
 </content>
+
+2026-09-12 update: [Printer configuration tabs](../specs/2026-09-12-printer-configuration-tabs.md)
+replaces manual pairing controls with the Add dialog lifecycle and uses Disable/Enable for retained agents.

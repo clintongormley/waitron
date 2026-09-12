@@ -584,6 +584,11 @@ unfiltered `main` run, not a wrong hook.
   a screenshot directory named after its test file; the vocabulary guard tried to read that directory
   and failed with `EISDIR` after an intentional TDD failure. `sourceFilesIn` now checks `isFile()`,
   with a fixture preserving an actual nested source file (`scripts/english-only.test.ts`).
+- **A reopened polling dialog owns a new in-flight gate.** Reset that gate on close and guard its
+  release with the request's generation as well as guarding the response. Otherwise an old read
+  blocks the reopened dialog, or its `finally` releases the new read's gate. The printer review
+  reproduced both shapes (`apps/dashboard/src/screens/printers-screen.test.ts`, “starts a fresh agent
+  read immediately after reopening”).
 - **A browser test using fake timers must advance an awaited animation frame or restore real timers
   first.** The printer modal close test stalled on its own paused `requestAnimationFrame`; asserting
   the native dialog's closed state avoids mixing that clock with the browser's queued close event

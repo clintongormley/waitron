@@ -247,7 +247,7 @@ export class PrintersScreen extends LitElement {
   @state() private armedRevokeId: string | null = null;
   @state() private armedDeletePrinterId: string | null = null;
 
-  // The id of the agent whose "Allow again" control is ARMED, or null. Its own state (like Deny's) so
+  // The id of the agent whose "Enable" control is ARMED, or null. Its own state (like Deny's) so
   // arming one agent's re-allow does not disarm another agent's revoke.
   @state() private armedAllowId: string | null = null;
 
@@ -389,7 +389,11 @@ export class PrintersScreen extends LitElement {
           this.#renewPairingAt = Date.now() + 60_000;
           const api = passive ? (this.api.background ?? this.api) : this.api;
           const result = await (passive ? api.renewPairingMode() : api.openPairingMode());
-          this.pairing = { open: true, openUntil: result.openUntil, refusedRecently: 0 };
+          this.pairing = {
+            open: true,
+            openUntil: result.openUntil,
+            refusedRecently: this.pairing?.refusedRecently ?? 0,
+          };
         } else {
           await this.api.closePairingMode();
         }
@@ -414,6 +418,7 @@ export class PrintersScreen extends LitElement {
     if (!this.addingAgent) return;
     this.addingAgent = false;
     this.#agentEpoch++;
+    this.#agentReadInFlight = false;
     this.openRequestId = null;
     clearInterval(this.#agentTimer);
     this.#agentTimer = undefined;
@@ -446,8 +451,10 @@ export class PrintersScreen extends LitElement {
       this.errorKey = codeOf(error);
       this.scanningAgents = false;
     } finally {
-      this.#agentReadInFlight = false;
-      if (Date.now() >= this.#agentScanUntil) this.scanningAgents = false;
+      if (epoch === this.#agentEpoch) {
+        this.#agentReadInFlight = false;
+        if (Date.now() >= this.#agentScanUntil) this.scanningAgents = false;
+      }
     }
   }
 
@@ -787,6 +794,7 @@ export class PrintersScreen extends LitElement {
 
   #renderPairing(): TemplateResult {
     return html`<p class="hint" data-test="pairing-panel">${t("printers.pairing_hint")}</p>
+      ${(this.pairing?.refusedRecently ?? 0) > 0 ? html`<p class="hint" data-test="pairing-refused">${t("printers.pairing_refused").replace("{count}", String(this.pairing!.refusedRecently))}</p>` : nothing}
       ${this.pairing?.open ? html`<p data-test="pairing-until">${t("printers.pairing_open_until").replace("{time}", this.#timestamp(this.pairing.openUntil))}</p>` : nothing}`;
   }
 
