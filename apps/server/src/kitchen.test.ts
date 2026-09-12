@@ -254,7 +254,7 @@ async function productCourse(productId: string): Promise<string | null> {
 }
 async function seedCategory(cfg: TillConfig): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(
-    sql`insert into categories (tenant_id, name) values (${cfg.tenantId}, 'Food') returning id`,
+    sql`insert into categories (tenant_id, name) values (${cfg.tenantId}, '{"en":"Food"}'::jsonb) returning id`,
   );
   return rows[0]!.id;
 }

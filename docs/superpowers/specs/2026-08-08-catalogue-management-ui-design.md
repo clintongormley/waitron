@@ -1,5 +1,10 @@
 # Catalogue / menu management UI — Design
 
+2026-09-12: category names, hierarchy and memberships are extended by the
+[category integration guide](../../developers/product-categories.md). The old combined screen
+remains until the Products editor is integrated.
+
+
 **Date:** 2026-08-08
 **Status:** Design; not started.
 **Scope:** the owner-facing UI and HTTP write path to **author the menu** — create/list/edit products

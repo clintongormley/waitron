@@ -553,7 +553,7 @@ export class ImageLibrary extends LitElement {
               ${this.deleteError ? html`<p role="alert" class="error">${t("image.delete_error")}</p>` : nothing}
               <p>${t(this.deletion.uses.length ? "image.in_use" : "image.confirm_help")}</p>
               <ul>
-                ${this.deletion.uses.map((use) => html`<li><a href=${`/manage/catalogue/product/${encodeURIComponent(use.id)}`}>${this.#text(use.names)}${use.active ? "" : ` (${t("image.inactive")})`}</a></li>`)}
+                ${this.deletion.uses.map((use) => html`<li><a href=${use.kind === "category" ? `/manage/categories?category=${encodeURIComponent(use.id)}` : `/manage/catalogue/product/${encodeURIComponent(use.id)}`}>${this.#text(use.names)}${use.kind === "category" || use.active ? "" : ` (${t("image.inactive")})`}</a></li>`)}
               </ul>
               <wt-form-actions slot="footer"
                 ><wt-button

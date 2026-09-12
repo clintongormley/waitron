@@ -79,7 +79,7 @@ async function setupVenue(): Promise<Seeded> {
   const seeded = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+    const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
     const agua = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,

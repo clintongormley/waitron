@@ -60,12 +60,15 @@ export const categories = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
-    name: text("name").notNull(),
+    name: jsonb("name").$type<Record<string, string>>().notNull(),
     stationId: uuid("station_id"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [index("categories_tenant_id_idx").on(t.tenantId)],
+  (t) => [
+    index("categories_tenant_id_idx").on(t.tenantId),
+    unique("categories_tenant_id_key").on(t.tenantId, t.id),
+  ],
 );
 
 /** A priced item. `unit_price` is GROSS (VAT-inclusive), per item (`each`) or per kg (`weight`).
@@ -80,6 +83,7 @@ export const products = pgTable(
     catalogueId: uuid("catalogue_id")
       .notNull()
       .references(() => catalogues.id),
+    // The primary category; catalogue replaces it together with the complete membership set.
     categoryId: uuid("category_id").references(() => categories.id),
     stationId: uuid("station_id"),
     courseId: uuid("course_id"),

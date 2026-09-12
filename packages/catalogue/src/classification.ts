@@ -4,6 +4,8 @@ import type { ChangeSource } from "@waitron/shared";
 const STATE = "menu configuration; copied to a standby, never drained back";
 
 export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
+  classify("category_details", "state", STATE),
+  classify("product_categories", "state", STATE),
   classify("content_languages", "state", STATE),
   classify("menu_sections", "state", STATE),
   classify("menu_items", "state", STATE),

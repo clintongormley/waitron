@@ -52,7 +52,7 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
     stationB = await seedStation(TENANT_B, LOCATION_B);
     const [catA] = await admin
       .insert(categories)
-      .values({ tenantId: TENANT_A, name: "Comida" })
+      .values({ tenantId: TENANT_A, name: { es: "Comida" } })
       .returning({ id: categories.id });
     categoryA = catA!.id;
     const [cat] = await admin

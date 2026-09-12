@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import {
+  categoryDetails,
   readContentLanguages,
   validateContentTranslations,
   validateImageBytes,
 } from "@waitron/catalogue";
-import { products, type Transaction } from "@waitron/db";
+import { categories, products, type Transaction } from "@waitron/db";
 import {
   AppError,
   contentLanguageCode,
@@ -27,13 +28,15 @@ export interface ImageRecord extends ImageMetadataInput {
   updatedAt: Date;
   usageCount: number;
 }
-export interface ImageUsage {
-  kind: "product";
-  id: string;
-  catalogueId: string;
-  names: Record<string, string>;
-  active: boolean;
-}
+export type ImageUsage =
+  | { kind: "category"; id: string; names: Record<string, string> }
+  | {
+      kind: "product";
+      id: string;
+      catalogueId: string;
+      names: Record<string, string>;
+      active: boolean;
+    };
 export interface UploadImageOptions {
   fallbackLanguage?: string;
   maxUploadBytes: number;
@@ -136,7 +139,24 @@ export async function listImageUsages(
     .from(products)
     .where(and(eq(products.tenantId, tenantId), eq(products.image, image[0].filename)))
     .orderBy(products.id);
-  return rows.map((row) => ({ kind: "product", ...row }));
+  const categoryRows = await tx
+    .select({ id: categories.id, names: categories.name })
+    .from(categoryDetails)
+    .innerJoin(
+      categories,
+      and(
+        eq(categories.tenantId, categoryDetails.tenantId),
+        eq(categories.id, categoryDetails.categoryId),
+      ),
+    )
+    .where(
+      and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.image, image[0].filename)),
+    )
+    .orderBy(categories.id);
+  return [
+    ...rows.map((row): ImageUsage => ({ kind: "product", ...row })),
+    ...categoryRows.map((row): ImageUsage => ({ kind: "category", ...row })),
+  ];
 }
 
 export async function readImage(
@@ -260,7 +280,7 @@ export async function deleteImage(
   tenantId: string,
   imageId: string,
 ): Promise<{ deleted: boolean; uses: ImageUsage[] }> {
-  // FOR UPDATE conflicts with the FK's KEY SHARE lock when a product attaches this image.
+  // FOR UPDATE conflicts with the FK's KEY SHARE lock when a product or category attaches this image.
   const [image] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
@@ -339,7 +359,7 @@ export async function listImages(
   const result = await tx.execute<ImageRecord & Record<string, unknown>>(sql`
     select m.id, m.filename, m.names, m.alt_text as "altText", m.labels,
       m.created_at as "createdAt", m.updated_at as "updatedAt",
-      (select count(*)::int from products p where p.tenant_id = m.tenant_id and p.image = m.filename) as "usageCount"
+      ((select count(*)::int from products p where p.tenant_id = m.tenant_id and p.image = m.filename) + (select count(*)::int from category_details c where c.tenant_id = m.tenant_id and c.image = m.filename)) as "usageCount"
     from media_images m where ${where} order by ${order}, m.id asc limit ${limit} offset ${offset}
   `);
   return { images: result.rows, total: count.rows[0]!.total };

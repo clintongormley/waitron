@@ -42,7 +42,7 @@ import {
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
   renameCatalogue,
-  renameCategory,
+  updateCategory,
   setProductOptionGroups,
   updateOptionGroup,
   updateOptionGroupItem,
@@ -59,7 +59,7 @@ const fx = useCatalogueDb();
 describe("catalogue operations", () => {
   it("offers one product on two menus with distinct identities and prices", async () => {
     await asTenant(async (tx) => {
-      const category = await createCategory(tx, tenantId, { name: "Cocktails" });
+      const category = await createCategory(tx, tenantId, { name: { en: "Cocktails" } });
       const upstairs = await createCatalogue(tx, tenantId, { name: "Upstairs" });
       const downstairs = await createCatalogue(tx, tenantId, { name: "Downstairs" });
       const product = await createProduct(tx, tenantId, {
@@ -329,10 +329,10 @@ describe("catalogue operations", () => {
 
   it("creates and lists categories", async () => {
     await asTenant(async (tx) => {
-      const food = await createCategory(tx, tenantId, { name: "Food" });
-      const drinks = await createCategory(tx, tenantId, { name: "Drinks" });
-      const cats = await listCategories(tx);
-      expect(cats.map((c) => c.name).sort()).toEqual(["Drinks", "Food"]);
+      const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
+      const drinks = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
+      const cats = await listCategories(tx, tenantId);
+      expect(cats.map((c) => c.name.en).sort()).toEqual(["Drinks", "Food"]);
       expect(cats.map((c) => c.id).sort()).toEqual([drinks.id, food.id].sort());
     });
   });
@@ -388,7 +388,7 @@ describe("catalogue operations", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await updateProduct(tx, water.id, {
+      await updateProduct(tx, tenantId, water.id, {
         unitPrice: "1.80",
         descriptions: { en: "sparkling water" },
       });
@@ -426,11 +426,11 @@ describe("catalogue operations", () => {
       expect(listed.find((p) => p.id === withImage.id)!.image).toBe("x.webp");
       expect(listed.find((p) => p.id === noImage.id)!.image).toBeNull();
       // updateProduct sets a new image reference…
-      await updateProduct(tx, noImage.id, { image: "y.png" });
+      await updateProduct(tx, tenantId, noImage.id, { image: "y.png" });
       const afterSet = (await listProducts(tx, tenantId, cat.id)).find((p) => p.id === noImage.id)!;
       expect(afterSet.image).toBe("y.png");
       // …and `null` clears it back to no-picture.
-      await updateProduct(tx, noImage.id, { image: null });
+      await updateProduct(tx, tenantId, noImage.id, { image: null });
       const afterClear = (await listProducts(tx, tenantId, cat.id)).find(
         (p) => p.id === noImage.id,
       )!;
@@ -452,11 +452,11 @@ describe("catalogue operations", () => {
       expect(p.active).toBe(true);
       // `{ active: false }` deactivates through the same edit route (the headless deactivateProduct
       // stays for the till/other callers)…
-      await updateProduct(tx, p.id, { active: false });
+      await updateProduct(tx, tenantId, p.id, { active: false });
       const deactivated = (await listProducts(tx, tenantId, cat.id)).find((x) => x.id === p.id)!;
       expect(deactivated.active).toBe(false);
       // …and `{ active: true }` reactivates it.
-      await updateProduct(tx, p.id, { active: true });
+      await updateProduct(tx, tenantId, p.id, { active: true });
       const reactivated = (await listProducts(tx, tenantId, cat.id)).find((x) => x.id === p.id)!;
       expect(reactivated.active).toBe(true);
     });
@@ -557,14 +557,16 @@ describe("catalogue operations", () => {
       });
       // An invalid code on update is rejected before the write.
       await expect(
-        updateProduct(tx, p.id, { allergens: { nope: { presence: "contains" } } as never }),
+        updateProduct(tx, tenantId, p.id, {
+          allergens: { nope: { presence: "contains" } } as never,
+        }),
       ).rejects.toMatchObject({ code: "allergen.invalid_code" });
       // A valid update is written back.
-      await updateProduct(tx, p.id, { allergens: { milk: { presence: "may_contain" } } });
+      await updateProduct(tx, tenantId, p.id, { allergens: { milk: { presence: "may_contain" } } });
       const [afterSet] = await listProducts(tx, tenantId, cat.id);
       expect(afterSet!.allergens).toEqual({ milk: { presence: "may_contain" } });
       // `null` clears the declaration back to unreviewed.
-      await updateProduct(tx, p.id, { allergens: null });
+      await updateProduct(tx, tenantId, p.id, { allergens: null });
       const [afterClear] = await listProducts(tx, tenantId, cat.id);
       expect(afterClear!.allergens).toBeNull();
     });
@@ -941,7 +943,7 @@ describe("catalogue operations", () => {
       const cat = await createCatalogue(tx, tenantId, { name: "C" });
       const missing = "00000000-0000-0000-0000-0000000000ff";
       await expect(
-        updateProduct(tx, missing, { allergens: { eggs: { presence: "contains" } } }),
+        updateProduct(tx, tenantId, missing, { allergens: { eggs: { presence: "contains" } } }),
       ).resolves.toBeUndefined();
       // No row was created or altered: the catalogue stays empty.
       expect(await listProducts(tx, tenantId, cat.id)).toEqual([]);
@@ -1041,7 +1043,7 @@ describe("catalogue operations", () => {
       // Simulate the recipe module setting a pending derivation (an uncategorised ingredient).
       await applyDietDerivation(tx, p.id, { origins: [], pending: true });
       const [b] = await readDiet(tx, p.id);
-      await updateProduct(tx, p.id, { dietOverride: { vegan: "yes" } });
+      await updateProduct(tx, tenantId, p.id, { dietOverride: { vegan: "yes" } });
       const [a] = await readDiet(tx, p.id);
       return [b!, a!];
     });
@@ -1064,7 +1066,7 @@ describe("catalogue operations", () => {
       });
       // reviewed all-plant recipe derivation → derived is vegan
       await applyDietDerivation(tx, p.id, { origins: ["plant"], pending: false });
-      await updateProduct(tx, p.id, { dietOverride: null });
+      await updateProduct(tx, tenantId, p.id, { dietOverride: null });
       return readDiet(tx, p.id);
     });
     expect(row!.override).toBeNull();
@@ -1087,7 +1089,7 @@ describe("catalogue operations", () => {
       });
       // reviewed all-plant recipe derivation → derived is vegan
       await applyDietDerivation(tx, p.id, { origins: ["plant"], pending: false });
-      await updateProduct(tx, p.id, {
+      await updateProduct(tx, tenantId, p.id, {
         allergens: { milk: { presence: "contains" } },
         dietOverride: { vegan: "no" },
       });
@@ -1113,7 +1115,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       await expect(
-        updateProduct(tx, p.id, {
+        updateProduct(tx, tenantId, p.id, {
           dietOverride: { addContains: ["meat"], removeContains: ["meat"] },
         }),
       ).rejects.toMatchObject({ code: "diet.add_remove_conflict" });
@@ -1133,7 +1135,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
         dietOverride: { vegan: "no" },
       });
-      await updateProduct(tx, p.id, { unitPrice: "2.00" });
+      await updateProduct(tx, tenantId, p.id, { unitPrice: "2.00" });
       return readDiet(tx, p.id);
     });
     expect(row!.diet).toMatchObject({ vegan: "no" });
@@ -1205,17 +1207,17 @@ describe("catalogue operations", () => {
 
   it("renames a category", async () => {
     await asTenant(async (tx) => {
-      const food = await createCategory(tx, tenantId, { name: "Food" });
-      await renameCategory(tx, food.id, "Fresh food");
-      const [seen] = await listCategories(tx);
-      expect(seen!.name).toBe("Fresh food");
+      const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
+      await updateCategory(tx, tenantId, food.id, { name: { en: "Fresh food" } });
+      const [seen] = await listCategories(tx, tenantId);
+      expect(seen!.name).toEqual({ en: "Fresh food" });
     });
   });
 
   it("lists a location's catalogue's active products only, with the category name resolved", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
-      const food = await createCategory(tx, tenantId, { name: "Food" });
+      const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
       const p1 = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: food.id,

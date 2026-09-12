@@ -16,7 +16,9 @@ import type { OptionGroup, Product } from "../api/client.js";
  */
 afterEach(cleanupWidgets);
 
-const CATEGORIES: CategorySummary[] = [{ id: "cat-1", name: "Bebidas" }];
+const CATEGORIES: CategorySummary[] = [
+  { id: "cat-1", name: { es: "Bebidas" }, image: null, parentId: null },
+];
 
 const OPTION_GROUPS: OptionGroup[] = [
   {
@@ -43,6 +45,8 @@ const EDIT_PRODUCT: Product = {
   id: "prod-1",
   catalogueId: "cat-1",
   categoryId: "cat-1",
+  categoryIds: ["cat-1"],
+  primaryCategoryId: "cat-1",
   descriptions: { es: "Té verde" },
   pricingUnit: "each",
   unitPrice: "1.20",

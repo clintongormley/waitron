@@ -1,6 +1,8 @@
 export const CATALOGUE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
+    { name: "category_details" },
+    { name: "product_categories" },
     { name: "content_languages" },
     { name: "menu_sections" },
     { name: "menu_items" },

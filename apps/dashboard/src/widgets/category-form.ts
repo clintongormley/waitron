@@ -1,0 +1,210 @@
+import { LocaleChangeController } from "../state/locale-controller.js";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
+import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
+import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "./image-upload.js";
+import type { ImageUploader } from "./image-upload.js";
+import type { CategoryInput, CategorySummary } from "../api/client.js";
+import { t } from "../i18n/t.js";
+
+export function categoryPath(
+  category: CategorySummary,
+  categories: readonly CategorySummary[],
+  language: string,
+  config: ContentLanguages = { defaultLanguage: language, languages: [language] },
+): string {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  let current: CategorySummary | undefined = category;
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    names.unshift(resolveEnabledContentText(current.name, language, config) || current.id);
+    current = categories.find((item) => item.id === current!.parentId);
+  }
+  return names.join(" / ");
+}
+
+/** API writes belong to the host, so the same editor can create a category inside a product draft. */
+@customElement("dashboard-category-form")
+export class CategoryForm extends LitElement {
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
+  static override styles = [
+    baseStyles,
+    selectStyles,
+    css`
+      .fields {
+        display: grid;
+        gap: var(--wt-space-4);
+      }
+      .field-error {
+        color: var(--wt-color-danger);
+      }
+      label {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
+    `,
+  ];
+  @property({ type: Boolean }) open = false;
+  @property({ type: Boolean }) busy = false;
+  @property({ attribute: false }) locales: readonly string[] = [];
+  @property({ attribute: false }) value: CategorySummary | null = null;
+  @property({ attribute: false }) categories: readonly CategorySummary[] = [];
+  @property({ attribute: false }) api?: ImageUploader;
+  @property({ attribute: false }) fieldErrors: Record<string, string> = {};
+  @state() private names: Record<string, string> = {};
+  @state() private parentId: string | null = null;
+  @state() private image: string | null = null;
+  @state() private validation: Record<string, string> = {};
+  @state() private pickerOpen = false;
+  protected override willUpdate(changes: PropertyValues<this>): void {
+    if (
+      (changes.has("open") && this.open) ||
+      (changes.has("value") &&
+        this.value?.id !== (changes.get("value") as CategorySummary | null | undefined)?.id)
+    ) {
+      this.names = { ...this.value?.name };
+      for (const locale of this.locales) this.names[locale] ??= "";
+      this.parentId = this.value?.parentId ?? null;
+      this.image = this.value?.image ?? null;
+      this.validation = {};
+    }
+  }
+  #emit(
+    event: Event,
+    type: "wt-submit" | "wt-cancel",
+    detail: { value: CategoryInput } | Record<string, never>,
+  ): void {
+    event.stopPropagation();
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+  #submit(event: Event): void {
+    event.stopPropagation();
+    if (this.busy || this.pickerOpen) return;
+    const language = this.locales[0];
+    if (!language || !this.names[language]?.trim()) {
+      this.validation = { [`name-${language ?? ""}`]: t("categories.name_required") };
+      return;
+    }
+    this.validation = {};
+    this.#emit(event, "wt-submit", {
+      value: { name: { ...this.names }, parentId: this.parentId, image: this.image },
+    });
+  }
+  #parents(): CategorySummary[] {
+    const excluded = new Set(this.value ? [this.value.id] : []);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const category of this.categories)
+        if (category.parentId && excluded.has(category.parentId) && !excluded.has(category.id)) {
+          excluded.add(category.id);
+          changed = true;
+        }
+    }
+    return this.categories.filter((category) => !excluded.has(category.id));
+  }
+  override render() {
+    const errors = { ...this.fieldErrors, ...this.validation };
+    return html`<wt-modal
+      .open=${this.open}
+      heading=${t(this.value ? "categories.edit" : "categories.create")}
+      @keydown=${(event: KeyboardEvent) => {
+        if (this.busy && event.key === "Escape") event.preventDefault();
+      }}
+      @wt-close=${(event: Event) => {
+        if (!this.busy && !this.pickerOpen) this.#emit(event, "wt-cancel", {});
+        else event.stopPropagation();
+      }}
+    >
+      <div
+        ?inert=${this.busy}
+        class="fields"
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
+      >
+        <wt-form-error-summary
+          heading=${t("form.error_heading")}
+          .errors=${Object.values(errors)}
+        ></wt-form-error-summary>
+        ${this.locales.map(
+          (locale) =>
+            html`<wt-input
+              name=${`category-name-${locale}`}
+              label=${`${t("categories.name")} (${locale})`}
+              .required=${locale === this.locales[0]}
+              .disabled=${this.busy}
+              .value=${this.names[locale] ?? ""}
+              .error=${errors[`name-${locale}`] ?? ""}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.names = { ...this.names, [locale]: event.detail.value };
+                this.validation = {};
+              }}
+            ></wt-input>`,
+        )}
+        <label
+          >${t("categories.parent")}<select
+            name="category-parent"
+            aria-invalid=${errors.parent ? "true" : "false"}
+            aria-describedby="category-parent-error"
+            .disabled=${this.busy}
+            @change=${(event: Event) => {
+              event.stopPropagation();
+              this.parentId = (event.target as HTMLSelectElement).value || null;
+            }}
+          >
+            <option value="" .selected=${this.parentId === null}>
+              ${t("categories.no_parent")}
+            </option>
+            ${this.#parents().map((category) => html`<option value=${category.id} .selected=${category.id === this.parentId}>${categoryPath(category, this.categories, this.locales[0] ?? "en")}</option>`)}</select
+          ><span class="field-error" id="category-parent-error">${errors.parent ?? ""}</span></label
+        >
+        <dashboard-image-upload
+          aria-describedby="category-image-error"
+          .api=${this.api}
+          .image=${this.image}
+          @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
+            event.stopPropagation();
+            this.pickerOpen = event.detail.open;
+          }}
+          @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+            event.stopPropagation();
+            this.image = event.detail.image;
+          }}
+        ></dashboard-image-upload>
+        <span class="field-error" id="category-image-error">${errors.image ?? nothing}</span>
+      </div>
+      <wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          .disabled=${this.busy}
+          @click=${(event: Event) => this.#emit(event, "wt-cancel", {})}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save"
+          variant="primary"
+          .disabled=${this.busy || this.pickerOpen}
+          @click=${(event: Event) => this.#submit(event)}
+          >${t("action.save")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-modal>`;
+  }
+}
+declare global {
+  interface HTMLElementTagNameMap {
+    "dashboard-category-form": CategoryForm;
+  }
+}

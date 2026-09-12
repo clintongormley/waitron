@@ -446,7 +446,7 @@ describe("DashboardApi", () => {
   });
 
   it("listCategories GETs the categories with credentials", async () => {
-    const categories = [{ id: "cat1", name: "Entrantes" }];
+    const categories = [{ id: "cat1", name: { es: "Entrantes" }, image: null, parentId: null }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(categories));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCategories()).toEqual(categories);
@@ -456,17 +456,74 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("createCategory POSTs the name and returns the created category", async () => {
-    const created = { id: "cat2", name: "Principales" };
+  it("createCategory POSTs localized metadata and returns the created category", async () => {
+    const input = { name: { es: "Principales" }, image: "food.jpg", parentId: "cat1" };
+    const created = { id: "cat2", ...input };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createCategory("Principales")).toEqual(created);
+    expect(await api.createCategory(input)).toEqual(created);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Principales" }),
+      body: JSON.stringify(input),
     });
+  });
+
+  it("uses the category hierarchy and membership endpoints with their response shapes", async () => {
+    const category = { id: "cat1", name: { es: "Entrantes" }, image: null, parentId: null };
+    const product = {
+      id: "p1",
+      catalogueId: "menu1",
+      categoryId: "cat1",
+      categoryIds: ["cat1"],
+      primaryCategoryId: "cat1",
+      descriptions: { es: "Croquetas" },
+      pricingUnit: "each",
+      unitPrice: "8.00",
+      vatClass: "reduced",
+      active: true,
+      allergens: null,
+      manualAllergens: null,
+      dietOverride: null,
+      image: null,
+    };
+    const memberships = { categoryIds: ["cat1", "cat2"], primaryCategoryId: "cat2" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(category))
+      .mockResolvedValueOnce(jsonResponse({ ...category, image: "food.jpg" }))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { id: "p1", descriptions: { es: "Croquetas" }, active: true, ...memberships },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse([product]))
+      .mockResolvedValueOnce(jsonResponse(memberships))
+      .mockResolvedValueOnce(jsonResponse(memberships));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getCategory("cat1")).toEqual(category);
+    expect(await api.updateCategory("cat1", { image: "food.jpg" })).toEqual({
+      ...category,
+      image: "food.jpg",
+    });
+    await api.deleteCategory("cat1");
+    expect(await api.listCategoryProducts("cat1")).toEqual([
+      { id: "p1", descriptions: { es: "Croquetas" }, active: true, ...memberships },
+    ]);
+    expect(await api.listLibraryProducts()).toEqual([product]);
+    expect(await api.getProductCategories("p1")).toEqual(memberships);
+    expect(await api.replaceProductCategories("p1", memberships)).toEqual(memberships);
+    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
+      ["/management-api/categories/cat1", "GET", undefined],
+      ["/management-api/categories/cat1", "PATCH", JSON.stringify({ image: "food.jpg" })],
+      ["/management-api/categories/cat1", "DELETE", undefined],
+      ["/management-api/categories/cat1/products", "GET", undefined],
+      ["/management-api/products", "GET", undefined],
+      ["/management-api/products/p1/categories", "GET", undefined],
+      ["/management-api/products/p1/categories", "PUT", JSON.stringify(memberships)],
+    ]);
   });
 
   it("listProducts GETs the addressed catalogue's products with credentials", async () => {
@@ -475,6 +532,8 @@ describe("DashboardApi", () => {
         id: "p1",
         catalogueId: "c1",
         categoryId: null,
+        categoryIds: [],
+        primaryCategoryId: null,
         descriptions: { es: "Café solo" },
         pricingUnit: "each",
         unitPrice: "1.50",

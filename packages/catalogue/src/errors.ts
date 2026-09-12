@@ -4,6 +4,12 @@ import "@waitron/shared";
 /** @waitron/catalogue's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "category.not_found": { categoryId: string };
+    "category.parent_cycle": Record<string, never>;
+    "category.image_not_found": Record<string, never>;
+    "category.membership_invalid": Record<string, never>;
+    "category.primary_required": Record<string, never>;
+    "category.in_use": { children: number; products: number; routes: number };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
     /** A translation map contains a non-text value. */

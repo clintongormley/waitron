@@ -149,8 +149,10 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
 2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The owner-requested
    Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products;
-   [shared design and branch contracts](superpowers/specs/2026-09-12-products-overhaul-design.md).
-   Implementation has not started. Products integrates the other three; recipes are deferred for
+   Categories is implemented on `products-categories` (pending branch finishing and merge), with
+   [API and reusable-form integration notes](developers/product-categories.md). The
+   [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) defines the branch contracts.
+   Products integrates the other three; recipes are deferred for
    this workflow and their authoring withdrawal belongs to that build.
 3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319 and
    #327 reworked these recently, so read them against the rules before changing anything.

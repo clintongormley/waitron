@@ -133,7 +133,7 @@ const suite = usePgliteDb({
       async (tx) => {
         await asAppUser(tx);
         const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-        const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+        const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
         const p = await createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: bebidas.id,

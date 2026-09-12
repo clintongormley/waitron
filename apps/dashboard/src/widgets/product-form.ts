@@ -750,7 +750,7 @@ export class ProductForm extends LitElement {
           </select>
         </label>
         <label class="field"
-          >${t("product.category")}
+          >${t("categories.primary")}
           <select
             name="category"
             data-test="category"
@@ -762,7 +762,7 @@ export class ProductForm extends LitElement {
             ${this.categories.map(
               (c) =>
                 html`<option value=${c.id} .selected=${c.id === this.categoryId}>
-                  ${c.name}
+                  ${resolveContentText(c.name, this.locales[0] ?? "en", this.locales[0] ?? "en")}
                 </option>`,
             )}
           </select>

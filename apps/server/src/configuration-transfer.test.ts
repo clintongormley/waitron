@@ -214,6 +214,19 @@ describe("configuration transfer database path", () => {
         sql`update products set image = ${uploaded.image.filename} where tenant_id = ${source.tenantId} and id = '22222222-aaaa-aaaa-aaaa-222222222222'`,
       );
       await tx.execute(sql`
+        insert into categories (id, tenant_id, name) values
+          ('23232323-aaaa-aaaa-aaaa-232323232323', ${source.tenantId}, '{"es":"Panadería"}'::jsonb)`);
+      await tx.execute(sql`
+        insert into category_details (tenant_id, category_id, image) values
+          (${source.tenantId}, '23232323-aaaa-aaaa-aaaa-232323232323', ${uploaded.image.filename})`);
+      await tx.execute(sql`
+        insert into product_categories (tenant_id, product_id, category_id) values
+          (${source.tenantId}, '22222222-aaaa-aaaa-aaaa-222222222222',
+           '23232323-aaaa-aaaa-aaaa-232323232323')`);
+      await tx.execute(sql`
+        update products set category_id = '23232323-aaaa-aaaa-aaaa-232323232323'
+        where tenant_id = ${source.tenantId} and id = '22222222-aaaa-aaaa-aaaa-222222222222'`);
+      await tx.execute(sql`
         insert into persons
           (id, tenant_id, display_name, pin_hash, password_hash, email, role)
         values
@@ -336,6 +349,31 @@ describe("configuration transfer database path", () => {
         sql`select image from products where tenant_id = ${target.tenantId}`,
       );
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
+      const category = await tx.execute<{
+        name: Record<string, string>;
+        image: string;
+        primary: boolean;
+        member: boolean;
+      }>(sql`
+        select c.name, d.image,
+          p.category_id = c.id as primary,
+          exists (
+            select 1 from product_categories pc
+            where pc.tenant_id = p.tenant_id and pc.product_id = p.id and pc.category_id = c.id
+          ) as member
+        from categories c
+        join category_details d on d.tenant_id = c.tenant_id and d.category_id = c.id
+        join products p on p.tenant_id = c.tenant_id
+        where c.tenant_id = ${target.tenantId} and p.descriptions ->> 'es-ES' = 'Café'
+      `);
+      expect(category.rows).toEqual([
+        {
+          name: { es: "Panadería" },
+          image: metadata!.filename,
+          primary: true,
+          member: true,
+        },
+      ]);
     });
     const imported = await suite.db.execute<{
       products: number;

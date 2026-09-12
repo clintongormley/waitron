@@ -26,13 +26,17 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
 
-const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes" }];
+const categories: CategorySummary[] = [
+  { id: "c1", name: { es: "Entrantes" }, image: null, parentId: null },
+];
 
 const products: Product[] = [
   {
     id: "p1",
     catalogueId: "cat-a",
     categoryId: "c1",
+    categoryIds: ["c1"],
+    primaryCategoryId: "c1",
     descriptions: { es: "Croquetas de jamón" },
     pricingUnit: "each",
     unitPrice: "8.50",

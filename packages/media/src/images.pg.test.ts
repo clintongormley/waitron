@@ -191,3 +191,89 @@ it("makes an attachment wait for deletion then rejects the missing reference", a
     await Promise.all([attach.close(), remove.close()]);
   }
 });
+
+it("waits for an attaching category then reports its committed use instead of deleting", async () => {
+  const { createCategory, updateCategory } = await import("@waitron/catalogue");
+  const { tenantId, image } = await fixture();
+  const category = await app(suite.admin, tenantId, (tx) =>
+    createCategory(tx, tenantId, { name: { en: "Bakery" } }),
+  );
+  const [attach, remove] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let ready!: () => void;
+  const attached = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  try {
+    const pid = (await remove.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
+      .rows[0]!.pid;
+    const adding = app(attach, tenantId, async (tx) => {
+      await updateCategory(tx, tenantId, category.id, { image: image.filename });
+      ready();
+      await wait;
+    });
+    await attached;
+    const deleting = app(remove, tenantId, (tx) => deleteImage(tx, tenantId, image.id));
+    try {
+      await blocked(pid);
+    } finally {
+      release();
+    }
+    const [result] = await Promise.all([deleting, adding]);
+    expect(result).toEqual({
+      deleted: false,
+      uses: [{ kind: "category", id: category.id, names: { en: "Bakery" } }],
+    });
+  } finally {
+    release();
+    await Promise.all([attach.close(), remove.close()]);
+  }
+});
+
+it("makes a category attachment wait for deletion then rejects the missing reference", async () => {
+  const { createCategory, updateCategory } = await import("@waitron/catalogue");
+  const { tenantId, image } = await fixture();
+  const category = await app(suite.admin, tenantId, (tx) =>
+    createCategory(tx, tenantId, { name: { en: "Bakery" } }),
+  );
+  const [attach, remove] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let ready!: () => void;
+  const deleted = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  try {
+    const pid = (await attach.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
+      .rows[0]!.pid;
+    const deleting = app(remove, tenantId, async (tx) => {
+      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
+      ready();
+      await wait;
+    });
+    await deleted;
+    const adding = app(attach, tenantId, (tx) =>
+      updateCategory(tx, tenantId, category.id, { image: image.filename }),
+    );
+    const settled = Promise.allSettled([adding, deleting]);
+    try {
+      await blocked(pid);
+    } finally {
+      release();
+    }
+    const [result, deletion] = await settled;
+    expect(result.status).toBe("rejected");
+    expect(deletion.status).toBe("fulfilled");
+    expect(
+      await app(suite.admin, tenantId, (tx) => readImageBytes(tx, tenantId, image.filename)),
+    ).toBeNull();
+  } finally {
+    release();
+    await Promise.all([attach.close(), remove.close()]);
+  }
+});

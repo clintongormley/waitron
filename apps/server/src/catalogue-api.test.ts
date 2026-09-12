@@ -402,11 +402,16 @@ describe("mountCatalogueApi — location menus", () => {
 describe("mountCatalogueApi — categories", () => {
   it("POST /management-api/categories creates one (201)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/categories", {
-      body: { name: "Bebidas" },
+      body: { name: { es: "Bebidas" } },
     });
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { id: string; name: string };
-    expect(body.name).toBe("Bebidas");
+    const body = (await res.json()) as {
+      id: string;
+      name: Record<string, string>;
+      image: string | null;
+      parentId: string | null;
+    };
+    expect(body).toMatchObject({ name: { es: "Bebidas" }, image: null, parentId: null });
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -420,11 +425,13 @@ describe("mountCatalogueApi — categories", () => {
 
   it("GET /management-api/categories lists them (200)", async () => {
     const app = mountApp();
-    await send(app, "POST", "/management-api/categories", { body: { name: "Postres" } });
+    await send(app, "POST", "/management-api/categories", {
+      body: { name: { es: "Postres" } },
+    });
     const res = await send(app, "GET", "/management-api/categories");
     expect(res.status).toBe(200);
-    const rows = (await res.json()) as { name: string }[];
-    expect(rows.some((r) => r.name === "Postres")).toBe(true);
+    const rows = (await res.json()) as { name: Record<string, string> }[];
+    expect(rows.some((r) => r.name.es === "Postres")).toBe(true);
   });
 });
 
@@ -522,7 +529,7 @@ describe("mountCatalogueApi — products", () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Product catalogue");
     const catRes = await send(app, "POST", "/management-api/categories", {
-      body: { name: "Cafés" },
+      body: { name: { es: "Cafés" } },
     });
     const categoryId = ((await catRes.json()) as { id: string }).id;
 
@@ -542,7 +549,8 @@ describe("mountCatalogueApi — products", () => {
     const product = (await res.json()) as {
       id: string;
       catalogueId: string;
-      categoryId: string | null;
+      categoryIds: string[];
+      primaryCategoryId: string | null;
       descriptions: Record<string, string>;
       unitPrice: string;
       vatClass: string;
@@ -553,7 +561,8 @@ describe("mountCatalogueApi — products", () => {
     };
     expect(product).toMatchObject({
       catalogueId,
-      categoryId,
+      categoryIds: [categoryId],
+      primaryCategoryId: categoryId,
       descriptions: { es: "Café solo" },
       unitPrice: "1.20",
       vatClass: "general",
@@ -894,7 +903,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Full-patch catalogue");
     const catRes = await send(app, "POST", "/management-api/categories", {
-      body: { name: "Tapas" },
+      body: { name: { es: "Tapas" } },
     });
     const categoryId = ((await catRes.json()) as { id: string }).id;
     const createRes = await send(app, "POST", "/management-api/products", {
@@ -927,7 +936,8 @@ describe("mountCatalogueApi — product request-shape screens", () => {
         descriptions: Record<string, string>;
         vatClass: string;
         pricingUnit: string;
-        categoryId: string | null;
+        categoryIds: string[];
+        primaryCategoryId: string | null;
         image: string | null;
       }[]
     ).find((r) => r.id === productId)!;
@@ -935,7 +945,8 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       descriptions: { es: "después" },
       vatClass: "reduced",
       pricingUnit: "weight",
-      categoryId,
+      categoryIds: [categoryId],
+      primaryCategoryId: categoryId,
       image: "pic.png",
     });
   });
@@ -2021,4 +2032,53 @@ describe("catalogue API tenant authorization", () => {
         .rows,
     ).toEqual([{ name: { es: "Tamaño" } }]);
   });
+});
+
+it("authors translated hierarchy and shares full membership replacement through the API", async () => {
+  const app = mountApp("en-GB");
+  await suite.db.execute(sql`delete from content_languages`);
+  const created = await send(app, "POST", "/management-api/categories", {
+    body: { name: { en: "Food", fr: "Cuisine" }, parentId: null, image: null },
+  });
+  expect(created.status).toBe(201);
+  const category = (await created.json()) as { id: string };
+  const path = `/management-api/categories/${category.id}`;
+  expect(await (await send(app, "GET", path)).json()).toEqual({
+    id: category.id,
+    name: { en: "Food", fr: "Cuisine" },
+    parentId: null,
+    image: null,
+  });
+  expect((await send(app, "PATCH", path, { body: { parentId: category.id } })).status).toBe(400);
+  const catalogueId = await createCatalogueVia(app, "Membership menu");
+  const response = await send(app, "POST", "/management-api/products", {
+    body: {
+      catalogueId,
+      categoryId: null,
+      descriptions: { en: "Toast" },
+      unitPrice: "2",
+      pricingUnit: "each",
+      vatClass: "general",
+    },
+  });
+  expect(response.status).toBe(201);
+  const product = (await response.json()) as { id: string };
+  const memberships = `/management-api/products/${product.id}/categories`;
+  expect(
+    await (await send(app, "PUT", memberships, { body: { categoryIds: [category.id] } })).json(),
+  ).toEqual({ categoryIds: [category.id], primaryCategoryId: category.id });
+  expect(
+    ((await (await send(app, "GET", `${path}/products`)).json()) as { id: string }[]).map(
+      (p) => p.id,
+    ),
+  ).toEqual([product.id]);
+  expect((await send(app, "DELETE", path)).status).toBe(409);
+  expect(
+    (await send(app, "PUT", memberships, { body: { categoryIds: [] }, cookie: staffCookie }))
+      .status,
+  ).toBe(403);
+  expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
+  expect((await send(app, "PUT", memberships, { body: { categoryIds: [] } })).status).toBe(200);
+  expect((await send(app, "DELETE", path)).status).toBe(204);
+  expect((await send(app, "GET", path)).status).toBe(404);
 });

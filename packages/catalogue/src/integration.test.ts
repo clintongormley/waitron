@@ -13,6 +13,8 @@ import {
   createProduct,
   listAvailableProducts,
 } from "./operations.js";
+import { replaceProductCategories } from "./categories.js";
+import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { priceBasket } from "./pricing.js";
 import { seedVenue } from "../test/fixtures.js";
 
@@ -36,7 +38,7 @@ import { seedVenue } from "../test/fixtures.js";
  * (`apps/server/scripts/catalogue-demo.ts`) and by `packages/fiscal-verifactu`'s e2e suite.
  */
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   // `FakeFiscalBackend.recordSale`/`registerNode` read and write their own
   // `fake_node_registrations`/`fake_fiscal_records` tables, and nothing creates those tables except
   // this call — the identical setup `packages/core`'s `record-sale.test.ts` performs.
@@ -97,8 +99,8 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       // Seed a catalogue: one weight-priced product ("sliced ham") in a "Food" category. English
       // strings only — this is a generic package under the english-only guard.
       const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
-      const food = await createCategory(tx, tenantId, { name: "Food" });
-      await createProduct(tx, tenantId, {
+      const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
+      const product = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: food.id,
         descriptions: { en: "sliced ham" },
@@ -106,12 +108,19 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         unitPrice: "24.90",
         vatClass: "reduced",
       });
+      const breakfast = await createCategory(tx, tenantId, { name: { en: "Breakfast" } });
+      await replaceProductCategories(tx, tenantId, product.id, {
+        categoryIds: [food.id, breakfast.id],
+        primaryCategoryId: food.id,
+      });
       await assignCatalogueToLocation(tx, locationId, cat.id);
 
       // The till's read → pricing → fiscal write, all from catalogue data. `listAvailableProducts`'
       // `AvailableProduct` is fed straight into `priceBasket`, which only typechecks because it is
       // structurally assignable to `PriceableProduct` (Task 5).
-      const [ham] = (await listAvailableProducts(tx, locationId)).products;
+      const available = (await listAvailableProducts(tx, locationId)).products;
+      expect(available.map((row) => row.id)).toEqual([product.id]);
+      const [ham] = available;
       expect(ham).toBeDefined();
       priced = priceBasket([{ product: ham!, quantity: "0.320" }]);
 

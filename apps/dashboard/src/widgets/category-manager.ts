@@ -1,10 +1,16 @@
+import { resolveEnabledContentText } from "@waitron/shared";
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  submitOnEnter,
+  currentContentLanguages,
+  type DataTableColumn,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale } from "../i18n/t.js";
 import type { CategorySummary } from "../api/client.js";
 
 /** Lists reusable product categories and emits a request to create one. */
@@ -58,8 +64,10 @@ export class CategoryManager extends LitElement {
       {
         key: "name",
         label: t("category.title"),
-        cell: (category) => category.name,
-        sortValue: (category) => category.name,
+        cell: (category) =>
+          resolveEnabledContentText(category.name, currentLocale(), currentContentLanguages()),
+        sortValue: (category) =>
+          resolveEnabledContentText(category.name, currentLocale(), currentContentLanguages()),
       },
     ];
   }

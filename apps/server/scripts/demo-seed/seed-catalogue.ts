@@ -126,7 +126,7 @@ export async function seedCatalogues(
         where tenant_id = ${tenantId} and id = ${existingMenuId}`);
     }
     for (const [categoryIndex, cat] of data.categories.entries()) {
-      const category = await createCategory(tx, tenantId, { name: cat.name[locale] });
+      const category = await createCategory(tx, tenantId, { name: cat.name });
       if (cat.station !== null) {
         // The create op takes no station; set the route with a parameterised update. Both the id and
         // the category id are bound params.

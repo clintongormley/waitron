@@ -12,13 +12,15 @@ export interface LibraryImage extends ImageMetadata {
   updatedAt: string;
   usageCount: number;
 }
-export interface ImageUsage {
-  kind: "product";
-  id: string;
-  catalogueId: string;
-  names: Record<string, string>;
-  active: boolean;
-}
+export type ImageUsage =
+  | { kind: "category"; id: string; names: Record<string, string> }
+  | {
+      kind: "product";
+      id: string;
+      catalogueId: string;
+      names: Record<string, string>;
+      active: boolean;
+    };
 export interface ImageQuery {
   search: string;
   label: string;

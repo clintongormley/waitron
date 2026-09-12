@@ -15,6 +15,31 @@
 // key added to `en` without a Spanish sibling is a compile error, which is the
 // guard that keeps the two in step.
 export const en = {
+  "categories.actions": "Actions",
+  "nav.categories": "Categories",
+  "categories.create": "Create category",
+  "categories.edit": "Edit category",
+  "categories.name": "Name",
+  "categories.name_required": "Enter a name in the default content language.",
+  "categories.parent": "Parent",
+  "categories.no_parent": "No parent",
+  "categories.search": "Search categories",
+  "categories.products": "Directly assigned products",
+  "categories.empty": "You have no categories yet.",
+  "categories.load_error": "The categories could not be loaded.",
+  "categories.delete_confirm": "Delete this category?",
+  "categories.in_use":
+    "This category is used by {children} child categories, {products} products and {routes} preparation routes. Remove those references first.",
+  "categories.primary_required":
+    "Choose a replacement primary category before removing this membership.",
+  "categories.primary": "Primary",
+  "categories.membership": "Product categories",
+  "categories.add": "Add product",
+  "categories.remove": "Remove membership",
+  "categories.search_products": "Search products",
+  "categories.choose_primary": "Choose primary",
+  "categories.no_products": "No directly assigned products.",
+
   "nav.location_settings": "Location invoices",
   "location_settings.title": "Location invoices",
   "location_settings.description": "Invoice operation description",
@@ -1027,6 +1052,31 @@ export type StringKey = keyof typeof en;
 // Partial): every base key must be translated, so an untranslated addition fails
 // typecheck rather than silently falling through to English at runtime.
 export const es: Record<StringKey, string> = {
+  "categories.actions": "Acciones",
+  "nav.categories": "Categorías",
+  "categories.create": "Crear categoría",
+  "categories.edit": "Editar categoría",
+  "categories.name": "Nombre",
+  "categories.name_required": "Introduce un nombre en el idioma de contenido predeterminado.",
+  "categories.parent": "Categoría superior",
+  "categories.no_parent": "Sin categoría superior",
+  "categories.search": "Buscar categorías",
+  "categories.products": "Productos asignados directamente",
+  "categories.empty": "Todavía no tienes categorías.",
+  "categories.load_error": "No se pudieron cargar las categorías.",
+  "categories.delete_confirm": "¿Eliminar esta categoría?",
+  "categories.in_use":
+    "Esta categoría tiene {children} categorías hijas, {products} productos y {routes} rutas de preparación. Elimina primero esas referencias.",
+  "categories.primary_required":
+    "Elige una categoría principal de reemplazo antes de quitar esta asignación.",
+  "categories.primary": "Principal",
+  "categories.membership": "Categorías del producto",
+  "categories.add": "Añadir producto",
+  "categories.remove": "Quitar asignación",
+  "categories.search_products": "Buscar productos",
+  "categories.choose_primary": "Elige la principal",
+  "categories.no_products": "No hay productos asignados directamente.",
+
   "nav.location_settings": "Facturación del local",
   "location_settings.title": "Facturación del local",
   "location_settings.description": "Descripción de la operación",

@@ -22,6 +22,8 @@ function product(overrides: Partial<Product> = {}): Product {
     id: "prod-1",
     catalogueId: "cat-1",
     categoryId: "category-1",
+    categoryIds: ["category-1"],
+    primaryCategoryId: "category-1",
     descriptions: { es: "Croquetas de jamón" },
     pricingUnit: "each",
     unitPrice: "8.50",

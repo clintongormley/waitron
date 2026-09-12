@@ -43,6 +43,7 @@ import { IDENTITY_MIGRATIONS, hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../src/modules.js";
 import {
+  CATALOGUE_MIGRATIONS,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -93,11 +94,12 @@ async function main(): Promise<void> {
 
   const db = await createPostgresDb(databaseUrl);
   try {
-    // Self-migrate a blank database, exactly as daily-close-demo self-migrates PGlite. CORE first
-    // (identity's persons FK onto core's tenants/tills; the fiscal chain reads core's sales), then
-    // identity (applyVenue's seed-admin needs `persons`), then fiscal (registerSif needs
+    // Self-migrate a blank database, exactly as daily-close-demo self-migrates PGlite. CORE first,
+    // then catalogue for the seeded products, identity (applyVenue's seed-admin needs `persons`),
+    // then fiscal (registerSif needs
     // `registro_sif`/`cadenas`; recordSale's chain needs `registros_facturacion`).
     await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, CATALOGUE_MIGRATIONS);
     await runMigrations(db, IDENTITY_MIGRATIONS);
     await runMigrations(db, FISCAL_MIGRATIONS);
 
@@ -154,8 +156,8 @@ async function main(): Promise<void> {
     await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, tenantId, { name: "Comida" });
-      const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+      const comida = await createCategory(tx, tenantId, { name: { en: "Comida" } });
+      const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
       await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,

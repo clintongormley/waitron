@@ -8,8 +8,8 @@ import type { CategorySummary } from "../api/client.js";
  * The category manager owns a labelled create field (`wt-input`) + a button, lists categories in the shared data table and has no in-flight fetch to settle. It is mounted in both themes so axe checks the same colour tokens as the app.
  */
 const categories: CategorySummary[] = [
-  { id: "c1", name: "Entrantes" },
-  { id: "c2", name: "Postres" },
+  { id: "c1", name: { es: "Entrantes" }, image: null, parentId: null },
+  { id: "c2", name: { es: "Postres" }, image: null, parentId: null },
 ];
 
 afterEach(cleanupWidgets);

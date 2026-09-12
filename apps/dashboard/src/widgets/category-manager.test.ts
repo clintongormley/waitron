@@ -13,8 +13,8 @@ async function tableRoot(el: CategoryManager): Promise<ShadowRoot> {
 }
 
 const categories: CategorySummary[] = [
-  { id: "c1", name: "Entrantes" },
-  { id: "c2", name: "Postres" },
+  { id: "c1", name: { es: "Entrantes" }, image: null, parentId: null },
+  { id: "c2", name: { es: "Postres" }, image: null, parentId: null },
 ];
 
 /** Drive the create field the way the operator does: type into the wt-input (its composed wt-change). */

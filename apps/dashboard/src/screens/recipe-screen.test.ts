@@ -36,6 +36,8 @@ const products: Product[] = [
     id: "p1",
     catalogueId: "cat-a",
     categoryId: null,
+    categoryIds: [],
+    primaryCategoryId: null,
     descriptions: { es: "Bizcocho" },
     pricingUnit: "each",
     unitPrice: "3.50",

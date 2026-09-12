@@ -1,7 +1,8 @@
 # Build Categories
 
 Branch: `products-categories`. Read the [spec](../specs/2026-09-12-product-categories-design.md) and
-[shared contract](../specs/2026-09-12-products-overhaul-design.md). Implementation is not started.
+[shared contract](../specs/2026-09-12-products-overhaul-design.md).
+Implementation and validation receipts are recorded below.
 
 ## 1. Trace the single-category consumers
 
@@ -61,3 +62,56 @@ subscription and media-reference guards after schema registration changes.
 Document membership API, primary semantics, reusable form properties and migration changes for
 Products. Update the backlog/operator docs when the implementation changes their claims. Record
 commands/results and announce readiness for `finish-branch`; do not merge without the owner.
+
+## Implementation decisions and receipts (2026-09-12)
+
+`products.categoryId` remains the internal primary category. Names stay in the existing core
+category row as translated JSON, avoiding a second editable name. Catalogue owns hierarchy/image
+metadata and product membership. The old single-category product selector delegates to the shared
+operation and cannot clear additional memberships accidentally.
+
+Read the [integration guide](../../developers/product-categories.md) for the membership API,
+reusable forms, migration files and Products handoff. The Products branch still owns composing
+these forms into its replacement product editor.
+
+These focused suites passed. Reproduce a package row with
+`TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/<package> test -- <files>`.
+Browser runs were sequential across packages after checking host processes and memory.
+
+| Package | Files | Passed |
+| --- | --- | --- |
+| catalogue | `src/categories.test.ts src/categories.pg.test.ts src/operations.test.ts src/content-languages.test.ts src/content-languages.pg.test.ts src/integration.test.ts` | 100 |
+| media | `src/configuration-transfer.test.ts src/images.test.ts` | 38 |
+| media | `src/images.pg.test.ts` | 6 |
+| server | `src/catalogue-api.test.ts src/catalogue-api.pg.test.ts src/category-fks.pg.test.ts src/configuration-transfer.test.ts` | 153 |
+| server | `src/working-order.test.ts` | 113 |
+| server | `src/kitchen.test.ts` | 18 |
+| venue-service | `src/operations.test.ts src/routes.test.ts` | 13 |
+| venue-service | `src/category-dependencies.test.ts` | 2 |
+| db | `src/schema/routing-station.test.ts` | 2 |
+| recipes | `src/ingredients.test.ts` | 12 |
+| fiscal-verifactu | `src/privileges.test.ts` | 5 |
+| fiscal-verifactu | `src/inmutabilidad.test.ts` | 6 |
+| dashboard | `src/widgets/category-form.test.ts src/widgets/category-form.a11y.test.ts src/screens/categories-screen.test.ts src/screens/categories-screen.a11y.test.ts` | 38 |
+| dashboard | `src/widgets/product-form.test.ts src/widgets/product-form.a11y.test.ts` | 52 |
+| media | `src/dashboard/image-library.test.ts src/dashboard/image-library.a11y.test.ts src/dashboard/image-picker.test.ts` | 34 |
+| venue-service | `src/dashboard/client.test.ts src/dashboard/venue-operations-screen.test.ts src/dashboard/venue-operations-screen.a11y.test.ts` | 38 |
+
+After the final product-query refinement, `src/operations.test.ts src/integration.test.ts`
+passed 73 catalogue checks and `src/working-order.test.ts` passed 113 server checks.
+
+Existing dashboard client, catalogue, product-list, category-manager, navigation and recipe-widget
+checks also passed after their category/product fixtures adopted the new wire shapes.
+
+`pnpm exec vitest run scripts/append-only-enable-always.test.ts scripts/claude-md-pointers.test.ts
+scripts/journal-monotonic.test.ts scripts/live-subscriptions.test.ts
+scripts/classification-complete.test.ts scripts/module-graph-honesty.test.ts` passed 47 checks.
+
+The exact privilege matrix first failed because it lacked `category_details` and
+`product_categories`; adding their observed `SIUD` grants made it pass. Three final browser
+regressions first failed for disabled-language search and missing inline parent/image errors;
+all passed after the fixes, with accessibility checked in both themes.
+
+Formatting and ESLint passed over the changed TypeScript files. The catalogue, server, dashboard,
+venue-service, media, db and recipes typechecks passed. Branch finishing, the normal push hook,
+external review and current-head CI remain for the owner's `finish-branch` instruction.
