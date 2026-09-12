@@ -187,11 +187,13 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     // so a `TipoRectificativa: null` on the rebuilt side would break the deep-equal against a record
     // that has no such key at all.
     //
-    // F2, not F1, and a two-decimal rate: this record goes to the database only, never through
-    // `validate`, because it calls `buildAltaRecord` directly. An F1 with no `Destinatarios` and a
-    // bare "21" rate are the exact two faults the chain guard now refuses, so building them here
-    // would leave a fixture describing a record production code can no longer produce. The
-    // round-trip property this case exists for is unaffected by either value.
+    // F2, not F1: this record goes to the database only, never through `validate`, because it
+    // calls `buildAltaRecord` directly. A missing `Destinatarios` on an F1 is the fault the chain
+    // guard now refuses, so building one here would leave a fixture describing a record production
+    // code can no longer produce. The rate is written with its two decimals only so the literal
+    // matches what `buildAltaRecord` emits — it runs every rate through `formatAmountExact`, so a
+    // bare "21" would reach `validate` as "21.00" and raise nothing. The round-trip property this
+    // case exists for is unaffected by either value.
     const built = buildAltaRecord({
       IDEmisorFactura: TEST_NIF,
       NumSerieFactura: "A/9",

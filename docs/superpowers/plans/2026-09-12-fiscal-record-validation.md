@@ -285,6 +285,13 @@ VAT rate written without its decimals, neither of which the real write path can
 produce. The fixture is corrected here; that is the guard doing its job."
 ```
 
+> **Correction, 2026-09-12 (review wave):** the VAT-rate half of that sentence is
+> false and was not written into the commit. `buildAltaRecord` runs every rate
+> through `formatAmountExact`, so a bare `"21"` reaches `validate` as `"21.00"`
+> and raises no issue — measured, with a control that forced a bare `"21"` past
+> the builder and did raise `TIPO_RANGE`. The missing recipient was the only
+> fault the fixture ever had.
+
 ---
 
 ### Task 2: A warning is written, filed, and flagged

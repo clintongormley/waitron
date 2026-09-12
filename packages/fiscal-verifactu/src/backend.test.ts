@@ -291,8 +291,9 @@ describe("recordSubstitution — refusals", () => {
   // contention. The chain-append path and the concurrency property are
   // `substitution-path.e2e.test.ts`'s real-PG job.
 
-  /** A minimal F3 `SaleForFiscalRecord` — POSITIVE total, and (unlike every other method's fixture)
-   * a NON-null counterparty, because a full invoice must always name its recipient. Its own fields
+  /** A minimal F3 `SaleForFiscalRecord` — POSITIVE total, and a NON-null counterparty, which the
+   * interface REQUIRES here and leaves optional on `recordSale`, because a full invoice must always
+   * name its recipient. Its own fields
    * are never read on the refusal paths that throw before assembling anything from `sale`, but a
    * well-formed value keeps the call type-correct. */
   function substitutionSale(overrides: Partial<SaleForFiscalRecord> = {}): SaleForFiscalRecord {
