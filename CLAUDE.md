@@ -505,6 +505,10 @@ unfiltered `main` run, not a wrong hook.
 
 ## 4. Testing
 
+- **Test provider HTTP refusals through the real client, as well as a throwing fake seat.** The
+  SumUp unpair route's fake proved that a thrown error preserved the local reader, but the HTTP
+  client silently accepted 401/403/409. The reader-deletion regressions now reject those responses
+  and separately retain the already-absent 404 retry (`packages/payments-sumup/src/sumup-client.test.ts`).
 - **Source scanners check filesystem type as well as the filename suffix.** Vitest stores failure
   screenshots in directories named `*.test.ts`; treating those directories as TypeScript files made
   the vocabulary guard throw `EISDIR` after browser failures. Keep real nested source files in scope;

@@ -231,6 +231,11 @@ the payments migration set drops and recreates (CLAUDE.md §3: no backwards-comp
 data-migration code). The `active`/`disabled_at` pair and the withheld DELETE grant are unchanged —
 rows are still never deleted, so a historical payment always resolves a reader name.
 
+**2026-09-12 implementation note:** if your demo database already has the payments schema, rebuild
+it with `wa-wt reset demo` before running this branch. This discards the demo data and creates the
+renamed column. The original migration's hash changes; this is not an upgrade for an existing
+database. See the [development reset procedure](../../ui-review.md).
+
 **Routes**, replacing `POST …/readers/:id/retire`:
 
 - `PATCH /management-api/payments/readers/:id` — `{ name }`
@@ -281,6 +286,9 @@ and it is off*. Proven by deletion: with the flag dropped the regression reads "
 - **Stripe** fills `online`, `model` (`device_type`), `serial` (`serial_number`), `firmwareVersion`
   (`device_sw_version`), `connection` (`ip_address`) and `lastSeenAt` — **dividing `last_seen_at` by
   1000**, per the receipt above. No `batteryPercent`.
+
+  **2026-09-12 correction:** pass the value directly to JavaScript `Date`, whose input is already
+  milliseconds. Do not apply the division above; see the implementation note at the end.
 
 ### The screen
 

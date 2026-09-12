@@ -341,6 +341,18 @@ describe("sumupClient reader management", () => {
     expect(s.calls).toContainEqual(["DELETE", "/v0.1/merchants/MC/readers/rdr_1"]);
   });
 
+  it.each([400, 401, 403, 409, 429, 500])("rejects reader deletion on HTTP %s", async (status) => {
+    const s = stub(() => ({ status, body: { title: "Rejected" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+    await expect(client.deleteReader("rdr_1")).rejects.toThrow(`HTTP ${status}`);
+  });
+
+  it("accepts deletion of an already absent reader on a retry", async () => {
+    const s = stub(() => ({ status: 404, body: { title: "Reader not found" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+    await expect(client.deleteReader("rdr_1")).resolves.toBeUndefined();
+  });
+
   it("lists the merchant memberships this API key can act as", async () => {
     const s = stub(() => ({
       status: 200,

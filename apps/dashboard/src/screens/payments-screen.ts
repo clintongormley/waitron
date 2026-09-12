@@ -25,7 +25,7 @@ import type {
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
-/** Hosts provider-owned pairing forms and account discovery through the generic payments API. */
+/** Provider forms come through CARD_PROVIDER_PANELS; this screen never imports a provider package. */
 @customElement("dashboard-payments-screen")
 export class PaymentsScreen extends LitElement {
   static override styles = [

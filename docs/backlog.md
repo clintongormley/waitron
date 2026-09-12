@@ -1296,6 +1296,9 @@ for the projected remainder.
   reader stays re-addable as printers already do) with Unpair as a separate row-menu action, and keeps
   the battery / connection / firmware / last-seen the vendors already report, including showing
   "Unknown" when the provider cannot be reached.
+  If your demo database already has the payments schema, run `wa-wt reset demo` before using this
+  branch: the original reader migration now creates `disabled_at`. This discards the demo data;
+  an existing schema is not upgraded by the edited migration.
   Live Solo adoption and battery confirmation remain required before the PR.
 - **More than one card provider loaded at once** — DONE (2026-09-12, same branch as above). A venue can
   now have several providers connected and several readers per provider; the pay path chooses the reader

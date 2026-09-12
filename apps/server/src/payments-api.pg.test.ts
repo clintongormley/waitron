@@ -1048,6 +1048,26 @@ describe("reader adoption and local management", () => {
     expect([listed, removed]).toEqual([0, 0]);
   });
 
+  it("refuses enabling a disabled reader after disconnecting its provider", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+    await connectStripe(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    const added = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    const { id } = (await added.json()) as { id: string };
+    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
+    expect((await send(app, "POST", `${base}/providers/stripe/disconnect`, opts)).status).toBe(204);
+    const response = await send(app, "POST", `${base}/readers/${id}/enable`, opts);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
+    });
+    const stored = await suite.admin.execute(
+      sql`select active, disabled_at is not null as dated from card_readers where id = ${id}`,
+    );
+    expect(stored.rows).toEqual([{ active: false, dated: true }]);
+  });
+
   it.each(["available-readers", "adopt"])(
     "refuses disconnected %s before the vendor call",
     async (action) => {

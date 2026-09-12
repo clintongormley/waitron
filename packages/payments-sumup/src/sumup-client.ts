@@ -220,7 +220,13 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       };
     },
     async deleteReader(readerId: string): Promise<void> {
-      await call("DELETE", `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`);
+      const r = await call(
+        "DELETE",
+        `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`,
+      );
+      // A retry may find the reader already removed; other refusals must not look like success.
+      if (r.status >= 400 && r.status !== 404)
+        throw new Error(`sumup DELETE reader: HTTP ${r.status}`);
     },
     async memberships() {
       const r = await call("GET", "/v0.1/memberships");

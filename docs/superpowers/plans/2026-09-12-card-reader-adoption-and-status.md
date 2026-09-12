@@ -41,6 +41,18 @@ value directly to produce ISO text. Dividing by 1000 is needed only for a second
   Earlier attempts and their retained failure evidence are described below.
 - Live Solo adoption and a comparison with its reported battery remain pending environment access.
 
+## Whole-branch review
+
+The isolated Claude run-it review found a real-client gap behind the throwing fake: SumUp reader
+deletion accepted 4xx refusals. Five new HTTP cases failed before the fix; the client now rejects
+those responses while preserving successful deletion and a 404 retry. The HTTP suite passed all
+24 tests. A new disable/disconnect/enable regression failed with 204 instead of 409 when the
+credential guard was deleted; restoring it passed the 34-test PostgreSQL route suite.
+
+The review also prompted the demo reset instructions and the adjacent dated Stripe timestamp
+correction. The approved defaults-retention, zero-battery and single-page Stripe behavior remain.
+Review report, usage and triage: `/private/tmp/waitron-reader-review-d7q0hk9m/`.
+
 
 The next full-gate attempt stopped before the WireGuard change-feed test body: Testcontainers timed
 out waiting for a published port. `docker inspect c58e09f22340` showed PostgreSQL healthy and
