@@ -215,6 +215,15 @@ export const SETUP_PACKAGE = "@waitron/setup";
 export const VENUE_SERVICE_PACKAGE = "@waitron/venue-service";
 
 /**
+ * The two card-payment provider modules. Each combines a real-Postgres node project with a Chromium
+ * dashboard-panel project — the same shape as bookings and venue-service — so each gets a shard of
+ * its own rather than sharing a light bin: a browser package in the shared light shard is the shape
+ * UI_PACKAGE's receipt warns against, and its Chromium install would also weigh down its bin-mates.
+ */
+export const PAYMENTS_STRIPE_PACKAGE = "@waitron/payments-stripe";
+export const PAYMENTS_SUMUP_PACKAGE = "@waitron/payments-sumup";
+
+/**
  * The `test-server` shard's package: apps/server, the workspace's largest suite.
  *
  * Unlike the browser packages above, this split is a MEASURED PERFORMANCE one, not a hang
@@ -270,6 +279,8 @@ export const OWN_SHARD_PACKAGES = [
   FISCAL_VERIFACTU_PACKAGE,
   "@waitron/bookings",
   "@waitron/sync",
+  PAYMENTS_STRIPE_PACKAGE,
+  PAYMENTS_SUMUP_PACKAGE,
 ];
 
 /**
@@ -302,8 +313,6 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/country-gb",
   "@waitron/country-packs",
   "@waitron/dashboard-kit",
-  "@waitron/payments-stripe",
-  "@waitron/payments-sumup",
   "@waitron/identity",
   "@waitron/workforce",
   "@waitron/credentials",
@@ -402,6 +411,8 @@ export const SCOPE_GATES = [
   { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },
   { output: "bookings", covers: membership("@waitron/bookings") },
   { output: "sync", covers: membership("@waitron/sync") },
+  { output: "payments_stripe", covers: membership(PAYMENTS_STRIPE_PACKAGE) },
+  { output: "payments_sumup", covers: membership(PAYMENTS_SUMUP_PACKAGE) },
   { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },
   { output: "light_b", covers: lightGate(LIGHT_B_PACKAGES) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },

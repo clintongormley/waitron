@@ -22,6 +22,7 @@ import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import {
   GENERIC_PACKAGES,
+  I18N_CATALOGUES,
   PACKAGES_ROOT,
   SELF,
   SPANISH_WORDS,
@@ -175,6 +176,52 @@ describe("configuration", () => {
     // A wildcard here (say, *.test.ts) would silently drop every test file in packages/db out of
     // scope, which is where fixture names live.
     expect([...SELF]).toEqual(["english-only.ts", "no-regime-vocabulary.test.ts"]);
+  });
+
+  it("excludes the dashboard i18n translation catalogues by exact suffix, and nothing wider", () => {
+    // A module's `src/dashboard/strings.ts` holds `{ en, es }` UI copy: its `es` values are
+    // translation, not vocabulary (the dashboard-kit exclusion's principle, one file down). Only that
+    // one suffix is excluded, so every other file in the package stays in scope.
+    expect([...I18N_CATALOGUES]).toEqual(["dashboard/strings.ts"]);
+  });
+
+  it("drops each payment provider's dashboard catalogue from the scan while keeping its other files", () => {
+    // The two catalogues that fail on real Spanish translations (`nombre`, `pagos`). Excluded here,
+    // but the package's non-catalogue source is still discovered and scanned.
+    for (const pkg of ["payments-stripe", "payments-sumup"]) {
+      const files = sourceFilesIn(pkg);
+      expect(
+        files.some((f) => f.endsWith("dashboard/strings.ts")),
+        pkg,
+      ).toBe(false);
+      expect(files.length, pkg).toBeGreaterThan(0);
+    }
+  });
+
+  it("would flag the catalogues' es values if scanned, so the pass is the exclusion not weak vocab", () => {
+    // Prove-by-construction, the guard's own style: run findSpanish on the catalogue's real content
+    // with the assembled forbidden set. It fires (the Spanish translations ARE forbidden vocabulary),
+    // so the file passing the tree scan is DUE TO the exclusion, not because the words slipped the set.
+    for (const pkg of ["payments-stripe", "payments-sumup"]) {
+      const catalogue = join(PACKAGES_ROOT, pkg, "src", "dashboard", "strings.ts");
+      expect(existsSync(catalogue), pkg).toBe(true);
+      expect(findSpanish(readSource(catalogue), FORBIDDEN).length, pkg).toBeGreaterThan(0);
+    }
+  });
+
+  it("still scans a Spanish identifier in a non-catalogue dashboard file (the exclusion keeps its teeth)", () => {
+    // The exclusion is by PATH, not content: only `dashboard/strings.ts` is dropped. A Spanish
+    // identifier in any other file — a `dashboard/panel.ts` widget, say — is still caught. The
+    // exclusion cannot be widened into a loophole for Spanish code.
+    const isCatalogue = (relative: string) =>
+      I18N_CATALOGUES.some((suffix) => relative.endsWith(suffix));
+    expect(isCatalogue("dashboard/strings.ts")).toBe(true);
+    expect(isCatalogue("dashboard/panel.ts")).toBe(false);
+    expect(isCatalogue("dashboard/strings.test.ts")).toBe(false);
+    // And a Spanish identifier in such a non-catalogue file is a real violation, exactly as before.
+    expect(findSpanish("const nombreLector = 1;", FORBIDDEN).map((v) => v.word)).toEqual([
+      "nombre",
+    ]);
   });
 
   it("cannot reach this suite, so it needs no exemption", () => {
