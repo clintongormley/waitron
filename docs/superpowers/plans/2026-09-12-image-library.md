@@ -4,8 +4,8 @@
 
 Content-language configuration, editing and fallback, the media module, image management and product
 selection are implemented in the `image-library` branch. Workspace validation is complete; the
-branch is in `finish-branch`. The isolated Claude review is complete and its fixes are being
-validated before push and CI. No merge is claimed here.
+branch is in `finish-branch`. The isolated Claude review and local validation of its fixes are
+complete. Push and current-head CI follow; no merge is claimed here.
 
 The steps below are the implementation sequence. The recorded checks at the end describe focused
 runs during development, not a final check of every later edit.
@@ -118,6 +118,12 @@ explicit; the fallback read itself now has a reproducer and fix. No finding requ
 Review-fix focused receipts: 13 real-Postgres search tests and 24 PGlite image tests; 23 image-library
 browser tests and five route tests; 224 restore/config/backup tests across ten server files, including
 all four real database restores. The rebased dashboard suite passed 1,709 tests, till passed 1,394,
-and the catalogue, recipes, venue-service and dashboard-modules suites also passed. Final static,
-root and full server/media checks are running before push; the normal pre-push coverage gate and
-CI still follow.
+and the catalogue, recipes, venue-service and dashboard-modules suites also passed. Final lint,
+type checking, formatting and root checks passed; server passed 3,100 tests and media passed 96.
+The manual package run was completed in continuations after regression fixes.
+
+A later rebase onto `abb553c03bfe15c1fe6d15dbd9c323128abf09b7` retained the review approval.
+The sole conflict was documentation: the new concise CLAUDE.md keeps the rules, with receipts moved
+to the matching topic documents. The documentation-pointer guard passed. This main also changed
+the gate policy: the push hook now checks local static/root gates; required package coverage runs
+in CI. Follow that policy for the push instead of repeating the completed local package runs.
