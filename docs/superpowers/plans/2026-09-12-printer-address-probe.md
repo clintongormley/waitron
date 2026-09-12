@@ -53,6 +53,13 @@ comment is removed. The existing active/disabled browser regression covers the r
 Add again concern; whole-workspace type checking covers required Host implementations.
 
 The post-rebase whole-repository gate passed. Review corrections passed the 93-test agent package
-(with coverage), 102 server/helper/route/integration tests and five TCP tests. Affected package
-typechecks and both server/print-agent application builds passed. The normal pre-push hook supplies
+(with coverage), 102 server/helper/route/integration tests and five TCP tests. Both server and print-agent application builds passed. The initial server typecheck failed, as recorded below. The normal pre-push hook supplies
 the final affected-package coverage gate before the PR.
+
+The first push was correctly refused: all affected coverage suites passed, but the local `PullReply`
+type in `print-api.test.ts` omitted `networkProbes`. A cast added during review fixes produced
+TS2352. The earlier shell sequence ran the build after that typecheck failed, masking its exit
+status; its apparent success was not a passing typecheck. The response type now includes the
+shared `NetworkProbe` type, and the cast is removed. The fail-fast command
+`pnpm --filter @waitron/server typecheck && TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run src/print-api.test.ts`
+passed, including all 50 route tests. The normal hook is retried without bypassing any step.

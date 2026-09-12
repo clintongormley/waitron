@@ -107,6 +107,12 @@ the commit.
 
 Traps, each of which cost a round trip:
 
+- **Check every command's exit status.** A shell sequence separated by newlines reports only its
+  last command's status. Use `&&` for dependent validation steps, or capture each status separately.
+  Cost: the A3 review-fix command ran a successful build after a failed server typecheck and reported
+  success; the pre-push hook correctly refused the test's incomplete response type. Receipt:
+  `docs/superpowers/plans/2026-09-12-printer-address-probe.md`.
+
 - **CI's shards run `test:coverage`, not `test`.** Before calling a package green, run
   `pnpm --filter <pkg> test:coverage`. There is no single `test` job: `.github/workflows/ci.yml` runs
   `test-heavy` (`packages/db`) and `test-server` (`apps/server`) as three-way file shards each with a
