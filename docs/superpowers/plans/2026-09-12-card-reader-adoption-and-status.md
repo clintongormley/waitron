@@ -39,7 +39,17 @@ value directly to produce ISO text. Dividing by 1000 is needed only for a second
 - `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and the full `pnpm test` passed. The final
   workspace test command exited 0; its log is `/private/tmp/waitron-adoption-workspace-gate.log`.
   Earlier attempts and their retained failure evidence are described below.
-- Live Solo adoption and a comparison with its reported battery remain pending environment access.
+- Live Solo check passed on 2026-09-12 with the owner's approved experiment key. Chromium drove
+  the actual dashboard Add action through a local HTTP bridge to the payment routes and a disposable
+  PostgreSQL database. Reader `rdr_053SG4NG3J80AV0YHBK79MB7A7` was adopted with the edited name
+  `Live Solo validation`; the screen displayed Online and 100%, matching the status response's
+  `battery_level: 100`. The provider list retained the same reference after adoption. The fetch
+  wrapper permitted only GET requests to `https://api.sumup.com` and recorded seven calls.
+  Logs, result JSON and the temporary harness are retained under
+  `/private/tmp/waitron-reader-review-d7q0hk9m/`. No existing Waitron database was used.
+
+- After rebase and review fixes, the full manual gate passed again; the normal pre-push hook then
+  passed type checks and coverage for the changed packages and their dependents in 303 seconds.
 
 ## Whole-branch review
 

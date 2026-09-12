@@ -1299,7 +1299,9 @@ for the projected remainder.
   If your demo database already has the payments schema, run `wa-wt reset demo` before using this
   branch: the original reader migration now creates `disabled_at`. This discards the demo data;
   an existing schema is not upgraded by the edited migration.
-  Live Solo adoption and battery confirmation remain required before the PR.
+  Live Solo check passed on 2026-09-12: the dashboard adopted the already-paired reader into a
+  disposable PostgreSQL database and displayed 100%, matching SumUp's response. The provider
+  registration remained present; all vendor requests were GETs.
 - **More than one card provider loaded at once** — DONE (2026-09-12, same branch as above). A venue can
   now have several providers connected and several readers per provider; the pay path chooses the reader
   per call (the payment-time picker on the till, or the paying device's default) and drives THAT reader's
