@@ -1,0 +1,67 @@
+# Units
+
+Read the [shared design](2026-09-12-products-overhaul-design.md) first.
+
+You choose the unit you actually sell, such as each, grams or kilograms, and set how many decimal
+places a quantity may contain. A price of 24.90 per kg with a quantity of 0.250 produces a gross
+line total of 6.23 using the existing money rounding. A price per gram is a separate price; choosing
+g does not convert a kg price automatically.
+
+## Your workflow
+
+Units has its own navigation entry and searchable table showing the resolved name and precision.
+Create and Edit open the same modal form. The default-language name and precision are required;
+translations for other enabled languages are optional. Precision is an integer in 0–3, with help
+text explaining that 0 allows whole quantities only. Reject fractions, negative numbers, blanks,
+NaN and values above the supported limit at both UI and API boundaries.
+
+Seed each (0), g (0), kg (3), mg (0), ml (0), l (3) for a new tenant. Symbols can be identical across
+languages; each uses localized labels. Seeding occurs once as part of provisioning, not on every
+page load. A later provisioning call neither overwrites edits nor recreates intentionally deleted
+seed units. Use a durable per-tenant seeded marker if needed, and test this explicitly.
+
+Delete asks for confirmation and is blocked if any product uses the unit, including unavailable
+products. Show a localized explanation and the referencing products. Renaming and changing precision
+are allowed while in use; new quantities use the new rule, existing locked quantities retain their
+snapshot. Historical references must not prevent deletion when only copied values remain. If an
+actual retained reference exists, refuse deletion rather than invalidating that record.
+
+The product form defaults to each, offers existing units and opens this same unit form through
+“Add unit”. If the seeded each was deleted, choose explicitly rather than assuming an ID or silently
+recreating it. A successful nested create selects the returned unit and retains the product draft.
+
+## Model and boundaries
+
+Public shape: `Unit { id, name: LocalizedText, precision: number }`. Products write `unitId` and
+reads expose the resolved unit object. Catalogue owns unit definitions and assignments. Enforce
+tenant-consistent references; do not introduce a core-to-catalogue migration dependency.
+
+Keep a stable internal seed key independent of the editable display name. Deletion and assignment
+must serialize via referential constraints/locking so an “unused” check cannot race with a product
+save. Every product save validates that the unit belongs to the same tenant. Extend configuration
+transfer and content-language gap checks. Transfer seeded state as well as definitions.
+
+Quantities and prices travel as decimal strings. Validate precision before writing, ignoring
+insignificant trailing zeroes (`1.000` is valid for precision 0). Positive sale quantities remain
+required; existing return/correction paths retain their own sign rules. A unit conveys precision
+and display, not a conversion factor or inventory measurement dimension. Hardware weight conversion
+must use an explicit known unit mapping, never infer it from an editable translated name.
+
+At selection time freeze the unit name and precision on the order context and carry them through
+park/resume, kitchen displays and receipt/reprint rendering. Do not recover historical units from
+current definitions. Audit and retire each/weight switches in browser and server validation;
+custom units must have the same modifier, pricing and quantity validation paths. Coordinate the
+modifier gate change with the Modifiers branch; avoid competing rewrites of the order pricer.
+
+## Acceptance
+
+- A new tenant sees the seeds; editing/deleting a seed survives provisioning repeated on another node.
+- Required default-language names and precision errors appear beside their fields and in a summary.
+- kg accepts 0.125; each rejects 0.125; precision 2 rejects 1.234 without rounding it to 1.23.
+- A custom unit works through create, edit, sale, park/resume, kitchen and receipt snapshots.
+- Changing a unit after parking an order does not change its unit label, quantity or total.
+- An unavailable product still blocks deletion; concurrent assignment/delete cannot orphan a product.
+- A different tenant's unit cannot be read, edited, deleted or attached, including by a manager session.
+- Default-language changes include unit names; translations survive language disable/re-enable.
+
+No conversions, recipes, stock tracking or arbitrary precision expansion are part of this section.
