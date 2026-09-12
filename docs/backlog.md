@@ -79,11 +79,14 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 Ranked 2026-09-12, with the reason for each place and the track it belongs to. Each item is its own
 brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **A box a real operator can set up without a terminal** (B1) — **in flight** on
-   `feat/box-trust-onboarding`; certificate guidance and connection checks are implemented, with
-   the physical OS/browser trust walkthrough still open. This addresses the 2026-09-11 setup
-   dead-end: a re-image replaced the box's CA while the browser trusted the old one, and the
-   provisioning error offered no recovery instructions.
+1. **Walk the box setup on real devices** (B1) — the onboarding code landed (#330): certificate
+   guidance before setup details, connection retry/help, matching download/help paths over HTTP and
+   HTTPS, and an installer QR pointing at the guide, across macOS, Windows, Linux, ChromeOS, Android
+   and iPhone/iPad. What is left is physical verification — install the certificate, reopen with no
+   warning, then replace it after a re-image — tracked per OS/browser in
+   [ui-review.md](ui-review.md). This closes the 2026-09-11 setup dead-end: a re-image replaced the
+   box's CA while the browser trusted the old one, and the provisioning error offered no recovery
+   instructions.
 
 2. **The setup wizard asks the wrong things** (A2) — the till name, the two series codes and "what
    this location does" want defaults and explanations, and the demo path should not demand real
@@ -441,16 +444,17 @@ the CI `image` job (#288); boot-failure diagnosability — a recovery page of cu
 by error code, and an ahead-of-image database check (#310); the enum-upgrade repair and its two root
 guards (#307); real hardware bringup (#302); `linux/amd64`-only images (#325, published — the manifest
 carries amd64 alone); the backup + recovery-key wizard (#295); guided node onboarding, all four modes
-(#296); the print-agent process, its box wiring and on-node auto-enrolment (#282, #289, #308, #311).
+(#296); the print-agent process, its box wiring and on-node auto-enrolment (#282, #289, #308, #311); the
+CA-trust onboarding guidance, connection retry/help and the per-OS certificate walkthrough (#330).
 Proven end to end 2026-09-09: blank box → phone setup → provision → trading over HTTPS → enrolled
 till → a recorded preproduction sale.
 
-### B1. Onboarding must surface the CA-trust step — in flight
+### B1. Onboarding must surface the CA-trust step — LANDED #330 (2026-09-12)
 
-`feat/box-trust-onboarding` adds certificate guidance before collecting setup details, connection
-retry/help, matching download/help paths over HTTP and HTTPS, and an installer QR pointing at the
-guide. It covers macOS, Windows, Linux, ChromeOS, Android and iPhone/iPad, with browser-specific
-instructions. [Design](superpowers/specs/2026-09-12-box-trust-onboarding-design.md),
+The branch added certificate guidance before collecting setup details, connection retry/help,
+matching download/help paths over HTTP and HTTPS, and an installer QR pointing at the guide. It
+covers macOS, Windows, Linux, ChromeOS, Android and iPhone/iPad, with browser-specific instructions.
+[Design](superpowers/specs/2026-09-12-box-trust-onboarding-design.md),
 [plan and validation](superpowers/plans/2026-09-12-box-trust-onboarding.md).
 
 Still to walk on real devices: installing the certificate, reopening without a warning, then replacing
@@ -795,7 +799,7 @@ partial scope; the detail for a live thread is in its track.
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
-| 9 | Deployment | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); till reroute S1–S6; promotion endpoint (#272) | CA-trust onboarding (B1); USB installer (B3); cloud standby live link + the Waitron Cloud boundary |
+| 9 | Deployment | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272) | USB installer (B3); cloud standby live link + the Waitron Cloud boundary |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring, TS-5 split-bill (#324) | core COMPLETE; owner-added extensions parked |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor | — |
 | 12 | KDS / devices | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, order-timing alerts; device identity + profiles (#199, #231, #269) | routing audit view; expo device kind; device-scoped fire/collect routes |
