@@ -133,6 +133,27 @@ declare module "@waitron/shared" {
     "chain.append_contention": { tenantId: string; nodeId: string; attempts: number };
 
     /**
+     * `attemptAppend` (./chain.ts) refused a record that `@waitron/verifactu`'s `validate` reports
+     * as one AEAT could not accept — a forbidden character in the invoice number, a control
+     * character in a free-text field, an out-of-range amount. Raised BEFORE the insert, so nothing
+     * is written and the chain head does not move: `registros_facturacion` is append-only and
+     * hash-chained, and a value written wrong there stays wrong (CLAUDE.md §5), so refusing a
+     * record is the only remedy that leaves the venue repairable.
+     *
+     * `fiscal.*` and English, not `verifactu.*` and not Spanish: this names OUR local refusal, not
+     * an AEAT wire state. The sibling distinction the registry already draws is
+     * `fiscal.sale_not_recorded` (ours) beside `fiscal.registro_rechazado` (AEAT's answer).
+     *
+     * Params carry the offending FIELD NAMES and the validator's own ISSUE CODES — never the
+     * offending values. The shared error boundary writes params into `waitron.log`, which the
+     * unauthenticated recovery page renders to anyone on the venue's LAN
+     * (`apps/server/src/recovery-surface.ts`), so an operator's data must never travel here.
+     * Both arrays, because one record can breach several rules at once and a human fixing the
+     * venue wants all of them, not the first.
+     */
+    "fiscal.record_invalid": { fields: string[]; codes: string[] };
+
+    /**
      * Task 9's drainer (`./drain.ts`, `applyOutcome`). AEAT rejected this record outright
      * (`resolveEstadoEfectivo` returned `"rejected"`) — never constructed as a thrown `AppError`
      * (rejection is an ordinary, expected outcome the drainer resolves and moves on from, not a

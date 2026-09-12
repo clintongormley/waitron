@@ -303,13 +303,13 @@ export function altaFor(
     NumSerieFactura: `A/${invoiceNumber}`,
     FechaExpedicionFactura: new Date("2026-07-20T00:00:00+02:00"),
     NombreRazonEmisor: "Waitron SL",
-    TipoFactura: "F1",
+    TipoFactura: "F2",
     DescripcionOperacion: "Venta en establecimiento",
     Desglose: [
       {
         BaseImponibleOimporteNoSujeto: "102.02",
         CuotaRepercutida: "21.43",
-        TipoImpositivo: "21",
+        TipoImpositivo: "21.00",
         CalificacionOperacion: "S1",
       },
     ],

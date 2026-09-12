@@ -9,7 +9,7 @@ import { AppError } from "@waitron/shared";
 import type { NodeId, TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { AltaInput, AnulacionInput, Encadenamiento } from "@waitron/verifactu";
-import { buildAltaRecord, buildAnulacionRecord } from "@waitron/verifactu";
+import { buildAltaRecord, buildAnulacionRecord, validate } from "@waitron/verifactu";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
@@ -214,6 +214,22 @@ async function attemptAppend(
     registro.tipo === "alta"
       ? buildAltaRecord({ ...registro.input, Encadenamiento: encadenamiento })
       : buildAnulacionRecord({ ...registro.input, Encadenamiento: encadenamiento });
+
+  // Refuse a record AEAT could not accept BEFORE it reaches the append-only table. This is the one
+  // seam every record type passes through (alta and anulación, so sale, void, correction and
+  // substitution alike), and the first moment the COMPLETE record exists — the chain pointer and
+  // the huella are filled in above — so what is checked is what will be stored.
+  //
+  // Error severity only. `validate`'s two warnings are the amount cross-checks, which AEAT accepts
+  // under its own ±10.00 tolerance (see validate.ts above CUOTA_TOTAL_MISMATCH); blocking a sale
+  // for one would refuse a record the authority would have taken.
+  const blocking = validate(record).filter((issue) => issue.severity === "error");
+  if (blocking.length > 0) {
+    throw new AppError("fiscal.record_invalid", {
+      fields: blocking.map((issue) => issue.field),
+      codes: blocking.map((issue) => issue.code),
+    });
+  }
 
   const row = toRegistroRow(record, {
     tenantId,
