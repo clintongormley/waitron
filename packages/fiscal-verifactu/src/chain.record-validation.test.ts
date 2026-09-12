@@ -100,7 +100,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
   // one-way door: such a record can no longer be annulled at all.) So the record is appended
   // directly, which is also the only way to reach the anulación branch with a bad value.
   it("refuses an anulación whose voided invoice number is illegal", async () => {
-    const bad = anulacionFor(tillId, "00000000-0000-4000-8000-000000000001", 1, 1);
+    const bad = anulacionFor(tillId, brandSaleId("00000000-0000-4000-8000-000000000001"), 1, 1);
     const registro = {
       ...bad,
       input: { ...bad.input, NumSerieFacturaAnulada: "Serie A/1" },

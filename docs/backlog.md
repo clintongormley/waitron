@@ -180,15 +180,47 @@ rather than sweep. One pass, whenever somebody has the file open anyway.
 passport, residence certificate and so on, enumerated at
 `packages/verifactu/schemas/SuministroInformacion.xsd:894-927` — and choosing wrongly files a record
 into an append-only table that can never be unfiled. Whoever wires up business-customer sales makes
-that call. Unreachable today: nothing supplies a counterparty.
+that call. No HTTP route supplies a counterparty today — core's `recordSale` hardcodes `null` and
+nothing calls `recordSubstitution` from a route — but `packages/core`'s substitution path types it as
+required, so the refusal is one route away, not one feature away.
 
-### A1b. The validator never checks the recipient's own identity
+### A1b. The validator never checks the recipient's own identity — DONE in A1
 
-`validate` scans the issuer's name and the operation description for control characters but does
-neither for `Destinatarios.IDDestinatario[].NombreRazon`, and applies no length rule to the
-recipient's NIF. A customer-supplied name carrying a control character would make the filed XML
-unparseable. Predates A1 (`git log -S`, #51) and is already reachable through `recordSubstitution`;
-A1 widens its future reach to every business-customer sale.
+`validate` scanned the issuer's name and the operation description for characters XML forbids but
+did neither for `Destinatarios.IDDestinatario[].NombreRazon`, and applied no length rule to the
+recipient's NIF. The gap predates A1 (`git log -S`, #51), but A1 is what made it live: before it,
+nothing put a recipient on a sale. The run-it review then proved it against real PostgreSQL — a
+customer named `Cliente<U+0007>SL` went through the new full-invoice path, the sale COMMITTED, and
+the bell character was stored in the append-only record. Fixed on the same branch: every recipient's
+name is scanned and the issue names which one, and the recipient's NIF gets the same exactly-nine
+rule the issuer's does (`sf:NIFType` is the identical XSD type). Regression at the chain seam.
+
+### A1d. Four things the A1 review wave raised and did not fix
+
+Each was judged and deliberately left; none blocks the merge.
+
+- **The audited AEAT package's own shared record fixture is still a full invoice naming no
+  recipient.** `packages/verifactu/test/fixtures.ts`'s `ALTA_INPUT` is the exact shape A1 corrected
+  everywhere else. Not free to fix: it reproduces AEAT's own vector-1 hash, and the exact-XML
+  expectations in `xml/serialize.test.ts` would all move. Whoever touches it does so with those two
+  facts in hand.
+- **The venue-field check restates three rules the validator owns.** `packages/fiscal-verifactu`'s
+  `venue-fields.ts` copies the series-code character set, the description cap and the control-character
+  range out of `@waitron/verifactu`'s `validate.ts`, and a whole test file exists to keep the copy
+  honest. A reviewer proposed exporting `NUMSERIE_PATTERN`, `CONTROL_CHAR_PATTERN` and a named
+  description cap from the library's barrel instead, deleting both the copy and the guard. DEFERRED
+  on purpose (owner, 2026-09-12): it widens an audited fiscal library's public surface at the end of
+  a branch, and the drift guard already closes the risk — 34 tests, proven against fourteen
+  mutations. Revisit when something else needs those patterns.
+- **The till writes the same three-way error classification at five call sites.**
+  `apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown in five places; a
+  helper would collapse it. Cosmetic, and cheapest to do alongside the tip-collection work that
+  touches `#onPayTab` anyway.
+- **`setup.request_invalid` is described as "currently the AEAT certificate seal".**
+  `apps/server/src/errors.ts` says so, while `parseVenue` raises it for every venue field it checks,
+  through `invalidRequest` in `apps/server/src/setup-api.ts`. Already false before A1 — the sentence
+  dates from #142 (`git log -S`) — so A1 neither created nor fixed it. One line, whenever somebody
+  has that registry open.
 
 ### A2. The setup wizard
 
@@ -203,7 +235,10 @@ Owner walkthrough 2026-09-12, none started. Detail for each under *Detail → Se
   a dashboard screen that can change it (nothing can today, though the wizard promises it).
 - **The demo path** asks for real business details; ask only for the operator and the location's name
   and address, generate a company tax ID, fill the rest with values they can change later.
-- **Per-field errors on the shop page** instead of one banner listing every possible problem.
+- **Per-field errors on the shop page** instead of one banner listing every possible problem. A1
+  built the per-field shape — the marked field, its own sentence in the input's `error` slot, focus
+  moved to it, no banner — for the four fields the fiscal regime refuses. What is left is the rules
+  the form evaluates itself, which still raise one banner listing everything.
 - **The certificate page** should show the export steps for the operator's own OS.
 - **A mistyped setup address gives a blank page** — redirect unknown paths to `/`, not a catch-all.
 - **Password and PIN reveal controls** on the first-operator screen, the dashboard's icon version.
@@ -340,7 +375,8 @@ Two halves, one branch each (owner decision 2026-09-12).
   document.
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
   cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
-  flattens every server code to one `sale.error` key, hiding `sale.empty_basket`.
+  flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
+  `sale.empty_basket`.
 
 ### A9. Product depth — after the primary works
 

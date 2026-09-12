@@ -16,7 +16,8 @@ export interface VenueFiscalSelection {
    * two enabled. Non-fiscal overrides in `base` are carried through untouched. */
   config: ModuleConfig;
   /** The fiscal contribution the territory's `filing` id names, or `undefined` when no slot member in
-   * `modules` declares it. The provision handler reaches its `provisioningSecret` seat through this. */
+   * `modules` declares it. The provision handler reaches its `provisioningSecret` seat through this,
+   * and both it and the `venue` CLI reach `venueFields`. */
   contribution: FiscalContribution | undefined;
 }
 

@@ -124,8 +124,9 @@ export const sales = pgTable(
     // (pre-production, no deployed data), and immutable table-wide like every
     // other column here.
     correctsSaleId: uuid("corrects_sale_id"),
-    // The recipient (`destinatario`) of a full invoice — set on an F3 canje (and, later, an F1),
-    // NULL on an ordinary F2 sale. Stored on the generic sales row, not only in the fiscal
+    // The recipient (`destinatario`) of a full invoice — set on any sale that names one: an F3
+    // canje today, and an F1 full invoice from any caller that supplies a counterparty. NULL on an
+    // ordinary F2 sale. Stored on the generic sales row, not only in the fiscal
     // record's `destinatarios`, for the same reason `corrects_sale_id`/`fiscal_state` are here
     // (see this table's own comment above): a full invoice's recipient is a reprint/Z-report fact,
     // and keeping it here answers "who was this invoiced to?" with no cross-boundary join. English

@@ -341,10 +341,14 @@ async function status(argv: string[], deps: CliDeps): Promise<number> {
  * whole slice `planVenue`/`applyVenue` compose.
  *
  * The ORDER mirrors `instance`: everything that can be resolved and validated WITHOUT a database is
- * done first — including the pure `planVenue`, which refuses an unimplemented territory, a bad
- * locale count and duplicate series codes — so a malformed request costs the operator neither a
- * pasted admin credential nor an opened connection (venue-plan.ts's "no admin connection is spent on
- * a malformed request"). Only then is the admin URI asked for and the target opened.
+ * done first — the fiscal regime's own venue-field seat, which refuses a legal name or operation
+ * description carrying a character XML forbids, an operation description over 500 characters, and
+ * either series code outside AEAT's character set or longer than the 38-character base
+ * (`setup.request_invalid`, naming the offending field), and then the pure `planVenue`, which
+ * refuses an unimplemented territory, a bad locale count and duplicate series codes — so a
+ * malformed request costs the operator neither a pasted admin credential nor an opened connection
+ * (venue-plan.ts's "no admin connection is spent on a malformed request"). Only then is the admin
+ * URI asked for and the target opened.
  *
  * Unlike `instance`, the connection is to the TARGET database as the OWNER-admin, not to the cluster
  * admin: `applyVenue` inserts as the role that owns the tables, so there is no

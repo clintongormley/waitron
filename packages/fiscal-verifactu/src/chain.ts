@@ -36,7 +36,10 @@ const MAX_APPEND_ATTEMPTS = 3;
  * exist before `appendToChain` runs. `saleId` travels alongside rather than living inside `input`:
  * it is this package's own foreign key onto core's `sales`, not an AEAT field, and keeping it out
  * of the arm that becomes `buildAltaRecord`/`buildAnulacionRecord`'s parameter stops it from ever
- * being accidentally hashed.
+ * being accidentally hashed. `saleId` and `tillId` are the BRANDED ids, not bare strings: every
+ * caller already holds genuine branded values, so typing them here drops two unchecked casts at the
+ * row insert. A brand is structurally still a string, so the never-inside-`input`, never-hashed
+ * property above is untouched by it — the brand narrows what may be assigned in, nothing else.
  *
  * `tillId` travels the same way, and for the same reason it is a real column: the immutable
  * `registros_facturacion.till_id` is an informational SNAPSHOT of where the sale rang (node-id
@@ -52,15 +55,15 @@ const MAX_APPEND_ATTEMPTS = 3;
 export type PendingRegistro =
   | {
       tipo: "alta";
-      saleId: string;
-      tillId: string;
+      saleId: SaleId;
+      tillId: TillId;
       entorno: Entorno;
       input: Omit<AltaInput, "Encadenamiento">;
     }
   | {
       tipo: "anulacion";
-      saleId: string;
-      tillId: string;
+      saleId: SaleId;
+      tillId: TillId;
       entorno: Entorno;
       input: Omit<AnulacionInput, "Encadenamiento">;
     };
@@ -274,8 +277,8 @@ async function attemptAppend(
   if (warnings.length > 0) {
     await recordIncident(tx, {
       tenantId,
-      tillId: registro.tillId as TillId,
-      saleId: registro.saleId as SaleId,
+      tillId: registro.tillId,
+      saleId: registro.saleId,
       error: new AppError("fiscal.record_totals_disagree", {
         fields: warnings.map((issue) => issue.field),
         codes: warnings.map((issue) => issue.code),

@@ -29,7 +29,9 @@ import { SERVER_FIELDS, type ServerField } from "../server-fields.js";
  * On `Next` it validates required fields, the tax identifier and postcode, postcode/province
  * agreement, supported fiscal jurisdiction, distinct series codes, and one or two invoice languages.
  * A failure shows a SINGLE `role="alert"` banner and marks the offending fields `invalid`, and nothing
- * is emitted. On success it
+ * is emitted. A field the SERVER refused is different: it is marked and carries its own sentence in
+ * the input's `error` slot, with focus moved to it and no banner — the banner region is for faults
+ * this form evaluated itself. On success it
  * emits the `venue` slice as a `setup-patch`, then a screen-agnostic `setup-advance` for the SHELL to
  * route: the venue→`cert`/`review` decision (live ES-common needs the AEAT cert; demo goes
  * straight to `review`) lives in `apps/setup/src/setup-app.ts`, which owns the merged draft — this
@@ -218,15 +220,21 @@ export class SetupVenueScreen extends LitElement {
    */
   override updated(changed: PropertyValues<this>): void {
     if (!changed.has("invalidField") || this.serverInvalid === undefined) return;
+    // Selected by the field's semantic `name`, not by its `data-test` hook: a test hook is not an
+    // identity a production code path may depend on (CLAUDE.md §3 → Forms), and the repo's other
+    // focus-the-refused-field does the same (`apps/dashboard/src/screens/login-screen.ts`).
     const field = this.shadowRoot!.querySelector<
       HTMLElement & { updateComplete?: Promise<unknown> }
-    >(`[data-test=${this.serverInvalid.key}]`);
+    >(`wt-input[name=${this.serverInvalid.key}]`);
     if (field === null) return;
     // Awaiting the `wt-input`'s OWN first render, not just this screen's: a Lit child renders in a
     // later microtask, so at this point the host exists but the native input focus is delegated to
     // does not, and focusing the host would do nothing at all (measured — the first version of this
-    // left `shadowRoot.activeElement` null).
-    void Promise.resolve(field.updateComplete).then(() => field.focus());
+    // left `shadowRoot.activeElement` null). The `isConnected` guard is the same sibling's: the
+    // screen can be torn down between the microtask being queued and it running.
+    void Promise.resolve(field.updateComplete).then(() => {
+      if (this.isConnected) field.focus();
+    });
   }
 
   /**
@@ -452,6 +460,7 @@ export class SetupVenueScreen extends LitElement {
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${label}
+      name=${key}
       data-test=${key}
       type=${type}
       ?invalid=${this.invalid.has(key) || refused !== undefined}
