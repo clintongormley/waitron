@@ -484,10 +484,23 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     // connection). The CLI has no operator `modules.json`, so the base is empty (the seam's default).
     // `modules` is the ENABLED subset, so a no-regime (`GB-…`) venue drops `fiscal-verifactu` and its
     // SIF seed is never planned.
-    const { config: fiscalConfig } = venueFiscalSelection(
-      deps.modules,
-      request.location.fiscalTerritory,
-    );
+    const selection = venueFiscalSelection(deps.modules, request.location.fiscalTerritory);
+    const fiscalConfig = selection.config;
+    // The regime's own rules on the four fields the operator just typed, reached through the same
+    // contract seat the setup wizard uses (`FiscalContribution.venueFields`) — this file names no
+    // regime package. Run HERE, before `resolveAdminUri` asks for an admin credential and long
+    // before `applyVenue` mints the tenant, node, SIF and hash chain, so a refusal costs no
+    // connection and leaves nothing behind (CLAUDE.md §5). Without it this command could provision a
+    // venue whose series code the tax agency rejects, and every sale it ever took would be refused
+    // at the chain seam with no way back — `create-series` is ON CONFLICT DO NOTHING, so re-running
+    // reuses the tenant. A regime that files nothing offers no seat; the optional call is how its
+    // venues skip the check.
+    selection.contribution?.venueFields?.validate({
+      legalName: request.legalName,
+      seriesCode: request.seriesCode,
+      rectificativeSeriesCode: request.rectificativeSeriesCode,
+      operationDescription: request.location.operationDescription,
+    });
     const modules = enabledModules(deps.modules, fiscalConfig);
 
     // Pure, and the last thing that can refuse the request without touching a database: an
