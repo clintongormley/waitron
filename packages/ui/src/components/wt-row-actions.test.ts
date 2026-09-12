@@ -38,6 +38,26 @@ describe("row actions", () => {
     const icon = el.shadowRoot!.querySelector("button wt-icon")!;
     expect(icon.getAttribute("name")).toBe("kebab");
   });
+  it("shows a caller-supplied icon instead of the kebab, for a non-row menu (e.g. account menu) reusing this same disclosure", async () => {
+    const { el } = await mountWidget<WtRowActions>("wt-row-actions", {
+      label: "Account menu",
+      icon: "person",
+    });
+    const icon = el.shadowRoot!.querySelector("button wt-icon")!;
+    expect(icon.getAttribute("name")).toBe("person");
+  });
+  it("defaults the trigger icon to md, but takes a caller-supplied size (e.g. a larger account-menu trigger)", async () => {
+    const { el } = await mountWidget<WtRowActions>("wt-row-actions", {
+      label: "Department actions",
+    });
+    expect(el.shadowRoot!.querySelector("button wt-icon")!.getAttribute("size")).toBe("md");
+
+    const { el: bigger } = await mountWidget<WtRowActions>("wt-row-actions", {
+      label: "Account menu",
+      iconSize: "lg",
+    });
+    expect(bigger.shadowRoot!.querySelector("button wt-icon")!.getAttribute("size")).toBe("lg");
+  });
   it("registers the reusable action disclosure", async () => {
     const el = await mount('<wt-row-actions label="Department actions"></wt-row-actions>');
     expect(el.shadowRoot?.querySelector("button")?.getAttribute("aria-label")).toBe(

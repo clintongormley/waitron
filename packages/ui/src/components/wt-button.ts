@@ -83,11 +83,19 @@ export class WtButton extends LitElement {
         background: transparent;
         color: var(--wt-color-text);
       }
+
+      /* For a button standing in as a MENU ITEM (e.g. inside wt-row-actions' popover, which already
+         stretches a slotted button to the popover's full width) — a centered label reads oddly once
+         the button is wider than its text, unlike an ordinary button sized to its own content. */
+      :host([align="start"]) button {
+        justify-content: flex-start;
+      }
     `,
   ];
 
   @property({ reflect: true }) variant: WtButtonVariant = "secondary";
   @property({ reflect: true }) size: WtButtonSize = "md";
+  @property({ reflect: true }) align: "center" | "start" = "center";
   @property({ type: Boolean, reflect: true }) disabled = false;
   /** An in-progress action: the button is disabled, marked `aria-busy`, and a decorative spinner
    * leads the label. The label stays visible — and is the one thing announced — so the caller swaps

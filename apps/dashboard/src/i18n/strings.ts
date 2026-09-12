@@ -107,6 +107,10 @@ export const en = {
   // The hamburger that opens/closes the off-canvas nav drawer on narrow screens (icon-only, so this is
   // its accessible name).
   "nav.toggle": "Toggle navigation",
+  // The banner's account-icon trigger (icon-only, so this is its accessible name) and the two
+  // actions inside the menu it opens.
+  "nav.account_menu": "Account menu",
+  "action.account_settings": "Account settings",
   // Sidebar group headers (grouping the seventeen manager faces; the pinned overview+sales group has none)
   "nav.group.menu": "Products and recipes",
   "nav.group.service": "Service",
@@ -1070,6 +1074,8 @@ export const es: Record<StringKey, string> = {
   "form.confirm_password_required": "Confirma la contraseña",
   "nav.sections": "Secciones",
   "nav.toggle": "Mostrar u ocultar la navegación",
+  "nav.account_menu": "Menú de cuenta",
+  "action.account_settings": "Configuración de la cuenta",
   "nav.group.menu": "Productos y recetas",
   "nav.group.service": "Servicio",
   "nav.group.team": "Equipo",

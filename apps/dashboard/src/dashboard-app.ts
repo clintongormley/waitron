@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeOf } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
@@ -32,6 +33,7 @@ import { LocaleChangeController } from "./state/locale-controller.js";
 import "./widgets/language-chooser.js";
 import "./screens/login-screen.js";
 import "./screens/profile-screen.js";
+import type { ProfileScreen } from "./screens/profile-screen.js";
 import "./screens/my-schedule-screen.js";
 import "./screens/dashboard-overview-screen.js";
 import "./screens/dashboard-sales-screen.js";
@@ -369,7 +371,12 @@ export class DashboardApp extends LitElement {
       }
 
       .venue-name {
-        min-width: 0;
+        /* A floor, not zero: unbounded, this flex item was the only shrinkable thing in
+           .brand-identity, so a narrow banner could squeeze it down to a couple of pixels wide —
+           and overflow-wrap: anywhere then wrapped every single CHARACTER onto its own line rather
+           than at word boundaries, a tall unreadable column instead of a couple of ordinary lines.
+           overflow-wrap: anywhere stays as the guard for a single word longer than this floor. */
+        min-width: 8ch;
         padding-inline-start: var(--wt-space-3);
         border-inline-start: 1px solid var(--wt-color-border);
         font-weight: var(--wt-font-weight-bold);
@@ -430,6 +437,11 @@ export class DashboardApp extends LitElement {
           top: 0;
           bottom: 0;
           left: 0;
+          /* position:absolute drops .sidebar out of flex layout, so the flex-basis above no longer
+             sizes it — without its own width it fell back to shrink-to-fit over the nav's content,
+             a width that moved every time a group expanded or collapsed and that translateX(-100%)
+             then closed against inconsistently. */
+          width: var(--dashboard-sidebar-width);
           z-index: 30;
           /* Opaque so the dimmed main column never shows through the sliding panel. */
           background: var(--wt-color-bg);
@@ -490,6 +502,12 @@ export class DashboardApp extends LitElement {
    * (so it survives refresh/deep-link — `#applyRequestedScreen`/`#writeCurrentUrl` keep the two in
    * sync) as well as `#openProfile`/`#closeProfile` for in-session opens and closes. */
   @state() private profileOpen = false;
+
+  /** Which tab of the open profile modal is showing — profile-screen.ts owns the tab strip itself
+   * and reports changes via `profile-tab-change`, because the Edit action for "Your details" lives
+   * in THIS shell's modal footer (alongside Close), not inside profile-screen.ts: Security has no
+   * equivalent single action, so the footer only shows Edit while "details" is active. */
+  @state() private profileTab: "details" | "security" = "details";
 
   /** Manually-collapsed nav groups (headerless groups are never collapsible, so never appear here).
    * A group in this set still renders expanded if it contains the CURRENT screen — collapsing "Team"
@@ -998,15 +1016,27 @@ export class DashboardApp extends LitElement {
       ${
         authenticated
           ? html`<div class="banner-actions">
-              <wt-button variant="secondary" data-test="profile" @click=${() => this.#openProfile()}
-                >${t("profile.title")}</wt-button
+              <wt-row-actions
+                icon="person"
+                iconSize="lg"
+                label=${t("nav.account_menu")}
+                data-test="account-menu"
               >
-              <wt-button
-                variant="secondary"
-                data-test="logout"
-                @click=${() => void this.#onLogout()}
-                >${t("action.logout")}</wt-button
-              >
+                <wt-button
+                  variant="ghost"
+                  align="start"
+                  data-test="profile"
+                  @click=${() => this.#openProfile()}
+                  >${t("action.account_settings")}</wt-button
+                >
+                <wt-button
+                  variant="ghost"
+                  align="start"
+                  data-test="logout"
+                  @click=${() => void this.#onLogout()}
+                  >${t("action.logout")}</wt-button
+                >
+              </wt-row-actions>
             </div>`
           : nothing
       }
@@ -1209,6 +1239,9 @@ export class DashboardApp extends LitElement {
             ? html`<dashboard-profile-screen
                 .api=${this.api}
                 @profile-updated=${() => void this.#probeSession()}
+                @profile-tab-change=${(e: CustomEvent<{ tab: "details" | "security" }>) => {
+                  this.profileTab = e.detail.tab;
+                }}
               ></dashboard-profile-screen>`
             : nothing
         }
@@ -1216,6 +1249,19 @@ export class DashboardApp extends LitElement {
           <wt-button slot="cancel" data-test="close-profile" @click=${() => this.#closeProfile()}
             >${t("action.close")}</wt-button
           >
+          ${
+            this.profileTab === "details"
+              ? html`<wt-button
+                  data-test="edit-profile-details"
+                  variant="primary"
+                  @click=${() =>
+                    this.renderRoot
+                      .querySelector<ProfileScreen>("dashboard-profile-screen")
+                      ?.editDetails()}
+                  >${t("action.edit")}</wt-button
+                >`
+              : nothing
+          }
         </wt-form-actions>
       </wt-modal>
     `;

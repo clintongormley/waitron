@@ -101,6 +101,13 @@ async function click(el: ProfileScreen, action: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
   await flush(el);
 }
+// The Edit action for "Your details" lives in dashboard-app.ts's modal footer, not in this screen
+// (see editDetails() on ProfileScreen) — standalone here, tests call the same public entry point
+// that button uses.
+async function editDetails(el: ProfileScreen) {
+  el.editDetails();
+  await flush(el);
+}
 function input(el: ProfileScreen, name: string, value: string) {
   el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
     `wt-input[name=${name}]`,
@@ -113,9 +120,9 @@ describe("your profile", () => {
     const { el, api } = await mount({
       getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null, lastNames: " " }),
     });
-    // The details card (and its Edit button) stays visible behind the modal — see "renders the
-    // details card behind the edit modal, not in place of it" below — so what actually proves the
-    // edit form opened automatically is the modal itself being open with the incomplete fields shown.
+    // The details card stays visible behind the modal — see "opens Edit in a modal over the
+    // details card, not in place of it" below — so what actually proves the edit form opened
+    // automatically is the modal itself being open with the incomplete fields shown.
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
     for (const [name, key] of [
       ["firstNames", "form.first_names_required"],
@@ -137,7 +144,9 @@ describe("your profile", () => {
     expect(api.saveProfile).toHaveBeenCalledWith(
       expect.objectContaining({ firstNames: "Alex", lastNames: "Rivera" }),
     );
-    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).not.toBeNull();
+    // Back to view — the details card (its Edit action lives in dashboard-app.ts's modal footer
+    // now, see editDetails()) rather than left stuck open after a successful save.
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   });
 
   it("renders your details and passkeys accessibly", async () => {
@@ -154,12 +163,12 @@ describe("your profile", () => {
     const { el } = await mount();
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     expect(modal.open).toBe(false);
-    await click(el, "edit-details");
+    await editDetails(el);
     expect(modal.open).toBe(true);
-    // The card (and its own Edit button) is still there behind the modal — this is the whole point
-    // of the modal pattern: editing overlays the page rather than replacing it.
+    // The card is still there behind the modal — this is the whole point of the modal pattern:
+    // editing overlays the page rather than replacing it.
     expect(el.shadowRoot!.textContent).toContain("alex@example.com");
-    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
     await click(el, "cancel");
     expect(modal.open).toBe(false);
   });
@@ -171,7 +180,7 @@ describe("your profile", () => {
     // deterministically by dispatching the delayed event by hand, rather than depending on luck.
     const { el } = await mount();
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
-    await click(el, "edit-details");
+    await editDetails(el);
     // Cancel, then immediately open a different edit — both BEFORE Lit has rendered either
     // transition, so the real "close" event this Cancel will eventually cause has not fired yet
     // (its flag is still armed) by the time "remove" is already the current mode.
@@ -246,7 +255,7 @@ describe("your profile", () => {
   });
   it("validates details and lets you cancel edits without saving", async () => {
     const { el, api } = await mount();
-    await click(el, "edit-details");
+    await editDetails(el);
     input(el, "displayName", "");
     input(el, "email", "bad");
     await click(el, "save");
@@ -259,7 +268,7 @@ describe("your profile", () => {
     ).toBeTruthy();
     await click(el, "cancel");
     expect(el.shadowRoot!.textContent).toContain("alex@example.com");
-    await click(el, "edit-details");
+    await editDetails(el);
     input(el, "displayName", "Alex Updated");
     const language = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=locale]")!;
     language.value = "es-ES";
@@ -276,7 +285,7 @@ describe("your profile", () => {
   });
   it("requires current credentials for an email change and gives each password field a reveal control", async () => {
     const { el, api, host } = await mount();
-    await click(el, "edit-details");
+    await editDetails(el);
     input(el, "email", "new@example.com");
     await flush(el);
     await click(el, "save");

@@ -1,4 +1,4 @@
-import { page } from "@vitest/browser/context";
+import { commands, page } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
@@ -282,6 +282,8 @@ const screenCanvasEditor = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-canvas-editor-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
+const accountMenuTrigger = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=account-menu]");
 const brandBanner = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=brand-banner]");
 const venueName = (el: DashboardApp) =>
@@ -613,20 +615,22 @@ describe("dashboard-app", () => {
     expect(getMe).not.toHaveBeenCalled();
   });
 
-  it("puts logout on the right side of the authenticated banner", async () => {
+  it("puts the account menu on the right side of the authenticated banner", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
 
     const banner = brandBanner(el)!;
     const name = venueName(el)!;
-    const logout = logoutBtn(el)!;
+    const trigger = accountMenuTrigger(el)!;
     expect(banner).toBeTruthy();
     expect(name.textContent?.trim()).toBe("Deli Test SL");
-    expect(logout).toBeTruthy();
-    expect(logout.getBoundingClientRect().left).toBeGreaterThan(name.getBoundingClientRect().right);
+    expect(trigger).toBeTruthy();
+    expect(trigger.getBoundingClientRect().left).toBeGreaterThan(
+      name.getBoundingClientRect().right,
+    );
     const bannerBox = banner.getBoundingClientRect();
     const trailingPadding = Number.parseFloat(getComputedStyle(banner).paddingRight);
-    expect(logout.getBoundingClientRect().right).toBeCloseTo(bannerBox.right - trailingPadding, 0);
+    expect(trigger.getBoundingClientRect().right).toBeCloseTo(bannerBox.right - trailingPadding, 0);
   });
 
   it("puts the full-width banner above both the sidebar and page content", async () => {
@@ -863,7 +867,8 @@ describe("dashboard-app", () => {
     const profileScreen = el.shadowRoot!.querySelector("dashboard-profile-screen")!;
     await new Promise((r) => setTimeout(r, 0));
     await profileScreen.updateComplete;
-    profileScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-details]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-profile-details"]')!.click();
     await profileScreen.updateComplete;
     const innerModal = profileScreen.shadowRoot!.querySelector("wt-modal")!;
     expect(innerModal.open).toBe(true);
@@ -1726,6 +1731,65 @@ describe("dashboard-app", () => {
     expect(layout().classList.contains("drawer-open")).toBe(false);
     expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
     expect(catalogue(el)).toBeTruthy();
+  });
+
+  // Real viewport resizes below — the matchMedia STUB the other drawer tests use never applies the
+  // actual CSS @media rule, so it cannot catch a real off-canvas layout bug (see the two below).
+  it("keeps the off-canvas drawer a fixed width, unaffected by which nav groups are expanded", async () => {
+    // .sidebar drops out of flex layout under position:absolute (the narrow media query), so
+    // without its own explicit width it fell back to shrink-to-fit over the nav's content — a width
+    // that could change with every group expand/collapse, making the closed drawer's
+    // translateX(-100%) resolve against a moving target instead of a fixed one (measured live at
+    // 211px vs the intended 170px/18ch — this fixture's own nav content happens not to diverge
+    // enough to fail these two assertions on the unfixed CSS, but they still pin the invariant an
+    // explicit width guarantees: the narrow drawer is exactly as wide as the desktop sidebar, and
+    // never moves when a group's disclosure state changes).
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+    const desktopWidth = sidebar().getBoundingClientRect().width;
+    try {
+      await commands.setViewportSize(400, 800);
+      for (let i = 0; i < 100 && !sidebar().hasAttribute("inert"); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      const widthBeforeToggle = sidebar().getBoundingClientRect().width;
+      expect(widthBeforeToggle).toBeCloseTo(desktopWidth, 0);
+      // Fully off-screen when closed, not a hairline sliver left visible.
+      expect(sidebar().getBoundingClientRect().right).toBeLessThanOrEqual(0);
+
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!.click();
+      await el.updateComplete;
+      expect(sidebar().getBoundingClientRect().width).toBeCloseTo(widthBeforeToggle, 0);
+    } finally {
+      await commands.setViewportSize(1280, 800);
+    }
+  });
+
+  it("keeps the venue name on a legible line width at narrow viewport, never squeezed into one letter per line", async () => {
+    // .venue-name had no floor on how far it could shrink (min-width: 0, no lower bound), so at a
+    // narrow banner width the flex algorithm could squeeze it down to a sliver a couple of pixels
+    // wide — with overflow-wrap: anywhere, that wraps every single CHARACTER onto its own line
+    // instead of wrapping at word boundaries, producing a tall, unreadable vertical column.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const venueName = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="venue-name"]')!;
+    try {
+      await commands.setViewportSize(390, 800);
+      const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+      for (let i = 0; i < 100 && !sidebar.hasAttribute("inert"); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      const rect = venueName().getBoundingClientRect();
+      expect(rect.width).toBeGreaterThan(20);
+      expect(rect.height).toBeLessThan(100);
+    } finally {
+      await commands.setViewportSize(1280, 800);
+    }
   });
 
   it("clicking the scrim closes the drawer", async () => {

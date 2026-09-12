@@ -3,6 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-icon.js";
+import type { WtIconSize } from "./wt-icon.js";
 
 @customElement("wt-row-actions")
 export class WtRowActions extends LitElement {
@@ -45,6 +46,12 @@ export class WtRowActions extends LitElement {
   ];
 
   @property() label = "";
+  /** Defaults to the row-actions kebab; a menu anchored elsewhere (e.g. an account menu) passes
+   * its own icon name so this stays the one popover-menu primitive instead of a duplicate. */
+  @property() icon = "kebab";
+  /** wt-icon's own size scale — a per-row kebab wants the default; a banner-level trigger (e.g.
+   * the account menu) reads better larger. */
+  @property() iconSize: WtIconSize = "md";
   @state() private expanded = false;
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
@@ -117,7 +124,7 @@ export class WtRowActions extends LitElement {
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
       >
-        <wt-icon name="kebab"></wt-icon>
+        <wt-icon name=${this.icon} size=${this.iconSize}></wt-icon>
       </button>
       <div id="actions" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
         <div class="actions"><slot @click=${this.onAction}></slot></div>

@@ -239,39 +239,6 @@ describe("staff-screen", () => {
     expect(dialog.open).toBe(false);
   });
 
-  it("prevents forged self-deactivation while allowing a colleague to be deactivated", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
-    Object.assign(el, { currentPersonId: "p1" });
-    await flush(el);
-    await openEdit(el, "p1");
-    await editForm(el).updateComplete;
-    const button = editForm(el).shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      "[data-test=mark-inactive]",
-    )!;
-    expect(button.disabled).toBe(true);
-    editForm(el).dispatchEvent(
-      new CustomEvent("deactivate-person", { bubbles: true, composed: true }),
-    );
-    await flush(el);
-    expect(api.deactivatePerson).not.toHaveBeenCalled();
-    Object.assign(el, { currentPersonId: "p2" });
-    await el.updateComplete;
-    await openEdit(el, "p1");
-    await editForm(el).updateComplete;
-    expect(
-      editForm(el).shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-        "[data-test=mark-inactive]",
-      )!.disabled,
-    ).toBe(false);
-    editForm(el).dispatchEvent(
-      new CustomEvent("deactivate-person", { bubbles: true, composed: true }),
-    );
-    await flush(el);
-    expect(api.deactivatePerson).toHaveBeenCalledWith("p1");
-    expect(api.savePerson).not.toHaveBeenCalled();
-  });
-
   it("loads the staff on connect and hands them to the list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -622,48 +589,6 @@ describe("staff-screen — row edit", () => {
     expect(api.listStaff).toHaveBeenCalledTimes(2);
   });
 
-  it("deactivates a colleague without rewriting their profile fields", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
-    await flush(el);
-    await openEdit(el, "p1");
-
-    editForm(el).dispatchEvent(
-      new CustomEvent("deactivate-person", { bubbles: true, composed: true }),
-    );
-    await flush(el);
-
-    expect(api.deactivatePerson).toHaveBeenCalledWith("p1");
-    expect(api.savePerson).not.toHaveBeenCalled();
-    expect(api.listStaff).toHaveBeenCalledTimes(2);
-  });
-
-  it("reset-pin clears the PIN and reloads the list", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
-    await flush(el);
-    await openEdit(el, "p1");
-
-    editForm(el).dispatchEvent(new CustomEvent("reset-pin", { bubbles: true, composed: true }));
-    await flush(el);
-
-    expect(api.resetPin).toHaveBeenCalledWith("p1");
-    expect(api.listStaff).toHaveBeenCalledTimes(2);
-  });
-
-  it("reset login sends a fresh invitation and closes the dialog", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
-    await flush(el);
-    await openEdit(el, "p1");
-
-    editForm(el).dispatchEvent(new CustomEvent("reset-login", { bubbles: true, composed: true }));
-    await flush(el);
-
-    expect(api.resetLogin).toHaveBeenCalledWith("p1");
-    expect(editForm(el).open).toBe(false);
-  });
-
   it("resends an invitation and reports delivery after closing the edit dialog", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -680,21 +605,6 @@ describe("staff-screen — row edit", () => {
     expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent).toContain(
       "invitación",
     );
-  });
-
-  it("reactivates an inactive user and sends an invitation", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
-    await flush(el);
-    await openEdit(el, "p2");
-
-    editForm(el).dispatchEvent(
-      new CustomEvent("reactivate-person", { bubbles: true, composed: true }),
-    );
-    await flush(el);
-
-    expect(api.reactivatePerson).toHaveBeenCalledWith("p2");
-    expect(editForm(el).open).toBe(false);
   });
 
   // A rejected edit action becomes the error banner (never an unhandled rejection — pristine output
@@ -770,13 +680,30 @@ describe("staff-screen — row edit", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
+  const saveDetails = {
+    displayName: "Ada",
+    firstNames: "Ada",
+    lastNames: "Lovelace",
+    telephone: null,
+    email: "ada@x.com",
+    role: "manager" as const,
+    status: "active" as const,
+  };
+  function dispatchSave(el: StaffScreen): void {
+    editForm(el).dispatchEvent(
+      new CustomEvent("save-person", { detail: saveDetails, bubbles: true, composed: true }),
+    );
+  }
+
+  // save-person is the one edit action left in the form (reset/deactivate/reactivate moved to the
+  // row's kebab menu) — it still exercises #editWith/#runEditAction's shared guards below.
   it("falls back to server.internal when a rejected edit action carries no code", async () => {
-    const api = stubApi({ resetPin: vi.fn().mockRejectedValue({}) });
+    const api = stubApi({ savePerson: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
     await flush(el);
     await openEdit(el, "p1");
 
-    editForm(el).dispatchEvent(new CustomEvent("reset-pin", { bubbles: true, composed: true }));
+    dispatchSave(el);
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
@@ -788,11 +715,11 @@ describe("staff-screen — row edit", () => {
     await flush(el);
     await openEdit(el, "p1");
 
-    editForm(el).dispatchEvent(new CustomEvent("reset-pin", { bubbles: true, composed: true }));
-    editForm(el).dispatchEvent(new CustomEvent("reset-pin", { bubbles: true, composed: true }));
+    dispatchSave(el);
+    dispatchSave(el);
     await flush(el);
 
-    expect(api.resetPin).toHaveBeenCalledTimes(1);
+    expect(api.savePerson).toHaveBeenCalledTimes(1);
   });
 
   // A forged action event with no open person must be dropped.
@@ -801,10 +728,10 @@ describe("staff-screen — row edit", () => {
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
     await flush(el);
     // No openEdit(): editingPerson is null.
-    editForm(el).dispatchEvent(new CustomEvent("reset-pin", { bubbles: true, composed: true }));
+    dispatchSave(el);
     await flush(el);
 
-    expect(api.resetPin).not.toHaveBeenCalled();
+    expect(api.savePerson).not.toHaveBeenCalled();
   });
 
   // The screen owns the edit-open state, so the dialog's `wt-close` must bubble up and clear it —

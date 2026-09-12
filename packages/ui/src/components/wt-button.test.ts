@@ -15,6 +15,18 @@ test("defaults to the secondary variant", async () => {
   expect(el.getAttribute("variant")).toBe("secondary");
 });
 
+test("centers its label by default, but left-aligns it when used as a menu item", async () => {
+  const el = await mount('<wt-button style="width:200px">Account settings</wt-button>');
+  const button = el.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(button).justifyContent).toBe("center");
+
+  const startEl = await mount(
+    '<wt-button align="start" style="width:200px">Account settings</wt-button>',
+  );
+  const startButton = startEl.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(startButton).justifyContent).toBe("flex-start");
+});
+
 test("meets the minimum tap target at default size on both axes", async () => {
   // A POS numpad ("1", "+", "−") is exactly the failing case: a single narrow glyph produces a
   // button whose height clears --wt-tap-min but whose width does not.

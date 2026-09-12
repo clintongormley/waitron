@@ -25,42 +25,18 @@ function change(el: PersonEdit, testId: string, value: string): void {
 }
 
 describe("person-edit", () => {
-  it("suspends detail submission while a lifecycle confirmation is open", async () => {
-    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
-    const saves: Event[] = [];
-    const resets: Event[] = [];
-    el.addEventListener("save-person", (event) => saves.push(event));
-    el.addEventListener("reset-login", (event) => resets.push(event));
-    const input = el
-      .shadowRoot!.querySelector("[data-test=edit-email]")!
-      .shadowRoot!.querySelector("input")!;
-    const enter = () =>
-      input.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
-      );
-    enter();
-    expect(saves).toHaveLength(1);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-login]")!.click();
-    await el.updateComplete;
-    enter();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
-    expect(saves).toHaveLength(1);
-    expect(resets).toHaveLength(0);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-action]")!.click();
-    await el.updateComplete;
-    enter();
-    expect(saves).toHaveLength(2);
-  });
-
-  it("uses the shared modal with one field per row and a divider before role and status", async () => {
+  it("uses the shared modal with one field per row, the same field-list shape as the profile screen's own edit form", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     const modal = el.shadowRoot!.querySelector("wt-modal");
     expect(modal).not.toBeNull();
     await modal!.updateComplete;
-    const fields = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".field")];
-    for (let i = 1; i < fields.length; i++) {
-      expect(fields[i]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-        fields[i - 1]!.getBoundingClientRect().bottom,
+    // One shared grid gap (see profile-screen.ts's own ".fields"), not a per-field margin — so
+    // every row (wt-input as well as the role/status <label>s) stacks without overlapping.
+    const rows = [...el.shadowRoot!.querySelector(".fields")!.children] as HTMLElement[];
+    expect(rows.length).toBeGreaterThan(0);
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        rows[i - 1]!.getBoundingClientRect().bottom,
       );
     }
     for (const name of ["role", "status"]) {
@@ -68,8 +44,9 @@ describe("person-edit", () => {
       expect(select.required).toBe(true);
       expect(select.parentElement!.textContent).toContain("*");
     }
-    const divider = el.shadowRoot!.querySelector("hr")!;
-    expect(divider.nextElementSibling!.querySelector("select")!.name).toBe("role");
+    // No <hr> divider ahead of role/status — the profile screen's edit form doesn't have one
+    // either, one continuous field list instead.
+    expect(el.shadowRoot!.querySelector("hr")).toBeNull();
   });
 
   it("presents one populated form and emits the full edit through one Save", async () => {
@@ -112,55 +89,38 @@ describe("person-edit", () => {
     });
   });
 
-  it("confirms reset login, reset PIN and mark inactive before emitting each action", async () => {
+  it("resends a pending invitation without a confirmation step — it isn't destructive", async () => {
+    const pending = { ...person, status: "pending" as const };
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
-      person,
+      person: pending,
       open: true,
     });
-    for (const [testId, eventName] of [
-      ["reset-login", "reset-login"],
-      ["reset-pin", "reset-pin"],
-      ["mark-inactive", "deactivate-person"],
-    ] as const) {
-      const events: Event[] = [];
-      el.addEventListener(eventName, (event) => events.push(event), { once: true });
-      el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!.click();
-      await el.updateComplete;
-      expect(events).toHaveLength(0);
-      expect(el.shadowRoot!.querySelector("[data-test=confirmation]")!.textContent).not.toBe("");
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-action]")!.click();
-      const event = events[0]!;
-      expect(event.bubbles).toBe(true);
-      expect(event.composed).toBe(true);
-    }
-    expect(el.shadowRoot!.querySelector("[data-test=edit-password]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=edit-pin]")).toBeNull();
-  });
-
-  it("does not let the signed-in user mark themselves inactive", async () => {
-    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
-      person,
-      currentPersonId: person.personId,
-      open: true,
-    });
-    const button = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      "[data-test=mark-inactive]",
-    )!;
-    expect(button.disabled).toBe(true);
     const events: Event[] = [];
-    el.addEventListener("deactivate-person", (event) => events.push(event));
-    button.click();
-    expect(events).toHaveLength(0);
+    el.addEventListener("resend-invitation", (event) => events.push(event), { once: true });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=resend-invitation]")!.click();
+    expect(events).toHaveLength(1);
+    expect(events[0]!.bubbles).toBe(true);
+    expect(events[0]!.composed).toBe(true);
   });
 
-  it("keeps inactive users inactive while editing and offers explicit reactivation", async () => {
+  it("hides Resend invitation once the account is no longer pending", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    expect(el.shadowRoot!.querySelector("[data-test=resend-invitation]")).toBeNull();
+  });
+
+  it("no longer offers reset login/PIN or deactivate/reactivate from the form — those live on the row's kebab menu now", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    for (const testId of ["reset-login", "reset-pin", "mark-inactive", "reactivate"]) {
+      expect(el.shadowRoot!.querySelector(`[data-test=${testId}]`)).toBeNull();
+    }
+  });
+
+  it("keeps inactive users' status select constrained to suspended while editing", async () => {
     const inactive = { ...person, status: "suspended" as const };
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       person: inactive,
       open: true,
     });
-    expect(el.shadowRoot!.querySelector("[data-test=mark-inactive]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=reactivate]")).not.toBeNull();
     const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!;
     expect([...status.options].map((option) => option.value)).toEqual(["suspended"]);
   });

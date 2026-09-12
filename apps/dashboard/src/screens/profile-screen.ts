@@ -9,7 +9,7 @@ import { toDataURL } from "qrcode";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
@@ -78,17 +78,6 @@ export class ProfileScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
       }
-      .group {
-        margin-bottom: var(--wt-space-5);
-      }
-      .group-label {
-        margin: 0 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--wt-color-text-muted);
-      }
       .button-group {
         display: flex;
         gap: var(--wt-space-2);
@@ -156,14 +145,6 @@ export class ProfileScreen extends LitElement {
         font-weight: var(--wt-font-weight-normal);
         color: var(--wt-color-text-muted);
       }
-      .card-footer {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-        padding-top: var(--wt-space-3);
-        border-top: 1px solid var(--wt-color-border);
-      }
       /* A card action stays visually calm (the shared secondary look) until you interact with it —
          width-driven, so ch is the right unit (same reasoning as dashboard-app.ts's own
          --dashboard-sidebar-width). 12ch comfortably clears "Disable"/"Replace"/"Confirm", the
@@ -225,6 +206,7 @@ export class ProfileScreen extends LitElement {
   @property({ attribute: false }) navigate: (url: string) => void = (url) =>
     window.location.assign(url);
   @state() private profile: OwnProfile | null = null;
+  @state() private activeTab: "details" | "security" = "details";
   @state() private mode: Mode = "view";
   @state() private fields = emptyFields();
   @state() private errors: Partial<Record<Field, string>> = {};
@@ -243,9 +225,28 @@ export class ProfileScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    // dashboard-app.ts renders its OWN Edit button (alongside the outer modal's Close, per
+    // wt-form-actions convention) rather than one inside this screen, so it needs to know which
+    // tab is active to decide whether to show it — Security has no equivalent single action.
+    // Fired here too, not just from #selectTab, so the initial "details" tab is known without the
+    // host having to assume this screen's default.
+    this.#announceTab();
     void this.#load();
   }
   #initialDetailsChecked = false;
+  #announceTab(): void {
+    this.dispatchEvent(
+      new CustomEvent("profile-tab-change", {
+        detail: { tab: this.activeTab },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  /** Called by dashboard-app.ts's relocated Edit button (see #announceTab above). */
+  editDetails(): void {
+    this.#edit("details");
+  }
 
   async #load(): Promise<void> {
     try {
@@ -552,11 +553,26 @@ export class ProfileScreen extends LitElement {
         return t("profile.remove_passkey");
     }
   }
+  #selectTab(event: CustomEvent<{ value: string }>): void {
+    // wt-change bubbles/is composed; this panel today has no nested wt-change emitter of its own,
+    // but the guard matches the same pattern used everywhere else a wt-tabs strip owns navigation
+    // (see venue-operations-screen.ts's #selectView).
+    if (event.target !== event.currentTarget) return;
+    this.activeTab = event.detail.value as "details" | "security";
+    this.#announceTab();
+  }
   #renderDetails(p: OwnProfile) {
     return html`
-      <div class="group">
-        <h2 class="group-label">${t("profile.details")}</h2>
-        <wt-card raised>
+      <wt-tabs
+        label=${t("profile.title")}
+        .value=${this.activeTab}
+        .items=${[
+          { key: "details", label: t("profile.details") },
+          { key: "security", label: t("profile.security") },
+        ]}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#selectTab(event)}
+      >
+        <div slot="details" class="tab-panel">
           <div class="row">
             <span class="field-label">${t("profile.name")}</span>
             <span class="field-value">${p.displayName}</span>
@@ -601,20 +617,8 @@ export class ProfileScreen extends LitElement {
               >${this.locales.find((l) => l.code === (p.locale ?? this.venueLocale))?.label}</span
             >
           </div>
-          <div class="card-footer">
-            <wt-button
-              data-test="edit-details"
-              class="card-action accent-primary"
-              ?disabled=${this.busy}
-              @click=${() => this.#edit("details")}
-              >${t("action.edit")}</wt-button
-            >
-          </div>
-        </wt-card>
-      </div>
-      <div class="group">
-        <h2 class="group-label">${t("profile.security")}</h2>
-        <wt-card raised>
+        </div>
+        <div slot="security" class="tab-panel">
           <div class="action-row">
             <div class="text">
               <span class="field-value">${t("login.password")}</span>
@@ -748,8 +752,8 @@ export class ProfileScreen extends LitElement {
                   : nothing
             }
           </div>
-        </wt-card>
-      </div>
+        </div>
+      </wt-tabs>
       ${
         this.privacyNoticeUrl === ""
           ? nothing
