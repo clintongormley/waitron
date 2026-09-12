@@ -522,6 +522,17 @@ optimisation must check that every guard over `deploy/` is still in the root pro
 > unaffected. The build + smoke moved into the reusable `image-smoke.yml`, also called by a nightly
 > `image-nightly.yml`. Code is truth; this paragraph is the prediction, not the current gate.
 
+> **2026-09-12 — arm64 dropped** (branch `chore/amd64-only-image`). Every published manifest is now
+> `linux/amd64` alone, and so is every PR build — the push-versus-PR platform split above is gone
+> with it. The ARM half was a prediction ("so a small ARM box works"), not a target: the box is a
+> fanless mini-PC, and nothing in `deploy/` selects an image architecture. It was not free. Measured
+> across the last three publishing runs, the `publish` job took 6m11s, 8m02s and 7m37s
+> (`34689317021`, `34646835148`, `34642794955`); in the slowest, its two build-and-push steps were
+> 392s and 65s of the 482s, while the same Dockerfile built for amd64 alone in that run's smoke job
+> took 144s. Its `mode=max` export also put a second platform's layers into a GHA cache already at
+> the repository's ceiling (CLAUDE.md §2, which holds the measurement). Add the platform back when
+> an ARM box is a real target, and pay the emulation on a release tag.
+
 **Updating a box:** `docker compose pull && docker compose up -d` — the compose pins `:main` until
 release tags exist. Unattended updates are the installer spec's question (a box we did not sell
 still needs them).

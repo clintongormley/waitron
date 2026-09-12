@@ -60,13 +60,15 @@ jobs:
             fi
           done
 
-      # The default builder uses the `docker` driver, which supports neither a GHA cache export nor
-      # a multi-platform manifest.
+      # The default builder uses the `docker` driver, which does not serve the `cache-to: type=gha`
+      # export below.
       - uses: docker/setup-buildx-action@v3
 
-      # Loaded into the runner's daemon so `docker compose` can run it. A multi-platform build
-      # cannot be loaded at all, which is why the `publish` job builds a second time — it reuses
-      # these amd64 layers from the same GHA cache scope and only arm64 is actually built.
+      # Loaded into the runner's daemon so `docker compose` can run it — this job never pushes. That
+      # is ci.yml's `publish`, which therefore builds a second time on its own runner: it is gated on
+      # the whole `ci` aggregate (its header says why), and this job also runs on pull requests,
+      # which must not publish. Its build is the same single platform, so these are the layers it
+      # looks for in the shared GHA cache scope.
       - name: Build the image
         uses: docker/build-push-action@v6
         with:
