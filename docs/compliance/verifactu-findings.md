@@ -925,6 +925,8 @@ source: BOE consolidated texts fetched 2026-09-12, and the DGT consulta read on 
 
 ### 15.1 Only ONE original per invoice, and a reprint is a *duplicado*
 
+**Implementation update, 2026-09-12:** the [receipts branch design](../superpowers/specs/2026-09-12-receipts-payment-slips-and-duplicates-design.md) adds `DUPLICADO` to the reprint action while preserving the filed invoice and recorded payment facts. The code observations below describe the behavior before that implementation.
+
 **RD 1619/2012 art. 14** (BOE-A-2012-14696, consolidated), in full:
 
 > «**1.** Los empresarios y profesionales o sujetos pasivos sólo podrán expedir **un original de cada

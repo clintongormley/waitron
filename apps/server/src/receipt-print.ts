@@ -245,7 +245,7 @@ export async function enqueueOriginalReceipt(
   await enqueuePrintJob(tx, printConfig(cfg), resolved.printer.id, resolved.receiptBytes);
 }
 
-/** An invoice-first cash collection opens the drawer without issuing another original. */
+/** Invoice-first collection retains the auto-mode drawer policy without issuing another original. */
 export async function enqueueCashSaleDrawer(
   tx: Transaction,
   cfg: TillConfig,

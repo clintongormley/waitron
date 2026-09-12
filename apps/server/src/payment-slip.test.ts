@@ -41,6 +41,7 @@ describe("payment slip (pure renderer, no database)", () => {
     expect(text).not.toContain("SECRET-SERIES");
     expect(text).not.toContain("https://fiscal.invalid");
     expect(text).not.toContain("VERI*FACTU");
+    expect(text).not.toMatch(/^\s*(?:Factura|Serie|Número de factura)\s*[:#]?\s*\S+/im);
     expect(bytesInclude(bytes, Uint8Array.from([0x1d, 0x28, 0x6b]))).toBe(false);
   });
   it("omits missing card facts, tip and label while keeping the amount", () => {
