@@ -247,6 +247,25 @@ export class VerifactuBackend implements FiscalBackend {
     }));
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
+    // An F1 (factura completa) must name its recipient, and an F2 must NOT carry one — so this
+    // block is filled in exactly when `TipoFactura` below resolves to "F1". A SPANISH recipient is
+    // named by NIF, the shape `buildDestinatarios` already builds for the F3 canje path.
+    //
+    // A NON-Spanish recipient is left UNSET here, deliberately. AEAT names a foreign recipient
+    // through `IDOtro`, which carries an `IDType` (02 NIF-IVA, 03 passport, 04 official ID,
+    // 05 residence certificate, 06 other) and whose XSD forbids `CodigoPais` ES beside IDType 01.
+    // Which of those a given foreign customer takes is a fiscal decision nobody here has made, and
+    // `registros_facturacion` is append-only and hash-chained (CLAUDE.md §5) — a guessed IDType
+    // would be filed and could never be unfiled. Leaving the block out means `appendToChain`'s
+    // record validation refuses the sale loudly, naming `Destinatarios`, before anything is
+    // written. A future B2B task must pin the IDType vocabulary to a primary source (the asesor or
+    // the AEAT XSD) and build the `IDOtro` shape here; until then this refusal is the intended
+    // behaviour, not a gap to paper over.
+    const destinatarios =
+      sale.counterparty !== null && sale.counterparty.countryCode === "ES"
+        ? this.buildDestinatarios(sale.counterparty)
+        : undefined;
+
     const input: Omit<AltaInput, "Encadenamiento"> = {
       IDEmisorFactura: sif.nif,
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
@@ -257,6 +276,7 @@ export class VerifactuBackend implements FiscalBackend {
       // ordinary case at a till (`SaleForFiscalRecord.counterparty`'s own doc comment) — no task
       // yet supplies a non-null one, so "F1" is unreachable through the real write path today.
       TipoFactura: sale.counterparty === null ? "F2" : "F1",
+      Destinatarios: destinatarios,
       DescripcionOperacion: sale.descriptionOfOperation,
       Desglose: desglose,
       CuotaTotal: cuotaTotal,

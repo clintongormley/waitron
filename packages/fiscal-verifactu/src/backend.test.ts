@@ -471,6 +471,94 @@ describe("recordSale — invoice type selection", () => {
       .where(eq(registrosFacturacion.numSerieFactura, "A/999"));
     expect(row?.tipoFactura).toBe("F1");
   });
+
+  /** Records one recipient-identified sale directly through the backend, bypassing
+   * `packages/core` for the same reason the F1 case above does: core always passes
+   * `counterparty: null` today, so this branch has no other caller. */
+  async function sellWithRecipient(
+    saleId: string,
+    invoiceNumber: number,
+    counterparty: { taxId: string; legalName: string; countryCode: string },
+  ): Promise<void> {
+    await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.insert(sales).values({
+        id: saleId,
+        tenantId,
+        tillId,
+        nodeId,
+        seriesId,
+        invoiceNumber,
+        issuedAt: "2026-03-01T12:05:00.000Z",
+        issuedOffsetMinutes: 60,
+        total: "0.00",
+        vatBreakdown: [],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      await backend.recordSale(tx, {
+        tenantId,
+        tillId,
+        nodeId,
+        saleId: brandSaleId(saleId),
+        seriesId,
+        seriesCode: "A",
+        invoiceNumber,
+        issuedAt: new Date("2026-03-01T12:05:00.000Z"),
+        offsetMinutes: 60,
+        descriptionOfOperation: "Venta en establecimiento",
+        total: decimal("12.10"),
+        vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+        counterparty,
+      });
+    });
+  }
+
+  it("names a Spanish recipient on the stored F1 record", async () => {
+    await sellWithRecipient("88888888-8888-4888-8888-888888888888", 998, {
+      taxId: "B12345678",
+      legalName: "Cliente SL",
+      countryCode: "ES",
+    });
+
+    const [row] = await pg.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.numSerieFactura, "A/998"));
+    expect(row?.destinatarios).toEqual({
+      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
+    });
+  });
+
+  /**
+   * Pins a DECISION, not a mechanism: a foreign recipient is refused rather than guessed at. AEAT
+   * identifies one through `IDOtro`, whose `IDType` (02 NIF-IVA, 03 passport, 04 official ID,
+   * 05 residence certificate, 06 other) nobody here has chosen — and `registros_facturacion` is
+   * append-only, so a wrong guess would be filed and could never be unfiled (CLAUDE.md §5). The
+   * refusal arrives from the chain's own record validation, naming `Destinatarios`; there is no
+   * separate country check in `recordSale` to keep the two ways of being wrong reporting the same
+   * way. If a future B2B task builds the `IDOtro` shape, this test is the one it must replace.
+   */
+  it("refuses a non-Spanish recipient rather than guessing an identifier type", async () => {
+    await expect(
+      sellWithRecipient("99999999-9999-4999-8999-999999999999", 997, {
+        taxId: "FR12345678901",
+        legalName: "Client SARL",
+        countryCode: "FR",
+      }),
+    ).rejects.toMatchObject({
+      code: "fiscal.record_invalid",
+      params: { fields: ["Destinatarios"], codes: ["DESTINATARIOS_REQUIRED"] },
+    });
+
+    const rows = await pg.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.numSerieFactura, "A/997"));
+    expect(rows).toEqual([]);
+  });
 });
 
 describe("checkIntegrity", () => {
