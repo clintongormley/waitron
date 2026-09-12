@@ -23,11 +23,15 @@ type Phase = "form" | "pairing" | "expired" | "failed";
  * (including that pairing switches off standalone use on that Solo), a reader-name field and the 8–9
  * character pairing-code field. Pressing _Pair_ POSTs the code; the dialog then polls the reader's
  * status every {@link PAIRING_POLL_MS} and shows a countdown from {@link PAIRING_LIFETIME_MS}. It ends
- * three ways: the reader coming online saves the row (`onAdded`) and closes; the countdown running out
- * shows `pairing_expired` and offers _try again_; a rejection shows `pairing_failed` and offers the
- * same. Navigating away stops the poll — `disconnectedCallback` clears the timer, the printers-screen
- * `#endScan` precedent. All pairing calls go through the server, so the API key never reaches the
- * browser.
+ * three ways: the reader's `pairingStatus` reaching `paired` saves the row (`onAdded`) and closes; the
+ * countdown running out shows `pairing_expired` and offers _try again_; a rejection shows
+ * `pairing_failed` and offers the same. Completion is gated on `pairingStatus`, NOT device connectivity
+ * (`online`): a reader can confirm pairing and then be briefly offline within the code's window, and
+ * gating on `online` would wrongly time it out. Navigating away stops the poll — `disconnectedCallback`
+ * clears the timer, the printers-screen `#endScan` precedent. On a genuine expiry or failure (never
+ * reaching `paired`) the `processing` reader row this attempt created is retired, so no un-paired orphan
+ * lingers to be picked as a device default. All pairing calls go through the server, so the API key
+ * never reaches the browser.
  */
 @customElement("sumup-add-reader")
 export class SumUpAddReader extends LitElement {
@@ -104,10 +108,13 @@ export class SumUpAddReader extends LitElement {
     this.errors = [];
     this.phase = "pairing";
     this.remaining = PAIRING_LIFETIME_MS / 1000;
+    this.#readerId = ""; // clear any id from a previous attempt so a failed POST leaves no stale ref
     let result;
     try {
       result = await this.#client().addReader({ name: this.name, code: this.code });
     } catch {
+      // The POST failed before a row was created (the server inserts only after the seat pairs), so
+      // there is no orphan to retire here — just show the failure.
       this.phase = "failed";
       return;
     }
@@ -128,21 +135,21 @@ export class SumUpAddReader extends LitElement {
     try {
       status = await this.#client().readerStatus(this.#readerId);
     } catch {
-      this.#endPoll();
-      this.phase = "failed";
+      this.#abandon("failed");
       return;
     } finally {
       this.#pairInFlight = false;
     }
     if (!this.isConnected) return;
-    if (status.online) {
+    // Gate on PAIRING status, not device connectivity: a reader that has paired may go briefly offline
+    // within the code's window, and `online` would wrongly time it out.
+    if (status.pairingStatus === "paired") {
       this.#finish();
       return;
     }
     this.remaining = Math.max(0, Math.ceil((this.#pairUntil - Date.now()) / 1000));
     if (Date.now() >= this.#pairUntil) {
-      this.#endPoll();
-      this.phase = "expired";
+      this.#abandon("expired");
     }
   }
 
@@ -150,6 +157,25 @@ export class SumUpAddReader extends LitElement {
     this.#endPoll();
     this.onAdded();
     this.onClose();
+  }
+
+  /** End a pairing attempt that never reached `paired`: stop the poll, show the end state, and retire
+   * the `processing` reader row this attempt created so it does not linger as an un-paired orphan. */
+  #abandon(phase: "expired" | "failed"): void {
+    this.#endPoll();
+    this.phase = phase;
+    void this.#retireOrphan();
+  }
+
+  /** Best-effort retire of the row the successful POST created. A failed retire must not hang the
+   * dialog — the orphan can still be retired from the readers list — so its rejection is swallowed. */
+  async #retireOrphan(): Promise<void> {
+    if (this.#readerId === "") return;
+    try {
+      await this.#client().retireReader(this.#readerId);
+    } catch {
+      // swallow — cleanup is best-effort; never block the try-again flow on it
+    }
   }
 
   #endPoll(): void {

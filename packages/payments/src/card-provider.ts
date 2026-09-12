@@ -77,6 +77,12 @@ export interface CardProviderContribution {
 export interface ReaderStatus {
   online: boolean;
   detail?: string; // connection type, screen state
+  /** Where pairing itself stands, DISTINCT from device connectivity (`online`): a reader confirms
+   * pairing (`processing → paired`) and only later may go briefly offline. The add-reader dialog
+   * polls THIS to decide a pairing succeeded, never `online` — a reader that paired but is momentarily
+   * offline is paired. Optional and additive: a provider whose reader is paired the instant it is
+   * added (Stripe, a reference) reports `"paired"`, and a caller that predates the field ignores it. */
+  pairingStatus?: "processing" | "paired";
 }
 export interface CardProviderBuildDeps {
   db: Database;

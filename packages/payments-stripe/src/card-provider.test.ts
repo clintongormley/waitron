@@ -249,6 +249,8 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
     const result = await seat.readers.status(deps, "tmr_abc");
     expect(result.online).toBe(true);
     expect(result.detail).toBe("stripe_s700");
+    // A reference reader is paired the instant it is added, so status always reports paired.
+    expect(result.pairingStatus).toBe("paired");
   });
 
   it("status maps an offline reader", async () => {

@@ -215,14 +215,27 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
 
     async status(deps: CardProviderRuntimeDeps, providerRef: string): Promise<ReaderStatus> {
       const client = await sumupClientForTenant(deps);
+      let base: ReaderStatus;
       try {
-        return await client.readerStatus(providerRef);
+        base = await client.readerStatus(providerRef);
       } catch {
         // The low-level status call throws on an unknown/removed reader or a SumUp outage. A reader
         // page must render that as offline, never crash — so an unreadable status is reported, not
         // rethrown (Task 6 review).
-        return { online: false, detail: "unreachable" };
+        base = { online: false, detail: "unreachable" };
       }
+      // Pairing completion is `getReader`'s status settling `processing → paired`, a DIFFERENT thing
+      // from device connectivity above: a reader can pair and then be briefly offline. The add-reader
+      // dialog waits on `pairingStatus`, so surface it here (a second SumUp call is fine on a config
+      // screen). Tolerate a null/thrown `getReader` exactly as the connectivity read does — leave
+      // `pairingStatus` undefined rather than crash.
+      try {
+        const reader = await client.getReader(providerRef);
+        if (reader !== null) return { ...base, pairingStatus: pairingStatus(reader.status) };
+      } catch {
+        // fall through — pairingStatus stays undefined
+      }
+      return base;
     },
 
     async remove(deps: CardProviderRuntimeDeps, providerRef: string): Promise<void> {

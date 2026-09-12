@@ -470,9 +470,13 @@ describe("readers — lifecycle and screens", () => {
       cookie: venue.managerCookie,
     });
     expect(status.status).toBe(200);
-    expect((await status.json()) as { online: boolean; detail?: string }).toEqual({
+    expect(
+      (await status.json()) as { online: boolean; detail?: string; pairingStatus?: string },
+    ).toEqual({
       online: true,
       detail: "bbpos_wisepos_e",
+      // A Stripe reference reader is paired the instant it is added, so its status carries this.
+      pairingStatus: "paired",
     });
 
     // Point a device at the reader, then the list's deviceCount reflects it.

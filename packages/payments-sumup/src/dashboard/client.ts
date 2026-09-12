@@ -24,11 +24,13 @@ export interface AddReaderResult {
   status: "paired" | "processing";
 }
 
-/** A reader's live status as `GET /management-api/payments/readers/:id/status` returns it — the panel
- * treats `online` becoming true as the pairing completing. */
+/** A reader's live status as `GET /management-api/payments/readers/:id/status` returns it. The panel
+ * waits on `pairingStatus` reaching `"paired"` — pairing completion, DISTINCT from device connectivity
+ * (`online`): a reader can pair and then be briefly offline within the code's window. */
 export interface ReaderStatus {
   online: boolean;
   detail?: string;
+  pairingStatus?: "processing" | "paired";
 }
 
 /** The SumUp connect-form payload: the API key plus the optional affiliate pair, and (on the
@@ -68,9 +70,16 @@ export class SumUpPaymentsClient {
     });
   }
 
-  /** `GET /management-api/payments/readers/:id/status` — the reader's live online status. */
+  /** `GET /management-api/payments/readers/:id/status` — the reader's live status (online + pairing). */
   readerStatus(id: string): Promise<ReaderStatus> {
     return this.#request<ReaderStatus>(`/management-api/payments/readers/${id}/status`, "GET");
+  }
+
+  /** `POST /management-api/payments/readers/:id/retire` — retire the reader row. The dialog calls this
+   * to clean up the `processing` row it created when a pairing attempt expires or fails without ever
+   * reaching `paired`, so no un-paired orphan lingers to be picked as a device default. */
+  retireReader(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/payments/readers/${id}/retire`, "POST");
   }
 }
 

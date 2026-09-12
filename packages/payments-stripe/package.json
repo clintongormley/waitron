@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./dashboard": "./src/dashboard/index.ts"
+    "./dashboard": "./src/dashboard/index.ts",
+    "./src/testing/fake-stripe.js": "./src/testing/fake-stripe.ts"
   },
   "scripts": {
     "test": "vitest run",

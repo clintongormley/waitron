@@ -286,6 +286,35 @@ describe("SUMUP_CARD_PROVIDER.readers", () => {
     expect(typeof result.detail).toBe("string");
   });
 
+  it("status reports pairingStatus from getReader, settling processing → paired", async () => {
+    let pairing = "processing";
+    const fetch = routedFetch({
+      "GET /v0.1/merchants/MABC123/readers/rdr_x/status": () =>
+        json(200, { data: { status: "OFFLINE" } }),
+      "GET /v0.1/merchants/MABC123/readers/rdr_x": () =>
+        json(200, { id: "rdr_x", status: pairing }),
+    });
+    const deps = await readerDeps(fetch);
+
+    const first = await SUMUP_CARD_PROVIDER.readers.status(deps, "rdr_x");
+    expect(first).toEqual({ online: false, pairingStatus: "processing" });
+
+    pairing = "paired";
+    const second = await SUMUP_CARD_PROVIDER.readers.status(deps, "rdr_x");
+    expect(second).toEqual({ online: false, pairingStatus: "paired" });
+  });
+
+  it("status tolerates a failing getReader, leaving pairingStatus undefined", async () => {
+    const fetch = routedFetch({
+      "GET /v0.1/merchants/MABC123/readers/rdr_x/status": () =>
+        json(200, { data: { status: "ONLINE", connection_type: "WIFI", state: "IDLE" } }),
+      "GET /v0.1/merchants/MABC123/readers/rdr_x": () => json(500, { message: "boom" }),
+    });
+    const result = await SUMUP_CARD_PROVIDER.readers.status(await readerDeps(fetch), "rdr_x");
+    expect(result).toEqual({ online: true, detail: "WIFI / IDLE" });
+    expect(result.pairingStatus).toBeUndefined();
+  });
+
   it("remove unpairs the reader from the merchant account", async () => {
     const seen: Seen[] = [];
     const fetch = routedFetch(

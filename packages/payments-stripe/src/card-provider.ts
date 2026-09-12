@@ -226,7 +226,10 @@ export function createStripeCardProvider(
           // `retrieve` types as `Reader | DeletedReader`; only `Reader` carries `status`/`device_type`.
           const online = "status" in reader && reader.status === "online";
           const detail = "device_type" in reader ? reader.device_type : undefined;
-          return { online, ...(detail !== undefined ? { detail } : {}) };
+          // A Stripe reference reader is paired the instant it is added (verified by one retrieve), so
+          // there is nothing to poll for pairing — it is always `"paired"` once it resolves. Reported
+          // for contract consistency; the Stripe add flow never polls.
+          return { online, pairingStatus: "paired", ...(detail !== undefined ? { detail } : {}) };
         } catch {
           // A reader page must render an unreadable status as offline, never crash — an unknown or
           // removed reader, or a Stripe outage, is reported, not rethrown.
