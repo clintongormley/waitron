@@ -1,6 +1,6 @@
 # UI review — the polished-product walkthrough tracker
 
-The authoritative state of **Track 1** (UI/UX polish & correctness) from [backlog.md](backlog.md).
+The authoritative state of the walkthrough in **Track A — UI and application** of [backlog.md](backlog.md).
 
 We walk every chunk of functionality in **customer-journey order**: Claude boots the app and shows
 the owner how each area works today (screenshots + plain English), the owner then plays with it and
@@ -43,13 +43,13 @@ stack). The front-end vite servers can stay up.
 - 🔧 **corrections logged** — issues captured below, fixes not yet landed
 - ✅ **done** — reviewed, and any corrections have landed
 
-**Sequencing (2026-09-05, from `backlog.md` → *Priorities → Sequencing*):** work areas 2–18 now.
-Leave area 1 (setup wizard) until the cloud-standby provisioning path lands (Track B item 2). Area 19
-(device management) opened 2026-09-05: the `tills` vs `devices` decision is recorded
-(`superpowers/specs/2026-09-05-register-and-device-model-decision.md`; keep both — register = the
-drawer, device = the screen) and area 19 carries that build's no-migration half (landed #269). A
-correction that needs a **new table** is no longer parked (the RLS removal + migration squash landed,
-#255): it needs CLAUDE.md §3's classification line and nothing else; everything proceeds.
+**Sequencing (revised 2026-09-12, from `backlog.md` → *What to work on next*):** the goal is a
+standalone on-prem primary, so the setup wizard (area 1) is no longer parked — its corrections are
+listed under the backlog's Track A item A2. Walk areas 2–20 at the real box; area 19 (device
+management) carries the register-versus-device decision
+(`superpowers/specs/2026-09-05-register-and-device-model-decision.md`: keep both — register = the
+drawer, device = the screen; the no-migration half landed #269). A correction that needs a new table
+needs CLAUDE.md §3's classification line and nothing else.
 
 ## Walkthrough order & status
 
@@ -83,8 +83,7 @@ one line; the fix's detail belongs in its PR/commit, not here.
 
 ### General UI corrections — 2026-09-06
 
-Owner scope: **all UI**. Finish-branch review is in progress on `ui/till-login`. Earlier browser,
-server and built-app reload results are dated in the plan; the final workspace gate is pending. Plan: [UI navigation and controls](superpowers/plans/2026-09-06-ui-navigation-and-controls.md).
+Owner scope: **all UI**. Landed as #249. Plan: [UI navigation and controls](superpowers/plans/2026-09-06-ui-navigation-and-controls.md).
 
 - Keep the selected navigation tab in the URL so Back, Forward and refresh restore it. Includes
   dashboard sections, till canvas tabs, Schedule, Kitchen/station selection, Pass, Allergens, floor
