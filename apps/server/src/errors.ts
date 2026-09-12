@@ -15,6 +15,8 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    /** The short-lived printer address queue has no free slot; retry after a request expires. */
+    "printer.probe_busy": Record<string, never>;
     "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;

@@ -1,4 +1,5 @@
 import { hostname } from "node:os";
+import { probeNetwork } from "./tcp-probe.js";
 import {
   BluetoothTransport,
   NetworkTcpTransport,
@@ -86,6 +87,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     // injected fake in tests. Its four methods ARE the host's.
     visibleDevices: devices.visibleDevices,
     scan: devices.scan,
+    probeNetwork,
     pair: devices.pair,
     resolve: devices.resolve,
   };

@@ -65,6 +65,18 @@ export const en = {
   "printers.jobs_limit":
     "All jobs awaiting delivery, plus the latest 100 printed jobs and 100 failed jobs with no retries left.",
   "printers.host_required": "Enter a host name or IP address",
+  "printers.probe_title": "Check a known address",
+  "printers.probe_host": "IP address",
+  "printers.probe_host_invalid": "Enter an IPv4 or IPv6 address without a URL, port or zone suffix",
+  "printers.probe_hint":
+    "If your printer is on another network, enter its IP address. The usual port is 9100. Your print agents must be able to reach that network.",
+  "printers.probe_action": "Check address",
+  "printers.probe_waiting": "Waiting for a print agent to reach this address…",
+  "printers.probe_found":
+    "Address reachable. Choose Add below, then send a test print to check the printer.",
+  "printers.probe_missing":
+    "No print agent reported this address. Check the address, port, printer power and network connection, and make sure a print agent is online. Then try again.",
+  "printers.probe_registered": "Address reachable. This printer is already added.",
   "printers.port_invalid": "Enter a whole port number from 1 to 65535",
   "printers.device_required": "Enter the device ID",
   "printers.poll_required": "Enter the cloud polling ID",
@@ -1050,6 +1062,19 @@ export const es: Record<StringKey, string> = {
   "printers.jobs_limit":
     "Todos los trabajos pendientes de entrega, los últimos 100 impresos y los últimos 100 fallidos sin más reintentos.",
   "printers.host_required": "Introduce un nombre de equipo o una dirección IP",
+  "printers.probe_title": "Comprobar una dirección conocida",
+  "printers.probe_host": "Dirección IP",
+  "printers.probe_host_invalid":
+    "Introduce una dirección IPv4 o IPv6 sin URL, puerto ni sufijo de zona",
+  "printers.probe_hint":
+    "Si tu impresora está en otra red, introduce su dirección IP. El puerto habitual es 9100. Tus agentes de impresión deben poder acceder a esa red.",
+  "printers.probe_action": "Comprobar dirección",
+  "printers.probe_waiting": "Esperando a que un agente de impresión acceda a esta dirección…",
+  "printers.probe_found":
+    "Dirección accesible. Elige Añadir abajo y envía una impresión de prueba para comprobar la impresora.",
+  "printers.probe_missing":
+    "Ningún agente de impresión ha comunicado esta dirección. Revisa la dirección, el puerto, la alimentación y la conexión de la impresora, y comprueba que haya un agente conectado. Después, inténtalo de nuevo.",
+  "printers.probe_registered": "Dirección accesible. Esta impresora ya está añadida.",
   "printers.port_invalid": "Introduce un número entero de puerto entre 1 y 65535",
   "printers.device_required": "Introduce el ID del dispositivo",
   "printers.poll_required": "Introduce el ID de consulta en la nube",

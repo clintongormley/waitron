@@ -402,6 +402,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     const app = mountApp(tenantA);
     const routes = [
       { method: "POST", path: "/management-api/printer-discovery/start" },
+      { method: "POST", path: "/management-api/printer-discovery/probe" },
       { method: "GET", path: "/management-api/discovered-printers" },
     ] as const;
 
@@ -422,7 +423,10 @@ describe("Print API over real Postgres (as the app role)", () => {
       });
 
       // Manager session → 200 (the gate admits it).
-      const manager = await send(app, method, path, { cookie: managerCookie });
+      const manager = await send(app, method, path, {
+        cookie: managerCookie,
+        ...(path.endsWith("/probe") ? { body: { host: "192.168.20.247", port: 9100 } } : {}),
+      });
       expect(manager.status).toBe(200);
     }
   });

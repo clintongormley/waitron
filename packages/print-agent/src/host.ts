@@ -51,9 +51,7 @@ export interface VisibleDevice {
   model?: string;
 }
 
-/** A device turned up by an active scan during a discovery window — a broader set than
- * {@link VisibleDevice}: a network printer answers with `host`/`port` and no `localKey`, a fresh
- * Bluetooth device with a `name` the operator recognises but not yet a paired `localKey`. */
+/** An active scan or address-check result. A reachable TCP address does not establish printer identity. */
 export interface DiscoveredDevice {
   transport: PrintTransport;
   localKey?: string;
@@ -70,6 +68,13 @@ export interface PairResult {
   ok: boolean;
   localKey?: string;
   error?: string;
+}
+
+/** A manager-requested address check, valid only until the server's expiry instant. */
+export interface NetworkProbe {
+  host: string;
+  port: number;
+  expiresAt: number;
 }
 
 export interface Host {
@@ -93,6 +98,8 @@ export interface Host {
   /** An active discovery pass over the given transports (all discoverable kinds when omitted); run
    * only while the server holds a discovery window open. */
   scan(kinds?: TransportKind[]): Promise<DiscoveredDevice[]>;
+  /** Bounded TCP connection checks; send no bytes and return only reachable targets. */
+  probeNetwork(targets: NetworkProbe[]): Promise<DiscoveredDevice[]>;
   /** Turns a claimed job's connection facts into a {@link PrinterTarget} the transport can send to —
    * for a local job, mapping its `localKey` to the box's current device path. Throws when the device
    * is gone, so the loop marks the job failed rather than sending nowhere. */

@@ -252,6 +252,10 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     expect(q(el, "[data-test=printer-last-seen-p3]")).toBeNull();
     expect(q(el, "[data-test=new-transport]")).toBeNull();
     await expectNoA11yViolations(host);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect((q(el, "[data-test=probe-host]") as unknown as { invalid: boolean }).invalid).toBe(true);
+    await expectNoA11yViolations(host);
   });
   it("renders printer editing accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(

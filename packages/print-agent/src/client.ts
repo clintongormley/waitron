@@ -5,12 +5,10 @@
  * join-and-accept handshake; `pullJobs`/`report` are the runtime's claim/settle loop.
  */
 
-import type { DiscoveredDevice, VisibleDevice } from "./host.js";
+import type { DiscoveredDevice, NetworkProbe, VisibleDevice } from "./host.js";
 import type { PrintTransport } from "./transport.js";
 
-/** The inventory the agent posts on every pull: the devices it can already reach (`visible`) and,
- * only while a discovery window is open, what an active scan turned up (`scanned`). The server binds
- * configured printers to real hardware from this. */
+/** Every pull reports local presence (`visible`) and active scan or address-check results (`scanned`). */
 export interface AgentInventory {
   host?: string;
   visible: VisibleDevice[];
@@ -77,6 +75,7 @@ export interface PullReply {
   servers: ServerEntry[];
   jobs: WireJob[];
   discoveryUntil: number | null;
+  networkProbes?: NetworkProbe[];
 }
 
 /** The result the runtime reports back per job — `done`, or `failed` with the error text. */
@@ -248,7 +247,30 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
     });
   }
   const discoveryUntil = typeof b.discoveryUntil === "number" ? b.discoveryUntil : null;
-  return { nodeId: b.nodeId, servers, jobs, discoveryUntil };
+  const networkProbes: NetworkProbe[] = [];
+  for (const raw of Array.isArray(b.networkProbes) ? b.networkProbes.slice(0, 8) : []) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const target = raw as Record<string, unknown>;
+    if (
+      typeof target.host !== "string" ||
+      target.host.length > 64 ||
+      typeof target.port !== "number" ||
+      !Number.isInteger(target.port) ||
+      target.port < 1 ||
+      target.port > 65535 ||
+      typeof target.expiresAt !== "number" ||
+      !Number.isFinite(target.expiresAt)
+    )
+      continue;
+    networkProbes.push({ host: target.host, port: target.port, expiresAt: target.expiresAt });
+  }
+  return {
+    nodeId: b.nodeId,
+    servers,
+    jobs,
+    discoveryUntil,
+    ...(networkProbes.length ? { networkProbes } : {}),
+  };
 }
 
 /** Builds an {@link AgentClient}. `fetch` is injected (never the global) so tests run without a

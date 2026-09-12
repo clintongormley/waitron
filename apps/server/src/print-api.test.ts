@@ -655,6 +655,25 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect((await jobRow(jobId)).status).toBe("printing");
   });
 
+  it("passes an explicitly requested address to agents even outside their local subnet", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const response = await send(app, "POST", "/management-api/printer-discovery/probe", {
+      cookie: managerCookie,
+      body: { host: "192.168.20.247", port: 9100 },
+    });
+    expect(response.status).toBe(200);
+    const target = (await response.json()) as { host: string; port: number; expiresAt: number };
+    expect(target).toEqual({
+      host: "192.168.20.247",
+      port: 9100,
+      requestedAt: expect.any(Number),
+      expiresAt: expect.any(Number),
+    });
+    const reply = await pull(app, token);
+    expect(reply).toMatchObject({ networkProbes: [target] });
+  });
+
   it("returns discoveryUntil after a discovery window is opened", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
