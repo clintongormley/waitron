@@ -130,14 +130,6 @@ What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, 
 `apps/server`, `packages/printing`'s dashboard side, `packages/payments*`. Numbered in priority
 order; the small items at the end of each area live in Track C.
 
-**In flight:**
-
-- **`ui-overhaul`** — a dashboard restyle: collapsible nav sections and group colours, the profile
-  edited in a modal, calmer card actions, and the matching `design-system.md` rules, with touch-ups in
-  the payments screens. Branched off `main` on 2026-09-12; no spec in the tree, the nearest plan is
-  [UI navigation and controls](superpowers/plans/2026-09-06-ui-navigation-and-controls.md), whose own
-  scope landed as #249.
-
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
 `packages/verifactu/src/validate.ts` holds AEAT's rules and no production file called it, confirmed by
@@ -320,6 +312,25 @@ Two halves, one branch each (owner decision 2026-09-12).
 - **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI.
 
 ### A7. Users, roles and the dashboard shell
+
+**The dashboard shell restyle landed (#333, 2026-09-12).** The sidebar's groups now collapse and the
+current item is highlighted, there is a Settings group, and the app registered the kebab and hamburger
+icons it had never had. The banner's separate "Your profile" and "Log out" buttons became a single
+person-icon menu, and the profile moved off its own page into a modal opened from that banner, with
+"Your details" and "Security" tabs. Two shared pieces gained options instead of being copied:
+`wt-row-actions` takes an `icon` and `iconSize` (it was a fixed kebab) and `wt-button` takes an
+`align`, so menu entries read left-aligned like a real dropdown — the staff, payments-reader and
+venue-operations menus use them too. The Users edit form lost its Reset access/PIN and
+Deactivate/Reactivate buttons, which already sit on the row's own menu behind a confirmation; Resend
+invitation stayed. Two bugs were found while checking the work and fixed test-first: saving your
+profile re-probed the session and silently reset the screen behind the modal to Overview, so closing
+the modal dropped you there instead of where you had been; and Edit was clickable before the profile
+data had loaded. The rules went into [design-system.md](developers/design-system.md) and CLAUDE.md §3.
+
+Left open by that branch: nothing was deliberately deferred — the review findings were applied — but
+the restyle was only ever checked in screenshots on a desktop browser. Nobody has walked it on the
+real box or a phone, so the narrow-viewport banner and drawer are unverified on hardware; that walk
+belongs with the display walkthrough in [ui-review.md](ui-review.md).
 
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
@@ -791,7 +802,7 @@ partial scope; the detail for a live thread is in its track.
 
 | # | Sub-project | State | Remaining |
 | --- | --- | --- | --- |
-| 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons | `wt-select` (A7) |
+| 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333) | `wt-select` (A7) |
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
