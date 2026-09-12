@@ -1501,6 +1501,18 @@ describe("dashboard-app", () => {
     expect(navItem(el, "overview")!.getAttribute("aria-current")).toBeNull();
   });
 
+  it("mutes a resting nav item and paints only the current one from the primary token", async () => {
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+    // Opens on overview (Task 9's landing) → overview is current, catalogue is resting.
+    expect(getComputedStyle(navItem(el, "overview")!).color).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(navItem(el, "catalogue")!).color).toBe("rgb(1, 2, 3)");
+  });
+
   // Task 12: the responsive drawer. On narrow screens the sidebar is an off-canvas drawer toggled by
   // the hamburger; opening it flips `.layout.drawer-open` and shows a scrim, and selecting any nav item
   // closes it again while STILL switching the screen (so a phone tap navigates and dismisses in one go).
@@ -1636,6 +1648,26 @@ describe("dashboard-app", () => {
     );
     await el.updateComplete;
     expect(layout().classList.contains("drawer-open")).toBe(false);
+  });
+
+  it("keeps the shell within one screen height so the sidebar and content scroll independently, not the page", async () => {
+    // A screen taller than the viewport (the profile screen, with several cards) used to grow the
+    // whole page past one screen while the sidebar capped itself to exactly one screen height —
+    // the sidebar then visibly stopped short of the page's real bottom. Bounding the shell to the
+    // viewport and letting both panes scroll internally fixes that; this proves it by measuring the
+    // actual rendered geometry in a real browser, not by inspecting styles.
+    await page.viewport(1000, 600);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    const shell = el.shadowRoot!.querySelector(".shell")!;
+    expect(shell.getBoundingClientRect().height).toBeLessThanOrEqual(600);
+    const sidebar = el.shadowRoot!.querySelector(".sidebar")!;
+    const main = el.shadowRoot!.querySelector(".main")!;
+    expect(
+      Math.abs(sidebar.getBoundingClientRect().bottom - main.getBoundingClientRect().bottom),
+    ).toBeLessThan(2);
   });
 
   it("a staff session gets no hamburger toggle (its only face is self-service, so no drawer)", async () => {
@@ -2455,7 +2487,10 @@ it("leaves long dashboard content clear of the bottom-right language chooser on 
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
-    window.scrollTo(0, document.documentElement.scrollHeight);
+    // .main scrolls internally (the shell is bounded to one screen height), not the page — see
+    // "keeps the shell within one screen height..." above.
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    main.scrollTo(0, main.scrollHeight);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const chooser = el.shadowRoot!.querySelector("dashboard-language-chooser")!;
     const trigger = chooser

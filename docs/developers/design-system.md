@@ -102,6 +102,11 @@ and `--wt-color-surface-raised`, the pair other primitives already hover onto (`
 `wt-data-table`), are identical in the light theme today, so that idiom would be invisible on
 `wt-button`'s own secondary variant, which already rests on `--wt-color-surface`.
 
+`wt-button` also exposes its inner `<button>` as a CSS part (`part="button"`), so a consuming
+screen can layer its own hover accent onto specific buttons — `wt-button.foo::part(button):hover`
+— without changing what a variant looks like everywhere else `wt-button` is used. See "Card action
+buttons" under "Page composition" below for the pattern this exists for.
+
 `--wt-dialog-max-width` (`min(90vw, 32rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
@@ -344,12 +349,25 @@ locales) edge. Do not show Logout before authentication.
 
 A sidebar nav row is a `.nav-item` — a plain flat `<button>`, not `wt-button`. `wt-button`'s own
 box (border, background, bold text) is right for a page action, but a sidebar lists ~20 of them;
-stacking that many buttons reads as a wall of buttons, not navigation. The selected item carries
-`aria-current="page"` and is styled from that attribute: an accent-coloured leading edge plus bold,
-coloured text, no background fill — the same idiom `wt-tabs` already uses for its selected tab
-(`border-bottom-color` there, `border-inline-start-color` here), not a new one. A resting row hovers
-to `--wt-color-surface` — visible here because the sidebar itself sits on `--wt-color-bg`, unlike
-`wt-button`'s own secondary variant (see `--wt-opacity-hover` above).
+stacking that many buttons reads as a wall of buttons, not navigation. A resting row is
+`--wt-color-text-muted`, not full-strength text — at equal weight and colour, ~20 items compete
+with the group headers above them and bury the current page's accent in a crowd of equally dark
+siblings. The selected item carries `aria-current="page"` and is styled from that attribute: an
+accent-coloured leading edge plus bold, full-strength coloured text, no background fill — the same
+idiom `wt-tabs` already uses for its selected tab (`border-bottom-color` there,
+`border-inline-start-color` here), not a new one — and it is now the one loud thing in an otherwise
+calm list. Hovering a row moves it to full-strength text plus a `--wt-color-surface` background —
+visible here because the sidebar itself sits on `--wt-color-bg`, unlike `wt-button`'s own secondary
+variant (see `--wt-opacity-hover` above). A `.nav-group` header takes the same small-caps treatment
+as a card's group-label (uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter
+link.
+
+The sidebar and the content column both scroll independently, bounded to the space below the
+banner (`.shell { height: 100vh }`, `.sidebar`/`.main` both `max-height: 100%; overflow-y: auto`) —
+the page itself never scrolls. Before this, only `.sidebar` was self-contained
+(`max-height: 100vh`); `.main` just grew with its content and pushed the whole page taller, so once
+a screen exceeded one viewport the sidebar — capped to one screen — visibly stopped short of where
+the page actually ended. Both panes now share the same bound, so they always end at the same line.
 
 ### Dashboard authentication
 
@@ -450,16 +468,45 @@ inside it does something different. Four shapes cover what's needed so far:
   with no action — unless there's actually something to configure, in which case that's the
   card's one action.
 
-### Button variant discipline
+### Card action buttons: calm at rest, accented on hover
 
-`primary` (filled) is the forward/constructive action for a card or row — "Edit", "Change
-password", "Add passkey", "Set up authenticator" — not "one primary per screen". A settings screen
-made of several independent cards has several primary actions, one per card, because each card is
-its own small task; the "one primary" instinct is really about not having two competing forward
-actions in the *same* card or footer. `danger` (red) is for an action that removes or disables
-something — "Remove" on a passkey, "Disable authenticator" — regardless of how forward-moving it
-otherwise looks. `secondary` (outlined) is for anything left over: maintenance actions that aren't
-the card's main path ("Replace recovery codes" when 2FA is already on), and Cancel/Back.
+A card or row's action button (Edit, Change, Add, Remove, Set up, Disable, Replace, Confirm) stays
+`secondary` (plain/outlined) **at rest**, regardless of what it does — filling every action solid
+at rest (an earlier version of this rule made "primary" mean "the card's one forward action" and
+painted it blue always-on) reads as visual noise once a screen has several cards, each with its own
+"primary" fighting for attention, and different-length labels at solid fill read as mismatched
+pills. Colour appears only on **hover**, via `wt-button`'s exposed `button` CSS part:
+
+```css
+.card-action.accent-primary::part(button):hover {
+  border-color: var(--wt-color-primary);
+  color: var(--wt-color-primary);
+}
+.card-action.accent-danger::part(button):hover {
+  border-color: var(--wt-color-danger);
+  color: var(--wt-color-danger);
+}
+```
+
+Use `accent-primary` for a forward/constructive action, `accent-danger` for one that removes or
+disables something, and neither class for a purely maintenance action ("Replace recovery codes"
+when 2FA is already on) — it gets only `wt-button`'s own generic hover dim. This is deliberately
+**not** a change to what `variant="primary"`/`"danger"` mean on `wt-button` itself — those still
+render solid at rest everywhere else (the till's checkout button, for one, needs to read as
+"the important action" without anyone hovering it first, and there is no hover on a touchscreen at
+all). The part hook lets a screen layer an accent onto specific buttons without touching that
+contract.
+
+Give every card action a fixed `min-width` (`ch`-based — see `--dashboard-sidebar-width` in
+`dashboard-app.ts` for the same reasoning) so a row of differently-worded actions still reads as
+one uniform set rather than a jumble of pill widths, and keep labels short — reuse the small shared
+`action.*` vocabulary (`action.edit`, `action.remove`, `action.add`, `action.change`,
+`action.setup`, `action.disable`, `action.replace`, `action.confirm`) rather than spelling out what
+the surrounding row or card label already says. Where a short label repeats more than once on the
+same screen for genuinely different things (two "Change" buttons, for Password and PIN; two "Set
+up" buttons, for the authenticator and Google), give each an `aria-label` with the fuller wording —
+otherwise a screen reader's "list all buttons" navigation can't tell them apart. A label that
+appears once on the screen doesn't need one, matching the sitewide bare "Edit"/"Remove" convention.
 
 Right-align a card's footer actions (`justify-content: flex-end`) — the same "primary action
 bottom-right" rule `wt-form-actions` already applies to forms sitewide (see "Forms" above).

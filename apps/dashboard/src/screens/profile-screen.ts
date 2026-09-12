@@ -143,6 +143,22 @@ export class ProfileScreen extends LitElement {
         padding-top: var(--wt-space-3);
         border-top: 1px solid var(--wt-color-border);
       }
+      /* A card action stays visually calm (the shared secondary look) until you interact with it —
+         width-driven, so ch is the right unit (same reasoning as dashboard-app.ts's own
+         --dashboard-sidebar-width), sized to fit "Disable"/"Replace", the longest labels here. The
+         colour appears only via wt-button's exposed button part on hover, never at rest, so a row
+         of these reads as one calm set of actions rather than a wall of solid colour. */
+      .card-action {
+        min-width: 8ch;
+      }
+      .card-action.accent-primary::part(button):hover {
+        border-color: var(--wt-color-primary);
+        color: var(--wt-color-primary);
+      }
+      .card-action.accent-danger::part(button):hover {
+        border-color: var(--wt-color-danger);
+        color: var(--wt-color-danger);
+      }
       .hint {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -521,9 +537,9 @@ export class ProfileScreen extends LitElement {
                             </div>
                             <wt-button
                               data-test="confirm-email"
-                              variant="primary"
+                              class="card-action accent-primary"
                               @click=${() => this.#edit("email")}
-                              >${t("profile.confirm_email")}</wt-button
+                              >${t("action.confirm")}</wt-button
                             >
                           </div>`
                     }
@@ -536,7 +552,7 @@ export class ProfileScreen extends LitElement {
                     <div class="card-footer">
                       <wt-button
                         data-test="edit-details"
-                        variant="primary"
+                        class="card-action accent-primary"
                         ?disabled=${this.busy}
                         @click=${() => this.#edit("details")}
                         >${t("action.edit")}</wt-button
@@ -556,10 +572,11 @@ export class ProfileScreen extends LitElement {
                         p.hasPassword
                           ? html`<wt-button
                               data-test="change-password"
-                              variant="primary"
+                              class="card-action accent-primary"
+                              aria-label=${t("profile.change_password")}
                               ?disabled=${this.busy}
                               @click=${() => this.#edit("password")}
-                              >${t("profile.change_password")}</wt-button
+                              >${t("action.change")}</wt-button
                             >`
                           : nothing
                       }
@@ -568,10 +585,11 @@ export class ProfileScreen extends LitElement {
                       <span class="field-value">${t("person.pin")}</span>
                       <wt-button
                         data-test="change-pin"
-                        variant="primary"
+                        class="card-action accent-primary"
+                        aria-label=${t("profile.change_pin")}
                         ?disabled=${this.busy}
                         @click=${() => this.#edit("pin")}
-                        >${t("profile.change_pin")}</wt-button
+                        >${t("action.change")}</wt-button
                       >
                     </div>
                   </wt-card>
@@ -593,17 +611,17 @@ export class ProfileScreen extends LitElement {
                                     >${new Date(key.createdAt).toLocaleDateString()}</span
                                   >
                                 </div>
-                                ${p.hasPassword ? html`<wt-button data-test="remove-passkey" variant="danger" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_name").replace("{name}", key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1)))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
+                                ${p.hasPassword ? html`<wt-button data-test="remove-passkey" class="card-action accent-danger" ?disabled=${this.busy} aria-label=${t("profile.remove_passkey_name").replace("{name}", key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1)))} @click=${() => this.#edit("remove", key.id)}>${t("action.remove")}</wt-button>` : nothing}
                               </div>`,
                           )
                     }
                     <div class="card-footer">
                       <wt-button
                         data-test="add-passkey"
-                        variant="primary"
+                        class="card-action accent-primary"
                         ?disabled=${this.busy}
                         @click=${() => this.#edit("passkey")}
-                        >${t("staff.add_passkey")}</wt-button
+                        >${t("action.add")}</wt-button
                       >
                     </div>
                   </wt-card>
@@ -619,19 +637,22 @@ export class ProfileScreen extends LitElement {
                         p.hasTotp
                           ? html`<wt-button
                                 data-test="recovery-codes"
+                                class="card-action"
+                                aria-label=${t("profile.replace_recovery_codes")}
                                 @click=${() => this.#edit("recovery")}
-                                >${t("profile.replace_recovery_codes")}</wt-button
+                                >${t("action.replace")}</wt-button
                               ><wt-button
                                 data-test="disable-authenticator"
-                                variant="danger"
+                                class="card-action accent-danger"
                                 @click=${() => this.#edit("disable-totp")}
-                                >${t("profile.disable_authenticator")}</wt-button
+                                >${t("action.disable")}</wt-button
                               >`
                           : html`<wt-button
                               data-test="setup-authenticator"
-                              variant="primary"
+                              class="card-action accent-primary"
+                              aria-label=${t("profile.setup_authenticator")}
                               @click=${() => this.#edit("totp")}
-                              >${t("profile.setup_authenticator")}</wt-button
+                              >${t("action.setup")}</wt-button
                             >`
                       }
                     </div>
@@ -656,16 +677,17 @@ export class ProfileScreen extends LitElement {
                               p.hasGoogle
                                 ? html`<wt-button
                                     data-test="unlink-google"
-                                    variant="danger"
+                                    class="card-action accent-danger"
                                     @click=${() => this.#edit("unlink-google")}
-                                    >${t("profile.unlink_google")}</wt-button
+                                    >${t("action.remove")}</wt-button
                                   >`
                                 : html`<wt-button
                                     data-test="setup-google"
-                                    variant="primary"
+                                    class="card-action accent-primary"
+                                    aria-label=${t("profile.setup_google")}
                                     ?disabled=${this.busy}
                                     @click=${() => this.#edit("google")}
-                                    >${t("profile.setup_google")}</wt-button
+                                    >${t("action.setup")}</wt-button
                                   >`
                             }
                           </div>`

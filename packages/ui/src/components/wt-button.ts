@@ -106,10 +106,14 @@ export class WtButton extends LitElement {
   // control in `form.elements`. Forms are handled in JS via `wt-change`, not native submission.
   // Full form association via ElementInternals is out of scope for this component.
 
+  // `part="button"` lets a consumer layer its own hover accent (e.g. `wt-button.foo::part(button):hover`)
+  // without changing what a variant looks like everywhere else it's used — see "Page composition" in
+  // docs/developers/design-system.md.
   override render() {
     return html`
       <button
         type="button"
+        part="button"
         ?disabled=${this.disabled || this.loading}
         aria-busy=${this.loading ? "true" : nothing}
         aria-label=${this.ariaLabel ?? nothing}

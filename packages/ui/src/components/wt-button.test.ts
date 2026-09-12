@@ -78,6 +78,16 @@ test("primary variant paints from the primary token", async () => {
   expect(getComputedStyle(inner).backgroundColor).toBe("rgb(1, 2, 3)");
 });
 
+test("exposes its inner button as a CSS part, so a consumer can layer its own hover accent", async () => {
+  const el = await mount(
+    `<wt-button class="accent">x</wt-button><style>wt-button.accent::part(button):hover { color: rgb(9, 9, 9); }</style>`,
+  );
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(inner).color).not.toBe("rgb(9, 9, 9)");
+  await userEvent.hover(inner);
+  expect(getComputedStyle(inner).color).toBe("rgb(9, 9, 9)");
+});
+
 test("dims on hover via the hover-opacity token, and stops dimming on unhover", async () => {
   const el = await mount("<wt-button>x</wt-button>");
   host.style.setProperty("--wt-opacity-hover", "0.6");

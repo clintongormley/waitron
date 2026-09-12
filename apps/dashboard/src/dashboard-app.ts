@@ -208,11 +208,14 @@ export class DashboardApp extends LitElement {
         --dashboard-sidebar-width: 18ch;
       }
 
-      /* The banner owns the first full-width row; navigation and content share the row below it. */
+      /* The banner owns the first full-width row; navigation and content share the row below it.
+         A firm height (not min-height) bounds the shell to exactly one screen, so overflow below
+         the banner has to happen INSIDE .sidebar/.main (each scrolls independently) rather than by
+         growing the whole page — see .sidebar and .main below. */
       .shell {
         display: flex;
         flex-direction: column;
-        min-height: 100vh;
+        height: 100vh;
       }
 
       /* Two-column app chrome below the banner: a fixed-width sidebar beside the main column. */
@@ -224,11 +227,14 @@ export class DashboardApp extends LitElement {
         min-height: 0;
       }
 
-      /* The desktop sidebar: fixed width, scrolls vertically on its own when the nav is tall. */
+      /* The desktop sidebar: fixed width, scrolls vertically on its own when the nav is tall.
+         max-height is relative to .layout's now-bounded cross size (via .shell's firm height), not
+         a flat 100vh guess — a flat 100vh ignored the banner's own height, so on a page taller than
+         one screen the sidebar capped out short of where .main actually ended. */
       .sidebar {
         flex: 0 0 var(--dashboard-sidebar-width);
         box-sizing: border-box;
-        max-height: 100vh;
+        max-height: 100%;
         overflow-y: auto;
         padding: var(--wt-space-3);
         border-right: 1px solid var(--wt-color-border);
@@ -241,18 +247,23 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-1);
       }
 
-      /* Group header: a quiet, small label above its items — not a competing heading. */
+      /* Group header: small caps, like a card's group-label (see profile-screen.ts) — makes it
+         unmistakably a label rather than a fainter link, which plain small+muted text didn't. */
       .nav-group {
         margin: var(--wt-space-3) 0 var(--wt-space-1);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
 
       /* A flat nav row, not a button: no border/background box, so a list of ~20 of these reads as
-         navigation rather than a stack of buttons. The selected-item treatment (accent edge + bold
-         coloured text, no fill) mirrors wt-tabs' own selected state — same idiom, vertical instead
-         of horizontal. */
+         navigation rather than a stack of buttons. Resting items are muted, not full-strength text —
+         at equal weight and colour they competed with the group headers above and buried the
+         current page's accent in a crowd of equally dark siblings. The selected-item treatment
+         (accent edge + bold coloured text, no fill) mirrors wt-tabs' own selected state — same idiom,
+         vertical instead of horizontal — and is now the one loud thing in an otherwise calm list. */
       .nav-item {
         display: block;
         width: 100%;
@@ -261,7 +272,7 @@ export class DashboardApp extends LitElement {
         border: none;
         border-inline-start: 3px solid transparent;
         background: transparent;
-        color: var(--wt-color-text);
+        color: var(--wt-color-text-muted);
         font: inherit;
         font-weight: var(--wt-font-weight-normal);
         text-align: start;
@@ -270,6 +281,7 @@ export class DashboardApp extends LitElement {
 
       .nav-item:hover {
         background: var(--wt-color-surface);
+        color: var(--wt-color-text);
       }
 
       .nav-item[aria-current="page"] {
@@ -278,10 +290,15 @@ export class DashboardApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The content column beside the sidebar. */
+      /* The content column beside the sidebar — scrolls independently, the same as .sidebar above,
+         so a tall screen never grows the outer page past one viewport (that used to leave the
+         shorter sidebar looking cut off next to a taller .main). */
       .main {
         flex: 1 1 auto;
         min-width: 0;
+        min-height: 0;
+        max-height: 100%;
+        overflow-y: auto;
         display: flex;
         flex-direction: column;
       }
