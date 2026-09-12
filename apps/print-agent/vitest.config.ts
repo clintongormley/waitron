@@ -1,6 +1,6 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 
-// Hermetic: temp dirs and `app.request`, no listener, no container, no hardware.
+// Tests use temporary state and local listeners, with no container or hardware.
 export default defineConfig({
   test: {
     globals: true,
@@ -8,9 +8,8 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
-      // `src/bin.ts` is the process entry — wired by hand, exercised by a manual boot; everything it
-      // calls is tested directly.
-      exclude: [...coverageConfigDefaults.exclude, "src/bin.ts"],
+      // Process entries are exercised by a manual boot; their helpers are tested directly.
+      exclude: [...coverageConfigDefaults.exclude, "src/bin.ts", "src/dev-bin.ts"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },

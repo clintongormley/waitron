@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "esbuild src/bin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/print-agent.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
-    "dev": "tsx src/bin.ts",
+    "dev": "tsx src/dev-bin.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

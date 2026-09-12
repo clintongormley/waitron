@@ -809,6 +809,13 @@ that boot IS the live smoke that the unit suite (`apps/server/scripts/dev-setup.
 (`CREATE PUBLICATION` runs only at boot). A dev DB provisioned before this change is refused; run
 `wa-wt reset demo`.
 
+The print agent's dev launcher treats the inherited `WAITRON_STATE_DIR` as the server's box state
+and nests its own state under `print-agent/`, so worktree switches retain its token and target
+resets clear it. Wait for the server listener before choosing HTTP or HTTPS: onboarding can mint
+the leaf during boot. Read the local public CA for dev trust; the unprivileged landing listener
+can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
+`apps/print-agent/src/dev.test.ts`.
+
 ---
 
 ## 7. Keep this file current — it is part of the work, not a chore
