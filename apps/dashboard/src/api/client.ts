@@ -1923,6 +1923,14 @@ export class DashboardApi {
 
   // ── Receipt-trim configuration ────────────────────────────────────────────────────────────────
 
+  getLocationSettings(): Promise<{ name: string; operationDescription: string }> {
+    return this.#request("/management-api/location-settings", "GET");
+  }
+
+  putLocationSettings(operationDescription: string): Promise<void> {
+    return this.#request("/management-api/location-settings", "PUT", { operationDescription });
+  }
+
   /**
    * `GET /management-api/receipt` — the authored receipt trim, or the server's `DEFAULT_RECEIPT` (`{}`)
    * when this tenant has never authored one (the route falls back server-side), so this never 404s.

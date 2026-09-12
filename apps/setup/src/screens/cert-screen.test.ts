@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./cert-screen.js";
 import type { SetupCertScreen } from "./cert-screen.js";
@@ -178,7 +178,11 @@ describe("setup-cert-screen", () => {
     await el.updateComplete;
     expect(events).toEqual([]);
     expect(q(el, "[data-test=error]")).not.toBeNull();
-    expect(q(el, "[data-test=error]")!.getAttribute("role")).toBe("alert");
+    const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await summary.updateComplete;
+    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
     expect(q(el, ".field.file")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=pfx-field-error]")).not.toBeNull();
     expect((q(el, "[data-test=pfx]") as HTMLInputElement).getAttribute("aria-invalid")).toBe(
@@ -293,7 +297,8 @@ describe("setup-cert-screen", () => {
       // A clean read-error banner shows; nothing counts as loaded.
       const banner = q(el, "[data-test=error]");
       expect(banner).not.toBeNull();
-      expect(banner!.textContent).toContain("couldn't read that file");
+      await (banner as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(banner!.shadowRoot!.textContent).toContain("couldn't read that file");
       expect(q(el, "[data-test=file-status]")).toBeNull();
 
       // Next stays blocked (pfxBase64 empty) — nothing is emitted.
@@ -306,4 +311,33 @@ describe("setup-cert-screen", () => {
     }
     expect(rejections).toEqual([]); // the catch handled it — nothing escaped
   });
+});
+
+it.each([
+  ["Mozilla/5.0 (Windows NT 10.0) Chrome/130", "Windows"],
+  ["Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605", "macOS"],
+  ["Mozilla/5.0 (Windows NT 10.0) Firefox/140", "Firefox"],
+  ["Mozilla/5.0 (iPhone; CPU iPhone OS) Safari/605", "another computer"],
+])(
+  "offers export help for %s with the alternatives still accessible",
+  async (userAgent, expected) => {
+    const ua = vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
+    try {
+      const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+      const help = q(el, "[data-test=certificate-export-help]");
+      expect(help).not.toBeNull();
+      expect(help!.textContent).toContain(expected);
+      expect(help!.querySelectorAll("details")).toHaveLength(3);
+      const open = help!.querySelector("details[open]");
+      if (expected === "another computer") expect(open).toBeNull();
+      else expect(open!.querySelector("summary")!.textContent).toContain(expected);
+    } finally {
+      ua.mockRestore();
+    }
+  },
+);
+
+it("uses the icon reveal control for the certificate passphrase", async () => {
+  const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+  expect(q(el, "[data-test=toggle-passphrase]")!.querySelector("svg")).not.toBeNull();
 });

@@ -4,6 +4,9 @@ import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchAdoptRequested, dispatchSetupGoto } from "../events.js";
 import type { AdoptBody } from "../api/client.js";
@@ -121,12 +124,26 @@ export class SetupConnectScreen extends LitElement {
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]"))}
       class="field"
       label=${label}
+      name=${key}
+      autocomplete=${key === "password" ? "current-password" : key === "personId" ? "username" : key === "totp" ? "one-time-code" : "off"}
+      ?required=${key !== "totp"}
+      error=${this.invalid.has(key) ? `Check the ${label.toLowerCase()}.` : ""}
       data-test=${key}
       type=${type}
       ?invalid=${this.invalid.has(key)}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-    ></wt-input>`;
+      ><wt-help-tooltip slot="help" aria-label=${`Help with ${label.toLowerCase()}`}
+        >${
+          {
+            primaryUrl: "Enter the full HTTPS address of the primary box this mirror will copy.",
+            personId: "Enter an admin's person ID from the primary box.",
+            password: "Enter that admin's dashboard password on the primary box.",
+            totp: "If this admin uses an authenticator, enter its current one-time code.",
+          }[key]
+        }</wt-help-tooltip
+      ></wt-input
+    >`;
   }
 
   override render(): TemplateResult {
@@ -147,21 +164,25 @@ export class SetupConnectScreen extends LitElement {
           // a problem in what the operator just typed, so a stale server-routed message must not sit
           // beside it. The routed-back server banner shows only when there is NO client error.
           this.showError
-            ? html`<p class="error" role="alert" data-test="error">
-                Enter the primary box address, an admin person ID, and the admin password.
-              </p>`
+            ? html`<wt-form-error-summary
+                data-test="error"
+                heading="There is a problem with this form"
+                .errors=${[...this.invalid].map((key) => `Check the ${{ primaryUrl: "primary box address", personId: "admin person ID", password: "admin password", totp: "authenticator code" }[key]}.`)}
+              ></wt-form-error-summary>`
             : this.errorMessage === undefined
               ? nothing
               : html`<p class="error" role="alert" data-test="server-error">
                   ${this.errorMessage}
                 </p>`
         }
-        <div class="actions">
-          <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}>Back</wt-button>
+        <wt-form-actions>
+          <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+            >Back</wt-button
+          >
           <wt-button variant="primary" data-test="connect" @click=${() => this.#connect()}
             >Connect</wt-button
           >
-        </div>
+        </wt-form-actions>
       </wt-card>
     `;
   }

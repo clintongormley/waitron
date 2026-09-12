@@ -13,37 +13,16 @@ import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/co
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
-import type { ProvisionBody } from "../api/client.js";
-import { SERVER_FIELDS, type ServerField } from "../server-fields.js";
+import type { VenueDefaults, ProvisionBody } from "../api/client.js";
+import { SERVER_FIELDS } from "../server-fields.js";
 
-/**
- * The wizard's field-heavy step: the tenant (country, tax id, legal name), its location (name,
- * invoice languages, address and day cutover…) and the two invoice series codes —
- * one logical "your shop" form. Every field name matches the server's `parseVenue` / `VenueRequest`
- * exactly (`apps/server/src/setup-api.ts`, `packages/provisioning/src/venue-plan.ts`), so the emitted
- * patch slots straight into `venue` / `venue.location`.
- *
- * On `Next` it validates required fields, the tax identifier and postcode, postcode/province
- * agreement, supported fiscal jurisdiction, distinct series codes, and one or two invoice languages.
- * A failure shows a SINGLE `role="alert"` banner and marks the offending fields `invalid`, and nothing
- * is emitted. A field the SERVER refused is different: it is marked and carries its own sentence in
- * the input's `error` slot, with focus moved to it and no banner — the banner region is for faults
- * this form evaluated itself. On success it
- * emits the `venue` slice as a `setup-patch`, then a screen-agnostic `setup-advance` for the SHELL to
- * route: the venue→`cert`/`review` decision (live ES-common needs the AEAT cert; demo goes
- * straight to `review`) lives in `apps/setup/src/setup-app.ts`, which owns the merged draft — this
- * screen no longer reads `mode` for routing. `Back` returns to `admin` (a fixed `setup-goto`). All nav
- * events are composed/bubbling, the pair the shell listens for.
- *
- * The form seeds its local state from the shell's `draft` ONCE on mount, so stepping Back then forward
- * is non-destructive across all editable fields. Following `apps/setup/src/screens/admin-screen.ts`
- * for the field/`wt-change`/banner idiom, and `@waitron/ui`'s shared native-`<select>`
- * (`selectStyles`) idiom for the native dropdowns (there is no `wt-select` primitive).
- */
-
+// Local edits survive re-renders; the shell draft restores them when a screen is remounted.
 /** The text fields, each a `wt-input`. Everything here is required except `addressLine2`. */
 type TextField =
   | "country"
@@ -107,6 +86,46 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "rectificativeSeriesCode",
 ];
 
+const FIELD_HELP: Record<TextField, string> = {
+  country:
+    "Choose the country where your business is registered. It determines the available address and tax settings.",
+  taxId: "Enter the tax identifier of the business that issues the invoices.",
+  legalName: "Use the business's registered legal name, as it appears on its tax documents.",
+  name: "Choose the name you use for this location in Waitron.",
+  operationDescription:
+    "This text describes the sale on every record sent to the tax agency. Keep the suggested wording for ordinary shop sales. Invoice languages do not translate this text. You can change it in the dashboard for future records.",
+  addressLine1: "Enter the location's street and building number.",
+  addressLine2: "Add a floor, unit or other address detail if needed.",
+  postalCode: "Enter the location's postal code. Waitron uses it to suggest the province.",
+  city: "Enter the town or city where this location is based.",
+  province:
+    "The province must match the postal code. It determines the fiscal territory and time zone.",
+  dayCutover:
+    "Sales before this time belong to the previous business day. Keep 04:00 if you finish trading after midnight.",
+  tillName:
+    "Name the first register. Caja 1 is a useful starting point; this name is not your tax-filing identity.",
+  seriesCode:
+    "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 38 characters. Keep FS unless you need another series.",
+  rectificativeSeriesCode:
+    "This prefix identifies correction invoices, for example FR/1. Use a different prefix from ordinary invoices. Keep FR unless you need another series.",
+};
+const FIELD_LABELS: Record<TextField, string> = {
+  country: "country",
+  taxId: "tax ID",
+  legalName: "legal name",
+  name: "location name",
+  operationDescription: "invoice operation description",
+  addressLine1: "street address",
+  addressLine2: "address detail",
+  postalCode: "postal code",
+  city: "city",
+  province: "province",
+  dayCutover: "business day cutover",
+  tillName: "till name",
+  seriesCode: "invoice series code",
+  rectificativeSeriesCode: "correction series code",
+};
+
 const LOCALE_LABELS: Readonly<Record<string, string>> = {
   "es-ES": "Spanish (España)",
   "ca-ES": "Catalan (Català)",
@@ -169,6 +188,19 @@ export class SetupVenueScreen extends LitElement {
 
   /** The accumulated draft, passed down from the shell. Read ONCE on mount to seed the local fields. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
+  @property({ attribute: false }) defaults: VenueDefaults = {};
+  #descriptionEdited = false;
+
+  get #demo(): boolean {
+    return this.draft.mode === "demo";
+  }
+
+  #descriptionDefault(): string {
+    const filing =
+      this.#jurisdiction()?.modules?.filing ??
+      this.#pack()?.fiscalJurisdictions.find(({ supported }) => supported)?.modules?.filing;
+    return filing === undefined ? "" : (this.defaults[filing]?.operationDescription ?? "");
+  }
 
   /** A server-side venue-validation error the shell routed back here, shown as a banner so the
    * operator can correct the offending detail and re-submit. `undefined` normally. */
@@ -181,7 +213,7 @@ export class SetupVenueScreen extends LitElement {
    */
   @property() invalidField?: string;
 
-  /** The editable text fields. Defaults match the shell's seeded draft; seeding overlays what it holds. */
+  /** Local defaults are used only for fields the accumulated draft does not already contain. */
   @state() private values: Record<TextField, string> = {
     country: "ES",
     taxId: "",
@@ -193,10 +225,10 @@ export class SetupVenueScreen extends LitElement {
     postalCode: "",
     city: "",
     province: "",
-    dayCutover: "",
-    tillName: "",
-    seriesCode: "",
-    rectificativeSeriesCode: "",
+    dayCutover: "04:00",
+    tillName: "Caja 1",
+    seriesCode: "FS",
+    rectificativeSeriesCode: "FR",
   };
 
   @state() private invoiceLocales: string[] = ["es-ES"];
@@ -207,19 +239,8 @@ export class SetupVenueScreen extends LitElement {
   /** True once a `Next` was rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
 
-  /**
-   * {@link SetupVenueScreen.invalidField} resolved to this form's own field key, held SEPARATELY
-   * from {@link SetupVenueScreen.invalid} and cleared the moment the operator edits that field
-   * ({@link SetupVenueScreen.#onField}). It is separate because `#next` rebuilds `invalid` from
-   * scratch on every press and returns early while that set is non-empty: a mark for a rule this
-   * form cannot evaluate, folded into that set, would survive every rebuild and block Next forever.
-   *
-   * The intersection with `{ key: TextField }` is not decoration: assigning `SERVER_FIELDS[…]` to it
-   * is what makes the compiler check that every key the shared map names is a real field on this
-   * form. Proven by mutation — adding a key to `ServerFieldKey` that this screen has no field for
-   * fails typecheck with "Type 'ServerFieldKey' is not assignable to type 'TextField'".
-   */
-  @state() private serverInvalid?: ServerField & { readonly key: TextField };
+  // Keep server refusals separate: local validation rebuilds its own set on every submission.
+  @state() private serverInvalid?: { readonly key: TextField; readonly message: string };
 
   /** Guards {@link SetupVenueScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
@@ -230,12 +251,23 @@ export class SetupVenueScreen extends LitElement {
     if (!this.#seeded) {
       this.#seeded = true;
       this.#seedFromDraft();
+      if (this.#demo && this.values.taxId === "") {
+        this.values = { ...this.values, taxId: this.#pack()?.demo?.createCompanyTaxId() ?? "" };
+      }
+    }
+    if (
+      !this.#descriptionEdited &&
+      this.draft.venue?.location?.operationDescription === undefined
+    ) {
+      this.values = { ...this.values, operationDescription: this.#descriptionDefault() };
     }
     // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
     // the operator has already cleared by editing the field.
     if (changed.has("invalidField")) {
       this.serverInvalid =
         this.invalidField === undefined ? undefined : SERVER_FIELDS[this.invalidField];
+      if (this.#demo && this.serverInvalid?.key === "legalName")
+        this.serverInvalid = { ...this.serverInvalid, key: "name" };
     }
   }
 
@@ -290,13 +322,12 @@ export class SetupVenueScreen extends LitElement {
       seriesCode: venue.seriesCode ?? this.values.seriesCode,
       rectificativeSeriesCode: venue.rectificativeSeriesCode ?? this.values.rectificativeSeriesCode,
     };
-    this.invoiceLocales = loc.invoiceLocales ?? this.invoiceLocales;
+    const pack = this.#pack();
+    const area = this.#area(pack);
+    this.invoiceLocales = loc.invoiceLocales ?? [
+      area?.defaultLocale ?? pack?.defaultLocale ?? "es-ES",
+    ];
     if (loc.invoiceLocales !== undefined) {
-      const pack = getVenueSetupCountryPack(venue.country ?? this.values.country);
-      const area =
-        pack === undefined || loc.province === undefined
-          ? undefined
-          : findAdministrativeArea(pack, loc.province);
       this.#invoiceLocalesFollowAreaDefault =
         pack !== undefined &&
         loc.invoiceLocales.length === 1 &&
@@ -309,6 +340,7 @@ export class SetupVenueScreen extends LitElement {
     // Editing the field the server refused retires that mark: the new value has not been refused.
     if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
     const value = event.detail.value;
+    if (key === "operationDescription") this.#descriptionEdited = true;
     if (key === "postalCode") {
       const pack = this.#pack();
       const validation = pack?.postalCode?.validate(value);
@@ -380,6 +412,11 @@ export class SetupVenueScreen extends LitElement {
    * proven by deletion: drop the equality block and the "same series code blocks Next" test flips red.
    */
   #next(): void {
+    if (this.#demo && this.values.operationDescription === "") {
+      this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
+      return;
+    }
+    if (this.#demo) this.values = { ...this.values, legalName: this.values.name };
     const invalid = new Set<TextField | "invoiceLocales">();
     for (const key of REQUIRED_TEXT_FIELDS) {
       if (this.values[key].trim() === "") invalid.add(key);
@@ -430,6 +467,9 @@ export class SetupVenueScreen extends LitElement {
     this.invalid = invalid;
     if (invalid.size > 0) {
       this.showError = true;
+      void this.updateComplete.then(() =>
+        this.shadowRoot?.querySelector<HTMLElement>("[invalid]")?.focus(),
+      );
       return;
     }
     this.showError = false;
@@ -477,12 +517,27 @@ export class SetupVenueScreen extends LitElement {
     dispatchSetupGoto(this, "admin");
   }
 
-  /**
-   * Renders one text field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. A
-   * field the SERVER refused is marked too, and carries its explanation in `wt-input`'s own `error`
-   * slot — which renders the sentence beside the field and wires `aria-describedby` to it, the
-   * shared form contract (`docs/developers/design-system.md` → Forms).
-   */
+  #fieldError(key: TextField | "invoiceLocales"): string {
+    if (!this.invalid.has(key)) return "";
+    if (key === "invoiceLocales") return "Choose one or two invoice languages.";
+    if (this.values[key].trim() === "") return `Enter the ${FIELD_LABELS[key]}.`;
+    if (key === "taxId") return "Enter a valid tax ID for the selected country.";
+    if (key === "postalCode") return "Enter a valid postal code that matches the province.";
+    if (key === "province")
+      return this.#jurisdiction()?.supported === false
+        ? "Setup is not available for this fiscal territory yet."
+        : "Choose the province that matches the postal code.";
+    if (key === "seriesCode" || key === "rectificativeSeriesCode")
+      return "Use different codes for ordinary and correction invoices.";
+    return `Check the ${FIELD_LABELS[key]}.`;
+  }
+
+  #help(key: TextField): TemplateResult {
+    return html`<wt-help-tooltip slot="help" aria-label=${`Help with ${FIELD_LABELS[key]}`}
+      >${FIELD_HELP[key]}</wt-help-tooltip
+    >`;
+  }
+
   #field(label: string, key: TextField, type = "text"): TemplateResult {
     const refused = this.serverInvalid?.key === key ? this.serverInvalid : undefined;
     return html`<wt-input
@@ -494,10 +549,12 @@ export class SetupVenueScreen extends LitElement {
       data-test=${key}
       type=${type}
       ?invalid=${this.invalid.has(key) || refused !== undefined}
-      error=${refused === undefined ? "" : refused.message}
+      ?required=${key !== "addressLine2"}
+      error=${refused?.message ?? this.#fieldError(key)}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-    ></wt-input>`;
+      >${this.#help(key)}</wt-input
+    >`;
   }
 
   override render(): TemplateResult {
@@ -507,14 +564,32 @@ export class SetupVenueScreen extends LitElement {
     return html`
       <wt-card>
         <h1>Your shop</h1>
-        <p>The business, its location and its invoice series. You can change these later.</p>
+        <p>
+          ${this.#demo ? "Name your demo location and enter its address. Waitron supplies a made-up business identity and invoice settings; you can review them before setup." : "Enter the business that issues your invoices and the address of this location."}
+        </p>
 
-        <h2>Business</h2>
+        ${
+          this.#demo && this.values.operationDescription === ""
+            ? html`<p role="alert" tabindex="-1" data-test="defaults-error">
+                  Demo invoice settings have not loaded yet.
+                </p>
+                <wt-button
+                  data-test="retry-defaults"
+                  @click=${() => this.dispatchEvent(new CustomEvent("setup-defaults-requested", { bubbles: true, composed: true }))}
+                  >Try loading settings again</wt-button
+                >`
+            : nothing
+        }
+        <h2>${this.#demo ? "Location" : "Business"}</h2>
         <label class="field select">
-          <span>Country</span>
+          <span>Country * ${this.#help("country")}</span>
           <select
+            name="country"
+            required
             data-test="country"
             ?invalid=${this.invalid.has("country")}
+            aria-invalid=${this.invalid.has("country") ? "true" : "false"}
+            aria-describedby="country-error"
             @change=${(event: Event) => this.#onCountry(event)}
           >
             ${VENUE_SETUP_COUNTRY_PACKS.map(
@@ -527,41 +602,62 @@ export class SetupVenueScreen extends LitElement {
                 </option>`,
             )}
           </select>
+          <span class="error" id="country-error">${this.#fieldError("country")}</span>
         </label>
-        ${this.#field(pack?.taxIdentifier?.label ?? "Tax ID", "taxId")}
-        ${this.#field("Legal name", "legalName")}
-
-        <h2>Location</h2>
-        ${this.#field("Location name", "name")}
+        ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? "Tax ID", "taxId")}${this.#field("Legal name", "legalName")}`}
+        ${this.#demo ? nothing : html`<h2>Location</h2>`} ${this.#field("Location name", "name")}
         <p data-test="fiscalTerritory">
           Fiscal territory: ${jurisdiction?.id ?? "Select province"}
         </p>
-        <fieldset class="locales" ?invalid=${this.invalid.has("invoiceLocales")}>
-          <legend>Invoice languages (pick one or two)</legend>
-          ${(pack?.invoiceLocales ?? []).map(
-            (locale) =>
-              html`<label class="locale-option">
-                <input
-                  type="checkbox"
-                  data-test=${`locale-${locale}`}
-                  .checked=${this.invoiceLocales.includes(locale)}
-                  @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
-                />
-                ${LOCALE_LABELS[locale] ?? locale}
-              </label>`,
-          )}
-        </fieldset>
-        ${this.#field("What this location does", "operationDescription")}
+        ${
+          this.#demo
+            ? nothing
+            : html`<fieldset
+                  class="locales"
+                  tabindex="-1"
+                  ?invalid=${this.invalid.has("invoiceLocales")}
+                  aria-invalid=${this.invalid.has("invoiceLocales") ? "true" : "false"}
+                  aria-describedby=${this.invalid.has("invoiceLocales") ? "invoice-locales-error" : nothing}
+                >
+                  <legend>
+                    Invoice languages (pick one or two) *
+                    <wt-help-tooltip aria-label="Help with invoice languages"
+                      >Choose the languages printed on invoices. The province suggests the first
+                      language; the operation description is kept separately.</wt-help-tooltip
+                    >
+                  </legend>
+                  ${(pack?.invoiceLocales ?? []).map(
+                    (locale) =>
+                      html`<label class="locale-option">
+                        <input
+                          type="checkbox"
+                          name="invoiceLocales"
+                          value=${locale}
+                          data-test=${`locale-${locale}`}
+                          .checked=${this.invoiceLocales.includes(locale)}
+                          @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
+                        />
+                        ${LOCALE_LABELS[locale] ?? locale}
+                      </label>`,
+                  )}
+                  ${this.invalid.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${this.#fieldError("invoiceLocales")}</p>` : nothing}
+                </fieldset>
+                ${this.#field("Invoice operation description", "operationDescription")}`
+        }
         ${this.#field("Address line 1", "addressLine1")}
         ${this.#field("Address line 2 (optional)", "addressLine2")}
         ${this.#field("Postal code", "postalCode")} ${this.#field("City", "city")}
         ${
           pack !== undefined && pack.administrativeAreas.length > 0
             ? html`<label class="field select">
-                <span>Province</span>
+                <span>Province * ${this.#help("province")}</span>
                 <select
+                  name="province"
+                  required
+                  aria-describedby="province-error"
                   data-test="province"
                   ?invalid=${this.invalid.has("province")}
+                  aria-invalid=${this.invalid.has("province") ? "true" : "false"}
                   @change=${(event: Event) => this.#onProvince(event)}
                 >
                   <option value="" .selected=${area === undefined}>Select province</option>
@@ -575,38 +671,42 @@ export class SetupVenueScreen extends LitElement {
                       </option>`,
                   )}
                 </select>
+                <span class="error" id="province-error">${this.#fieldError("province")}</span>
               </label>`
             : this.#field("Province / region", "province")
         }
         <p data-test="timeZone">Time zone: ${area?.timeZone ?? pack?.defaultTimeZone ?? "—"}</p>
-        ${this.#field("Business day cutover", "dayCutover", "time")}
-
-        <h2>Invoicing</h2>
-        ${this.#field("Till name", "tillName")} ${this.#field("Invoice series code", "seriesCode")}
-        ${this.#field("Rectificative series code", "rectificativeSeriesCode")}
         ${
-          // A SINGLE live alert region — two simultaneous `role="alert"` nodes double-announce to a
-          // screen reader (a11y fix). The client-validation banner takes precedence: it names a
-          // problem in what the operator just typed, so a stale server-routed message must not sit
-          // beside it. The routed-back server banner shows only when there is NO client error.
+          this.#demo
+            ? nothing
+            : html`${this.#field("Business day cutover", "dayCutover", "time")}
+
+                <h2>Invoicing</h2>
+                ${this.#field("Till name", "tillName")}
+                ${this.#field("Invoice series code", "seriesCode")}
+                ${this.#field("Rectificative series code", "rectificativeSeriesCode")}`
+        }
+        ${
           this.showError
-            ? html`<p class="error" role="alert" data-test="error">
-                Check the highlighted fields: use a valid tax ID and postal code, make sure the
-                province matches, pick one or two invoice languages, and use different invoice
-                series.
-              </p>`
+            ? html`<wt-form-error-summary
+                data-test="error"
+                heading="There is a problem with this form"
+                .errors=${[...this.invalid].map((key) => this.#fieldError(key))}
+              ></wt-form-error-summary>`
             : this.errorMessage === undefined
               ? nothing
               : html`<p class="error" role="alert" data-test="server-error">
                   ${this.errorMessage}
                 </p>`
         }
-        <div class="actions">
-          <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}>Back</wt-button>
+        <wt-form-actions>
+          <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+            >Back</wt-button
+          >
           <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
             >Next</wt-button
           >
-        </div>
+        </wt-form-actions>
       </wt-card>
     `;
   }

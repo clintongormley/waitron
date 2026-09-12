@@ -213,6 +213,15 @@ export const SPAIN: CountryPack = {
     },
     ...unsupportedFiscalJurisdictions,
   ],
+  demo: {
+    createCompanyTaxId(): string {
+      const digits = String(crypto.getRandomValues(new Uint32Array(1))[0]! % 10_000_000).padStart(
+        7,
+        "0",
+      );
+      return `B${digits}${entityControl(digits).digit}`;
+    },
+  },
   taxIdentifier: { label: "NIF", validate: validateSpanishNif },
   postalCode: { validate: validateSpanishPostalCode },
   telephone: { validate: validateSpanishPhone },

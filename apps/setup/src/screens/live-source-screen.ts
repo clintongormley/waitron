@@ -4,6 +4,9 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import { passwordIcon } from "../password-icon.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import {
   dispatchConfigurationRequested,
@@ -67,6 +70,10 @@ export class SetupLiveSourceScreen extends LitElement {
         <p>Copy menus, layouts, staff profiles and settings from a preparation export.</p>
         <label class="field">
           Configuration export <span aria-hidden="true">*</span>
+          <wt-help-tooltip aria-label="Help with configuration export"
+            >Choose the encrypted configuration exported from your prepared restaurant. This copies
+            its settings into a new Live setup.</wt-help-tooltip
+          >
           <input
             name="configuration-export"
             type="file"
@@ -93,6 +100,7 @@ export class SetupLiveSourceScreen extends LitElement {
           type=${this.passphraseVisible ? "text" : "password"}
           autocomplete="off"
           required
+          error=${this.invalid.has("passphrase") ? "Enter a passphrase of at least 12 characters." : ""}
           ?invalid=${this.invalid.has("passphrase")}
           .value=${this.passphrase}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -101,13 +109,16 @@ export class SetupLiveSourceScreen extends LitElement {
             this.invalid = new Set([...this.invalid].filter((field) => field !== "passphrase"));
           }}
         >
+          <wt-help-tooltip slot="help" aria-label="Help with export passphrase"
+            >Enter the passphrase used to encrypt the configuration export.</wt-help-tooltip
+          >
           <wt-button
             slot="end"
             variant="ghost"
             data-test="toggle-passphrase"
             aria-label=${this.passphraseVisible ? "Hide export passphrase" : "Show export passphrase"}
             @click=${() => (this.passphraseVisible = !this.passphraseVisible)}
-            >${this.passphraseVisible ? "Hide" : "Show"}</wt-button
+            >${passwordIcon(this.passphraseVisible)}</wt-button
           >
         </wt-input>
         ${
@@ -119,9 +130,10 @@ export class SetupLiveSourceScreen extends LitElement {
         }
         ${
           this.showError
-            ? html`<p class="error" role="alert">
-                There is a problem with this form. Check the fields below.
-              </p>`
+            ? html`<wt-form-error-summary
+                heading="There is a problem with this form"
+                .errors=${[...this.invalid].map((field) => (field === "artifact" ? "Choose a configuration export." : "Enter a passphrase of at least 12 characters."))}
+              ></wt-form-error-summary>`
             : this.errorMessage
               ? html`<p class="error" role="alert">${this.errorMessage}</p>`
               : nothing

@@ -4,28 +4,14 @@ import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import { passwordIcon } from "../password-icon.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
-
-/**
- * The wizard's second step: the first operator's credentials — a display name, a login email, a login
- * password, and a numeric PIN. All four are required (the email is the admin's dashboard-login
- * credential); the server hashes `pin`/`password` at the boundary (`apps/server/src/setup-api.ts`), so
- * they travel plaintext and the wizard never hashes.
- *
- * On `Next` it client-validates that none is blank — a blank one shows a `role="alert"` banner and
- * marks the offending field(s) `invalid`, and nothing is emitted — then emits the admin slice as a
- * `setup-patch` and navigates to `venue`. `Back` returns to `mode`. Both nav events are the composed/
- * bubbling pair the shell listens for. Following `apps/dashboard/src/screens/login-screen.ts` for the
- * field/`wt-change`/error idiom.
- *
- * The form seeds its local state from the shell's `draft` ONCE on mount, so stepping `venue`→Back→
- * `admin`→forward restores the operator's typed credentials rather than blanking them (the shell
- * reassigns `draft` on every merge, so the seed must be guarded to the first update). Mirrors the
- * `#seeded`/`#seedFromDraft` idiom in `apps/setup/src/screens/venue-screen.ts`.
- */
 
 /** The four credential fields, each a `wt-input`. */
 type AdminField = "displayName" | "email" | "password" | "pin";
@@ -54,6 +40,7 @@ export class SetupAdminScreen extends LitElement {
     password: "",
     pin: "",
   };
+  @state() private visible = new Set<AdminField>();
   @state() private invalid = new Set<AdminField>();
 
   /** True once a `Next` with a blank field has been rejected — drives the `role="alert"` banner. */
@@ -137,11 +124,34 @@ export class SetupAdminScreen extends LitElement {
       data-test=${key}
       name=${fieldPurpose.name}
       autocomplete=${fieldPurpose.autocomplete}
-      type=${type}
+      type=${this.visible.has(key) ? "text" : type}
+      required
+      error=${this.invalid.has(key) ? `Enter your ${label.toLowerCase()}.` : ""}
       ?invalid=${this.invalid.has(key)}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-    ></wt-input>`;
+    >
+      <wt-help-tooltip slot="help" aria-label=${`Help with ${label.toLowerCase()}`}>
+        ${{ displayName: "Use the name your colleagues will see in Waitron.", email: "Use your email to sign in to the dashboard and recover your account.", password: "Choose a password for signing in to the dashboard.", pin: "Choose a numeric PIN for quick sign-in at the till." }[key]}
+      </wt-help-tooltip>
+      ${
+        type === "password"
+          ? html`<wt-button
+              slot="end"
+              variant="ghost"
+              data-test=${`toggle-${key}`}
+              aria-label=${`${this.visible.has(key) ? "Hide" : "Show"} ${key === "pin" ? "PIN" : "password"}`}
+              @click=${() => {
+                const visible = new Set(this.visible);
+                if (visible.has(key)) visible.delete(key);
+                else visible.add(key);
+                this.visible = visible;
+              }}
+              >${passwordIcon(this.visible.has(key))}</wt-button
+            >`
+          : nothing
+      }
+    </wt-input>`;
   }
 
   override render(): TemplateResult {
@@ -153,17 +163,21 @@ export class SetupAdminScreen extends LitElement {
         ${this.#field("Password", "password", "password")} ${this.#field("PIN", "pin", "password")}
         ${
           this.showError
-            ? html`<p class="error" role="alert" data-test="error">
-                Enter a display name, email, password and PIN for the first operator.
-              </p>`
+            ? html`<wt-form-error-summary
+                data-test="error"
+                heading="There is a problem with this form"
+                .errors=${[...this.invalid].map((key) => `Enter your ${{ displayName: "display name", email: "email", password: "password", pin: "PIN" }[key]}.`)}
+              ></wt-form-error-summary>`
             : nothing
         }
-        <div class="actions">
-          <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}>Back</wt-button>
+        <wt-form-actions>
+          <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+            >Back</wt-button
+          >
           <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
             >Next</wt-button
           >
-        </div>
+        </wt-form-actions>
       </wt-card>
     `;
   }

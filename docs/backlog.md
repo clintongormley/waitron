@@ -88,10 +88,8 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    box's CA while the browser trusted the old one, and the provisioning error offered no recovery
    instructions.
 
-2. **The setup wizard asks the wrong things** (A2) — the till name, the two series codes and "what
-   this location does" want defaults and explanations, and the demo path should not demand real
-   business details. The *checking* half landed with A1 (#331); what is left here is defaults,
-   wording and the demo path.
+2. **Setup wizard A2** is implemented and reviewed on `setup-wizard`. It needs
+   green PR checks and landing before the next box walkthrough.
 
 3. **A printer on another subnet cannot be added at all** (A3). #319 removed the manual host:port form
    and neither discovery pass crosses a subnet, which is exactly the owner's home setup. Small, and it
@@ -242,36 +240,27 @@ Each was judged and deliberately left; none blocks the merge.
   `apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown in five places; a
   helper would collapse it. Cosmetic, and cheapest to do alongside the tip-collection work that
   touches `#onPayTab` anyway.
-- **`setup.request_invalid`'s registry entry describes a surface it outgrew.**
-  `apps/server/src/errors.ts` calls it "currently the AEAT certificate seal" and then enumerates its
-  `field` param as `"certKind"` or `"pfxBase64"`. Both halves are stale: `parseVenue` raises the code
-  for every venue field it checks, through `invalidRequest` in `apps/server/src/setup-api.ts`, and A1
-  widened it again by making the provisioning CLI's venue-field seat a new thrower with its own field
-  names. The first half was already false before A1 — the sentence dates from #142 (`git log -S`) —
-  so A1 neither created nor fixed it, but A1 did add to what the second half leaves out. Two lines,
-  whenever somebody has that registry open.
 
 ### A2. The setup wizard
 
-Owner walkthrough 2026-09-12, none started. Detail for each under *Detail → Setup wizard*.
+Implemented and reviewed on `setup-wizard` (2026-09-12), awaiting PR checks and landing. Changed-package
+coverage and the implementation's complete repository gate passed. [Design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) ·
+[Plan](superpowers/plans/2026-09-12-setup-wizard-a2.md).
 
-- **Till name and the two series codes** — prefill the till name (or drop the question and let the
-  dashboard create registers), default the codes to `FS` and `FR`, and drop all three from the demo
-  path. The refusing half is DONE in A1: the server, the provisioning command and the wizard all
-  reject a code the fiscal record would later reject (charset, the 38-character base, the two must
-  differ), and the wizard marks the field. What is left here is the defaults and the demo path.
-- **"What this location does"** — a default, wording that says what the tax agency does with it, and
-  a dashboard screen that can change it (nothing can today, though the wizard promises it).
-- **The demo path** asks for real business details; ask only for the operator and the location's name
-  and address, generate a company tax ID, fill the rest with values they can change later.
-- **Per-field errors on the shop page** instead of one banner listing every possible problem. A1
-  built the per-field shape — the marked field, its own sentence in the input's `error` slot, focus
-  moved to it, no banner — for the four fields the fiscal regime refuses. What is left is the rules
-  the form evaluates itself, which still raise one banner listing everything.
-- **The certificate page** should show the export steps for the operator's own OS.
-- **A mistyped setup address gives a blank page** — redirect unknown paths to `/`, not a catch-all.
-- **Password and PIN reveal controls** on the first-operator screen, the dashboard's icon version.
-- Every field wants a `wt-help-tooltip` explanation.
+- First till defaults to `Caja 1`, series to `FS` and `FR`, and business day cutover to `04:00`.
+  The fiscal contribution supplies `Venta en establecimiento` as the operation-description default.
+- Demo asks for the operator and the location name/address, generates a company tax ID, and shows
+  its supplied settings on Review. Moving from Demo to Prepare or Live clears the generated identity.
+- Shop errors explain the individual fields; setup inputs have help, shared form summaries/actions,
+  and the operator's Password and PIN use the dashboard-style icon reveal control.
+- Certificate export help starts with the detected Windows, macOS or Firefox guide and keeps the
+  alternatives available. Instructions link to FNMT's guidance.
+- Unknown setup browser navigation redirects to `/`; missing files and API routes retain their responses.
+- The dashboard's **Location invoices** screen edits the operation description for future records,
+  with fiscal validation, configuration permission and explicit tenant checks.
+- Corrected the stale `setup.request_invalid` registry description tracked under A1.
+
+The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
@@ -887,7 +876,8 @@ The long form for tracked items, so the tracks above stay readable.
 
 ### Setup wizard — what the walkthrough found (A2)
 
-Owner walkthrough 2026-09-12. Each names what the wizard does today.
+Owner walkthrough 2026-09-12. These findings record the behavior before A2.
+The [A2 design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) describes the changes on `setup-wizard`.
 
 1. *The certificate page tells a Spanish operator nothing about getting the file.* It says only
    "Upload the certificate file and enter its passphrase" and accepts `.pfx` / `.p12`

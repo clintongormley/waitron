@@ -415,6 +415,11 @@ unfiltered `main` run, not a wrong hook.
   multi-tenant DB (till-reroute S3). The per-task review and four quality lenses all reasoned it "safe
   under one-tenant-per-db"; only the run-it seat, which RAN a two-tenant probe as `app_user`
   (rolsuper=f), caught it — reading missed it, running caught it (§1, §4).
+- **A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries.**
+  The permission check returns the session's tenant; it does not compare it with the configured tenant.
+  A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
+  them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, “refuses a manager session
+  belonging to another tenant”.
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Nothing is
   deployed; schema changes drop and recreate. A backfill for an empty database is code to maintain
   that buys nothing — and the first draft of the settlement design carried one that could only ever
@@ -535,6 +540,11 @@ unfiltered `main` run, not a wrong hook.
   test fixture. The reader-adoption gate found a healthy PostgreSQL container with a requested TCP
   binding but an empty published-port list; a focused rerun passed without explaining the first
   failure. Receipt: `docs/superpowers/plans/2026-09-12-card-reader-adoption-and-status.md`.
+- **Concurrent coverage runs must not share a package's report directory.** The hook's expanded
+  dependency set can include a package also selected by a supplemental run. In A2, two overlapping
+  fiscal-verifactu runs ended with `ENOENT` writing `coverage/.tmp/coverage-41.json`; Vitest cleans
+  that shared directory. Inspect the resolved selection first, or give an intentional second run
+  its own `--coverage.reportsDirectory`. Receipt: `docs/superpowers/plans/2026-09-12-setup-wizard-a2.md`.
 - **Reuse a supplied test container before probing Docker again.** A failing `docker info` command
   is not evidence that a container global setup already started is absent. Run 34507423350 failed
   `deployment.test.ts` at this redundant check; `harness.docker.test.ts` injects a CLI timeout to

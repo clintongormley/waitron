@@ -149,3 +149,16 @@ describe("validateSpanishPhone", () => {
     expect(validateSpanishPhone(input).valid).toBe(false);
   });
 });
+
+describe("demo company identity", () => {
+  it("generates company identifiers accepted by the country's real validator", () => {
+    const values = new Set<string>();
+    for (let index = 0; index < 100; index++) {
+      const taxId = SPAIN.demo!.createCompanyTaxId();
+      expect(taxId).toMatch(/^B[0-9]{8}$/);
+      expect(validateSpanishNif(taxId)).toEqual({ valid: true, normalized: taxId, kind: "entity" });
+      values.add(taxId);
+    }
+    expect(values.size).toBeGreaterThan(1);
+  });
+});
