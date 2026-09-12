@@ -232,6 +232,8 @@ Then, immediately after the `const record = …` assignment and before `const ro
 - `TipoImpositivo: "21"` — the validator requires exactly two decimal places (`TIPO_RANGE`). The real write path never produces this: it comes from `decimal(line.vatRate)`, which carries `"21.00"`.
 - `TipoFactura: "F1"` with no `Destinatarios` — a full invoice must name its recipient (`DESTINATARIOS_REQUIRED`). The real till path emits `"F2"` for a simplified sale, which needs no recipient (`backend.ts`, the `counterparty === null` line).
 
+(Correction, 2026-09-12: only ONE issue — see the note under Step 9.)
+
 So the fixture describes a record the production code cannot generate. Fix the fixture, do not weaken the guard and do not rewrite the tests that use it:
 
 ```ts
@@ -286,7 +288,8 @@ produce. The fixture is corrected here; that is the guard doing its job."
 ```
 
 > **Correction, 2026-09-12 (review wave):** the VAT-rate half of that sentence is
-> false and was not written into the commit. `buildAltaRecord` runs every rate
+> false. It was nonetheless committed, in ed32d534's message, which cannot be
+> edited now — which is why the correction lives here. `buildAltaRecord` runs every rate
 > through `formatAmountExact`, so a bare `"21"` reaches `validate` as `"21.00"`
 > and raises no issue — measured, with a control that forced a bare `"21"` past
 > the builder and did raise `TIPO_RANGE`. The missing recipient was the only

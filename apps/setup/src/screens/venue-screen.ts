@@ -61,6 +61,35 @@ type TextField =
   | "seriesCode"
   | "rectificativeSeriesCode";
 
+/**
+ * The browser autofill purpose for each field, beside the semantic `name` the shared form contract
+ * asks for (`docs/developers/design-system.md` → Forms; `admin-screen.ts` renders the same pair from
+ * its own map). Every value here is `"off"`, and that is the decision, not an omission: each field
+ * on this screen describes the VENUE, while the browser's stored values describe the PERSON filling
+ * the form in. `address-line1` on `addressLine1` would invite the operator's own home address into
+ * the shop's registered address, and `organization` on `legalName` the company they work for rather
+ * than the one being registered — and these values are what the fiscal record puts on the wire
+ * verbatim. Without an explicit `"off"` a browser guesses a purpose from the field's name, which is
+ * exactly the guess this turns off. Kept per-field rather than one blanket attribute so a field that
+ * later does have a correct purpose is a one-line change with a visible reason.
+ */
+const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
+  country: "off",
+  taxId: "off",
+  legalName: "off",
+  name: "off",
+  operationDescription: "off",
+  addressLine1: "off",
+  addressLine2: "off",
+  postalCode: "off",
+  city: "off",
+  province: "off",
+  dayCutover: "off",
+  tillName: "off",
+  seriesCode: "off",
+  rectificativeSeriesCode: "off",
+};
+
 /** Everything a complete venue must carry — `addressLine2` alone may be blank (it becomes `null`). */
 const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "country",
@@ -461,6 +490,7 @@ export class SetupVenueScreen extends LitElement {
       class="field"
       label=${label}
       name=${key}
+      autocomplete=${FIELD_AUTOCOMPLETE[key]}
       data-test=${key}
       type=${type}
       ?invalid=${this.invalid.has(key) || refused !== undefined}

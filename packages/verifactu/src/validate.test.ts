@@ -797,6 +797,26 @@ describe("validate — the recipient's own name and NIF", () => {
     );
   });
 
+  it("rejects a control character in a foreign recipient's IDOtro.ID", () => {
+    // `xml/serialize.ts` writes IDOtro.ID into the document as element text, exactly as it writes
+    // NombreRazon, so one here is the same unparseable-XML harm. Unreachable through waitron today
+    // (a non-Spanish recipient is refused before the record is built), which is precisely why the
+    // library's own boundary carries it: the defect this branch fixed was an uncalled rule rotting.
+    const record = buildAltaRecord({
+      ...INPUT,
+      Destinatarios: {
+        IDDestinatario: [
+          {
+            NombreRazon: "Client SARL",
+            IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR\x07123" },
+          },
+        ],
+      },
+    });
+    const issue = validate(record).find((i) => i.code === "CONTROL_CHAR");
+    expect(issue?.field).toBe("Destinatarios.IDDestinatario[0].IDOtro.ID");
+  });
+
   it("does not length-check a foreign recipient's IDOtro, which is a different XSD type", () => {
     // The xsd:choice's other branch is IDOtroType, whose ID is TextMax20Type — a 9-character rule
     // there would refuse identifiers AEAT accepts.
@@ -1084,6 +1104,22 @@ describe("validate — pins the exact field, message and severity for every Vali
         "Destinatarios.IDDestinatario[0].NombreRazon must not contain XML control characters",
       mutate: (r) => {
         r.Destinatarios = { IDDestinatario: [{ NombreRazon: "Clien\x07te SL", NIF: "B99999999" }] };
+      },
+    },
+    {
+      description: "CONTROL_CHAR on Destinatarios.IDDestinatario[0].IDOtro.ID",
+      code: "CONTROL_CHAR",
+      field: "Destinatarios.IDDestinatario[0].IDOtro.ID",
+      message: "Destinatarios.IDDestinatario[0].IDOtro.ID must not contain XML control characters",
+      mutate: (r) => {
+        r.Destinatarios = {
+          IDDestinatario: [
+            {
+              NombreRazon: "Client SARL",
+              IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR\x071" },
+            },
+          ],
+        };
       },
     },
     {

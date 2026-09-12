@@ -32,7 +32,9 @@ export type ServerFieldKey =
   "legalName" | "seriesCode" | "rectificativeSeriesCode" | "operationDescription";
 
 export interface ServerField {
-  /** The venue form's own field key, which is also its `data-test` hook. */
+  /** The venue form's own field key. It is also the field's `name` attribute, which is how the
+   * screen finds the input to focus, and its `data-test` hook. The `name` is the production
+   * dependency; the test hook is not (CLAUDE.md §3 → Forms). */
   readonly key: ServerFieldKey;
   /** What is wrong, in the operator's terms. */
   readonly message: string;

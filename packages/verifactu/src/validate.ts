@@ -181,12 +181,12 @@ export function validate(record: RegistroAlta | RegistroAnulacion): ValidationIs
   // A control character makes the serialised document not well-formed XML —
   // not merely schema-invalid, but unparseable — so it is rejected rather
   // than silently stripped, which would alter a fiscal record's text.
-  // `value !== undefined &&` is mutation-tested as equivalent: RefExterna is
-  // the only optional caller below, and RegExp.prototype.test() coerces an
-  // undefined argument to the literal string "undefined" (verified in
-  // Node), which CONTROL_CHAR_PATTERN never matches — so a `true &&` mutant
-  // still evaluates to false on the one call site where the guard could
-  // matter. No test can kill an equivalent mutant.
+  // `value !== undefined &&` is mutation-tested as equivalent: the optional
+  // callers below are RefExterna and a foreign recipient's IDOtro.ID, and
+  // RegExp.prototype.test() coerces an undefined argument to the literal
+  // string "undefined" (verified in Node), which CONTROL_CHAR_PATTERN never
+  // matches — so a `true &&` mutant still evaluates to false at every call
+  // site where the guard could matter. No test can kill an equivalent mutant.
   const checkNoControlChars = (field: string, value: string | undefined) => {
     if (value !== undefined && CONTROL_CHAR_PATTERN.test(value)) {
       add("CONTROL_CHAR", field, `${field} must not contain XML control characters`);
@@ -300,12 +300,20 @@ export function validate(record: RegistroAlta | RegistroAnulacion): ValidationIs
   // IDEmisorFactura and SistemaInformatico.NIF carry, so it earns the identical NIF_LENGTH rule.
   // The IDOtro branch of the xsd:choice is a different type (TextMax20Type, up to 15 characters per
   // its own documentation) and is deliberately NOT length-checked here.
+  //
+  // IDOtro.ID gets the control-character scan even so: xml/serialize.ts writes it into the document
+  // as element text exactly as it writes NombreRazon, so one there makes the filing equally
+  // unparseable. `@waitron/fiscal-verifactu` cannot reach it today (buildDestinatarios refuses a
+  // non-Spanish recipient before building one), but this is the library's OWN boundary and the whole
+  // reason this check exists is that a rule with no caller rots unnoticed. Its two siblings are
+  // enumerations, not free text, so neither is scanned.
   record.Destinatarios?.IDDestinatario.forEach((destinatario, index) => {
     const field = `Destinatarios.IDDestinatario[${index}]`;
     checkNoControlChars(`${field}.NombreRazon`, destinatario.NombreRazon);
     if (destinatario.NIF !== undefined && destinatario.NIF.length !== 9) {
       add("NIF_LENGTH", `${field}.NIF`, "NIF must be exactly 9 characters");
     }
+    checkNoControlChars(`${field}.IDOtro.ID`, destinatario.IDOtro?.ID);
   });
 
   if (record.DescripcionOperacion.length > 500) {

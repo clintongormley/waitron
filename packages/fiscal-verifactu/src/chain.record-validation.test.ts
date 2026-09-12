@@ -185,8 +185,8 @@ describe("a record whose totals disagree with themselves is written, filed and f
 describe("a recipient's name is checked as closely as the issuer's", () => {
   /** The run-it review's own reproduction, at the seam it got past. A Spanish business customer's
    * name is typed or pasted at the till, so U+0007 reaches the record exactly the way it reached
-   * the reviewer's: the F1 path this branch opened is the first thing that ever wrote a recipient
-   * on a sale, and `validate` scanned the ISSUER's name but not the recipient's. `registros_facturacion`
+   * the reviewer's: the F1 path this branch opened is the second path that writes a recipient —
+   * `recordSubstitution`'s F3 was the first, and `validate` scanned neither. `registros_facturacion`
    * is append-only, so a bell character stored there could never be taken out again.
    *
    * `packages/core`'s `recordSale` hardcodes `counterparty: null`, so the F1 branch is reached by

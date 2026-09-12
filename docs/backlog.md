@@ -188,10 +188,12 @@ required, so the refusal is one route away, not one feature away.
 
 `validate` scanned the issuer's name and the operation description for characters XML forbids but
 did neither for `Destinatarios.IDDestinatario[].NombreRazon`, and applied no length rule to the
-recipient's NIF. The gap predates A1 (`git log -S`, #51), but A1 is what made it live: before it,
-nothing put a recipient on a sale. The run-it review then proved it against real PostgreSQL — a
-customer named `Cliente<U+0007>SL` went through the new full-invoice path, the sale COMMITTED, and
-the bell character was stored in the append-only record. Fixed on the same branch: every recipient's
+recipient's NIF. The gap predates A1 (`git log -S`, #51) and was already reachable through core's
+`recordSubstitution`, whose recipient has always been required; A1 widened it to any F1 `recordSale`
+builds. Neither is reachable from an HTTP route yet, so the run-it review reproduced it by calling
+the backend directly: a customer named `Cliente<U+0007>SL` went through the new full-invoice path
+against real PostgreSQL, the sale COMMITTED, and the bell character was stored in the append-only
+record. Fixed on the same branch: every recipient's
 name is scanned and the issue names which one, and the recipient's NIF gets the same exactly-nine
 rule the issuer's does (`sf:NIFType` is the identical XSD type). Regression at the chain seam.
 
@@ -216,11 +218,14 @@ Each was judged and deliberately left; none blocks the merge.
   `apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown in five places; a
   helper would collapse it. Cosmetic, and cheapest to do alongside the tip-collection work that
   touches `#onPayTab` anyway.
-- **`setup.request_invalid` is described as "currently the AEAT certificate seal".**
-  `apps/server/src/errors.ts` says so, while `parseVenue` raises it for every venue field it checks,
-  through `invalidRequest` in `apps/server/src/setup-api.ts`. Already false before A1 — the sentence
-  dates from #142 (`git log -S`) — so A1 neither created nor fixed it. One line, whenever somebody
-  has that registry open.
+- **`setup.request_invalid`'s registry entry describes a surface it outgrew.**
+  `apps/server/src/errors.ts` calls it "currently the AEAT certificate seal" and then enumerates its
+  `field` param as `"certKind"` or `"pfxBase64"`. Both halves are stale: `parseVenue` raises the code
+  for every venue field it checks, through `invalidRequest` in `apps/server/src/setup-api.ts`, and A1
+  widened it again by making the provisioning CLI's venue-field seat a new thrower with its own field
+  names. The first half was already false before A1 — the sentence dates from #142 (`git log -S`) —
+  so A1 neither created nor fixed it, but A1 did add to what the second half leaves out. Two lines,
+  whenever somebody has that registry open.
 
 ### A2. The setup wizard
 
