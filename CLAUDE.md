@@ -425,7 +425,8 @@ unfiltered `main` run, not a wrong hook.
   The permission check returns the session's tenant; it does not compare it with the configured tenant.
   A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
   them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, “refuses a manager session
-  belonging to another tenant”.
+  belonging to another tenant”. Printer routes enforce the same check; their regression is
+  `apps/server/src/print-api.pg.test.ts`, “refuses another tenant's manager…”.
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Nothing is
   deployed; schema changes drop and recreate. A backfill for an empty database is code to maintain
   that buys nothing — and the first draft of the settlement design carried one that could only ever

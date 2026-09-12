@@ -67,6 +67,20 @@ async function seedTenantWithLocation(): Promise<Tenant> {
   return { tenantId, locationId: loc.rows[0]!.id };
 }
 
+it("refuses another tenant's manager before checking an address or reading printer inventory", async () => {
+  const foreign = await seedTenantWithLocation();
+  const app = mountApp(foreign);
+  const response = await send(app, "POST", "/management-api/printer-discovery/probe", {
+    cookie: managerCookie,
+    body: { host: "192.168.20.247" },
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  expect(
+    (await send(app, "GET", "/management-api/printers", { cookie: managerCookie })).status,
+  ).toBe(403);
+});
+
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
   const { managerSid, staffSid } = await withTenant(suite.admin, tenantA.tenantId, async (tx) => {
@@ -1006,9 +1020,24 @@ describe("print job resend as the deployment role", () => {
       )?.canResend,
     ).toBe(false);
     const foreign = await seedTenantWithLocation();
-    expect((await send(mountApp(foreign), "POST", path, { cookie: managerCookie })).status).toBe(
-      404,
-    );
+    const foreignSession = await withTenant(suite.admin, foreign.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const person = await tx.execute<{ id: string }>(sql`
+        insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${foreign.tenantId}, 'Other manager', ${hashPin("1234")}, 'manager') returning id`);
+      return startManagementSession(tx, {
+        tenantId: foreign.tenantId,
+        personId: person.rows[0]!.id,
+      });
+    });
+    // Use this tenant's own manager so the assertion reaches the job's tenant predicate.
+    expect(
+      (
+        await send(mountApp(foreign), "POST", path, {
+          cookie: `${MANAGEMENT_COOKIE}=${foreignSession.id}`,
+        })
+      ).status,
+    ).toBe(404);
     expect(
       (
         await send(app, "POST", `/management-api/print-jobs/${randomUUID()}/resend`, {

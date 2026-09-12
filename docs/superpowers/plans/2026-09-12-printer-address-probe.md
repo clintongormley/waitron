@@ -78,3 +78,18 @@ states the permitted unicast address space, and the route retains a concise erro
 The review's requested host-level deduplication was declined: the server queue already normalizes and
 deduplicates its eight targets; malformed injected arrays remain bounded but are not promised to be
 salvaged beyond the cap. The historical Epson/dns-sd receipt remains in the cited central-printer design.
+
+## Review after A2 landed
+
+A2 (#334) advanced main in the dashboard client, strings and server errors. The branch rebased cleanly
+onto `f5941462` and received the required fresh isolated review. Its bounded node/PostgreSQL
+experiments found no new defect; browser checks were reserved for the driver because another
+session was running whole-workspace coverage. The printing registry header does not claim exclusive
+ownership of every printer-prefixed code, and the screen selects `api.background` for polling.
+
+Applying A2's new authorization rule exposed a separate driver-reproduced defect: the shared printer
+gate checked permission but not the session's tenant. The new real-PostgreSQL address-check test
+returned 200 where 403 was required. The gate now compares the returned tenant with the configured
+tenant before invoking any printer operation. All 79 printer route/integration tests pass. The
+resend isolation test uses the foreign tenant's own manager so its existing 404 assertion still
+reaches the job's tenant predicate instead of stopping at the new authorization check.
