@@ -1,5 +1,10 @@
 # SP-3c — Module-owned gated provisioning (the fiscal module's `provisioning` and `fiscal` seats)
 
+> **2026-09-12:** this document refers to `.github/instructions/waitron.instructions.md`, which has
+> been deleted. Its rules moved to `docs/developers/conventions-ui.md`, `conventions-data.md` and
+> `testing-guide.md` — sweep those instead. The original is still readable with
+> `git show f5941462:.github/instructions/waitron.instructions.md`.
+
 **Date:** 2026-09-05
 **Status:** design. **Owner-reviewed:** the three shaping decisions below were taken 2026-09-05 (the
 brainstorm that produced this spec): (1) SP-3c covers every provisioning-time seam plus the backend

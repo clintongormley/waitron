@@ -1,5 +1,10 @@
 # Implement node onboarding
 
+> **2026-09-12:** this document refers to `.github/instructions/waitron.instructions.md`, which has
+> been deleted. Its rules moved to `docs/developers/conventions-ui.md`, `conventions-data.md` and
+> `testing-guide.md` — sweep those instead. The original is still readable with
+> `git show f5941462:.github/instructions/waitron.instructions.md`.
+
 Date: 2026-09-09. [Design](../specs/2026-09-09-node-onboarding-design.md).
 Execution model: Sol at high effort, per owner instruction. Planning does not authorize sending
 fiscal samples, live payments or email to outside recipients during this session.
@@ -148,6 +153,7 @@ checks separately. Verify production activation cannot be reached by a browser-o
 change or imported readiness assertion.
 
 Audit prose across the complete changed path set, including `.github/instructions`, README/runbooks,
+
 backlog and historical pointers. Record the Prepare compliance question before release; do not call
 the feature legally cleared on the strength of tests. Update the backlog with completed slices and
 remaining release evidence. Announce readiness for `finish-branch`; do not merge without the owner's
