@@ -92,7 +92,15 @@ overlay/veil colour elsewhere, reuse it rather than inventing a new one.
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
-`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`
+`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-opacity-disabled`,
+`--wt-opacity-hover`
+
+`--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
+opacity dip, the same treatment for every variant. A variant-specific background or border-colour
+change would need a distinct value per variant to stay visible in both themes: `--wt-color-surface`
+and `--wt-color-surface-raised`, the pair other primitives already hover onto (`wt-tabs`,
+`wt-data-table`), are identical in the light theme today, so that idiom would be invisible on
+`wt-button`'s own secondary variant, which already rests on `--wt-color-surface`.
 
 `--wt-dialog-max-width` (`min(90vw, 32rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
@@ -332,6 +340,17 @@ name: one deployment database represents one tenant, while that tenant can conta
 locations. Once a session is active, put Logout at the banner's trailing (right-hand in the shipped
 locales) edge. Do not show Logout before authentication.
 
+### Dashboard sidebar navigation
+
+A sidebar nav row is a `.nav-item` — a plain flat `<button>`, not `wt-button`. `wt-button`'s own
+box (border, background, bold text) is right for a page action, but a sidebar lists ~20 of them;
+stacking that many buttons reads as a wall of buttons, not navigation. The selected item carries
+`aria-current="page"` and is styled from that attribute: an accent-coloured leading edge plus bold,
+coloured text, no background fill — the same idiom `wt-tabs` already uses for its selected tab
+(`border-bottom-color` there, `border-inline-start-color` here), not a new one. A resting row hovers
+to `--wt-color-surface` — visible here because the sidebar itself sits on `--wt-color-bg`, unlike
+`wt-button`'s own secondary variant (see `--wt-opacity-hover` above).
+
 ### Dashboard authentication
 
 Show **Please log in to continue** above the initial Email field and offer passive passkey autofill
@@ -433,10 +452,17 @@ inside it does something different. Four shapes cover what's needed so far:
 
 ### Button variant discipline
 
-`secondary` (outlined) is the default for everyday actions. `primary` (filled) is reserved for the
-one main call-to-action on a screen — most settings screens have none. `danger` (red) is only for
-an action that removes or disables something; "Change password" is not destructive and stays
-`secondary`.
+`primary` (filled) is the forward/constructive action for a card or row — "Edit", "Change
+password", "Add passkey", "Set up authenticator" — not "one primary per screen". A settings screen
+made of several independent cards has several primary actions, one per card, because each card is
+its own small task; the "one primary" instinct is really about not having two competing forward
+actions in the *same* card or footer. `danger` (red) is for an action that removes or disables
+something — "Remove" on a passkey, "Disable authenticator" — regardless of how forward-moving it
+otherwise looks. `secondary` (outlined) is for anything left over: maintenance actions that aren't
+the card's main path ("Replace recovery codes" when 2FA is already on), and Cancel/Back.
+
+Right-align a card's footer actions (`justify-content: flex-end`) — the same "primary action
+bottom-right" rule `wt-form-actions` already applies to forms sitewide (see "Forms" above).
 
 ### Spacing rhythm
 
@@ -446,6 +472,17 @@ Using the existing `--wt-space-*` scale:
 - `--wt-space-5` between one card and the next group label (i.e. between whole sections)
 - `--wt-space-2` between a group label and its card
 - row padding inside a card: `--wt-space-3` vertical, `--wt-space-4` horizontal
+
+### Left-anchor narrow content — don't centre it
+
+A narrower `max-width` on a settings/form screen keeps line length readable, but the screen itself
+stays anchored to the body's left padding, the same as a full-width `wt-data-table` screen — never
+`margin-inline: auto`. Centering a narrow screen in the *remaining* space beside the sidebar makes
+it read as a visually different app from the wide table screens next to it; anchoring both to the
+same edge and varying only the width does not. `backup-screen.ts` and `receipt-screen.ts` already
+follow this (`max-width` alone); `profile-screen.ts` used to be the outlier. The one legitimate
+exception is a full-page screen with no sidebar at all, like the login screen — centering a
+freestanding form with nothing to anchor to is the normal, expected treatment there.
 
 ### Typography roles
 
