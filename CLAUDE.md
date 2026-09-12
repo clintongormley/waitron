@@ -312,6 +312,17 @@ unfiltered `main` run, not a wrong hook.
   tty, …); a class that is neither a Docker default nor 180 (e.g. hidraw) is what gets denied. Pinned
   by `scripts/deploy-image-env.test.ts`; spec
   `docs/superpowers/specs/2026-09-10-print-agent-box-wiring-design.md` §5.
+- **A command name is declared under `waitron.commands`, never `bin`.** pnpm links a `bin` while it
+  INSTALLS and skips one whose target is missing, and nothing here builds at install time, so a
+  `bin` under `dist/` is never linked by the install that reads it. Every CLI is run by path anyway
+  (`node /app/bin-restore.js` in the image). Cost: repeated `Failed to create bin` warnings on every
+  install, in every worktree and in the image build, plus an AEAT runbook whose
+  `pnpm --filter … exec waitron-credentials` steps could never have run; the measurements are in that
+  runbook's dated note (`docs/superpowers/plans/2026-07-28-first-aeat-submission.md`, Task 3).
+  Guards: `scripts/manifest-commands.test.ts` (a declared `bin` target must be tracked by git; a
+  `waitron.commands` target must appear as an `--outfile=` in its own package's `build` script, which
+  is a text match) and `scripts/deploy-image-env.test.ts` (the image ships every name the server
+  declares).
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would
   publish the whole harness and give `asAppUser` a second import path. Consequence: `apps/server`

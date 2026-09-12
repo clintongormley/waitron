@@ -609,5 +609,5 @@ WITH the bundle rather than one inferred from source syntax by whichever Node ha
 matching how every other `package.json` in this repo declares `"type"` rather than relying on
 sniffing. Chosen over renaming the bundle to `dist/server.mjs` (which forces the same fact through
 the file's extension instead, unconditionally of Node version or flags) because a rename also
-touches `package.json`'s `bin` field, the CI gate's smoke-test paths, and this README's own
+touches `package.json`'s `waitron.commands` entry, the CI gate's smoke-test paths, and this README's own
 `node dist/server.js` examples, for no behavioural difference once `dist/package.json` exists.

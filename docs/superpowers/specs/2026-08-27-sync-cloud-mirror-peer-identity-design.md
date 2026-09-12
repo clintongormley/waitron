@@ -194,6 +194,11 @@ out }`, connecting as `WAITRON_SYNC_RETENTION_DATABASE_URL` (the `sync_retention
 Registered in `apps/server/package.json`'s `bin` map and bundled in its `build` script, beside
 `bin-sync-evict`. Wrong/absent args print usage and exit `2`, the evict convention.
 
+> **2026-09-12:** neither command was ever built, and the `bin` map is gone — command names live
+> under `waitron.commands` now, and a `bin` pointing into `dist/` turns the root project red
+> (`scripts/manifest-commands.test.ts`). Declare a new command there and add its `--outfile` to the
+> package's `build` script. `waitron-sync-evict`, named above, was removed too.
+
 ## 8. sync-api rewrite — `apps/server/src/sync-api.ts`
 
 - Replace `requireNodeTokens(c, nodeTokens)` with **`requirePeer(db, c) → { subscriberId }`**, which

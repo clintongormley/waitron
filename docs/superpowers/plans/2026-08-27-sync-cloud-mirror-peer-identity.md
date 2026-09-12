@@ -505,7 +505,8 @@ git commit -s -m "feat(sync): revokePeer + listPeers (cloud-mirror A)"
 **Files:**
 - Create: `apps/server/src/sync-peer-command.ts`
 - Create: `apps/server/src/bin-sync-peer.ts`
-- Modify: `apps/server/package.json` (`bin` map + `build` esbuild line)
+- Modify: `apps/server/package.json` (`bin` map + `build` esbuild line) — see the 2026-09-12 note
+  further down this task: there is no `bin` map any more
 - Test: `apps/server/src/sync-peer-command.test.ts`
 
 **Interfaces:**
@@ -696,6 +697,12 @@ syncPeerCommand({
 }).then((code) => process.exit(code));
 /* v8 ignore stop */
 ```
+
+> **2026-09-12:** neither command was ever built, and there is no `bin` map any more — command names
+> live under `waitron.commands`, and a `bin` pointing into `dist/` turns the root project red
+> (`scripts/manifest-commands.test.ts`). Declare the name there and add its `--outfile` to the
+> `build` script. There is nothing to put it "beside" any more — `waitron-sync-evict` was removed
+> too. The design doc for this task carries the same note.
 
 In `apps/server/package.json`, add to the `bin` map (beside `waitron-sync-evict`):
 

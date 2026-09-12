@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "main": "./src/bin.ts",
-  "bin": {
-    "waitron-print-agent": "./dist/print-agent.js"
+  "waitron": {
+    "commands": {
+      "waitron-print-agent": "./dist/print-agent.js"
+    }
   },
   "scripts": {
     "build": "esbuild src/bin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/print-agent.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
