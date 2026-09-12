@@ -10,7 +10,7 @@ import { assertBuiltApp, mountSpa, safeResolve } from "./spa-api.js";
 const noopLog: Logger = () => {};
 
 /** Records every line so the non-ENOENT read-failure branch can be asserted, mirroring
- * `media-api.test.ts`'s `capturingLog`. */
+ * the logger shape used by route tests. */
 const capturingLog = () => {
   const lines: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const log: Logger = (level, event, fields) => {
@@ -152,7 +152,7 @@ describe("mountSpa", () => {
   it("answers 404 and logs when a read fails for a reason other than ENOENT", async () => {
     // `assets` is a directory, so `readFile` throws EISDIR — the misconfiguration branch. It is still a
     // bare 404 to the caller (this route never 500s or leaks fs detail), but it logs, unlike the
-    // ordinary missing-file ENOENT. Mirrors media-api.test.ts's ENOTDIR case.
+    // ordinary missing-file ENOENT.
     const { log, lines } = capturingLog();
     const app = new Hono();
     mountSpa(app, { root: root!, basePath: "" }, log);

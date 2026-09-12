@@ -56,8 +56,7 @@ vi.mock("undici", async (importOriginal) => {
   };
 });
 
-// A media dir + state dir under this suite's own temp root so boot's `mkdirSync(mediaDir)` never writes
-// into `apps/server/src`. The `modules.json` resolves the two-member fiscal slot to Veri*Factu (disabling
+// Filesystem paths stay under this suite's temporary root. The modules.json selects Veri*Factu (disabling
 // `fiscal-none`) so a trading/mirror boot does not refuse `module.fiscal_slot_ambiguous`.
 const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-endpoint-media-"));
 const FISCAL_NONE_OFF = JSON.stringify({ modules: { "fiscal-none": false } });

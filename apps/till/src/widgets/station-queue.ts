@@ -1,3 +1,4 @@
+import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
@@ -6,7 +7,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { donenessLabel } from "../i18n/doneness-label.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
-import { descriptionFor, trimQuantity } from "./dish-format.js";
+import { snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
 import type {
   StationQueueCourse,
   StationQueueGroup,
@@ -92,6 +93,11 @@ function courseOrder(course: StationQueueCourse | null): number {
  */
 @customElement("till-station-queue")
 export class TillStationQueue extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     dietBadgeStyles,
@@ -890,17 +896,19 @@ export class TillStationQueue extends LitElement {
     return html`<span class="line-modifiers">
       ${modifiers.map(
         (modifier) =>
-          html`<span class="modifier">+ ${descriptionFor(modifier.descriptions, "")}</span>`,
+          html`<span class="modifier"
+            >+ ${snapshotDescriptionFor(modifier.descriptions, "")}</span
+          >`,
       )}
     </span>`;
   }
 
   /** The line's dish label for the kitchen display: `qty× name`, e.g. "2× Paella". The name resolves in
-   *  the operator locale with a first-available fallback ({@link descriptionFor}, degrading to "" for an
+   *  the operator locale with a stored receipt-language fallback ({@link snapshotDescriptionFor}, degrading to "" for an
    *  empty map — the till's set-at-boot `currentLocale()` is `TillInfo.locale`); the quantity is the
    *  line's numeric(_,3) trimmed of trailing zeros ({@link trimQuantity}, shared with the table screen). */
   #dish(item: StationQueueItem): string {
-    return `${trimQuantity(item.quantity)}× ${descriptionFor(item.descriptions, "")}`;
+    return `${trimQuantity(item.quantity)}× ${snapshotDescriptionFor(item.descriptions, "")}`;
   }
 
   /** The accessible name for a bump control — whole-ticket vs per-line, named with the order number. */

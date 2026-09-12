@@ -1,3 +1,4 @@
+import { MEDIA_DASHBOARD } from "@waitron/media/dashboard";
 import { BOOKINGS_DASHBOARD } from "@waitron/bookings/dashboard";
 import { VENUE_SERVICE_DASHBOARD } from "@waitron/venue-service/dashboard";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
@@ -7,6 +8,7 @@ import type { DashboardContribution } from "@waitron/dashboard-kit";
 // UI-bearing module (the browser twin of @waitron/composition's server descriptor list); the app under
 // apps/dashboard imports neither a module nor @waitron/composition, only this registry.
 export const DASHBOARD_MODULES: readonly DashboardContribution[] = [
+  MEDIA_DASHBOARD,
   BOOKINGS_DASHBOARD,
   VENUE_SERVICE_DASHBOARD,
 ];

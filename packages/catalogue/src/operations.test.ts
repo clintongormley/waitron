@@ -321,7 +321,7 @@ describe("catalogue operations", () => {
       const stall = await createCatalogue(tx, tenantId, { name: "Drinks stall" });
       expect(deli.active).toBe(true);
       expect(deli.version).toBe(1);
-      const cats = await listCatalogues(tx);
+      const cats = await listCatalogues(tx, tenantId);
       expect(cats.map((c) => c.name).sort()).toEqual(["Deli", "Drinks stall"]);
       expect(cats.map((c) => c.id).sort()).toEqual([deli.id, stall.id].sort());
     });
@@ -366,7 +366,7 @@ describe("catalogue operations", () => {
         unitPrice: "3.00",
         vatClass: "general",
       });
-      const products = await listProducts(tx, cat.id);
+      const products = await listProducts(tx, tenantId, cat.id);
       expect(products.map((p) => p.id).sort()).toEqual([ham.id, water.id].sort());
       const seenHam = products.find((p) => p.id === ham.id)!;
       expect(seenHam.pricingUnit).toBe("weight");
@@ -392,7 +392,7 @@ describe("catalogue operations", () => {
         unitPrice: "1.80",
         descriptions: { en: "sparkling water" },
       });
-      const [seen] = await listProducts(tx, cat.id);
+      const [seen] = await listProducts(tx, tenantId, cat.id);
       expect(seen!.unitPrice).toBe("1.80");
       expect(seen!.descriptions).toEqual({ en: "sparkling water" });
     });
@@ -422,16 +422,18 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       expect(noImage.image).toBeNull();
-      const listed = await listProducts(tx, cat.id);
+      const listed = await listProducts(tx, tenantId, cat.id);
       expect(listed.find((p) => p.id === withImage.id)!.image).toBe("x.webp");
       expect(listed.find((p) => p.id === noImage.id)!.image).toBeNull();
       // updateProduct sets a new image reference…
       await updateProduct(tx, noImage.id, { image: "y.png" });
-      const afterSet = (await listProducts(tx, cat.id)).find((p) => p.id === noImage.id)!;
+      const afterSet = (await listProducts(tx, tenantId, cat.id)).find((p) => p.id === noImage.id)!;
       expect(afterSet.image).toBe("y.png");
       // …and `null` clears it back to no-picture.
       await updateProduct(tx, noImage.id, { image: null });
-      const afterClear = (await listProducts(tx, cat.id)).find((p) => p.id === noImage.id)!;
+      const afterClear = (await listProducts(tx, tenantId, cat.id)).find(
+        (p) => p.id === noImage.id,
+      )!;
       expect(afterClear.image).toBeNull();
     });
   });
@@ -451,11 +453,11 @@ describe("catalogue operations", () => {
       // `{ active: false }` deactivates through the same edit route (the headless deactivateProduct
       // stays for the till/other callers)…
       await updateProduct(tx, p.id, { active: false });
-      const deactivated = (await listProducts(tx, cat.id)).find((x) => x.id === p.id)!;
+      const deactivated = (await listProducts(tx, tenantId, cat.id)).find((x) => x.id === p.id)!;
       expect(deactivated.active).toBe(false);
       // …and `{ active: true }` reactivates it.
       await updateProduct(tx, p.id, { active: true });
-      const reactivated = (await listProducts(tx, cat.id)).find((x) => x.id === p.id)!;
+      const reactivated = (await listProducts(tx, tenantId, cat.id)).find((x) => x.id === p.id)!;
       expect(reactivated.active).toBe(true);
     });
   });
@@ -485,7 +487,7 @@ describe("catalogue operations", () => {
       });
       expect(shown.active).toBe(true);
       // Both round-trip through listProducts.
-      const listed = await listProducts(tx, cat.id);
+      const listed = await listProducts(tx, tenantId, cat.id);
       expect(listed.find((p) => p.id === hidden.id)!.active).toBe(false);
       expect(listed.find((p) => p.id === shown.id)!.active).toBe(true);
     });
@@ -504,7 +506,7 @@ describe("catalogue operations", () => {
         allergens: { gluten: { presence: "contains", source: "wheat" } },
       });
       expect(p.allergens).toEqual({ gluten: { presence: "contains", source: "wheat" } });
-      const [listed] = await listProducts(tx, cat.id);
+      const [listed] = await listProducts(tx, tenantId, cat.id);
       expect(listed!.allergens).toEqual({ gluten: { presence: "contains", source: "wheat" } });
     });
   });
@@ -559,11 +561,11 @@ describe("catalogue operations", () => {
       ).rejects.toMatchObject({ code: "allergen.invalid_code" });
       // A valid update is written back.
       await updateProduct(tx, p.id, { allergens: { milk: { presence: "may_contain" } } });
-      const [afterSet] = await listProducts(tx, cat.id);
+      const [afterSet] = await listProducts(tx, tenantId, cat.id);
       expect(afterSet!.allergens).toEqual({ milk: { presence: "may_contain" } });
       // `null` clears the declaration back to unreviewed.
       await updateProduct(tx, p.id, { allergens: null });
-      const [afterClear] = await listProducts(tx, cat.id);
+      const [afterClear] = await listProducts(tx, tenantId, cat.id);
       expect(afterClear!.allergens).toBeNull();
     });
   });
@@ -842,7 +844,7 @@ describe("catalogue operations", () => {
         allergens: { eggs: { presence: "contains" } },
         pending: false,
       });
-      const [row] = await listProducts(tx, cat.id);
+      const [row] = await listProducts(tx, tenantId, cat.id);
       return row!.allergens;
     });
     expect(seen).toEqual({ eggs: { presence: "contains" }, nuts: { presence: "may_contain" } });
@@ -868,7 +870,7 @@ describe("catalogue operations", () => {
         allergens: { eggs: { presence: "contains" } },
         pending: false,
       });
-      const [row] = await listProducts(tx, cat.id);
+      const [row] = await listProducts(tx, tenantId, cat.id);
       return row!;
     });
     expect(seen.allergens).toEqual({
@@ -902,7 +904,7 @@ describe("catalogue operations", () => {
         unitPrice: "1.00",
         vatClass: "general",
       });
-      const rows = await listProducts(tx, cat.id);
+      const rows = await listProducts(tx, tenantId, cat.id);
       return [rows.find((p) => p.id === forced.id)!, rows.find((p) => p.id === plain.id)!];
     });
     expect(withOverride.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
@@ -924,7 +926,7 @@ describe("catalogue operations", () => {
         allergens: { nuts: { presence: "contains" } },
       });
       await applyRecipeDerivation(tx, p.id, { allergens: {}, pending: true });
-      const [row] = await listProducts(tx, cat.id);
+      const [row] = await listProducts(tx, tenantId, cat.id);
       return row!.allergens;
     });
     expect(seen).toBeNull();
@@ -942,7 +944,7 @@ describe("catalogue operations", () => {
         updateProduct(tx, missing, { allergens: { eggs: { presence: "contains" } } }),
       ).resolves.toBeUndefined();
       // No row was created or altered: the catalogue stays empty.
-      expect(await listProducts(tx, cat.id)).toEqual([]);
+      expect(await listProducts(tx, tenantId, cat.id)).toEqual([]);
     });
   });
 
@@ -1089,7 +1091,7 @@ describe("catalogue operations", () => {
         allergens: { milk: { presence: "contains" } },
         dietOverride: { vegan: "no" },
       });
-      const [product] = await listProducts(tx, cat.id);
+      const [product] = await listProducts(tx, tenantId, cat.id);
       const [diet] = await readDiet(tx, p.id);
       return { allergens: product!.allergens, diet: diet! };
     });
@@ -1196,7 +1198,7 @@ describe("catalogue operations", () => {
       await expect(
         renameCatalogue(tx, "00000000-0000-4000-8000-000000000001" as TenantId, cat.id, "Wrong"),
       ).rejects.toMatchObject({ code: "catalogue.not_found" });
-      const [seen] = await listCatalogues(tx);
+      const [seen] = await listCatalogues(tx, tenantId);
       expect(seen!.name).toBe("Delicatessen");
     });
   });
@@ -1383,7 +1385,7 @@ describe("catalogue operations", () => {
       const shelf = await createCatalogue(tx, tenantId, { name: "Shelf" });
       await assignCatalogueToLocation(tx, locationId, main.id);
       await addCatalogueToLocation(tx, tenantId, locationId, lunch.id);
-      const rows = await listCataloguesForLocation(tx, locationId);
+      const rows = await listCataloguesForLocation(tx, tenantId, locationId);
       expect(rows).toHaveLength(3);
       const byId = new Map(rows.map((r) => [r.id, r]));
       expect(byId.get(main.id)).toMatchObject({ name: "Main", sellable: true, isDefault: true });

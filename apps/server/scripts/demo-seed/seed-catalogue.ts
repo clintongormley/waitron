@@ -12,6 +12,7 @@ import {
   createMenuItem,
   createMenuSection,
   createProduct,
+  writeContentLanguages,
 } from "@waitron/catalogue";
 import {
   CASA_DELGADO,
@@ -104,6 +105,7 @@ export async function seedCatalogues(
   { locationId, locale }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
   const stationIds = await resolveStationIds(tx, tenantId, locationId);
+  await writeContentLanguages(tx, tenantId, { defaultLanguage: locale, languages: [locale] });
   const productsByImage = new Map<string, string>();
   const menuItemsByProduct = new Map<string, string>();
 
@@ -154,7 +156,6 @@ export async function seedCatalogues(
           pricingUnit: product.pricingUnit,
           unitPrice: product.unitPrice,
           vatClass: product.vatClass,
-          image: product.image,
         });
         const menuItem = await createMenuItem(tx, tenantId, {
           menuId: catalogue.id,

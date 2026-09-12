@@ -1,4 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
+import { setContentLanguages } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -597,27 +598,37 @@ describe("recipe-screen", () => {
     expect(editor(el).recipe).toEqual(recipeB);
   });
 
-  it("labels each product option by its description, falling back to a bare id", async () => {
-    const richProducts: Product[] = [
-      { ...products[0]!, id: "p-es", descriptions: { es: "Bizcocho" } },
-      { ...products[0]!, id: "p-en", descriptions: { en: "Sponge" } }, // no es → first description
-      { ...products[0]!, id: "p-none", descriptions: {} }, // no descriptions → the id
-    ];
-    const api = stubApi({ listProducts: vi.fn().mockResolvedValue(richProducts) });
-    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
-    await flush(el);
-    selectValue(el, "recipe-catalogue-select", "cat-a");
-    await flush(el);
+  it.each(["es", "en"])(
+    "labels product options using the configured %s default, then the id",
+    async (defaultLanguage) => {
+      setContentLanguages({ defaultLanguage, languages: ["es", "en"] });
+      const richProducts: Product[] = [
+        { ...products[0]!, id: "p-es", descriptions: { es: "Bizcocho" } },
+        { ...products[0]!, id: "p-en", descriptions: { en: "Sponge" } },
+        { ...products[0]!, id: "p-fr", descriptions: { fr: "Gâteau" } },
+        { ...products[0]!, id: "p-none", descriptions: {} }, // no descriptions → the id
+      ];
+      const api = stubApi({ listProducts: vi.fn().mockResolvedValue(richProducts) });
+      const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+      await flush(el);
+      selectValue(el, "recipe-catalogue-select", "cat-a");
+      await flush(el);
 
-    const labels = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>(
-        "[data-test=recipe-product-select] option",
-      ),
-    ]
-      .filter((o) => o.value !== "") // drop the placeholder option
-      .map((o) => o.textContent!.trim());
-    expect(labels).toEqual(["Bizcocho", "Sponge", "p-none"]);
-  });
+      const labels = [
+        ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>(
+          "[data-test=recipe-product-select] option",
+        ),
+      ]
+        .filter((o) => o.value !== "") // drop the placeholder option
+        .map((o) => o.textContent!.trim());
+      expect(labels).toEqual([
+        "Bizcocho",
+        defaultLanguage === "en" ? "Sponge" : "p-en",
+        "p-fr",
+        "p-none",
+      ]);
+    },
+  );
 
   it("renders exactly one h1 (its own title)", async () => {
     const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api: stubApi() });

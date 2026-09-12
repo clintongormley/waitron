@@ -43,27 +43,28 @@ describe("product-list", () => {
     expect(rows.length).toBe(3);
   });
 
-  it("shows the name from descriptions[primaryLocale] (default es)", async () => {
+  it("shows the name from the supplied primaryLocale", async () => {
     const products = [
       product({ descriptions: { es: "Croquetas de jamón", en: "Ham croquettes" } }),
     ];
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products,
+      primaryLocale: "es",
+    });
     const row = (await tableRoot(el)).querySelector("tbody tr")!;
     expect(row.textContent).toContain("Croquetas de jamón");
     expect(row.textContent).not.toContain("Ham croquettes");
   });
 
-  it("falls back to another description when the primary locale is absent", async () => {
-    // primaryLocale es, but this product only carries en — a name in the wrong language beats a blank
-    // row (the productName graceful-degrade approach, apps/till/src/widgets/product-name.ts).
+  it("uses the id when the configured default translation is missing", async () => {
     const products = [product({ descriptions: { en: "Ham croquettes" } })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products,
       primaryLocale: "es",
     });
-    expect((await tableRoot(el)).querySelector("tbody tr")!.textContent).toContain(
-      "Ham croquettes",
-    );
+    const row = (await tableRoot(el)).querySelector("tbody tr")!;
+    expect(row.textContent).toContain(products[0]!.id);
+    expect(row.textContent).not.toContain("Ham croquettes");
   });
 
   it("honours a non-default primaryLocale", async () => {

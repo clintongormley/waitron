@@ -1,3 +1,4 @@
+import { uploadImage } from "@waitron/media";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 // Real PostgreSQL checks startup through app_user connections and contending backends.
@@ -1016,7 +1017,7 @@ describe("startServer, against a real container as the deployment role", () => {
       // `0 === 0` pass without boot having migrated anything (CLAUDE.md §1) — except `fiscal-none`, which
       // ships NO migrations by design, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(12);
+      expect(sets).toHaveLength(13);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);
@@ -2107,13 +2108,8 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  // The upload/serve routes (later slices) store product images under `config.mediaDir`; `boot.ts`
-  // must ensure that directory exists once, at startup, before mounting anything — a missing store
-  // would fail the first upload rather than the boot. Proven by behaviour, not by mocking: point
-  // `WAITRON_MEDIA_DIR` at a nested path that does NOT exist yet, boot, and assert `existsSync`
-  // flipped false -> true — proof the recursive `mkdirSync` ran with this resolved, absolute
-  // mediaDir, not merely that some directory happened to be present already.
-  it("ensures the configured media directory exists at boot (recursive), and serves it from the public /media route", async () => {
+  // Exercise the module route through trading boot, including bytes, CORS and rejected names.
+  it("serves database image bytes through the public route on a running server", async () => {
     const port = await freePort();
     const mediaDir = join(MEDIA_ROOT, "created-at-boot", "product-images");
     expect(existsSync(mediaDir)).toBe(false);
@@ -2132,17 +2128,28 @@ describe("startServer, against a real container as the deployment role", () => {
     });
 
     try {
-      // `startServer` resolves only after the mkdir (which runs before the first pass), so the
-      // directory is already present the moment the boot returns — no polling needed.
-      expect(existsSync(mediaDir)).toBe(true);
+      // Serving database images does not create a filesystem media store.
+      expect(existsSync(mediaDir)).toBe(false);
 
-      // `mountMedia` is on the SAME app, wired to `config.mediaDir` (this very dir). Drop a
-      // content-hash-shaped file into it and fetch it back through the public serve route: a 200 with
-      // the right bytes and Content-Type is the proof the mount ran AND reads from `config.mediaDir` —
-      // a plain nonexistent route would answer Hono's own 404, so only a 200 distinguishes the two.
-      const imageName = "a".repeat(64) + ".png";
       const imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      await writeFile(join(mediaDir, imageName), imageBytes);
+      const imageName = await withTenant(
+        suite.admin,
+        TILL_ENV.WAITRON_TILL_TENANT_ID,
+        async (tx) => {
+          const result = await uploadImage(
+            tx,
+            TILL_ENV.WAITRON_TILL_TENANT_ID,
+            {
+              bytes: imageBytes,
+              names: { en: "Bread", es: "Pan" },
+              altText: { en: "A loaf", es: "Una hogaza" },
+              labels: [],
+            },
+            { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: "es" },
+          );
+          return result.image.filename;
+        },
+      );
       const image = await fetch(`http://127.0.0.1:${port}/media/${imageName}`);
       expect(image.status).toBe(200);
       expect(image.headers.get("content-type")).toBe("image/png");
@@ -2586,7 +2593,7 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
 });
 
 describe("MAX_UPLOAD_BYTES", () => {
-  it("is 5 MiB — the product-image upload ceiling the write routes (later slices) enforce", () => {
+  it("is 5 MiB — the image-library upload ceiling", () => {
     // A settled config constant (design §5e, proposal 5 MiB), pinned here so a later edit to the
     // upload route cannot silently change the ceiling without this failing.
     expect(MAX_UPLOAD_BYTES).toBe(5 * 1024 * 1024);

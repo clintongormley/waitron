@@ -1,3 +1,4 @@
+import { ContentLanguageController } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -16,6 +17,11 @@ const OVERDUE_REFRESH_MS = 30_000;
  * not hide a failure in the other. Server values refresh through their own query dependencies. */
 @customElement("dashboard-overview-screen")
 export class OverviewScreen extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     metricStyles,

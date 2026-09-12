@@ -1,43 +1,46 @@
-// Copy committed product image tiles into the venue media directory under their
-// content hashes and update product image names in the caller's transaction.
-// The caller supplies mediaDir; the helper does not generate images.
-
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import { uploadImage } from "@waitron/media";
 
 /** The installed image supplies a copied asset directory; source/dev falls back beside this module. */
 const SRC_DIR =
   process.env.WAITRON_DEMO_MEDIA_SOURCE || fileURLToPath(new URL("media", import.meta.url));
 
 export interface SeedMediaInput {
-  /** Absolute directory the served media files are written into — Task 11 passes boot's
-   * `config.mediaDir` so the running dev server serves exactly what the seed wrote. Created if absent. */
-  mediaDir: string;
-  /** image basename → product id, from `seedCatalogues`. Each product's `image` currently holds the
-   * plain basename; this step replaces it with the content-addressed served name. */
+  tenantId: string;
+  /** Committed image basename → product id, from seedCatalogues. */
   productsByImage: Map<string, string>;
 }
 
-/**
- * Copy each seeded product's committed placeholder tile into `mediaDir` under its content hash and
- * rewrite `products.image` to the served `<sha256hex>.png` name. Idempotent on the filesystem side (a
- * content-addressed name is stable, so re-running rewrites the same bytes to the same path), and
- * order-independent (each product is handled on its own row).
- */
+/** Store committed dish tiles and attach their references inside the caller's transaction. */
 export async function seedMedia(
   tx: Transaction,
-  { mediaDir, productsByImage }: SeedMediaInput,
+  { tenantId, productsByImage }: SeedMediaInput,
 ): Promise<void> {
-  await mkdir(mediaDir, { recursive: true });
-
   for (const [imageBasename, productId] of productsByImage) {
+    const { rows } = await tx.execute<{ descriptions: Record<string, string> }>(sql`
+      select descriptions from products where tenant_id = ${tenantId} and id = ${productId}
+    `);
+    const product = rows[0];
+    if (product === undefined)
+      throw new Error("demo-seed: image product does not belong to this venue");
     const bytes = await readFile(join(SRC_DIR, imageBasename));
-    const hashedName = `${createHash("sha256").update(bytes).digest("hex")}.png`;
-    await writeFile(join(mediaDir, hashedName), bytes);
-    await tx.execute(sql`update products set image = ${hashedName} where id = ${productId}`);
+    const { image } = await uploadImage(
+      tx,
+      tenantId,
+      {
+        bytes,
+        names: product.descriptions,
+        altText: product.descriptions,
+        labels: [],
+      },
+      { maxUploadBytes: 5 * 1024 * 1024 },
+    );
+    await tx.execute(
+      sql`update products set image = ${image.filename} where tenant_id = ${tenantId} and id = ${productId}`,
+    );
   }
 }

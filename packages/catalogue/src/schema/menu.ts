@@ -9,10 +9,33 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  text,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import { catalogues, optionGroupItems, optionGroups, products, tenants } from "@waitron/db";
+
+/** One content-language policy shared by the tenant's reusable catalogue and media. */
+export const contentLanguages = pgTable(
+  "content_languages",
+  {
+    tenantId: uuid("tenant_id").primaryKey(),
+    defaultLanguage: text("default_language").notNull(),
+    languages: text("languages").array().notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.tenantId],
+      foreignColumns: [tenants.id],
+      name: "content_languages_tenant_fk",
+    }).onDelete("restrict"),
+    check("content_languages_default_ck", sql`${t.defaultLanguage} = any(${t.languages})`),
+    check(
+      "content_languages_list_ck",
+      sql`cardinality(${t.languages}) between 1 and 200 and array_position(${t.languages}, null) is null`,
+    ),
+  ],
+);
 
 /** A presentation heading within one menu. Product categories remain the reporting taxonomy. */
 export const menuSections = pgTable(

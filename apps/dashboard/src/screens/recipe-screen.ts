@@ -1,3 +1,5 @@
+import { localizedName } from "../i18n/localized.js";
+import { ContentLanguageController } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -49,6 +51,11 @@ import type {
  */
 @customElement("dashboard-recipe-screen")
 export class RecipeScreen extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     selectStyles,
@@ -296,10 +303,8 @@ export class RecipeScreen extends LitElement {
     return this.products.find((p) => p.id === this.selectedProductId) ?? null;
   }
 
-  /** A product's display name: its `es` description, falling back to any other, then the bare id — a
-   * name in the wrong language beats a blank option, and an id beats nothing (the product-list rule). */
   #productName(product: Product): string {
-    return product.descriptions["es"] ?? Object.values(product.descriptions)[0] ?? product.id;
+    return localizedName(product.descriptions) || product.id;
   }
 
   override render(): TemplateResult {

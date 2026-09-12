@@ -1,11 +1,21 @@
-import { afterEach, expect, it } from "vitest";
+import { beforeEach, afterEach, expect, it } from "vitest";
 import { setLocale } from "./t.js";
 import { localizedName } from "./localized.js";
+import { setContentLanguages } from "@waitron/ui";
+
+beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] }));
 
 afterEach(() => {
   // localizedName reads t.ts's module-level locale; reset to the shipped default so a setLocale in
   // one test cannot leak into another (order-independence, §4).
   setLocale("es-ES");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+});
+
+it("uses the site default rather than the first stored translation", () => {
+  setLocale("fr-FR");
+  setContentLanguages({ defaultLanguage: "es", languages: ["es", "fr", "en"] });
+  expect(localizedName({ en: "Bread", es: "Pan" })).toBe("Pan");
 });
 
 it("resolves a FULL invoice-locale-tag map (the receipt/invoice path, es-ES)", () => {
@@ -32,10 +42,9 @@ it("prefers the FULL tag over the short subtag when both are present", () => {
   expect(localizedName({ "es-ES": "Café con leche", es: "Café" })).toBe("Café con leche");
 });
 
-it("falls back to the first value when the current language is absent", () => {
+it("falls back to the configured English default when the current language is absent", () => {
   setLocale("es-ES");
-  // Neither "es-ES" nor "es" present → the ?? Object.values(map)[0] arm, so a name in some other
-  // language still shows rather than an empty string.
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
   expect(localizedName({ en: "Latte" })).toBe("Latte");
 });
 

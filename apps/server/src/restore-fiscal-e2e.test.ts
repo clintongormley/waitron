@@ -1,3 +1,5 @@
+import { uploadImage, readImageBytes } from "@waitron/media";
+import { withTenant } from "@waitron/db";
 import { execFile } from "node:child_process";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -248,6 +250,19 @@ beforeAll(async () => {
     const baselineAdmin = await createPostgresDb(pg.uri);
     try {
       await seedFiscalRegistro(baselineAdmin);
+      await withTenant(baselineAdmin, F.tenantId, async (tx) => {
+        await uploadImage(
+          tx,
+          F.tenantId,
+          {
+            bytes: BASELINE_MEDIA,
+            names: { es: "Pan" },
+            altText: { es: "Una hogaza" },
+            labels: ["Food"],
+          },
+          { maxUploadBytes: 100, fallbackLanguage: "es" },
+        );
+      });
       const head = await baselineAdmin.execute<{ secuencia: number; ultima_huella: string }>(
         sql`select secuencia, ultima_huella from cadenas`,
       );
@@ -374,6 +389,17 @@ describe("fiscal restore (real Postgres, end to end)", () => {
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );
+      await withTenant(db, F.tenantId, async (tx) => {
+        const images = await tx.execute<{
+          filename: string;
+          names: Record<string, string>;
+          labels: string[];
+        }>(sql`select filename, names, labels from media_images where tenant_id = ${F.tenantId}`);
+        expect(images.rows).toHaveLength(1);
+        expect(images.rows[0]).toMatchObject({ names: { es: "Pan" }, labels: ["Food"] });
+        const restored = await readImageBytes(tx, F.tenantId, images.rows[0]!.filename);
+        expect(restored?.bytes).toEqual(new Uint8Array(BASELINE_MEDIA));
+      });
       const ledger = await db.execute<{ n: number }>(
         sql`select count(*)::int as n from registros_facturacion`,
       );

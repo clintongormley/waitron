@@ -69,8 +69,7 @@ const TILL_ENV = {
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
-// A media dir under this suite's own temp root so boot's `mkdirSync(mediaDir)` never writes into
-// `apps/server/src`. Created synchronously so `KEY_ENV` can reference it; torn down in `afterAll`.
+// Filesystem paths are isolated under this suite's temporary root and removed in afterAll.
 const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-media-"));
 // A `modules.json` that resolves the two-member fiscal slot to Veri*Factu (disabling the no-regime
 // `fiscal-none`), the shape a real ES provision persists. Every trading/mirror boot here reaches

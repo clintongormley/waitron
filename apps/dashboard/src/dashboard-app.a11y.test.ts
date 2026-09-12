@@ -62,6 +62,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       loginDefault: "es-ES",
       venueName: "Deli Test SL",
     }),
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     listStaff: vi.fn().mockResolvedValue(people),
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),

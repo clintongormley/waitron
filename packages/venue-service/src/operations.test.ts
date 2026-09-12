@@ -7,6 +7,7 @@ import {
   createMenuItem,
   createMenuSection,
   createProduct,
+  writeContentLanguages,
 } from "@waitron/catalogue";
 import { asAppUser, CORE_MIGRATIONS, withTenant, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -110,14 +111,14 @@ describe("venue service routing", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
-        descriptions: { en: "Sparkling water" },
+        descriptions: { en: "Sparkling water", fr: "Eau pétillante" },
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "general",
       });
       const section = await createMenuSection(tx, tenantId, {
         menuId: menu.id,
-        name: { en: "Drinks" },
+        name: { en: "Drinks", fr: "Boissons" },
       });
       await createMenuItem(tx, tenantId, {
         menuId: menu.id,
@@ -132,6 +133,19 @@ describe("venue service routing", () => {
           zoneName: "Terrace",
           productId: product.id,
           productName: "Sparkling water",
+        },
+      ]);
+      await writeContentLanguages(tx, tenantId, {
+        defaultLanguage: "fr",
+        languages: ["fr", "en"],
+      });
+      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+        {
+          code: "zone.route_missing",
+          zoneId: zone.rows[0]!.id,
+          zoneName: "Terrace",
+          productId: product.id,
+          productName: "Eau pétillante",
         },
       ]);
       await createPreparationRoute(

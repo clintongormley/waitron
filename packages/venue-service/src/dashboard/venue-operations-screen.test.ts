@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, setContentLanguages } from "@waitron/ui";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import "./venue-operations-screen.js";
@@ -8,9 +8,13 @@ import "./venue-operations-screen.js";
 const hosts: HTMLElement[] = [];
 const originalUrl = location.href;
 const originalHistoryState: unknown = history.state;
-beforeEach(() => setLocale("en"));
+beforeEach(() => {
+  setLocale("en");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+});
 afterEach(() => {
   setLocale("en");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   for (const host of hosts.splice(0)) host.remove();
   history.replaceState(originalHistoryState, "", originalUrl);
 });
@@ -74,6 +78,7 @@ const model: VenueServiceView = {
     { id: "z2", name: "Deli counter" },
   ],
   products: [{ id: "p1", descriptions: { en: "Negroni" }, pricingUnit: "each", active: true }],
+  sections: [],
   offers: [
     {
       id: "i1",
@@ -295,7 +300,7 @@ describe("venue operations screen", () => {
     field(el, "offer-price-m2").value = "9.00";
     await action(el, "save-editor");
     expect(api.createMenuSection).toHaveBeenCalledWith("m2", {
-      name: { en: "Cocktails", es: "Cocktails" },
+      name: { en: "Cocktails" },
       displayOrder: 0,
     });
     expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
@@ -306,7 +311,68 @@ describe("venue operations screen", () => {
     });
   });
 
-  it("reuses an existing named section when adding another product", async () => {
+  it("requires the configured default for a new section and allows optional translations", async () => {
+    setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "de"] });
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
+      createMenuItem: vi.fn().mockResolvedValue({ id: "i2" }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m2");
+    expect(field(el, "offer-section-m2").hasAttribute("required")).toBe(true);
+    expect(field(el, "offer-section-m2-de").hasAttribute("required")).toBe(false);
+    field(el, "offer-section-m2-de").value = "Getränke";
+    field(el, "offer-price-m2").value = "9.00";
+    await action(el, "save-editor");
+    expect(api.createMenuSection).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[data-field-error="offer-section-m2"]')).not.toBeNull();
+    field(el, "offer-section-m2").value = "Boissons";
+    await action(el, "save-editor");
+    expect(api.createMenuSection).toHaveBeenCalledWith("m2", {
+      name: { fr: "Boissons", de: "Getränke" },
+      displayOrder: 0,
+    });
+  });
+
+  it("uses the configured fallback and repaints when content languages change", async () => {
+    setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "de"] });
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        products: [{ ...model.products[0], descriptions: { de: "Wasser", fr: "Eau" } }],
+      }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m2");
+    expect(field(el, "offer-product-m2").textContent).toContain("Eau");
+    field(el, "offer-section-m2").value = "Draft";
+    setContentLanguages({ defaultLanguage: "de", languages: ["de", "fr"] });
+    await el.updateComplete;
+    expect(field(el, "offer-product-m2").textContent).toContain("Wasser");
+    expect(field(el, "offer-section-m2").value).toBe("Draft");
+    expect(field(el, "offer-section-m2").closest("label")!.textContent).toContain("French");
+  });
+
+  it("ignores a retained translation in a disabled interface language", async () => {
+    setContentLanguages({ defaultLanguage: "fr", languages: ["fr"] });
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        products: [{ ...model.products[0], descriptions: { en: "Water", fr: "Eau" } }],
+      }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m2");
+    expect(field(el, "offer-product-m2").textContent).toContain("Eau");
+    expect(field(el, "offer-product-m2").textContent).not.toContain("Water");
+  });
+
+  it("reuses the default-language section name even when the interface displays another translation", async () => {
+    setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "en"] });
     const sectionModel: VenueServiceView = {
       ...model,
       products: [
@@ -320,7 +386,7 @@ describe("venue operations screen", () => {
           menuId: "m2",
           productId: "p2",
           sectionId: "sec2",
-          sectionName: { en: "Snacks" },
+          sectionName: { en: "Snacks", fr: "Collations" },
           descriptions: { en: "Olives" },
           grossPrice: "4.00",
         },
@@ -334,13 +400,140 @@ describe("venue operations screen", () => {
     const el = await mount(api);
     await selectTab(el, "menus");
     await action(el, "new-offer-m2");
-    field(el, "offer-section-m2").value = "Snacks";
+    field(el, "offer-section-m2").value = "Collations";
     field(el, "offer-price-m2").value = "5.00";
     await action(el, "save-editor");
     expect(api.createMenuSection).not.toHaveBeenCalled();
     expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
       productId: "p1",
       sectionId: "sec2",
+      grossPrice: "5.00",
+      displayOrder: 0,
+    });
+  });
+
+  it("lists and edits a section with no offers so its translations can be completed", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        offers: [],
+        sections: [
+          {
+            id: "empty",
+            menuId: "m1",
+            name: { en: "Desserts", de: "Nachspeisen" },
+            displayOrder: 0,
+            active: true,
+          },
+        ],
+      }),
+      updateMenuSection: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "sections-m1");
+    expect(tableText(el, "menu-sections-m1")).toContain("Desserts");
+    await action(el, "edit-section-empty");
+    expect(field(el, "section-name-en").value).toBe("Desserts");
+    field(el, "section-name-en").value = "";
+    field(el, "section-name-fr").value = "Desserts français";
+    await action(el, "save-editor");
+    expect(api.updateMenuSection).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[data-field-error="section-name-en"]')).not.toBeNull();
+    field(el, "section-name-en").value = "Desserts";
+    await action(el, "save-editor");
+    expect(api.updateMenuSection).toHaveBeenCalledWith("empty", {
+      name: { en: "Desserts", de: "Nachspeisen", fr: "Desserts français" },
+    });
+  });
+
+  it("edits section translations, requires the default, and preserves disabled translations", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        offers: [{ ...model.offers[0], sectionName: { en: "Cocktails", de: "Getränke" } }],
+      }),
+      updateMenuSection: vi.fn().mockResolvedValue(undefined),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "edit-offer-i1");
+    expect(field(el, "offer-section-m1").value).toBe("Cocktails");
+    expect(el.shadowRoot!.querySelector('[name="offer-section-m1-de"]')).toBeNull();
+    field(el, "offer-section-m1").value = "";
+    field(el, "offer-section-m1-fr").value = "Boissons";
+    await action(el, "save-editor");
+    expect(api.updateMenuSection).not.toHaveBeenCalled();
+    expect(api.updateMenuItem).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[data-field-error="offer-section-m1"]')).not.toBeNull();
+    field(el, "offer-section-m1").value = "Drinks";
+    await action(el, "save-editor");
+    expect(api.updateMenuSection).toHaveBeenCalledWith("sec1", {
+      name: { en: "Drinks", de: "Getränke", fr: "Boissons" },
+    });
+    expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: "11.00" });
+  });
+
+  it("clears an enabled optional section translation and retains the draft after a failed save", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        offers: [
+          {
+            ...model.offers[0],
+            sectionName: { en: "Cocktails", fr: "Boissons", de: "Getränke" },
+          },
+        ],
+      }),
+      updateMenuSection: vi.fn().mockRejectedValue(new Error("write failed")),
+      updateMenuItem: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "edit-offer-i1");
+    field(el, "offer-section-m1-fr").value = "";
+    await action(el, "save-editor");
+    expect(api.updateMenuSection).toHaveBeenCalledWith("sec1", {
+      name: { en: "Cocktails", de: "Getränke" },
+    });
+    expect(api.updateMenuItem).not.toHaveBeenCalled();
+    expect(field(el, "offer-section-m1-fr").value).toBe("");
+    expect(summary(el)).toContain("could not be saved");
+  });
+
+  it("persists new translations when reusing a section for another product", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        products: [
+          ...model.products,
+          { id: "p2", descriptions: { en: "Olives" }, pricingUnit: "each", active: true },
+        ],
+        offers: [{ ...model.offers[0], sectionName: { en: "Cocktails", de: "Getränke" } }],
+      }),
+      updateMenuSection: vi.fn().mockResolvedValue(undefined),
+      createMenuSection: vi.fn(),
+      createMenuItem: vi.fn().mockResolvedValue({ id: "i2" }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m1");
+    field(el, "offer-section-m1").value = "Cocktails";
+    field(el, "offer-section-m1-fr").value = "Boissons";
+    field(el, "offer-price-m1").value = "5.00";
+    await action(el, "save-editor");
+    expect(api.createMenuSection).not.toHaveBeenCalled();
+    expect(api.updateMenuSection).toHaveBeenCalledWith("sec1", {
+      name: { en: "Cocktails", de: "Getränke", fr: "Boissons" },
+    });
+    expect(api.createMenuItem).toHaveBeenCalledWith("m1", {
+      productId: "p2",
+      sectionId: "sec1",
       grossPrice: "5.00",
       displayOrder: 0,
     });

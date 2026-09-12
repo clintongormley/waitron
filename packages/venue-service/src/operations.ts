@@ -10,9 +10,15 @@ import {
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { listMenuOffers, type MenuOffer } from "@waitron/catalogue";
+import { listMenuOffers, readContentLanguages, type MenuOffer } from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode } from "@waitron/module";
-import { AppError, type LocationId, type TenantId } from "@waitron/shared";
+import {
+  AppError,
+  FALLBACK_LOCALE,
+  resolveContentText,
+  type LocationId,
+  type TenantId,
+} from "@waitron/shared";
 import {
   departments,
   departmentHours,
@@ -362,6 +368,7 @@ export async function listVenueReadiness(
     )
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
 
+  const { defaultLanguage } = await readContentLanguages(tx, cfg.tenantId, FALLBACK_LOCALE);
   const issues = zones.flatMap((zone): VenueReadinessIssue[] => {
     if (zone.departmentId === null || zone.departmentActive !== true) {
       return [{ code: "zone.department_missing", zoneId: zone.id, zoneName: zone.name }];
@@ -395,7 +402,7 @@ export async function listVenueReadiness(
     const productsById = new Map(
       available.offers.map((offer) => [
         offer.productId,
-        Object.values(offer.descriptions)[0] ?? offer.productId,
+        resolveContentText(offer.descriptions, defaultLanguage, defaultLanguage) || offer.productId,
       ]),
     );
     for (const [productId, productName] of productsById) {

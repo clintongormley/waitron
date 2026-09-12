@@ -167,6 +167,17 @@ The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps dra
 shared components. Whether they follow in this pass or later is open — decide it before the
 component rules harden around the dashboard alone.
 
+**In flight:**
+
+- **`image-library`** (2026-09-12) implements configurable content languages and a shared photo
+  library with translations, labels, search, product reuse and deletion blocked by existing uses.
+  Receipt languages stay separate. Image bytes now use the media module's Postgres tables;
+  workspace lint, type checking, formatting and all package coverage checks pass. Ready for
+  `finish-branch`; this work has not landed.
+  [Design](superpowers/specs/2026-09-12-image-library-design.md),
+  [plan and focused checks](superpowers/plans/2026-09-12-image-library.md),
+  [operator guide](content-and-images.md).
+
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
 `packages/verifactu/src/validate.ts` holds AEAT's rules and no production file called it, confirmed by
@@ -470,11 +481,12 @@ ongoing overhaul listed at the top of Track A.
 - **Layout designer follow-ons**: the aggregated device-profile bundle (till, station, hardware, area,
   order routing, printer target on the profile); truly-real card renders in the editor (needs a
   neutral shared card package); the visual theme editor; community canvas sharing.
-- **Unify string resolution** behind one language-negotiation resolver
-  ([design](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)): a shared
-  `negotiate()`, de-hardcode `"es"`, a presentational venue-default UI language, and the write-side
-  header drift (`sales.locale` stamped from boot-time `cfg` rather than `locations.invoice_locales`).
-  The apps ship only Spanish and English catalogues, so a Catalan preference falls back to Spanish.
+- **Language resolution follow-ons**
+  ([original design](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
+  `image-library` implements configurable content languages and their shared fallback separately
+  from interface and receipt languages; it is still in flight. The write-side header drift
+  (`sales.locale` stamped from boot-time `cfg` rather than `locations.invoice_locales`) remains
+  separate work. Adding content translations does not translate Waitron's interface.
 - **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
   recurring, a calendar grid, deposits.
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted

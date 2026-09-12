@@ -66,8 +66,8 @@ const TILL_ENV = {
 };
 
 // The credentials key the trading branch's `loadKeyRing` requires (a mirror is still a trading boot,
-// so the ring is loaded before the mode is read — it just files nothing). Plus a media dir under
-// this suite's own temp root so the boot's `mkdirSync(mediaDir)` never writes into `apps/server/src`.
+// so the ring is loaded before the mode is read — it just files nothing). Filesystem paths remain
+// under this suite's temporary root.
 const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-mirror-media-"));
 // A `modules.json` resolving the two-member fiscal slot to Veri*Factu (disabling `fiscal-none`). A
 // mirror boot reaches `makeFiscalBackend` too, so without it the default-on both-enabled set would refuse

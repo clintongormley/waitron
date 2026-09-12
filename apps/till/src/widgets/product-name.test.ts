@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "../i18n/t.js";
 import { productName } from "./product-name.js";
 import type { TillProduct } from "../api/client.js";
+import { setContentLanguages } from "@waitron/ui";
 
 function product(descriptions: Record<string, string>): TillProduct {
   return {
@@ -16,9 +17,19 @@ function product(descriptions: Record<string, string>): TillProduct {
 }
 
 // setLocale mutates module-level state; put it back so the default the other suites rely on holds.
-afterEach(() => setLocale("es-ES"));
+beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] }));
+
+afterEach(() => {
+  setLocale("es-ES");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+});
 
 describe("productName", () => {
+  it("uses the site default for a missing translation regardless of object order", () => {
+    setLocale("fr-FR");
+    setContentLanguages({ defaultLanguage: "es", languages: ["es", "fr", "en"] });
+    expect(productName(product({ en: "Bread", es: "Pan" }))).toBe("Pan");
+  });
   it("uses the current locale's description", () => {
     setLocale("es-ES");
     expect(productName(product({ "es-ES": "Café", en: "Coffee" }))).toBe("Café");
@@ -31,8 +42,9 @@ describe("productName", () => {
     expect(productName(product({ en: "Coffee", es: "Café" }))).toBe("Café");
   });
 
-  it("falls back to any available description when the current locale is missing", () => {
+  it("falls back to the configured English default when the current locale is missing", () => {
     setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
     expect(productName(product({ en: "Coffee" }))).toBe("Coffee");
   });
 

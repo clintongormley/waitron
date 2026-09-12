@@ -110,6 +110,7 @@ jobs:
       server: ${{ steps.gates.outputs.server }}
       fiscal_verifactu: ${{ steps.gates.outputs.fiscal_verifactu }}
       bookings: ${{ steps.gates.outputs.bookings }}
+      media: ${{ steps.gates.outputs.media }}
       sync: ${{ steps.gates.outputs.sync }}
       payments_stripe: ${{ steps.gates.outputs.payments_stripe }}
       payments_sumup: ${{ steps.gates.outputs.payments_sumup }}
@@ -1144,6 +1145,52 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/bookings" test:coverage
 
+  # Media owns real-Postgres and Chromium projects, so its runner installs both test prerequisites.
+  test-media:
+    timeout-minutes: 15
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/media exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - run: pnpm --filter @waitron/media exec playwright install chromium
+
+      - name: Run the media shard
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+          DEBUG: "vitest:browser:pool"
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/media" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/media" test:coverage
+
   # The Stripe payment module, like bookings, owns both a real-Postgres node project and a Chromium
   # dashboard-panel project. Its own runner keeps Chromium out of the database bins and gives failures
   # a package-specific job result.
@@ -1324,6 +1371,7 @@ jobs:
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           set -- "$@" --filter "!@waitron/bookings"
+          set -- "$@" --filter "!@waitron/media"
           set -- "$@" --filter "!@waitron/sync"
           set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/payments-sumup"
@@ -1399,6 +1447,7 @@ jobs:
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           set -- "$@" --filter "!@waitron/bookings"
+          set -- "$@" --filter "!@waitron/media"
           set -- "$@" --filter "!@waitron/sync"
           set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/payments-sumup"
@@ -1534,6 +1583,7 @@ jobs:
       - test-setup
       - test-venue-service
       - test-bookings
+      - test-media
       - test-sync
       - test-payments-stripe
       - test-payments-sumup

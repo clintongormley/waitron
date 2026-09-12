@@ -33,7 +33,8 @@ export interface CoreServices {
  */
 export interface ModuleRouteContext {
   db: Database;
-  cfg: { tenantId: TenantId; locationId: LocationId };
+  cfg: { tenantId: TenantId; locationId: LocationId; contentDefaultLanguage?: string };
+  maxUploadBytes?: number;
   core: CoreServices;
 }
 
@@ -256,6 +257,8 @@ export interface ModuleBackupContribution {
 /** One tenant-scoped table whose rows may cross from preparation into a fresh production database. */
 export interface ConfigurationTransferTable {
   readonly name: string;
+  /** Insert these rows before the named tables when a module adds a reference to its data. */
+  readonly before?: readonly string[];
   readonly omit?: readonly string[];
   readonly locationColumns?: readonly string[];
   readonly reconnect?: boolean;
@@ -264,7 +267,13 @@ export interface ConfigurationTransferTable {
 /** Every module declares either its transferable configuration or that it has none. */
 export type ModuleConfigurationTransfer =
   | { readonly kind: "none" }
-  | { readonly kind: "tables"; readonly tables: readonly ConfigurationTransferTable[] };
+  | {
+      readonly kind: "tables";
+      readonly tables: readonly ConfigurationTransferTable[];
+      readonly validate?: (
+        tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
+      ) => void;
+    };
 
 /**
  * A module descriptor: a plain object the composition root collects into a list, deriving each surface
@@ -328,6 +337,14 @@ export interface WaitronModule {
   readonly venueService?: VenueServiceContribution;
   readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
   readonly configurationTransfer?: ModuleConfigurationTransfer;
+  /** Required localized fields contributed to a content-default change check. */
+  readonly contentTranslations?: {
+    gaps(
+      tx: Transaction,
+      tenantId: string,
+      language: string,
+    ): Promise<{ kind: string; id: string }[]>;
+  };
 }
 
 /** The dependencies a module declares — its `requires.core` (a dep on "core") plus every

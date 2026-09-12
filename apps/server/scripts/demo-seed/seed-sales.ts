@@ -313,7 +313,11 @@ export async function seedSales(
         const parentLineNo = lines.length + 1;
         lines.push({
           lineNo: parentLineNo,
-          descriptions: toInvoiceLineDescriptions(product.descriptions, [invoiceLocale]),
+          descriptions: toInvoiceLineDescriptions(
+            product.descriptions,
+            [invoiceLocale],
+            invoiceLocale,
+          ),
           quantity: "1",
           unitPrice: base,
           vatRate: rate,
@@ -329,7 +333,7 @@ export async function seedSales(
           const optionBase = baseFromGross(optionGross, optionRate);
           lines.push({
             lineNo: lines.length + 1,
-            descriptions: toInvoiceLineDescriptions(option.name, [invoiceLocale]),
+            descriptions: toInvoiceLineDescriptions(option.name, [invoiceLocale], invoiceLocale),
             quantity: "1",
             unitPrice: optionBase,
             vatRate: optionRate,

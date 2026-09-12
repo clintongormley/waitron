@@ -1,24 +1,16 @@
 import { tenantId as brandTenantId } from "@waitron/shared";
-// Side-effect only: loads this host's errors.ts augmentation for the code this file THROWS directly,
-// `management.request_invalid` (declared in `./errors.js`), under the "every file that throws one of
-// these imports ./errors.js" convention. `shared.invalid_id` is declared in `@waitron/shared` and
-// loads via the `AppError` value import below; the `media.*` codes are declared in
-// `@waitron/catalogue`'s own errors.ts and load transitively through the value imports from that
-// package (`validateImageBytes` et al.); the identity codes the gate throws
-// (`management_session.*`, `person.suspended`, `authorization.not_permitted`) load via the
-// `@waitron/identity` value import. So this one line is all this file needs.
 import "./errors.js";
-import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { bodyLimit } from "hono/body-limit";
-import { AppError } from "@waitron/shared";
+import { sql } from "drizzle-orm";
+import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
   catalogueExists,
+  readContentLanguages,
+  writeContentLanguages,
+  validateContentTranslations,
   createCatalogue,
   createCategory,
   createMenuItem,
@@ -31,6 +23,7 @@ import {
   listCataloguesForLocation,
   listCategories,
   listMenuOffers,
+  listMenuSections,
   listOptionGroupItems,
   listOptionGroups,
   listProductOptionGroupIds,
@@ -42,8 +35,8 @@ import {
   updateOptionGroup,
   updateOptionGroupItem,
   updateMenuItem,
+  updateMenuSection,
   updateProduct,
-  validateImageBytes,
   type CreateOptionGroupInput,
   type CreateOptionGroupItemInput,
   type DietOverride,
@@ -60,24 +53,20 @@ import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
-/**
- * Everything the dashboard's catalogue-management routes need. Mirrors `ManagementApiDeps` — `db`
- * + this venue's own `cfg.tenantId` are passed to every `withTenant` below. The deployment holds
- * one tenant per database. `mediaDir` is the absolute store `boot.ts` ensured exists;
- * `maxUploadBytes` is the DoS ceiling the upload route enforces (surfaced on `deps`, not a
- * constant, so a test can shrink it). No card provider, clock or secure-cookie flag: these routes
- * touch only the catalogue and the image store, and the session cookie is set by the
- * management-login routes, never here.
- */
+/** Catalogue and content-language routes scope every operation to the configured tenant. */
 export interface CatalogueApiDeps {
+  contentTranslationGaps?: (
+    tx: Transaction,
+    tenantId: string,
+    language: string,
+  ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
   /** `cfg.tenantId` scopes every `withTenant` below (one tenant per database). `nodeId` is this
    * node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no longer
    * stamps a capture origin — the application outbox and its capture triggers were removed (native
    * replication ships every row). */
   cfg: { tenantId: string; nodeId: string };
-  mediaDir: string;
-  maxUploadBytes: number;
+  venueLocale?: string;
 }
 
 /**
@@ -124,9 +113,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "diet.invalid_origin": 400,
   "diet.invalid_label": 400,
   "diet.add_remove_conflict": 400,
-  "media.missing": 400,
-  "media.unsupported_type": 415,
-  "media.too_large": 413,
   // An invalid option-group AUTHORING config (Task 11): the select bounds or the required⇒min rule the
   // DB CHECKs enforce, surfaced by `createOptionGroup`/`updateOptionGroup` as a clean 400 before the
   // write rather than the opaque 500 the CHECK would raise. The `?? 400` default already covers it; it
@@ -265,26 +251,6 @@ function parseOptionGroupIds(value: unknown): string[] | undefined {
   return [...new Set(value as string[])];
 }
 
-/**
- * Multipart framing — the boundary lines and the file part's own `Content-Disposition`/`Content-Type`
- * headers — makes the raw request body a little larger than the file bytes it carries. `bodyLimit`
- * guards that RAW body (a coarse DoS ceiling that rejects an oversized upload BEFORE `parseBody`
- * buffers the whole thing into memory), so it sits this margin ABOVE `maxUploadBytes`, leaving the
- * EXACT per-file limit to the `file.size` check in the handler — which alone knows the true size and
- * carries it in `media.too_large`'s `{ size }`. 16 KiB comfortably covers the boundary, the part
- * headers and a long client filename we never store.
- */
-const UPLOAD_BODY_HEADROOM = 16 * 1024;
-
-/**
- * The deployment holds one tenant per database. Mounts the dashboard's gated catalogue write
- * group plus the image-upload route on an existing Hono app — `mountManagementApi`'s sibling,
- * attached to the SAME app (the `mountWebhook`/`mountTillApi` convention). Every route wraps its
- * handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then,
- * inside `withTenant` + `asAppUser`, `authorizeManager(...)` (→ 403) before the headless
- * `@waitron/catalogue` op, in this database. The `person.manage` gate runs on every route through
- * one constant.
- */
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
   // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
   // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
@@ -296,18 +262,89 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await authorizeManager(tx, {
+      const auth = await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: CATALOGUE_WRITE_PERMISSION,
       });
+      if (auth.tenantId !== deps.cfg.tenantId) {
+        throw new AppError("authorization.not_permitted", {
+          permission: CATALOGUE_WRITE_PERMISSION,
+        });
+      }
       return fn(tx);
     });
+
+  const assertOwned = async (
+    tx: Transaction,
+    table: "products" | "option_groups" | "option_group_items",
+    id: string,
+    groupId?: string,
+  ): Promise<void> => {
+    const result = await tx.execute(sql`
+      select 1 from ${sql.identifier(table)}
+      where tenant_id = ${tenantId} and id = ${id}
+      ${groupId === undefined ? sql`` : sql`and group_id = ${groupId}`}
+    `);
+    if (result.rows.length === 0) {
+      throw new AppError("authorization.not_permitted", { permission: CATALOGUE_WRITE_PERMISSION });
+    }
+  };
+
+  app.get("/management-api/content-languages", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(
+        await gated(sessionId, (tx) =>
+          readContentLanguages(tx, tenantId, deps.venueLocale ?? FALLBACK_LOCALE),
+        ),
+      );
+    }),
+  );
+
+  // Language choices are public content metadata; this read neither requires nor touches a session.
+  app.get("/api/content-languages", (c) =>
+    run(c, log, async () => {
+      const config = await withTenant(deps.db, tenantId, async (tx) => {
+        await asAppUser(tx);
+        return readContentLanguages(tx, tenantId, deps.venueLocale ?? FALLBACK_LOCALE);
+      });
+      return c.json(config);
+    }),
+  );
+
+  app.put("/management-api/content-languages", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<{ defaultLanguage?: unknown; languages?: unknown }>(c);
+      if (
+        typeof body.defaultLanguage !== "string" ||
+        !Array.isArray(body.languages) ||
+        !body.languages.every((language): language is string => typeof language === "string")
+      ) {
+        throw new AppError("management.request_invalid", { field: "languages" });
+      }
+      const config = {
+        defaultLanguage: body.defaultLanguage,
+        languages: body.languages as string[],
+      };
+      await gated(sessionId, (tx) =>
+        writeContentLanguages(
+          tx,
+          tenantId,
+          config,
+          deps.venueLocale ?? FALLBACK_LOCALE,
+          deps.contentTranslationGaps,
+        ),
+      );
+      return c.body(null, 204);
+    }),
+  );
 
   // ── Catalogues ─────────────────────────────────────────────────────────────────────────────────
   app.get("/management-api/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listCatalogues(tx));
+      const rows = await gated(sessionId, (tx) => listCatalogues(tx, tenantId));
       return c.json(rows);
     }),
   );
@@ -346,6 +383,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
+  app.get("/management-api/catalogues/:id/sections", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      return c.json(await gated(sessionId, (tx) => listMenuSections(tx, tenantId, menuId)));
+    }),
+  );
+
   app.post("/management-api/catalogues/:id/sections", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -355,14 +400,37 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "name" });
       }
       const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
-      const created = await gated(sessionId, (tx) =>
-        createMenuSection(tx, tenantId, {
+      const created = await gated(sessionId, async (tx) => {
+        await validateContentTranslations(
+          tx,
+          tenantId,
+          body.name as Record<string, string>,
+          deps.venueLocale ?? FALLBACK_LOCALE,
+        );
+        return createMenuSection(tx, tenantId, {
           menuId,
           name: body.name as Record<string, string>,
           ...(displayOrder === undefined ? {} : { displayOrder }),
-        }),
-      );
+        });
+      });
       return c.json(created, 201);
+    }),
+  );
+
+  app.patch("/management-api/menu-sections/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const sectionId = requireUuidParam(c.req.param("id"), "MenuSectionId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (typeof body.name !== "object" || body.name === null || Array.isArray(body.name)) {
+        throw new AppError("management.request_invalid", { field: "name" });
+      }
+      const name = body.name as Record<string, string>;
+      await gated(sessionId, async (tx) => {
+        await validateContentTranslations(tx, tenantId, name, deps.venueLocale ?? FALLBACK_LOCALE);
+        await updateMenuSection(tx, tenantId, sectionId, { name });
+      });
+      return c.body(null, 204);
     }),
   );
 
@@ -445,7 +513,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
-      const rows = await gated(sessionId, (tx) => listCataloguesForLocation(tx, locationId));
+      const rows = await gated(sessionId, (tx) =>
+        listCataloguesForLocation(tx, tenantId, locationId),
+      );
       return c.json(rows);
     }),
   );
@@ -513,7 +583,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
-      const rows = await gated(sessionId, (tx) => listProducts(tx, catalogueId));
+      const rows = await gated(sessionId, (tx) => listProducts(tx, tenantId, catalogueId));
       return c.json(rows);
     }),
   );
@@ -588,6 +658,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.active === undefined ? {} : { active: body.active }),
       };
       const created = await gated(sessionId, async (tx) => {
+        await validateContentTranslations(
+          tx,
+          tenantId,
+          input.descriptions,
+          deps.venueLocale ?? FALLBACK_LOCALE,
+        );
         const product = await createProduct(tx, tenantId, input);
         if (optionGroupIds !== undefined) {
           await setProductOptionGroups(tx, tenantId, product.id, optionGroupIds);
@@ -678,6 +754,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // always bumps `updatedAt`, so its `.set()` is never empty.
       const optionGroupIds = parseOptionGroupIds(body.optionGroupIds);
       await gated(sessionId, async (tx) => {
+        await assertOwned(tx, "products", productId);
+        if (patch.descriptions !== undefined)
+          await validateContentTranslations(
+            tx,
+            tenantId,
+            patch.descriptions,
+            deps.venueLocale ?? FALLBACK_LOCALE,
+          );
         await updateProduct(tx, productId, patch);
         if (optionGroupIds !== undefined) {
           await setProductOptionGroups(tx, tenantId, productId, optionGroupIds);
@@ -745,7 +829,15 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(sort === undefined ? {} : { sort }),
         ...(body.active === undefined ? {} : { active: body.active }),
       };
-      const created = await gated(sessionId, (tx) => createOptionGroup(tx, tenantId, input));
+      const created = await gated(sessionId, async (tx) => {
+        await validateContentTranslations(
+          tx,
+          tenantId,
+          input.name,
+          deps.venueLocale ?? FALLBACK_LOCALE,
+        );
+        return createOptionGroup(tx, tenantId, input);
+      });
       return c.json(created, 201);
     }),
   );
@@ -787,12 +879,18 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         }
         patch.active = body.active;
       }
-      // A patch with no mutable field is a 204 no-op: `updateOptionGroup` guards its own empty `.set()`
-      // is never reached (it read-merges then updates), but skipping the tenant transaction entirely
-      // when nothing changed matches the sibling status/zone PATCH shape. An out-of-uuid/missing id is a
-      // silent no-op inside `updateOptionGroup` (the updateProduct posture).
-      if (Object.keys(patch).length === 0) return c.body(null, 204);
-      await gated(sessionId, (tx) => updateOptionGroup(tx, groupId, patch));
+      await gated(sessionId, async (tx) => {
+        await assertOwned(tx, "option_groups", groupId);
+        if (Object.keys(patch).length === 0) return;
+        if (patch.name !== undefined)
+          await validateContentTranslations(
+            tx,
+            tenantId,
+            patch.name,
+            deps.venueLocale ?? FALLBACK_LOCALE,
+          );
+        await updateOptionGroup(tx, groupId, patch);
+      });
       return c.body(null, 204);
     }),
   );
@@ -862,9 +960,15 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
       // for a foreign id, the same posture the product routes take on a foreign catalogueId.
-      const created = await gated(sessionId, (tx) =>
-        createOptionGroupItem(tx, tenantId, groupId, input),
-      );
+      const created = await gated(sessionId, async (tx) => {
+        await validateContentTranslations(
+          tx,
+          tenantId,
+          input.name,
+          deps.venueLocale ?? FALLBACK_LOCALE,
+        );
+        return createOptionGroupItem(tx, tenantId, groupId, input);
+      });
       return c.json(created, 201);
     }),
   );
@@ -872,9 +976,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.patch("/management-api/option-groups/:groupId/items/:itemId", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Both ids screened for shape (→ shared.invalid_id). `groupId` scopes the item to its group in the
-      // URL for the editor's benefit; the item's own id is the update key (items are tenant-unique).
-      requireUuidParam(c.req.param("groupId"), "OptionGroupId");
+      const groupId = requireUuidParam(c.req.param("groupId"), "OptionGroupId");
       const itemId = requireUuidParam(c.req.param("itemId"), "OptionGroupItemId");
       const body = await readJsonBody<{
         name?: unknown;
@@ -926,61 +1028,20 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.removeOrigins !== undefined) {
         patch.removeOrigins = body.removeOrigins as string[] | null;
       }
-      // No mutable field → 204 no-op, sidestepping updateOptionGroupItem's empty `.set()` (which Drizzle
-      // rejects). A well-formed-but-missing item id is a silent no-op (the updateProduct posture).
-      if (Object.keys(patch).length === 0) return c.body(null, 204);
-      await gated(sessionId, (tx) => updateOptionGroupItem(tx, itemId, patch));
+      await gated(sessionId, async (tx) => {
+        await assertOwned(tx, "option_group_items", itemId, groupId);
+        if (Object.keys(patch).length === 0) return;
+        if (patch.name !== undefined)
+          await validateContentTranslations(
+            tx,
+            tenantId,
+            patch.name,
+            deps.venueLocale ?? FALLBACK_LOCALE,
+          );
+        await updateOptionGroupItem(tx, itemId, patch);
+      });
       return c.body(null, 204);
     }),
-  );
-
-  // ── Image upload ─────────────────────────────────────────────────────────────────────────────────
-  // `bodyLimit` is the coarse DoS guard: it rejects a raw body over `maxUploadBytes + framing` BEFORE
-  // `parseBody` buffers it into memory, answering the same `media.too_large` 413 the precise per-file
-  // check answers so the client sees one contract. On this path the exact bytes are not measured (the
-  // body was rejected mid-stream), so `size` reports the ceiling the body exceeded — a lower bound;
-  // the handler's `file.size` check carries the true size.
-  const tooLargeCeiling = deps.maxUploadBytes + UPLOAD_BODY_HEADROOM;
-  app.post(
-    "/management-api/product-images",
-    bodyLimit({
-      maxSize: tooLargeCeiling,
-      onError: (c: Context) =>
-        c.json(
-          {
-            error: {
-              code: "media.too_large",
-              params: { size: tooLargeCeiling, limit: deps.maxUploadBytes },
-            },
-          },
-          413,
-        ),
-    }),
-    (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        // The only DB work is the gate: authorise, then write to disk (no DB). Split so the fs write
-        // does not hold a transaction open.
-        await gated(sessionId, async () => undefined);
-
-        const parsed = await c.req.parseBody();
-        const file = parsed["file"];
-        if (!(file instanceof File)) throw new AppError("media.missing", {});
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        // Precise per-file limit (the exact authority; carries the true size). Reachable when the file
-        // exceeds maxUploadBytes yet the whole body stayed under bodyLimit's coarser ceiling.
-        if (file.size > deps.maxUploadBytes) {
-          throw new AppError("media.too_large", { size: file.size, limit: deps.maxUploadBytes });
-        }
-        // The stored name is SERVER-generated from the bytes — never the untrusted client filename or
-        // Content-Type. The extension is sniffed from the magic bytes (`validateImageBytes` throws
-        // `media.unsupported_type`), and the 64-hex SHA-256 makes the write idempotent (same bytes →
-        // same name) and the served URL cacheable + traversal-proof (design §5b).
-        const ext = validateImageBytes(bytes);
-        const name = `${createHash("sha256").update(bytes).digest("hex")}.${ext}`;
-        await writeFile(join(deps.mediaDir, name), bytes);
-        return c.json({ image: name }, 201);
-      }),
   );
 }
 

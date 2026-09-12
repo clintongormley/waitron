@@ -17,8 +17,8 @@ export interface TicketIssuer {
 
 /**
  * A filed line's goods name in the invoice locale (art. 7.1.e), resolved from the line's snapshotted
- * `descriptions` map exactly as `productName` resolves a product's — the invoice locale, then any
- * description the line carries, degrading to "" only for an empty map (a catalogue defect that still
+ * `descriptions` map — the invoice locale, then any stored receipt description, degrading to ""
+ * only for an empty map (a catalogue defect that still
  * prints something). The line comes from the SERVER's filed composition, so this reads its map rather
  * than a `TillProduct`.
  */

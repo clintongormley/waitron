@@ -1,14 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { ConfigurationTransferTable, WaitronModule } from "@waitron/module";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
-import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
-import { writeFileAtomic } from "./fs-atomic.js";
-import { MEDIA_FILENAME } from "./media-api.js";
+import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
 
 const ENTRY = "configuration.json";
@@ -163,7 +159,26 @@ function declarations(modules: readonly WaitronModule[]): ConfigurationTransferT
       tables.push(table);
     }
   }
-  return tables;
+  const ordered: ConfigurationTransferTable[] = [];
+  const visiting = new Set<string>();
+  const emitted = new Set<string>();
+  for (const table of tables)
+    for (const name of table.before ?? []) {
+      if (!names.has(name)) throw new AppError("setup.request_invalid", { field: `table:${name}` });
+    }
+  const emit = (table: ConfigurationTransferTable): void => {
+    if (emitted.has(table.name)) return;
+    if (visiting.has(table.name))
+      throw new AppError("setup.request_invalid", { field: `table:${table.name}` });
+    visiting.add(table.name);
+    for (const dependency of tables.filter((candidate) => candidate.before?.includes(table.name)))
+      emit(dependency);
+    visiting.delete(table.name);
+    emitted.add(table.name);
+    ordered.push(table);
+  };
+  tables.forEach(emit);
+  return ordered;
 }
 
 /** Read only explicitly declared, tenant-scoped configuration rows from one consistent transaction. */
@@ -193,99 +208,12 @@ export async function exportConfigurationTables(
   return { tables, reconnect };
 }
 
-function validateMediaFilename(filename: string): string {
-  const expected = MEDIA_FILENAME.exec(filename)?.[0]?.split(".")[0];
-  if (expected === undefined) {
-    throw new AppError("setup.request_invalid", { field: `media:${filename}` });
-  }
-  return expected;
-}
-
-function validateMediaEntry(entry: ArchiveEntry): string {
-  if (!entry.name.startsWith("media/")) {
-    throw new AppError("setup.request_invalid", { field: "artifact" });
-  }
-  const filename = entry.name.slice("media/".length);
-  const expected = validateMediaFilename(filename);
-  const actual = createHash("sha256").update(entry.bytes).digest("hex");
-  if (expected === undefined || expected !== actual) {
-    throw new AppError("setup.request_invalid", { field: `media:${filename}` });
-  }
-  return filename;
-}
-
-/** Capture only media filenames referenced by transferable product rows. Content-addressed names
- * make the database snapshot and these later reads one immutable logical snapshot. */
-export async function collectConfigurationMedia(
-  bundle: ConfigurationBundle,
-  mediaDir: string,
-): Promise<ArchiveEntry[]> {
-  const names = [
-    ...new Set(
-      (bundle.tables.products ?? [])
-        .map((row) => row.image)
-        .filter((name): name is string => typeof name === "string"),
-    ),
-  ].sort();
-  const entries = await Promise.all(
-    names.map(async (name) => {
-      validateMediaFilename(name);
-      return { name: `media/${name}`, bytes: await readFile(join(mediaDir, name)) };
-    }),
-  );
-  for (const entry of entries) validateMediaEntry(entry);
-  return entries;
-}
-
-export function encodeConfigurationBundle(
-  bundle: ConfigurationBundle,
-  passphrase: string,
-  media: ArchiveEntry[] = [],
-): Buffer {
-  if (passphrase.length < 12) {
-    throw new AppError("setup.request_invalid", { field: "passphrase" });
-  }
-  for (const entry of media) validateMediaEntry(entry);
+export function encodeConfigurationBundle(bundle: ConfigurationBundle, passphrase: string): Buffer {
+  if (passphrase.length < 12) throw new AppError("setup.request_invalid", { field: "passphrase" });
   return encryptArtifact(
-    packArchive([{ name: ENTRY, bytes: Buffer.from(JSON.stringify(bundle), "utf8") }, ...media]),
+    packArchive([{ name: ENTRY, bytes: Buffer.from(JSON.stringify(bundle), "utf8") }]),
     passphrase,
   );
-}
-
-function decodeConfigurationArchive(
-  artifact: Uint8Array,
-  passphrase: string,
-): { bundle: ConfigurationBundle; media: ArchiveEntry[] } {
-  const entries = unpackArchive(decryptArtifact(artifact, passphrase));
-  if (entries[0]?.name !== ENTRY) {
-    throw new AppError("setup.request_invalid", { field: "artifact" });
-  }
-  const media = entries.slice(1);
-  const seen = new Set<string>();
-  for (const entry of media) {
-    const filename = validateMediaEntry(entry);
-    if (seen.has(filename)) throw new AppError("setup.request_invalid", { field: "artifact" });
-    seen.add(filename);
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(Buffer.from(entries[0].bytes).toString("utf8"));
-  } catch {
-    throw new AppError("setup.request_invalid", { field: "artifact" });
-  }
-  const bundle = parseConfigurationBundle(value);
-  const referenced = new Set(
-    (bundle.tables.products ?? [])
-      .map((row) => row.image)
-      .filter((name): name is string => typeof name === "string"),
-  );
-  if (
-    referenced.size !== media.length ||
-    media.some((entry) => !referenced.has(entry.name.slice(6)))
-  ) {
-    throw new AppError("setup.request_invalid", { field: "media" });
-  }
-  return { bundle, media };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -355,22 +283,16 @@ export function decodeConfigurationBundle(
   artifact: Uint8Array,
   passphrase: string,
 ): ConfigurationBundle {
-  return decodeConfigurationArchive(artifact, passphrase).bundle;
-}
-
-/** Publish validated immutable media after the database import commits. Repeating this after a
- * restart writes the same bytes to the same content-addressed names. */
-export async function publishConfigurationMedia(
-  artifact: Uint8Array,
-  passphrase: string,
-  mediaDir: string,
-): Promise<void> {
-  const { media } = decodeConfigurationArchive(artifact, passphrase);
-  await mkdir(mediaDir, { recursive: true });
-  for (const entry of media) {
-    const filename = entry.name.slice("media/".length);
-    await writeFileAtomic(join(mediaDir, filename), entry.bytes, 0o644);
+  const entries = unpackArchive(decryptArtifact(artifact, passphrase));
+  if (entries.length !== 1 || entries[0]?.name !== ENTRY)
+    throw new AppError("setup.request_invalid", { field: "artifact" });
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.from(entries[0].bytes).toString("utf8"));
+  } catch {
+    throw new AppError("setup.request_invalid", { field: "artifact" });
   }
+  return parseConfigurationBundle(value);
 }
 
 function checkedRows(
@@ -418,6 +340,10 @@ export function validateConfigurationBundle(
     }
   }
   checkedRows(bundle, modules);
+  for (const module of modules) {
+    const contribution = module.configurationTransfer;
+    if (contribution?.kind === "tables") contribution.validate?.(bundle.tables);
+  }
 }
 
 /** Apply the validated allowlist inside the caller's venue transaction. */

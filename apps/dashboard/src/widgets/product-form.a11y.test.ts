@@ -58,7 +58,7 @@ describe.each(["light", "dark"] as const)("product-form a11y (%s theme)", (theme
   it("renders accessibly when open", async () => {
     const { el, host } = await mountWidget<ProductForm>(
       "dashboard-product-form",
-      { open: true, catalogueId: "cat-1", categories: CATEGORIES },
+      { locales: ["es"], open: true, catalogueId: "cat-1", categories: CATEGORIES },
       theme,
     );
     const wtDialog = el.shadowRoot!.querySelector("wt-dialog")!;
@@ -70,6 +70,7 @@ describe.each(["light", "dark"] as const)("product-form a11y (%s theme)", (theme
     const { el, host } = await mountWidget<ProductForm>(
       "dashboard-product-form",
       {
+        locales: ["es"],
         open: true,
         catalogueId: "cat-1",
         categories: CATEGORIES,
@@ -88,6 +89,7 @@ describe.each(["light", "dark"] as const)("product-form a11y (%s theme)", (theme
     const { el, host } = await mountWidget<ProductForm>(
       "dashboard-product-form",
       {
+        locales: ["es"],
         open: true,
         catalogueId: "cat-1",
         categories: CATEGORIES,

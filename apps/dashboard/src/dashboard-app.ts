@@ -11,7 +11,9 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
-import { codeOf } from "./i18n/codes.js";
+import { codeOf, codeMessage } from "./i18n/codes.js";
+import { setContentLanguages } from "@waitron/ui";
+import { DashboardQueries } from "./api/query-controller.js";
 import { diag } from "./diagnostics.js";
 import type { StringKey } from "./i18n/strings.js";
 // The module-UI seam: modules are mounted generically from the browser-safe registry, never named here.
@@ -570,6 +572,15 @@ export class DashboardApp extends LitElement {
   @state() private myPersonId = "";
 
   @state() private sessionNoticeCode: string | null = null;
+  @state() private contentLanguageError: string | null = null;
+  @state() private contentLanguagesReady = false;
+  readonly #languageQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.contentLanguageError = codeOf(error);
+    },
+  );
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
   private sessionIdleTimeoutSeconds = 30 * 60;
   private sessionGeneration = 0;
@@ -773,6 +784,18 @@ export class DashboardApp extends LitElement {
     this.#broadcastSessionDeadline(Date.now() + remainingSeconds * 1000);
     this.#writeCurrentUrl(true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
+    this.#loadContentLanguages();
+  }
+
+  #loadContentLanguages(): void {
+    this.contentLanguageError = null;
+    void this.#languageQueries
+      .watch("getContentLanguages", [], (config) => {
+        setContentLanguages(config);
+        this.contentLanguagesReady = true;
+        this.contentLanguageError = null;
+      })
+      .catch(() => undefined);
   }
 
   #scheduleSessionExpiry(seconds: number): void {
@@ -792,6 +815,9 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null): void {
+    this.#languageQueries.release("getContentLanguages");
+    this.contentLanguagesReady = false;
+    this.contentLanguageError = null;
     this.liveUpdates?.stop();
     this.sessionGeneration += 1;
     clearTimeout(this.sessionExpiryTimer);
@@ -981,9 +1007,34 @@ export class DashboardApp extends LitElement {
               : nothing
           }
           <div class="main">
+            ${
+              this.contentLanguageError
+                ? html`<div role="alert" data-test="content-language-error">
+                    <p>
+                      ${t("content_languages.load_error")} ${codeMessage(this.contentLanguageError)}
+                    </p>
+                    <wt-button
+                      data-test="retry-content-languages"
+                      variant="secondary"
+                      @click=${() => this.#loadContentLanguages()}
+                      >${t("content_languages.retry")}</wt-button
+                    >
+                  </div>`
+                : nothing
+            }
             <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
                  screen subtree, repainting every child in the new language (screens hold no controller). -->
-            <div class="body">${keyed(currentLocale(), this.#renderScreen())}</div>
+            <div class="body">
+              ${
+                this.contentLanguagesReady
+                  ? keyed(currentLocale(), this.#renderScreen())
+                  : this.contentLanguageError === null
+                    ? html`<p role="status" data-test="content-language-loading">
+                        ${t("content_languages.loading")}
+                      </p>`
+                    : nothing
+              }
+            </div>
             <dashboard-language-chooser
               .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
             ></dashboard-language-chooser>

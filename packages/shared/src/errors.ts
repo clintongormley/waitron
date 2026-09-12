@@ -81,6 +81,8 @@
  * than rediscover.
  */
 export interface ErrorParams {
+  /** A content language is not a recognised language identifier. */
+  "content.language_invalid": Record<string, never>;
   "shared.invalid_id": { kind: string; value: string };
   "shared.invalid_decimal": { value: string };
   "shared.decimal_overflow": { value: string; maxIntegerDigits: number };

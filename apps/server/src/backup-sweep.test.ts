@@ -145,19 +145,18 @@ describe("runOnce (fan-out)", () => {
     expect(entriesOf(a).get("db.dump")!.toString()).toBe("DUMP-BYTES");
   });
 
-  it("assembles a full archive: manifest.json, db.dump, media/<blob>, secrets/<path>", async () => {
+  it("assembles database and secret entries without copying the obsolete media directory", async () => {
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
     const entries = entriesOf(a);
-    // All four entry kinds are present.
+    // Photo bytes travel inside the database dump.
     expect(entries.has("manifest.json")).toBe(true);
     expect(entries.has("db.dump")).toBe(true);
-    expect(entries.has("media/abc123.jpg")).toBe(true);
+    expect(entries.has("media/abc123.jpg")).toBe(false);
     expect(entries.has("secrets/secrets.env")).toBe(true);
     // Every RECOVERY_FILES path is captured under `secrets/`.
     for (const rel of RECOVERY_FILES) expect(entries.has(`secrets/${rel}`)).toBe(true);
-    // The media blob and a secret round-trip verbatim.
-    expect(entries.get("media/abc123.jpg")!.toString()).toBe("IMG");
+    // Secrets retain their exact bytes.
     expect(entries.get("secrets/secrets.env")!.toString()).toBe("secrets.env-contents");
     // The manifest parses back to the builder's object.
     expect(JSON.parse(entries.get("manifest.json")!.toString())).toEqual(FIXED_MANIFEST);

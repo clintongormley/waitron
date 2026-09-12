@@ -1,7 +1,7 @@
 // End-to-end proof of the whole demo seed (Phase 2, Task 12): migrate → provision a chained venue →
 // `seedDemoRestaurant`, then assert the pieces Tasks 1-11 built actually COMPOSE — the reports light
 // up, both menus are accessible, products come from both catalogues, a seeded product's `image`
-// resolves to a real file in the media store, and a working order MIXING a Casa Delgado item with a
+// resolves to database image bytes, and a working order MIXING a Casa Delgado item with a
 // Menú del Día item parks and retrieves without `sale.unknown_product`. That last assertion is the
 // end-to-end proof of Phase 1's union-reprice: `parkOrder` re-prices the basket against the
 // location's WHOLE accessible catalogue set, so a line drawn from a non-default menu must resolve.
@@ -15,14 +15,8 @@
 // Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
 // `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
 //
-// Media: `WAITRON_MEDIA_DIR` is repointed at a throwaway `mkdtemp` dir for the whole suite and torn
-// down in `afterAll`, so the seed's ~44 content-addressed PNGs never touch the repo's dev media store.
-
-import { mkdtemp, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -42,7 +36,8 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "../../src/till-config.js";
 import { getHeldOrder, parkOrder } from "../../src/working-order.js";
-import { MEDIA_FILENAME } from "../../src/media-api.js";
+import { MEDIA_FILENAME } from "@waitron/media";
+import { readImageBytes } from "@waitron/media";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -132,21 +127,6 @@ function tillConfigFor(venue: Venue): TillConfig {
 }
 
 describe("demo seed end-to-end", () => {
-  let mediaDir: string;
-  const priorMediaDir = process.env.WAITRON_MEDIA_DIR;
-
-  beforeAll(async () => {
-    // Point the media step at a throwaway dir, never the repo's dev media store.
-    mediaDir = await mkdtemp(join(tmpdir(), "waitron-seed-int-media-"));
-    process.env.WAITRON_MEDIA_DIR = mediaDir;
-  });
-
-  afterAll(async () => {
-    if (priorMediaDir === undefined) delete process.env.WAITRON_MEDIA_DIR;
-    else process.env.WAITRON_MEDIA_DIR = priorMediaDir;
-    if (mediaDir !== undefined) await rm(mediaDir, { recursive: true, force: true });
-  });
-
   it("seeds a venue whose reports, menus, media, and mixed order all compose", async () => {
     const venue = await provisionVenue();
     const start = Date.now();
@@ -208,12 +188,15 @@ describe("demo seed end-to-end", () => {
     const diaProduct = diaProducts.find(optionFree) ?? diaProducts[0]!;
 
     // (4) Media: a sampled product's `image` is a content-addressed name that BOTH matches the served
-    // filename shape AND resolves to a real file in the temp media dir the seed wrote to.
+    // filename shape AND resolves to image bytes in the database.
     expect(read.image).not.toBeNull();
     expect(read.image!).toMatch(MEDIA_FILENAME);
-    const fileStat = await stat(join(mediaDir, read.image!));
-    expect(fileStat.isFile()).toBe(true);
-    expect(fileStat.size).toBeGreaterThan(0);
+    const storedImage = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return readImageBytes(tx, venue.tenantId, read.image!);
+    });
+    expect(storedImage?.contentType).toBe("image/png");
+    expect(storedImage!.bytes.length).toBeGreaterThan(0);
 
     // (5) A working order MIXING a Casa Delgado item and a Menú del Día item parks and retrieves
     // WITHOUT `sale.unknown_product` — the end-to-end proof of Phase 1's union-reprice. `parkOrder`

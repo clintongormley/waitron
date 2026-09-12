@@ -1,7 +1,9 @@
+import { dashboardPath } from "../navigation.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import type { ContentLanguages } from "@waitron/shared";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, setContentLanguages, UrlStateController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -13,6 +15,7 @@ import "../widgets/product-list.js";
 import "../widgets/product-form.js";
 import "../widgets/category-manager.js";
 import "../widgets/option-group-manager.js";
+import "../widgets/content-languages.js";
 import type { CreateProductDetail, UpdateProductDetail } from "../widgets/product-form.js";
 import type {
   CatalogueSummary,
@@ -95,6 +98,8 @@ export class CatalogueScreen extends LitElement {
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
+  @state() private contentLanguages: ContentLanguages | null = null;
+  @state() private languageSettingsOpen = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -143,6 +148,31 @@ export class CatalogueScreen extends LitElement {
   #savingOptionGroup = false;
   @state() private savingOptionGroupItem = false;
 
+  #linkedProduct: string | null = null;
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "catalogue") return;
+      this.#linkedProduct = this.#url.read("product");
+      if (this.#linkedProduct === null) this.formOpen = false;
+      this.#openLinkedProduct();
+    },
+    dashboardPath,
+  );
+
+  #openLinkedProduct(): void {
+    const id = this.#linkedProduct;
+    if (id === null || !this.products.some((product) => product.id === id)) return;
+    this.#linkedProduct = null;
+    this.#onEditProduct(new CustomEvent("edit-product", { detail: { productId: id } }));
+  }
+
+  #closeForm(): void {
+    this.formOpen = false;
+    this.#linkedProduct = null;
+    if (this.#url.read("product") !== null) this.#url.write({ product: null }, true);
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -155,6 +185,10 @@ export class CatalogueScreen extends LitElement {
     this.errorKey = null;
     try {
       await Promise.all([
+        this.#queries.watch("getContentLanguages", [], (value) => {
+          this.contentLanguages = value;
+          setContentLanguages(value);
+        }),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
         }),
@@ -203,6 +237,7 @@ export class CatalogueScreen extends LitElement {
       this.catalogues.map((catalogue) => [catalogue.id]),
       (lists) => {
         this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
+        this.#openLinkedProduct();
       },
     );
   }
@@ -288,7 +323,7 @@ export class CatalogueScreen extends LitElement {
       // create-vs-patch asymmetry, `dietOverride: null` is legal on create (leaves no override).
       input.dietOverride = detail.dietOverride;
       await this.api.createProduct(input);
-      this.formOpen = false;
+      this.#closeForm();
       await this.#reloadProducts();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -308,7 +343,7 @@ export class CatalogueScreen extends LitElement {
     this.errorKey = null;
     try {
       await this.api.updateProduct(event.detail.id, event.detail.patch);
-      this.formOpen = false;
+      this.#closeForm();
       await this.#reloadProducts();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -474,16 +509,42 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
+  async #languagesSaved(event: CustomEvent<ContentLanguages>): Promise<void> {
+    event.stopPropagation();
+    this.languageSettingsOpen = false;
+    this.contentLanguages = event.detail;
+    setContentLanguages(event.detail);
+    try {
+      await this.#queries.watch("getContentLanguages", [], (value) => {
+        this.contentLanguages = value;
+        setContentLanguages(value);
+      });
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
   override render(): TemplateResult {
     const hasCatalogue = this.catalogues.length > 0;
+    const locales = this.contentLanguages?.languages ?? [];
     return html`
       <div class="header">
         <h1 class="title">${t("catalogue.title")}</h1>
+        <wt-button
+          variant="secondary"
+          data-test="edit-languages"
+          ?disabled=${this.contentLanguages === null}
+          @click=${() => {
+            this.languageSettingsOpen = true;
+          }}
+          >${t("content_languages.title")}</wt-button
+        >
         ${
           hasCatalogue
             ? html`<wt-button
                 variant="primary"
                 data-test="add-product"
+                ?disabled=${locales.length === 0}
                 @click=${() => this.#openForm()}
                 >${t("catalogue.add_product")}</wt-button
               >`
@@ -495,6 +556,7 @@ export class CatalogueScreen extends LitElement {
         hasCatalogue
           ? html`<dashboard-product-list
               .products=${this.products}
+              .primaryLocale=${this.contentLanguages?.defaultLanguage ?? ""}
               @edit-product=${(e: CustomEvent<{ productId: string }>) => this.#onEditProduct(e)}
             ></dashboard-product-list>`
           : html`<p class="prompt" data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
@@ -510,6 +572,7 @@ export class CatalogueScreen extends LitElement {
       <section class="option-groups">
         <h2 class="section-title">${t("option_group.section_title")}</h2>
         <dashboard-option-group-manager
+          .locales=${locales}
           .itemBusy=${this.savingOptionGroupItem}
           .groups=${this.optionGroups}
           .items=${this.optionGroupItems}
@@ -534,6 +597,7 @@ export class CatalogueScreen extends LitElement {
       ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
 
       <dashboard-product-form
+        .locales=${locales}
         .open=${this.formOpen}
         .catalogueId=${this.selectedCatalogueId}
         .categories=${this.categories}
@@ -547,8 +611,21 @@ export class CatalogueScreen extends LitElement {
         @update-product=${(e: CustomEvent<UpdateProductDetail>) => void this.#onUpdateProduct(e)}
         @set-product-course=${(e: CustomEvent<{ productId: string; courseId: string | null }>) =>
           void this.#onSetProductCourse(e)}
-        @wt-close=${() => (this.formOpen = false)}
+        @wt-close=${() => this.#closeForm()}
       ></dashboard-product-form>
+      ${
+        this.contentLanguages
+          ? html`<dashboard-content-languages
+              .open=${this.languageSettingsOpen}
+              .config=${this.contentLanguages}
+              .api=${this.api}
+              @languages-closed=${() => {
+                this.languageSettingsOpen = false;
+              }}
+              @languages-saved=${(event: CustomEvent<ContentLanguages>) => void this.#languagesSaved(event)}
+            ></dashboard-content-languages>`
+          : nothing
+      }
     `;
   }
 }

@@ -26,6 +26,7 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
         floorZones: [],
         products: [],
         offers: [],
+        sections: [],
       }),
     } as unknown as VenueServiceApi;
     host.append(el);

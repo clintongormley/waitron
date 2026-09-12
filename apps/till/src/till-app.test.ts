@@ -1,4 +1,5 @@
 import { page } from "@vitest/browser/context";
+import { currentContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -319,6 +320,9 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
  */
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   const api = {
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     getTill: vi.fn().mockResolvedValue(till),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: "en-GB" }),
@@ -565,6 +569,17 @@ afterEach(() => {
 });
 
 describe("till-app", () => {
+  it("loads the site's content default without changing the interface or receipt language", async () => {
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "fr", languages: ["fr", "en"] }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await flush(el);
+    await vi.waitFor(() => expect(currentContentLanguages().defaultLanguage).toBe("fr"));
+    expect(currentLocale()).toBe(till.locale);
+  });
   it("registers as a custom element", () => {
     expect(customElements.get("till-app")).toBe(TillApp);
   });

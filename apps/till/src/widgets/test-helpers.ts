@@ -1,6 +1,6 @@
 import axe from "axe-core";
-import { expect } from "vitest";
-import { applyTokens } from "@waitron/ui";
+import { beforeEach, expect } from "vitest";
+import { applyTokens, setContentLanguages } from "@waitron/ui";
 
 /**
  * Test support for the till's Lit widgets. It mirrors `packages/ui/src/test-helpers.ts` and
@@ -8,6 +8,9 @@ import { applyTokens } from "@waitron/ui";
  * till widget takes its `products`/`store` as `@property({ attribute: false })` objects, which
  * cannot travel through markup. So it creates the element, assigns the props, then connects it.
  */
+
+// Standalone widget fixtures use a Spanish venue; app roots replace this with their API configuration.
+beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] }));
 
 export type Theme = "light" | "dark";
 

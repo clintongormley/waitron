@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
@@ -79,6 +80,29 @@ const groups = [groupA, groupB];
 afterEach(cleanupWidgets);
 
 describe("till-station-queue", () => {
+  it("keeps dish and modifier receipt snapshots visible with an unrelated content default", async () => {
+    const previousLocale = currentLocale();
+    setLocale("en-GB");
+    setContentLanguages({ defaultLanguage: "ca", languages: ["ca"] });
+    try {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [
+          {
+            ...groupA,
+            items: [
+              { ...groupA.items[0]!, modifiers: [{ descriptions: { "es-ES": "Mantequilla" } }] },
+            ],
+          },
+        ],
+        stationId: "st-1",
+      });
+      expect(el.shadowRoot!.textContent).toContain("2× Paella");
+      expect(el.shadowRoot!.textContent).toContain("Mantequilla");
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-station-queue")).toBe(TillStationQueue);
   });

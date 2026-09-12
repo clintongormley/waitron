@@ -16,7 +16,8 @@
     "@waitron/dashboard-kit": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/payments-sumup": "workspace:*",
-    "@waitron/venue-service": "workspace:*"
+    "@waitron/venue-service": "workspace:*",
+    "@waitron/media": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

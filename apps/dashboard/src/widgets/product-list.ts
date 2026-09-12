@@ -1,6 +1,7 @@
+import { resolveContentText } from "@waitron/shared";
 import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, currentContentLanguages, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import { t } from "../i18n/t.js";
@@ -45,14 +46,11 @@ export class ProductList extends LitElement {
   ];
 
   @property({ attribute: false }) products: Product[] = [];
-  @property() primaryLocale = "es";
+  @property() primaryLocale = "";
 
   #name(product: Product): string {
-    return (
-      product.descriptions[this.primaryLocale] ??
-      Object.values(product.descriptions)[0] ??
-      product.id
-    );
+    const language = this.primaryLocale || currentContentLanguages().defaultLanguage;
+    return resolveContentText(product.descriptions, language, language) || product.id;
   }
 
   #edit(event: Event, productId: string): void {

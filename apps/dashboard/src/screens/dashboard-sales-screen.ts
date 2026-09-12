@@ -1,3 +1,4 @@
+import { ContentLanguageController } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -27,13 +28,18 @@ import { today } from "../date-utils.js";
  *
  * Money fields arrive pre-formatted as decimal strings from the server and are rendered verbatim
  * (there is no client-side currency formatter in this app). Top-seller names come from a per-locale
- * `descriptions` map resolved through the shared {@link localizedName} helper. Every async path is
+ * `descriptions` map resolved through the shared {@link localizedSnapshotName} helper. Every async path is
  * `try/catch`ed into the `errorKey` banner (the roster/overview-screen pattern); a `from > to` range
  * is left for the server to reject (400 `management.request_invalid`, per report-api.ts's `from > to`
  * guard), which surfaces the same way. Read-only: it authors nothing.
  */
 @customElement("dashboard-sales-screen")
 export class SalesScreen extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     metricStyles,

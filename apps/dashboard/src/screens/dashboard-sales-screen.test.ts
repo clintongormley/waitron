@@ -35,7 +35,7 @@ const close: DailyCloseDto = {
   },
   counts: { sales: 10, corrections: 1, voids: 2 },
   // Short language-subtag keys — the catalogue/product `descriptions` shape (`invoiceLocales:
-  // ["es","ca"]`); localizedName resolves it via the short-subtag arm (the overview-screen test
+  // ["es","ca"]`); localizedSnapshotName resolves it via the short-subtag arm (the overview-screen test
   // covers the full-tag arm). Both keyings are live in the tree.
   topSellers: [{ descriptions: { es: "Café", en: "Coffee" }, quantity: "5", total: "10.00" }],
 };
@@ -49,7 +49,7 @@ const period: SalesPeriodDto = {
     taxTotal: "210.00",
     grossTotal: "1210.00",
   },
-  // Second row has no "es" key: exercises localizedName's fallback-to-first-value arm.
+  // Second row has no "es" key: exercises localizedSnapshotName's stored-language fallback.
   topSellers: [
     { descriptions: { es: "Croqueta", en: "Croquette" }, quantity: "40", total: "80.00" },
     { descriptions: { en: "Tortilla" }, quantity: "12", total: "36.00" },

@@ -12,13 +12,13 @@ const overview: SalesOverview = {
   openTables: { open: 3, total: 12 },
   topSellers: [
     // FULL invoice-locale-tag keys — the shape the `/reports/overview` sale-line snapshot produces
-    // (its seed writes `{ "es-ES": … }`); localizedName resolves it via the full-tag arm.
+    // (its seed writes `{ "es-ES": … }`); localizedSnapshotName resolves it via the full-tag arm.
     {
       descriptions: { "es-ES": "Café con leche", "en-GB": "Latte" },
       quantity: "18",
       total: "36.00",
     },
-    // Second row carries neither "es-ES" nor "es": exercises localizedName's fallback-to-first-value arm.
+    // Second row carries neither "es-ES" nor "es": exercises localizedSnapshotName's stored-language fallback.
     { descriptions: { en: "Croissant" }, quantity: "12", total: "24.00" },
   ],
 };

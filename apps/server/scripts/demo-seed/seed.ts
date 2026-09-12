@@ -1,12 +1,11 @@
 // Seed catalogue, floor, staff and media in one app-role transaction. Seed sales after it commits
 // because each sale opens its own transaction and reads the committed products.
-// Media uses the same configured directory as the server. Fiscal sales are preproduction.
+// Image bytes share the database transaction. Fiscal sales are preproduction.
 
 import { tenantId as brandTenantId } from "@waitron/shared";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { listAvailableProducts } from "@waitron/catalogue";
-import { DEFAULT_MEDIA_ROOT } from "../../src/boot.js";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
@@ -44,9 +43,6 @@ export async function seedDemoRestaurant(
   db: Database,
   { venue, locale, salesDays }: SeedDemoInput,
 ): Promise<void> {
-  // `||`, not `??`: an empty `WAITRON_MEDIA_DIR=""` is a valid-but-wrong value that must fall back to
-  // the default, not be used verbatim (CLAUDE.md §3, "an empty connection string is a valid string").
-  const mediaDir = process.env.WAITRON_MEDIA_DIR || DEFAULT_MEDIA_ROOT;
   const { tenantId, locationId } = venue;
 
   // One tenant/app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
@@ -68,7 +64,7 @@ export async function seedDemoRestaurant(
     });
     await seedFloor(tx, { tenantId, locationId, locale, menuIds });
     await seedStaff(tx, brandTenantId(tenantId));
-    await seedMedia(tx, { mediaDir, productsByImage });
+    await seedMedia(tx, { tenantId, productsByImage });
     return (await listAvailableProducts(tx, locationId)).products;
   });
 

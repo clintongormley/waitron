@@ -1,4 +1,6 @@
+import { setContentLanguages } from "@waitron/ui";
 import { afterEach, describe, expect, it } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { formatMoney } from "../i18n/format.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -28,6 +30,23 @@ const jamon: TillProduct = {
 afterEach(cleanupWidgets);
 
 describe("till-product-grid", () => {
+  it("refreshes displayed names when the configured fallback changes", async () => {
+    setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "en"] });
+    try {
+      const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+        products: [{ ...cafe, descriptions: { fr: "Pain", en: "Bread" } }],
+        store: new WorkingOrderStore(),
+      });
+      expect(el.shadowRoot!.querySelector(".name")!.textContent).toBe("Pain");
+      setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector(".name")!.textContent).toBe("Bread");
+    } finally {
+      setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    }
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-product-grid")).toBe(TillProductGrid);
   });
