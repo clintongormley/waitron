@@ -63,3 +63,9 @@ Design: [Connect to a box before entering setup details](../specs/2026-09-12-box
   adjacent certificate-route comments; corrected stale setup-only and operator-CA claims.
 - Review and token artifacts: `/tmp/waitron-b1-finish-7qszib6u/review.md`, `.timing`, `.usage`.
   Physical OS trust acceptance remains pending; the review did not perform those system operations.
+
+- Final whole-workspace pre-push passed (597 seconds), including 3,050 server tests and 268 setup
+  tests. Log: `/tmp/waitron-b1-finish-7qszib6u/push.log`.
+- A subsequent no-leaf recovery probe printed an HTTP link labelled “secure”. The new trust-page
+  regression failed (1 failed, 6 passed); neutral Continue/QR wording removes that claim and the
+  no-CA instruction to install a missing certificate. The focused trust/landing tests then passed.

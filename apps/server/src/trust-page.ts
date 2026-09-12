@@ -123,7 +123,7 @@ export function renderTrustPage(input: TrustPageInput): string {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Waitron — connect securely</title>
+<title>Waitron — connect to this box</title>
 <style>
 :root { color-scheme: light dark; font: 17px/1.55 system-ui, sans-serif; }
 body { margin: 0; } main { max-width: 48rem; margin: auto; padding: 1.5rem; }
@@ -152,12 +152,12 @@ and the selected browser's trust settings. See the re-image guidance above if th
 <section class="go"><h2>${caAvailable ? "3" : "2"}. Open Waitron</h2>
 <p>After installing the certificate, reopen your browser and follow this link. If it still shows a warning,
 return to the instructions rather than entering setup details.</p>
-<p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">Continue to the secure site</a></p>
+<p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">Continue to Waitron</a></p>
 <ul>${urlItems}</ul></section>
 <section class="scan"><h2>Open on another device</h2>
 ${
   qrSvg
-    ? `<figure>${qrSvg}<figcaption>This QR opens the secure box address. Install the certificate on that device first.</figcaption></figure>`
+    ? `<figure>${qrSvg}<figcaption>This QR opens the box address.</figcaption></figure>`
     : '<p class="no-qr">No QR code is available here. Use one of the addresses above.</p>'
 }
 </section>

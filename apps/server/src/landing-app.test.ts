@@ -59,7 +59,7 @@ describe("landing app", () => {
     }
   });
 
-  // The page's "Continue to the secure site" hand-off — the whole reason the landing page carries
+  // The page's "Continue to Waitron" hand-off — the whole reason the landing page carries
   // `httpsUrl`: the visitor follows it AFTER trusting the CA, escaping the HTTPS interstitial.
   it("renders the HTTPS hand-off link", async () => {
     const dir = stateDirWithCa();
@@ -72,7 +72,7 @@ describe("landing app", () => {
       });
       const html = await (await app.request("http://waitron.local/")).text();
       expect(html).toContain('href="https://waitron.local:8080"');
-      expect(html).toMatch(/Continue to the secure site/i);
+      expect(html).toMatch(/Continue to Waitron/i);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

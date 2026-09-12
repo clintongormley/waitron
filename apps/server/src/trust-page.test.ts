@@ -76,3 +76,17 @@ it("gives operator-certificate guidance without referring to missing instruction
   expect(html).toContain("If this box was re-imaged");
   expect(html).toContain("whoever installed");
 });
+
+it("does not describe a plain HTTP recovery destination as secure", () => {
+  const html = renderTrustPage({
+    reachUrls: ["http://waitron.local"],
+    caAvailable: false,
+    caDownloadPath: "/ca.crt",
+    httpsUrl: "http://waitron.local",
+    qrSvg: "<svg></svg>",
+  });
+  expect(html).toContain('href="http://waitron.local">Continue to Waitron</a>');
+  expect(html).not.toContain("secure site");
+  expect(html).not.toContain("secure box address");
+  expect(html).not.toContain("Install the certificate on that device first");
+});
