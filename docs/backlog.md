@@ -127,6 +127,18 @@ not answer yet, and the answer is written down there in the same change rather t
 screen. Owner decision 2026-09-12: **this work runs on Sonnet.** It is screenshot-driven iteration
 with the owner looking at each step, not a write-a-plan-and-dispatch job.
 
+**Open, and it bites this work first: two documents now state the component rules and they have
+already drifted** (found by the #337 review, not fixed there). `design-system.md` binds the token
+rule to "any component or view" and its forbidden-colour list omits `color()`;
+[conventions-ui.md](developers/conventions-ui.md) records what the guard mechanically enforces, which
+is narrower — `packages/ui/src/no-hardcoded-chrome.test.ts` globs `packages/ui/src/components/*.ts`
+only — and its list does include `color()`. #337 recorded which is authoritative for what
+(the guard decides what CI does, `design-system.md` decides what a reviewer asks for) rather than
+silently editing either. **Next action:** decide whether the token rule binds views as well as
+components, then make the guard and both documents agree — one of them is currently telling a reader
+something CI will not enforce. Whoever picks up the next screen should settle this first, because
+every screen after it inherits the answer.
+
 Done so far: the dashboard shell itself — the sidebar, the banner and the account menu — plus
 **Account settings** (Your profile) and the **user administration** section (#333; what changed is
 under A7).
@@ -691,6 +703,20 @@ turns out to need a design moves to its track.
   sub-view is unreachable; the default counter canvas has no prep-queue rail.
 - The dashboard's `es-ES` module default still needs the flip the till got in #170; check the
   dashboard money formatter for the same "doesn't follow the UI locale" bug.
+
+**House rules and their guards:**
+
+- **The pointers guard is deliberately narrower than "every pointer"** (#337).
+  `scripts/claude-md-pointers.test.ts` checks every markdown link in `CLAUDE.md` and the topic files,
+  and backticked paths under `apps/`, `packages/`, `docs/`, `scripts/`, `deploy/`, `bench/`,
+  `.github/` and `.husky/`. It does NOT check a root-level filename such as `eslint.config.js` — a
+  pointer `CLAUDE.md` really does give a reader — nor a bare directory. `CLAUDE.md` §7 says so; widen
+  the guard if that gap ever costs something.
+- **Eight historical plans and specs carry a dated pointer to the deleted
+  `.github/instructions/waitron.instructions.md`** (#337 deleted it after moving its rules into the
+  `docs/developers/` files; it read nowhere after Copilot's review was switched off on 2026-09-06).
+  Nothing guards that class, so a future rename needs the sweep done by hand:
+  `grep -rn --include="*.md" waitron.instructions .` is the whole list.
 
 **Payments:**
 
