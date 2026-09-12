@@ -1092,24 +1092,28 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
   real-time push; station-kind threshold defaults; an unbumped-since-fire neglect metric; a shared
   flash helper.
 
-**Receipts, duplicates & card payments — IMPLEMENTED ON BRANCH 2026-09-12; awaiting `finish-branch`.** Design:
+**Receipts, duplicates & card payments — LANDED #324 (2026-09-12).** Design:
 [2026-09-12-receipts-payment-slips-and-duplicates-design.md](superpowers/specs/2026-09-12-receipts-payment-slips-and-duplicates-design.md);
 [implementation plan](superpowers/plans/2026-09-12-receipts-payment-slips-and-duplicates.md).
 
-The branch moves card identity to a separate payment slip, distinguishes original and duplicate receipt actions, adds permission-gated queue resends, enables printing through a device-profile capability, and connects split-by-item payment with stored grouping labels. Invoice-first placement always prints the original bill; collection offers duplicates.
+It moves card identity to a separate payment slip, distinguishes original and duplicate receipt actions, adds permission-gated queue resends, enables printing through a device-profile capability, and connects split-by-item payment with stored grouping labels. Invoice-first placement always prints the original bill; collection offers duplicates.
 
 Implementation exposed lost cash-change facts on replay. The approved correction adds `cash_tendered` beside the settled tender amount, reads the issuer from the filed fiscal record, and freezes grouping when the invoice files. Optional header and footer use the current layout; no receipt snapshot is stored.
 
-Branch review separated drawer opening from printing: cash settlement at a till creates its own audited drawer job in every print mode. Handhelds cannot open the drawer, even with a drawer capability, and drawer jobs cannot be manually resent. Documents remain resendable without a drawer effect.
+Review separated drawer opening from printing: cash settlement at a till creates its own audited drawer job in every print mode. Handhelds cannot open the drawer, even with a drawer capability, and drawer jobs cannot be manually resent. Documents remain resendable without a drawer effect.
 
-Local validation passed: the full workspace lint, typecheck, formatting and test gate, plus affected-package coverage. Branch review and CI remain part of `finish-branch`.
+Nothing physical was tested: no real printer produced a slip, a duplicate or a drawer pulse, so every
+paper claim here rests on tests and rendered bytes only. First chance to close that is the next session
+at the box with the Epson TM-T88III.
 
 Legal groundwork and the unresolved multi-recipient route remain in [findings §15](compliance/verifactu-findings.md) and [advisor Q19](compliance/asesor-questions.md).
 
 Named out of scope in the spec, each its own future item: **bilingual receipts** (`invoice_locales` is
 configured and snapshotted but rendered by NEITHER document — its own slice covering both); making
 one-original-per-invoice **structural** rather than procedural; putting the invoice number on the slip
-(Q19(e)).
+(Q19(e)); and a **per-tender payment slip** when one sale is settled by several cards — today the slip
+assumes a single card capture, and the multi-tender pay path in the dependency note below is its
+prerequisite.
 
 Dependency note for the money-split-on-one-bill case (still unbuilt): it needs a multi-tender pay path —
 `settleSale` already accepts `tenders[]`, but `payWorkingOrder` takes a single `tender` and
@@ -1117,7 +1121,7 @@ Dependency note for the money-split-on-one-bill case (still unbuilt): it needs a
 el momento de realizarse la operación») constrains how long an invoice may sit open waiting for the last
 payer.
 
-**Split-bill UI (TS-5 finish) — included in the receipts branch above.** The till selects whole items or quantities and calls the existing split operation. The server retains its one-tab-to-separate-checks fiscal tests and stamps each check with the origin’s grouping label.
+**Split-bill UI (TS-5 finish) — landed with #324 above.** The till selects whole items or quantities and calls the existing split operation. The server retains its one-tab-to-separate-checks fiscal tests and stamps each check with the origin’s grouping label.
 
 **SumUp printer-cradle experiment (owner-raised 2026-09-12) — hardware not yet owned.** Whether the
 Solo's printer cradle auto-prints a card slip on a **Cloud-API-initiated** checkout is unknown and
@@ -1929,7 +1933,7 @@ genuinely-decision-bearing.
 
 **SumUp:**
 
-- **Card-payment proof on the receipt — LANDED #315.** Historical behavior; the receipts branch above moves these card facts to a separate slip. A card sale now prints the card block (scheme,
+- **Card-payment proof on the receipt — LANDED #315.** Historical behavior; #324 above has since moved these card facts to a separate slip. A card sale now prints the card block (scheme,
   masked PAN `**** NNNN`, entry mode, auth code, and a `Propina`/`Cobrado` pair when a tip rode on the
   card) below `TOTAL`, replacing the bogus `Efectivo`/`Cambio 0,00` a card sale printed before. Optional
   `CardDetails` on the `PaymentResult` contract; SumUp fills it from the transaction it already fetches;
