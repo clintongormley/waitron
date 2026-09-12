@@ -632,9 +632,14 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **Fast local pre-push checks** — implemented on `chore/fast-pre-push`: retain sign-offs, locked
-  installation, formatting, lint, root guards and scoped typechecks; mandatory package tests and
-  coverage run in CI. Branch finishing uses focused local tests rather than a duplicate full gate.
+- **Fast local pre-push checks — LANDED #338 (2026-09-12).** The hook keeps sign-offs, the locked
+  install, formatting, lint, the root guards and scoped typechecks, and runs no package tests at all;
+  CI owns the package suites and their coverage thresholds, and `scripts/pre-push.test.mjs` is the
+  fifteen-case fixture suite that now guards the hook's shell. **The consequence to watch:** CI's
+  `changes` job is now the only thing that runs a package's tests, so a package a branch touched that
+  CI did not select has been tested by nothing — read that job's `code`, `scope` and `packages`
+  outputs before calling a branch green. On #338 itself every package job skipped on `code=false`,
+  which was correct: it changed no file under `packages/` or `apps/`.
 
 - **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
   retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with
