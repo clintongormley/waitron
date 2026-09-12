@@ -37,7 +37,26 @@ const DESCRIPTION_MAX = 500;
 // eslint-disable-next-line no-control-regex -- deliberately matching control characters
 const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 
-function refuse(field: string): never {
+/**
+ * Every field path this validator can name, as the request body spells it. Exported so the setup
+ * wizard's own copy can be checked against it (`scripts/setup-wizard-fiscal-fields.test.ts`) — the
+ * wizard marks and explains the refused field, and nothing under `apps/` may import a regime package
+ * (`scripts/module-seams.test.ts`), so the two lists are tied together in the root project instead.
+ *
+ * `refuse` takes this union rather than a bare string, so a call naming a path that is not here
+ * fails to compile. What that does NOT catch is the other direction — a path listed here that
+ * nothing refuses any more; the per-path cases in ./venue-fields.test.ts are what cover that.
+ */
+export const VENUE_FISCAL_FIELD_PATHS = [
+  "legalName",
+  "seriesCode",
+  "rectificativeSeriesCode",
+  "location.operationDescription",
+] as const;
+
+export type VenueFiscalFieldPath = (typeof VENUE_FISCAL_FIELD_PATHS)[number];
+
+function refuse(field: VenueFiscalFieldPath): never {
   throw new AppError("setup.request_invalid", { field });
 }
 

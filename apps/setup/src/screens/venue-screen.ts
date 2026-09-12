@@ -17,6 +17,7 @@ import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
+import { SERVER_FIELDS, type ServerField } from "../server-fields.js";
 
 /**
  * The wizard's field-heavy step: the tenant (country, tax id, legal name), its location (name,
@@ -81,38 +82,6 @@ const LOCALE_LABELS: Readonly<Record<string, string>> = {
   "gl-ES": "Galician (Galego)",
   "eu-ES": "Basque (Euskara)",
   "en-GB": "English",
-};
-
-/** Both invoice series codes carry the same rule, so they carry the same sentence. */
-const SERIES_CODE_MESSAGE =
-  "Use letters, numbers, and the characters / _ . and - only, up to 38 characters.";
-
-/**
- * The venue fields the SERVER can refuse: each keyed by the path the server names it by, carrying
- * this form's own field key and what to tell the operator. The server names the operation
- * description by its position in the request body (`location.operationDescription`) while this form
- * calls it `operationDescription`, so the two spellings are reconciled here rather than assumed
- * equal; a path missing from this map marks nothing, because it belongs to another screen.
- *
- * The rules themselves belong to the fiscal regime
- * (`packages/fiscal-verifactu/src/venue-fields.ts`) and this form cannot evaluate them, so each
- * sentence says what the operator should DO — never the rule or the pattern behind it.
- */
-const SERVER_FIELDS: Readonly<
-  Record<string, { readonly key: TextField; readonly message: string }>
-> = {
-  legalName: {
-    key: "legalName",
-    message:
-      "The tax agency will not accept this name. Remove any hidden characters — typing it out instead of pasting it usually clears them.",
-  },
-  seriesCode: { key: "seriesCode", message: SERIES_CODE_MESSAGE },
-  rectificativeSeriesCode: { key: "rectificativeSeriesCode", message: SERIES_CODE_MESSAGE },
-  "location.operationDescription": {
-    key: "operationDescription",
-    message:
-      "Keep this to 500 characters or fewer, and remove any hidden characters — typing it out instead of pasting it usually clears them.",
-  },
 };
 
 @customElement("setup-venue-screen")
@@ -213,8 +182,13 @@ export class SetupVenueScreen extends LitElement {
    * ({@link SetupVenueScreen.#onField}). It is separate because `#next` rebuilds `invalid` from
    * scratch on every press and returns early while that set is non-empty: a mark for a rule this
    * form cannot evaluate, folded into that set, would survive every rebuild and block Next forever.
+   *
+   * The intersection with `{ key: TextField }` is not decoration: assigning `SERVER_FIELDS[…]` to it
+   * is what makes the compiler check that every key the shared map names is a real field on this
+   * form. Proven by mutation — adding a key to `ServerFieldKey` that this screen has no field for
+   * fails typecheck with "Type 'ServerFieldKey' is not assignable to type 'TextField'".
    */
-  @state() private serverInvalid?: { readonly key: TextField; readonly message: string };
+  @state() private serverInvalid?: ServerField & { readonly key: TextField };
 
   /** Guards {@link SetupVenueScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
@@ -232,6 +206,27 @@ export class SetupVenueScreen extends LitElement {
       this.serverInvalid =
         this.invalidField === undefined ? undefined : SERVER_FIELDS[this.invalidField];
     }
+  }
+
+  /**
+   * Move the keyboard focus to the field the server refused, once, when the shell hands it down. The
+   * form is roughly sixteen controls long and both series codes sit at the bottom of it, so without
+   * this the operator is dropped on a freshly-mounted form scrolled to the top with the marked field
+   * off-screen and nothing said about it — and a screen reader announces nothing at all, because no
+   * focus moves and this screen deliberately renders no banner for a marked field. `wt-input`
+   * delegates focus, so this lands on the native input and the browser scrolls it into view.
+   */
+  override updated(changed: PropertyValues<this>): void {
+    if (!changed.has("invalidField") || this.serverInvalid === undefined) return;
+    const field = this.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete?: Promise<unknown> }
+    >(`[data-test=${this.serverInvalid.key}]`);
+    if (field === null) return;
+    // Awaiting the `wt-input`'s OWN first render, not just this screen's: a Lit child renders in a
+    // later microtask, so at this point the host exists but the native input focus is delegated to
+    // does not, and focusing the host would do nothing at all (measured — the first version of this
+    // left `shadowRoot.activeElement` null).
+    void Promise.resolve(field.updateComplete).then(() => field.focus());
   }
 
   /**

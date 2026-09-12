@@ -422,8 +422,29 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=legalName]")!.hasAttribute("invalid")).toBe(false);
   });
 
-  // The server names the operation description by its nested request path; this screen calls the same
-  // field `operationDescription`. The explicit map is what keeps the two spellings in step.
+  // Nothing else tells the operator that anything happened: this screen renders no banner for a
+  // server-marked field, and both series codes sit at the bottom of roughly sixteen controls, so on a
+  // normal viewport the mark is off-screen on arrival and a screen reader announces nothing. Moving
+  // focus is what makes the return visible — and `wt-input` delegates focus, so the browser scrolls
+  // the native input into view. Prove-by-deletion: drop `updated()` and this flips red.
+  it("moves focus to the refused field on arrival, so the operator sees where they landed", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "seriesCode",
+    });
+    const input = q(el, "[data-test=seriesCode]")!;
+    await new Promise((resolve) => setTimeout(resolve, 0)); // the focus waits on wt-input's render
+    expect(el.shadowRoot!.activeElement).toBe(input);
+  });
+
+  // A form with no server mark must not steal focus from wherever the operator was.
+  it("moves no focus when the server refused nothing", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(el.shadowRoot!.activeElement).toBeNull();
+  });
+
+  // The server names the operation description by its position in the request body; this screen calls
+  // the same field `operationDescription`. The shared map's `key` is what keeps the two in step.
   it("maps the server's nested field path onto this form's own field", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "location.operationDescription",

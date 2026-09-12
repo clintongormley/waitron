@@ -23,6 +23,7 @@ import type {
   SetupApi,
 } from "./api/client.js";
 import type { ConfigurationRequestDetail, RestoreRequestDetail } from "./events.js";
+import { SERVER_FIELDS } from "./server-fields.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
@@ -129,19 +130,6 @@ const VENUE_ERROR_MESSAGES: Record<string, string> = {
     "The series code and rectificative series code must differ.",
   "fiscal.regime_not_implemented": "That fiscal territory isn't supported yet.",
 };
-
-/**
- * The field paths the venue FORM owns, exactly as `apps/server/src/setup-api.ts`'s `parseVenue` and
- * the fiscal regime's venue-field seat (`packages/fiscal-verifactu/src/venue-fields.ts`) name them.
- * A `setup.request_invalid` naming one of these goes BACK to that form with the field marked; every
- * other field keeps the review-screen banner.
- */
-const VENUE_FORM_FIELDS = new Set([
-  "legalName",
-  "seriesCode",
-  "rectificativeSeriesCode",
-  "location.operationDescription",
-]);
 
 /**
  * Plain-English messages for the adopt failures the shell routes BACK to the `connect` screen (C2b).
@@ -411,10 +399,10 @@ export class SetupApp extends LitElement {
    *   `setup.provision_failed` is only that boundary's log tag, never a wire code). Re-POSTing the same
    *   data would just fail again, so route BACK to the `venue` form with a banner; the fix is editing,
    *   not retrying in place.
-   * - `setup.request_invalid` naming a field the venue FORM owns → back to `venue` with that field
-   *   marked and explained. The four fiscal text fields the regime refuses
-   *   (`packages/fiscal-verifactu/src/venue-fields.ts`) are rules this wizard cannot evaluate
-   *   itself, so the operator is returned to the field rather than shown a raw field path.
+   * - `setup.request_invalid` naming one of the four fields the fiscal regime refuses
+   *   (`./server-fields.ts`) → back to `venue` with that field marked, explained and focused. Those
+   *   are rules the wizard cannot evaluate itself, so the operator is returned to the field rather
+   *   than shown a raw field path.
    * - `setup.request_invalid` naming any other field → back to `review` with a banner naming
    *   `params.field`. Those fields their own screen does validate, so this stays a fallback.
    * - `setup.provisioning_secret_required` → back to `cert` to add the certificate.
@@ -446,9 +434,10 @@ export class SetupApp extends LitElement {
     switch (code) {
       case "setup.request_invalid": {
         const field = typeof error.params?.field === "string" ? error.params.field : undefined;
-        if (field !== undefined && VENUE_FORM_FIELDS.has(field)) {
+        // The same list the venue form marks and explains from, so a path can never route back to a
+        // form that has nothing to say about it.
+        if (field !== undefined && Object.hasOwn(SERVER_FIELDS, field)) {
           this.venueInvalidField = field;
-          this.venueError = undefined;
           this.screen = "venue";
           return;
         }
