@@ -28,9 +28,8 @@ export function renderTrustPage(input: TrustPageInput): string {
     ? `<p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">Download this box's certificate</a></p>
        <p>Download a fresh copy from this box. Install it using the instructions for your device below.
        This is the connection certificate, not your business's tax-agency certificate.</p>`
-    : `<p>This box uses an operator-supplied certificate; there is no box certificate to download.
-       If your browser shows a warning, ask whoever installed that certificate to check its trust,
-       expiry and the address you are opening.</p>`;
+    : `<p>No box certificate is available to download. If this box uses an operator-supplied certificate,
+       ask whoever installed it to check its trust, expiry and the address you are opening.</p>`;
 
   const osSteps = caAvailable
     ? `<section>
@@ -117,7 +116,9 @@ export function renderTrustPage(input: TrustPageInput): string {
     <p>If several certificates have the same name and you cannot identify this box's old entry,
     ask the installer to identify it before removing anything.</p>
   </section>`
-    : "";
+    : `<section id="replacement"><h2>If this box was re-imaged</h2>
+       <p>Ask whoever installed the box to confirm which certificate it now serves and how your device
+       should trust it. A certificate downloaded before the re-image may no longer apply.</p></section>`;
 
   return `<!doctype html>
 <html lang="en"><head>
@@ -146,9 +147,9 @@ but HTTPS can show a certificate warning before this page opens. Use the browser
 HTTP version of this local box if offered. If your browser or administrator forbids that, download the
 certificate on another device that can reach the box and transfer the file to this device.</p>
 <p>If a certificate warning remains after installation, check the address, your device's date and time,
-and the selected browser's trust settings. The instructions above include replacement after a re-image.</p>
+and the selected browser's trust settings. See the re-image guidance above if this box was replaced.</p>
 </section>
-<section class="go"><h2>3. Open Waitron</h2>
+<section class="go"><h2>${caAvailable ? "3" : "2"}. Open Waitron</h2>
 <p>After installing the certificate, reopen your browser and follow this link. If it still shows a warning,
 return to the instructions rather than entering setup details.</p>
 <p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">Continue to the secure site</a></p>

@@ -894,6 +894,16 @@ describe("startServer, against a real container as the deployment role", () => {
       const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
       expect(health.status).toBe(200);
 
+      const trust = await fetch(`https://127.0.0.1:${port}/setup/trust`, via);
+      expect(trust.status).toBe(200);
+      expect(await trust.text()).toContain("Connect to this Waitron box");
+      for (const path of ["/ca.crt", "/setup-api/ca.crt"]) {
+        const download = await fetch(`https://127.0.0.1:${port}${path}`, via);
+        expect(download.status).toBe(200);
+        expect(await download.text()).toBe(ca.toString());
+      }
+      expect((await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via)).status).toBe(404);
+
       // The control: a plain-HTTP dial to the SAME port is torn down mid-handshake, because the
       // listener speaks TLS now. This is the regression the phone proof hit, inverted.
       await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
@@ -1323,12 +1333,7 @@ describe("startServer, against a real container as the deployment role", () => {
   });
 
   it("setup mode serves the discovery JSON, the CA download, and the trust page over HTTPS (slice 3)", async () => {
-    // Slice 3's discovery surface is mounted in the SETUP branch only (a trading box's tills are
-    // already paired). It rides the same minted self-signed cert the shared setup path produces
-    // (`ensureBoxSecrets`), so every route is dialled over HTTPS trusting the box CA — read back the
-    // same way the setup-mode HTTPS test above does. This is the prove-by-deletion target for
-    // "setup-only": moving `mountDiscovery` into the trading branch makes `/setup-api/discovery` 404
-    // here (the setup catch-all answers 200 text/html, failing the JSON `toMatchObject` below).
+    // Requests trust the persisted box CA, exercising the real listener and boot route mounting.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-disc-"));
     const server = await startServer({
@@ -1424,6 +1429,13 @@ describe("startServer, against a real container as the deployment role", () => {
       // The box's OWN fallback leaf was minted too (the always-mint half), even though the operator's
       // cert is the one served — so a later boot that drops the operator vars still has a cert to serve.
       expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(true);
+      const discovery = await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via);
+      expect(await discovery.json()).toMatchObject({ caDownloadAvailable: false });
+      for (const path of ["/ca.crt", "/setup-api/ca.crt"]) {
+        expect((await fetch(`https://127.0.0.1:${port}${path}`, via)).status).toBe(404);
+      }
+      const help = await fetch(`https://127.0.0.1:${port}/setup/trust`, via);
+      expect(await help.text()).not.toContain('download="waitron-ca.crt"');
     } finally {
       await server.close();
       await close();
@@ -1821,13 +1833,8 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  it("trading mode does NOT mount the setup-only discovery routes (slice 3), and the trading surface is unchanged", async () => {
-    // Slice 3's discovery/CA/trust surface is mounted in the SETUP branch only. A provisioned box
-    // (all five WAITRON_TILL_*_ID + a credentials key, via KEY_ENV) mounts NONE of it: /setup-api/
-    // discovery is a bare Hono 404 (no setup routes, no till SPA catch-all here — WAITRON_TILL_APP_DIR
-    // is unset), while today's trading routes (/api/staff, /health) still answer exactly as before —
-    // the mDNS start/stop added to the shared prefix is the only trading-path change. The real
-    // multicast-dns socket this boot now starts is torn down by server.close() below (→ mdns.stop()).
+  it("trading mode serves public certificate help without setup discovery, alongside trading routes", async () => {
+    // No till SPA is configured, so an absent machine-discovery endpoint must return a real 404.
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -1844,7 +1851,7 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(disc.status).toBe(404);
       // And the CA download + trust page are equally absent in trading mode.
       expect((await fetch(`http://127.0.0.1:${port}/setup-api/ca.crt`)).status).toBe(404);
-      expect((await fetch(`http://127.0.0.1:${port}/setup/trust`)).status).toBe(404);
+      expect((await fetch(`http://127.0.0.1:${port}/setup/trust`)).status).toBe(200);
 
       // The deployment holds one tenant per database. The trading surface is unchanged: the
       // unauthenticated roster route answers this till's empty staff list in this database (200

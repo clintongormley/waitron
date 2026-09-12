@@ -45,7 +45,7 @@ it("serves the CA as a downloadable attachment", async () => {
   expect(await res.text()).toContain("BEGIN CERTIFICATE");
 });
 
-it("404s the CA download when the box has no CA (operator cert)", async () => {
+it("404s the CA download when the box has no CA", async () => {
   const d = await mkdtemp(join(tmpdir(), "disc-noca-"));
   dirs.push(d);
   const res = await appFor(d).request("/setup-api/ca.crt");
@@ -138,7 +138,7 @@ it("logs a non-ENOENT ca.crt read failure and still answers 404 no_box_ca", asyn
   expect(events.some((e) => e.level === "error" && e.event === "setup.ca_read_failed")).toBe(true);
 });
 
-it("keeps a certificate download on its route when HTTP is upgraded to HTTPS", async () => {
+it("serves the landing certificate path as an alias on the discovery app", async () => {
   const app = appFor(await stateDirWithCa());
   const res = await app.request("https://waitron.local/ca.crt");
   expect(res.status).toBe(200);

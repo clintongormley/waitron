@@ -141,6 +141,7 @@ describe("waitron.sh install (published main)", () => {
     expect(r.stdout).toContain("https://waitron.local/manage/email");
     expect(r.stdout).toContain("http://waitron.local:9110");
     expect(r.stdout).toContain("http://waitron.local/setup/trust");
+    expect(r.stdout).toContain("https://waitron.local/setup/trust");
   });
 });
 

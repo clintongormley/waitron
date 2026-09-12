@@ -13,11 +13,7 @@ afterEach(() => {
   for (const host of mounted.splice(0)) host.remove();
 });
 
-/**
- * A fake {@link SetupApi} covering the only method the shell calls on boot (`getStatus`). `provision`
- * is stubbed so a later step could call it; a test overrides either with its own `vi.fn()`. Cast
- * through `unknown` because the shell touches only this surface, mirroring the dashboard's `stubApi`.
- */
+/** Default boot reads and successful write responses; each test overrides the request it exercises. */
 function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): SetupApi {
   return {
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
@@ -166,6 +162,54 @@ describe("setup-app", () => {
       (await screenHost(el, "connection")).shadowRoot!.querySelector("[role=alert]"),
     ).toBeNull();
   });
+
+  it.each([true, false])(
+    "releases a pending connection check when reattached before settlement: %s",
+    async (reattachFirst) => {
+      let settle!: (status: SetupStatus) => void;
+      const status: SetupStatus = {
+        provisioned: false,
+        environment: "preproduction",
+        needs: ["venue"],
+      };
+      const getStatus = vi
+        .fn()
+        .mockResolvedValueOnce(status)
+        .mockImplementationOnce(
+          () =>
+            new Promise<SetupStatus>((resolve) => {
+              settle = resolve;
+            }),
+        )
+        .mockResolvedValue(status);
+      const getDiscovery = vi.fn().mockResolvedValue({ caDownloadAvailable: true });
+      const el = await mountSetupApp(stubApi({ getStatus, getDiscovery }));
+      const parent = el.parentElement!;
+      (await screenHost(el, "connection"))
+        .shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!
+        .click();
+      await flush(el);
+      el.remove();
+      if (reattachFirst) parent.appendChild(el);
+      settle(status);
+      await flush(el);
+      if (!reattachFirst) {
+        parent.appendChild(el);
+        await flush(el);
+      }
+      expect(getDiscovery).toHaveBeenCalledOnce();
+      expect(getStatus).toHaveBeenCalledTimes(2);
+      if (!reattachFirst) {
+        const control = (
+          await screenHost(el, "connection")
+        ).shadowRoot!.querySelector<HTMLButtonElement>("[data-test=continue]")!;
+        expect(control.disabled).toBe(false);
+        control.click();
+        await flush(el);
+      }
+      expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
+    },
+  );
 
   it("preserves the draft and opens connection help separately after a failed provision", async () => {
     const el = await mountSetupApp(

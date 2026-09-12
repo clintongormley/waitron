@@ -292,7 +292,7 @@ const BACKUP_ENV_KEYS = [
  * same, and `waitron.sh`'s QR URL. `scripts/deploy-image-env.test.ts` reads this line as text and
  * pins all three to it.
  */
-const BOX_HOSTNAME = "waitron.local";
+export const BOX_HOSTNAME = "waitron.local";
 
 /**
  * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather
@@ -923,6 +923,25 @@ export async function startServer(
     } else await next();
   });
 
+  // Help and certificate downloads precede every mode-specific gate and SPA catch-all.
+  // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
+  mountDiscovery(
+    app,
+    {
+      stateDir: config.stateDir,
+      hostname: BOX_HOSTNAME,
+      port: config.httpPort,
+      secure:
+        config.till === undefined ||
+        config.tls !== undefined ||
+        mintedBoxLeaf(config.stateDir) !== undefined,
+      listIpv4: boxAddresses,
+      discoveryEnabled: config.till === undefined,
+      serveBoxCa: config.tls === undefined,
+    },
+    log,
+  );
+
   if (config.till === undefined) {
     // SETUP MODE (slice 1b/2a/2b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID
     // are set). It serves ONLY `/health` and the unauthenticated setup surface: no reconciler/duty, no
@@ -954,24 +973,6 @@ export async function startServer(
     // `startServer`'s own `() => new Date()`, so the cert's validity window is anchored to real boot
     // time. The trading `else` branch reads `config.tls` unchanged — untouched.
     //
-    // The discovery + CA-serving surface (slice 3): GET /setup-api/ca.crt (the CA 2a minted),
-    // GET /setup-api/discovery, and GET /setup/trust. Registered BEFORE mountSetup (below, inside the
-    // provisioning try) so the GET * placeholder catch-all inside mountSetup cannot shadow these paths
-    // (Hono is first-match-wins). Setup-mode only — a trading box needs neither (its tills are already
-    // paired). `secure: true` — the box serves the setup surface over HTTPS (2a), so every reach URL is
-    // https. Registered here, before the provisioning try, because it needs none of that try's
-    // resources (the owner pool / key ring) — only config.
-    mountDiscovery(
-      app,
-      {
-        stateDir: config.stateDir,
-        hostname: BOX_HOSTNAME,
-        port: config.httpPort,
-        secure: true,
-        listIpv4: boxAddresses,
-      },
-      log,
-    );
     // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
     // dir, a missing/unreadable `secrets.env`, or `startListening` -> `buildServeOptions` ->
     // `readFileSync` on a missing/unreadable operator TLS file) closes `db` before it propagates —

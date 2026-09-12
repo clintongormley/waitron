@@ -63,3 +63,16 @@ it("covers common operating systems, browser stores and replacement certificates
   expect(html).toContain("old certificate");
   expect(html).toContain("HTTPS");
 });
+
+it("gives operator-certificate guidance without referring to missing instructions", () => {
+  const html = renderTrustPage({
+    reachUrls: [],
+    caAvailable: false,
+    caDownloadPath: "/ca.crt",
+    httpsUrl: "https://waitron.local",
+  });
+  expect(html).not.toContain("3. Open Waitron");
+  expect(html).not.toContain("The instructions above include replacement");
+  expect(html).toContain("If this box was re-imaged");
+  expect(html).toContain("whoever installed");
+});

@@ -62,6 +62,11 @@ two collide, and a `docker compose up` here would reconcile that running project
 `COMPOSE_PROJECT_NAME=waitron-<something>` when exercising this file on such a machine; on a box the
 collision cannot arise.
 
+If HTTP is disabled, use the installer's **Secure help** address, `https://waitron.local/setup/trust`.
+The main listener serves this guide during setup, trading, pending adoption and boot recovery.
+While the listener presents your own TLS certificate, the guide directs you to whoever installed
+it. It does not offer the box's fallback CA, which cannot certify that connection.
+
 ## Updating and operating
 
 ```bash

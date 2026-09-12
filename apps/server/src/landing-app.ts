@@ -31,7 +31,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
   const app = new Hono();
 
   // Does the box have its own CA to serve? A page view is not a deliberate download, so this collapses
-  // ENOENT (operator-cert box) and any other read failure alike to `false` — the page just shows "no
+  // ENOENT and any other read failure alike to `false` — the page just shows "no
   // box CA" rather than logging. The `/ca.crt` route below is the deliberate action, so it
   // distinguishes the two error classes. Same split as `discovery-api.ts`.
   const caExists = (): Promise<boolean> =>
@@ -56,10 +56,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
     try {
       pem = await readFile(caPath, "utf8");
     } catch (error) {
-      // ENOENT is the ordinary case — this box uses an operator-supplied certificate, so there is no
-      // box CA to hand out; unlogged. Any OTHER read failure (EACCES, EISDIR, …) of this box-owned
-      // path is a misconfiguration worth one line, but STILL the same `no_box_ca` 404 to the LAN
-      // caller: this route never 500s and never leaks fs detail. Same posture as `discovery-api.ts`.
+      // Missing files need no operator log. Other read failures are logged without exposing paths.
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT") {
         // `code` is optional on the error TYPE, but every fs read failure this route can hit sets it,
@@ -71,7 +68,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
       return c.json(
         {
           error: "no_box_ca",
-          message: "This box uses an operator-supplied certificate; no CA download is needed.",
+          message: "No box CA is available for this connection.",
         },
         404,
       );

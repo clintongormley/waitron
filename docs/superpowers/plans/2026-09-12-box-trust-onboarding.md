@@ -40,3 +40,26 @@ Design: [Connect to a box before entering setup details](../specs/2026-09-12-box
   its complete coverage suite; production setup was rebuilt afterwards.
 - Physical OS/browser certificate installation and replacement remain pending in `docs/ui-review.md`.
   No venue box was re-imaged or deployed, and no OS trust store was changed by these checks.
+
+## Finish-branch review, 2026-09-12
+
+- The isolated Claude run-it review took 185 seconds. Four findings were accepted: missing public
+  routes outside setup, incomplete no-CA guidance, alias tests named more broadly than they measured,
+  and a missing HTTPS installer fallback. Real boot checks additionally exposed the recovery listener
+  and operator TLS's persisted fallback CA; public routes now follow the active listener's certificate.
+- Before the fixes, the selected server tests failed 6 cases (88 passed): trading and adoption guide
+  routes were absent, recovery returned its catch-all page, operator TLS advertised the fallback CA,
+  and no-CA guidance referred to missing steps. The fixed run passed 108 tests across boot,
+  boot.mirror, node-entry, trust-page, discovery-api and landing-listener. Commands/logs:
+  `/tmp/waitron-b1-review-{red,green}.log`.
+- `pnpm exec vitest run scripts/waitron-sh.test.mjs` failed the secure-link assertion before the fix
+  (14 passed), then passed all 15. `pnpm --filter @waitron/server typecheck` passed after the fixes.
+- Rejected the suggested remount/stuck-button defect: `pnpm --filter @waitron/setup test
+  src/setup-app.test.ts` passed 71 tests, including detach/reattach both before and after a pending
+  Continue settles. The discovery read runs once and the button becomes usable; `firstUpdated`, not
+  `connectedCallback`, starts the initial read. The review's surviving finally-guard mutation is
+  retained as a coverage limitation, not evidence of that defect.
+- The driver read the base-to-tip documentation, deployment procedure, shared test instructions and
+  adjacent certificate-route comments; corrected stale setup-only and operator-CA claims.
+- Review and token artifacts: `/tmp/waitron-b1-finish-7qszib6u/review.md`, `.timing`, `.usage`.
+  Physical OS trust acceptance remains pending; the review did not perform those system operations.

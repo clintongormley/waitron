@@ -560,7 +560,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     });
   }, 60_000);
 
-  it("boots adoption-pending on an EMPTY database with a pending file, serving only /health + /api/box/status", async () => {
+  it("boots adoption-pending on an EMPTY database with status and public certificate help", async () => {
     // C6 / derived fact 1: an adopted mirror restarts while its native initial copy is still running,
     // so the tenant rows are absent. A pending-adoption.json is present. Boot must enter the
     // adoption-pending branch and serve a minimal status surface WITHOUT touching tenant-scoped rows.
@@ -619,6 +619,10 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       const status = await fetch(`${base}/api/box/status`);
       expect(status.status).toBe(200);
       expect(await status.json()).toEqual({ adoption: "pending" });
+      const trust = await fetch(`${base}/setup/trust`);
+      expect(trust.status).toBe(200);
+      expect(await trust.text()).toContain("Connect to this Waitron box");
+      expect((await fetch(`${base}/setup-api/discovery`)).status).toBe(404);
 
       // No mirror ambient session / dashboard read path is mounted: a dashboard read that the normal
       // mirror boot answers via the ambient viewer is unreachable here (no `set-cookie`, and the gated

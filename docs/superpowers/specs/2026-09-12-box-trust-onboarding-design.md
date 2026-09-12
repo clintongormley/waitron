@@ -58,3 +58,10 @@ Accessed 2026-09-12. Short source quotations establish the boundary; the UI para
 The old-CA removal plus full Chrome quit procedure comes from the owner's recorded box incident in
 `docs/backlog.md` B1. This branch does not claim that every OS or every certificate replacement needs
 all those recovery steps.
+
+## Review clarification, 2026-09-12
+
+Public guide/download routes belong on the main listener before setup, trading and adoption gates,
+and before the recovery page's catch-all. Machine discovery remains setup-only. Disable box CA
+availability and downloads when operator TLS is active, even when fallback box secrets exist.
+The installer also prints the HTTPS help address for installations without the HTTP landing listener.

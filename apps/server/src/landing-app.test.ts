@@ -78,8 +78,7 @@ describe("landing app", () => {
     }
   });
 
-  // Operator-cert box: no box CA. The page omits the download link (shows the operator-cert note) and
-  // the download route 404s `no_box_ca` — the same all-errors-collapse posture as discovery-api.
+  // Missing CA files remove the download offer and return the same no_box_ca response.
   it("omits the download link and 404s /ca.crt when there is no box CA", async () => {
     const dir = stateDirWithoutCa();
     try {
@@ -127,7 +126,7 @@ describe("landing app", () => {
   });
 });
 
-it("serves the same guide and download paths before and after an HTTPS upgrade", async () => {
+it("serves the discovery guide and certificate paths as aliases on the landing app", async () => {
   const dir = stateDirWithCa();
   try {
     const app = buildLandingApp({
