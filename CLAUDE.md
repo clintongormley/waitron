@@ -184,11 +184,13 @@ Traps, each of which cost a round trip:
   headroom, never by a count: before a heavy run check free memory (`memory_pressure | grep free`)
   and the heaviest processes (`ps -axo rss,command | sort -nr | head`), then scale
   `--workspace-concurrency` to what is free. Receipt: 77% of 64 GB free tonight with two review
-  sessions, four vitest workers and two Chromiums running. Chromium cannot launch
-  inside Codex's macOS sandbox
+  sessions, four vitest workers and two Chromiums running. **Chromium's launch depends on the
+  Codex seat's PERMISSIONS, not on Codex.** Sandboxed, it cannot start
   (`bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer: Permission denied (1100)`,
-  measured 2026-09-06), so a run that reaches a browser package is driven from the host, never
-  from a Codex seat.
+  measured 2026-09-06); with host permissions it runs the real browser suites normally (the owner
+  ran a browser package green from Codex, 2026-09-12). So a browser run needs a host-permissioned
+  seat — not necessarily a Claude one, and the earlier blanket "never from a Codex seat" was the
+  sandboxed case stated too widely.
 - **Only the `core` migration set has an upgrade test; every module set is still migrated from a
   VIRGIN database only, so a green gate is no evidence that a module set can upgrade a box.** Drizzle
   applies a set's PENDING migrations in one transaction, and PostgreSQL refuses to name a label added
@@ -684,7 +686,9 @@ Fable 5.1 is opt-in for the brainstorm plus two short dispatched reads (a spec t
 round five) and never drives execution — a hook denies it; dispatched seats run on Opus 5; Codex
 (`gpt-6-astra` at medium effort — measured against Sol on one commit with one bounded brief: faster,
 fewer tokens, and it found the real defect that Sol at low missed; the process log is the tripwire)
-holds exactly one seat, `/finish-branch`'s run-it reviewer, dispatched through
+holds exactly one seat **in a Claude-driven session** — when Codex drives, the roles reverse and
+Codex implements while Claude reviews (owner, 2026-09-12), so a Codex implementation is not a rule
+violation; ask who is driving. That one seat is `/finish-branch`'s run-it reviewer, dispatched through
 `~/workspace/tools/codex-seat.sh review-run`, which is the second model family on the diff now that
 Copilot's automatic review is off (its rule was removed from the main ruleset 2026-09-06). The
 repository carries no Codex file: the seat script passes the model, the effort, the doc-size cap
