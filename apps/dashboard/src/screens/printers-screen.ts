@@ -382,13 +382,15 @@ export class PrintersScreen extends LitElement {
 
   // Serialize opens and closes so a late open cannot leave pairing enabled after closing the modal.
   #setPairing(open: boolean, passive = false): Promise<void> {
+    const epoch = this.#agentEpoch;
     this.#pairingOperations = this.#pairingOperations.then(async () => {
       try {
         if (open) {
-          if (!this.addingAgent || !this.isConnected) return;
+          if (epoch !== this.#agentEpoch || !this.addingAgent || !this.isConnected) return;
           this.#renewPairingAt = Date.now() + 60_000;
           const api = passive ? (this.api.background ?? this.api) : this.api;
           const result = await (passive ? api.renewPairingMode() : api.openPairingMode());
+          if (epoch !== this.#agentEpoch) return;
           this.pairing = {
             open: true,
             openUntil: result.openUntil,
@@ -398,6 +400,7 @@ export class PrintersScreen extends LitElement {
           await this.api.closePairingMode();
         }
       } catch (error) {
+        if (epoch !== this.#agentEpoch) return;
         this.errorKey = codeOf(error);
         this.scanningAgents = false;
       }
@@ -419,6 +422,11 @@ export class PrintersScreen extends LitElement {
     this.addingAgent = false;
     this.#agentEpoch++;
     this.#agentReadInFlight = false;
+    this.pairing = {
+      open: false,
+      openUntil: null,
+      refusedRecently: this.pairing?.refusedRecently ?? 0,
+    };
     this.openRequestId = null;
     clearInterval(this.#agentTimer);
     this.#agentTimer = undefined;

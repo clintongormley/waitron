@@ -6,8 +6,10 @@ with Print Agents if none are active, Printers if there are active agents but no
 and Print Queue otherwise. A selected tab takes precedence over these defaults, survives live
 updates, and travels in `/manage/printers/view/<key>` for browser navigation.
 
-Print Queue includes every queued, printing and failed job, plus the latest 100 completed jobs
-selected by delivery time, with missing delivery times ordered last. Rows remain ordered by creation time, newest first. Each status has
+Print Queue includes every queued, printing and retryable failed job, plus the latest 100 completed jobs
+selected by delivery time, with missing delivery times ordered last. Jobs that have exhausted their
+retries are limited to the latest 100 by creation time, so historical failures do not accumulate in
+every live response. The screen explains both history limits. Rows remain ordered by creation time, newest first. Each status has
 text and a coloured dot: grey for queued, blue for printing, green for done and red for failed.
 The endpoint keeps its existing tenant filter and omits job payloads.
 
@@ -38,7 +40,7 @@ reads, pairing lifetime and late replies, modal dimensions and small-screen cont
 retained printers, and unfinished jobs older than the completed-history limit. Physical discovery
 and paper output require a connected box and are outside these browser/API fixtures.
 
-Validation completed on 2026-09-12: `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and
+Initial implementation validation on 2026-09-12, before the subsequent rebase and review fixes: `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and
 `TESTCONTAINERS_RYUK_DISABLED=true pnpm test` passed. Complete `test:coverage` runs passed for
 `@waitron/dashboard` (1,593 tests), `@waitron/ui` (379 tests) and `@waitron/server` (2,974 tests),
 with their configured thresholds enforced. Chromium snapshots of the queue and both Add dialogs

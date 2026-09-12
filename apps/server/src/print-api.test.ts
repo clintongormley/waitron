@@ -1263,6 +1263,10 @@ describe("mountPrintApi — management: recent jobs", () => {
       insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
       select ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'), 'done', '2199-01-01'
       from generate_series(1, 101)`);
+    await suite.db.execute(sql`
+      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
+      select ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'), 'failed', 5, '2199-01-01'
+      from generate_series(1, 101)`);
     const foreignPreview = await send(
       app,
       "GET",
@@ -1340,6 +1344,58 @@ describe("mountPrintApi — management: recent jobs", () => {
       const created = jobs.map((job) => Date.parse(job.createdAt));
       expect(created).toEqual([...created].sort((a, b) => b - a));
       expect(jobs.every((job) => !("payload" in job))).toBe(true);
+    } finally {
+      await suite.db.execute(sql`delete from print_jobs where printer_id = ${printerId}`);
+    }
+  });
+
+  it("bounds exhausted failures without hiding queued, printing or retryable jobs", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    try {
+      const pending = await suite.db.execute<{ id: string }>(sql`
+        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
+        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
+          attempts, '2020-01-01'
+        from (values ('queued', 0), ('printing', 0), ('failed', 4)) as jobs(status, attempts)
+        cross join generate_series(1, 101)
+        returning id`);
+      const failed = await suite.db.execute<{ id: string; created_at: string }>(sql`
+        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
+        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'failed', 5,
+          '2099-01-01'::timestamptz + n * interval '1 second'
+        from generate_series(1, 101) as jobs(n)
+        returning id, created_at`);
+      const response = await send(app, "GET", "/management-api/print-jobs", {
+        cookie: managerCookie,
+      });
+      expect(response.status).toBe(200);
+      const rows = (await response.json()) as {
+        id: string;
+        printerId: string;
+        status: string;
+        attempts: number;
+      }[];
+      const mine = rows.filter((row) => row.printerId === printerId);
+      expect(mine).toHaveLength(403);
+      expect(
+        mine
+          .filter((row) => row.status !== "failed" || row.attempts < 5)
+          .map((row) => row.id)
+          .sort(),
+      ).toEqual(pending.rows.map((row) => row.id).sort());
+      expect(
+        mine
+          .filter((row) => row.status === "failed" && row.attempts >= 5)
+          .map((row) => row.id)
+          .sort(),
+      ).toEqual(
+        failed.rows
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+          .slice(0, 100)
+          .map((row) => row.id)
+          .sort(),
+      );
     } finally {
       await suite.db.execute(sql`delete from print_jobs where printer_id = ${printerId}`);
     }

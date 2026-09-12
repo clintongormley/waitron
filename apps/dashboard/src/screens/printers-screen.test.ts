@@ -2136,3 +2136,53 @@ it("retains the refused-request hint when pairing opens automatically", async ()
   await flush(el);
   expect(text(el, "[data-test=pairing-refused]")).toContain("2");
 });
+
+it("ignores a previous opening's pairing failure while the reopened dialog scans", async () => {
+  let rejectOld!: (error: unknown) => void;
+  const api = stubApi({
+    openPairingMode: vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectOld = reject;
+          }),
+      )
+      .mockImplementation(() => new Promise(() => {})),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  await selectTab(el, "agents");
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  q(el, "[data-test=cancel-new-agent]")!.click();
+  await flush(el);
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  rejectOld({ code: "printer.not_found" });
+  await flush(el);
+  expect(q(el, "[role=alert]")).toBeNull();
+  expect(q(el, "[data-test=scan-agents]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
+    true,
+  );
+});
+
+it("does not show a previous pairing deadline after reopening before the next open completes", async () => {
+  const api = stubApi({
+    openPairingMode: vi
+      .fn()
+      .mockResolvedValueOnce({ openUntil: OPEN.openUntil })
+      .mockImplementation(() => new Promise(() => {})),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  await selectTab(el, "agents");
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  expect(q(el, "[data-test=pairing-until]")).not.toBeNull();
+  q(el, "[data-test=cancel-new-agent]")!.click();
+  await flush(el);
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  expect(q(el, "[data-test=pairing-until]")).toBeNull();
+});

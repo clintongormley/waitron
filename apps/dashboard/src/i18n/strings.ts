@@ -48,7 +48,8 @@ export const en = {
   "printers.delivered_at": "Delivered at",
   "printers.view_job": "View printout",
   "printers.resend_job": "Re-send job",
-  "printers.jobs_limit": "All waiting and failed jobs, plus the latest 100 completed jobs.",
+  "printers.jobs_limit":
+    "All jobs awaiting delivery, plus the latest 100 printed jobs and 100 failed jobs with no retries left.",
   "printers.host_required": "Enter a host name or IP address",
   "printers.port_invalid": "Enter a whole port number from 1 to 65535",
   "printers.device_required": "Enter the device ID",
@@ -984,7 +985,8 @@ export const es: Record<StringKey, string> = {
   "printers.delivered_at": "Entregado el",
   "printers.view_job": "Ver impresión",
   "printers.resend_job": "Reenviar trabajo",
-  "printers.jobs_limit": "Todos los trabajos pendientes y fallidos, y los últimos 100 completados.",
+  "printers.jobs_limit":
+    "Todos los trabajos pendientes de entrega, los últimos 100 impresos y los últimos 100 fallidos sin más reintentos.",
   "printers.host_required": "Introduce un nombre de equipo o una dirección IP",
   "printers.port_invalid": "Introduce un número entero de puerto entre 1 y 65535",
   "printers.device_required": "Introduce el ID del dispositivo",

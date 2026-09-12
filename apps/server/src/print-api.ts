@@ -13,7 +13,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   asAppUser,
@@ -802,6 +802,18 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.status, "done")))
           .orderBy(sql`${printJobs.deliveredAt} desc nulls last`, desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
+        const recentFailed = tx
+          .select({ id: printJobs.id })
+          .from(printJobs)
+          .where(
+            and(
+              eq(printJobs.tenantId, deps.cfg.tenantId),
+              eq(printJobs.status, "failed"),
+              gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
+            ),
+          )
+          .orderBy(desc(printJobs.createdAt), desc(printJobs.id))
+          .limit(RECENT_JOBS_LIMIT);
         return tx
           .select({
             id: printJobs.id,
@@ -817,7 +829,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .where(
             and(
               eq(printJobs.tenantId, deps.cfg.tenantId),
-              or(ne(printJobs.status, "done"), inArray(printJobs.id, recentCompleted)),
+              or(
+                and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
+                and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+                inArray(printJobs.id, recentCompleted),
+                inArray(printJobs.id, recentFailed),
+              ),
             ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));

@@ -6,7 +6,7 @@
    widen only the hardware Add modals through the shared modal sizing option, and show status dots.
 3. Tie pairing admission and passive join polling to the Add agent dialog. Serialize window changes
    and discard stale reads. Keep printer discovery's existing scan window and disabled-record reuse.
-4. Return all unfinished jobs alongside the bounded completed history. Keep tenant filtering and
+4. Return all jobs awaiting delivery alongside 100 recent completions and 100 failures with no retries left. Keep tenant filtering and
    payload omission. Align Disable wording and document the primary-only automatic enrolment limit.
 5. Run focused regressions, changed-package coverage, and the repository gate. Report results and
    readiness for `finish-branch`; do not merge.
