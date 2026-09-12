@@ -6,6 +6,7 @@ import "./wt-spinner.js";
 
 export type WtButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 export type WtButtonSize = "sm" | "md" | "lg";
+export type WtButtonAlign = "center" | "start";
 
 @customElement("wt-button")
 export class WtButton extends LitElement {
@@ -95,7 +96,7 @@ export class WtButton extends LitElement {
 
   @property({ reflect: true }) variant: WtButtonVariant = "secondary";
   @property({ reflect: true }) size: WtButtonSize = "md";
-  @property({ reflect: true }) align: "center" | "start" = "center";
+  @property({ reflect: true }) align: WtButtonAlign = "center";
   @property({ type: Boolean, reflect: true }) disabled = false;
   /** An in-progress action: the button is disabled, marked `aria-busy`, and a decorative spinner
    * leads the label. The label stays visible — and is the one thing announced — so the caller swaps

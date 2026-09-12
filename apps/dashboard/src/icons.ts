@@ -1,7 +1,10 @@
 /**
  * The dashboard's registered icon set — see registerIcons() in @waitron/ui and "Icons" in
- * docs/developers/design-system.md. Each is a plain geometric shape at wt-icon's 16x16 viewBox, not
- * borrowed from an external icon library, so there is nothing to attribute or keep in sync.
+ * docs/developers/design-system.md. Each is a plain geometric shape at wt-icon's 16x16 viewBox,
+ * hand-plotted or computed directly rather than imported from an icon library's asset files — with
+ * one exception, `person` (see below), whose path numbers were scaled from a published glyph's own
+ * coordinates rather than plotted independently. Whether that needs its own attribution is an open
+ * question this comment does not resolve; flag it rather than assuming either answer.
  *
  * - hamburger: the sidebar drawer toggle (three bars — opens the whole app's navigation).
  * - kebab: wt-row-actions' per-row "more actions" trigger (three dots — a small, local menu, not
@@ -12,7 +15,7 @@
  *   computed with trigonometry at 16x16, verified by rendering it large before use.
  * - person: the banner's account-menu trigger (head + shoulders bust). Scaled by 2/3 from Material
  *   Design's 24x24 "person" glyph's own path numbers (a uniform scale keeps its bezier curves
- *   correct), not hand-plotted.
+ *   correct) — the one icon here derived from a specific external source rather than plotted fresh.
  */
 export const DASHBOARD_ICONS: Record<string, string> = {
   hamburger: "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",

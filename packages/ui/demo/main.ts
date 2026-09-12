@@ -17,6 +17,11 @@ import "../src/components/wt-row-actions.js";
 registerIcons({
   check: "M2 8 L6 12 L14 4",
   cart: "M1 2 h3 l2 8 h7 l2 -6 H5",
+  // wt-row-actions requires its consuming app to register this — an unregistered name renders
+  // nothing, leaving its trigger a blank button (apps/dashboard/src/icons.ts registers the same
+  // path for the real app).
+  kebab:
+    "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
 });
 
 const panel = (theme: "light" | "dark") => `
@@ -53,7 +58,7 @@ const panel = (theme: "light" | "dark") => `
         <div class="row">
           <h3>Team</h3>
           <wt-row-actions label="Team actions">
-            <wt-button class="create-member">Create team member</wt-button>
+            <wt-button align="start" class="create-member">Create team member</wt-button>
           </wt-row-actions>
         </div>
         <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
@@ -143,8 +148,9 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
       align: "end",
       cell: (row: { name: string; role: string }) => html`
         <wt-row-actions label=${`Actions for ${row.name}`}>
-          <wt-button @click=${() => openMember(row)}>Edit</wt-button>
+          <wt-button align="start" @click=${() => openMember(row)}>Edit</wt-button>
           <wt-button
+            align="start"
             variant="danger"
             @click=${() => {
               table.rows = table.rows.filter((member) => member !== row);

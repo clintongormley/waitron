@@ -213,10 +213,12 @@ unfiltered `main` run, not a wrong hook.
   are visibly marked; an attempted invalid submission shows explanatory text beside every bad field
   and one localized “problem with this form” summary. Every input has a semantic `name` (plus the
   standard `autocomplete` purpose when one exists), never a generated widget id as its identity.
-  Password reveal buttons use the input's `end` slot and an action-specific accessible label.
-  An inline confirmation suspends the enclosing form's Save and implicit Enter submission until
-  resolved. The user-admin review reproduced Enter saving details behind a pending login-reset
-  confirmation (`apps/dashboard/src/widgets/person-edit.test.ts`, “suspends detail submission…”).
+  Password reveal buttons use the input's `end` slot and an action-specific accessible label. An
+  inline confirmation embedded IN a form suspends that form's Save and implicit Enter submission
+  until resolved — no current form embeds one (person-edit.ts's own confirmation moved out to the
+  row's kebab menu as a separate `wt-dialog`, outside any form, on `ui-overhaul`), so there is no
+  live instance to point at, but the shape can recur the next time a confirmation lands inside a
+  form rather than beside one.
   `wt-form-actions` keeps the primary action bottom-right and Cancel/Back bottom-left. Optional field
   explanations use `wt-help-tooltip`, whose button closes on outside click or Escape. Cost: the
   dashboard login exposed `wt-input-N` to password safes and disabled incomplete forms without saying
@@ -249,9 +251,10 @@ unfiltered `main` run, not a wrong hook.
   combinations. Cost: the live-updates run-it review found this unguarded coupling.
 - **The dashboard banner is persistent identity chrome.** Put it at the very top of the page at full
   width, with the menu and content underneath. Show the canonical Waitron lockup and the deployment
-  tenant's legal name on login and every authenticated screen. Put Logout at the trailing edge only
-  when a session exists. Use the tenant name, not a location: a deployment database has one tenant
-  and that tenant can contain several locations (`packages/db/src/schema/tenants.ts`).
+  tenant's legal name on login and every authenticated screen. Put the account menu (a person-icon
+  `wt-row-actions` popover holding Account settings and Log out) at the trailing edge only when a
+  session exists. Use the tenant name, not a location: a deployment database has one tenant and
+  that tenant can contain several locations (`packages/db/src/schema/tenants.ts`).
 - **Dashboard sign-in matches the browser's `Accept-Language` preferences.** The public locale
   response carries a separate `loginDefault`; `venueDefault` still describes the venue and remains
   the fallback for signed-in people without a saved language. Returning to login after logout or
