@@ -1740,6 +1740,37 @@ wizard makes harder than it needs to be; each one names what it does today.
    remaining design question is where the made-up values are applied — the screen skipping fields, or
    the shell patching defaults into the draft — and how the review step shows what was chosen.
 
+**“What this location does” is the wrong question for a required tax-agency field** (owner asked
+why we ask it, 2026-09-12; not started). The answer is stored on the location
+(`operation_description`, `NOT NULL`, `packages/db/src/schema/tenants.ts`) and copied onto every
+invoice record Waitron files as AEAT's `DescripcionOperacion` — `packages/core/src/record-sale.ts`
+reads it back and `packages/fiscal-verifactu/src/backend.ts` puts it on the wire, and corrections and
+substitutions do the same. AEAT's only rules are at most 500 characters and no control characters
+(`packages/verifactu/src/validate.ts`). Three problems with collecting it the way the wizard does:
+
+- *The wording asks for the wrong thing.* AEAT wants a description of the transaction being invoiced;
+  the question invites a description of the business, so an operator writes “Deli and coffee shop”
+  and that becomes the description of every sale. Our own fixture has the right shape — “Venta en
+  establecimiento”, a sale on the premises (`apps/server/src/testing/venue-fixtures.ts`) — and the
+  provisioning CLI at least calls it “operation description”
+  (`packages/provisioning/src/cli.ts`), which only helps somebody who already knows the term.
+- *It is a constant, not a question.* The same string is filed on every sale from that location
+  forever, and it goes to the Spanish tax agency, so it should be Spanish regardless of which one or
+  two invoice languages the venue picked. That makes it a setting with a sensible default the
+  operator can override, not a blank box on the way in.
+- *Nothing can change it afterwards.* The only write to that column outside setup is the
+  Prepare-to-Live configuration transfer (`apps/server/src/configuration-transfer.ts`); no dashboard
+  screen edits it. So the promise at the top of the same wizard screen — “You can change these later”
+  — is false for this field, and a wrong answer stays on every future invoice until somebody edits
+  the database by hand.
+
+Wanted: a default, better wording explaining what the tax agency does with it, and a dashboard screen
+that can change it. The design question is where the default belongs. It is not really a country
+fact — `DescripcionOperacion` is a Veri\*Factu field, and a no-filing regime has no equivalent — so it
+probably belongs to the fiscal contribution rather than to `CountryPack`, which today carries no
+defaults seat of this kind (`packages/country/src/country.ts`). For the demo path it should not be
+asked at all (see the wizard follow-ups above).
+
 **Constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid real-cert):**
 
 - **A setup box's `/health` returns 503 by design** (no duty loop → not trading-healthy); a
