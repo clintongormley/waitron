@@ -807,6 +807,349 @@ describe("printers-screen", () => {
 
   // ── Printers: discovered-device registration (central printer provisioning §10) ────────────────────────────
 
+  it("Enter checks the address once while pending and allows retry after rejection", async () => {
+    let reject!: (reason: unknown) => void;
+    const probePrinterAddress = vi.fn().mockImplementation(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ probePrinterAddress }),
+    });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    const control = q(el, "[data-test=probe-host]") as import("@waitron/ui").WtInput;
+    await control.updateComplete;
+    const input = control.shadowRoot!.querySelector("input")!;
+    input.value = "192.168.20.247";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(probePrinterAddress).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard("{Enter}");
+    q(el, "[data-test=probe-printer]")!.click();
+    expect(probePrinterAddress).toHaveBeenCalledExactlyOnceWith({
+      host: "192.168.20.247",
+      port: 9100,
+    });
+    expect(q(el, "[data-test=probe-printer]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
+      true,
+    );
+    reject({ code: "printer.probe_busy" });
+    await flush(el);
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(probePrinterAddress).toHaveBeenCalledTimes(2);
+    reject({ code: "printer.probe_busy" });
+    await flush(el);
+  });
+
+  it("checks an explicit printer address while automatic discovery is running, then offers Add", async () => {
+    const requestedAt = Date.now();
+    const device: DiscoveredPrinter = {
+      agentId: "a1",
+      agentName: "Kitchen agent",
+      transport: "network_tcp",
+      host: "192.168.20.247",
+      port: 9200,
+      alreadyRegistered: false,
+      printerId: null,
+      lastSeenAt: new Date(requestedAt).toISOString(),
+    };
+    const probePrinterAddress = vi.fn().mockResolvedValue({
+      host: device.host,
+      port: device.port,
+      requestedAt,
+      expiresAt: requestedAt + 30000,
+    });
+    const api = stubApi({ probePrinterAddress });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    const address = q(el, "[data-test=probe-host]");
+    expect(address).not.toBeNull();
+    address!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "192.168.20.247" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    q(el, "[data-test=probe-port]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "9200" }, bubbles: true, composed: true }),
+    );
+    (api.listDiscoveredPrinters as ReturnType<typeof vi.fn>).mockResolvedValue([device]);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(probePrinterAddress).toHaveBeenCalledWith({ host: "192.168.20.247", port: 9200 });
+    expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_found"));
+    expect(api.createPrinter).not.toHaveBeenCalled();
+    q(el, "[data-test='register-192.168.20.247:9200']")!.click();
+    await flush(el);
+    expect(api.createPrinter).toHaveBeenCalledWith({
+      name: "192.168.20.247",
+      transport: "network_tcp",
+      host: "192.168.20.247",
+      port: 9200,
+    });
+    expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_registered"));
+  });
+
+  it("explains invalid address and port fields instead of disabling Check address", async () => {
+    const probePrinterAddress = vi.fn();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ probePrinterAddress }),
+    });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=probe-printer]")).not.toBeNull();
+    q(el, "[data-test=probe-port]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "70000" }, bubbles: true, composed: true }),
+    );
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(probePrinterAddress).not.toHaveBeenCalled();
+    expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe(
+      t("printers.probe_host_invalid"),
+    );
+    expect((q(el, "[data-test=probe-port]") as unknown as { error: string }).error).toBe(
+      t("printers.port_invalid"),
+    );
+    expect((q(el, "[data-test=probe-errors]") as unknown as { errors: string[] }).errors).toEqual([
+      t("printers.probe_host_invalid"),
+      t("printers.port_invalid"),
+    ]);
+  });
+
+  it("ignores old inventory, times out, and accepts a fresh report on retry through passive polling", async () => {
+    const requestedAt = Date.now() + 60_000; // The server's clock need not match the browser.
+    const target = {
+      host: "192.168.20.247",
+      port: 9100,
+      requestedAt,
+      expiresAt: requestedAt + 30_000,
+    };
+    const device: DiscoveredPrinter = {
+      ...discoveredNetwork[0]!,
+      host: target.host,
+      port: target.port,
+      lastSeenAt: new Date(requestedAt - 1).toISOString(),
+    };
+    const list = vi.fn().mockResolvedValue([device]);
+    const passive = vi.fn().mockResolvedValue([device]);
+    const probe = vi.fn().mockResolvedValue(target);
+    const api = stubApi({
+      listDiscoveredPrinters: list,
+      probePrinterAddress: probe,
+      background: stubApi({ listDiscoveredPrinters: passive }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      q(el, "[data-test=probe-host]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: target.host } }),
+      );
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_waiting"));
+      await vi.advanceTimersByTimeAsync(30_000);
+      await el.updateComplete;
+      expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_missing"));
+      expect(passive).toHaveBeenCalled();
+      passive.mockResolvedValue([{ ...device, lastSeenAt: new Date(requestedAt).toISOString() }]);
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await el.updateComplete;
+      expect(probe).toHaveBeenCalledTimes(2);
+      expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_found"));
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps a refused address to its field and ignores a late refusal after reopening", async () => {
+    const probe = vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "host" } });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ probePrinterAddress: probe }),
+    });
+    await flush(el);
+    await openDiscovery(el);
+    const change = () =>
+      q(el, "[data-test=probe-host]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "printer.local" } }),
+      );
+    change();
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe(
+      t("printers.probe_host_invalid"),
+    );
+    expect((q(el, "[data-test=probe-errors]") as unknown as { errors: string[] }).errors).toEqual([
+      t("printers.probe_host_invalid"),
+    ]);
+    let reject!: (error: unknown) => void;
+    probe.mockImplementationOnce(
+      () =>
+        new Promise((_, r) => {
+          reject = r;
+        }),
+    );
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-new-printer]")!.click();
+    await flush(el);
+    await openDiscovery(el);
+    reject({ code: "printer.probe_busy" });
+    await flush(el);
+    expect(q(el, "[data-test=new-printer-modal]")!.textContent).not.toContain(
+      codeMessage("printer.probe_busy"),
+    );
+    expect(text(el, "[data-test=probe-status]")).toBe("");
+  });
+
+  it("starts new polling while an old discovery read is pending without releasing the new read's gate", async () => {
+    const target = {
+      host: "192.168.20.247",
+      port: 9100,
+      requestedAt: Date.now(),
+      expiresAt: Date.now() + 30000,
+    };
+    let finishOld!: (rows: DiscoveredPrinter[]) => void;
+    let finishNew!: (rows: DiscoveredPrinter[]) => void;
+    const passive = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<DiscoveredPrinter[]>((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<DiscoveredPrinter[]>((resolve) => {
+            finishNew = resolve;
+          }),
+      )
+      .mockResolvedValue([]);
+    const api = stubApi({
+      probePrinterAddress: vi.fn().mockResolvedValue(target),
+      background: stubApi({ listDiscoveredPrinters: passive }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(passive).toHaveBeenCalledTimes(1);
+      q(el, "[data-test=probe-host]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: target.host } }),
+      );
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(passive).toHaveBeenCalledTimes(2);
+      finishOld(discoveredNetwork);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(passive).toHaveBeenCalledTimes(2);
+      finishNew([]);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(passive).toHaveBeenCalledTimes(3);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([true, false])(
+    "recognizes a registered address (active=%s) and preserves Add again",
+    async (active) => {
+      const row = { ...printers[0]!, active };
+      const target = {
+        host: row.host!,
+        port: row.port!,
+        requestedAt: Date.now(),
+        expiresAt: Date.now() + 30000,
+      };
+      const device: DiscoveredPrinter = {
+        ...discoveredNetwork[0]!,
+        host: target.host,
+        port: target.port,
+        lastSeenAt: new Date(target.requestedAt).toISOString(),
+        alreadyRegistered: true,
+        printerId: row.id,
+      };
+      const api = stubApi({
+        listPrinters: vi.fn().mockResolvedValue([row]),
+        listDiscoveredPrinters: vi.fn().mockResolvedValue([device]),
+        probePrinterAddress: vi.fn().mockResolvedValue(target),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      await openDiscovery(el);
+      q(el, "[data-test=probe-host]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: target.host } }),
+      );
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      expect(text(el, "[data-test=probe-status]")).toContain(
+        t(active ? "printers.probe_registered" : "printers.probe_found"),
+      );
+      const add = q(el, `[data-test='register-${target.host}:${target.port}']`);
+      if (active) expect(add).toBeNull();
+      else {
+        expect(add!.textContent).toContain(t("printers.add_again"));
+        add!.click();
+        await flush(el);
+        expect(api.updatePrinter).toHaveBeenCalledWith(row.id, { active: true });
+        expect(api.createPrinter).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("shows a refresh error without claiming the address failed to respond", async () => {
+    const api = stubApi({
+      probePrinterAddress: vi
+        .fn()
+        .mockResolvedValue({ host: "10.0.0.1", port: 9100, requestedAt: 0, expiresAt: 30000 }),
+      background: stubApi({
+        listDiscoveredPrinters: vi.fn().mockRejectedValue({ code: "management_session.expired" }),
+      }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      q(el, "[data-test=probe-host]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "10.0.0.1" } }),
+      );
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await el.updateComplete;
+      expect(q(el, "[data-test=new-printer-modal]")!.textContent).toContain(
+        codeMessage("management_session.expired"),
+      );
+      expect(text(el, "[data-test=probe-status]")).not.toContain(t("printers.probe_missing"));
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it("registers a discovered IP printer with its name, host and port only", async () => {
     const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

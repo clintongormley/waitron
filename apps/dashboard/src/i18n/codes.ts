@@ -12,6 +12,10 @@ import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-ki
 // English is the source of truth here too, and `apps/*` is exempt from the english-only guard, so the
 // Spanish below is user-facing translation, not schema vocabulary. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "printer.probe_busy": {
+    en: "Several addresses are being checked. Wait a moment and try again.",
+    es: "Se están comprobando varias direcciones. Espera un momento e inténtalo de nuevo.",
+  },
   "management_session.required": {
     en: "Please log in to continue",
     es: "Inicia sesión para continuar",

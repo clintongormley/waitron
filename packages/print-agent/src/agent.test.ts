@@ -399,6 +399,124 @@ describe("createAgent — inventory, discovery and resolve", () => {
       scanned: unknown[];
     };
 
+  it.each([0, 100_000, -100_000])(
+    "probes explicit addresses independently of a failed scan and stops at expiry (clock offset %s ms)",
+    async (offset) => {
+      const target = { host: "192.168.20.247", port: 9100, expiresInMs: 29000 };
+      const found = { transport: "network_tcp" as const, host: target.host, port: target.port };
+      const probeNetwork = vi.fn().mockResolvedValue([found]);
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        probeNetwork,
+        scan: async () => {
+          throw new Error("no Bluetooth");
+        },
+      });
+      let now = 1000 + offset;
+      host.now = () => now;
+      const c = client({
+        pullJobs: vi.fn().mockResolvedValue(
+          okR({
+            nodeId: "n1",
+            servers: [],
+            jobs: [],
+            discoveryUntil: 90000,
+            networkProbes: [target],
+          }),
+        ),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      expect(probeNetwork).not.toHaveBeenCalled();
+      vi.mocked(c.pullJobs).mockResolvedValue(failR({ kind: "unreachable", detail: "offline" }));
+      await agent.runOnce();
+      expect(agent.status.phase).toBe("unreachable");
+      expect(probeNetwork).toHaveBeenCalledWith([target]);
+      expect(inventoryOf(c, 1).scanned).toEqual([found]);
+      now = 30000 + offset;
+      await agent.runOnce();
+      expect(probeNetwork).toHaveBeenCalledTimes(1);
+      expect(inventoryOf(c, 2).scanned).toEqual([]);
+    },
+  );
+
+  it("does not carry a server's address checks to a different primary", async () => {
+    const B = "http://b.test";
+    const target = { host: "192.168.20.247", port: 9100, expiresInMs: 30000 };
+    const found = { transport: "network_tcp" as const, host: target.host, port: target.port };
+    const probeNetwork = vi.fn().mockResolvedValue([found]);
+    const host = fakeHost({ config: CONFIG, token: "a1.s", probeNetwork });
+    let promoted = false;
+    const c = client({
+      probeNode: vi.fn(async (url) =>
+        okR({
+          ...primary,
+          nodeId: url === B ? "n2" : "n1",
+          term: promoted ? 2 : 1,
+          acceptingSales: promoted ? url === B : url === A,
+        }),
+      ),
+      pullJobs: vi.fn().mockResolvedValue(
+        okR({
+          nodeId: "n1",
+          servers: [{ url: B, nodeId: "n2" }],
+          jobs: [],
+          discoveryUntil: null,
+          networkProbes: [target],
+        }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(probeNetwork).toHaveBeenCalledWith([target]);
+    expect(inventoryOf(c, 1).scanned).toEqual([found]);
+    probeNetwork.mockClear();
+    promoted = true;
+    await agent.runOnce();
+    expect(agent.status.current).toBe(B);
+    expect(probeNetwork).not.toHaveBeenCalled();
+    expect(c.pullJobs).toHaveBeenLastCalledWith(
+      B,
+      "a1.s",
+      expect.objectContaining({ scanned: [] }),
+    );
+  });
+
+  it("a rejected address probe does not block pulling and delivering a print job", async () => {
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      probeNetwork: async () => {
+        throw new Error("network unavailable");
+      },
+    });
+    const c = client({
+      pullJobs: vi
+        .fn()
+        .mockResolvedValueOnce(
+          okR({
+            nodeId: "n1",
+            servers: [],
+            jobs: [],
+            discoveryUntil: null,
+            networkProbes: [{ host: "10.0.0.1", port: 9100, expiresInMs: 30000 }],
+          }),
+        )
+        .mockResolvedValue(
+          okR({ nodeId: "n1", servers: [], jobs: [usbJob("probe-print")], discoveryUntil: null }),
+        ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(c.report).toHaveBeenCalledWith(expect.any(String), "a1.s", "probe-print", {
+      status: "done",
+    });
+    expect(host.logs.some((line) => line.includes("address probe failed"))).toBe(true);
+  });
+
   it("reports visible devices on every pull", async () => {
     const host = fakeHost({
       config: CONFIG,

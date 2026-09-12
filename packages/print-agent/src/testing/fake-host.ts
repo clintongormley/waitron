@@ -3,6 +3,7 @@ import type {
   AgentStatus,
   DiscoveredDevice,
   Host,
+  NetworkProbe,
   PairResult,
   TransportKind,
   VisibleDevice,
@@ -23,6 +24,7 @@ export function fakeHost(
     fetch: typeof fetch;
     visibleDevices: () => Promise<VisibleDevice[]>;
     scan: (kinds?: TransportKind[]) => Promise<DiscoveredDevice[]>;
+    probeNetwork: (targets: NetworkProbe[]) => Promise<DiscoveredDevice[]>;
     resolve: (job: WireJob) => Promise<PrinterTarget>;
     pair: (mac: string) => Promise<PairResult>;
   }> = {},
@@ -76,6 +78,7 @@ export function fakeHost(
     },
     visibleDevices: overrides.visibleDevices ?? (async () => []),
     scan: overrides.scan ?? (async () => []),
+    probeNetwork: overrides.probeNetwork ?? (async () => []),
     resolve:
       overrides.resolve ??
       (async (job) => ({

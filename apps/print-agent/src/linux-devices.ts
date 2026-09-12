@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import dgram from "node:dgram";
-import net from "node:net";
+import { connectTcp } from "./tcp-probe.js";
 import { networkInterfaces } from "node:os";
 import type {
   DiscoveredDevice,
@@ -192,25 +192,11 @@ async function liveNetworkScan(): Promise<DiscoveredDevice[]> {
   return mergeDiscovered(announced, swept);
 }
 
-/** One TCP connect: accepted within `timeoutMs` → `true`; refused, unreachable or silent → `false`. */
-function liveTcpConnect(host: string, port: number, timeoutMs: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = net.connect({ host, port });
-    const finish = (ok: boolean): void => {
-      socket.destroy();
-      resolve(ok);
-    };
-    socket.setTimeout(timeoutMs, () => finish(false));
-    socket.once("connect", () => finish(true));
-    socket.once("error", () => finish(false));
-  });
-}
-
 /** The port-9100 sweep over the box's own subnets (`sweep.ts` decides the addresses and the fan-out).
  * Not yet run on the box — the network receipt (provisioning design §7, 2026-09-11 addendum). */
 function liveSweep(): Promise<DiscoveredDevice[]> {
   const hosts = sweepCandidates({ interfaces: networkInterfaces });
-  return sweepPort({ hosts, port: SWEEP_PORT, connect: liveTcpConnect });
+  return sweepPort({ hosts, port: SWEEP_PORT, connect: connectTcp });
 }
 
 /** One mDNS `_pdl-datastream._tcp` query, collecting responses for a short window and decoding each

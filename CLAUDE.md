@@ -107,6 +107,12 @@ the commit.
 
 Traps, each of which cost a round trip:
 
+- **Check every command's exit status.** A shell sequence separated by newlines reports only its
+  last command's status. Use `&&` for dependent validation steps, or capture each status separately.
+  Cost: the A3 review-fix command ran a successful build after a failed server typecheck and reported
+  success; the pre-push hook correctly refused the test's incomplete response type. Receipt:
+  `docs/superpowers/plans/2026-09-12-printer-address-probe.md`.
+
 - **CI's shards run `test:coverage`, not `test`.** Before calling a package green, run
   `pnpm --filter <pkg> test:coverage`. There is no single `test` job: `.github/workflows/ci.yml` runs
   `test-heavy` (`packages/db`) and `test-server` (`apps/server`) as three-way file shards each with a
@@ -419,7 +425,8 @@ unfiltered `main` run, not a wrong hook.
   The permission check returns the session's tenant; it does not compare it with the configured tenant.
   A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
   them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, “refuses a manager session
-  belonging to another tenant”.
+  belonging to another tenant”. Printer routes enforce the same check; their regression is
+  `apps/server/src/print-api.pg.test.ts`, “refuses another tenant's manager…”.
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Nothing is
   deployed; schema changes drop and recreate. A backfill for an empty database is code to maintain
   that buys nothing — and the first draft of the settlement design carried one that could only ever

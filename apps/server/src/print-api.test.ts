@@ -7,6 +7,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, esc } from "@waitron/printing";
+import type { NetworkProbe } from "@waitron/print-agent";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -231,6 +232,7 @@ interface PullReply {
   servers: { nodeId: string; url: string; standing: string }[];
   jobs: PullJob[];
   discoveryUntil: number | null;
+  networkProbes?: NetworkProbe[];
 }
 
 /** POST the agent pull carrying an inventory (`visible`/`scanned` default to empty), asserting 200 and
@@ -653,6 +655,30 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     });
     expect(Buffer.from(seen.jobs[0]!.payload, "base64").equals(Buffer.from(payload))).toBe(true);
     expect((await jobRow(jobId)).status).toBe("printing");
+  });
+
+  it("passes an explicitly requested address to agents even outside their local subnet", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const response = await send(app, "POST", "/management-api/printer-discovery/probe", {
+      cookie: managerCookie,
+      body: { host: "192.168.20.247", port: 9100 },
+    });
+    expect(response.status).toBe(200);
+    const target = (await response.json()) as { host: string; port: number; expiresAt: number };
+    expect(target).toEqual({
+      host: "192.168.20.247",
+      port: 9100,
+      requestedAt: expect.any(Number),
+      expiresAt: expect.any(Number),
+    });
+    const reply = await pull(app, token);
+    expect(reply).toMatchObject({
+      networkProbes: [{ host: target.host, port: target.port, expiresInMs: expect.any(Number) }],
+    });
+    const probe = reply.networkProbes?.[0];
+    expect(probe?.expiresInMs).toBeGreaterThan(0);
+    expect(probe?.expiresInMs).toBeLessThanOrEqual(30_000);
   });
 
   it("returns discoveryUntil after a discovery window is opened", async () => {

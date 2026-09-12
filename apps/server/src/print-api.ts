@@ -1,16 +1,6 @@
-// Side-effect only: loads this host's errors.ts augmentation for the apps/server codes THESE routes
-// throw directly — the shared knock codes `device.pairing_closed`/`device.join_full` (the window +
-// cap refusals, answered on the agent knock BY DESIGN — the agent joins through the same
-// join_requests mechanism a device does) and `management.request_invalid` (the body/query screens).
-// `device.join_rate_limited` reaches here through the value import of `createEnrolRateLimiter`
-// (`enrol-rate-limit.js`, which throws it). The printing/agent codes this surface answers —
-// `printer.*`/`agent.*` — are declared in @waitron/printing's own errors.ts and reach here through the
-// VALUE imports of its verbs below (createPrinter/updatePrinter/deactivatePrinter/claimPrintJobs/
-// reportPrintJob and, transitively, requireAgent's authenticateAgent); the join codes
-// (`device.join_full`, and `join_request.not_found` via the accept route in join-api.ts) load through
-// the value imports of `createJoinRequest`/`readAgentJoinStatus` (`join-requests.js`); `shared.invalid_id`
-// (thrown by `requireUuidParam`) loads via the AppError value import. See the note atop errors.ts.
+// Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
+import { createPrinterProbes } from "./printer-probes.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
@@ -138,6 +128,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_full": 429,
   "device.join_rate_limited": 429,
   "printer.not_found": 404,
+  "printer.probe_busy": 429,
   "print_job.not_found": 404,
   "print_job.not_resendable": 409,
   "printer.invalid_config": 422,
@@ -318,6 +309,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     lastSeenAt: number;
   }
   const discovered = new Map<string, DiscoveredEntry>(); // key: `${agentId}:${transport}:${localKey ?? host+":"+port}`
+  const printerProbes = createPrinterProbes();
   let discoveryUntil = 0; // epoch ms; 0 = closed
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const DISCOVERED_TTL_MS = 15_000;
@@ -329,7 +321,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   ): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await authorizeManager(tx, { managementSessionId: sessionId, permission });
+      const authorization = await authorizeManager(tx, {
+        managementSessionId: sessionId,
+        permission,
+      });
+      if (authorization.tenantId !== deps.cfg.tenantId)
+        throw new AppError("authorization.not_permitted", { permission });
       return fn(tx);
     });
 
@@ -453,6 +450,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // polls each routable server to follow the primary across a failover, and `nodeId` tells which it
       // is now on. `discoveryUntil` echoes the open window (null when shut) so the box knows to scan.
       const held = await deps.readMembership();
+      const networkProbes = printerProbes.current();
       return c.json({
         nodeId: deps.cfg.nodeId,
         servers: routableServers(held),
@@ -466,6 +464,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           payload: Buffer.from(job.payload).toString("base64"),
         })),
         discoveryUntil: discoveryUntil > Date.now() ? discoveryUntil : null,
+        ...(networkProbes.length ? { networkProbes } : {}),
       });
     }),
   );
@@ -597,6 +596,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       await gated(sessionId, async () => {}); // authorises printer.manage; no printer/job work
       discoveryUntil = Date.now() + DISCOVERY_WINDOW_MS;
       return c.json({ discoveryUntil });
+    }),
+  );
+
+  app.post("/management-api/printer-discovery/probe", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      await gated(sessionId, async () => {});
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      return c.json(printerProbes.add(body));
     }),
   );
 

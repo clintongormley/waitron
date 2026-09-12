@@ -7,6 +7,7 @@ export type {
   DiscoveredDevice,
   Host,
   HostLog,
+  NetworkProbe,
   PairResult,
   VisibleDevice,
 } from "./host.js";

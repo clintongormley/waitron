@@ -2284,6 +2284,19 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     ).rejects.toMatchObject({ code: "printer.already_registered" });
   });
 
+  it("requests an address check and preserves the server's timing", async () => {
+    const target = { host: "192.168.20.247", port: 9100, requestedAt: 1000, expiresAt: 31000 };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(target));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.probePrinterAddress({ host: target.host, port: target.port })).toEqual(target);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printer-discovery/probe", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ host: target.host, port: target.port }),
+    });
+  });
+
   it("startPrinterDiscovery POSTs the discovery-start route and returns the window end", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ discoveryUntil: 1234 }));
     const api = new DashboardApi("", fetchImpl);

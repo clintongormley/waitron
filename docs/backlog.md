@@ -264,6 +264,13 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
+**In flight:** `feat/printer-address-probe` implements Check address through the print agents,
+with IPv4/IPv6 and port validation, bounded TCP checks, fresh-result feedback and Add again.
+Affected coverage and the whole-workspace tests pass. Physical network
+and paper checks below remain outstanding.
+[Design](superpowers/specs/2026-09-12-printer-address-probe-design.md) ·
+[Validation](superpowers/plans/2026-09-12-printer-address-probe.md).
+
 - **A printer on another subnet cannot be added** — a configurable extra-subnet list or a "probe this
   address" button; build one first.
 - **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock

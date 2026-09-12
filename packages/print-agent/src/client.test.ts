@@ -292,6 +292,32 @@ describe("createClient — pullJobs", () => {
     expect(fetchImpl.mock.calls[0]![1].headers.authorization).toBe("Bearer a1.secret");
   });
 
+  it("decodes bounded address probes without letting a malformed target block jobs", async () => {
+    const target = { host: "192.168.20.247", port: 9100, expiresInMs: 30000 };
+    const fetchImpl = vi.fn().mockResolvedValue(
+      reply(200, {
+        nodeId: "n",
+        servers: [],
+        jobs: [],
+        discoveryUntil: null,
+        networkProbes: [
+          target,
+          null,
+          { ...target, port: 0 },
+          { ...target, expiresInMs: "later" },
+          { ...target, expiresInMs: 0 },
+          { ...target, expiresInMs: -1 },
+          { ...target, expiresInMs: 30_001 },
+        ],
+      }),
+    );
+    const result = await createClient({ fetch: fetchImpl }).pullJobs("http://s", "tok", {
+      visible: [],
+      scanned: [],
+    });
+    expect(result.ok && result.value.networkProbes).toEqual([target]);
+  });
+
   it("posts the inventory and parses discoveryUntil + localKey", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       reply(200, {

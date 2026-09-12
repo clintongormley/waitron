@@ -1,3 +1,4 @@
+import { probeNetwork } from "../../print-agent/src/tcp-probe.js";
 import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -158,6 +159,88 @@ afterEach(async () => {
 });
 
 describe("print-agent end to end", () => {
+  it("checks a requested address through an accepted agent and makes it available to Add without sending bytes", async () => {
+    const loopback = printer!;
+    const app = new Hono();
+    const pairingMode = createPairingMode();
+    pairingMode.open();
+    mountPrintApi(
+      app,
+      { db: suite.db, cfg, pairingMode, readMembership: async () => null },
+      noopLog,
+    );
+    mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+    mountNodeApi(
+      app,
+      {
+        nodeId: cfg.nodeId,
+        acceptingSales: true,
+        environment: "preproduction",
+        readMembership: async () => null,
+      },
+      noopLog,
+    );
+    const host = fakeHost({
+      config: { serverUrl: BASE, name: "Address agent" },
+      probeNetwork,
+      fetch: (input, init) => Promise.resolve(app.request(input, init)),
+    });
+    host.now = Date.now;
+    const agent = createAgent({ host });
+    await agent.runOnce();
+    const joinId = (await host.token())!.split(".")[0]!;
+    const choice = host.statuses.find(
+      (status) => status.verificationCode !== undefined,
+    )!.verificationCode;
+    expect(
+      (
+        await send(app, "POST", `/management-api/print-agent-join-requests/${joinId}/accept`, {
+          cookie: managerCookie,
+          body: { choice },
+        })
+      ).status,
+    ).toBe(204);
+    const requested = await send(app, "POST", "/management-api/printer-discovery/probe", {
+      cookie: managerCookie,
+      body: { host: loopback.host, port: loopback.port },
+    });
+    expect(requested.status).toBe(200);
+    const target = (await requested.json()) as { requestedAt: number };
+    await agent.runOnce(); // Fetch the requested target.
+    await agent.runOnce(); // Connect and report through the real wire client.
+    expect(await loopback.firstConnection).toEqual(Buffer.alloc(0));
+    const discovery = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    const rows = (await discovery.json()) as Array<{
+      host: string;
+      port: number;
+      lastSeenAt: string;
+    }>;
+    expect(rows).toEqual([
+      expect.objectContaining({
+        host: loopback.host,
+        port: loopback.port,
+        transport: "network_tcp",
+        alreadyRegistered: false,
+      }),
+    ]);
+    expect(Date.parse(rows[0]!.lastSeenAt)).toBeGreaterThanOrEqual(target.requestedAt);
+    expect(
+      (
+        await send(app, "POST", "/management-api/printers", {
+          cookie: managerCookie,
+          body: {
+            name: "Known address",
+            transport: "network_tcp",
+            host: loopback.host,
+            port: loopback.port,
+          },
+        })
+      ).status,
+    ).toBe(201);
+  });
+
   it("joins, is accepted, pulls with inventory, delivers a network + a usb job, marks both done — then revoke halts it", async () => {
     const loopback = printer!;
 

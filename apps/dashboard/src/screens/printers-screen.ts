@@ -38,6 +38,7 @@ import type {
   PrintTransport,
   Printer,
   PrinterPatch,
+  PrinterAddressProbe,
   Till,
 } from "../api/client.js";
 
@@ -262,6 +263,11 @@ export class PrintersScreen extends LitElement {
   /** A Scan press is listening for results — the button is busy and a second press is ignored. Its
    * own gate, not `submitting`: the listen runs for seconds and must not block Add/Register. */
   @state() private scanning = false;
+  @state() private probeHost = "";
+  @state() private probePort = "9100";
+  @state() private probeErrors: Record<string, string> = {};
+  @state() private probeStatus: "idle" | "pending" | "found" | "missing" | "registered" = "idle";
+  #probeTarget: PrinterAddressProbe | undefined;
   @state() private scanningAgents = false;
   #agentTimer?: ReturnType<typeof setInterval>;
   #agentScanUntil = 0;
@@ -587,26 +593,74 @@ export class PrintersScreen extends LitElement {
       alreadyRegistered:
         device.alreadyRegistered || this.#registeredDevices.has(this.#deviceKey(device)),
     }));
+    const target = this.#probeTarget;
+    if (target && this.probeStatus === "pending") {
+      const match = this.discovered.find(
+        (device) =>
+          device.transport === "network_tcp" &&
+          device.host === target.host &&
+          device.port === target.port &&
+          Date.parse(device.lastSeenAt) >= target.requestedAt,
+      );
+      if (match) this.probeStatus = this.#canAdd(match) ? "found" : "registered";
+    }
   }
 
-  /** Listen for agent reports while the discovery window is open. */
-  async #scan(): Promise<void> {
-    if (this.scanning) return;
+  async #probe(): Promise<void> {
+    if (this.probeStatus === "pending") return;
+    const host = this.probeHost.trim();
+    const port = Number(this.probePort);
+    const errors: Record<string, string> = {};
+    if (!host) errors.host = t("printers.probe_host_invalid");
+    if (!/^\d+$/.test(this.probePort) || !Number.isInteger(port) || port < 1 || port > 65535)
+      errors.port = t("printers.port_invalid");
+    this.probeErrors = errors;
+    if (Object.keys(errors).length) return;
+    await this.#scan({ host, port });
+  }
+
+  /** Listen for automatic discovery or the separately expiring address check. */
+  async #scan(address?: { host: string; port: number }): Promise<void> {
+    if (!address && this.scanning) return;
+    this.#endScan();
+    this.#probeTarget = undefined;
+    this.probeStatus = address ? "pending" : "idle";
     this.errorKey = null;
     this.scanning = true;
     const epoch = ++this.#scanEpoch;
     try {
-      await this.api.startPrinterDiscovery();
+      const target = address ? await this.api.probePrinterAddress(address) : undefined;
+      if (!address) await this.api.startPrinterDiscovery();
       if (epoch !== this.#scanEpoch) return;
+      this.#probeTarget = target;
       if (!this.isConnected || !this.addingPrinter) return this.#endScan();
       await this.#loadDiscovered(epoch);
       if (epoch !== this.#scanEpoch) return;
       if (!this.isConnected || !this.addingPrinter) return this.#endScan();
-      this.#scanUntil = Date.now() + SCAN_LISTEN_MS;
+      this.#scanUntil =
+        Date.now() + (target ? target.expiresAt - target.requestedAt : SCAN_LISTEN_MS);
       this.#scanTimer = setInterval(() => void this.#scanTick(), SCAN_POLL_MS);
     } catch (error) {
       if (epoch !== this.#scanEpoch) return;
-      this.errorKey = codeOf(error);
+      this.probeStatus = "idle";
+      const field =
+        typeof error === "object" &&
+        error !== null &&
+        "params" in error &&
+        typeof error.params === "object" &&
+        error.params !== null &&
+        "field" in error.params
+          ? error.params.field
+          : undefined;
+      if (
+        address &&
+        codeOf(error) === "management.request_invalid" &&
+        (field === "host" || field === "port")
+      ) {
+        this.probeErrors = {
+          [field]: t(field === "host" ? "printers.probe_host_invalid" : "printers.port_invalid"),
+        };
+      } else this.errorKey = codeOf(error);
       this.#endScan();
     }
   }
@@ -620,10 +674,11 @@ export class PrintersScreen extends LitElement {
     } catch (error) {
       if (epoch !== this.#scanEpoch) return;
       this.errorKey = codeOf(error);
+      this.probeStatus = "idle";
       this.#endScan();
       return;
     } finally {
-      this.#scanInFlight = false;
+      if (epoch === this.#scanEpoch) this.#scanInFlight = false;
     }
     if (epoch !== this.#scanEpoch) return;
     if (Date.now() >= this.#scanUntil) this.#endScan();
@@ -633,7 +688,9 @@ export class PrintersScreen extends LitElement {
     this.#scanEpoch++;
     if (this.#scanTimer !== undefined) clearInterval(this.#scanTimer);
     this.#scanTimer = undefined;
+    this.#scanInFlight = false;
     this.scanning = false;
+    if (this.probeStatus === "pending") this.probeStatus = "missing";
   }
 
   #deviceKey(device: DiscoveredPrinter): string {
@@ -675,6 +732,12 @@ export class PrintersScreen extends LitElement {
         });
       }
       this.#registeredDevices.add(this.#deviceKey(device));
+      if (
+        device.transport === "network_tcp" &&
+        device.host === this.#probeTarget?.host &&
+        device.port === this.#probeTarget?.port
+      )
+        this.probeStatus = "registered";
       this.discovered = this.discovered.map((candidate) =>
         this.#deviceKey(candidate) === this.#deviceKey(device)
           ? { ...candidate, alreadyRegistered: true }
@@ -1186,6 +1249,9 @@ export class PrintersScreen extends LitElement {
           this.formErrors = {};
           this.errorKey = null;
           this.addingPrinter = true;
+          this.probeHost = "";
+          this.probePort = "9100";
+          this.probeErrors = {};
           this.#registeredDevices.clear();
           void this.#scan();
         }}
@@ -1470,6 +1536,68 @@ export class PrintersScreen extends LitElement {
       ${this.#renderError()}
       <p class="hint">${t("printers.discovery_hint")}</p>
       <p class="hint">${t("printers.bluetooth_pair_note")}</p>
+      <section
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=probe-printer]"))}
+      >
+        <h3>${t("printers.probe_title")}</h3>
+        <p class="hint">${t("printers.probe_hint")}</p>
+        <wt-form-error-summary
+          data-test="probe-errors"
+          .heading=${t("form.error_heading")}
+          .errors=${Object.values(this.probeErrors)}
+        ></wt-form-error-summary>
+        <wt-input
+          name="printer-probe-address"
+          required
+          label=${t("printers.probe_host")}
+          data-test="probe-host"
+          .value=${this.probeHost}
+          .invalid=${!!this.probeErrors.host}
+          .error=${this.probeErrors.host ?? ""}
+          ?disabled=${this.probeStatus === "pending"}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.probeHost = event.detail.value;
+          }}
+        ></wt-input>
+        <wt-input
+          name="printer-probe-port"
+          required
+          label=${t("printers.port")}
+          data-test="probe-port"
+          .value=${this.probePort}
+          .invalid=${!!this.probeErrors.port}
+          .error=${this.probeErrors.port ?? ""}
+          ?disabled=${this.probeStatus === "pending"}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.probePort = event.detail.value;
+          }}
+        ></wt-input>
+        <wt-form-actions
+          ><wt-button
+            variant="primary"
+            data-test="probe-printer"
+            ?loading=${this.probeStatus === "pending"}
+            @click=${() => void this.#probe()}
+            >${t("printers.probe_action")}</wt-button
+          ></wt-form-actions
+        >
+        <p role="status" data-test="probe-status">
+          ${
+            this.probeStatus === "idle"
+              ? nothing
+              : t(
+                  (
+                    {
+                      pending: "printers.probe_waiting",
+                      found: "printers.probe_found",
+                      missing: "printers.probe_missing",
+                      registered: "printers.probe_registered",
+                    } as const
+                  )[this.probeStatus],
+                )
+          }
+        </p>
+      </section>
       <div class="actions">
         <wt-button
           data-test="scan-printers"

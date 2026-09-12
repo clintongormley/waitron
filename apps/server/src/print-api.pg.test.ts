@@ -67,6 +67,20 @@ async function seedTenantWithLocation(): Promise<Tenant> {
   return { tenantId, locationId: loc.rows[0]!.id };
 }
 
+it("refuses another tenant's manager before checking an address or reading printer inventory", async () => {
+  const foreign = await seedTenantWithLocation();
+  const app = mountApp(foreign);
+  const response = await send(app, "POST", "/management-api/printer-discovery/probe", {
+    cookie: managerCookie,
+    body: { host: "192.168.20.247" },
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  expect(
+    (await send(app, "GET", "/management-api/printers", { cookie: managerCookie })).status,
+  ).toBe(403);
+});
+
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
   const { managerSid, staffSid } = await withTenant(suite.admin, tenantA.tenantId, async (tx) => {
@@ -394,20 +408,18 @@ describe("Print API over real Postgres (as the app role)", () => {
   });
 
   it("the discovery routes require printer.manage — 401 unauth, 403 staff, 2xx manager (gate proven by deletion)", async () => {
-    // Design §11: the discovered list and the discovery WINDOW are readable/openable only with a
-    // `printer.manage` session (the agent setup page stays LAN + unauthenticated, but these operator
-    // surfaces are gated). Both routes funnel through print-api's shared `gated` helper, so deleting the
-    // `authorizeManager(...)` call from it flips every staff case below from 403 to a 2xx, turning the
-    // 403 assertions red; restoring it turns them green. Proven as the app role on real Postgres.
+    // All discovery surfaces require printer.manage, including an address check with a valid body.
     const app = mountApp(tenantA);
     const routes = [
       { method: "POST", path: "/management-api/printer-discovery/start" },
+      { method: "POST", path: "/management-api/printer-discovery/probe" },
       { method: "GET", path: "/management-api/discovered-printers" },
     ] as const;
 
     for (const { method, path } of routes) {
+      const body = path.endsWith("/probe") ? { host: "192.168.20.247", port: 9100 } : undefined;
       // Unauthenticated → 401 (no session) BEFORE any window mutation or DB read.
-      const unauth = await send(app, method, path);
+      const unauth = await send(app, method, path, { body });
       expect(unauth.status).toBe(401);
       expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
@@ -415,14 +427,17 @@ describe("Print API over real Postgres (as the app role)", () => {
 
       // Staff session → 403 (`printer.manage` refused) — a staff clerk cannot open a discovery window
       // or read the discovered list.
-      const staff = await send(app, method, path, { cookie: staffCookie });
+      const staff = await send(app, method, path, { cookie: staffCookie, body });
       expect(staff.status).toBe(403);
       expect((await staff.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "authorization.not_permitted" },
       });
 
       // Manager session → 200 (the gate admits it).
-      const manager = await send(app, method, path, { cookie: managerCookie });
+      const manager = await send(app, method, path, {
+        cookie: managerCookie,
+        body,
+      });
       expect(manager.status).toBe(200);
     }
   });
@@ -1005,9 +1020,24 @@ describe("print job resend as the deployment role", () => {
       )?.canResend,
     ).toBe(false);
     const foreign = await seedTenantWithLocation();
-    expect((await send(mountApp(foreign), "POST", path, { cookie: managerCookie })).status).toBe(
-      404,
-    );
+    const foreignSession = await withTenant(suite.admin, foreign.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const person = await tx.execute<{ id: string }>(sql`
+        insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${foreign.tenantId}, 'Other manager', ${hashPin("1234")}, 'manager') returning id`);
+      return startManagementSession(tx, {
+        tenantId: foreign.tenantId,
+        personId: person.rows[0]!.id,
+      });
+    });
+    // Use this tenant's own manager so the assertion reaches the job's tenant predicate.
+    expect(
+      (
+        await send(mountApp(foreign), "POST", path, {
+          cookie: `${MANAGEMENT_COOKIE}=${foreignSession.id}`,
+        })
+      ).status,
+    ).toBe(404);
     expect(
       (
         await send(app, "POST", `/management-api/print-jobs/${randomUUID()}/resend`, {

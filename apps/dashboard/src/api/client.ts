@@ -1060,6 +1060,13 @@ export interface PrinterInput {
   pollId?: string;
 }
 
+export interface PrinterAddressProbe {
+  host: string;
+  port: number;
+  requestedAt: number;
+  expiresAt: number;
+}
+
 /** One `GET /management-api/discovered-printers` row — a device an agent currently sees or found in a
  * scan (central printer provisioning §9). `usb`/`bluetooth` devices carry a stable `localKey`; a freshly
  * scanned `network_tcp` printer carries `host`/`port` and may have no `localKey`. `agentName` is the box
@@ -2481,6 +2488,14 @@ export class DashboardApi {
     return this.#request<{ discoveryUntil: number }>(
       "/management-api/printer-discovery/start",
       "POST",
+    );
+  }
+
+  probePrinterAddress(input: { host: string; port: number }): Promise<PrinterAddressProbe> {
+    return this.#request<PrinterAddressProbe>(
+      "/management-api/printer-discovery/probe",
+      "POST",
+      input,
     );
   }
 

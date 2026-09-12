@@ -5,7 +5,7 @@ import {
   type JobOutcome,
   type WireJob,
 } from "./client.js";
-import type { AgentConfig, AgentStatus, DiscoveredDevice, Host } from "./host.js";
+import type { AgentConfig, AgentStatus, DiscoveredDevice, Host, NetworkProbe } from "./host.js";
 import { Router } from "./router.js";
 
 /** The idle poll interval (base spec §4 step 6). A non-empty batch re-polls at once; only an empty pull sleeps. */
@@ -51,6 +51,8 @@ export function createAgent(opts: AgentOptions): Agent {
   // tick actively scans (and posts the results) only while `host.now()` is still under it; 0 means no
   // window, so an initial tick and a closed window both skip the scan.
   let discoveryUntil = 0;
+  let networkProbes: { target: NetworkProbe; expiresAt: number }[] = [];
+  let probeServer: string | undefined;
   let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
   let lastPhaseLine = "";
 
@@ -259,6 +261,30 @@ export function createAgent(opts: AgentOptions): Agent {
         });
       }
     }
+    const targets =
+      current === probeServer
+        ? networkProbes.filter((probe) => host.now() < probe.expiresAt).map((probe) => probe.target)
+        : [];
+    if (targets.length) {
+      try {
+        const reachable = await host.probeNetwork(targets);
+        scanned.push(
+          ...reachable.filter(
+            (target) =>
+              !scanned.some(
+                (device) =>
+                  device.transport === "network_tcp" &&
+                  device.host === target.host &&
+                  device.port === target.port,
+              ),
+          ),
+        );
+      } catch (error) {
+        host.log.warn("address probe failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     const hostname = host.hostname?.();
     const pulled = await client.pullJobs(current, token, {
       visible,
@@ -281,6 +307,13 @@ export function createAgent(opts: AgentOptions): Agent {
     r.merge(pulled.value.servers);
     // Carry the window forward so the NEXT tick knows whether to scan; a null reply closes it (0).
     discoveryUntil = pulled.value.discoveryUntil ?? 0;
+    // A remote server's epoch deadline cannot be compared with this host's clock.
+    const receivedAt = host.now();
+    networkProbes = (pulled.value.networkProbes ?? []).map((target) => ({
+      target,
+      expiresAt: receivedAt + target.expiresInMs,
+    }));
+    probeServer = current;
     // Tick-local, reset every tick (never `lastError` itself mid-loop): did ANY send fail this tick?
     let anyFailed = false;
     for (const job of pulled.value.jobs) if (await push(job, token, current)) anyFailed = true;
