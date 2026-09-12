@@ -1018,6 +1018,59 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 });
 
+// The regime's own rules on the fields the operator typed, reached through the contract seat
+// (`FiscalContribution.venueFields`) — the subject file imports no regime package. The rules
+// themselves are the regime's to test (`packages/fiscal-verifactu/src/venue-fields.test.ts`); what
+// belongs here is that the boundary RUNS them, threads the offending field name back, and mints
+// nothing when it refuses. Deletion-proof: drop the `contribution.venueFields?.validate(…)` call
+// from `parseProvisionPayload` and every refusal case below goes RED (the bad venue reaches
+// `provision`).
+describe("POST /setup-api/provision — the regime's rules on the operator's venue fields", () => {
+  it.each<[string, string, (body: Record<string, unknown>) => void]>([
+    [
+      "a series code with a space",
+      "seriesCode",
+      (b) => void (asRec(b.venue).seriesCode = "Serie A"),
+    ],
+    [
+      "a rectificative series code with a space",
+      "rectificativeSeriesCode",
+      (b) => void (asRec(b.venue).rectificativeSeriesCode = "Serie R"),
+    ],
+    [
+      "an operation description carrying a character XML forbids",
+      "location.operationDescription",
+      (b) => void (asRec(asRec(b.venue).location).operationDescription = "Barra\u0007principal"),
+    ],
+  ])("refuses %s, naming the field and provisioning nothing", async (_label, field, mutate) => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    mutate(body);
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toEqual({ code: "setup.request_invalid", params: { field } });
+    // The tenant, node, SIF and hash chain are unrepairable once minted (CLAUDE.md §5), so the
+    // property that matters is that the mint was never reached at all.
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("still provisions the ordinary demo venue, whose fields the regime accepts", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody());
+
+    expect(res.status).toBe(200);
+    expect(provision).toHaveBeenCalledOnce();
+    await tick();
+  });
+});
+
 // The upfront cert-shape validator (`parseAeatCert`/`validateAeatCert`) moved into the regime with the
 // cert itself (fiscal-none slice): its direct tests — including the empty-passphrase branch unreachable
 // through the endpoint — now live in `packages/fiscal-verifactu/src/provisioning-secret.test.ts`.

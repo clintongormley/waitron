@@ -404,6 +404,18 @@ function parseProvisionPayload(
   const selection = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
   if (selection.contribution === undefined) invalidRequest("location.fiscalTerritory");
   const contribution = selection.contribution;
+  // The regime's own rules on the fields the operator typed, reached through the contract seat —
+  // this file imports no regime package (`scripts/module-seams.test.ts` pins that allowlist empty).
+  // It runs here, before the secret gate below and long before `provision` mints the tenant, node,
+  // SIF and hash chain, so a refusal leaves nothing behind (CLAUDE.md §5) and the operator fixes the
+  // field in the wizard instead of meeting it as a refused first sale at the till. A regime that
+  // files nothing offers no seat, and the optional call is how its venues skip the check.
+  contribution.venueFields?.validate({
+    legalName: venue.legalName,
+    seriesCode: venue.seriesCode,
+    rectificativeSeriesCode: venue.rectificativeSeriesCode,
+    operationDescription: venue.location.operationDescription,
+  });
   const secret = contribution.provisioningSecret;
   const secretExpected = secret?.required(environment) ?? false;
   const present = body.aeatCert !== undefined;
