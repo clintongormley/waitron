@@ -43,7 +43,7 @@ any missing required field marked. **Not verified:** the review reached the over
 by firing events from code, so nobody has shown that a real pointer can get there. This change left
 the list's existing in-browser paging and search alone — the replacement is the next item.
 
-**Three user and profile follow-ups from the owner's walkthrough** (2026-09-12, not started).
+**User and profile follow-ups from the owner's walkthrough** (2026-09-12, not started).
 
 1. *Keep the display name in step with the person's name as it is typed.* Today the create form
    copies only the FIRST names into Display name, and stops copying the moment anyone edits that box
@@ -62,6 +62,40 @@ the list's existing in-browser paging and search alone — the replacement is th
 3. *The admin's Edit user form has no Language.* A person's stored interface language (`locale`) can
    only be chosen on Your profile, so an admin setting someone else up cannot pick the language that
    person will first see. Add the same chooser to the admin editor.
+
+4. *Nothing checks that a typed value makes sense — a phone number accepts “abc”.* Seen while
+   editing a user, but the gap is general: a person's telephone travels from the form to the database
+   as free text with no format check anywhere on the way. The dashboard field never puts an error on
+   it (`apps/dashboard/src/widgets/person-edit.ts:102`), the server only checks it is a string
+   (`apps/server/src/management-api.ts:1053`), and the database only refuses an empty one
+   (`packages/identity/src/schema/persons.ts:93`). The shared Forms contract
+   (`docs/developers/design-system.md` → Forms) says how to SHOW a field error but never says a value
+   has to be checked at all. The country packs already hold the seat for this: `CountryPack.telephone`
+   is a validator slot (`packages/country/src/country.ts:47`) and Spain fills it with
+   `validateSpanishPhone`, which strips spaces, brackets, dots and dashes, accepts a leading `+34` or
+   `0034`, and hands back the number in `+34…` form (`packages/country-es/src/spain.ts:91`) — nothing
+   calls it yet. Wanted: use the country pack's rule where the pack has one, and where it does not,
+   fall back to a generic shape — an optional `+` and country code, then digits only, with spaces
+   removed before checking. Check in the browser so the operator is told straight away, and again at
+   the server boundary, the way country packs already repeat their address derivation. Open questions:
+   whether the stored value is normalised or kept exactly as typed; whether a number already in the
+   database that does not pass blocks an unrelated edit to the same person; and which other free-text
+   fields get the same treatment — the packs carry tax-identifier and postal-code validators too, and
+   the tax identifier is fiscal.
+
+5. *Dropdown options appear in whatever order the code happens to list them.* The Role chooser on
+   both the create and the edit form renders a hardcoded list in privilege order — staff, supervisor,
+   manager, admin (`apps/dashboard/src/widgets/person-form.ts:16`,
+   `apps/dashboard/src/widgets/person-edit.ts:14`) — so what the operator reads is not alphabetical,
+   and once the labels are translated it is in no order at all. Wanted, here and everywhere: sort a
+   dropdown by the label the person actually reads, in the interface language's own alphabet
+   (`Intl.Collator`), never by the underlying code. Decide first WHERE that rule lives: there is no
+   shared select component, so every screen writes its own raw `<select>`, and this becomes either a
+   `wt-select` in `packages/ui` or a written rule in the Forms contract that each screen follows.
+   Lists that are deliberately in a lifecycle order rather than an alphabetical one need a way to say
+   so. Worth checking at the same time: `wt-data-table` sorts its rows with `localeCompare` and no
+   locale argument (`packages/ui/src/components/wt-data-table.ts:143`), so table sorting follows the
+   browser's language rather than the one the person chose in Waitron.
 
 **Tell people by email when their account's security changes** (owner, 2026-09-12, not started).
 Waitron only ever emails somebody when it wants them to click something: the sender handles exactly
