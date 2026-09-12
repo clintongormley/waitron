@@ -384,5 +384,31 @@ declare module "@waitron/shared" {
      * that one was.
      */
     "fiscal.substitution_unsupported": { saleId: string; tipoFactura: string };
+
+    /**
+     * Thrown by `buildDestinatarios` (./backend.ts) for a recipient whose country is not `ES`. AEAT
+     * names a foreign recipient through `IDOtro`, which carries an `IDType` this project has not
+     * chosen a value for: the vocabulary is enumerated by the XSD
+     * (`packages/verifactu/schemas/SuministroInformacion.xsd`, `PersonaFisicaJuridicaIDTypeType`)
+     * but which value AEAT admits for which non-resident is open with the asesor
+     * (`docs/compliance/asesor-questions.md`, Q17(a)). `registros_facturacion` is append-only and
+     * hash-chained (CLAUDE.md §5), so a guessed identifier type would be filed and could never be
+     * unfiled — the sale is refused instead.
+     *
+     * ONE code for both recipient-naming paths, because it is one decision: the F3 canje
+     * (`recordSubstitution`) and the F1 full invoice (`recordSale`) both reach it through
+     * `buildDestinatarios`. It is a PERMANENT refusal — retrying files nothing new — so the till
+     * gives it its own message telling the operator to stop and take payment another way, rather
+     * than the generic "try again" (`apps/till/src/till-app.ts`).
+     *
+     * `countryCode` is the recipient's country, not an operator's own text, so it may ride in
+     * params: the shared error boundary writes params into `waitron.log`, which the unauthenticated
+     * recovery page renders to anyone on the venue's LAN. The recipient's name and tax identifier
+     * are operator data and never appear here (see `fiscal.record_invalid` for the full reasoning).
+     *
+     * `fiscal.*` and English, matching this file's other regime-neutral-shaped codes: a fact about
+     * the record being built, not an AEAT wire state.
+     */
+    "fiscal.foreign_recipient_unsupported": { countryCode: string };
   }
 }

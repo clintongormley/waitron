@@ -412,7 +412,10 @@ describe("recordSubstitution — refusals", () => {
           { substitutedSaleIds: [someTicket] },
         ),
       ),
-    ).rejects.toThrow(/non-Spanish/i);
+    ).rejects.toMatchObject({
+      code: "fiscal.foreign_recipient_unsupported",
+      params: { countryCode: "FR" },
+    });
   });
 });
 
@@ -533,13 +536,14 @@ describe("recordSale — invoice type selection", () => {
   });
 
   /**
-   * Pins a DECISION, not a mechanism: a foreign recipient is refused rather than guessed at. AEAT
-   * identifies one through `IDOtro`, whose `IDType` (02 NIF-IVA, 03 passport, 04 official ID,
-   * 05 residence certificate, 06 other) nobody here has chosen — and `registros_facturacion` is
-   * append-only, so a wrong guess would be filed and could never be unfiled (CLAUDE.md §5). The
-   * refusal arrives from the chain's own record validation, naming `Destinatarios`; there is no
-   * separate country check in `recordSale` to keep the two ways of being wrong reporting the same
-   * way. If a future B2B task builds the `IDOtro` shape, this test is the one it must replace.
+   * Pins a DECISION: a foreign recipient is refused rather than guessed at, because a guessed AEAT
+   * identifier type would be filed into an append-only table and could never be unfiled (CLAUDE.md
+   * §5). The refusal is `buildDestinatarios`' own, explicit and named, and it is the SAME refusal
+   * the F3 canje path gets — one decision in one place, rather than one path refusing explicitly
+   * and the other by leaving the recipient block out and letting the chain guard notice. The
+   * vocabulary this is waiting on has one home (`buildDestinatarios`' doc comment) and is not
+   * restated here. If a future B2B task builds the `IDOtro` shape, this test is the one it must
+   * replace.
    */
   it("refuses a non-Spanish recipient rather than guessing an identifier type", async () => {
     await expect(
@@ -549,8 +553,8 @@ describe("recordSale — invoice type selection", () => {
         countryCode: "FR",
       }),
     ).rejects.toMatchObject({
-      code: "fiscal.record_invalid",
-      params: { fields: ["Destinatarios"], codes: ["DESTINATARIOS_REQUIRED"] },
+      code: "fiscal.foreign_recipient_unsupported",
+      params: { countryCode: "FR" },
     });
 
     const rows = await pg.db
