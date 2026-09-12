@@ -3,16 +3,8 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import "./person-form.js";
 import type { PersonForm } from "./person-form.js";
 
-/**
- * The create dialog only exposes anything to the accessibility tree once it is OPEN — a closed
- * <dialog> renders nothing to test — so it is mounted with `open = true` and its wt-dialog's first
- * render (which calls showModal) is settled before axe runs, in both themes. axe is run against the
- * themed host so a color-contrast check means what it means in the app.
- *
- * The rendered surface axe sees: the dialog's accessible name (from its `heading`), the three
- * labelled `wt-input` fields (display name, PIN, email), the labelled role `<select>`, and the
- * primary confirm control in the footer.
- */
+// Open the modal before running axe so its controls enter the accessibility tree.
+// The themed host gives the contrast checks the same background as the dashboard.
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("person-form a11y (%s theme)", (theme) => {
@@ -22,7 +14,7 @@ describe.each(["light", "dark"] as const)("person-form a11y (%s theme)", (theme)
       { open: true },
       theme,
     );
-    const wtDialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    const wtDialog = el.shadowRoot!.querySelector("wt-modal")!;
     await (wtDialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     // The email field carries an accessible name from its wt-input label (the <label for>/<input id>
     // pair in wt-input's shadow), so axe's label rule passes and a screen-reader user hears "Email".

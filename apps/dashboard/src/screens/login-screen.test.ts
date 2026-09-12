@@ -113,7 +113,6 @@ async function mountPasskeyOffer(overrides: Partial<DashboardApi> = {}) {
   await flush(el);
   input(el, "new-password", "new password");
   input(el, "new-pin", "4321");
-  input(el, "confirm-pin", "4321");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
   await flush(el);
   return { el, api };
@@ -355,7 +354,6 @@ describe("login-screen", () => {
     el.addEventListener("logged-in", loggedIn);
     input(el, "new-password", "a replacement password");
     input(el, "new-pin", "4321");
-    input(el, "confirm-pin", "4321");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
     await flush(el);
     expect(loggedIn).not.toHaveBeenCalled();
@@ -914,13 +912,11 @@ describe("login-screen", () => {
     expect(inputs).toEqual([
       { name: "new-password", autocomplete: "new-password", required: true },
       { name: "new-pin", autocomplete: "off", required: true },
-      { name: "confirm-pin", autocomplete: "off", required: true },
     ]);
 
     const labels = [
       ["account.show_new_password", "account.hide_new_password"],
       ["account.show_new_pin", "account.hide_new_pin"],
-      ["account.show_confirm_pin", "account.hide_confirm_pin"],
     ] as const;
     for (const [index, field] of fields.entries()) {
       const toggle = field.querySelector<HTMLElement>("wt-button[slot=end]")!;
@@ -955,7 +951,7 @@ describe("login-screen", () => {
     const submit = el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!;
     const click = vi.spyOn(submit, "click").mockImplementation(() => undefined);
     const fields = [...el.shadowRoot!.querySelectorAll("wt-input")];
-    expect(fields).toHaveLength(3);
+    expect(fields).toHaveLength(2);
     for (const field of fields) {
       const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
       input.focus();
@@ -971,7 +967,6 @@ describe("login-screen", () => {
       password: "old login password",
       secondFactor: "old recovery code",
       pin: "1234",
-      confirmPin: "1234",
     });
     await el.updateComplete;
 
@@ -983,7 +978,7 @@ describe("login-screen", () => {
     ]);
   });
 
-  it("distinguishes a missing PIN confirmation in the fields and summary", async () => {
+  it("marks a missing PIN without asking for confirmation", async () => {
     history.replaceState(
       null,
       "",
@@ -996,15 +991,11 @@ describe("login-screen", () => {
     expect(
       el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=new-pin]")!.error,
     ).toBe(t("form.pin_required"));
-    expect(
-      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=confirm-pin]")!
-        .error,
-    ).toBe(t("form.confirm_pin_required"));
+    expect(el.shadowRoot!.querySelector("wt-input[name=confirm-pin]")).toBeNull();
     const summary = el
       .shadowRoot!.querySelector("wt-form-error-summary")!
       .shadowRoot!.querySelector<HTMLElement>("[role=alert]")!.textContent;
     expect(summary).toContain(t("form.pin_required"));
-    expect(summary).toContain(t("form.confirm_pin_required"));
   });
 
   it("does not fetch the roster on connect", async () => {
@@ -1194,7 +1185,6 @@ describe("login-screen", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     (el as unknown as { password: string }).password = "a replacement password";
     (el as unknown as { pin: string }).pin = "4321";
-    (el as unknown as { confirmPin: string }).confirmPin = "4321";
     await el.updateComplete;
     const loggedIn = new Promise<{ personId: string }>((resolve) =>
       el.addEventListener("logged-in", (e) => resolve((e as CustomEvent).detail)),

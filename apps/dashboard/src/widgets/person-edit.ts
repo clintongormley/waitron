@@ -1,8 +1,8 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -22,8 +22,12 @@ export class PersonEdit extends LitElement {
     baseStyles,
     selectStyles,
     css`
-      wt-dialog {
-        --wt-dialog-max-width: min(92vw, 48rem);
+      hr {
+        width: 100%;
+        box-sizing: border-box;
+        border: 0;
+        border-top: 1px solid var(--wt-color-border);
+        margin: 0 0 var(--wt-space-4);
       }
       .field {
         display: block;
@@ -31,7 +35,7 @@ export class PersonEdit extends LitElement {
       }
       .grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
         gap: 0 var(--wt-space-4);
       }
       .actions {
@@ -41,10 +45,9 @@ export class PersonEdit extends LitElement {
         padding-top: var(--wt-space-4);
         border-top: 1px solid var(--wt-color-border);
       }
-      @media (max-width: 38rem) {
-        .grid {
-          grid-template-columns: 1fr;
-        }
+      .required {
+        margin-inline-start: var(--wt-space-1);
+        color: var(--wt-color-danger);
       }
     `,
   ];
@@ -116,6 +119,7 @@ export class PersonEdit extends LitElement {
 
   #save(event: Event): void {
     event.stopPropagation();
+    if (this.pendingAction !== null) return;
     if (!this.#validate()) return;
     this.#emit("save-person", {
       displayName: this.details.displayName.trim(),
@@ -169,9 +173,10 @@ export class PersonEdit extends LitElement {
   override render() {
     const person = this.person;
     return html`
-      <wt-dialog
+      <wt-modal
         heading=${person ? `${t("action.edit")} ${person.displayName}` : t("person.edit")}
         .open=${this.open}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         @wt-close=${() => {
           this.open = false;
           this.#loadPerson();
@@ -210,11 +215,13 @@ export class PersonEdit extends LitElement {
                   )}
                   ${this.#input("edit-email", "email", t("person.email"), "email")}
                   ${this.#input("edit-telephone", "telephone", t("person.telephone"), "telephone")}
+                  <hr />
                   <label class="field">
-                    ${t("person.role")}
+                    ${t("person.role")}<span class="required" aria-hidden="true">*</span>
                     <select
                       data-test="edit-role"
                       name="role"
+                      required
                       @change=${(event: Event) =>
                         (this.details = {
                           ...this.details,
@@ -230,10 +237,11 @@ export class PersonEdit extends LitElement {
                     </select>
                   </label>
                   <label class="field">
-                    ${t("person.status_label")}
+                    ${t("person.status_label")}<span class="required" aria-hidden="true">*</span>
                     <select
                       data-test="edit-status"
                       name="status"
+                      required
                       ?disabled=${person.personId === this.currentPersonId}
                       @change=${(event: Event) =>
                         (this.details = {
@@ -343,11 +351,12 @@ export class PersonEdit extends LitElement {
           <wt-button
             data-test="save"
             variant="primary"
+            ?disabled=${this.pendingAction !== null}
             @click=${(event: Event) => this.#save(event)}
             >${t("action.save")}</wt-button
           >
         </wt-form-actions>
-      </wt-dialog>
+      </wt-modal>
     `;
   }
 }

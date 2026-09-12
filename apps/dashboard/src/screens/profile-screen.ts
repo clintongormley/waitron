@@ -155,6 +155,8 @@ export class ProfileScreen extends LitElement {
     super.connectedCallback();
     void this.#load();
   }
+  #initialDetailsChecked = false;
+
   async #load(): Promise<void> {
     try {
       await Promise.all([
@@ -171,6 +173,21 @@ export class ProfileScreen extends LitElement {
           this.venueLocale = locales.venueDefault;
         }),
       ]);
+      if (!this.#initialDetailsChecked && this.profile !== null && this.isConnected) {
+        this.#initialDetailsChecked = true;
+        if (
+          this.mode === "view" &&
+          [
+            this.profile.displayName,
+            this.profile.firstNames,
+            this.profile.lastNames,
+            this.profile.email,
+          ].some((value) => !value?.trim())
+        ) {
+          this.#edit("details");
+          this.errors = this.#detailsErrors();
+        }
+      }
     } catch (error) {
       this.error = codeMessage(codeOf(error));
     }
@@ -259,18 +276,24 @@ export class ProfileScreen extends LitElement {
       }
     </wt-input>`;
   }
+  #detailsErrors(): Partial<Record<Field, string>> {
+    const f = this.fields;
+    const errors: Partial<Record<Field, string>> = {};
+    if (!f.displayName.trim()) errors.displayName = t("form.name_required");
+    if (!f.firstNames.trim()) errors.firstNames = t("form.first_names_required");
+    if (!f.lastNames.trim()) errors.lastNames = t("form.last_names_required");
+    if (!f.email.trim()) errors.email = t("form.email_required");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
+      errors.email = codeMessage("person.email_invalid");
+    return errors;
+  }
+
   async #save(): Promise<void> {
     if (this.busy) return;
     const f = this.fields;
     const errors: Partial<Record<Field, string>> = {};
-    if (this.mode === "details") {
-      if (!f.displayName.trim()) errors.displayName = t("form.name_required");
-      if (!f.firstNames.trim()) errors.firstNames = t("form.first_names_required");
-      if (!f.lastNames.trim()) errors.lastNames = t("form.last_names_required");
-      if (!f.email.trim()) errors.email = t("form.email_required");
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
-        errors.email = codeMessage("person.email_invalid");
-    }
+    if (this.mode === "details") Object.assign(errors, this.#detailsErrors());
+
     if (this.mode === "passkey" && f.passkeyName.trim().length > 80)
       errors.passkeyName = t("profile.passkey_name_too_long");
     if (this.needsCredentials) {

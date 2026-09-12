@@ -1,19 +1,19 @@
-import { LitElement, html } from "lit";
+import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { registerIcons, type DataTableColumn } from "@waitron/ui";
+import { type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
-import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import { t } from "../i18n/t.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonSummary } from "../api/client.js";
-
-registerIcons({ edit: "M11.7 1.3a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4L6 13l-4 1 1-4z" });
 
 /** Presents the staff roster and emits the selected person id; the screen owns data and actions. */
 @customElement("dashboard-staff-list")
 export class StaffList extends LitElement {
   @property({ attribute: false }) people: PersonSummary[] = [];
+
+  @property({ attribute: false }) currentPersonId: string | null = null;
 
   #edit(event: Event, personId: string): void {
     event.stopPropagation();
@@ -27,7 +27,6 @@ export class StaffList extends LitElement {
   }
 
   #columns(): DataTableColumn<PersonSummary>[] {
-    const editLabel = t("action.edit");
     return [
       {
         key: "displayName",
@@ -73,17 +72,44 @@ export class StaffList extends LitElement {
         label: t("staff.actions"),
         align: "end",
         cell: (person) => html`
-          <wt-button
-            variant="ghost"
-            data-test="edit-${person.personId}"
-            aria-label=${`${editLabel} ${person.displayName}`}
-            @click=${(event: Event) => this.#edit(event, person.personId)}
-          >
-            <wt-icon name="edit"></wt-icon>
-          </wt-button>
+          <wt-row-actions label=${`${t("staff.actions")}: ${person.displayName}`}>
+            <wt-button
+              variant="ghost"
+              data-test="edit-${person.personId}"
+              @click=${(event: Event) => this.#edit(event, person.personId)}
+              >${t("action.edit")}</wt-button
+            >
+            ${this.#action(person, "reset-login", t("person.reset_login"))}
+            ${this.#action(person, "reset-pin", t("person.reset_pin"))}
+            ${
+              person.status === "suspended"
+                ? this.#action(person, "reactivate", t("person.reactivate_and_invite"))
+                : this.#action(person, "disable", t("person.mark_inactive"))
+            }
+            ${person.status === "pending" ? this.#action(person, "resend-invitation", t("person.resend_invitation")) : nothing}
+          </wt-row-actions>
         `,
       },
     ];
+  }
+
+  #action(person: PersonSummary, action: string, label: string) {
+    return html`<wt-button
+      variant="ghost"
+      data-test=${`${action}-${person.personId}`}
+      ?disabled=${action === "disable" && person.personId === this.currentPersonId}
+      @click=${(event: Event) => {
+        event.stopPropagation();
+        this.dispatchEvent(
+          new CustomEvent("person-action", {
+            detail: { personId: person.personId, action },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }}
+      >${label}</wt-button
+    >`;
   }
 
   override render() {

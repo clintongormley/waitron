@@ -30,7 +30,20 @@ backoff, login/recovery polish and automatic return to login at session expiry a
 the [account setup and user management plan](superpowers/plans/2026-09-09-user-management-and-account-setup.md).
 Still open: passkey-based reauthentication for an account with no password; an
 operator screen that stores Google provider credentials in the vault. Turnstile and SMS verification
-belong to the later optional cloud/remote offering.
+belong to the later optional cloud/remote offering. Wording follow-up: the till still renders
+`person.suspended` as “Account suspended”; align its English and Spanish messages with the
+dashboard's Disabled terminology (`apps/till/src/i18n/strings.ts`).
+
+**Shared database-backed table paging, search and sorting: separate PR, user admin first**
+(owner decision, 2026-09-12). Large lists should query the database from the first page, regardless
+of total row count. Extend `wt-data-table` with reusable paging, sorting and loading controls;
+each screen supplies its query and domain filters, while its API applies search, filters, ordering
+and row limits in the database. Start with 50 users per page and a server-enforced maximum.
+Search and sorting must cover the whole matching dataset, so you can find a user outside the
+displayed page. Debounce typed searches, reset the page when filters change, ignore superseded
+responses and preserve passive live refreshes. Verify bounded responses with a large dataset and
+stable ordering across pages. Ship user admin as the first consumer, with the shared contract
+available to other tables. Keep this out of the current user-admin modal and account-setup UI PR.
 
 **Dashboard login shortcuts — LANDED #305** (owner, 2026-09-10). The
 [implementation plan](superpowers/plans/2026-09-10-login-screen.md) covers separate authenticator

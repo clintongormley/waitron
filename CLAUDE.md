@@ -214,6 +214,9 @@ unfiltered `main` run, not a wrong hook.
   and one localized “problem with this form” summary. Every input has a semantic `name` (plus the
   standard `autocomplete` purpose when one exists), never a generated widget id as its identity.
   Password reveal buttons use the input's `end` slot and an action-specific accessible label.
+  An inline confirmation suspends the enclosing form's Save and implicit Enter submission until
+  resolved. The user-admin review reproduced Enter saving details behind a pending login-reset
+  confirmation (`apps/dashboard/src/widgets/person-edit.test.ts`, “suspends detail submission…”).
   `wt-form-actions` keeps the primary action bottom-right and Cancel/Back bottom-left. Optional field
   explanations use `wt-help-tooltip`, whose button closes on outside click or Escape. Cost: the
   dashboard login exposed `wt-input-N` to password safes and disabled incomplete forms without saying

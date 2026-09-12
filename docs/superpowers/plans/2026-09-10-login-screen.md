@@ -1,5 +1,10 @@
 # Faster dashboard login
 
+2026-09-12 owner update: Account setup now asks for one PIN entry, without confirmation.
+When you reach Your profile with required details missing, its details editor opens and marks
+those fields. See the [user-management update](2026-09-09-user-management-and-account-setup.md)
+and the login/profile screen regressions in `apps/dashboard/src/screens/`.
+
 2026-09-11 owner update: [login-flow refinements](../specs/2026-09-11-login-flow-refinements-design.md)
 supersede the sign-in choices below where they conflict. Email entry opens password without an
 automatic passkey prompt; only opted-in email/method preferences persist, changing accounts clears

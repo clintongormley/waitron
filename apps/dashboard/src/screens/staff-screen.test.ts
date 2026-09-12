@@ -94,14 +94,151 @@ async function openEdit(el: StaffScreen, personId: string): Promise<void> {
   await el.updateComplete;
 }
 
-/** The native <dialog> inside the screen's person-form, once wt-dialog's first render has settled. */
+/** The native <dialog> inside the screen's person-form, once wt-modal's first render has settled. */
 async function nativeDialog(el: StaffScreen): Promise<HTMLDialogElement> {
-  const wtDialog = form(el).shadowRoot!.querySelector("wt-dialog")!;
+  const wtDialog = form(el).shadowRoot!.querySelector("wt-modal")!;
   await (wtDialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
   return wtDialog.shadowRoot!.querySelector("dialog")!;
 }
 
 describe("staff-screen", () => {
+  it.each([
+    ["reset-login", "resetLogin"],
+    ["reset-pin", "resetPin"],
+    ["disable", "deactivatePerson"],
+  ] as const)(
+    "confirms the row's %s action before changing the selected user",
+    async (action, method) => {
+      const api = stubApi();
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+      await flush(el);
+      list(el).dispatchEvent(
+        new CustomEvent("person-action", {
+          detail: { personId: "p1", action },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api[method]).not.toHaveBeenCalled();
+      const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+      expect(dialog).not.toBeNull();
+      expect(dialog.open).toBe(true);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-row-action]")!.click();
+      await flush(el);
+      expect(api[method]).toHaveBeenCalledWith("p1");
+      expect(dialog.open).toBe(false);
+      expect(editForm(el).open).toBe(false);
+    },
+  );
+
+  it.each(["create", "edit"])(
+    "clears a row confirmation when the %s editor is requested",
+    async (editor) => {
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+      await flush(el);
+      list(el).dispatchEvent(
+        new CustomEvent("person-action", { detail: { personId: "p1", action: "reset-pin" } }),
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+      if (editor === "create")
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+      else await openEdit(el, "p1");
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(false);
+      expect(editor === "create" ? form(el).open : editForm(el).open).toBe(true);
+    },
+  );
+
+  it("closes the editor after a successful save even when refreshing fails", async () => {
+    const api = stubApi({
+      listStaff: vi
+        .fn()
+        .mockResolvedValueOnce(people)
+        .mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+    editForm(el).dispatchEvent(
+      new CustomEvent("save-person", { detail: {}, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(api.savePerson).toHaveBeenCalledTimes(1);
+    expect(editForm(el).open).toBe(false);
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("server.internal"),
+    );
+  });
+
+  it("loads 1000 users, displays every matching row and filters without another request", async () => {
+    const roster = Array.from({ length: 1000 }, (_, i) => ({
+      ...people[0]!,
+      personId: `p${i}`,
+      displayName: `User ${i}`,
+    }));
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(roster) });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await list(el).updateComplete;
+    const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1000);
+    const search = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=search]")!;
+    search.value = "User 999";
+    search.dispatchEvent(new Event("input"));
+    await flush(el);
+    expect(list(el).people.map((person) => person.personId)).toEqual(["p999"]);
+    const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=role-filter]")!;
+    role.value = "staff";
+    role.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(list(el).people).toEqual([]);
+    expect(api.listStaff).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a failed row action open for retry and ignores invalid or self-disable requests", async () => {
+    const api = stubApi({
+      resetPin: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue(undefined),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api,
+      currentPersonId: "p1",
+    });
+    await flush(el);
+    for (const detail of [
+      { personId: "missing", action: "reset-pin" },
+      { personId: "p1", action: "invalid" },
+      { personId: "p1", action: "disable" },
+    ]) {
+      list(el).dispatchEvent(new CustomEvent("person-action", { detail }));
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(false);
+    }
+    list(el).dispatchEvent(
+      new CustomEvent("person-action", { detail: { personId: "p1", action: "reset-pin" } }),
+    );
+    await flush(el);
+    const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-row-action]")!;
+    confirm.click();
+    confirm.click();
+    await flush(el);
+    expect(api.resetPin).toHaveBeenCalledTimes(1);
+    const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("server.internal"),
+    );
+    confirm.click();
+    await flush(el);
+    expect(api.resetPin).toHaveBeenCalledTimes(2);
+    expect(dialog.open).toBe(false);
+  });
+
   it("prevents forged self-deactivation while allowing a colleague to be deactivated", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -171,7 +308,7 @@ describe("staff-screen", () => {
     await el.updateComplete;
     expect(form(el).open).toBe(true);
 
-    // Dismiss via the real Escape/backdrop path: the native <dialog> closing makes wt-dialog
+    // Dismiss via the real Escape/backdrop path: the native <dialog> closing makes wt-modal
     // dispatch a bubbling, composed `wt-close`. `dialog.close()` fires `close` as a QUEUED TASK
     // (not a microtask), so await the wt-close reaching the screen host before asserting — the same
     // timing the person-form suite documents.
