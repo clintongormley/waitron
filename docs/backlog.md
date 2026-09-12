@@ -63,6 +63,20 @@ the list's existing in-browser paging and search alone — the replacement is th
    only be chosen on Your profile, so an admin setting someone else up cannot pick the language that
    person will first see. Add the same chooser to the admin editor.
 
+**Tell people by email when their account's security changes** (owner, 2026-09-12, not started).
+Waitron only ever emails somebody when it wants them to click something: the sender handles exactly
+three purposes — invitation, password reset and email change — and every one of them carries an
+action link (`apps/server/src/account-email.ts`, `AccountActionPurpose` in
+`packages/identity/src/account-action.ts`). Nothing is sent AFTER the fact, so a person whose
+password is changed, or who has a passkey or an authenticator added or removed, learns nothing —
+which is the ordinary way somebody notices that an account has been taken over. Wanted: a
+notification-only message (no link to click, one line on what to do if it was not them) for the
+security events — password changed, passkey added or removed, authenticator enrolled or removed,
+recovery codes regenerated, email address changed, Google login connected or disconnected. Open
+questions for the design: whether an email-address change notifies the OLD address as well as the
+new one; what the message says when an admin made the change rather than the person; and whether
+these are grouped so a burst of changes is not a burst of emails.
+
 **Shared database-backed table paging, search and sorting: separate PR, user admin first**
 (owner decision, 2026-09-12). Large lists should query the database from the first page, regardless
 of total row count. Extend `wt-data-table` with reusable paging, sorting and loading controls;
