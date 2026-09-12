@@ -1740,6 +1740,51 @@ wizard makes harder than it needs to be; each one names what it does today.
    remaining design question is where the made-up values are applied — the screen skipping fields, or
    the shell patching defaults into the draft — and how the review step shows what was chosen.
 
+**Till name and the two series codes: explain them, default them, and check them** (owner asked what
+they are and what may be typed in them, 2026-09-12; not started). Three more fields on the same
+wizard screen, each traced below.
+
+- *“Till name” really is the till, not the filing identity.* It inserts a row in `tills`
+  (`create-till`, `packages/provisioning/src/venue-plan.ts` → `venue-apply.ts`). The node — the SIF
+  that owns the fiscal chain and files to AEAT — is created alongside it and named automatically
+  after the location (`create-node`, same plan), so nobody is ever asked to name it. The till name is
+  an operator-facing label: it is what a Z report prints beside each register. Every seed in this
+  repository uses “Caja 1”, which is the value to prefill. The till name never reaches AEAT.
+- *The two series codes should be defaulted rather than optional.* A series row must exist — the plan
+  always emits both `create-series` actions — so “optional” has to mean a default (“A” and “R”, say)
+  the operator can override, not a field that may be left empty. Do not ask for them at all on the
+  demo path.
+- *What may a series code contain?* Not digits 00–99 — nothing that narrow. The database takes any
+  non-empty text, unique per node (`invoice_series_code_ck`, `packages/db/src/schema/series.ts`). On
+  the wire the code is joined to the counter as `<code>/<number>`
+  (`formatInvoiceNumber`, `packages/core/src/record-sale.ts`), and that whole string must be 1–60
+  characters drawn from `A-Z a-z 0-9 / _ . -` — our own deliberately narrow charset, chosen so the QR
+  and form encodings cannot disagree; AEAT itself permits printable ASCII
+  (`packages/verifactu/src/validate.ts`). The practical ceiling on the code alone is 38 characters
+  (`MAX_BASE_CODE_LENGTH`, `packages/fiscal-verifactu/src/reserved-series.ts`), because a cold
+  restore appends `-<installation number>` to it and the counter needs room too.
+- *Nothing checks any of that at setup, and the cost lands in an append-only table.* The server
+  requires only a non-empty string (`asString`, `apps/server/src/setup-api.ts`). **Ran it** on
+  PGlite through the real write path: with the series code set to `Serie A`, `recordSale` resolved
+  normally and wrote `num_serie_factura = "Serie A/1"` into `registros_facturacion` — the immutable,
+  hash-chained table. **Ran the validator** on that same string: `NUMSERIE_CHARSET`, so AEAT would
+  reject every record carrying it. A separate finding from the same probe, evidence weaker (a text
+  search for importers, plus the write path above accepting an invalid record): `validate` is
+  exported from `@waitron/verifactu` but no production file imports it — only its own tests — so
+  nothing checks a record against AEAT's rules before it is chained or sent. That wants confirming
+  and then fixing on its own account; it is not only about series codes.
+- *Who changes a series code, and when?* In practice the system does, not the operator: a cold
+  restore or standby activation retires the live series and opens disjoint ones by suffixing the
+  installation number (`deriveReservedSeriesCodes`, same file). An operator would only change it to
+  match an existing numbering scheme their accountant already uses. Nothing in the dashboard can
+  change or add a series today — the only production insert is provisioning's.
+
+Wanted: prefill the till name, default both codes, drop all three from the demo path, and refuse a
+code at the wizard and at the server boundary that the fiscal record would later reject — charset,
+the 38-character base, and the existing “the two must differ” rule, each with its own message (see
+the per-field error item above). Every field on this screen also wants an explanation of what it is
+for; a `wt-help-tooltip` is the shared control for that (design system → Forms).
+
 **“What this location does” is the wrong question for a required tax-agency field** (owner asked
 why we ask it, 2026-09-12; not started). The answer is stored on the location
 (`operation_description`, `NOT NULL`, `packages/db/src/schema/tenants.ts`) and copied onto every
