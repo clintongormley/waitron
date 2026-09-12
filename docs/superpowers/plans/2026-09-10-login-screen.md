@@ -197,6 +197,13 @@ Update `docs/developers/design-system.md` and the dashboard login convention in 
 the implementation changes their current always-passkey/intermediate-menu rules. Keep the
 no-enrolment-lookup invariant while documenting the local remembered-method exception. Sweep
 `README.md`, `.github/instructions/`, `docs/ui-review.md`, and other consumers for stale claims;
+
+> **2026-09-12:** `.github/instructions/waitron.instructions.md` was deleted (nothing read it after
+> Copilot's review was switched off on 2026-09-06). Its rules now live in
+> `docs/developers/conventions-ui.md`, `conventions-data.md` and `testing-guide.md`; sweep those
+> instead. The original is still readable with
+> `git show f5941462:.github/instructions/waitron.instructions.md`.
+
 add dated pointers to historical specs instead of rewriting history. Update the backlog when this
 work's state changes. Commit with sign-off and hooks enabled. Announce readiness for `finish-branch`
 after implementation and validation; finishing and landing remain separate owner actions.

@@ -265,7 +265,18 @@ nothing and throws nothing (measured with a control, 2026-09-10) — so the mism
 an unclassified driver error in whatever query first touched the changed schema. Pointer:
 `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §4.2/§4.5/§9.
 
-**Carried from the retired Copilot instructions file** (`.github/instructions/waitron.instructions.md`, which nothing read after its review was switched off on 2026-09-06)
+## A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries
+
+The permission check returns the session's tenant; it does not compare it with the configured tenant.
+A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
+them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, "refuses a manager session
+belonging to another tenant".
+
+**Carried from the retired Copilot instructions file** (deleted 2026-09-12; read it with
+`git show f5941462:.github/instructions/waitron.instructions.md`). What was checked before deleting it: Copilot's automatic review was removed from
+this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` references the file, and
+Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still reads
+it — an `applyTo: "**"` instructions file would be picked up there.
 
 ## `packages/verifactu` must never import another workspace package, `@waitron/ui` included
 
@@ -284,17 +295,11 @@ nit to wave through.
 `packages/verifactu`, `packages/fiscal-verifactu` and `packages/workforce-es`. Since 2026-09-07 the
 English-only guard (`scripts/english-only.test.ts`) scans comment prose as well as identifiers in
 the generic packages, leaving only `«…»` quotes and backtick citations exempt.
-`packages/fiscal/src/no-regime-vocabulary.test.ts` checks the opposite direction: regime words such
-as "chain"/"hash" must be written in English inside `packages/fiscal`. A PR introducing a Spanish
+`packages/fiscal/src/no-regime-vocabulary.test.ts` enforces the opposite direction: its forbidden set
+is ENGLISH regime vocabulary, so a regime word such as "chain" or "hash" written in English inside
+`packages/fiscal` is what it refuses. (Verified against the guard itself, which strips comments
+precisely because its forbidden set is English regime vocabulary a comment legitimately cites.) A PR introducing a Spanish
 identifier into a generic package, an English regime term into `packages/fiscal`, one that adds a
 module's word to the base list instead of the module's own declaration, or one that drops a generic
 package from `GENERIC_PACKAGES` (and its pin) to make a scan pass, is a design question to raise,
 not a nit to wave through.
-
-## A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries
-
-The permission check returns the session's tenant; it does not compare it with the configured tenant.
-A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
-them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, "refuses a manager session
-belonging to another tenant". Printer routes enforce the same check; their regression is
-`apps/server/src/print-api.pg.test.ts`, "refuses another tenant's manager…".

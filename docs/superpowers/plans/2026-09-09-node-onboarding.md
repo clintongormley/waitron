@@ -148,6 +148,13 @@ checks separately. Verify production activation cannot be reached by a browser-o
 change or imported readiness assertion.
 
 Audit prose across the complete changed path set, including `.github/instructions`, README/runbooks,
+
+> **2026-09-12:** `.github/instructions/waitron.instructions.md` was deleted (nothing read it after
+> Copilot's review was switched off on 2026-09-06). Its rules now live in
+> `docs/developers/conventions-ui.md`, `conventions-data.md` and `testing-guide.md`; sweep those
+> instead. The original is still readable with
+> `git show f5941462:.github/instructions/waitron.instructions.md`.
+
 backlog and historical pointers. Record the Prepare compliance question before release; do not call
 the feature legally cleared on the strength of tests. Update the backlog with completed slices and
 remaining release evidence. Announce readiness for `finish-branch`; do not merge without the owner's

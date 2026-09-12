@@ -5,9 +5,12 @@ This file holds the evidence behind the UI-facing conventions in the repo root `
 recovery page: the regressions, measurements and pointers that paid for each rule. `CLAUDE.md` keeps
 the one-line version of each rule and points here for the rest. The component-level rules further
 down (no hardcoded chrome, real-Chromium testing, the two tests a new primitive needs, event
-discipline, and the rest) came from `.github/instructions/waitron.instructions.md`, a Copilot
-review-instructions file that nothing has read since Copilot's automatic PR review was switched off
-on 2026-09-06 — which is worth stating here, since a reader may never otherwise have seen them.
+discipline, and the rest) came from a Copilot review-instructions file deleted on
+2026-09-12 (`git show f5941462:.github/instructions/waitron.instructions.md`) — worth stating here, since a reader may never
+otherwise have seen them. What was checked before deleting it: Copilot's automatic review was removed
+from this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` references the file,
+and Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still
+reads it — an `applyTo: "**"` file would be picked up there.
 
 **Forms and the shared UI contract**
 
@@ -96,6 +99,14 @@ active-account reset, with the same acknowledgement for every address. Owner dec
 `docs/superpowers/specs/2026-09-11-login-flow-refinements-design.md`.
 
 **UI primitives in `packages/ui`**
+
+[design-system.md](design-system.md) is the DESIGN authority for the rules in this group and states
+several of them more broadly — the token rule there binds any component or view, not only
+`packages/ui`. What follows records what the GUARDS mechanically enforce, which is narrower and in
+one place wider: `packages/ui/src/no-hardcoded-chrome.test.ts` scans `packages/ui/src/components/*.ts`
+only, and its forbidden list includes `color()`, which design-system.md's wording omits. Where the
+two differ, the guard decides what CI does and design-system.md decides what a reviewer should ask
+for.
 
 ## No hardcoded chrome
 
@@ -188,5 +199,7 @@ security boundary nothing outside the design states. Pointer:
 
 The retired file's "Database tests that assert nothing" and "Workspace package boundaries" sections
 mostly restated rules that already live elsewhere in `CLAUDE.md` or in
-`docs/developers/conventions-data.md`. What follows is the part of those two sections that was more
-specific than the general rule and would otherwise have been lost.
+`docs/developers/conventions-data.md`. The part of them that was MORE specific than the general rule
+was kept, but it is not here: the database-test rules went to [testing-guide.md](testing-guide.md)
+and the package-boundary and vocabulary rules to [conventions-data.md](conventions-data.md), each
+under the same provenance note.

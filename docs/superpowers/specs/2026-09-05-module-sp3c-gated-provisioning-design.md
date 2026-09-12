@@ -487,6 +487,13 @@ the provisioning e2e use them); the guard (§9) is what stops the composition ro
 - `docs/superpowers/specs/2026-09-04-module-system-architecture-design.md` §9 ("provisioning still
   mints exactly one SIF per node at provision (`venue-apply.ts:158`)") — a dated pointer, not a rewrite.
 - `.github/instructions/waitron.instructions.md` — read in full for any claim about provisioning, the
+
+> **2026-09-12:** `.github/instructions/waitron.instructions.md` was deleted (nothing read it after
+> Copilot's review was switched off on 2026-09-06). Its rules now live in
+> `docs/developers/conventions-ui.md`, `conventions-data.md` and `testing-guide.md`; sweep those
+> instead. The original is still readable with
+> `git show f5941462:.github/instructions/waitron.instructions.md`.
+
   composition root or `apps/server/src/modules.ts` (SP-3b's lesson: the receipt sweep must include it).
 - CLAUDE.md §3: one entry — the composition list lives in `@waitron/composition`; only `bin.ts` and
   `modules.ts` import module packages, and `scripts/module-seams.test.ts` says so; a module's seed runs

@@ -102,7 +102,8 @@ hook, or how tests are scheduled:
   Cost: a review-fix command ran a successful build after a failed server typecheck and reported
   success.
 - **CI's shards run `test:coverage`, not `test`.** Before calling a package green, run
-  `pnpm --filter <pkg> test:coverage`. There is no single `test` job.
+  `pnpm --filter <pkg> test:coverage`. There is no single `test` job. Vitest `--shard` splits by FILE
+  COUNT, so `N` must never exceed a package's test-file count.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
@@ -131,7 +132,9 @@ hook, or how tests are scheduled:
 - **The pre-push log file can be days stale.** Reproduce; do not read it.
 - **The four browser packages run vitest in real headless Chromium.** Concurrency is decided by
   measured headroom, never by a count: check free memory and the heaviest processes first, then scale
-  `--workspace-concurrency` to what is free. Chromium's launch depends on a Codex seat's PERMISSIONS,
+  `--workspace-concurrency` to what is free. What is NOT allowed is adding a browser run beside ANOTHER
+  SESSION's browser run, or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check
+  what else is testing on the machine first. Chromium's launch depends on a Codex seat's PERMISSIONS,
   not on Codex — check host execution before deferring browser testing to another agent.
 - **Only the `core` migration set has an upgrade test; every module set is still migrated from a
   VIRGIN database only**, so a green gate is no evidence that a module set can upgrade a box. Cost: a
@@ -159,20 +162,27 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   editor after the write succeeds, then refresh separately — a retained create form invites a
   duplicate submission.
 - **Automatic dashboard reads are passive session activity.** Use the shared query controller or the
-  request primitive's `passive` option, or polling keeps an unattended dashboard signed in.
+  request primitive's `passive` option, or polling keeps an unattended dashboard signed in. Observer
+  callbacks assign snapshots; they do not rerun loaders that reset drafts or mint recovery keys.
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** A rejected subscription closes
   the whole tab's stream, so a misspelled name breaks other screens too. Guard:
-  `scripts/live-subscriptions.test.ts`.
+  `scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or
+  disabled-module combinations.
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
-  legal name (not a location), Logout at the trailing edge only when a session exists.
+  legal name (not a location). The account menu (a person-icon `wt-row-actions` popover holding
+  Account settings and Log out) sits at the trailing edge only when a session exists.
 - **Dashboard sign-in matches the browser's `Accept-Language` preferences.** Guard against a late
   locale response overwriting an authenticated person's language or an explicit choice.
 - **Dashboard login offers methods without revealing account enrolment.** Never query account status
-  or passkey enrolment to choose the public screen.
-- **Every colour, spacing, radius and font in a `packages/ui` component reads a `--wt-*` token.** No
-  hex, no named colours, no `rem`/`em`. Guard: `packages/ui/src/no-hardcoded-chrome.test.ts`.
+  or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
+  action: navigation, refresh, logout and session expiry never open one. Save the authenticated email
+  and the successful method only with Remember selected, never in tab storage.
+- **Every colour, spacing, radius and font reads a `--wt-*` token.** No hex, no named colours, no
+  `rem`/`em`. Guard: `packages/ui/src/no-hardcoded-chrome.test.ts`, which scans `packages/ui`
+  components; [design-system.md](docs/developers/design-system.md) states the rule for any component
+  or view, which is the wider scope a reviewer should apply.
 - **A new `wt-*` primitive needs two specific tests**, not "some tests": a token-painting test, and an
   axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes.
 - **Custom events are named `wt-*`, carry `detail`, and are dispatched `bubbles: true, composed: true`
@@ -180,8 +190,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   consumer observes the change twice.
 - **A retained hardware registration must remain re-addable after deactivation.** Discovery matches
   disabled records too; the dashboard offers them as Add again and reactivates the existing id.
-- **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** The guard is the
-  `import-x/no-restricted-paths` zone in `eslint.config.js`, not the empty `dependencies` block.
+- **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
+  other package in this repo, and `@waitron/printing` depends on IT, never the reverse. The guard is
+  the `import-x/no-restricted-paths` zone in `eslint.config.js`, not the empty `dependencies` block.
 - **A container that must reach a hot-plugged USB printer mounts `/dev:/dev:ro`**, plus
   `device_cgroup_rules: ["c 180:* rwm"]` and `group_add: ["7"]` — not a `/dev/usb` subdirectory bind
   and not a hard `devices:` line.
@@ -201,11 +212,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`
+  (root project, reads text)
   — shrink its allowlist, never grow it. `@waitron/dashboard-modules` is the browser-side twin.
 - **A new product domain lands as a MODULE, not as new code in the core**, filling the contract seats;
   generic code never learns it exists.
 - **A country pack is a browser-safe preset over modules, not a module.** Packs name contribution ids
-  as strings and never carry an external-provider credential.
+  as strings and never carry an external-provider credential. Setup derives geography-dependent values
+  in the browser and repeats the derivation at the server boundary.
 - **A command name is declared under `waitron.commands`, never `bin`.** Nothing builds at install
   time, so a `bin` under `dist/` is never linked by the install that reads it.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard**, so `apps/server` cannot deep-import
@@ -233,7 +246,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is
   NOT the query's isolation boundary.** Since RLS was dropped, `withTenant` no longer isolates
   SELECTs, so every read scopes to the tenant itself, a by-id read as much as a list read, never
-  trusting a globally-unique UUID. Cost: a by-id read on `working_orders.id` alone let tenant A read
+  trusting a globally-unique UUID or the deployment invariant. Cost: a by-id read on `working_orders.id` alone let tenant A read
   AND abandon tenant B's order. Four reading review layers called it safe; only the seat that RAN a
   two-tenant probe caught it.
 - **A configuration route checks the TENANT returned by `authorizeManager`, as well as scoping its
@@ -243,7 +256,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — the
   replication apply worker skips ordinary triggers. No policies, no RLS: one tenant per database.
-  Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-enable-always.test.ts`.
+  Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-enable-always.test.ts` — run
+  them after adding any table anywhere.
 - **The two publications a node holds are created by the table OWNER, and the replication role is a
   bootstrap the app provisioner only verifies** (`assertReplicationReady`). A subscription's
   connection string carries a password, so its statement is never logged and a failure throws only a
@@ -253,7 +267,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   migrator-owned. Any new provisioning path that creates schema carries `withRole`.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: an FK `REFERENCES`, and a
   trigger executing a function owned by a different migration set. No module creates the second kind
-  today. Guard: `scripts/module-graph-honesty.test.ts`.
+  today. Guard: `scripts/module-graph-honesty.test.ts`, which derives the trigger edge by reading
+  text and says so.
 - **No new table enters the core migration set without a stated reason in the commit.** A
   `tenant_id`-bearing domain table belongs to its module's own set, where its grants travel with it.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
@@ -296,7 +311,8 @@ container or browser test** — most of these rules exist because a test passed 
   `beforeAll`/`afterAll` only when the suite legitimately builds its own resource, and then guarded.
   Guard: `scripts/guarded-teardowns.test.ts`.
 - **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with Ryuk off an INTERRUPTED run
-  leaks containers; `pnpm reap` removes them by label and age. Never a blanket `docker volume prune`.
+  leaks containers; `pnpm reap` removes them by label and age. Never a blanket `docker volume prune`, and
+  `docker volume inspect` before any manual `rm`.
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND the process TITLE — not a bare `vitest` match.
 - **Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.** A
@@ -346,7 +362,8 @@ container or browser test** — most of these rules exist because a test passed 
   `EISDIR`. `sourceFilesIn` checks `isFile()`, with a fixture preserving a real nested source file.
 - **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated `lint`
   job and the hook run on every non-docs push. Two costs of living there: the root project does not
-  typecheck, and the module must be in the root `coverage.include`.
+  typecheck, and a module tested only from there must be in the root `coverage.include` AND excluded
+  from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
   Cost: the shared alta fixture had drifted into a record AEAT would reject, masking a real defect in
@@ -356,12 +373,18 @@ container or browser test** — most of these rules exist because a test passed 
   anything asserted on the result. Ask which assertion would fail if the behaviour were deleted; "it
   doesn't throw" is not an answer. `pnpm --filter @waitron/ui mutation` checks this systematically.
 - **`errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`.** Thirteen
-  hand-copied per-package versions were deleted; six of them passed with `errors.ts` fully unreachable.
+  hand-copied per-package versions were deleted; six of them passed with `errors.ts` fully
+  unreachable. It reads TEXT, so a `from "./errors.js"` inside a comment fakes an edge.
+- **Vitest's default coverage excludes swallow every dot-prefixed path** (`**/[.]**`), and
+  `include`/`exclude` replace rather than merge. A config measuring nothing still exits 0 with the
+  thresholds intact. Whenever `include` points inside a dot-directory, read the per-file table, not
+  the exit code.
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
   `toEqual` is what put `memberOf` under a matcher for the first time.
 
 Adding a new real-PG test package: the shared-container pattern and its knobs are in
 `docs/backlog.md` → _Reference_.
+
 ---
 
 ## 5. Fiscal invariants — the unrecoverable ones
@@ -418,7 +441,8 @@ before treating an implementation as a rule violation.
   push direct. A ROOT `CLAUDE.md` or `README.md` is format-checked and takes the normal flow.
 - **Every commit needs `git commit -s`.** **A PR that goes `BEHIND` is not rebased for that alone**
   (owner decision 2026-09-05): if what `main` gained is documentation, or code only in files this
-  branch did not touch, land it with `gh pr merge --squash --admin`. Rebase only for `CONFLICTING`,
+  branch did not touch, land it with `gh pr merge --squash --admin` — which bypasses the up-to-date
+  requirement and NOTHING else, never a failing check or an open review. Rebase only for `CONFLICTING`,
   or when `main` touched a code file this branch also changed. **Never `gh pr update-branch`** — its
   merge commit carries no sign-off and fails DCO.
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
@@ -429,7 +453,11 @@ before treating an implementation as a rule violation.
 - **After merging, delete the feature branch, local and remote, and verify the remote one is gone** —
   it has repeatedly survived.
 - **The main checkout goes stale in a way the worktrees do not**, because nothing installs there.
-  `/land-branch` runs `pnpm install` after the pull; run it yourself after any other pull.
+  `/land-branch` runs `pnpm install` after the pull; run it yourself after any other pull. An
+  untracked file there can block the post-merge `git pull --ff-only` — diff it before deleting.
+- **Before a PR, run the §2 gate yourself rather than relying on the hook, then `/finish-branch`.**
+  Both the hook and CI narrow to changed packages; the unfiltered `main` merge is the only run that
+  covers the rest.
 - **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
   `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*` — compose names its project after the
   directory, so an unqualified `docker compose up` starts a SECOND `db` on the same port.
@@ -439,7 +467,8 @@ unprompted, and **update it in the same change that makes it stale** (the moment
 reliably is a MERGE). Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`,
 both committed deliberately because a plan doubles as an operator's runbook. Session handoffs in
 `docs/handoffs/` are gitignored — never open a PR for one. Historical docs record what was true when
-written: add a dated pointer rather than rewriting them.
+written: add a dated pointer rather than rewriting them. The legal track is separate, in
+`docs/compliance/action-plan.md`.
 
 ---
 
@@ -456,13 +485,18 @@ would otherwise relitigate.
 The receipt goes in the matching topic file under `docs/developers/`. That split is what keeps this
 file loadable: it is read into every session, so a paragraph here is paid for on every turn of every
 session, while a paragraph in a topic file is paid for only when somebody needs it.
-`scripts/claude-md-pointers.test.ts` fails if a file this one points at does not exist.
+`scripts/claude-md-pointers.test.ts` fails if a path this file names — as a markdown link or as a
+backticked path — does not exist, if a topic file goes missing, or if this file grows past its
+budget.
 
 **Do not add:** one-off bugs with no reusable shape, anything the code or types already state plainly,
 or the narrative of what a session did — that belongs in the commit or the PR thread. **A count is a
-receipt that goes stale**, so describe the property, not the number. **If a guard enforces the rule,
-name the guard and stop** — do not also explain what the guard checks, because the failing test says
-that better and never goes stale.
+receipt that goes stale**, so describe the property, not the number. **If a guard enforces the rule, name the
+guard and stop** — do not also explain what the guard checks, because the failing test says that
+better and never goes stale. **The exception is a guard that is WEAKER than its name suggests**: one
+that reads text rather than running code, or that covers only part of what a reader would assume.
+Say so in the same line, because a failing test cannot tell you about the case it never checks — the
+first pass of this split dropped exactly three such hedges.
 
 **Prune as well as append.** A superseded rule teaches a session to work around something that no
 longer exists; delete it and say so in the commit. Natural moments: while addressing review findings,

@@ -244,7 +244,19 @@ Adding a new real-PG test package: the shared-container pattern and its knobs (`
 `cloneTemplate`, `singleFork` vs `maxForks`, template-key naming) are in `docs/backlog.md` →
 _Reference_.
 
-**Carried from the retired Copilot instructions file** (`.github/instructions/waitron.instructions.md`, which nothing read after its review was switched off on 2026-09-06)
+## Concurrent coverage runs must not share a package's report directory
+
+The hook's expanded dependency set can include a package also selected by a supplemental run. In A2,
+two overlapping fiscal-verifactu runs ended with `ENOENT` writing `coverage/.tmp/coverage-41.json`;
+Vitest cleans that shared directory. Inspect the resolved selection first, or give an intentional
+second run its own `--coverage.reportsDirectory`. Receipt:
+`docs/superpowers/plans/2026-09-12-setup-wizard-a2.md`.
+
+**Carried from the retired Copilot instructions file** (deleted 2026-09-12; read it with
+`git show f5941462:.github/instructions/waitron.instructions.md`). What was checked before deleting it: Copilot's automatic review was removed from
+this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` references the file, and
+Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still reads
+it — an `applyTo: "**"` instructions file would be picked up there.
 
 ## A grant assertion must call `asAppUser(tx)` before the query under test
 
@@ -266,18 +278,12 @@ be tested against real Postgres via Testcontainers
 ## Treat "there is a test" as an unfinished sentence
 
 This project has a documented history of tests that passed while the behaviour they were named
-after was absent or broken (see `.superpowers/sdd/coverage-mutation-report.md`). Coverage
+after was absent or broken. (The retired Copilot file cited
+`.superpowers/sdd/coverage-mutation-report.md` here; that path does not exist in this repository and
+did not when the file was deleted, so the pointer is dropped rather than carried forward.) Coverage
 percentage does not rule this out — it only proves a line executed, not that anything asserted on
 the result. When reviewing a test, ask specifically: if the behaviour under test were deleted or
 reverted, which assertion would fail, and how? "It calls the component and doesn't throw" is not an
 answer. `pnpm --filter @waitron/ui mutation` is the tool this repo uses to check that
 systematically — a surviving mutant on a boolean flag, a comparison operator, or a conditional guard
 means some test suite member exercises that code without noticing when it's wrong.
-
-## Concurrent coverage runs must not share a package's report directory
-
-The hook's expanded dependency set can include a package also selected by a supplemental run. In A2,
-two overlapping fiscal-verifactu runs ended with `ENOENT` writing `coverage/.tmp/coverage-41.json`;
-Vitest cleans that shared directory. Inspect the resolved selection first, or give an intentional
-second run its own `--coverage.reportsDirectory`. Receipt:
-`docs/superpowers/plans/2026-09-12-setup-wizard-a2.md`.

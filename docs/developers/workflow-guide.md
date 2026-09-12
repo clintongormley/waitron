@@ -125,9 +125,9 @@ violation; ask who is driving. That one seat is `/finish-branch`'s run-it review
 `~/workspace/tools/codex-seat.sh review-run`, which is the second model family on the diff now that
 Copilot's automatic review is off (its rule was removed from the main ruleset 2026-09-06). The
 repository carries no Codex file: the seat script passes the model, the effort, the doc-size cap
-(this file exceeds Codex's default and would be silently truncated), the sandbox's network switch
+(`CLAUDE.md` exceeds Codex's default and would be silently truncated), the sandbox's network switch
 (the Docker socket and DNS are closed by default; measured 2026-09-05) and the fallback that makes
-Codex read this file when there is no `AGENTS.md` (measured 2026-09-06, with a control). What is
+Codex read `CLAUDE.md` when there is no `AGENTS.md` (measured 2026-09-06, with a control). What is
 waitron-specific is the yardstick: each slice against the
 previous five PRs on fix rounds before land, false claims found at whole-branch review, and Codex
 tasks that needed a Claude fix round (the last is zero by construction from here on; the SP-3c and
