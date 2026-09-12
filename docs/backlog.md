@@ -1070,12 +1070,11 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
   real-time push; station-kind threshold defaults; an unbumped-since-fire neglect metric; a shared
   flash helper.
 
-**Receipts, duplicates & card payments (owner-raised 2026-09-11/12) — NEEDS A BRAINSTORM, then one slice.**
-The legal groundwork is done and recorded verbatim in
-[compliance/verifactu-findings.md §15](compliance/verifactu-findings.md) (RD 1619/2012 arts. 1, 4, 11,
-14; TRLGDCU art. 63; DGT 1693-02), and the open legal question is
-[asesor-questions.md Q19](compliance/asesor-questions.md). Four owner decisions taken 2026-09-12, none
-yet designed:
+**Receipts, duplicates & card payments — SPECCED 2026-09-12, ready for a plan.** Design:
+[2026-09-12-receipts-payment-slips-and-duplicates-design.md](superpowers/specs/2026-09-12-receipts-payment-slips-and-duplicates-design.md).
+Legal groundwork verbatim in [compliance/verifactu-findings.md §15](compliance/verifactu-findings.md)
+(RD 1619/2012 arts. 1, 4, 11, 14; TRLGDCU art. 63; DGT 1693-02; the Gipuzkoa TicketBAI answer on what a
+duplicate is); open advisor question [Q19](compliance/asesor-questions.md). What the spec settles:
 
 - **Take the card details OFF the fiscal ticket.** This REVERSES the landed card-receipt work
   ([2026-09-11 design](superpowers/specs/2026-09-11-card-receipt-tender-details-design.md), rendered at
@@ -1088,14 +1087,23 @@ yet designed:
   re-renders byte-identically to the first print — the exact property art. 14.4 forbids. Needs a
   decision on the failed-first-print case: if the customer never received the original, is the second
   print a duplicate or the original? (Q19(d)).
-- **Several guests wanting their own fiscal receipt.** Either split by item (built — see below) or the
-  art. 14.2.a) *duplicado* route with a per-person base/cuota split. Blocked on Q19; do not build (B)
-  on our own reading.
+- **Several guests wanting their own fiscal receipt** — split by item. The art. 14.2.a) *duplicado*
+  route is NOT built: blocked on Q19, and must not be built on our own reading.
+- **Handhelds may print**, gated on a new `print-receipt` device-profile capability replacing the
+  hardcoded `assertNotHandheld` firewall — which is what capability flags were introduced to generalise.
+- **Split checks get the origin table's label**, so one table's bills are identifiable at the printer.
+  They carry none today (`createOpenOrder(tx, cfg, checkId, [], null)`).
 
-Dependency note: the money-split-on-one-bill case ALSO needs a multi-tender pay path — `settleSale`
-already accepts `tenders[]`, but `payWorkingOrder` takes a single `tender` and `readTenderBlock` assumes
-exactly one per sale (`apps/server/src/till-sale.ts`). Art. 11.1 («expedidas en el momento de realizarse
-la operación») constrains how long an invoice may sit open waiting for the last payer.
+Named out of scope in the spec, each its own future item: **bilingual receipts** (`invoice_locales` is
+configured and snapshotted but rendered by NEITHER document — its own slice covering both); making
+one-original-per-invoice **structural** rather than procedural; putting the invoice number on the slip
+(Q19(e)).
+
+Dependency note for the money-split-on-one-bill case (still unbuilt): it needs a multi-tender pay path —
+`settleSale` already accepts `tenders[]`, but `payWorkingOrder` takes a single `tender` and
+`readTenderBlock` assumes exactly one per sale (`apps/server/src/till-sale.ts`). Art. 11.1 («expedidas en
+el momento de realizarse la operación») constrains how long an invoice may sit open waiting for the last
+payer.
 
 **Split-bill UI (TS-5 finish) — server done, till button is a placeholder.** `splitOffCheck` and
 `POST /api/tabs/:id/split` are landed and fiscally proven on real Postgres
