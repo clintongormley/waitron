@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
@@ -24,8 +24,12 @@ export class PersonForm extends LitElement {
     baseStyles,
     selectStyles,
     css`
-      wt-dialog {
-        --wt-dialog-max-width: min(90vw, 44rem);
+      hr {
+        width: 100%;
+        box-sizing: border-box;
+        border: 0;
+        border-top: 1px solid var(--wt-color-border);
+        margin: 0 0 var(--wt-space-4);
       }
       .field {
         display: block;
@@ -120,7 +124,7 @@ export class PersonForm extends LitElement {
       (message): message is string => message !== undefined,
     );
     return html`
-      <wt-dialog
+      <wt-modal
         heading=${t("person.new")}
         .open=${this.open}
         @wt-close=${() => this.#reset()}
@@ -134,6 +138,9 @@ export class PersonForm extends LitElement {
         ${this.#input("first-names", "given-name", t("person.first_names"), this.firstNames, true)}
         ${this.#input("last-names", "family-name", t("person.last_names"), this.lastNames, true)}
         ${this.#input("display-name", "nickname", t("person.display_name"), this.displayName, true)}
+        ${this.#input("email", "email", t("person.email"), this.email, true, "email")}
+        ${this.#input("telephone", "tel", t("person.telephone"), this.telephone, false, "tel")}
+        <hr />
         <label class="field">
           ${t("person.role")}<span class="required" aria-hidden="true">*</span>
           <select
@@ -148,8 +155,6 @@ export class PersonForm extends LitElement {
             ${ROLES.map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
           </select>
         </label>
-        ${this.#input("email", "email", t("person.email"), this.email, true, "email")}
-        ${this.#input("telephone", "tel", t("person.telephone"), this.telephone, false, "tel")}
         <wt-form-actions slot="footer">
           <wt-button
             slot="cancel"
@@ -170,7 +175,7 @@ export class PersonForm extends LitElement {
             >${t("action.create")}</wt-button
           >
         </wt-form-actions>
-      </wt-dialog>
+      </wt-modal>
     `;
   }
 

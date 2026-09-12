@@ -161,7 +161,6 @@ export class LoginScreen extends LitElement {
   @state() private secondFactor = "";
   @state() private factorMode: "totp" | "recovery" = "totp";
   @state() private pin = "";
-  @state() private confirmPin = "";
   @state() private step:
     "email" | "passkey" | "password" | "google" | "factor" | "reset-sent" | "setup-passkey" =
     this.rememberedLogin?.method ?? "email";
@@ -175,7 +174,6 @@ export class LoginScreen extends LitElement {
   @state() private passwordVisible = false;
   @state() private newPasswordVisible = false;
   @state() private pinVisible = false;
-  @state() private confirmPinVisible = false;
   @state() private token: string | null = new URLSearchParams(window.location.search).get("token");
   @state() private actionPurpose: AccountActionPurpose | null = actionPurposeFromUrl();
   @state() private actionValidated = false;
@@ -189,7 +187,6 @@ export class LoginScreen extends LitElement {
   @state() private passwordError = "";
   @state() private secondFactorError = "";
   @state() private pinError = "";
-  @state() private confirmPinError = "";
   @state() private googleConfigured = false;
   @state() private privacyNoticeUrl = "";
 
@@ -249,7 +246,6 @@ export class LoginScreen extends LitElement {
           this.passwordError,
           this.secondFactorError,
           this.pinError,
-          this.confirmPinError,
           this.passkeyNameError,
           this.errorKey === null ? "" : codeMessage(this.errorKey),
         ].filter(Boolean),
@@ -291,26 +287,17 @@ export class LoginScreen extends LitElement {
     this.pinError = "";
   }
 
-  #onConfirmPinChange(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.confirmPin = event.detail.value;
-    this.confirmPinError = "";
-  }
-
   #clearSecrets(): void {
     this.password = "";
     this.secondFactor = "";
     this.factorMode = "totp";
     this.pin = "";
-    this.confirmPin = "";
     this.passwordVisible = false;
     this.newPasswordVisible = false;
     this.pinVisible = false;
-    this.confirmPinVisible = false;
     this.passwordError = "";
     this.secondFactorError = "";
     this.pinError = "";
-    this.confirmPinError = "";
     this.passkeyName = "";
     this.passkeyNameError = "";
     this.passkeyFactorRequired = false;
@@ -498,14 +485,8 @@ export class LoginScreen extends LitElement {
           : this.pin.length < 4
             ? codeMessage("pin.too_short")
             : "";
-      this.confirmPinError =
-        this.confirmPin === ""
-          ? t("form.confirm_pin_required")
-          : this.pin !== this.confirmPin
-            ? t("account.pin_mismatch")
-            : "";
     }
-    if (this.passwordError !== "" || this.pinError !== "" || this.confirmPinError !== "") return;
+    if (this.passwordError !== "" || this.pinError !== "") return;
     this.busy = true;
     this.errorKey = null;
     try {
@@ -559,7 +540,6 @@ export class LoginScreen extends LitElement {
     this.step = "setup-passkey";
     this.noticeCode = null;
     this.pin = "";
-    this.confirmPin = "";
     this.passkeyFactorRequired = this.factorMode === "recovery";
     if (this.passkeyFactorRequired) this.secondFactor = "";
     this.passkeyName = "";
@@ -908,29 +888,6 @@ export class LoginScreen extends LitElement {
                               ?disabled=${this.busy}
                               @click=${() => (this.pinVisible = !this.pinVisible)}
                               >${this.#renderPasswordIcon(this.pinVisible)}</wt-button
-                            >
-                          </wt-input>
-                          <wt-input
-                            class="field"
-                            name="confirm-pin"
-                            autocomplete="off"
-                            required
-                            label=${t("account.confirm_pin")}
-                            type=${this.confirmPinVisible ? "text" : "password"}
-                            error=${this.confirmPinError}
-                            .value=${this.confirmPin}
-                            @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
-                            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onConfirmPinChange(e)}
-                          >
-                            <wt-button
-                              class="password-toggle"
-                              slot="end"
-                              variant="ghost"
-                              data-test="toggle-confirm-pin"
-                              aria-label=${this.confirmPinVisible ? t("account.hide_confirm_pin") : t("account.show_confirm_pin")}
-                              ?disabled=${this.busy}
-                              @click=${() => (this.confirmPinVisible = !this.confirmPinVisible)}
-                              >${this.#renderPasswordIcon(this.confirmPinVisible)}</wt-button
                             >
                           </wt-input>
                         `

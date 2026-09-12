@@ -73,12 +73,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta también requiere un código de autenticación. Inicia sesión con tu contraseña.",
   },
   "person.self_deactivation": {
-    en: "You cannot mark your own account inactive. Ask another administrator.",
+    en: "You cannot disable your own account. Ask another administrator.",
     es: "No puedes desactivar tu propia cuenta. Pídeselo a otro administrador.",
   },
   "person.suspended": {
-    en: "This account is inactive — ask a manager",
-    es: "Esta cuenta está inactiva. Avisa a un responsable",
+    en: "This account is disabled — ask a manager",
+    es: "Esta cuenta está desactivada. Avisa a un responsable",
   },
   "person.not_found": {
     en: "That person could not be found",

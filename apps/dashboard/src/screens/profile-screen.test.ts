@@ -102,12 +102,41 @@ async function click(el: ProfileScreen, action: string) {
   await flush(el);
 }
 function input(el: ProfileScreen, name: string, value: string) {
-  el.shadowRoot!.querySelector(`wt-input[name=${name}]`)!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value } }),
-  );
+  el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
+    `wt-input[name=${name}]`,
+  )!.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
 }
 
 describe("your profile", () => {
+  it("opens incomplete details with missing required fields marked, then saves them", async () => {
+    const profile = await apiStub().getProfile();
+    const { el, api } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null, lastNames: " " }),
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
+    for (const [name, key] of [
+      ["firstNames", "form.first_names_required"],
+      ["lastNames", "form.last_names_required"],
+    ] as const) {
+      const field = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
+        `wt-input[name=${name}]`,
+      )!;
+      expect(field.error).toBe(t(key));
+      expect(field.required).toBe(true);
+    }
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=displayName]")!
+        .error,
+    ).toBe("");
+    input(el, "firstNames", "Alex");
+    input(el, "lastNames", "Rivera");
+    await click(el, "save");
+    expect(api.saveProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ firstNames: "Alex", lastNames: "Rivera" }),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).not.toBeNull();
+  });
+
   it("renders your details and passkeys accessibly", async () => {
     const { el, host } = await mount();
     expect(el.shadowRoot!.textContent).toContain("alex@example.com");

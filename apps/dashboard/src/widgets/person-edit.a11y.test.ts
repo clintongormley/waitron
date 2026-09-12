@@ -6,7 +6,7 @@ import type { PersonSummary } from "../api/client.js";
 
 /**
  * The edit dialog only exposes anything to the accessibility tree once it is OPEN — a closed <dialog>
- * renders nothing — so it is mounted with a person and `open = true`, its wt-dialog's first render
+ * renders nothing — so it is mounted with a person and `open = true`, its wt-modal's first render
  * (which calls showModal) settled before axe runs, in both themes. axe runs against the themed host so
  * a color-contrast check means what it means in the app.
  *
@@ -33,7 +33,7 @@ describe.each(["light", "dark"] as const)("person-edit a11y (%s theme)", (theme)
       { person, open: true },
       theme,
     );
-    const wtDialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    const wtDialog = el.shadowRoot!.querySelector("wt-modal")!;
     await (wtDialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     // The email field carries an accessible name from its wt-input label, so axe's label rule passes
     // and a screen-reader user hears "Email".

@@ -1,5 +1,13 @@
 # User management and account setup
 
+2026-09-12 owner update: You now create and edit users in the shared `wt-modal`, with one
+field per line and a divider before role and status. The row hamburger menu offers Edit,
+Reset login, Reset PIN and Disable; account labels use Disabled. Setup asks for one PIN entry.
+After setup, Your profile opens its details editor when required information is missing and
+marks those fields. The list still loads all users and filters locally, without paging;
+`apps/dashboard/src/screens/staff-screen.test.ts` exercises 1,000 rows and checks that filtering
+does not request the list again. The older UI choices below are historical.
+
 2026-09-11 owner update: [login-flow refinements](../specs/2026-09-11-login-flow-refinements-design.md)
 supersede the sign-in choices below where they conflict. Email entry opens password without an
 automatic passkey prompt; only opted-in email/method preferences persist, changing accounts clears

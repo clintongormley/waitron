@@ -7,7 +7,7 @@ import { PersonForm } from "./person-form.js";
 afterEach(cleanupWidgets);
 
 async function openedDialog(el: PersonForm): Promise<HTMLDialogElement> {
-  const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+  const dialog = el.shadowRoot!.querySelector("wt-modal")!;
   await dialog.updateComplete;
   return dialog.shadowRoot!.querySelector("dialog")!;
 }

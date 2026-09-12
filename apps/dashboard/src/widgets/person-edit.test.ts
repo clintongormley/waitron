@@ -25,6 +25,26 @@ function change(el: PersonEdit, testId: string, value: string): void {
 }
 
 describe("person-edit", () => {
+  it("uses the shared modal with one field per row and a divider before role and status", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    const modal = el.shadowRoot!.querySelector("wt-modal");
+    expect(modal).not.toBeNull();
+    await modal!.updateComplete;
+    const fields = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".field")];
+    for (let i = 1; i < fields.length; i++) {
+      expect(fields[i]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        fields[i - 1]!.getBoundingClientRect().bottom,
+      );
+    }
+    for (const name of ["role", "status"]) {
+      const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`select[name=${name}]`)!;
+      expect(select.required).toBe(true);
+      expect(select.parentElement!.textContent).toContain("*");
+    }
+    const divider = el.shadowRoot!.querySelector("hr")!;
+    expect(divider.nextElementSibling!.querySelector("select")!.name).toBe("role");
+  });
+
   it("presents one populated form and emits the full edit through one Save", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       person,

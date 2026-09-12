@@ -33,6 +33,24 @@ async function editButton(el: StaffList, personId: string): Promise<HTMLElement>
 }
 
 describe("staff-list", () => {
+  it("opens a row menu with edit, reset login, reset PIN and Disable", async () => {
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const menu = table.shadowRoot!.querySelector("wt-row-actions")!;
+    expect(menu).not.toBeNull();
+    await menu.updateComplete;
+    menu.shadowRoot!.querySelector("button")!.click();
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    expect(
+      [...menu.querySelectorAll("wt-button")].map((button) => button.getAttribute("data-test")),
+    ).toEqual(["edit-p1", "reset-login-p1", "reset-pin-p1", "disable-p1"]);
+    const events: CustomEvent[] = [];
+    el.addEventListener("person-action", (event) => events.push(event as CustomEvent));
+    menu.querySelector<HTMLElement>("[data-test=reset-pin-p1]")!.click();
+    expect(events[0]!.detail).toEqual({ personId: "p1", action: "reset-pin" });
+  });
+
   it("renders one row per person with role and status", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
