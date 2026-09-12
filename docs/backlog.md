@@ -632,6 +632,10 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **Fast local pre-push checks** — implemented on `chore/fast-pre-push`: retain sign-offs, locked
+  installation, formatting, lint, root guards and scoped typechecks; mandatory package tests and
+  coverage run in CI. Branch finishing uses focused local tests rather than a duplicate full gate.
+
 - **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
   retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with
   "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); a test PostgreSQL
@@ -649,8 +653,7 @@ image constraints under *Detail → Box image*.
   candidate; rebalance `LIGHT_A/B_PACKAGES` when one light shard dominates.
 - **A hung real-PG suite leaks its cluster containers** and `pnpm reap` only removes labelled ones
   older than two hours — inspect creation times and ownership, remove only your own.
-- *Small:* the pre-push hook's shell is largely untested; `test-light` reports success without naming
-  what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
+- *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
 
 ---

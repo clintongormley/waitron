@@ -56,9 +56,10 @@ via the GraphQL `resolveReviewThread` mutation with the id passed as a variable.
 **An untracked file in the main checkout can block the post-merge `git pull --ff-only`.** Diff
 before deleting; the scratch copy was 113 lines behind what landed.
 
-**Before a PR**, run the §2 gate yourself rather than relying on the hook, then `/finish-branch`.
-Both the hook and CI narrow to changed packages; the unfiltered `main` merge is the only run that
-covers the rest.
+**Before a PR**, run focused tests for the behavior you changed, then `/finish-branch`. Let the
+normal hook run the §2 local checks once; let CI run mandatory package tests and coverage. Do not
+add a whole-workspace local run solely because the branch is being finished. Verify the current-head
+CI scope and results; the unfiltered `main` merge checks the combined tree when code is in scope.
 
 ## Documentation rules
 

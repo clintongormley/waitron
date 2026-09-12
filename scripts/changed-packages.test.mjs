@@ -429,7 +429,7 @@ describe("formatScope", () => {
 
   // The FOURTH outcome. `code=false` is what makes a pure-root pull request skip every code-gated
   // job in ci.yml — the ungated `lint` job runs the repo-level project there — and `scope=root` is
-  // what makes the hook skip the scoped typecheck and coverage while still running it.
+  // what makes the hook skip package typechecks while still running the root guards.
   it("emits its own line for a root-only push", () => {
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
       "code=false\nscope=root\npackages=\nroot=true\ndeploy=false",
@@ -664,7 +664,7 @@ describe("the CLI", () => {
   });
 });
 
-// The guard both test shards and the hook run before `pnpm <filters> test:coverage`. It reads a
+// CI uses this guard before test:coverage; the hook uses it before typecheck. It reads a
 // `pnpm <the same filters> ls --depth -1 --json` result and answers with an EXIT CODE, which is the
 // only part of it the shell can act on — so these spawn it rather than calling scriptRunCheck.
 //

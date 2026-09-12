@@ -12,10 +12,4 @@ describe("local test budgets", () => {
       expect(scripts[name]).toContain("--workspace-concurrency=2");
     }
   });
-
-  it("uses the same deadline and package cap in pre-push", () => {
-    expect(read(".husky/pre-push")).toContain(
-      'node scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2 "$@" test:coverage || cov_rc=$?',
-    );
-  });
 });

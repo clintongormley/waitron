@@ -78,15 +78,16 @@ wide margin. This section stays in full deliberately: it applies to every change
 
 ## 2. The gate
 
-```bash
-pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
-```
+Run focused behavioral tests while implementing, including a failing test before a fix. Let the
+normal pre-push hook run the local checks once; mandatory package tests and coverage run in CI.
+Do not add a whole-workspace local run solely to finish a branch. Broader local runs remain useful
+for investigating failures or behavior across packages. Required CI checks must pass on the current head.
 
-That is the shallow, whole-workspace check. The pre-push hook (`.husky/pre-push`) is deeper but
-narrower — it runs `pnpm reap`, `pnpm install --frozen-lockfile`, `format:check`, then `typecheck`
-and `test:coverage` over the CHANGED packages and their dependents. CI adds mutation testing and
-`bundle-smoke`, which nothing local runs. **A green from any one of the three is evidence about what
-it ran, and nothing more.**
+The pre-push hook (`.husky/pre-push`) checks sign-offs, frozen install, formatting, lint, root guards
+with coverage, and scoped package types. It runs no package tests. Documentation stops after
+formatting; machinery-only changes stop after root guards; deletion-only pushes skip checks.
+Unknown ranges keep the full local gate, including workspace typechecking. See
+[ci-and-gates.md](docs/developers/ci-and-gates.md) for commands and scope details.
 
 **Coverage thresholds** are split (owner decision 2026-09-05): `98/98/98/95` in `verifactu`,
 `fiscal-verifactu`, `core`, `db`, `sync` and `payments`; the `90/90/85/85` floor everywhere else,
@@ -101,9 +102,9 @@ hook, or how tests are scheduled:
   LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
   Cost: a review-fix command ran a successful build after a failed server typecheck and reported
   success.
-- **CI's shards run `test:coverage`, not `test`.** Before calling a package green, run
-  `pnpm --filter <pkg> test:coverage`. There is no single `test` job. Vitest `--shard` splits by FILE
-  COUNT, so `N` must never exceed a package's test-file count.
+- **CI's shards run `test:coverage`, not `test`.** Verify that package’s coverage job on the
+  current head; run `pnpm --filter <pkg> test:coverage` locally when investigating a failure.
+  There is no single `test` job. Vitest `--shard` splits by FILE COUNT, so `N` must never exceed a package's test-file count.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
@@ -114,21 +115,21 @@ hook, or how tests are scheduled:
   happens in one. Verify anything touching the filter in a clone or on a real PR.
 - **`pnpm --filter ""` is a hard error**, and an unquoted `$PACKAGES` expansion still GLOBS. Both
   gates build filters as positional parameters under `set -f … set +f`.
-- **A scoped `pnpm` run that selects nothing REPORTS SUCCESS.** Both gates pipe the selection through
-  `scripts/changed-packages.mjs runnable test:coverage` first; a green from that guard still does not
-  mean a test ran.
+- **A scoped `pnpm` run that selects nothing REPORTS SUCCESS.** CI checks the selection with
+  `scripts/changed-packages.mjs runnable test:coverage`; the hook checks `runnable typecheck`.
+  A green selection guard alone does not mean a check ran.
 - **The workspace root is outside `pnpm -r`**, so root config is linted but never typechecked, and
   `eslint.config.js` is not type-aware. Proven by mutation.
 - **`--frozen-lockfile` is not in the four-command gate.** Moving a dependency between `dependencies`
   and `devDependencies` fails CI at install. The hook runs it; the gate does not.
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
-  shared wire body with `toEqual`. Run the package unfiltered before believing a pass, and the whole
-  workspace when you touch a value more than one suite asserts.
+  shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
+  coverage. Run additional consumer tests locally when they help investigate shared behavior.
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
-  it.** Grep for tests that pin the list; run the whole workspace.
+  it.** Grep for tests that pin the list, run those guards, and verify CI selects every affected consumer.
 - **After a rebase + `--force-with-lease`, the hook can scope the WRONG package** (mechanism
-  unconfirmed). Confirm with `git diff --name-only origin/main..HEAD` and run THAT package's gates;
-  the PR's own CI is the trustworthy signal.
+  unconfirmed). Confirm with `git diff --name-only origin/main..HEAD` that the hook typechecked
+  the actual changed packages; run any missing typechecks and verify the PR’s CI scope and results.
 - **The pre-push log file can be days stale.** Reproduce; do not read it.
 - **The four browser packages run vitest in real headless Chromium.** Concurrency is decided by
   measured headroom, never by a count: check free memory and the heaviest processes first, then scale
@@ -455,9 +456,9 @@ before treating an implementation as a rule violation.
 - **The main checkout goes stale in a way the worktrees do not**, because nothing installs there.
   `/land-branch` runs `pnpm install` after the pull; run it yourself after any other pull. An
   untracked file there can block the post-merge `git pull --ff-only` — diff it before deleting.
-- **Before a PR, run the §2 gate yourself rather than relying on the hook, then `/finish-branch`.**
-  Both the hook and CI narrow to changed packages; the unfiltered `main` merge is the only run that
-  covers the rest.
+- **Before a PR, run focused behavior checks, then `/finish-branch`.** Let the normal hook run
+  the §2 local checks once and CI run mandatory package tests and coverage. Verify the current-head
+  CI scope and results; no whole-workspace local run is required solely to finish the branch.
 - **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
   `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*` — compose names its project after the
   directory, so an unqualified `docker compose up` starts a SECOND `db` on the same port.

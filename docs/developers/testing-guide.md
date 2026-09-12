@@ -77,7 +77,8 @@ stalled operation before assigning its cause to resource contention.
 
 (a clean vitest exit self-reaps via `globalTeardown`). The bloat (once: 173 volumes, 23 GB) starves
 PGlite `beforeAll`s and the `freePort` race, while an isolated re-run passes and proves nothing.
-`pnpm reap` (`scripts/reap-testcontainers.mjs`, also first in the hook) removes containers labelled
+Run `pnpm reap` before local database testing when needed. The command
+(`scripts/reap-testcontainers.mjs`) removes containers labelled
 `com.waitron.reapable` (stamped by `startPostgresContainer`, pinned by test) AND older than 2 h —
 so another repo's or a live watch-mode container survives — with their anon volumes. It never
 touches images and there is no blanket `docker volume prune` (it would reach other projects and the
@@ -246,7 +247,8 @@ _Reference_.
 
 ## Concurrent coverage runs must not share a package's report directory
 
-The hook's expanded dependency set can include a package also selected by a supplemental run. In A2,
+Two local coverage runs can select the same package through expanded dependencies. In A2,
+when the hook still ran package coverage,
 two overlapping fiscal-verifactu runs ended with `ENOENT` writing `coverage/.tmp/coverage-41.json`;
 Vitest cleans that shared directory. Inspect the resolved selection first, or give an intentional
 second run its own `--coverage.reportsDirectory`. Receipt:
