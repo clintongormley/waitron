@@ -145,11 +145,16 @@ function stubApi(pairingOpen = false): DashboardApi {
       .mockResolvedValue({ deviceId: "j1", name: "Pantalla pase", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
-    listReaders: vi
-      .fn()
-      .mockResolvedValue([
-        { id: "r1", provider: "sumup", name: "Front counter", active: true, deviceCount: 1 },
-      ]),
+    listReaders: vi.fn().mockResolvedValue([
+      {
+        id: "r1",
+        provider: "sumup",
+        name: "Front counter",
+        active: true,
+        canEnable: true,
+        deviceCount: 1,
+      },
+    ]),
     getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
     setDeviceReader: vi.fn().mockResolvedValue(undefined),
     patchDeviceHardware: vi.fn().mockResolvedValue({

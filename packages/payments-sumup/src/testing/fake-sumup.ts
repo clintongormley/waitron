@@ -236,11 +236,15 @@ export class FakeSumUp implements SumUpClient {
     r.status = status;
   }
 
-  readerStatus(readerId: string): Promise<{ online: boolean; detail?: string }> {
+  readerStatus(
+    readerId: string,
+  ): Promise<{ online: boolean; connection?: string; activity?: string }> {
     const r = this.readers.find((x) => x.id === readerId);
     if (r === undefined) return Promise.reject(new Error(`FakeSumUp: no reader ${readerId}`));
     return Promise.resolve(
-      r.status === "paired" ? { online: true, detail: "Wi-Fi / IDLE" } : { online: false },
+      r.status === "paired"
+        ? { online: true, connection: "Wi-Fi", activity: "IDLE" }
+        : { online: false },
     );
   }
 

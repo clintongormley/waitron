@@ -29,7 +29,14 @@ export interface AddReaderResult {
  * (`online`): a reader can pair and then be briefly offline within the code's window. */
 export interface ReaderStatus {
   online: boolean;
-  detail?: string;
+  batteryPercent?: number;
+  connection?: string;
+  activity?: string;
+  firmwareVersion?: string;
+  lastSeenAt?: string;
+  model?: string;
+  serial?: string;
+  unreachable?: boolean;
   pairingStatus?: "processing" | "paired";
 }
 
@@ -75,11 +82,11 @@ export class SumUpPaymentsClient {
     return this.#request<ReaderStatus>(`/management-api/payments/readers/${id}/status`, "GET");
   }
 
-  /** `POST /management-api/payments/readers/:id/retire` — retire the reader row. The dialog calls this
+  /** `POST /management-api/payments/readers/:id/unpair` — unpair the reader row. The dialog calls this
    * to clean up the `processing` row it created when a pairing attempt expires or fails without ever
    * reaching `paired`, so no un-paired orphan lingers to be picked as a device default. */
-  retireReader(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/payments/readers/${id}/retire`, "POST");
+  unpairReader(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/payments/readers/${id}/unpair`, "POST");
   }
 }
 

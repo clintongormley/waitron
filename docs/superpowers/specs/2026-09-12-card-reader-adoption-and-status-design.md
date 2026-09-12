@@ -218,6 +218,13 @@ is shown only where the seat supports it: the contribution declares `readers.can
 SumUp, **false for Stripe**, whose `remove` is already a documented no-op because a Stripe Terminal
 reader stays registered at Stripe. A menu item that does nothing is worse than an absent one.
 
+**2026-09-12 review correction:** a successful Unpair also records `unpaired_at`. Local Enable
+refuses that row, and the dashboard omits Enable through the list response's `canEnable` flag.
+Adoption clears the marker only after the provider lists the reference again. This preserves
+Enable's local-only behavior without offering it as a way to restore a removed provider registration.
+Local mutations lock the reader while reading its state so Enable also refuses a concurrent unpair.
+The timestamp is added by generated migration `0008_reader_unpair_state`.
+
 **Wording** matches the printers screen exactly: **Disable** / **Disabled** / **Add again**. The
 `payments.retire*` strings are replaced — these are UI strings, not error codes, so renaming is free
 (the never-rename rule covers error codes only).
@@ -230,6 +237,11 @@ so the code stops saying "retired" while every surface says "Disabled". Nothing 
 the payments migration set drops and recreates (CLAUDE.md §3: no backwards-compatibility or
 data-migration code). The `active`/`disabled_at` pair and the withheld DELETE grant are unchanged —
 rows are still never deleted, so a historical payment always resolves a reader name.
+
+**2026-09-12 implementation note:** if your demo database already has the payments schema, rebuild
+it with `wa-wt reset demo` before running this branch. This discards the demo data and creates the
+renamed column. The original migration's hash changes; this is not an upgrade for an existing
+database. See the [development reset procedure](../../ui-review.md).
 
 **Routes**, replacing `POST …/readers/:id/retire`:
 
@@ -281,6 +293,9 @@ and it is off*. Proven by deletion: with the flag dropped the regression reads "
 - **Stripe** fills `online`, `model` (`device_type`), `serial` (`serial_number`), `firmwareVersion`
   (`device_sw_version`), `connection` (`ip_address`) and `lastSeenAt` — **dividing `last_seen_at` by
   1000**, per the receipt above. No `batteryPercent`.
+
+  **2026-09-12 correction:** pass the value directly to JavaScript `Date`, whose input is already
+  milliseconds. Do not apply the division above; see the implementation note at the end.
 
 ### The screen
 
@@ -355,3 +370,11 @@ seats filling it; the Battery column, the Details dialog, the Unknown state and 
   `Location`, stays deferred from slice 1.
 - **Alerting on a low battery** — a notification surface, not a config screen; worth raising separately
   once the dashboard has somewhere to put it.
+
+
+## Implementation note — 2026-09-12
+
+Stripe's `last_seen_at` goes directly to JavaScript `Date`, which accepts milliseconds. The division
+by 1000 in Section 3 applies only when the receiving date API expects seconds. The regression uses
+`1789211028930` and expects `2026-09-12T11:03:48.930Z`; treating that value as seconds produces a year
+of 58667 and fails the test (`packages/payments-stripe/src/card-provider.test.ts`).

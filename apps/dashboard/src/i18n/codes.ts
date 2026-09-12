@@ -550,6 +550,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // Card payments (providers + readers). The connect/pairing forms live in each provider's panel, but
   // the human copy for every code the payments feature throws lives centrally here (a panel falls back
   // to codeMessage for a rejected connect), so an operator never sees a raw wire code.
+  "reader.not_listed": {
+    en: "This reader is no longer listed by the payment provider. Check the list and try again.",
+    es: "Este lector ya no aparece en la lista del proveedor de pagos. Revisa la lista e inténtalo de nuevo.",
+  },
   "reader.not_found": {
     en: "That card reader no longer exists",
     es: "Ese lector de tarjetas ya no existe",
@@ -559,8 +563,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Conecta este proveedor de pagos antes de añadirle un lector",
   },
   "payment.provider_in_use": {
-    en: "Retire this provider's card readers before disconnecting it",
-    es: "Retira los lectores de tarjetas de este proveedor antes de desconectarlo",
+    en: "Disable this provider's card readers before disconnecting it",
+    es: "Desactiva los lectores de tarjetas de este proveedor antes de desconectarlo",
   },
   "payment.provider_credential_rejected": {
     en: "The payment provider rejected those details — check them and try again",

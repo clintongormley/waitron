@@ -315,8 +315,8 @@ describe("sumupClient reader management", () => {
     const status = await client.readerStatus("rdr_1");
 
     expect(status.online).toBe(true);
-    expect(status.detail).toContain("Wi-Fi");
-    expect(status.detail).toContain("IDLE");
+    expect(status.connection).toBe("Wi-Fi");
+    expect(status.activity).toBe("IDLE");
     expect(s.calls).toContainEqual(["GET", "/v0.1/merchants/MC/readers/rdr_1/status"]);
   });
 
@@ -339,6 +339,18 @@ describe("sumupClient reader management", () => {
     await client.deleteReader("rdr_1");
 
     expect(s.calls).toContainEqual(["DELETE", "/v0.1/merchants/MC/readers/rdr_1"]);
+  });
+
+  it.each([400, 401, 403, 409, 429, 500])("rejects reader deletion on HTTP %s", async (status) => {
+    const s = stub(() => ({ status, body: { title: "Rejected" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+    await expect(client.deleteReader("rdr_1")).rejects.toThrow(`HTTP ${status}`);
+  });
+
+  it("accepts deletion of an already absent reader on a retry", async () => {
+    const s = stub(() => ({ status: 404, body: { title: "Reader not found" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+    await expect(client.deleteReader("rdr_1")).resolves.toBeUndefined();
   });
 
   it("lists the merchant memberships this API key can act as", async () => {

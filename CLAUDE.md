@@ -187,10 +187,10 @@ Traps, each of which cost a round trip:
   sessions, four vitest workers and two Chromiums running. **Chromium's launch depends on the
   Codex seat's PERMISSIONS, not on Codex.** Sandboxed, it cannot start
   (`bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer: Permission denied (1100)`,
-  measured 2026-09-06); with host permissions it runs the real browser suites normally (the owner
-  ran a browser package green from Codex, 2026-09-12). So a browser run needs a host-permissioned
-  seat — not necessarily a Claude one, and the earlier blanket "never from a Codex seat" was the
-  sandboxed case stated too widely.
+  measured 2026-09-06); with approved host execution, a direct Codex driver can run browser tests.
+  Receipt: on 2026-09-12,
+  `pnpm --filter @waitron/dashboard test src/screens/payments-screen.test.ts` passed in Chromium.
+  Check host execution before deferring browser testing to another agent.
 - **Only the `core` migration set has an upgrade test; every module set is still migrated from a
   VIRGIN database only, so a green gate is no evidence that a module set can upgrade a box.** Drizzle
   applies a set's PENDING migrations in one transaction, and PostgreSQL refuses to name a label added
@@ -505,6 +505,14 @@ unfiltered `main` run, not a wrong hook.
 
 ## 4. Testing
 
+- **Test provider HTTP refusals through the real client, as well as a throwing fake seat.** The
+  SumUp unpair route's fake proved that a thrown error preserved the local reader, but the HTTP
+  client silently accepted 401/403/409. The reader-deletion regressions now reject those responses
+  and separately retain the already-absent 404 retry (`packages/payments-sumup/src/sumup-client.test.ts`).
+- **Local reactivation cannot restore a removed provider registration.** Reader Enable initially
+  accepted a row after Unpair had removed it at SumUp. Successful unpair now records a local marker
+  which only provider-verified adoption clears; the concurrent Enable/unpair regression locks the
+  reader before deciding (`apps/server/src/payments-api.pg.test.ts`).
 - **Source scanners check filesystem type as well as the filename suffix.** Vitest stores failure
   screenshots in directories named `*.test.ts`; treating those directories as TypeScript files made
   the vocabulary guard throw `EISDIR` after browser failures. Keep real nested source files in scope;
@@ -514,6 +522,11 @@ unfiltered `main` run, not a wrong hook.
   and `mockClear is not a function`; the credential stubs pass with the same preload. Do not rely
   on a module mock replacing an already-loaded browser ES module. Evidence and limits:
   `docs/superpowers/specs/2026-09-10-ci-test-failures.md`.
+- **A container port-binding timeout needs Docker state as well as database logs.** Save
+  `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the failed
+  test fixture. The reader-adoption gate found a healthy PostgreSQL container with a requested TCP
+  binding but an empty published-port list; a focused rerun passed without explaining the first
+  failure. Receipt: `docs/superpowers/plans/2026-09-12-card-reader-adoption-and-status.md`.
 - **Reuse a supplied test container before probing Docker again.** A failing `docker info` command
   is not evidence that a container global setup already started is absent. Run 34507423350 failed
   `deployment.test.ts` at this redundant check; `harness.docker.test.ts` injects a CLI timeout to

@@ -6,7 +6,7 @@ CREATE TABLE "card_readers" (
 	"name" text NOT NULL,
 	"active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"retired_at" timestamp with time zone,
+	"disabled_at" timestamp with time zone,
 	CONSTRAINT "card_readers_tenant_id_key" UNIQUE("tenant_id","id"),
 	CONSTRAINT "card_readers_provider_ref_key" UNIQUE("tenant_id","provider","provider_ref")
 );

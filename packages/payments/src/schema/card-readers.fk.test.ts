@@ -44,7 +44,8 @@ describe("card_readers", () => {
     expect(stored[0]!.name).toBe("Counter");
     expect(stored[0]!.provider).toBe("sumup");
     expect(stored[0]!.active).toBe(true);
-    expect(stored[0]!.retiredAt).toBeNull();
+    expect(stored[0]!.disabledAt).toBeNull();
+    expect(stored[0]!.unpairedAt).toBeNull();
 
     // The (tenant_id, provider, provider_ref) unique rejects a second reader with the same ref.
     // `tx.insert` wraps the PG error in a DrizzleQueryError whose top-level `.message` is the

@@ -231,7 +231,7 @@ function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_termin
  * paying DEVICE's default (`device_card_readers`). A device with neither → `reader.not_found`. The
  * chosen reader is loaded BY ID with an explicit `eq(tenantId)` predicate — one-tenant-per-db is NOT
  * the query's isolation boundary (CLAUDE.md §3), so a foreign or unknown reader id is `reader.not_found`,
- * never chargeable — and must still be `active` (a retired reader cannot take a payment).
+ * never chargeable — and must still be `active` (a disabled reader cannot take a payment).
  */
 async function resolvePayReader(
   deps: TillApiDeps,

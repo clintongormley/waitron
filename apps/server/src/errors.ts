@@ -292,7 +292,7 @@ declare module "@waitron/shared" {
     "payment.webhook_unresolved": { provider: string; externalRef: string };
     /**
      * A card provider cannot be disconnected while a card reader that uses it is still active — the
-     * dashboard must retire those readers first. `activeReaders` is a COUNT so the message can say
+     * dashboard must disable those readers first. `activeReaders` is a COUNT so the message can say
      * how many; never a reader id or a secret. Thrown by the payments API's disconnect route
      * (`payments-api.ts`); `payment.*` because it is a fact about the payment provider, not the
      * process.
@@ -305,6 +305,8 @@ declare module "@waitron/shared" {
      * payments API (`payments-api.ts`).
      */
     "reader.not_found": { id: string };
+    /** Adoption names a reference absent from the provider account. Public provider id only. */
+    "reader.not_listed": { providerId: string };
     /**
      * A reader operation was asked for a provider that has no sealed credential — the provider must
      * be connected first. `providerId` is the public provider token (`"sumup"`/`"stripe"`), never a

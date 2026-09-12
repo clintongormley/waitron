@@ -4,7 +4,7 @@ import { tenants } from "@waitron/db";
 /**
  * One row per physical card reader the venue owns (SumUp/Stripe). Manager configuration, not a
  * money movement — classified `state` (copied to a standby, never drained back). A reader is
- * RETIRED via UPDATE (`active=false`, `retired_at` set), never DELETEd, so historical payments can
+ * DISABLED via UPDATE (`active=false`, `disabled_at` set), never DELETEd, so historical payments can
  * still resolve the reader's name; the grant idiom in 0004_card_readers_sql.sql withholds DELETE
  * for that reason.
  */
@@ -23,7 +23,9 @@ export const cardReaders = pgTable(
       .notNull()
       .defaultNow(),
     // Set when `active` flips false; the row is kept so historical payments still resolve a name.
-    retiredAt: timestamp("retired_at", { withTimezone: true, mode: "string" }),
+    disabledAt: timestamp("disabled_at", { withTimezone: true, mode: "string" }),
+    // Local Enable cannot restore a registration we removed at the provider; verified adoption can.
+    unpairedAt: timestamp("unpaired_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
     foreignKey({

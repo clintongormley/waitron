@@ -12,16 +12,16 @@ afterEach(() => {
 
 const READERS_PATH = "/management-api/payments/readers";
 const STATUS_PATH = "/management-api/payments/readers/r1/status";
-const RETIRE_PATH = "/management-api/payments/readers/r1/retire";
+const UNPAIR_PATH = "/management-api/payments/readers/r1/unpair";
 
 /** A request stub over the three routes the dialog calls. `add` may resolve an {@link AddReaderResult}
- * or throw; `status` is called for every poll and returns the next {@link ReaderStatus}; `retire`
+ * or throw; `status` is called for every poll and returns the next {@link ReaderStatus}; `unpair`
  * resolves (the orphan cleanup) unless overridden. */
 function stubRequest(opts: {
   add?: () => AddReaderResult | never;
   status?: () => ReaderStatus;
-  retire?: () => void | never;
-}): DashboardRequest & { statusCalls: () => number; retireCalls: () => number } {
+  unpair?: () => void | never;
+}): DashboardRequest & { statusCalls: () => number; unpairCalls: () => number } {
   const request = vi.fn(async (path: string, method: string) => {
     if (path === READERS_PATH && method === "POST") {
       return (opts.add ?? (() => ({ id: "r1", status: "processing" }) as AddReaderResult))();
@@ -29,17 +29,17 @@ function stubRequest(opts: {
     if (path === STATUS_PATH && method === "GET") {
       return (opts.status ?? (() => ({ online: false }) as ReaderStatus))();
     }
-    if (path === RETIRE_PATH && method === "POST") {
-      return (opts.retire ?? (() => undefined))();
+    if (path === UNPAIR_PATH && method === "POST") {
+      return (opts.unpair ?? (() => undefined))();
     }
     throw new Error(`unexpected ${method} ${path}`);
   }) as unknown as DashboardRequest & {
     statusCalls: () => number;
-    retireCalls: () => number;
+    unpairCalls: () => number;
   };
   const calls = () => (request as unknown as { mock: { calls: [string, string][] } }).mock.calls;
   request.statusCalls = () => calls().filter(([p, m]) => p === STATUS_PATH && m === "GET").length;
-  request.retireCalls = () => calls().filter(([p, m]) => p === RETIRE_PATH && m === "POST").length;
+  request.unpairCalls = () => calls().filter(([p, m]) => p === UNPAIR_PATH && m === "POST").length;
   return request;
 }
 
@@ -100,7 +100,7 @@ describe("sumup-add-reader", () => {
       await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS); // third poll → paired
       expect(onAdded).toHaveBeenCalledTimes(1);
       expect(onClose).toHaveBeenCalledTimes(1);
-      expect(request.retireCalls()).toBe(0); // paired, so nothing to clean up
+      expect(request.unpairCalls()).toBe(0); // paired, so nothing to clean up
     } finally {
       vi.useRealTimers();
     }
@@ -171,7 +171,7 @@ describe("sumup-add-reader", () => {
     }
   });
 
-  it("expires without paired: retires the created row and offers try again", async () => {
+  it("expires without paired: unpairs the created row and offers try again", async () => {
     vi.useFakeTimers();
     try {
       const request = stubRequest({
@@ -187,9 +187,9 @@ describe("sumup-add-reader", () => {
       expect(text(el, "[data-test=pairing-expired]")).toBe(t("payments.sumup.pairing_expired"));
       expect(q(el, "[data-test=try-again]")).not.toBeNull();
       expect(onAdded).not.toHaveBeenCalled();
-      // The processing orphan is retired so it cannot be picked as a default reader.
-      expect(request).toHaveBeenCalledWith(RETIRE_PATH, "POST");
-      expect(request.retireCalls()).toBe(1);
+      // The processing orphan is unpaired so it cannot be picked as a default reader.
+      expect(request).toHaveBeenCalledWith(UNPAIR_PATH, "POST");
+      expect(request.unpairCalls()).toBe(1);
 
       // Try again returns to the form with a cleared code.
       q(el, "[data-test=try-again]")!.click();
@@ -242,7 +242,7 @@ describe("sumup-add-reader", () => {
     }
   });
 
-  it("shows the failed copy and retires the row when a poll is rejected", async () => {
+  it("shows the failed copy and unpairs the row when a poll is rejected", async () => {
     vi.useFakeTimers();
     try {
       let polls = 0;
@@ -261,13 +261,13 @@ describe("sumup-add-reader", () => {
       expect(polls).toBe(1);
       expect(text(el, "[data-test=pairing-failed]")).toBe(t("payments.sumup.pairing_failed"));
       expect(q(el, "[data-test=try-again]")).not.toBeNull();
-      expect(request.retireCalls()).toBe(1);
+      expect(request.unpairCalls()).toBe(1);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("shows the failed copy and does NOT retire when the pair POST itself is rejected", async () => {
+  it("shows the failed copy and does NOT unpair when the pair POST itself is rejected", async () => {
     vi.useFakeTimers();
     try {
       const request = stubRequest({
@@ -280,18 +280,18 @@ describe("sumup-add-reader", () => {
       await fillAndPair(el);
       expect(text(el, "[data-test=pairing-failed]")).toBe(t("payments.sumup.pairing_failed"));
       expect(q(el, "[data-test=try-again]")).not.toBeNull();
-      expect(request.retireCalls()).toBe(0); // no row was created, nothing to retire
+      expect(request.unpairCalls()).toBe(0); // no row was created, nothing to unpair
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("survives a failed retire on expiry without hanging", async () => {
+  it("survives a failed unpair on expiry without hanging", async () => {
     vi.useFakeTimers();
     try {
       const request = stubRequest({
         status: () => ({ online: false, pairingStatus: "processing" }),
-        retire: () => {
+        unpair: () => {
           throw { code: "server.internal" };
         },
       });
@@ -302,7 +302,7 @@ describe("sumup-add-reader", () => {
       await el.updateComplete;
 
       expect(text(el, "[data-test=pairing-expired]")).toBe(t("payments.sumup.pairing_expired"));
-      expect(request.retireCalls()).toBe(1); // attempted, its rejection swallowed
+      expect(request.unpairCalls()).toBe(1); // attempted, its rejection swallowed
     } finally {
       vi.useRealTimers();
     }

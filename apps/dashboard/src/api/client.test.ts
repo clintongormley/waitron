@@ -18,6 +18,28 @@ function emptyResponse(): Response {
 }
 
 describe("DashboardApi", () => {
+  it("uses the discovery, adoption and separate reader-management routes", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const input = { providerId: "acme", providerRef: "v-1", name: "Garden" };
+    await api.availableReaders("acme");
+    await api.adoptReader(input);
+    await api.renameReader("r-1", "Garden");
+    await api.disableReader("r-1");
+    await api.enableReader("r-1");
+    await api.unpairReader("r-1");
+    expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+      ["/management-api/payments/providers/acme/available-readers", "GET", undefined],
+      ["/management-api/payments/readers/adopt", "POST", JSON.stringify(input)],
+      ["/management-api/payments/readers/r-1", "PATCH", JSON.stringify({ name: "Garden" })],
+      ...["disable", "enable", "unpair"].map((action) => [
+        `/management-api/payments/readers/r-1/${action}`,
+        "POST",
+        undefined,
+      ]),
+    ]);
+  });
+
   it("downloads an encrypted configuration export as binary", async () => {
     const artifact = new Blob(["encrypted"], { type: "application/octet-stream" });
     const response = new Response(artifact, { status: 200 });

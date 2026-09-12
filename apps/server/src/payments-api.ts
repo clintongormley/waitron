@@ -94,6 +94,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.pairing_refused": 422,
   "reader.provider_disconnected": 409,
   "reader.not_found": 404,
+  "reader.not_listed": 422,
   "device.not_found": 404,
 };
 
@@ -146,6 +147,133 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     ...(deps.fetch ? { fetch: deps.fetch } : {}),
   });
 
+  const requireConnected = async (
+    tx: Transaction,
+    seat: CardProviderContribution,
+  ): Promise<void> => {
+    const [credential] = await tx
+      .select({ purpose: tenantCredentials.purpose })
+      .from(tenantCredentials)
+      .where(
+        and(
+          eq(tenantCredentials.tenantId, deps.cfg.tenantId),
+          eq(tenantCredentials.purpose, seat.credentialPurpose),
+        ),
+      );
+    if (credential === undefined)
+      throw new AppError("reader.provider_disconnected", { providerId: seat.providerId });
+  };
+  const readerWhere = (id: string) =>
+    and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, id));
+  const requireReader = async (tx: Transaction, id: string) => {
+    // Local mutations decide from the locked row, so Enable cannot race a committed unpair.
+    const [reader] = await tx.select().from(cardReaders).where(readerWhere(id)).for("update");
+    if (reader === undefined) throw new AppError("reader.not_found", { id });
+    return reader;
+  };
+
+  app.get("/management-api/payments/providers/:id/available-readers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const seat = cardProviderById(deps.providers, c.req.param("id"));
+      await gated(sessionId, (tx) => requireConnected(tx, seat));
+      const listed = await seat.readers.list(runtimeDeps());
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .select({ providerRef: cardReaders.providerRef, active: cardReaders.active })
+          .from(cardReaders)
+          .where(
+            and(
+              eq(cardReaders.tenantId, deps.cfg.tenantId),
+              eq(cardReaders.provider, seat.providerId),
+            ),
+          ),
+      );
+      const registered = new Map(rows.map((row) => [row.providerRef, row.active]));
+      return c.json(
+        listed.map((reader) => ({
+          ...reader,
+          status: !registered.has(reader.providerRef)
+            ? "available"
+            : registered.get(reader.providerRef)
+              ? "added"
+              : "disabled",
+        })),
+      );
+    }),
+  );
+
+  app.post("/management-api/payments/readers/adopt", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const providerId = requireString(body.providerId, "providerId");
+      const providerRef = requireString(body.providerRef, "providerRef");
+      const name = requireString(body.name, "name").trim();
+      if (!name) throw new AppError("management.request_invalid", { field: "name" });
+      const seat = cardProviderById(deps.providers, providerId);
+      await gated(sessionId, (tx) => requireConnected(tx, seat));
+      const listed = await seat.readers.list(runtimeDeps());
+      if (!listed.some((reader) => reader.providerRef === providerRef))
+        throw new AppError("reader.not_listed", { providerId });
+      // Re-read after the network call; as in pairing below, the residual disconnect window remains.
+      // Adoption creates nothing at the provider to roll back.
+      const row = await gated(sessionId, async (tx) => {
+        await requireConnected(tx, seat);
+        const [saved] = await tx
+          .insert(cardReaders)
+          .values({ tenantId: deps.cfg.tenantId, provider: providerId, providerRef, name })
+          .onConflictDoUpdate({
+            target: [cardReaders.tenantId, cardReaders.provider, cardReaders.providerRef],
+            set: { name, active: true, disabledAt: null, unpairedAt: null },
+          })
+          .returning({ id: cardReaders.id });
+        return saved!;
+      });
+      return c.json({ id: row.id, status: "paired" }, 201);
+    }),
+  );
+
+  app.patch("/management-api/payments/readers/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CardReaderId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const name = requireString(body.name, "name").trim();
+      if (!name) throw new AppError("management.request_invalid", { field: "name" });
+      await gated(sessionId, async (tx) => {
+        await requireReader(tx, id);
+        await tx.update(cardReaders).set({ name }).where(readerWhere(id));
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  for (const action of ["disable", "enable"] as const) {
+    app.post(`/management-api/payments/readers/:id/${action}`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "CardReaderId");
+        await gated(sessionId, async (tx) => {
+          const reader = await requireReader(tx, id);
+          if (action === "enable") {
+            await requireConnected(tx, cardProviderById(deps.providers, reader.provider));
+            if (reader.unpairedAt !== null)
+              throw new AppError("reader.not_listed", { providerId: reader.provider });
+          }
+          await tx
+            .update(cardReaders)
+            .set({
+              active: action === "enable",
+              disabledAt: action === "enable" ? null : sql`now()`,
+            })
+            .where(readerWhere(id));
+        });
+        return c.body(null, 204);
+      }),
+    );
+  }
+
   // ── List every provider and whether it is connected (payments.manage) ────────────────────────────
   app.get("/management-api/payments/providers", (c) =>
     run(c, log, async () => {
@@ -170,6 +298,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           state: connected.has(p.credentialPurpose) ? "connected" : "not_connected",
           credentialFields: p.credentialFields,
           readerAdd: p.readerAdd,
+          canUnpair: p.readers.canUnpair,
         })),
       );
     }),
@@ -219,7 +348,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const id = c.req.param("id");
       await gated(sessionId, async (tx) => {
         const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
-        // Refuse while any ACTIVE reader still uses this provider — the operator retires those first.
+        // Refuse while any ACTIVE reader still uses this provider — the operator disables those first.
         // `activeReaders` is a COUNT (never a reader id or a secret), scoped to the tenant.
         const active = await tx
           .select({ id: cardReaders.id })
@@ -248,7 +377,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/readers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Active AND retired: `active` on each row lets the dashboard show a retired reader (historical
+      // Active AND disabled: `active` on each row lets the dashboard show a disabled reader (historical
       // payments still resolve its name). `deviceCount` comes from a SEPARATE tenant-scoped aggregate
       // rather than a correlated subquery over the `.from()` base — a `sql` scalar correlated to the
       // base table binds to the subquery's table and returns a wrong answer (CLAUDE.md §3, #152).
@@ -259,6 +388,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             provider: cardReaders.provider,
             name: cardReaders.name,
             active: cardReaders.active,
+            canEnable: sql<boolean>`${cardReaders.unpairedAt} is null`,
           })
           .from(cardReaders)
           .where(eq(cardReaders.tenantId, deps.cfg.tenantId))
@@ -309,12 +439,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         ...(code !== undefined ? { code } : {}),
         ...(reference !== undefined ? { reference } : {}),
       });
-      // A disconnect can commit between the pre-check above and this insert (the provider round-trip
-      // holds no transaction), leaving the just-paired reader's provider with NO sealed credential.
-      // Re-check the credential is STILL present in the same transaction as the insert and refuse if
-      // it is gone, so we never insert an ACTIVE reader whose provider is disconnected. A residual
-      // sub-millisecond window between this re-check and the commit is accepted; the common case (a
-      // disconnect that has already committed) is closed.
+      // Re-check after the provider round-trip. This refuses an already-committed disconnect;
+      // without a shared lock, a disconnect between this read and commit remains an accepted window.
       const inserted = await gated(sessionId, async (tx) => {
         const [cred] = await tx
           .select({ purpose: tenantCredentials.purpose })
@@ -369,36 +495,22 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // ── Retire a reader (payments.manage) ────────────────────────────────────────────────────────────
-  app.post("/management-api/payments/readers/:id/retire", (c) =>
+  app.post("/management-api/payments/readers/:id/unpair", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const readerId = requireUuidParam(c.req.param("id"), "CardReaderId");
-      // Load the reader BY ID, tenant-scoped but WITHOUT requiring `active` — a retry after a failed
-      // vendor unpair must still find the (already-retired) row and re-attempt the provider call.
-      // Another tenant's reader id is `reader.not_found` (by-id isolation, CLAUDE.md §3).
-      const reader = await gated(sessionId, async (tx) => {
-        const [row] = await tx
-          .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
-          .from(cardReaders)
-          .where(and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, readerId)));
-        if (row === undefined) throw new AppError("reader.not_found", { id: readerId });
-        return row;
-      });
-      // Tell the provider to forget the reader (SumUp deletes it; Stripe is a no-op) — a round-trip,
-      // so it runs outside any transaction. Do it BEFORE flipping the row so a vendor failure leaves
-      // the reader still active and the whole retire retryable; a retry re-runs the vendor call.
+      const id = requireUuidParam(c.req.param("id"), "CardReaderId");
+      const reader = await gated(sessionId, (tx) => requireReader(tx, id));
       const seat = cardProviderById(deps.providers, reader.provider);
+      if (!seat.readers.canUnpair)
+        throw new AppError("management.request_invalid", { field: "providerId" });
+      await gated(sessionId, (tx) => requireConnected(tx, seat));
+      // Vendor failure leaves the local row unchanged. Disabled rows remain addressable for retries.
       await seat.readers.remove(runtimeDeps(), reader.providerRef);
-      // Only once the vendor has forgotten it do we retire the row = UPDATE `active=false,
-      // retired_at=now()` (the row is KEPT so historical payments still resolve its name; `app_user`
-      // holds no DELETE on `card_readers`). Idempotent: a retry after the vendor already succeeded
-      // simply re-sets the same values.
       await gated(sessionId, (tx) =>
         tx
           .update(cardReaders)
-          .set({ active: false, retiredAt: sql`now()` })
-          .where(and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, readerId))),
+          .set({ active: false, disabledAt: sql`now()`, unpairedAt: sql`now()` })
+          .where(readerWhere(id)),
       );
       return c.body(null, 204);
     }),
@@ -455,7 +567,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             );
           return;
         }
-        // A named reader must be THIS tenant's AND active — a foreign or retired reader is
+        // A named reader must be THIS tenant's AND active — a foreign or disabled reader is
         // `reader.not_found`, never assignable (CLAUDE.md §3; keeps the composite reader FK from a 500).
         const [reader] = await tx
           .select({ id: cardReaders.id })

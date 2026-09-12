@@ -1,6 +1,6 @@
 {
-  "id": "24e78a79-243a-4de1-a38d-39718775b446",
-  "prevId": "453c3ad3-8dc2-4a91-8907-51357220cfc0",
+  "id": "e3151687-70be-44e0-94ec-3cac5b916c7e",
+  "prevId": "c9c0357a-574b-4011-b453-d9d56e1d6fb7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -58,6 +58,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "unpaired_at": {
+          "name": "unpaired_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -96,6 +102,89 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.device_card_readers": {
+      "name": "device_card_readers",
+      "schema": "",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reader_id": {
+          "name": "reader_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "device_card_readers_tenant_fk": {
+          "name": "device_card_readers_tenant_fk",
+          "tableFrom": "device_card_readers",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "device_card_readers_device_fk": {
+          "name": "device_card_readers_device_fk",
+          "tableFrom": "device_card_readers",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "tenant_id",
+            "device_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "device_card_readers_reader_fk": {
+          "name": "device_card_readers_reader_fk",
+          "tableFrom": "device_card_readers",
+          "tableTo": "card_readers",
+          "columnsFrom": [
+            "tenant_id",
+            "reader_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "device_card_readers_tenant_id_device_id_pk": {
+          "name": "device_card_readers_tenant_id_device_id_pk",
+          "columns": [
+            "tenant_id",
+            "device_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -310,6 +399,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "reader_id": {
+          "name": "reader_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "provider": {
           "name": "provider",
           "type": "text",
@@ -495,6 +590,21 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payments_reader_fk": {
+          "name": "payments_reader_fk",
+          "tableFrom": "payments",
+          "tableTo": "card_readers",
+          "columnsFrom": [
+            "tenant_id",
+            "reader_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },

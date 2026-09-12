@@ -207,6 +207,18 @@ export function createStripeCardProvider(
     },
 
     readers: {
+      canUnpair: false,
+      async list(deps) {
+        const secretKey = await secretKeyForTenant(deps);
+        // The default account page only; this does not enumerate subsequent pages.
+        const page = await makeStripe(secretKey).terminal.readers.list();
+        return page.data.map((reader) => ({
+          providerRef: reader.id,
+          name: reader.label,
+          model: reader.device_type,
+          serial: reader.serial_number,
+        }));
+      },
       async add(deps: CardProviderRuntimeDeps, input): Promise<AddReaderResult> {
         // Stripe's reader-add mode is `reference`, so the route always supplies a reader id; its
         // absence is a caller-contract violation, not a runtime condition an operator can act on.
@@ -222,22 +234,28 @@ export function createStripeCardProvider(
         try {
           const secretKey = await secretKeyForTenant(deps);
           const reader = await makeStripe(secretKey).terminal.readers.retrieve(providerRef);
-          // `retrieve` types as `Reader | DeletedReader`; only `Reader` carries `status`/`device_type`.
-          const online = "status" in reader && reader.status === "online";
-          const detail = "device_type" in reader ? reader.device_type : undefined;
-          // A Stripe reference reader is paired the instant it is added (verified by one retrieve), so
-          // there is nothing to poll for pairing — it is always `"paired"` once it resolves. Reported
-          // for contract consistency; the Stripe add flow never polls.
-          return { online, pairingStatus: "paired", ...(detail !== undefined ? { detail } : {}) };
+          if (!("status" in reader)) return { online: false, unreachable: true };
+          return {
+            online: reader.status === "online",
+            pairingStatus: "paired",
+            model: reader.device_type,
+            ...(reader.serial_number != null ? { serial: reader.serial_number } : {}),
+            ...(reader.device_sw_version != null
+              ? { firmwareVersion: reader.device_sw_version }
+              : {}),
+            ...(reader.ip_address != null ? { connection: reader.ip_address } : {}),
+            // Stripe's last_seen_at and JavaScript Date both use milliseconds.
+            ...(reader.last_seen_at != null
+              ? { lastSeenAt: new Date(reader.last_seen_at).toISOString() }
+              : {}),
+          };
         } catch {
-          // A reader page must render an unreadable status as offline, never crash — an unknown or
-          // removed reader, or a Stripe outage, is reported, not rethrown.
-          return { online: false, detail: "unreachable" };
+          return { online: false, unreachable: true };
         }
       },
 
       async remove(): Promise<void> {
-        // No vendor call: a Stripe Terminal reader stays registered at Stripe. Removing the local
+        // No vendor call: a Stripe Terminal reader stays registered at Stripe. Disabling the local
         // `card_readers` row is the route's job; there is nothing to unpair on the vendor side.
       },
     },

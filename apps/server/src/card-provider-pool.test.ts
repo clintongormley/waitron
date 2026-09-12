@@ -44,6 +44,8 @@ function fakeContribution(
     },
     build,
     readers: {
+      canUnpair: false,
+      list: async () => [],
       add: () => {
         throw new Error("not used by the pool");
       },
