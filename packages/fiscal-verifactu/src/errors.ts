@@ -402,8 +402,9 @@ declare module "@waitron/shared" {
      * ONE code for both recipient-naming paths, because it is one decision: the F3 canje
      * (`recordSubstitution`) and the F1 full invoice (`recordSale`) both reach it through
      * `buildDestinatarios`. It is a PERMANENT refusal — retrying files nothing new — so the till
-     * gives it its own message telling the operator to stop and take payment another way, rather
-     * than the generic "try again" (`apps/till/src/till-app.ts`).
+     * gives it its own message rather than the generic "try again": stop, the venue's invoice
+     * settings need fixing, call whoever set the box up, and refund any card charge already taken on
+     * the terminal (`sale.refused` / `place.refused`, `apps/till/src/i18n/strings.ts`).
      *
      * `countryCode` is the recipient's country, not an operator's own text, so it may ride in
      * params: the shared error boundary writes params into `waitron.log`, which the unauthenticated

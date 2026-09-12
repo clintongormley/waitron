@@ -128,9 +128,21 @@ function displayQuantity(product: TillProduct, quantity: string): string {
  *
  * They are separated from the ordinary `sale.error` because the advice differs and only one of the
  * two is honest: ringing the same basket up again produces the same record and the same refusal, so
- * an operator told to "try again" burns the queue learning nothing. `sale.refused` tells them to
- * stop and who to call. A venue operator has no terminal and no log; the till screen is the only
- * window they have.
+ * an operator told to "try again" burns the queue learning nothing. A venue operator has no terminal
+ * and no log; the till screen is the only window they have.
+ *
+ * Consulted by EVERY handler whose server call reaches `recordSale` — `#onConfirmPayment`,
+ * `#onCollectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onPayTab` — not just the counter's own
+ * pay. A venue whose invoice settings are wrong meets this on whichever of the five it happens to
+ * use first, so leaving any of them on "try again" would leave the defect live on that path.
+ *
+ * TWO messages, because the surfaces differ in one way that matters: the four SETTLE paths may
+ * already have taken the customer's money (a manual terminal charge keyed in after the fact, or an
+ * integrated capture that completed before the fiscal record was attempted), so they take
+ * `sale.refused`, which says the till recorded nothing and to refund a card charge on the terminal.
+ * `#onPlaceOrder` takes no tender at all, so it takes `place.refused`, which says the same "stop
+ * and call" without any sentence about money — a refund instruction would be as wrong there as
+ * "nothing was charged" is on the settle paths.
  */
 const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.record_invalid",
@@ -1200,7 +1212,11 @@ export class TillApp extends LitElement {
       // A NETWORK failure of the FISCAL request is `sale.unconfirmed` — the sale may have filed, so
       // a human checks before retrying (§4.3). A refusal from the FISCAL FILING itself
       // (`isPermanentSaleRefusal`) is `sale.refused`: nothing was written and nothing ever will be
-      // for this basket, so the operator is told to stop and call for help rather than to retry.
+      // for this basket, so the operator is told to stop and call for help rather than to retry —
+      // and, because `method: "card"` here is a MANUAL terminal charge the operator keyed in after
+      // the card had already gone through (`ConfirmPaymentDetail`, widgets/tender-pay.ts), to refund
+      // it on the terminal. The message says the TILL recorded nothing, never that nothing was
+      // charged.
       // Everything else — including a network failure of the preliminary `#syncIfDirty` save, which
       // filed nothing — stays the free-to-retry `sale.error`.
       this.errorKey = isPermanentSaleRefusal(error)
@@ -1275,10 +1291,18 @@ export class TillApp extends LitElement {
         this.cardOutcome = out.outcome;
       }
     } catch (error) {
-      // A NETWORK failure of the fiscal `pay` (no answer) is `sale.unconfirmed` — the charge may have
-      // captured and filed, so a human checks before retrying (§4.3); a server `{ code }`, or a network
-      // failure of the preliminary save (nothing filed), stays the free-to-retry `sale.error`.
-      this.errorKey = reachedFiscal && isNetworkFailure(error) ? "sale.unconfirmed" : "sale.error";
+      // A PERMANENT fiscal refusal is `sale.refused` — retrying files nothing new, and the terminal
+      // may ALREADY have captured (the fiscal record is written after the capture, `finalizeCapture`
+      // in `apps/server/src/till-sale.ts`), which is exactly the case that message's refund sentence
+      // is for. A NETWORK failure of the fiscal `pay` (no answer) is `sale.unconfirmed` — the charge
+      // may have captured and filed, so a human checks before retrying (§4.3); any other server
+      // `{ code }`, or a network failure of the preliminary save (nothing filed), stays the
+      // free-to-retry `sale.error`.
+      this.errorKey = isPermanentSaleRefusal(error)
+        ? "sale.refused"
+        : reachedFiscal && isNetworkFailure(error)
+          ? "sale.unconfirmed"
+          : "sale.error";
     } finally {
       this.submitting = false;
     }
@@ -1394,10 +1418,18 @@ export class TillApp extends LitElement {
     } catch (error) {
       // A rejected {code} must not lose the order in progress: stay on the counter, basket (and its
       // `"order"` stage) intact, and surface a generic, non-fatal message — never the raw domain code.
-      // A NETWORK failure of the FISCAL `placeOrder` is `sale.unconfirmed` — the placement / deferred
-      // invoice may have filed, so a human checks before retrying (§4.3); a server refusal, or a network
-      // failure of the preliminary save (nothing filed), keeps `place.error`.
-      this.errorKey = reachedFiscal && isNetworkFailure(error) ? "sale.unconfirmed" : "place.error";
+      // A PERMANENT fiscal refusal is `place.refused` — the invoice-first deferred invoice is a
+      // fiscal record and can be refused for the venue's own settings exactly like a sale, and
+      // retrying files nothing new. `place.refused`, not `sale.refused`: placing takes no tender, so
+      // its message carries nothing about charges or refunds. A NETWORK failure of the FISCAL
+      // `placeOrder` is `sale.unconfirmed` — the placement / deferred invoice may have filed, so a
+      // human checks before retrying (§4.3); any other server refusal, or a network failure of the
+      // preliminary save (nothing filed), keeps `place.error`.
+      this.errorKey = isPermanentSaleRefusal(error)
+        ? "place.refused"
+        : reachedFiscal && isNetworkFailure(error)
+          ? "sale.unconfirmed"
+          : "place.error";
     } finally {
       this.placing = false;
     }
@@ -1425,9 +1457,16 @@ export class TillApp extends LitElement {
       this.#showTicket(id, this.orderFlow !== "invoice_first");
     } catch (error) {
       // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
-      // invoice) with no preliminary save, so a NETWORK failure (no answer) is `sale.unconfirmed` — the
-      // collect may have filed, a human checks before retrying (§4.3); a server `{ code }` stays `sale.error`.
-      this.errorKey = isNetworkFailure(error) ? "sale.unconfirmed" : "sale.error";
+      // invoice) with no preliminary save. A PERMANENT fiscal refusal is `sale.refused` — collect
+      // carries a tender, including a manual terminal charge the operator already took, so this is
+      // one of the four surfaces that message's refund sentence exists for. A NETWORK failure (no
+      // answer) is `sale.unconfirmed` — the collect may have filed, a human checks before retrying
+      // (§4.3); any other server `{ code }` stays `sale.error`.
+      this.errorKey = isPermanentSaleRefusal(error)
+        ? "sale.refused"
+        : isNetworkFailure(error)
+          ? "sale.unconfirmed"
+          : "sale.error";
     } finally {
       this.submitting = false;
     }
@@ -2268,10 +2307,16 @@ export class TillApp extends LitElement {
       this.result = await this.api.recordSale([], tender, id);
       this.#showTicket(id);
     } catch (error) {
-      // No preliminary save here (this deliberately skips `#syncIfDirty` — see the header), so a NETWORK
-      // failure (no answer) is `sale.unconfirmed` — the tab sale may have filed, so a human checks before
-      // retrying (§4.3); a server `{ code }` stays the generic `sale.error`.
-      this.errorKey = isNetworkFailure(error) ? "sale.unconfirmed" : "sale.error";
+      // No preliminary save here (this deliberately skips `#syncIfDirty` — see the header). A
+      // PERMANENT fiscal refusal is `sale.refused`: paying a tab carries a tender like the counter's
+      // own pay, so the money the operator may already have taken is the same risk. A NETWORK
+      // failure (no answer) is `sale.unconfirmed` — the tab sale may have filed, so a human checks
+      // before retrying (§4.3); any other server `{ code }` stays the generic `sale.error`.
+      this.errorKey = isPermanentSaleRefusal(error)
+        ? "sale.refused"
+        : isNetworkFailure(error)
+          ? "sale.unconfirmed"
+          : "sale.error";
     } finally {
       this.submitting = false;
     }

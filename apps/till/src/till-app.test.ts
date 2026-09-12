@@ -3902,6 +3902,26 @@ describe("till-app", () => {
         expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("sale.error"));
       });
 
+      it("a PERMANENT fiscal refusal on a tab pay surfaces sale.refused, not the retry message", async () => {
+        // Paying a tab carries a tender like the counter's own pay, so the money the operator may
+        // already have taken is the same risk and the message is the same.
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          recordSale: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "pay-tab", { method: "cash", amount: "10.00" });
+        await flush(el);
+
+        expect(ticket(el)).toBeNull();
+        const banner = el.shadowRoot!.querySelector(".error")!;
+        expect(banner.textContent).toContain(t("sale.refused"));
+        expect(banner.textContent).not.toContain(t("sale.error"));
+      });
+
       it("back-to-floor reloads the occupancy read-model and returns to the floor", async () => {
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const listZones = vi.fn().mockResolvedValue([floorZone]);
@@ -3974,6 +3994,30 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1);
     },
   );
+
+  it("tells a CARD operator what to do about the money already on the terminal", async () => {
+    /* `method: "card"` on this event is a MANUAL bank-terminal charge: the operator put the card
+     * through the terminal and then keyed its operation number into the till
+     * (`ConfirmPaymentDetail`, widgets/tender-pay.ts). So by the time a permanent fiscal refusal
+     * arrives, the customer HAS been charged and the till has no record of the sale. The first
+     * version of this message ended "Nothing was charged", which is false in exactly that state and
+     * would leave the customer out of pocket. This pins that the card tender reaches the same
+     * permanent-refusal message at all; what that message must and must not SAY is pinned on the
+     * catalogues themselves, in `i18n/strings.test.ts`, where both languages can be checked without
+     * depending on which locale a rendered banner happens to be in. */
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "card", amount: "5", externalRef: "OP-4417" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.refused"));
+  });
 
   it("still says to retry when the refusal is an ordinary one", async () => {
     // The control in the other direction: without it, wiring every refusal to `sale.refused` would
@@ -4304,6 +4348,26 @@ describe("till-app", () => {
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("sale.error"));
       expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
+    });
+
+    it("a PERMANENT fiscal refusal surfaces sale.refused, not the retry message", async () => {
+      // The integrated terminal captures BEFORE the fiscal record is attempted (`finalizeCapture`,
+      // apps/server/src/till-sale.ts), so this is the path where the customer's card is most
+      // certainly already charged when the refusal arrives. Retrying files nothing new, so the
+      // message must say to stop — and must never claim no money was taken.
+      const pay = vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.refused"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
+      expect(c.store.lines).toHaveLength(1); // basket intact, like every other refusal
     });
 
     it("a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed (pay never reached)", async () => {
@@ -4705,6 +4769,29 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("working_order.rejected");
     });
 
+    it("place: a PERMANENT fiscal refusal surfaces place.refused, which says nothing about money", async () => {
+      // Placing issues the deferred invoice in invoice-first mode, which is a fiscal record and can
+      // be refused for the venue's own settings exactly like a sale. It takes NO tender, so it gets
+      // `place.refused` rather than `sale.refused`: a refund instruction would be wrong here, and
+      // this asserts the two messages are not interchangeable.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("place.refused"));
+      expect(banner.textContent).not.toContain(t("place.error"));
+      expect(banner.textContent).not.toContain(t("sale.refused"));
+      expect(c.store.lines).toHaveLength(1); // basket intact
+    });
+
     it("place: a fresh-basket park network failure shows place.error, not sale.unconfirmed", async () => {
       // F2 (§4.3): `parkOrder` is the preliminary save on a fresh basket; a network failure of it means
       // the `placeOrder` fiscal request was never made, so this is the free-to-retry `place.error`, not
@@ -4814,6 +4901,29 @@ describe("till-app", () => {
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("sale.error"));
       expect(el.shadowRoot!.textContent).not.toContain("working_order.not_placed");
+    });
+
+    it("collect-order: a PERMANENT fiscal refusal surfaces sale.refused, not the retry message", async () => {
+      // Collect is where a placed order's tender is finally taken, including a manual terminal
+      // charge the operator already put through, so it needs the same stop-and-refund message the
+      // counter's own pay gets.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder: vi.fn().mockRejectedValue({ code: "fiscal.foreign_recipient_unsupported" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.refused"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
+      expect(tenderPay(el).stage).toBe("collect"); // still awaiting collection
     });
 
     it("collect-order: a NETWORK failure (no answer) shows sale.unconfirmed, basket kept", async () => {

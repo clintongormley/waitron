@@ -281,10 +281,13 @@ async function attemptAppend(
         codes: warnings.map((issue) => issue.code),
       }),
       severity: "warning",
-      // The record's own generation instant, taken from the injected clock by `backend.ts` on all
-      // four call sites (`RecordInputBase.generadoEn`) — never `new Date()`. Every other
-      // `detectedAt:` in production code takes an injected clock, and one wall-clock read here
-      // would stamp an incident at an instant nothing else in the transaction shares.
+      // The record's own generation instant (`RecordInputBase.generadoEn`) — never `new Date()`.
+      // `backend.ts` fills it on all four call sites without ever reading a wall clock: one takes
+      // its own injected clock directly (`recordVoid`'s `now.instant`) and the other three take the
+      // caller's `sale.issuedAt`, which `packages/core` derived from ITS injected clock
+      // (`record-sale.ts`'s `now.instant`). Every other `detectedAt:` in production code is fed a
+      // clock the same way, and one wall-clock read here would stamp an incident at an instant
+      // nothing else in the transaction shares.
       detectedAt: registro.input.generadoEn,
     });
   }
