@@ -83,19 +83,62 @@ the list's existing in-browser paging and search alone — the replacement is th
    fields get the same treatment — the packs carry tax-identifier and postal-code validators too, and
    the tax identifier is fiscal.
 
-5. *Dropdown options appear in whatever order the code happens to list them.* The Role chooser on
-   both the create and the edit form renders a hardcoded list in privilege order — staff, supervisor,
-   manager, admin (`apps/dashboard/src/widgets/person-form.ts:16`,
-   `apps/dashboard/src/widgets/person-edit.ts:14`) — so what the operator reads is not alphabetical,
-   and once the labels are translated it is in no order at all. Wanted, here and everywhere: sort a
-   dropdown by the label the person actually reads, in the interface language's own alphabet
-   (`Intl.Collator`), never by the underlying code. Decide first WHERE that rule lives: there is no
-   shared select component, so every screen writes its own raw `<select>`, and this becomes either a
-   `wt-select` in `packages/ui` or a written rule in the Forms contract that each screen follows.
-   Lists that are deliberately in a lifecycle order rather than an alphabetical one need a way to say
-   so. Worth checking at the same time: `wt-data-table` sorts its rows with `localeCompare` and no
-   locale argument (`packages/ui/src/components/wt-data-table.ts:143`), so table sorting follows the
-   browser's language rather than the one the person chose in Waitron.
+5. *Dropdown options appear in whatever order the code happens to list them, and there is no shared
+   select to fix that in.* The Role chooser on both the create and the edit form renders a hardcoded
+   list in privilege order — staff, supervisor, manager, admin
+   (`apps/dashboard/src/widgets/person-form.ts:16`, `apps/dashboard/src/widgets/person-edit.ts:14`) —
+   so what the operator reads is not alphabetical, and once the labels are translated it is in no
+   order at all. **Owner decision (2026-09-12): build a `wt-select` in `packages/ui`** — every screen
+   writes its own raw `<select>` today, so a written rule alone would be followed unevenly and could
+   not be guarded. It sorts what it shows by the label the person actually reads, in the interface
+   language's own alphabet (`Intl.Collator`), never by the underlying code, and it takes the rest of
+   the Forms contract with it — label, required marker, `error`, a semantic `name` — the way
+   `wt-input` does. Lists that are deliberately in a lifecycle order rather than an alphabetical one
+   (a status, a workflow) need a way to say so. Then migrate the existing screens onto it. Worth
+   fixing at the same time: `wt-data-table` sorts its rows with `localeCompare` and no locale argument
+   (`packages/ui/src/components/wt-data-table.ts:143`), so table sorting follows the browser's
+   language rather than the one the person chose in Waitron.
+
+**Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
+decision, 2026-09-12, design not written). Today a person's role is a PostgreSQL enum with exactly
+four values — staff, supervisor, manager, admin (`packages/identity/src/schema/persons.ts:21`). The
+good news is that no call site anywhere gates on a role string: every one asks for a PERMISSION, and
+one map turns a role into its permission set (`packages/identity/src/permissions.ts`). A session also
+reads the person's role from the database on each request rather than carrying it in a cookie
+(`packages/identity/src/management-session.ts:70`), so an edited role takes effect at once. So the
+seam is already in the right place; what has to change is that roles and their permissions become
+rows the admin owns, per tenant, with the four existing ones seeded as defaults. No compatibility
+code is needed — nothing is deployed yet.
+
+The question the design turns on is the **ladder**. The four roles are ordered, staff below
+supervisor below manager below admin, and a module contributes a permission by naming only the lowest
+role that should hold it (`grantedFrom`, `packages/module/src/module.ts:64`); identity then spreads
+that permission to the named role and every role above it. A role an admin invents — “Head chef” —
+has no position on that ladder, so either every custom role declares where it sits, or the module
+contract stops naming a role and names something else: a named permission GROUP, or a default answer
+each role can then override. Pick one before writing any schema. `packages/composition/src/role-parity.ts`
+proves at compile time that the module contract's four roles and identity's four roles are the same
+list; whatever replaces the union has to keep an equivalent tie or the two drift apart silently.
+
+The rest, once that is settled:
+
+- **Who may edit a role.** There is already a permission for the dangerous half of this — `person.admin`
+  exists because assigning the admin role decides who controls every other permission. Editing roles
+  needs the same protection plus a rule that nobody can mint or widen a role beyond the permissions
+  they themselves hold, or the screen becomes a way to promote yourself. And a venue must never be
+  left with nobody who can administer roles.
+- **A role in use.** Deleting or narrowing a role changes what live sessions may do on their next
+  request. Decide whether a role with people in it can be deleted at all, and what happens to those
+  people if it can.
+- **Storage.** A table, not an enum — PostgreSQL's rule about naming a new enum value in the same
+  transaction that adds it is exactly the trap that bricked a box (CLAUDE.md §2). The table belongs in
+  identity's own migration set, carries `tenant_id`, and needs a classification entry like every other
+  new table (CLAUDE.md §3).
+- **Names.** The four built-in role names are translated from a fixed table
+  (`roleName`, `apps/dashboard/src/i18n/domain.ts:180`). A name an admin types has no translation, so
+  a venue's list will mix translated built-ins with untranslated custom ones — decide whether the
+  built-ins stay translated once they are rows, and sort the chooser (item 5) on whatever the person
+  ends up reading.
 
 **Tell people by email when their account's security changes** (owner, 2026-09-12, not started).
 Waitron only ever emails somebody when it wants them to click something: the sender handles exactly
