@@ -8,7 +8,7 @@ import { personRole, roleHasPermission } from "@waitron/identity";
  * Two things in `join-api.ts` break silently — functionally, with no test elsewhere failing — the day
  * `device.manage` and `printer.manage` stop being held by the same roles:
  *
- *  1. The three pairing-mode routes gate on `device.manage` ALONE. A `printer.manage`-only holder
+ *  1. The pairing-mode routes gate on `device.manage` ALONE. A `printer.manage`-only holder
  *     could then not open the venue's window at all, so could not enrol a print agent: a lockout with
  *     no error that names the cause.
  *  2. `MISSING_ROW_PERMISSION` becomes the existence oracle its own comment says it prevents. A

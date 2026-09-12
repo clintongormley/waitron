@@ -1117,8 +1117,8 @@ export interface PrintJobPreview {
   unsupported: boolean;
 }
 
-/** One `GET /management-api/print-jobs` row — the dashboard's status read (recent activity, newest
- * first, no payload). Mirrors print-api.ts's projection; `deliveredAt` is set only once `done`. */
+/** Queue and recent completion status, newest-created first, without payload bytes.
+ * `deliveredAt` is set only once `done`. */
 export interface PrintJobRow {
   canResend: boolean;
   id: string;
@@ -2182,7 +2182,7 @@ export class DashboardApi {
   }
 
   // ── Pairing mode + join requests (device-join-and-accept) ────────────────────────────────────────
-  // The seven verbs the Devices screen's join half drives (apps/server/src/join-api.ts). The window
+  // Shared join operations (apps/server/src/join-api.ts). The window
   // routes and the device accept are `device.manage`-gated; list, challenge and deny take their
   // permission from the row's KIND, so this same set serves the printers screen's agent queue.
 
@@ -2195,6 +2195,11 @@ export class DashboardApi {
    * window from now (the route is idempotent, so Extend and Open are the same call). */
   openPairingMode(): Promise<{ openUntil: string }> {
     return this.#request<{ openUntil: string }>("/management-api/pairing-mode", "POST");
+  }
+
+  /** Renew an open dialog's pairing window without extending its authenticated session. */
+  renewPairingMode(): Promise<{ openUntil: string }> {
+    return this.#request<{ openUntil: string }>("/management-api/pairing-mode/renew", "POST");
   }
 
   /** `DELETE /management-api/pairing-mode` — shut the window (an empty 204). Requests already pending
@@ -2485,8 +2490,7 @@ export class DashboardApi {
     return this.#request<PrintJobPreview>(`/management-api/print-jobs/${id}/preview`, "GET");
   }
 
-  /** `GET /management-api/print-jobs` — the recent print jobs (newest first, bounded), the dashboard's
-   * status read: last delivered, failing printers. No payload — opaque bytes are not status. */
+  /** All unfinished jobs plus the latest 100 completions, newest-created first, without payload. */
   listRecentJobs(): Promise<PrintJobRow[]> {
     return this.#request<PrintJobRow[]>("/management-api/print-jobs", "GET");
   }

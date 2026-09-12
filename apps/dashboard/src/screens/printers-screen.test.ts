@@ -207,6 +207,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     allowAgent: vi.fn().mockResolvedValue(undefined),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
     openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
+    renewPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
     closePairingMode: vi.fn().mockResolvedValue(undefined),
     joinRequests: vi.fn().mockResolvedValue(pending),
     joinChallenge: vi.fn().mockResolvedValue({ choices: CHOICES }),
@@ -256,12 +257,18 @@ async function filterPrinters(el: PrintersScreen, value: string): Promise<void> 
   select.dispatchEvent(new Event("change"));
   await flush(el);
 }
+async function selectTab(el: PrintersScreen, key: string): Promise<void> {
+  q(el, "wt-tabs")!.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
+  await flush(el);
+}
 async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {
+  await selectTab(el, "printers");
   if (!q(el, `[data-test="edit-printer-${id}"]`)) await filterPrinters(el, "all");
   q(el, `[data-test="edit-printer-${id}"]`)!.click();
   await flush(el);
 }
 async function openDiscovery(el: PrintersScreen): Promise<void> {
+  await selectTab(el, "printers");
   q(el, "[data-test=open-add-printer]")!.click();
   await flush(el);
 }
@@ -278,6 +285,78 @@ function toggleSwitch(el: PrintersScreen, sel: string, checked: boolean): void {
   input.checked = checked;
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
+
+describe("printer configuration tabs", () => {
+  it.each([
+    [[], [], "agents"],
+    [[{ ...agents[0]!, active: false }], printers, "agents"],
+    [agents, [], "printers"],
+    [agents, printers.map((p) => ({ ...p, active: false })), "printers"],
+    [agents, printers, "queue"],
+  ])("selects the useful first tab for setup %#", async (agentRows, printerRows, selected) => {
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValue(agentRows),
+      listPrinters: vi.fn().mockResolvedValue(printerRows),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    const tabs = q(el, "wt-tabs");
+    expect(tabs).toBeTruthy();
+    expect(
+      tabs!.shadowRoot!.querySelector('[aria-selected="true"]')?.getAttribute("data-key"),
+    ).toBe(selected);
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe(t("printers.title"));
+    expect(t("printers.title", "en-GB")).toBe("Printer configuration");
+  });
+
+  it("keeps the selected tab after a live update and hides the other panels", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    const tabs = q(el, "wt-tabs")!;
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!.click();
+    await flush(el);
+    expect(q(el, "[data-test=open-add-printer]")!.checkVisibility()).toBe(true);
+    expect(q(el, "[data-test=open-add-agent]")!.checkVisibility()).toBe(false);
+    vi.mocked(api.listPrinters).mockResolvedValue([]);
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(tabs.shadowRoot!.querySelector('[aria-selected="true"]')?.getAttribute("data-key")).toBe(
+      "printers",
+    );
+  });
+
+  it("opens pairing automatically and closes it with the agent modal", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    expect(api.openPairingMode).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=pairing-open]")).toBeNull();
+    expect(q(el, "[data-test=refresh-joins]")).toBeNull();
+    expect(
+      q(el, "[data-test=scan-agents]")!
+        .shadowRoot!.querySelector("button")!
+        .getAttribute("aria-busy"),
+    ).toBe("true");
+    q(el, "[data-test=cancel-new-agent]")!.click();
+    await flush(el);
+    expect(api.closePairingMode).toHaveBeenCalledOnce();
+  });
+
+  it("offers one printer scan action without a redundant refresh", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await openDiscovery(el);
+    expect(q(el, "[data-test=scan-printers]")).toBeTruthy();
+    expect(q(el, "[data-test=refresh-discovered]")).toBeNull();
+  });
+});
 
 describe("printers-screen", () => {
   it("updates a printer and its recent jobs after a data event while preserving an editing draft", async () => {
@@ -382,7 +461,7 @@ describe("printers-screen", () => {
     expect(
       (q(el, "[data-test=agents-table]") as import("@waitron/ui").WtDataTable).emptyMessage,
     ).toBe(t("printers.no_agents", "es-ES"));
-    expect(q(el, "[data-test=printers-table]")).toBeNull();
+    expect(q(el, "[data-test=printers-table]")).toBeTruthy();
     expect(
       (q(el, "[data-test=jobs-table]") as import("@waitron/ui").WtDataTable).emptyMessage,
     ).toBe(t("printers.no_jobs", "es-ES"));
@@ -410,55 +489,19 @@ describe("printers-screen", () => {
     expect(api.joinRequests).toHaveBeenCalledWith("print_agent");
   });
 
-  it("shows the shut window's Open control, with the refused-knock hint", async () => {
-    const api = stubApi({
-      pairingMode: vi.fn().mockResolvedValue({ ...SHUT, refusedRecently: 2 }),
-    });
+  it("opens the window automatically and shows when it lapses", async () => {
+    const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
-
-    expect(q(el, "[data-test=pairing-open]")).toBeTruthy();
-    expect(q(el, "[data-test=pairing-until]")).toBeNull();
-    expect(text(el, "[data-test=pairing-refused]")).toBe(
-      t("printers.pairing_refused", "es-ES").replace("{count}", "2"),
-    );
-  });
-
-  it("opens the window and shows when it lapses", async () => {
-    const pairingMode = vi.fn().mockResolvedValueOnce(SHUT).mockResolvedValue(OPEN);
-    const api = stubApi({ pairingMode });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    q(el, "[data-test=open-add-agent]")!.click();
-    await flush(el);
-
-    q(el, "[data-test=pairing-open]")!.click();
-    await flush(el);
-
-    expect(api.openPairingMode).toHaveBeenCalledWith();
+    expect(api.openPairingMode).toHaveBeenCalledOnce();
     expect(text(el, "[data-test=pairing-until]")).toBe(
       t("printers.pairing_open_until", "es-ES").replace("{time}", "2026-09-08 10:20"),
     );
     expect(q(el, "[data-test=pairing-open]")).toBeNull();
-  });
-
-  // Extend is the SAME call as Open — the route moves an open window's lapse rather than adding one.
-  it("extends and closes an open window", async () => {
-    const api = stubApi({ pairingMode: vi.fn().mockResolvedValue(OPEN) });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    q(el, "[data-test=open-add-agent]")!.click();
-    await flush(el);
-
-    q(el, "[data-test=pairing-extend]")!.click();
-    await flush(el);
-    expect(api.openPairingMode).toHaveBeenCalledWith();
-
-    q(el, "[data-test=pairing-close]")!.click();
-    await flush(el);
-    expect(api.closePairingMode).toHaveBeenCalledWith();
+    expect(q(el, "[data-test=pairing-extend]")).toBeNull();
+    expect(q(el, "[data-test=pairing-close]")).toBeNull();
   });
 
   it("shows an error banner when opening the window is rejected", async () => {
@@ -468,9 +511,6 @@ describe("printers-screen", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
-    await flush(el);
-
-    q(el, "[data-test=pairing-open]")!.click();
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
@@ -535,7 +575,7 @@ describe("printers-screen", () => {
     q(el, "[data-test=join-deny-j1]")!.click();
     await flush(el);
     expect(api.denyJoinRequest).toHaveBeenCalledWith("j1");
-    expect(api.joinRequests).toHaveBeenCalledTimes(2);
+    expect(api.joinRequests).toHaveBeenCalledTimes(3);
   });
 
   // ── Agents: the accept dialog's numeric match (no binding pickers — just the three numbers) ────────
@@ -575,7 +615,7 @@ describe("printers-screen", () => {
     expect(api.acceptPrintAgentJoinRequest).toHaveBeenCalledWith("j1", { choice: REAL_NUMBER });
     expect(q(el, "[data-test=join-dialog]")).toBeNull();
     expect(api.listAgents).toHaveBeenCalledTimes(2);
-    expect(api.joinRequests).toHaveBeenCalledTimes(2);
+    expect(api.joinRequests).toHaveBeenCalledTimes(3);
   });
 
   // Design §1.2: a wrong tap has ALREADY denied the request server-side (device.join_mismatch is the
@@ -584,7 +624,11 @@ describe("printers-screen", () => {
   it("treats a mismatch as terminal: the row goes, and the banner tells them to ask again", async () => {
     const api = stubApi({
       acceptPrintAgentJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
-      joinRequests: vi.fn().mockResolvedValueOnce(pending).mockResolvedValue([]),
+      joinRequests: vi
+        .fn()
+        .mockResolvedValueOnce(pending)
+        .mockResolvedValueOnce(pending)
+        .mockResolvedValue([]),
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -1356,13 +1400,13 @@ describe("printer settings table layout", () => {
     expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeNull();
   });
 
-  it("hides printer setup until an agent has registered", async () => {
+  it("keeps the Printers tab available before an agent has registered", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({ listAgents: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    expect(q(el, "[data-test=printers-table]")).toBeNull();
-    expect(q(el, "[data-test=open-add-printer]")).toBeNull();
+    expect(q(el, "[data-test=printers-table]")).toBeTruthy();
+    expect(q(el, "[data-test=open-add-printer]")).toBeTruthy();
     expect(q(el, "[data-test=jobs-table]")).toBeTruthy();
   });
 
@@ -1679,6 +1723,7 @@ it.each([
 it("returns keyboard focus to the printer row trigger after editing through its menu", async () => {
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
   await flush(el);
+  await selectTab(el, "printers");
   const edit = q(el, "[data-test=edit-printer-p1]")!;
   const menu = edit.closest("dashboard-row-actions")!;
   const trigger = menu.shadowRoot!.querySelector("button")!;
@@ -1716,13 +1761,13 @@ it("keeps the delete confirmation menu open and disarms another printer", async 
   expect(api.deactivatePrinter).not.toHaveBeenCalled();
   q(el, "[data-test=deactivate-printer-p2]")!.click();
   await flush(el);
-  expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("action.delete"));
+  expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("printers.disable"));
   q(el, "[data-test=deactivate-printer-p1]")!.click();
   await flush(el);
   expect(api.deactivatePrinter).not.toHaveBeenCalled();
   q(el, "[data-test=test-print-p1]")!.click();
   await flush(el);
-  expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("action.delete"));
+  expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("printers.disable"));
 });
 
 it("defaults to active printers and filters disabled and all registrations", async () => {
@@ -1843,4 +1888,190 @@ it("shows a localized resend failure and permits another attempt", async () => {
     false,
   );
   expect(api.listRecentJobs).toHaveBeenCalledTimes(1);
+});
+
+it("keeps pairing open, polls passively, and makes Scan usable again after listening", async () => {
+  const background = {
+    joinRequests: vi.fn().mockResolvedValue(pending),
+    openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
+    renewPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
+  };
+  const api = stubApi({ background: background as unknown as DashboardApi });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  vi.useFakeTimers();
+  try {
+    q(el, "[data-test=open-add-agent]")!.click();
+    await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS);
+    await el.updateComplete;
+    await settleTree(el.shadowRoot!);
+    expect(background.joinRequests).toHaveBeenCalledWith("print_agent");
+    expect(q(el, "[data-test=scan-agents]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
+      false,
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(background.renewPairingMode).toHaveBeenCalled();
+    const scans = background.joinRequests.mock.calls.length;
+    el.remove();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(api.closePairingMode).toHaveBeenCalledOnce();
+    expect(background.joinRequests).toHaveBeenCalledTimes(scans);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("closes a pending pairing open after the modal is dismissed", async () => {
+  let resolve!: (value: { openUntil: string | null }) => void;
+  const api = stubApi({
+    openPairingMode: vi.fn().mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  q(el, "[data-test=cancel-new-agent]")!.click();
+  await flush(el);
+  expect(api.closePairingMode).not.toHaveBeenCalled();
+  resolve({ openUntil: OPEN.openUntil });
+  await flush(el);
+  expect(api.closePairingMode).toHaveBeenCalledOnce();
+  expect(q(el, "[data-test=new-agent-modal]")).toBeNull();
+});
+
+it("reports a failed pairing close after dismissing the modal", async () => {
+  const api = stubApi({ closePairingMode: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  q(el, "[data-test=cancel-new-agent]")!.click();
+  await flush(el);
+  expect(text(el, "[role=alert]")).toContain(codeMessage("server.internal"));
+});
+
+it.each(["agent", "printer"])(
+  "makes the Add %s modal half again as wide on desktop",
+  async (kind) => {
+    await page.viewport(1280, 900);
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    q(el, `[data-test=open-add-${kind}]`)!.click();
+    await flush(el);
+    const dialog = q(el, `[data-test=new-${kind}-modal]`)!.shadowRoot!.querySelector("dialog")!;
+    expect(dialog.getBoundingClientRect().width).toBeCloseTo(768, 0);
+  },
+);
+
+it("distinguishes job statuses with coloured dots while preserving the status text", async () => {
+  const allJobs = (["queued", "printing", "done", "failed"] as const).map((status) => ({
+    ...jobs[0]!,
+    id: status,
+    status,
+  }));
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ listRecentJobs: vi.fn().mockResolvedValue(allJobs) }),
+  });
+  await flush(el);
+  const colors = allJobs.map((job) => {
+    const status = q(el, `[data-test=job-status-${job.id}]`)!;
+    expect(status.textContent).toBe(jobStatusName(job.status));
+    return getComputedStyle(status, "::before").backgroundColor;
+  });
+  expect(new Set(colors).size).toBe(4);
+  expect(colors).not.toContain("rgba(0, 0, 0, 0)");
+});
+
+it("re-adds a printer after adding and disabling it in the same screen", async () => {
+  let registered = false;
+  let active = false;
+  const device = discovered[0]!;
+  const printer = { ...printers[2]!, id: "p9", localKey: "SN-1" };
+  const api = stubApi({
+    listPrinters: vi
+      .fn()
+      .mockImplementation(async () => (registered ? [{ ...printer, active }] : [])),
+    listDiscoveredPrinters: vi
+      .fn()
+      .mockImplementation(async () => [
+        { ...device, alreadyRegistered: registered, printerId: registered ? "p9" : null },
+      ]),
+    createPrinter: vi.fn().mockImplementation(async () => {
+      registered = true;
+      active = true;
+      return { id: "p9" };
+    }),
+    deactivatePrinter: vi.fn().mockImplementation(async () => {
+      active = false;
+    }),
+    updatePrinter: vi.fn().mockImplementation(async () => {
+      active = true;
+    }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  await openDiscovery(el);
+  q(el, "[data-test=register-SN-1]")!.click();
+  await flush(el);
+  q(el, "[data-test=cancel-new-printer]")!.click();
+  await flush(el);
+  q(el, "[data-test=deactivate-printer-p9]")!.click();
+  await flush(el);
+  q(el, "[data-test=deactivate-printer-p9]")!.click();
+  await flush(el);
+  await openDiscovery(el);
+  expect(text(el, "[data-test=register-SN-1]")).toBe(t("printers.add_again"));
+  q(el, "[data-test=register-SN-1]")!.click();
+  await flush(el);
+  expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p9", { active: true });
+  expect(api.createPrinter).toHaveBeenCalledOnce();
+});
+
+it("restores printer tabs from the URL and browser navigation", async () => {
+  history.replaceState(null, "", "/manage/printers/view/agents?keep=yes");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
+  await flush(el);
+  expect(
+    q(el, "wt-tabs")!.shadowRoot!.querySelector("[aria-selected=true]")?.getAttribute("data-key"),
+  ).toBe("agents");
+  await selectTab(el, "printers");
+  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(location.search).toBe("?keep=yes");
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/agents"));
+  await flush(el);
+  expect(
+    q(el, "wt-tabs")!.shadowRoot!.querySelector("[aria-selected=true]")?.getAttribute("data-key"),
+  ).toBe("agents");
+});
+
+it("ignores an old agent scan after closing and reopening the modal", async () => {
+  let finishOld!: (rows: JoinRequestRow[]) => void;
+  const oldRead = new Promise<JoinRequestRow[]>((resolve) => {
+    finishOld = resolve;
+  });
+  const api = stubApi({
+    joinRequests: vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(oldRead)
+      .mockResolvedValue([]),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  q(el, "[data-test=cancel-new-agent]")!.click();
+  await flush(el);
+  q(el, "[data-test=open-add-agent]")!.click();
+  await flush(el);
+  finishOld([{ ...pending[0]!, id: "old-request" }]);
+  await flush(el);
+  expect(q(el, "[data-test=join-row-old-request]")).toBeNull();
 });

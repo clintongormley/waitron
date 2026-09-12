@@ -2817,3 +2817,15 @@ describe("DashboardApi — option groups + product attach (Task 11/12)", () => {
     });
   });
 });
+
+it("renews the pairing window without reporting dashboard session activity", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ openUntil: "2026-09-12T12:15:00Z" }));
+  const activity = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, activity);
+  expect(await api.background.renewPairingMode()).toEqual({ openUntil: "2026-09-12T12:15:00Z" });
+  expect(fetchImpl).toHaveBeenCalledWith("/management-api/pairing-mode/renew", {
+    method: "POST",
+    credentials: "include",
+  });
+  expect(activity).not.toHaveBeenCalled();
+});

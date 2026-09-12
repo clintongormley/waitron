@@ -472,6 +472,11 @@ design-review section apply.
   the agent setup page. Design: [printer settings](superpowers/specs/2026-09-11-printer-settings-tables.md);
   the [review record](superpowers/specs/2026-09-11-printer-settings-review.md) lists every finding with
   its disposition.
+  *In flight (2026-09-12, `printers`):* Printer configuration uses Queue, Printers and Print Agents
+  tabs with setup-aware defaults. Add agent owns the pairing window; both Add dialogs are wider and
+  use Scan with a spinner. The queue includes all unfinished jobs plus 100 recent completions.
+  Retained registrations use Disable/Disabled wording. Design and validation scope:
+  [printer configuration tabs](superpowers/specs/2026-09-12-printer-configuration-tabs.md).
   *Follow-ups (2026-09-11):* Delete now requires confirmation. The printer table defaults to Active,
   with Disabled and All filters; Add printer offers a disabled discovered device as **Add again**,
   restoring the same registration, settings and pending jobs. Named `wt-switch` controls replace

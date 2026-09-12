@@ -36,8 +36,8 @@ import "./errors.js";
 // (`active = true`) are QUERY predicates, so PGlite shows them faithfully. The two properties PGlite
 // CANNOT show — the routes running as the non-owner app role with only its grants (the gate proven by
 // DELETION there) and the claim's `for update … skip locked` under true concurrency — live in
-// `print-api.pg.test.ts` against real Postgres (CLAUDE.md §4). Each `it` seeds its own tenant, so its reads are its alone and
-// order-independent across the shared PGlite.
+// `print-api.pg.test.ts` against real Postgres (CLAUDE.md §4). Tests share the seeded tenant and
+// create their own printers; assertions about tenant-wide results must account for other tests' jobs.
 const noopLog: Logger = () => {};
 
 // The venue's routable servers the pull route echoes (via `readMembership` → `routableServers`).
@@ -1282,9 +1282,63 @@ describe("mountPrintApi — management: recent jobs", () => {
     const jobsResult = await send(app, "GET", "/management-api/print-jobs", {
       cookie: managerCookie,
     });
-    const jobs = (await jobsResult.json()) as { id: string }[];
-    expect(jobs).toHaveLength(100);
+    const jobs = (await jobsResult.json()) as { id: string; printerId: string }[];
+    expect(jobs.filter((job) => job.printerId === printerId)).toHaveLength(105);
     expect(jobs.some((j) => j.id === foreignJob)).toBe(false);
+  });
+
+  it("keeps every unfinished job alongside the last 100 completed jobs by delivery time", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    try {
+      const before = await send(app, "GET", "/management-api/print-jobs", {
+        cookie: managerCookie,
+      });
+      const existing = (await before.json()) as { id: string; status: string }[];
+      const existingPending = existing.filter((job) => job.status !== "done");
+      const pending = await suite.db.execute<{ id: string }>(sql`
+        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
+        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
+          attempts, '2020-01-01T00:00:00Z'
+        from (values ('queued', 0), ('printing', 0), ('failed', 4), ('failed', 5)) as jobs(status, attempts)
+        returning id`);
+      const completed = await suite.db.execute<{ id: string; delivered_at: string }>(sql`
+        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, created_at, delivered_at)
+        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
+          '2021-01-01T00:00:00Z'::timestamptz - n * interval '1 second',
+          '2099-01-01T00:00:00Z'::timestamptz + n * interval '1 second'
+        from generate_series(1, 101) as jobs(n)
+        returning id, delivered_at`);
+      const result = await send(app, "GET", "/management-api/print-jobs", {
+        cookie: managerCookie,
+      });
+      expect(result.status).toBe(200);
+      const jobs = (await result.json()) as { id: string; status: string; createdAt: string }[];
+      expect(jobs).toHaveLength(existingPending.length + 104);
+      expect(
+        jobs
+          .filter((job) => job.status !== "done")
+          .map((job) => job.id)
+          .sort(),
+      ).toEqual([...existingPending, ...pending.rows].map((job) => job.id).sort());
+      expect(
+        jobs
+          .filter((job) => job.status === "done")
+          .map((job) => job.id)
+          .sort(),
+      ).toEqual(
+        completed.rows
+          .sort((a, b) => Date.parse(b.delivered_at) - Date.parse(a.delivered_at))
+          .slice(0, 100)
+          .map((job) => job.id)
+          .sort(),
+      );
+      const created = jobs.map((job) => Date.parse(job.createdAt));
+      expect(created).toEqual([...created].sort((a, b) => b - a));
+      expect(jobs.every((job) => !("payload" in job))).toBe(true);
+    } finally {
+      await suite.db.execute(sql`delete from print_jobs where printer_id = ${printerId}`);
+    }
   });
 
   it("lists recent jobs newest-first without the payload", async () => {

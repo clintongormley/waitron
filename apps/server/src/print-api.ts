@@ -13,7 +13,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   asAppUser,
@@ -96,8 +96,7 @@ export interface PrintApiDeps {
 /** Printer configuration and history reads use printer.manage; document resends use print.resend. */
 const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
 
-/** How many recent jobs the management job list returns — a bound on the dashboard's status read, not
- * a tuning knob (the surface shows recent activity, not the whole history). */
+/** Completed history is bounded; unfinished jobs must remain visible regardless of age. */
 const RECENT_JOBS_LIMIT = 100;
 
 /** The fixed ESC/POS ticket the dashboard's test-print button enqueues (design §6) — a self-test the
@@ -700,7 +699,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, async (tx) => {
         const configured = await listPrinters(tx, deps.cfg);
-        // Aggregate the full tenant history: the recent-jobs page is capped and cannot supply totals.
+        // Aggregate the full tenant history: the queue includes only bounded completed history.
         const summaries = await tx.execute<{
           printer_id: string;
           pending_jobs: number;
@@ -792,14 +791,18 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // ── Recent print jobs (printer.manage) ───────────────────────────────────────────────────────────
+  // ── Print queue and recent completions (printer.manage) ─────────────────────────────────────────
   app.get("/management-api/print-jobs", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // The dashboard's status read (design §6: last delivered, failing printers). Newest first,
-      // bounded — recent activity, not the whole history. No `payload` (opaque bytes are not status).
-      const rows = await gated(sessionId, (tx) =>
-        tx
+      const rows = await gated(sessionId, (tx) => {
+        const recentCompleted = tx
+          .select({ id: printJobs.id })
+          .from(printJobs)
+          .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.status, "done")))
+          .orderBy(desc(printJobs.deliveredAt), desc(printJobs.id))
+          .limit(RECENT_JOBS_LIMIT);
+        return tx
           .select({
             id: printJobs.id,
             printerId: printJobs.printerId,
@@ -811,10 +814,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             deliveredAt: printJobs.deliveredAt,
           })
           .from(printJobs)
-          .where(eq(printJobs.tenantId, deps.cfg.tenantId))
-          .orderBy(desc(printJobs.createdAt))
-          .limit(RECENT_JOBS_LIMIT),
-      );
+          .where(
+            and(
+              eq(printJobs.tenantId, deps.cfg.tenantId),
+              or(ne(printJobs.status, "done"), inArray(printJobs.id, recentCompleted)),
+            ),
+          )
+          .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
+      });
       return c.json(
         rows.map(({ kind, ...job }) => ({
           ...job,

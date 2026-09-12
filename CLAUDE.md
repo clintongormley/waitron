@@ -233,6 +233,12 @@ unfiltered `main` run, not a wrong hook.
   management session, so polling it would keep an unattended dashboard signed in. Observer callbacks
   assign snapshots; they do not rerun loaders that reset drafts or mint recovery keys. See
   `docs/developers/dashboard-live-updates.md` and the passive-session and backup-screen regressions.
+- **A background API client does not make POST requests passive.** The request primitive marks only
+  GETs as passive. Automatic pairing renewal uses an explicit authenticated route that resolves the
+  session without touching its activity time. Cost: renewing the Add print agent dialog through the
+  ordinary Open route moved session expiry forward by ten minutes in the regression; the renewal
+  route leaves it unchanged and still refuses expired sessions (`apps/server/src/join-api.pg.test.ts`,
+  “renews the window without extending the session”).
 - **Dashboard subscription names travel with their server sources.** Core and contributed screens
   export `QUERY_DEPENDENCIES`; `scripts/live-subscriptions.test.ts` checks those names against shipped
   resources. A rejected subscription closes the whole tab's stream, so a misspelled name affects

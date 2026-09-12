@@ -143,6 +143,7 @@ function stubApi(pairingOpen = false): DashboardApi {
       refusedRecently: pairingOpen ? 0 : 2,
     }),
     openPairingMode: vi.fn().mockResolvedValue({ openUntil: "2026-09-08T10:20:00.000Z" }),
+    renewPairingMode: vi.fn().mockResolvedValue({ openUntil: "2026-09-08T10:20:00.000Z" }),
     closePairingMode: vi.fn().mockResolvedValue(undefined),
     joinRequests: vi.fn().mockResolvedValue(pending),
     joinChallenge: vi.fn().mockResolvedValue({ choices: CHOICES }),
@@ -201,7 +202,13 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    await expectNoA11yViolations(host);
+    for (const key of ["queue", "printers", "agents"]) {
+      q(el, "wt-tabs")!
+        .shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!
+        .click();
+      await flush(el);
+      await expectNoA11yViolations(host);
+    }
   });
 
   it("renders the open pairing window accessibly", async () => {
