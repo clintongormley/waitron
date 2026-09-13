@@ -465,9 +465,24 @@ password in component memory for the second request, and issue no session before
 
 Account setup and password-reset links validate their action before showing new credentials. Show
 the language chooser and the server-confirmed email on these forms. An invalid or expired action
-can request a replacement with the same acknowledgement for every account state. After setting a
-password, offer optional passkey creation with a recognizable name. A password reset still requires
-normal sign-in, including any enrolled second factor, before that offer.
+can request a replacement with the same acknowledgement for every account state.
+
+Three routes reach the optional passkey offer. Accepting an invitation signs the person in as part
+of setting their password, so the offer follows straight away. A password reset signs nobody in, so
+it sends the person to a normal sign-in first, including any enrolled second factor, and the offer
+follows that sign-in. Both of those link routes always offer. An ordinary password sign-in offers as
+well, but only when the server says to: someone who holds no passkey and has never settled the
+offer. That answer arrives on the authenticated sign-in response itself, and must never come from
+asking before sign-in whether an account exists or holds a passkey. Signing in with a passkey makes
+no offer, because the person already holds one, and a Google sign-in ends in a redirect the login
+screen never reads a response from, so it makes none either.
+
+Ask for a recognizable passkey name on the offer screen. When the sign-in that led there used a
+recovery code rather than an authenticator code, ask for a current authenticator code too, before
+registering anything. Both ways out — adding a passkey and skipping — record that the offer has been
+settled, so it is made once rather than at every sign-in, and both then sign the person in.
+Recording is bookkeeping and never a gate: when it fails, sign the person in anyway, because the
+worst that follows is being offered once more.
 
 The authenticator setup screen presents the enrolment URI as a QR code, keeps the setup key behind
 a manual fallback, and enables the factor only after the server accepts a current six-digit code.

@@ -897,8 +897,9 @@ export class DashboardApp extends LitElement {
   /**
    * A confirmed login from `dashboard-login-screen`. `stopPropagation` keeps the composed, bubbling
    * `logged-in` inside the shell (the house pattern — the shell is its final consumer, so it must not
-   * leak on to the document past the shadow boundary). The login route returns only `{ personId }`, so
-   * the shell re-probes `getMe()` to learn the freshly-authenticated role and land on the right face.
+   * leak on to the document past the shadow boundary). The login route returns who signed in and
+   * whether to offer them a passkey — no role and no permissions — so the shell re-probes `getMe()`
+   * to learn the freshly-authenticated role and land on the right face.
    */
   async #onLoggedIn(event: Event): Promise<void> {
     event.stopPropagation();

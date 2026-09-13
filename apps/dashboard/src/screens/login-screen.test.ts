@@ -131,6 +131,54 @@ async function signInWithPassword(overrides: Partial<DashboardApi> = {}) {
   return { el, api };
 }
 
+/**
+ * A `passkeyOfferSeen` stub that stays pending until `release()`, so a test can act in the gap
+ * between the click and the recorded resolution. Every call made in that gap is released together,
+ * so a test that provokes a second call still finishes instead of hanging on it.
+ */
+function pendingOfferSeen() {
+  const pending: Array<() => void> = [];
+  return {
+    passkeyOfferSeen: vi.fn(
+      () =>
+        new Promise<void>((done) => {
+          pending.push(() => done());
+        }),
+    ),
+    release: () => {
+      for (const done of pending) done();
+    },
+  };
+}
+
+/** Api stubs plus the hardware stub for a registration that succeeds. */
+function passkeyRegistrationStubs(): Partial<DashboardApi> {
+  vi.spyOn(navigator.credentials, "create").mockResolvedValue({
+    id: "new-key",
+    rawId: new Uint8Array([1]).buffer,
+    type: "public-key",
+    authenticatorAttachment: "platform",
+    response: {
+      clientDataJSON: new Uint8Array([2]).buffer,
+      attestationObject: new Uint8Array([3]).buffer,
+      getTransports: () => ["internal"],
+    },
+    getClientExtensionResults: () => ({}),
+  } as unknown as PublicKeyCredential);
+  return {
+    passkeyRegisterOptions: vi.fn().mockResolvedValue({
+      challengeHandle: "register",
+      options: {
+        challenge: "AQID",
+        rp: { name: "Waitron", id: "localhost" },
+        user: { id: "BAUG", name: "clinton@example.com", displayName: "Clinton" },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+      },
+    }),
+    passkeyRegisterVerify: vi.fn().mockResolvedValue({ credentialId: "new-key" }),
+  } as unknown as Partial<DashboardApi>;
+}
+
 describe("login-screen", () => {
   it("keeps an opted-in account when cancelling someone else's setup link", async () => {
     const saved = JSON.stringify({ email: "saved@example.test", method: "password" });
@@ -1348,30 +1396,9 @@ describe("login-screen", () => {
   });
 
   it("records the resolution when a passkey is added from the offer, then signs in", async () => {
-    vi.spyOn(navigator.credentials, "create").mockResolvedValue({
-      id: "new-key",
-      rawId: new Uint8Array([1]).buffer,
-      type: "public-key",
-      authenticatorAttachment: "platform",
-      response: {
-        clientDataJSON: new Uint8Array([2]).buffer,
-        attestationObject: new Uint8Array([3]).buffer,
-        getTransports: () => ["internal"],
-      },
-      getClientExtensionResults: () => ({}),
-    } as unknown as PublicKeyCredential);
     const { el, api } = await signInWithPassword({
       login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
-      passkeyRegisterOptions: vi.fn().mockResolvedValue({
-        challengeHandle: "register",
-        options: {
-          challenge: "AQID",
-          rp: { name: "Waitron", id: "localhost" },
-          user: { id: "BAUG", name: "clinton@example.com", displayName: "Clinton" },
-          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
-        },
-      }),
-      passkeyRegisterVerify: vi.fn().mockResolvedValue({ credentialId: "new-key" }),
+      ...passkeyRegistrationStubs(),
     });
     const events: Event[] = [];
     el.addEventListener("logged-in", (e) => events.push(e));
@@ -1401,6 +1428,56 @@ describe("login-screen", () => {
     el.addEventListener("logged-in", (e) => events.push(e));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
     await flush(el);
+    expect(events).toHaveLength(1);
+    // And the screen is left usable. A session-shaped rejection is reported to the shell before the
+    // promise rejects, which puts this screen back in front of the person — holding the form
+    // disabled for the round trip would then leave them unable to sign in at all.
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-test=submit]")!
+        .disabled,
+    ).toBe(false);
+  });
+
+  // Recording the resolution put a network round trip between the click and the sign-in, where
+  // before there was none. Both of these sign the same person in twice if that gap is left open.
+  it("signs in once when the offer is skipped twice before the first skip lands", async () => {
+    const { release, passkeyOfferSeen } = pendingOfferSeen();
+    const { el, api } = await signInWithPassword({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+      passkeyOfferSeen,
+    });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    const skip = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=skip-passkey]",
+    )!;
+    skip.click();
+    await el.updateComplete;
+    const disabledWhileSkipping = skip.disabled;
+    skip.click();
+    release();
+    await flush(el);
+    expect(api.passkeyOfferSeen).toHaveBeenCalledTimes(1);
+    expect(events).toHaveLength(1);
+    expect(disabledWhileSkipping).toBe(true);
+  });
+
+  it("signs in once when a passkey is added while a skip is still in flight", async () => {
+    const { release, passkeyOfferSeen } = pendingOfferSeen();
+    const { el, api } = await signInWithPassword({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+      passkeyOfferSeen,
+      ...passkeyRegistrationStubs(),
+    });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
+    release();
+    await flush(el);
+    expect(api.passkeyRegisterOptions).not.toHaveBeenCalled();
+    expect(api.passkeyOfferSeen).toHaveBeenCalledTimes(1);
     expect(events).toHaveLength(1);
   });
 });

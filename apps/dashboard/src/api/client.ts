@@ -1635,8 +1635,8 @@ export class DashboardApi {
   }
 
   /**
-   * `POST /management-api/session` — log in with an email + password. Returns who is now logged in;
-   * a bad credential rejects with the server's `{ code }`.
+   * `POST /management-api/session` — log in with an email + password. Returns who is now logged in
+   * and whether to offer them a passkey; a bad credential rejects with the server's `{ code }`.
    */
   login(input: {
     email: string;

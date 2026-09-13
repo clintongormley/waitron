@@ -550,15 +550,28 @@ export class LoginScreen extends LitElement {
   }
 
   /**
-   * Record that the offer was resolved, then sign in regardless. A failed bookkeeping call must never
-   * be a reason somebody cannot reach their own dashboard; the worst case is being offered once more.
+   * Record that the offer was resolved, then sign in regardless: a failed piece of bookkeeping must
+   * never be why somebody cannot reach their own dashboard, and the worst case is being offered once
+   * more. One kind of failure ends somewhere else — a session-shaped code
+   * (`management_session.required`, `management_session.expired`, `person.suspended`) reaches the
+   * shell through the request primitive's `onError`, which runs BEFORE it throws
+   * (`packages/dashboard-kit/src/request.ts`), and `main.ts`'s `waitron-session-invalid` — so by the
+   * time the catch below swallows anything, the shell has already put this screen back in front of
+   * the person.
+   *
+   * `busy` holds the screen for the round trip the recording added, because the render disables both
+   * buttons on it: without it a second Skip, or Add pressed on top of a pending Skip, signs the same
+   * person in twice. It is released again before announcing, since that session-shaped rejection
+   * leaves this screen mounted and it has to stay usable.
    */
   async #resolvePasskeyOffer(detail: CompletedLogin): Promise<void> {
+    this.busy = true;
     try {
       await this.api.passkeyOfferSeen();
     } catch {
       // Deliberately swallowed — see above.
     }
+    this.busy = false;
     if (this.isConnected) this.#announceLogin(detail);
   }
 
