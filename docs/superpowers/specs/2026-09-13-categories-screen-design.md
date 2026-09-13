@@ -220,6 +220,16 @@ no image, so squares and names line up down the column. The colour square is a s
 square filled with the colour; with no colour, an empty dashed square. The name link opens the
 products modal.
 
+> **Corrected 2026-09-13 (Task 18).** The "no colour" square shipped with a solid border, not the
+> dashed one called for here: `apps/dashboard/src/screens/categories-screen.ts`'s `.swatch` rule is
+> `border: 1px solid var(--wt-color-border)`, and `.swatch.none` only clears the background to
+> transparent — it does not switch the border style to dashed. This line is left as the original
+> design intent, not the shipped behaviour.
+
+The filter matches the resolved name only (not the path), case-insensitive, in both modes. In tree
+mode the matches' ancestors are included so each match is shown in place; ancestors that do not
+match themselves are rendered in muted text.
+
 The filter matches the resolved name only (not the path), case-insensitive, in both modes. In tree
 mode the matches' ancestors are included so each match is shown in place; ancestors that do not
 match themselves are rendered in muted text.
