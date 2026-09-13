@@ -13,7 +13,13 @@ const extras: ChoiceDraft = {
   addAllergens: { milk: { presence: "contains" } },
   dietaryEffect: { invalidates: ["vegetarian"] },
 };
-const options: ChoiceDraft = { id: "c", name: { es: "Opción" }, available: true };
+const options: ChoiceDraft = {
+  id: "c",
+  name: { es: "Opción" },
+  available: true,
+  addAllergens: { milk: { presence: "contains" } },
+  dietaryEffect: { invalidates: ["vegetarian"] },
+};
 
 describe.each(["light", "dark"] as const)("choice form (%s)", (theme) => {
   it.each([

@@ -417,9 +417,10 @@ export class ChoiceForm extends LitElement {
                     </option>
                     ${(["general", "reduced", "super_reduced", "zero"] as const).map((value) => html`<option value=${value} ?selected=${this.vatClass === value}>${vatClassName(value)}</option>`)}
                   </select></label
-                >${this.#effects()}`
+                >`
             : nothing
         }
+        ${this.#effects()}
       </div>
       <wt-form-actions slot="footer"
         ><wt-button

@@ -96,6 +96,32 @@ it("emits an options choice with only its shared fields", async () => {
   expect(value).toEqual({ id: value.id, name: { es: "Uno" }, available: false });
 });
 
+it("authors allergen and dietary effects on an options choice", async () => {
+  const el = await mountChoice({
+    kind: "options",
+    value: { id: "o", name: { es: "Uno" }, available: true },
+  });
+  const save = vi.fn();
+  el.addEventListener("wt-choice-save", save);
+  // Effects are edited for options too, not just extras — the till reads them for diet checks.
+  expect(el.shadowRoot!.querySelector("details")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('[name="priceDelta"]')).toBeNull();
+  await change(el, "addAllergens", "eggs");
+  await change(el, "dietary-reviewed", true);
+  await change(el, "dietaryEffect", "vegan");
+  await click(el, "choice-save");
+  const value = (save.mock.calls[0]![0] as CustomEvent<{ value: ChoiceDraft }>).detail.value;
+  expect(value).toMatchObject({
+    id: "o",
+    name: { es: "Uno" },
+    available: true,
+    addAllergens: { eggs: { presence: "contains" } },
+    dietaryEffect: { invalidates: ["vegan"] },
+  });
+  expect(value).not.toHaveProperty("priceDelta");
+  expect(value).not.toHaveProperty("maxQuantity");
+});
+
 it("guards its close so it does not bubble past itself", async () => {
   const el = await mountChoice({ kind: "options" });
   const outer = vi.fn();
