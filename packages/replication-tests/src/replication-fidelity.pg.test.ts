@@ -36,13 +36,18 @@ import {
   provisionAndBootstrapNode,
   REPLICATION_ROLE,
   type BootstrappedNode,
-} from "@waitron/sync/testing/replication-node.js";
-import { appendToChain } from "./chain.js";
-import { altaFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
+} from "./testing/replication-node.js";
+import { appendToChain } from "@waitron/fiscal-verifactu";
+import {
+  altaFor,
+  seedSale,
+  seedTill,
+  type SeededTill,
+} from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The exact per-class table lists (brief). LEDGER is what happened (append-only fiscal + sales);
-// STATE is configuration + live service. Small explicit lists of REAL tables, never
-// @waitron/composition (that would cycle back into @waitron/sync). Every name exists in the migrated
+// STATE is configuration + live service. Small explicit lists of REAL tables, not the lists derived
+// from @waitron/composition. Every name exists in the migrated
 // manifest and carries a primary key (replica identity), so no per-table work is needed.
 const LEDGER = [
   "sales",

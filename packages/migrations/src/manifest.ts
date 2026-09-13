@@ -104,7 +104,7 @@ export function resolveExistingMigrationsFolder(set: MigrationSet, root: string 
  * own `import.meta.url`; esbuild collapses all five modules into one file, so all five resolve to
  * `dist/../drizzle` — a folder that does not exist. Using the descriptors directly therefore works
  * in development and fails at boot in the shipped artefact, which is the worst available failure
- * mode. Only the `migrationsTable` names come from the packages, and `manifest.test.ts` pins them.
+ * mode. Only the `migrationsTable` names come from the packages, and `packages/composition/src/composition.test.ts` pins them.
  */
 export function migrationOptionsFor(
   sets: readonly MigrationSet[],

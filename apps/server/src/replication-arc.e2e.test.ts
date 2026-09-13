@@ -1,6 +1,6 @@
 // The SECOND owner-signature evidence suite (spec §11): the whole failover ARC end to end with the
 // REAL adopt/promote/rejoin code, on two real PostgreSQL nodes over native logical replication. Task 3's
-// sibling (`packages/fiscal-verifactu/src/replication-fidelity.pg.test.ts`) proved byte fidelity and
+// sibling (`packages/replication-tests/src/replication-fidelity.pg.test.ts`) proved byte fidelity and
 // ENABLE ALWAYS; this proves the mechanism a venue's failover actually runs:
 //
 //   Case 1 — every PUBLISHED table (the two DERIVED lists) is copyable; no `local` table copies.
@@ -45,7 +45,7 @@ import {
   provisionAndBootstrapNode,
   REPLICATION_ROLE,
   type BootstrappedNode,
-} from "@waitron/sync/testing/replication-node.js";
+} from "@waitron/replication-tests/testing/replication-node.js";
 import {
   buildConninfo,
   createPublications,

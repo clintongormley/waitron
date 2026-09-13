@@ -12,12 +12,16 @@ import {
   type TwoNodeWireguardCluster,
 } from "@waitron/db/testing/two-node-wireguard.js";
 import { REPLICATION_ROLE } from "@waitron/provisioning";
-import { createPublications } from "./publications.js";
-import { buildConninfo, createSubscription, dropSubscription } from "./subscriptions.js";
+import {
+  buildConninfo,
+  createPublications,
+  createSubscription,
+  dropSubscription,
+} from "@waitron/sync";
 import { provisionAndBootstrapNode, type BootstrappedNode } from "./testing/replication-node.js";
 
-// The same small hardcoded real-table list the sibling suite uses (NOT @waitron/composition — that
-// depends on @waitron/sync, a cycle). `tenants`/`locations` are state (S1).
+// The same small hardcoded real-table list the sibling suites use, not the lists derived from
+// @waitron/composition. `tenants`/`locations` are state (S1).
 const LEDGER = ["sales", "tenders"];
 const STATE = ["tenants", "locations"];
 

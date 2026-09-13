@@ -45,6 +45,23 @@ establishment, and the till's backend construction imported the Spanish regime d
 UI-bearing module (guarded by `module-seams` + `dashboard-browser-purity`), so `apps/dashboard`
 mounts modules without naming one, exactly as generic provisioning does not.
 
+## A test-only dependency closes a workspace dependency loop as surely as a runtime one
+
+pnpm counts `devDependencies` when it looks for a loop, and prints "There are cyclic workspace
+dependencies" on every install. Two test-only links made one: `@waitron/migrations` listed twelve
+modules to compare their journal table names with the manifest, while those modules used
+`@waitron/migrations` in their own tests; and `@waitron/sync`'s replication suites used
+`@waitron/provisioning`, which reaches `@waitron/sync` again through `@waitron/composition`. The
+journal-table test moved to `packages/composition/src/composition.test.ts`, and the real-database
+replication suites — `sync`'s three and `fiscal-verifactu`'s fidelity suite, with the node fixture
+`apps/server` also imports — moved to `packages/replication-tests`, which nothing depends on for
+production code. Receipt, 2026-09-13: `scripts/workspace-cycles.test.ts` listed the ten-package loop
+before the move and passes after it, and `pnpm install` no longer prints the warning.
+
+The guard reads each member's `package.json` and counts only `workspace:` ranges as links; it does
+not ask pnpm for its graph. Every `@waitron/*` dependency in the tree used that protocol on
+2026-09-13.
+
 ## A command name is declared under `waitron.commands`, never `bin`
 
 pnpm links a `bin` while it INSTALLS and skips one whose target is missing, and nothing here builds

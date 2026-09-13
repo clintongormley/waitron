@@ -966,10 +966,6 @@ image constraints under *Detail → Box image*.
   guard→stamp→`applyVenue`; one `closeAll(pools)` so a throw from the first close cannot skip the
   rest; a wizard-only box runs its trading life on the owner role rather than `app_user` until the
   role-split retrofit.
-- **`pnpm install` prints exactly one warning and nobody has looked at it**: a cyclic workspace
-  dependency among `bookings`, `migrations`, `fiscal-verifactu`, `sync`, `provisioning` and
-  `composition`. Unknown whether real or an artefact of the composition list depending on the modules
-  it names.
 - The shutdown REJECT path gates its failure-log flush before exit, so a `close()` rejection plus a
   stalled stdout pipe is an uncovered hang; `waitron.sh` pulls with `--ignore-pull-failures`, so a
   box with no manifest entry for its architecture fails silently at pull and breaks later at `up`.

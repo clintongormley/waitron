@@ -17,22 +17,25 @@ import { createPostgresDb, type Database } from "@waitron/db";
 import { roleUrl } from "@waitron/db/testing/postgres.js";
 import { startTwoNodeCluster, type TwoNodeCluster } from "@waitron/db/testing/two-node.js";
 import { REPLICATION_ROLE, withDatabase } from "@waitron/provisioning";
-import { createPublications, ensurePublications } from "./publications.js";
-import { isDrained, listSlots, readSlotDrain } from "./drain.js";
-import { readSubscriptionStatus } from "./status.js";
 import {
   buildConninfo,
+  createPublications,
   createSubscription,
   disableSubscription,
   dropReplicationSlot,
   dropSubscription,
   dropSubscriptionDetached,
   enableSubscription,
-} from "./subscriptions.js";
+  ensurePublications,
+  isDrained,
+  listSlots,
+  readSlotDrain,
+  readSubscriptionStatus,
+} from "@waitron/sync";
 import { provisionAndBootstrapNode, type BootstrappedNode } from "./testing/replication-node.js";
 
-// The same SMALL hardcoded real-table list Task 6 uses — NOT @waitron/composition (that depends on
-// @waitron/sync, a cycle). `sales`/`tenders` are ledger, `tenants`/`locations` are state (S1).
+// The same SMALL hardcoded real-table list replication-provision.pg.test.ts uses, not the lists
+// derived from @waitron/composition. `sales`/`tenders` are ledger, `tenants`/`locations` are state (S1).
 const LEDGER = ["sales", "tenders"];
 const STATE = ["tenants", "locations"];
 

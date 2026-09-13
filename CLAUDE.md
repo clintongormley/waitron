@@ -230,6 +230,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`
   (root project, reads text)
   — shrink its allowlist, never grow it. `@waitron/dashboard-modules` is the browser-side twin.
+- **A test-only dependency closes a workspace dependency loop as surely as a runtime one.** A suite
+  needing packages from both ends of a loop goes in a package nothing depends on
+  (`packages/replication-tests`). Guard: `scripts/workspace-cycles.test.ts` — it reads each
+  `package.json`, not pnpm's own graph.
 - **A new product domain lands as a MODULE, not as new code in the core**, filling the contract seats;
   generic code never learns it exists.
 - **A country pack is a browser-safe preset over modules, not a module.** Packs name contribution ids

@@ -14,10 +14,7 @@ import {
   withDatabase,
 } from "@waitron/provisioning";
 
-// Re-exported here so Task 3's fiscal fidelity suite imports `REPLICATION_ROLE` and
-// `provisionAndBootstrapNode` from `@waitron/sync/testing/replication-node.js` without a
-// fiscal→provisioning package edge (I8): this testing barrel already depends on `@waitron/provisioning`,
-// the fiscal package does not.
+// Re-exported so a suite takes the replication role and the node it provisions from one import.
 export { REPLICATION_ROLE };
 
 /**
