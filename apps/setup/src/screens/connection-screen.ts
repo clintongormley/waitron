@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
-import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
+import { helpLinkStyles, actionsStyles, errorStyles } from "../form-styles.js";
 
 /**
  * The wizard's first step: it asks the operator to read their own address bar.
@@ -13,7 +13,8 @@ import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../for
  * `isSecureContext: true` and its fetches return 200 (Chrome 153 probe, recorded in
  * `docs/superpowers/specs/2026-09-12-box-trust-onboarding-design.md`). So this screen carries no
  * detection code, and Continue is only a communication check: it re-reads status and never proves
- * that the certificate is installed.
+ * that the certificate is installed. Nothing here reports a verdict on the connection, which is why
+ * the screen needs no disclaimer saying it cannot.
  */
 @customElement("setup-connection-screen")
 export class SetupConnectionScreen extends LitElement {
@@ -22,13 +23,18 @@ export class SetupConnectionScreen extends LitElement {
     baseStyles,
     actionsStyles,
     errorStyles,
-    statusStyles,
     css`
       :host {
         display: block;
       }
+      /* "Otherwise:" and the button are one sentence, so they share a row and wrap together. */
       .actions {
-        justify-content: flex-end;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .otherwise {
+        margin: 0;
       }
     `,
   ];
@@ -39,16 +45,15 @@ export class SetupConnectionScreen extends LitElement {
     return html`<wt-card>
       <h1>Is your connection to this page secure?</h1>
       <p>
-        Look at your browser's address bar. A padlock with no certificate warning means this
-        server's certificate is already installed on this device.
-      </p>
-      <p>
+        Check your browser's address bar to see whether this page is secure or not. If it is “not
+        secure” (in red), then you need to
         <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
-          >Saw a warning, or not sure? Install this server's certificate</a
-        >
+          >install this server's certificate</a
+        >.
       </p>
       ${this.errorMessage ? html`<p class="error" role="alert">${this.errorMessage}</p>` : nothing}
       <div class="actions">
+        <p class="otherwise" data-test="otherwise">Otherwise:</p>
         <wt-button
           variant="primary"
           data-test="continue"
@@ -58,10 +63,6 @@ export class SetupConnectionScreen extends LitElement {
           ${this.checking ? "Checking connection…" : "Continue to setup"}
         </wt-button>
       </div>
-      <p class="status" data-test="continue-caveat">
-        Continue only checks that the server answers. It cannot see your device's certificate
-        settings.
-      </p>
     </wt-card>`;
   }
 }

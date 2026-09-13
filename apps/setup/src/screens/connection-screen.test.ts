@@ -20,12 +20,21 @@ describe("setup-connection-screen", () => {
   // clicked-through certificate warning (spec 2026-09-12-box-trust-onboarding-design, Chrome 153
   // probe: after a bypass the page still reads `secureContext: true` and fetches 200), so the
   // heading has to point the operator at the address bar rather than announce a verdict.
+  //
+  // Spec: "This is a communication check, never proof of installed trust." The disclaimer sentence
+  // that used to carry that is gone (owner copy, 2026-09-13). Nothing guards its absence by
+  // forbidden words — the owner's own copy says "whether this page is secure or not", so any such
+  // list catches honest phrasing and misses the dishonest phrasing nobody thought of. What stands
+  // in its place: the heading below must stay a QUESTION, and the two branch tests further down
+  // pin that the screen offers a choice rather than announcing a result.
   it("asks whether the connection is secure and points at the address bar", async () => {
     const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
     expect(text(q(el, "h1")!)).toBe("Is your connection to this page secure?");
+    expect(text(q(el, "h1")!).endsWith("?")).toBe(true); // a question, never a verdict
     const body = text(el.shadowRoot!);
     expect(body).toContain("address bar");
-    expect(body).toContain("padlock");
+    // The operator is told the exact words their browser shows, not a paraphrase to interpret.
+    expect(body).toContain("not secure");
   });
 
   // The whole point of the rewrite: a visitor should be able to read this screen at a glance.
@@ -40,17 +49,22 @@ describe("setup-connection-screen", () => {
     expect(link.getAttribute("href")).toBe("/setup/trust");
     expect(link.target).toBe("_blank");
     expect(link.rel).toContain("noopener");
-    expect(text(link)).toContain("certificate");
+    expect(text(link)).toBe("install this server's certificate");
   });
 
-  // Spec: "This is a communication check, never proof of installed trust." The line must survive
-  // any later trim of the copy, and it must read as a quiet aside, not as body text.
-  it("keeps the caveat that Continue is not proof the certificate is installed", async () => {
-    const { el, host } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
-    const caveat = q(el, "[data-test=continue-caveat]")!;
-    expect(text(caveat)).toContain("cannot see your device's certificate settings");
-    host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
-    expect(getComputedStyle(caveat).color).toBe("rgb(1, 2, 3)");
+  // The link is the "not secure" branch of one sentence, so it has to sit INSIDE that sentence.
+  // Lifted into a paragraph of its own it stops being the consequence of what the operator just read.
+  it("puts the guide link inside the sentence that describes the warning", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
+    const link = el.shadowRoot!.querySelector("[data-test=trust-help]")!;
+    expect(text(link.parentElement!)).toContain("not secure");
+  });
+
+  // The other branch: nothing wrong, so carry on. "Otherwise" is what makes Continue the
+  // alternative to installing rather than an unrelated button sitting underneath.
+  it("offers Continue as the other branch of the same choice", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
+    expect(text(q(el, "[data-test=otherwise]")!)).toBe("Otherwise:");
   });
 
   it("announces a connection error and hides the slot when there is none", async () => {

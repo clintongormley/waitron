@@ -87,9 +87,18 @@ available, which described an absence the reader had no way to notice. Measured 
 disclosure closed: 440 words before, 260 after when a device is guessed, 209 when none is.
 
 The wizard's connection step asks one question — is your connection to this page secure? — and tells
-the operator to read their own address bar, because the Chrome 153 probe row above already
-established that the page cannot tell. It keeps the line saying Continue only checks that the server
-answers. 103 rendered words before, 56 after.
+the operator to read their own address bar, in the browser's own words: if it says "not secure" (in
+red) they install the certificate, otherwise they continue. The Chrome 153 probe row above is why:
+the page cannot tell. 103 rendered words before, 40 after (owner's copy, 2026-09-13).
+
+The sentence disclaiming that Continue proves trust is GONE, and this section is the only record of
+that. The requirement it served — "a communication check, never proof of installed trust" — is now
+carried by the shape of the screen: the heading is a question, the operator is handed the test to
+run themselves, and nothing on the page reports a verdict. No test forbids verdict wording, and that
+is deliberate: the owner's own copy contains the phrase "whether this page is secure or not", so any
+forbidden-words list catches honest phrasing while missing whatever dishonest phrasing nobody
+thought of. What IS guarded: the heading stays a question, the guide link stays inside the "not
+secure" sentence, and "Otherwise:" stays attached to Continue.
 
 Both pages, and the whole setup wizard's visible text, say "server" rather than "box", and "IP
 address" rather than "numeric network address" (owner decision, 2026-09-13). Code identifiers,
