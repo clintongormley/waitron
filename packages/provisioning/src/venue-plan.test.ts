@@ -122,6 +122,7 @@ describe("planVenue", () => {
       displayName: "Owner",
       firstNames: null,
       lastNames: null,
+      locale: null,
       pinHash: "scrypt$00$00",
       passwordHash: "scrypt$aa$bb",
       email: "owner@example.test",
@@ -147,6 +148,52 @@ describe("planVenue", () => {
       firstNames: "Clinton",
       lastNames: "Gormley",
     });
+  });
+
+  it("carries the admin's UI language into the seed-admin action, and plans an absent one as null", () => {
+    // The applier writes the column unconditionally, so the action always carries it; `null` is what
+    // `persons.locale`'s `is null or length > 0` check accepts for "this person has no preference",
+    // which makes the apps fall back to the venue default.
+    const withLocale = planVenue(
+      request({
+        admin: {
+          displayName: "Clint",
+          locale: "en-GB",
+          pinHash: "pin-hash",
+          passwordHash: "password-hash",
+          email: "clinton@example.com",
+        },
+      }),
+      MODULES,
+    );
+    expect(withLocale.find((a) => a.kind === "seed-admin")).toMatchObject({ locale: "en-GB" });
+    expect(planVenue(request(), MODULES).find((a) => a.kind === "seed-admin")).toMatchObject({
+      locale: null,
+    });
+  });
+
+  it("REFUSES a UI language the apps cannot render rather than storing it", () => {
+    // `persons.locale` is a plain text column whose only constraint is non-empty, so an unrenderable
+    // code would be stored happily and then show the operator a screen of missing strings. The
+    // person's own write boundary (`setPersonLocale`) refuses one; the planner refuses it here so
+    // provisioning is not the one path that can write it, and so the refusal costs no connection.
+    try {
+      planVenue(
+        request({
+          admin: {
+            displayName: "Clint",
+            locale: "fr-FR",
+            pinHash: "pin-hash",
+            passwordHash: "password-hash",
+            email: "clinton@example.com",
+          },
+        }),
+        MODULES,
+      );
+      expect.unreachable("should have refused an unsupported UI language");
+    } catch (error) {
+      expect(isAppError(error) && error.code).toBe("locale.unsupported");
+    }
   });
 
   it("plans an admin with no real names as null rather than dropping the field", () => {
@@ -365,6 +412,7 @@ describe("describeVenueAction", () => {
       displayName: "Alicia",
       firstNames: "Alicia Maria",
       lastNames: "Fernandez Ruiz",
+      locale: "es-ES",
       pinHash: "scrypt$deadbeef$cafef00d",
       passwordHash: "scrypt$feedface$0ddba11",
       email: "owner@example.test",

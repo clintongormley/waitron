@@ -9,9 +9,9 @@ import {
   findAdministrativeAreaByPostalCode,
   resolveFiscalJurisdiction,
 } from "@waitron/country";
-import { getVenueSetupCountryPack } from "@waitron/country-packs";
+import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
@@ -20,6 +20,7 @@ import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
+import { resolveLoginLocale } from "./login-locale.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
@@ -309,7 +310,7 @@ function asStringArray(value: unknown, field: string): string[] {
  * before any provisioning. The plan retains its country/territory and other domain guards as a
  * second boundary for non-setup callers.
  */
-function parseVenue(venueRaw: unknown): VenueRequest {
+function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): VenueRequest {
   const v = asObject(venueRaw, "venue");
   const loc = asObject(v.location, "location");
   const admin = asObject(v.admin, "admin");
@@ -355,6 +356,11 @@ function parseVenue(venueRaw: unknown): VenueRequest {
     invalidRequest("location.invoiceLocales");
   }
 
+  // The province as it will be STORED (`locations.province`), which is also what the venue-default
+  // locale is derived from below — so the language the admin falls back to is derived from the same
+  // value `readVenueLocale` will read back off the row at boot.
+  const province = area?.name ?? provinceInput;
+
   return {
     country: country.countryCode,
     taxId: taxId?.valid === true ? taxId.normalized : taxIdInput,
@@ -368,7 +374,7 @@ function parseVenue(venueRaw: unknown): VenueRequest {
       addressLine2: asNullableString(loc.addressLine2, "location.addressLine2"),
       postalCode: postalCode?.valid === true ? postalCode.normalized : postalCodeInput,
       city: asString(loc.city, "location.city"),
-      province: area?.name ?? provinceInput,
+      province,
       timeZone: area?.timeZone ?? country.defaultTimeZone,
       dayCutover: asString(loc.dayCutover, "location.dayCutover"),
     },
@@ -386,6 +392,36 @@ function parseVenue(venueRaw: unknown): VenueRequest {
       // packages/identity/src/staff.ts).
       firstNames: asOptionalName(admin.firstNames, "admin.firstNames"),
       lastNames: asOptionalName(admin.lastNames, "admin.lastNames"),
+      // The first operator's UI language, written to `persons.locale` by `applyVenue`'s seed-admin
+      // insert. This is the DISPLAY language the dashboard and till render in — NOT
+      // `location.invoiceLocales`, which decides the language of an invoice and is a fiscal value.
+      // Setup asks no question for it: the wizard has no translated text and no chooser, so a
+      // question here would be a language picker on an English-only form. The provision request is
+      // sent by the operator's own browser, so its `Accept-Language` IS their preference.
+      // Why it matters that something is written at all: a person whose own locale is null falls
+      // back to the venue default (`resolveActiveLocale`, packages/shared/src/locales.ts:38, called
+      // by apps/dashboard/src/dashboard-app.ts:795 on the pair apps/server/src/me-api.ts:427 returns),
+      // and for a Spanish venue geography derives that default as Spanish — which is how a box set up
+      // from an English browser opened the dashboard in Spanish.
+      // `resolveLoginLocale` only ever returns a member of SUPPORTED_LOCALE_CODES, so the stored
+      // value is always a language the apps have a catalogue for. When the browser asks for a
+      // language we do not ship, it returns the venue's own geography-derived locale — the same
+      // area → country → English chain `readVenueLocale` runs at boot
+      // (apps/server/src/venue-locale.ts:38), except for that chain's `WAITRON_TILL_LOCALE` override,
+      // which a box in setup has no trading config to read.
+      // Two consequences of always resolving a value, so nobody reads this as harmless: this path
+      // never leaves `persons.locale` null, so the row cannot tell "chose Spanish" from "said
+      // nothing", and the operator is pinned to the language stored here if the venue default is
+      // changed afterwards — until they pick one on their own profile screen. That is the accepted
+      // trade for a wizard with no chooser, not an oversight.
+      locale: resolveLoginLocale(
+        acceptLanguage,
+        resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
+          area: province,
+          country: country.countryCode,
+          fallback: FALLBACK_LOCALE,
+        }),
+      ),
       pinHash: hashPin(asString(admin.pin, "admin.pin")),
       passwordHash: hashPassword(asString(admin.password, "admin.password")),
       // The admin's REQUIRED dashboard-login email. Presence/shape screened by `asString`
@@ -403,6 +439,7 @@ function parseVenue(venueRaw: unknown): VenueRequest {
 function parseProvisionPayload(
   parsed: unknown,
   devMode: boolean,
+  acceptLanguage: string | undefined,
 ): {
   mode: "demo" | "prepare" | "live";
   request: ProvisionRequest;
@@ -422,7 +459,7 @@ function parseProvisionPayload(
   }
   if (body.configurationImport === true && mode !== "live") invalidRequest("configurationImport");
 
-  const venue = parseVenue(body.venue);
+  const venue = parseVenue(body.venue, acceptLanguage);
   const environment: DeploymentEnvironment =
     mode === "live" && !devMode ? "production" : "preproduction";
   const selection = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
@@ -565,7 +602,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       try {
         if (deps.runFiscalTest === undefined) return directError(c, log, "setup.not_ready", 503);
         const parsed = await c.req.json().catch(() => null);
-        const payload = parseProvisionPayload(parsed, deps.devMode === true);
+        const payload = parseProvisionPayload(
+          parsed,
+          deps.devMode === true,
+          c.req.header("Accept-Language"),
+        );
         if (payload.mode !== "live" || payload.request.environment !== "production") {
           invalidRequest("mode");
         }
@@ -641,7 +682,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // Parse defensively: `c.req.json()` throws on a malformed body and returns `null` for a
         // literal JSON `null` — both are a bad request, not a 500.
         const parsed: unknown = await c.req.json().catch(() => null);
-        const payload = parseProvisionPayload(parsed, deps.devMode === true);
+        const payload = parseProvisionPayload(
+          parsed,
+          deps.devMode === true,
+          c.req.header("Accept-Language"),
+        );
         const {
           mode,
           request,

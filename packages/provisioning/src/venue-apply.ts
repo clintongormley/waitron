@@ -95,13 +95,18 @@ export async function applyVenue(
           // secret. `role='admin'` is the whole point: this person can log in and authorize privileged
           // actions from day one. `email` is the admin's required dashboard-login address, validated
           // and normalized at the request boundary and written verbatim here.
-          // `first_names`/`last_names` are the person's real name, nullable columns each carrying an
-          // `is null or length > 0` check — so the planner's `null` for "not given" is accepted and an
-          // empty string would not be.
+          // `first_names`/`last_names` are the person's real name, and `locale` the UI language they
+          // prefer — the DISPLAY language, nothing to do with the location's `invoice_locales`. All
+          // three are nullable columns carrying an `is null or length > 0` check, so the planner's
+          // `null` for "not given" is accepted and an empty string would not be. A null `locale`
+          // means this person has no preference of their own and the apps fall back to the venue
+          // default. A plan built by `planVenue` cannot carry a language the apps have no catalogue
+          // for — it refuses one — but this applier runs whatever action list it is handed, and the
+          // action's `locale` is a plain `string | null`, so a hand-built plan is not screened here.
           await tx.execute(sql`
-            insert into persons (tenant_id, display_name, first_names, last_names, pin_hash, password_hash, email, role)
+            insert into persons (tenant_id, display_name, first_names, last_names, locale, pin_hash, password_hash, email, role)
             select ${tenantId}, ${action.displayName}, ${action.firstNames}, ${action.lastNames},
-                   ${action.pinHash}, ${action.passwordHash}, ${action.email}, 'admin'
+                   ${action.locale}, ${action.pinHash}, ${action.passwordHash}, ${action.email}, 'admin'
             where not exists (
               select 1 from persons where tenant_id = ${tenantId} and role = 'admin')`);
           break;

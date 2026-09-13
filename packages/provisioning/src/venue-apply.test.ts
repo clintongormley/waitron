@@ -141,26 +141,29 @@ describe("applyVenue", () => {
       role: string;
       first_names: string | null;
       last_names: string | null;
+      locale: string | null;
       pin_hash: string;
       password_hash: string;
     }>(sql`
-      select display_name, role, first_names, last_names, pin_hash, password_hash
+      select display_name, role, first_names, last_names, locale, pin_hash, password_hash
       from persons where tenant_id = ${result.tenantId}`);
     expect(people.rows).toHaveLength(1);
-    // This request carries no real names, so the insert binds null for both columns and the row
-    // stores null — the `is null or length > 0` checks accept that, which is why the planner resolves
-    // an absent name to null rather than to an empty string.
+    // This request carries no real names and no UI-language preference, so the insert binds null for
+    // all three columns and the row stores null — the `is null or length > 0` checks accept that,
+    // which is why the planner resolves an absent value to null rather than to an empty string. A
+    // null `locale` is what leaves this person on the venue default.
     expect(people.rows[0]).toEqual({
       display_name: "Alicia",
       role: "admin",
       first_names: null,
       last_names: null,
+      locale: null,
       pin_hash: "scrypt$abc$def",
       password_hash: "scrypt$pwd$hash",
     });
   });
 
-  it("writes the admin's real names onto the seeded person when the request carries them", async () => {
+  it("writes the admin's real names and UI language onto the seeded person when the request carries them", async () => {
     // PGlite, not the real-container sibling. CLAUDE.md §4 sends a suite to real PostgreSQL for
     // privileges, triggers as the deployment role, or concurrency; none applies here. The insert is
     // made by the OWNER of `persons` on both targets, so no grant separates them, and PGlite runs the
@@ -173,6 +176,7 @@ describe("applyVenue", () => {
       displayName: "Clint",
       firstNames: "Clinton",
       lastNames: "Gormley",
+      locale: "en-GB",
       pinHash: "scrypt$abc$def",
       passwordHash: "scrypt$pwd$hash",
       email: "clinton@example.test",
@@ -186,11 +190,12 @@ describe("applyVenue", () => {
       display_name: string;
       first_names: string | null;
       last_names: string | null;
+      locale: string | null;
     }>(sql`
-      select display_name, first_names, last_names
+      select display_name, first_names, last_names, locale
       from persons where tenant_id = ${result.tenantId}`);
     expect(people.rows).toEqual([
-      { display_name: "Clint", first_names: "Clinton", last_names: "Gormley" },
+      { display_name: "Clint", first_names: "Clinton", last_names: "Gormley", locale: "en-GB" },
     ]);
   });
 

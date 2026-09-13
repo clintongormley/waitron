@@ -490,6 +490,10 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         displayName: adminName,
         firstNames: adminFirstNames,
         lastNames: adminLastNames,
+        // No browser, so no `Accept-Language` to read a UI-language preference from, and asking would
+        // be one more prompt for something the admin can change from their own profile screen. Null
+        // leaves them on the venue default until they do.
+        locale: null,
         pinHash: hashPin(adminPin),
         passwordHash: hashPassword(adminPassword),
         email: adminEmail,

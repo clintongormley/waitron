@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { AppError } from "@waitron/shared";
+import { AppError, SUPPORTED_LOCALE_CODES } from "@waitron/shared";
 import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { Database } from "@waitron/db";
@@ -252,10 +252,14 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   };
 }
 
-async function postProvision(app: Hono, body: unknown): Promise<Response> {
+async function postProvision(
+  app: Hono,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<Response> {
   return app.request("/setup-api/provision", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -526,6 +530,68 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       firstNames: "Ana Maria",
       lastNames: "Lopez Garcia",
     });
+  });
+
+  // The dashboard renders in the signed-in person's own language when they have one
+  // (`resolveActiveLocale`, packages/shared/src/locales.ts:38, called from
+  // apps/dashboard/src/dashboard-app.ts:795 with the `locale` / `venueLocale` pair
+  // apps/server/src/me-api.ts:427 returns). Setup never wrote one, so the first operator always fell
+  // through to the venue default — Spanish for a Spanish venue. These three pin the whole chain the
+  // request boundary now runs: header wins, unshipped language loses to the venue's own locale.
+  it("gives the admin the language their browser asked for", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody(), {
+      "Accept-Language": "en-GB,en;q=0.9,es;q=0.8",
+    });
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].venue.admin.locale).toBe("en-GB");
+  });
+
+  it("falls back to the venue's own language when the browser asks for one we do not ship", async () => {
+    // A Madrid venue, so the geography chain lands on the Spain pack's own `es-ES` rather than on
+    // the `en-GB` floor — which is what makes this test able to tell the two apart.
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody(), { "Accept-Language": "fr-FR,fr;q=0.9" });
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].venue.admin.locale).toBe("es-ES");
+  });
+
+  it("falls back to the venue's own language when the browser sends no preference", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody());
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].venue.admin.locale).toBe("es-ES");
+  });
+
+  it("only ever stores a language the apps can render", async () => {
+    // The stored value is written straight to `persons.locale`, which has no enum behind it (the
+    // column's only constraint is non-empty). A code nothing has a catalogue for would render as
+    // missing strings, so the resolver's output must stay inside the shipped set whatever the
+    // browser asks for — including a header that names a language and a region we do not ship.
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody(), { "Accept-Language": "en-US" });
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(SUPPORTED_LOCALE_CODES).toContain(provisionRequests[0].venue.admin.locale);
   });
 
   it.each(["admin.firstNames", "admin.lastNames"] as const)(
