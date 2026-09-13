@@ -230,10 +230,6 @@ The filter matches the resolved name only (not the path), case-insensitive, in b
 mode the matches' ancestors are included so each match is shown in place; ancestors that do not
 match themselves are rendered in muted text.
 
-The filter matches the resolved name only (not the path), case-insensitive, in both modes. In tree
-mode the matches' ancestors are included so each match is shown in place; ancestors that do not
-match themselves are rendered in muted text.
-
 The category form gains the colour picker described above, between the parent picker and the
 image. Field-error key: `color`.
 
