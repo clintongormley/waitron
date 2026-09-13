@@ -63,3 +63,5 @@ export { WtTabs, type TabItem } from "./components/wt-tabs.js";
 export { WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";
 
 export { readableTextColor, isHexColor, CATEGORY_PALETTE } from "./category-color.js";
+
+export { WtLozenge } from "./components/wt-lozenge.js";
