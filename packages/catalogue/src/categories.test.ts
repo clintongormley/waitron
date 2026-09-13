@@ -63,9 +63,15 @@ describe("category authoring", () => {
       product.id,
     ]);
     for (const category of [food, drinks])
-      expect(
-        (await app((tx) => listCategoryProducts(tx, tenantId, category.id))).map((p) => p.id),
-      ).toEqual([product.id]);
+      expect(await app((tx) => listCategoryProducts(tx, tenantId, category.id))).toEqual([
+        {
+          id: product.id,
+          descriptions: product.descriptions,
+          active: true,
+          primaryCategoryId: food.id,
+          categoryIds: [food.id, drinks.id].sort(),
+        },
+      ]);
     expect(await app((tx) => listCategories(tx, tenantId))).toEqual([food, drinks]);
   });
   it("requires an explicit replacement primary and rolls back invalid saves", async () => {
@@ -76,15 +82,22 @@ describe("category authoring", () => {
         primaryCategoryId: food.id,
       }),
     );
-    for (const input of [
-      { categoryIds: [drinks.id] },
-      { categoryIds: [food.id, food.id] },
-      { categoryIds: [food.id], primaryCategoryId: drinks.id },
-      { categoryIds: [crypto.randomUUID()], primaryCategoryId: food.id },
-    ]) {
+    for (const [input, code] of [
+      [{ categoryIds: [drinks.id] }, "category.primary_required"],
+      [{ categoryIds: [food.id, food.id] }, "category.membership_invalid"],
+      [{ categoryIds: [food.id], primaryCategoryId: drinks.id }, "category.membership_invalid"],
+      [{ categoryIds: [food.id], primaryCategoryId: null }, "category.membership_invalid"],
+      [{ categoryIds: [], primaryCategoryId: food.id }, "category.membership_invalid"],
+      [{ categoryIds: [crypto.randomUUID()], primaryCategoryId: food.id }, "category.not_found"],
+    ] as const) {
       await expect(
-        app((tx) => replaceProductCategories(tx, tenantId, product.id, input)),
-      ).rejects.toBeInstanceOf(Error);
+        app((tx) =>
+          replaceProductCategories(tx, tenantId, product.id, {
+            ...input,
+            categoryIds: [...input.categoryIds],
+          }),
+        ),
+      ).rejects.toMatchObject({ code });
       expect(await app((tx) => readProductCategories(tx, tenantId, product.id))).toEqual({
         categoryIds: [food.id, drinks.id].sort(),
         primaryCategoryId: food.id,
@@ -133,7 +146,7 @@ describe("category authoring", () => {
       leaf.id,
     ]);
   });
-  it("scopes reads and rejects foreign parents, products, categories and images", async () => {
+  it("scopes reads and rejects foreign parents, products and categories", async () => {
     const { tenantId, app, food, product } = await fixture();
     const other = await seedTenant(fx.db);
     expect(await app((tx) => listCategories(tx, other))).toEqual([]);
@@ -213,4 +226,43 @@ it("returns each product's own membership set when reading the unfiltered librar
     { id: product.id, categoryIds: [food.id], primaryCategoryId: food.id },
     { id: second.id, categoryIds: [drinks.id], primaryCategoryId: drinks.id },
   ]);
+});
+
+it("rejects an image reference with a category error when media is not installed", async () => {
+  const { tenantId, app, food } = await fixture();
+  await expect(
+    app((tx) =>
+      createCategory(tx, tenantId, {
+        name: { en: "New" },
+        image: "missing.jpg",
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "category.image_not_found" });
+  await expect(
+    app((tx) =>
+      updateCategory(tx, tenantId, food.id, {
+        image: "missing.jpg",
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "category.image_not_found" });
+  expect((await app((tx) => readCategory(tx, tenantId, food.id))).image).toBeNull();
+});
+
+it("the primary selector preserves memberships and clears only the final membership", async () => {
+  const { updateProduct } = await import("./operations.js");
+  const { tenantId, app, food, drinks, product } = await fixture();
+  await app((tx) => updateProduct(tx, tenantId, product.id, { categoryId: food.id }));
+  await app((tx) => updateProduct(tx, tenantId, product.id, { categoryId: drinks.id }));
+  expect(await app((tx) => readProductCategories(tx, tenantId, product.id))).toEqual({
+    categoryIds: [food.id, drinks.id].sort(),
+    primaryCategoryId: drinks.id,
+  });
+  await app((tx) =>
+    replaceProductCategories(tx, tenantId, product.id, { categoryIds: [drinks.id] }),
+  );
+  await app((tx) => updateProduct(tx, tenantId, product.id, { categoryId: null }));
+  expect(await app((tx) => readProductCategories(tx, tenantId, product.id))).toEqual({
+    categoryIds: [],
+    primaryCategoryId: null,
+  });
 });

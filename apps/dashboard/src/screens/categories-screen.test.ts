@@ -225,3 +225,22 @@ it.each([
     expect(form.open).toBe(true);
   },
 );
+
+it("opens the directly assigned products from an image-usage category link", async () => {
+  const previous = location.href;
+  const linked = new URL(previous);
+  linked.searchParams.set("category", "food");
+  history.replaceState(null, "", linked);
+  try {
+    const { el } = await mount();
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+          '[data-test="category-products"]',
+        )?.rows,
+      ).toEqual([product]),
+    );
+  } finally {
+    history.replaceState(null, "", previous);
+  }
+});

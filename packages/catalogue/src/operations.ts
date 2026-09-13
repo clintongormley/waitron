@@ -1086,6 +1086,7 @@ export async function updateProduct(
   // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
   const { allergens, dietOverride, categoryId, ...rest } = patch;
   if (categoryId !== undefined) {
+    // Choosing a primary retains other memberships; clearing is allowed only for the final membership.
     await lockCategories(tx, tenantId);
     const current = await readProductCategories(tx, tenantId, id);
     if (categoryId === null && current.categoryIds.length > 1)

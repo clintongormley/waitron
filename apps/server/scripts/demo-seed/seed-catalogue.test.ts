@@ -86,12 +86,12 @@ describe("seedCatalogues", () => {
         select ks.name as station_name
         from categories c
         left join kitchen_stations ks on ks.id = c.station_id
-        where c.name = 'Drinks'`);
+        where c.name->>'en' = 'Drinks'`);
       const { rows: charcuterieRoute } = await tx.execute<{ station_name: string | null }>(sql`
         select ks.name as station_name
         from categories c
         left join kitchen_stations ks on ks.id = c.station_id
-        where c.name = 'Charcuterie'`);
+        where c.name->>'en' = 'Charcuterie'`);
       return { out, menus, products, stations, drinksRoute, charcuterieRoute };
     });
 

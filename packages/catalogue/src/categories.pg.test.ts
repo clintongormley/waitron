@@ -11,6 +11,7 @@ import {
   replaceProductCategories,
   readProductCategories,
 } from "./categories.js";
+import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
 const suite = useTemplateDb({ template: "core" });
 const app = <T>(db: Database, tenant: string, action: (tx: Transaction) => Promise<T>) =>
@@ -155,5 +156,44 @@ it.each(["attach", "delete"] as const)(
         ? { categoryIds: [a.id], primaryCategoryId: a.id }
         : { categoryIds: [], primaryCategoryId: null },
     );
+  },
+);
+
+it.each(["category", "language"] as const)(
+  "serializes a name/hierarchy edit against default-language changes with %s first",
+  async (winner) => {
+    const { tenantId, a, b } = await fixture();
+    await app(suite.admin, tenantId, async (tx) => {
+      await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
+      await updateCategory(tx, tenantId, a.id, { name: { en: "A", fr: "Un" } });
+      await updateCategory(tx, tenantId, b.id, { name: { en: "B", fr: "Deux" } });
+    });
+    const edit = (tx: Transaction) =>
+      updateCategory(tx, tenantId, a.id, {
+        name: { en: "Changed" },
+        parentId: b.id,
+      });
+    const language = (tx: Transaction) =>
+      writeContentLanguages(tx, tenantId, {
+        defaultLanguage: "fr",
+        languages: ["fr", "en"],
+      });
+    const result = await race(
+      tenantId,
+      winner === "category" ? edit : language,
+      winner === "category" ? language : edit,
+    );
+    expect(result[0]!.status).toBe("fulfilled");
+    expect(result[1]).toMatchObject({
+      status: "rejected",
+      reason: {
+        code: winner === "category" ? "content.default_missing" : "content.translation_required",
+      },
+    });
+    expect(await app(suite.admin, tenantId, (tx) => readCategory(tx, tenantId, a.id))).toEqual({
+      ...a,
+      name: winner === "category" ? { en: "Changed" } : { en: "A", fr: "Un" },
+      parentId: winner === "category" ? b.id : null,
+    });
   },
 );

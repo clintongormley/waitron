@@ -289,3 +289,17 @@ reverted, which assertion would fail, and how? "It calls the component and doesn
 answer. `pnpm --filter @waitron/ui mutation` is the tool this repo uses to check that
 systematically — a surviving mutant on a boolean flag, a comparison operator, or a conditional guard
 means some test suite member exercises that code without noticing when it's wrong.
+
+
+## Rejected writes assert their domain error code
+
+During the Categories review on 2026-09-13, deleting the duplicate-membership guard left
+`categories.test.ts` green: the later unique-constraint failure also matched `toBeInstanceOf(Error)`.
+Keep rollback assertions, and assert the domain code that the API maps to its client response.
+
+In the disposable review checkout, replacing the duplicate-set condition with `false` and running
+`TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/catalogue test -- src/categories.test.ts
+-t 'requires an explicit replacement'` then failed: expected `category.membership_invalid`, received
+a wrapped PostgreSQL `23505`. Removing the category identity row lock similarly makes
+`apps/server/src/category-route-race.pg.test.ts` fail on the missing `category.in_use` code after
+an uncommitted route insert. Both controls passed again with the production guards restored.

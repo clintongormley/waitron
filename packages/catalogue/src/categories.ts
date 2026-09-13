@@ -1,6 +1,7 @@
 import { categories, products, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { and, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { categoryDetails, productCategories } from "./schema/categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import "./errors.js";
@@ -89,6 +90,10 @@ async function validateImage(
   filename: string | null,
 ): Promise<void> {
   if (filename === null) return;
+  const media = await tx.execute<{ present: boolean }>(
+    sql`select to_regclass('public.media_images') is not null as present`,
+  );
+  if (!media.rows[0]!.present) throw new AppError("category.image_not_found", {});
   // The media module owns the FK; KEY SHARE holds the reference through a concurrent deletion.
   const image = await tx.execute(
     sql`select 1 from media_images where tenant_id = ${tenantId} and filename = ${filename} for key share`,
@@ -242,14 +247,26 @@ export async function replaceProductCategories(
 }
 export async function listCategoryProducts(tx: Transaction, tenantId: string, categoryId: string) {
   await readCategory(tx, tenantId, categoryId);
-  const rows = await tx
+  const selected = alias(productCategories, "selected_membership");
+  return tx
     .select({
       id: products.id,
       descriptions: products.descriptions,
       active: products.active,
       primaryCategoryId: products.categoryId,
+      categoryIds: sql<
+        string[]
+      >`array_agg(${productCategories.categoryId}::text order by ${productCategories.categoryId})`,
     })
     .from(products)
+    .innerJoin(
+      selected,
+      and(
+        eq(selected.tenantId, products.tenantId),
+        eq(selected.productId, products.id),
+        eq(selected.categoryId, categoryId),
+      ),
+    )
     .innerJoin(
       productCategories,
       and(
@@ -257,9 +274,7 @@ export async function listCategoryProducts(tx: Transaction, tenantId: string, ca
         eq(productCategories.productId, products.id),
       ),
     )
-    .where(and(eq(products.tenantId, tenantId), eq(productCategories.categoryId, categoryId)))
+    .where(eq(products.tenantId, tenantId))
+    .groupBy(products.id)
     .orderBy(products.id);
-  return Promise.all(
-    rows.map(async (row) => ({ ...row, ...(await readProductCategories(tx, tenantId, row.id)) })),
-  );
 }

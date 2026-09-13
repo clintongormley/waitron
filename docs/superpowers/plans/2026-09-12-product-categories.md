@@ -113,5 +113,39 @@ regressions first failed for disabled-language search and missing inline parent/
 all passed after the fixes, with accessibility checked in both themes.
 
 Formatting and ESLint passed over the changed TypeScript files. The catalogue, server, dashboard,
-venue-service, media, db and recipes typechecks passed. Branch finishing, the normal push hook,
-external review and current-head CI remain for the owner's `finish-branch` instruction.
+venue-service, media, db and recipes typechecks passed. The initial implementation stopped before branch finishing; the next section records its review.
+
+
+## Branch review (2026-09-13)
+
+Claude Opus 5 reviewed the candidate at `8ae83ec7` against captured base `f1139e12` in 235 seconds.
+Artifacts: `/tmp/waitron-categories-review.Fwk9xa/brief.md`, `report.md`, `report.md.timing`,
+`report.md.usage`, and the driver `triage.md` in that directory.
+
+Accepted: permanent regression tests now distinguish domain errors from database constraint
+errors for duplicate memberships and a route attached during deletion. Removing each guard in the
+disposable candidate failed the new assertion; restoring it passed. Optional-media lookup now
+returns `category.image_not_found` when the media table is absent (the test first failed with
+`42P01`). Direct category products use one grouped membership query after the category lookup.
+
+The raw SQL/prose consumer sweep found two demo test files comparing JSON category names to text.
+Both failed with `22P02`; selecting the English JSON value preserves their routing assertions and
+both now pass. The previous error-shape assertion lesson is recorded in the testing guide.
+
+The legacy primary selector keeps its documented additive behavior: a new test checks retained
+memberships and clearing only the final membership. Tenant-wide authoring serialization remains
+the plan's explicit design; the reviewer reported no throughput measurement. The privilege matrix
+uses the complete manifest, and its five real-PG checks already passed. Media already declared its
+catalogue dependency at the captured base; no new module dependency was introduced.
+
+Further focused checks: six real-PG category races/privilege tests passed, including default-language
+and name/hierarchy edits in both commit orders; nine category operation tests passed; nine browser
+screen tests passed, including the image-usage deep link; and the route/deletion race passed.
+Existing image-race and configuration-transfer receipts remain applicable. These probes exercise
+the named races; they do not claim freedom from every possible deadlock. CI supplies wider package
+coverage after the push.
+
+The disposable populated-name migration probe ran the actual `0020` SQL against a category with a
+text name. It asserted `23502` from adding the required JSON column, and confirmed transaction
+rollback retained the original name. Source and receipt are `migration-probe.ts` and
+`migration-probe.txt` beside the review report. No shared development database was touched.
