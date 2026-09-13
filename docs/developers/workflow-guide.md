@@ -94,12 +94,14 @@ round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. De
 What does NOT wipe that volume is the common case: switching between worktrees on the same target.
 A target change wipes it, and so does `wa-wt reset` (read the script before assuming that is the
 whole list — `ensure_env` has a third path). The volume is seeded, so between wipes it keeps demo
-rows written weeks and branches ago. A branch's migrations can then be unable to run over them: migrations here carry no
-data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and recreate until Waitron is
-in production), so one that adds a column no existing row can fill stops the boot dead inside
-`applyMigrations`. Vite keeps serving the pages, so the dashboard still loads; it is the first
-request that needs the server — signing in — that fails, and with no code to render it falls back to
-the generic "Something went wrong, try again" (`apps/dashboard/src/i18n/codes.ts`).
+rows written weeks and branches ago. A branch's migrations can then be unable to run over them:
+migrations here carry no data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and
+recreate until Waitron is in production), so one that adds a column no existing row can fill stops
+the boot dead inside `applyMigrations`. Vite keeps serving the pages, so the dashboard still loads.
+Its own calls then fail quietly — an operator's log from 2026-09-13 shows repeated
+`http proxy error: /management-api/session/me … ECONNREFUSED 127.0.0.1:8080` with nothing on screen —
+and the failure only becomes words when they sign in, as the generic
+"Something went wrong, try again" (`apps/dashboard/src/i18n/codes.ts`).
 `packages/db/drizzle/0020_category_names.sql` did exactly this on 2026-09-13: it drops the old text
 `categories.name` and recreates it as `jsonb NOT NULL`, which the seeded demo categories cannot
 satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.
