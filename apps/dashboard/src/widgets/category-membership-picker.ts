@@ -101,7 +101,7 @@ export class CategoryMembershipPicker extends LitElement {
         ${this.categories.map((category) => html`<label><input type="checkbox" name="category-membership" value=${category.id} .checked=${this.draft.categoryIds.includes(category.id)} @change=${(event: Event) => this.#change(event, category.id)} />${categoryPath(category, this.categories, this.locales[0] ?? "en")}</label>`)}
       </fieldset>
       <label
-        >${t("categories.primary")}<select
+        >${t("editor.reporting_category")}<select
           name="primary-category"
           .disabled=${this.busy || !this.draft.categoryIds.length}
           aria-invalid=${this.error ? "true" : "false"}

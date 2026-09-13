@@ -32,6 +32,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose an image from your image library.",
     es: "Elige una imagen de tu biblioteca.",
   },
+  "category.color_invalid": {
+    en: "Choose a valid colour.",
+    es: "Elige un color válido.",
+  },
 
   "modifier.invalid": {
     en: "Check the modifier's names, choices, defaults and quantity limits.",

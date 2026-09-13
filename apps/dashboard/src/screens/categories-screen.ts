@@ -288,7 +288,7 @@ export class CategoriesScreen extends LitElement {
       },
       {
         key: "primary",
-        label: t("categories.primary"),
+        label: t("editor.reporting_category"),
         cell: (product) =>
           this.categories.find((category) => category.id === product.primaryCategoryId)
             ? this.#text(

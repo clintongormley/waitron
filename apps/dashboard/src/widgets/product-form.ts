@@ -751,7 +751,7 @@ export class ProductForm extends LitElement {
           </select>
         </label>
         <label class="field"
-          >${t("categories.primary")}
+          >${t("editor.reporting_category")}
           <select
             name="category"
             data-test="category"
