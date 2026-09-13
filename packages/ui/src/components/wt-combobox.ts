@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
-import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
+import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
 export interface ComboboxOption {
@@ -54,6 +54,18 @@ export class WtCombobox extends LitElement {
         ${disabledStyles}
       }
 
+      /* nowrap comes from text-wrap here because no-hardcoded-chrome.test.ts's keyword-colour scan
+         rejects the older shorthand, whose property name begins with a colour keyword. */
+      .value {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-wrap: nowrap;
+      }
+
+      .value.placeholder {
+        color: var(--wt-color-text-muted);
+      }
+
       .chevron {
         flex: none;
       }
@@ -104,6 +116,12 @@ export class WtCombobox extends LitElement {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
 
+      /* The row owns the click; the checkbox is a picture of the row's selected state. */
+      .option input[type="checkbox"] {
+        pointer-events: none;
+        accent-color: var(--wt-color-primary);
+      }
+
       .empty {
         padding: var(--wt-space-2) var(--wt-space-3);
         color: var(--wt-color-text-muted);
@@ -116,6 +134,12 @@ export class WtCombobox extends LitElement {
   @property({ attribute: false }) options: ComboboxOption[] = [];
   @property() noResultsLabel = "No results";
   @property() searchPlaceholder = "Search";
+  @property({ type: Boolean, reflect: true }) multiple = false;
+  @property() value = "";
+  @property({ attribute: false }) values: string[] = [];
+  @property() placeholder = "";
+  @property({ attribute: false }) countLabel: (count: number) => string = (count) =>
+    `${count} selected`;
 
   @state() private expanded = false;
   @state() private search = "";
@@ -136,6 +160,40 @@ export class WtCombobox extends LitElement {
 
   private get rowCount(): number {
     return this.filteredOptions.length;
+  }
+
+  private isSelected(optionValue: string): boolean {
+    return this.multiple ? this.values.includes(optionValue) : this.value === optionValue;
+  }
+
+  /** The closed-state trigger text: the chosen label, or a count once more than one is chosen. */
+  private get selectedText(): string {
+    if (this.multiple) {
+      if (this.values.length === 0) return "";
+      if (this.values.length === 1) {
+        return this.options.find((o) => o.value === this.values[0])?.label ?? "";
+      }
+      return this.countLabel(this.values.length);
+    }
+    return this.options.find((o) => o.value === this.value)?.label ?? "";
+  }
+
+  private commitSelection(optionValue: string, sourceEvent: Event): void {
+    if (this.multiple) {
+      this.values = this.values.includes(optionValue)
+        ? this.values.filter((v) => v !== optionValue)
+        : [...this.values, optionValue];
+      dispatchWtChange(this, sourceEvent, { values: this.values });
+    } else {
+      this.value = optionValue;
+      dispatchWtChange(this, sourceEvent, { value: this.value });
+      this.closeAndReturnFocus();
+    }
+  }
+
+  private closeAndReturnFocus(): void {
+    if (this.popup.matches(":popover-open")) this.popup.hidePopover();
+    this.trigger.focus();
   }
 
   private onSearchInput(event: Event): void {
@@ -160,6 +218,12 @@ export class WtCombobox extends LitElement {
       case "End":
         event.preventDefault();
         this.activeIndex = this.rowCount - 1;
+        return;
+      case "Enter":
+        event.preventDefault();
+        if (this.activeIndex >= 0 && this.activeIndex < this.filteredOptions.length) {
+          this.commitSelection(this.filteredOptions[this.activeIndex].value, event);
+        }
         return;
       default:
         return;
@@ -226,7 +290,9 @@ export class WtCombobox extends LitElement {
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
       >
-        <span class="value"></span>
+        <span class=${this.selectedText ? "value" : "value placeholder"}>
+          ${this.selectedText || this.placeholder}
+        </span>
         <wt-icon class="chevron" name="chevron-down"></wt-icon>
       </button>
       <div id="panel" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
@@ -245,16 +311,30 @@ export class WtCombobox extends LitElement {
           @input=${this.onSearchInput}
           @keydown=${this.onSearchKeydown}
         />
-        <ul id=${this.listboxId} class="list" role="listbox">
+        <ul id=${this.listboxId} class="list" role="listbox" aria-multiselectable=${this.multiple}>
           ${this.filteredOptions.map(
             (option, index) => html`
               <li
                 id=${`${this.listboxId}-${index}`}
                 class=${index === this.activeIndex ? "option active" : "option"}
                 role="option"
-                aria-selected="false"
+                aria-selected=${this.isSelected(option.value)}
+                @click=${(event: MouseEvent) => {
+                  this.activeIndex = index;
+                  this.commitSelection(option.value, event);
+                }}
               >
-                ${option.label}
+                ${
+                  this.multiple
+                    ? html`<input
+                        type="checkbox"
+                        tabindex="-1"
+                        aria-hidden="true"
+                        .checked=${this.isSelected(option.value)}
+                      />`
+                    : nothing
+                }
+                <span>${option.label}</span>
               </li>
             `,
           )}

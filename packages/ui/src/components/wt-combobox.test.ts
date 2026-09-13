@@ -208,3 +208,125 @@ test("the search input carries combobox ARIA wiring", async () => {
     el.shadowRoot!.querySelector('[role="listbox"]')!.id,
   );
 });
+
+test("clicking an option selects it, closes the panel, and emits wt-change (single-select)", async () => {
+  const { el, trigger, popup } = await mountWithOptions();
+  let received: string | undefined;
+  el.addEventListener("wt-change", (e) => {
+    received = (e as CustomEvent<{ value: string }>).detail.value;
+  });
+  await userEvent.click(trigger);
+  await userEvent.click(el.shadowRoot!.querySelectorAll('[role="option"]')[1]);
+  expect(received).toBe("vegan");
+  expect(el.value).toBe("vegan");
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.querySelector(".value")!.textContent?.trim()).toBe("Vegan");
+});
+
+test("Enter on the active option selects it", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  expect(el.value).toBe("gluten-free");
+  void search;
+});
+
+test("shows the placeholder when nothing is selected", async () => {
+  const { el } = await mountWithOptions();
+  el.placeholder = "Choose a tag";
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".value")!.textContent?.trim()).toBe("Choose a tag");
+});
+
+test("multi-select: clicking an option toggles it, keeps the panel open, and emits values", async () => {
+  const { el, trigger, popup } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
+  );
+  el.options = TAGS;
+  await el.updateComplete;
+  const received: string[][] = [];
+  el.addEventListener("wt-change", (e) => {
+    received.push((e as CustomEvent<{ values: string[] }>).detail.values);
+  });
+  await userEvent.click(trigger);
+  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
+  await userEvent.click(rows[0]);
+  await userEvent.click(rows[1]);
+  expect(el.values).toEqual(["gluten-free", "vegan"]);
+  expect(received).toEqual([["gluten-free"], ["gluten-free", "vegan"]]);
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.click(rows[0]);
+  expect(el.values).toEqual(["vegan"]);
+});
+
+test("the listbox is aria-multiselectable only in multiple mode", async () => {
+  const { el: single, trigger: singleTrigger } = await mountWithOptions();
+  await userEvent.click(singleTrigger);
+  expect(
+    single.shadowRoot!.querySelector('[role="listbox"]')!.getAttribute("aria-multiselectable"),
+  ).toBe("false");
+  // The open panel is a fixed overlay covering where the second combobox mounts, and would swallow
+  // the click below.
+  await userEvent.keyboard("{Escape}");
+
+  const { el: multi, trigger: multiTrigger } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
+  );
+  multi.options = TAGS;
+  await multi.updateComplete;
+  await userEvent.click(multiTrigger);
+  expect(
+    multi.shadowRoot!.querySelector('[role="listbox"]')!.getAttribute("aria-multiselectable"),
+  ).toBe("true");
+});
+
+test("multi-select renders a checkbox per option reflecting its selected state", async () => {
+  const { el, trigger } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
+  );
+  el.options = TAGS;
+  el.values = ["vegan"];
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  const boxes = el.shadowRoot!.querySelectorAll<HTMLInputElement>('.option input[type="checkbox"]');
+  expect([...boxes].map((box) => box.checked)).toEqual([false, true, false]);
+});
+
+test("multi-select shows the single label for one selection and countLabel for more than one", async () => {
+  const { el } = await mountCombobox('<wt-combobox label="Dietary tags" multiple></wt-combobox>');
+  el.options = TAGS;
+  el.countLabel = (count) => `${count} tags`;
+  el.values = ["vegan"];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".value")!.textContent?.trim()).toBe("Vegan");
+  el.values = ["vegan", "vegetarian"];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".value")!.textContent?.trim()).toBe("2 tags");
+});
+
+test("wt-change bubbles and crosses shadow boundaries", async () => {
+  const { mountInShadowRoot } = await import("../test-helpers.js");
+  const el = (await mountInShadowRoot(
+    '<wt-combobox label="Dietary tags"></wt-combobox>',
+  )) as WtCombobox;
+  el.options = TAGS;
+  await el.updateComplete;
+  let received: CustomEvent<{ value: string }> | undefined;
+  document.addEventListener(
+    "wt-change",
+    (e) => {
+      received = e as CustomEvent<{ value: string }>;
+    },
+    { once: true },
+  );
+  // Clicked programmatically, as wt-input's and wt-switch's twin tests do: a nested shadow root is
+  // outside applyTokens' reach (it adopts the token sheet on the document only), so this combobox
+  // has no padding, border or min-height and its trigger's box is empty — a real pointer click
+  // has nothing to land on. The dispatch under test does not care how the click arrived.
+  const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+  trigger.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')[0].click();
+  expect(received?.detail.value).toBe("gluten-free");
+});
