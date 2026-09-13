@@ -475,6 +475,11 @@ before treating an implementation as a rule violation.
 - **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
   `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*` — compose names its project after the
   directory, so an unqualified `docker compose up` starts a SECOND `db` on the same port.
+- **That dev database is shared and seeded, and an ordinary switch never wipes it — so a branch's
+  migrations can fail on the rows already in it.** Migrations assume an empty database (§3), so a new
+  NOT NULL column over seeded rows kills the boot and the browser shows only "something went wrong".
+  `wa-wt reset demo <name>` is the fix; boot names it (`migrations.dev_data_conflict`, dev mode only,
+  `apps/server/src/dev-data-conflict.ts`). Cost: repeated dead boots with only a driver stack trace.
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
 unprompted, and **update it in the same change that makes it stale** (the moment it goes stale most

@@ -69,6 +69,7 @@ import type {
 } from "./promote.js";
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
+import { withDevDataConflictHint } from "./dev-data-conflict.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
@@ -842,9 +843,13 @@ export async function startServer(
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
-  await applyMigrations(
-    config.migrationsDatabaseUrl,
-    migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
+  // The wrapper only adds a log line on the way past a dev-mode failure, and re-throws untouched;
+  // `dev-data-conflict.ts` states why that line is worth a seam here.
+  await withDevDataConflictHint(log, config.devMode, () =>
+    applyMigrations(
+      config.migrationsDatabaseUrl,
+      migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
+    ),
   );
   const db = await createPostgresDb(config.databaseUrl);
 
