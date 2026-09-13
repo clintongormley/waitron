@@ -542,6 +542,23 @@ describe("your profile", () => {
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   });
 
+  it("shows a passkey-specific message, not the generic banner, for any other ceremony failure", async () => {
+    const { el, api } = await mount();
+    // A real WebAuthnError (name "UnknownError") carries a `.code` like ERROR_AUTHENTICATOR_GENERAL_ERROR
+    // that must NOT reach codeOf, or it degrades to the generic "Something went wrong" banner.
+    vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
+      new DOMException("authenticator failed", "UnknownError"),
+    );
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
+    const errors = el.shadowRoot!.querySelector("wt-form-error-summary")!.errors;
+    expect(errors).toContain(codeMessage("passkey.verification_failed"));
+    expect(errors).not.toContain(codeMessage("__unmapped__"));
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  });
+
   it("stays quiet and keeps the modal open when the passkey prompt is cancelled", async () => {
     const { el } = await mount();
     vi.mocked(navigator.credentials.create).mockRejectedValueOnce(

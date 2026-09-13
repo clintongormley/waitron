@@ -15,9 +15,17 @@ export function deriveDisplayName(
   nextFirst: string,
   nextLast: string,
 ): string {
-  const prevGenerated = `${prevFirst} ${prevLast}`.trim();
+  // Join first and last into a single-spaced name, dropping an absent part and any stray spaces the
+  // raw form fields carried. Used for BOTH the "still matches the last generated name" comparison and
+  // the regenerated value, so the two never disagree over spacing.
+  const combine = (first: string, last: string): string =>
+    [first, last]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(" ");
+  const prevGenerated = combine(prevFirst, prevLast);
   if (current.trim() === "" || current === prevGenerated) {
-    return `${nextFirst} ${nextLast}`.trim();
+    return combine(nextFirst, nextLast);
   }
   return current;
 }

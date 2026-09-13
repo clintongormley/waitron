@@ -16,6 +16,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
 import type { DashboardApi } from "../api/client.js";
 import {
   forgetLoginPreference,
@@ -604,11 +605,21 @@ export class LoginScreen extends LitElement {
       await this.#resolvePasskeyOffer(this.completedLogin);
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      if (
-        error instanceof Error &&
-        (error.name === "NotAllowedError" || error.name === "AbortError")
-      )
+      // Classify every WebAuthn ceremony failure here, so the already-registered message appears on
+      // this screen too and no library `.code` reaches codeOf and degrades to the generic banner.
+      // Shared with profile-screen.ts.
+      const passkey = classifyPasskeyRegistrationError(error);
+      if (passkey === "cancelled") return;
+      if (passkey === "already_registered") {
+        this.errorKey = "passkey.already_registered";
         return;
+      }
+      if (passkey === "failed") {
+        this.errorKey = "passkey.verification_failed";
+        return;
+      }
+      // passkey === null → a server { code } rejection (e.g. totp.invalid from passkeyRegisterOptions):
+      // fall through to the server-code handling below.
       this.errorKey = codeOf(error, "passkey.verification_failed");
       if (this.errorKey === "totp.invalid") {
         this.passkeyFactorRequired = true;

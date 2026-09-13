@@ -6,7 +6,7 @@
  * so callers decide whether an absent number is allowed and only validate a non-empty value.
  */
 export function isValidTelephone(raw: string): boolean {
-  if (!/^\+?[\d\s().-]+$/.test(raw)) return false;
+  if (!/^\+?[\d ().-]+$/.test(raw)) return false;
   const digits = raw.replace(/\D/g, "");
   return digits.length >= 6 && digits.length <= 15;
 }

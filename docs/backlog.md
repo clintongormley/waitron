@@ -729,21 +729,20 @@ ongoing overhaul listed at the top of Track A.
   every screen and API as tenant-wide or location-scoped first.
 - **The admin's Edit user form has no Language** chooser; a person's `locale` can only be set on Your
   profile.
-- **Nothing checks that a typed value makes sense — a phone number accepts "abc".** The country packs
-  hold the seat (`CountryPack.telephone`, filled by `validateSpanishPhone`) and nothing calls it. Use
-  the pack's rule where there is one, otherwise `+` and country code then digits; browser and server.
-  Open: normalise or keep as typed; whether an old bad number blocks an unrelated edit; which fields
-  follow (the tax identifier is fiscal).
-- **Adding a second passkey on the same device shows a generic error** (owner, 2026-09-12). Reading
-  the code, not yet reproduced with a real authenticator: `beginPasskeyRegistration` lists the
-  person's enrolled credentials as `excludeCredentials` (`packages/identity/src/passkey.ts:157`), so
-  the authenticator refuses a duplicate and the browser throws a WebAuthn `InvalidStateError` from
-  `startRegistration` — before any request reaches the server. The profile screen's catch maps every
-  error through `codeOf` (`apps/dashboard/src/screens/profile-screen.ts:383`), so a browser error
-  with no Waitron code reads as the generic fallback; the login screen's offer-a-passkey path
-  swallows `NotAllowedError`/`AbortError` and nothing else. Wanted: say "this device already holds a
-  passkey for this account" in both languages, on both screens, and leave the form open. The server's
-  `passkey.already_registered` 409 stays as the backstop for a non-compliant client.
+- **Typed values are only partly checked — a generic phone-format screen landed, a country-specific
+  one has not.** Done 2026-09-13: a shared format check, `isValidTelephone` in `@waitron/shared`
+  (optional leading `+`, then digits separated by spaces, dots, hyphens or parentheses, 6–15 digits in
+  total), runs on both the browser forms and the server write paths. Identity throws
+  `person.telephone_invalid` when a non-empty number fails it (`packages/identity/src/profile.ts`,
+  `staff.ts`), and both routes map that to 400 (`apps/server/src/me-api.ts`,
+  `management-api.ts`). Resolved along the way: a number is kept exactly as typed, not normalised.
+  Still open: the country-pack seat (`CountryPack.telephone`, filled by `validateSpanishPhone`) is
+  still not called, so no country-specific rule runs yet — a Spanish mobile that fails the national
+  rule but passes the generic one is still accepted; other typed fields (email aside) are still
+  unchecked; the tax identifier stays fiscal. Confirm with owner: an existing malformed number now
+  blocks an otherwise-unrelated edit, because both forms re-validate the telephone field on every
+  submit — this was the open "does an old bad number block an unrelated edit?" question, and the
+  answer is currently yes.
 - Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
   passwordless account; an operator screen for Google provider credentials; native passkey prompts on
   real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
@@ -1115,15 +1114,6 @@ turns out to need a design moves to its track.
   the day a real venue is live, this stops being a one-line change.
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
   (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
-- Profile follow-ups (owner, 2026-09-12): keep Display name in step with the person's name as it is
-  typed, in all three forms (`person-form.ts`, `person-edit.ts`, `profile-screen.ts` under
-  `apps/dashboard/src`); Your profile calls the display name just "Name" (`profile.name`) — one
-  field, one label. Since 2026-09-13 two forms work the display name out independently, each with
-  its own tests: the add-person form (`person-form.ts`) and the setup wizard's account screen
-  (`apps/setup/src/screens/admin-screen.ts`). Extract one shared helper before a third copy appears.
-  Decide one thing first: that branch's review judged an EDIT form should not follow the names as
-  they are typed, because it would overwrite a display name somebody chose while they correct a
-  surname — which is in tension with "all three forms" above. An owner call.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish

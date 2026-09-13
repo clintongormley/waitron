@@ -318,6 +318,27 @@ describe("login-screen", () => {
     expect(loggedIn).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the already-registered message and keeps the offer open when the device holds a passkey", async () => {
+    const { el, api } = await mountPasskeyOffer(passkeyRegistrationStubs());
+    // A real InvalidStateError from the ceremony: the library wraps it into a WebAuthnError whose
+    // `.code` must NOT reach codeOf, or it degrades to the generic banner instead of this message.
+    vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
+      new DOMException("already registered", "InvalidStateError"),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
+    await flush(el);
+    expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
+      "passkey.already_registered",
+    );
+    expect(
+      el.shadowRoot!.querySelector("wt-form-error-summary")?.shadowRoot?.textContent,
+    ).toContain(codeMessage("passkey.already_registered"));
+    // The offer stays open so the person can still skip or retry.
+    expect(el.shadowRoot!.querySelector("[data-test=skip-passkey]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).not.toBeNull();
+  });
+
   it("requests an authenticator code when registration reauthentication requires it", async () => {
     const { el, api } = await mountPasskeyOffer({
       passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "totp.invalid" }),

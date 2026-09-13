@@ -20,6 +20,11 @@ describe("isValidTelephone", () => {
     expect(isValidTelephone("+44 20x")).toBe(false);
   });
 
+  it("rejects tabs and newlines — only a literal space separates, per the documented list", () => {
+    expect(isValidTelephone("123\t456")).toBe(false);
+    expect(isValidTelephone("123\n456")).toBe(false);
+  });
+
   it("rejects too few digits (fewer than 6)", () => {
     expect(isValidTelephone("+44 20")).toBe(false); // 4 digits
     expect(isValidTelephone("+34 600")).toBe(false); // 5 digits

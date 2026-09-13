@@ -26,6 +26,18 @@ describe("deriveDisplayName", () => {
     expect(deriveDisplayName("", "Chef Alba", "", "Alba", "Ruiz")).toBe("Alba Ruiz");
   });
 
+  it("single-spaces a generated name even when the source fields carry stray spaces", () => {
+    expect(deriveDisplayName("", "", "", "  Alba  ", "  Ruiz  ")).toBe("Alba Ruiz");
+  });
+
+  it("regenerates cleanly from stray-space fields when the current name matched the last generated one", () => {
+    // prevGenerated collapses "  Alba  "/"  Ruiz  " to "Alba Ruiz", which the current name equals,
+    // so the change flows through and the new value is single-spaced too.
+    expect(deriveDisplayName("Alba Ruiz", "  Alba  ", "  Ruiz  ", "  Alba  ", "  Soler  ")).toBe(
+      "Alba Soler",
+    );
+  });
+
   it("compares correctly when previous names carry internal spaces", () => {
     // prevGenerated is "Alex Maria Ramos"; current matches it, so it regenerates
     expect(

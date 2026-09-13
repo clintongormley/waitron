@@ -17,6 +17,7 @@ import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
 
 type Mode =
   | "view"
@@ -516,19 +517,25 @@ export class ProfileScreen extends LitElement {
       this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
     } catch (error) {
       // A passkey ceremony fails through @simplewebauthn/browser's WebAuthnError, whose `.code` is a
-      // library constant (e.g. ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED), not a wire code — so the
-      // codeOf path below would degrade every one of them to the generic banner. Read `.name` first.
-      if (this.mode === "passkey" && error instanceof Error) {
-        // A cancelled or aborted prompt is not a failure: leave the modal open, show nothing (the
-        // finally clears busy). Matches login-screen.ts's cancelled-ceremony handling.
-        if (error.name === "NotAllowedError" || error.name === "AbortError") return;
-        if (error.name === "InvalidStateError") {
+      // library constant (not a wire code) — so classify EVERY ceremony failure here rather than let
+      // codeOf read that constant and degrade it to the generic banner. Shared with login-screen.ts.
+      if (this.mode === "passkey") {
+        const passkey = classifyPasskeyRegistrationError(error);
+        // A cancelled or aborted prompt is not a failure: leave the modal open, show nothing.
+        if (passkey === "cancelled") return;
+        if (passkey === "already_registered") {
           this.error = codeMessage("passkey.already_registered");
           return;
         }
+        if (passkey === "failed") {
+          this.error = codeMessage("passkey.verification_failed");
+          return;
+        }
+        // passkey === null → a server { code } rejection or startRegistration's plain "not supported"
+        // / "not completed" Errors (no `.code`): fall through so codeOf yields the passkey fallback.
       }
-      // For any other passkey failure fall back to a passkey-specific message rather than
-      // server.internal; server wire codes (password.invalid, totp.invalid, …) still resolve and map.
+      // Server wire codes (password.invalid, totp.invalid, …) still resolve and map; the passkey
+      // fallback covers the plain Errors that reach here.
       const code =
         this.mode === "passkey" ? codeOf(error, "passkey.verification_failed") : codeOf(error);
       this.error = codeMessage(code);
