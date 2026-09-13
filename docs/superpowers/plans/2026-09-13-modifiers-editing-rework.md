@@ -39,7 +39,7 @@
 - `apps/till/src/api/client.ts` — local `Modifier`/`ModifierSnapshot` types.
 - `apps/till/src/widgets/modifier-picker.ts` — preselected pre-fill; yes/no as a `wt-switch` toggle.
 - `apps/till/src/widgets/basket.ts` — print "Yes"/"No" from local strings.
-- `apps/till/src/i18n/strings.ts` — `modifier.yes` / `modifier.no`.
+- `apps/till/src/widgets/basket.ts` — an affirmative yes/no shows the modifier name, a negative one shows nothing (Ruling C; no new strings).
 
 **Primitive (Task 3)**
 - `packages/ui/src/components/wt-button.ts` (+ `.test.ts`, `.a11y.test.ts`) — a round, icon-only `shape`.
@@ -202,12 +202,13 @@ column and adds a preselected flag."
 - Modify: `apps/till/src/api/client.ts` (local `Modifier`, `ModifierSnapshot` types)
 - Modify: `apps/till/src/widgets/modifier-picker.ts`
 - Modify: `apps/till/src/widgets/basket.ts`
-- Modify: `apps/till/src/i18n/strings.ts` (en `en` map and its `es` translation)
 - Test: `apps/till/src/widgets/modifier-picker.modes.test.ts`, `apps/till/src/widgets/basket.test.ts`, and fixture edits in `apps/till/src/state/as-served-diet.test.ts`, `apps/till/src/widgets/tender-pay.test.ts`
+
+Note (Ruling C): `apps/till/src/i18n/strings.ts` is NOT modified — no `modifier.yes`/`modifier.no` strings are added. A yes/no is a checkbox labelled with the modifier name.
 
 **Interfaces:**
 - Consumes: the shapes from Task 1, mirrored in the till's own `client.ts` types.
-- Produces: a yes/no modifier renders as one `wt-switch`; a preselected extras choice pre-fills quantity 1; the basket shows localized "Yes"/"No".
+- Produces: a yes/no modifier renders as one `wt-switch`; a preselected extras choice pre-fills quantity 1; the basket shows the modifier name for an affirmative yes/no answer and nothing for a negative one.
 
 - [ ] **Step 1: Write the failing till tests**
 
@@ -232,10 +233,13 @@ it("pre-fills quantity 1 for a preselected extras choice", async () => {
 ```
 
 ```ts
-// basket.test.ts — a yes/no answer shows localized Yes/No, not a stored label
-it("prints Yes for a true yes/no answer", async () => {
-  const el = await mountBasket({ /* line with a yes-no snapshot, value: true */ });
-  expect(el.shadowRoot!.textContent).toContain("Yes");
+// basket.test.ts — a yes/no is a checkbox: an affirmative answer shows the modifier name,
+// a negative answer shows nothing (Ruling C — consistent with the receipt/kitchen ticket).
+it("shows the modifier name for an affirmative yes/no answer and omits a negative one", async () => {
+  const yes = await mountBasket({ /* line with a yes-no snapshot, name {en:"Extra hot"}, value: true */ });
+  expect(yes.shadowRoot!.textContent).toContain("Extra hot");
+  const no = await mountBasket({ /* line with the same yes-no snapshot, value: false */ });
+  expect(no.shadowRoot!.textContent).not.toContain("Extra hot");
 });
 ```
 
@@ -271,10 +275,10 @@ In `apps/till/src/widgets/modifier-picker.ts`:
 
 Add `import "@waitron/ui/src/components/wt-switch.js";` near the other UI imports if it is not already present.
 
-- [ ] **Step 5: Basket text and strings**
+- [ ] **Step 5: Basket rendering (Ruling C — checkbox semantics, no yes/no strings)**
 
-In `apps/till/src/i18n/strings.ts` add to the `en` map (near the other `modifier.*` keys) `"modifier.yes": "Yes",` and `"modifier.no": "No",`, and the matching `es` entries `"Sí"` / `"No"`.
-In `apps/till/src/widgets/basket.ts` (line 329) replace `snapshot.type === "yes-no" ? this.#lineText(line, snapshot.label, "")` with `snapshot.type === "yes-no" ? t(snapshot.value ? "modifier.yes" : "modifier.no")`. Confirm `t` is imported in the file (it is used elsewhere).
+A yes/no is a checkbox labelled with the modifier name: an affirmative answer shows the name, a negative answer shows nothing, consistent with the server's `modifierSnapshotLabels` (Task 1). Do NOT add `modifier.yes`/`modifier.no` strings — none are needed.
+In `apps/till/src/widgets/basket.ts` (line 329) the yes-no branch currently reads `snapshot.type === "yes-no" ? this.#lineText(line, snapshot.label, "")`. The snapshot no longer has a `label`. Change the branch so an affirmative yes/no renders the modifier name (`this.#lineText(line, snapshot.name, "")`) and a negative one renders nothing — and, since the row is built as `<name>: <value>`, filter a negative yes/no out of the mapped list entirely rather than printing an empty `<name>:`. The cleanest shape: extend the existing `.filter((snapshot) => snapshot.type !== "extras")` to also drop a `snapshot.type === "yes-no" && !snapshot.value` entry, then in the map render a yes-no as just the name (no trailing value). Confirm the resulting markup for an affirmative yes/no shows the modifier name with no stray colon-value.
 
 - [ ] **Step 6: Run the till tests; verify they pass**
 
