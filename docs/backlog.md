@@ -326,6 +326,15 @@ What it left open:
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
+- **A shadow-root styling bug affects `wt-data-table` cells throughout the dashboard.** During QA, a
+  real rendering issue was found and fixed in `apps/dashboard/src/screens/categories-screen.ts`: custom
+  markup (a colour swatch, a thumbnail, a muted-row style) inside a `cell:` callback was styled by CSS
+  rules in the consuming screen's own stylesheet, but Lit mounts that markup one shadow-root layer
+  deeper, inside `wt-data-table`'s own shadow root, where those styles could never reach it. Elements
+  rendered with no size, colour, or dimming despite passing all automated tests (which only checked DOM
+  attribute/class presence, never computed style or layout). The fix used an existing correct pattern
+  already deployed in `printers-screen.ts`: `part=` attributes plus `wt-data-table::part(...)` selectors.
+  The same bug was found already live on `main`, unrelated to this branch, in `apps/dashboard/src/widgets/product-list.ts` — product thumbnails render at full natural size and allergen badges as unstyled text. A structural guard comparing each screen's `static styles` class selectors against classes used inside `wt-data-table` callbacks looks feasible and would catch this whole class of bug.
 
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers are now written once and attached to as
 many products as you like, instead of being retyped per product. There are four kinds: free text (a

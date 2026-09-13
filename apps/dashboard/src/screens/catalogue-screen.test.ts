@@ -250,7 +250,11 @@ describe("catalogue-screen", () => {
   });
 
   it("ignores an unknown product id", async () => {
-    history.replaceState(null, "", "/manage/catalogue/product/00000000-0000-4000-8000-000000000000");
+    history.replaceState(
+      null,
+      "",
+      "/manage/catalogue/product/00000000-0000-4000-8000-000000000000",
+    );
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
