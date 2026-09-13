@@ -13,6 +13,7 @@ import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
 import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
+import "../src/components/wt-combobox.js";
 
 registerIcons({
   check: "M2 8 L6 12 L14 4",
@@ -22,6 +23,7 @@ registerIcons({
   // path for the real app).
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
+  "chevron-down": "M3 6 L8 11 L13 6",
 });
 
 const panel = (theme: "light" | "dark") => `
@@ -50,6 +52,9 @@ const panel = (theme: "light" | "dark") => `
       <div class="row" style="margin-top:16px">
         <wt-switch label="Modo formación"></wt-switch>
         <wt-switch label="Activado" checked></wt-switch>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <wt-combobox label="Dietary tags" class="demo-combobox"></wt-combobox>
       </div>
     </wt-card>
     <wt-tabs label="Venue settings">
