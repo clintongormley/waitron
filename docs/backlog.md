@@ -1013,7 +1013,12 @@ image constraints under *Detail → Box image*.
   Playwright's "Frame was detached" during a whole-workspace run, and then passed both on its own
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
-  rather than re-running to green.
+  rather than re-running to green. A fifth, seen twice the same day (2026-09-13) in `test-dashboard`'s
+  browser a11y suite, on two unrelated PRs and two unrelated tests: `products-editor`'s CI run failed
+  `dashboard-app.a11y.test.ts`'s recipe-screen heading-order case (job 103718734296); `units`'s
+  (#350) failed `floor-screen.a11y.test.ts`'s "renders accessibly with empty lists" on a
+  color-contrast check (job 103778327703), in code neither branch touched — it passed 8/8 locally
+  against the identical commit. Worth a dedicated look if it recurs a third time; not chased here.
 - **Comments across the tree still say PGlite cannot check a database permission** — the belief
   CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
   session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
