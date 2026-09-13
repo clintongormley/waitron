@@ -53,6 +53,7 @@ export class PersonForm extends LitElement {
   @state() private selectedRole: PersonRole = "staff";
   @state() private fieldErrors: Partial<Record<Field, string>> = {};
 
+  /** Once the administrator types into Display name it stops following the two name fields. */
   #displayNameEdited = false;
   #roleSelect = createRef<HTMLSelectElement>();
 
@@ -63,11 +64,12 @@ export class PersonForm extends LitElement {
   #change(field: Field | "telephone", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const value = event.detail.value;
-    if (field === "firstNames") {
-      this.firstNames = value;
-      if (!this.#displayNameEdited) this.displayName = value;
-    } else if (field === "lastNames") this.lastNames = value;
-    else if (field === "displayName") {
+    if (field === "firstNames" || field === "lastNames") {
+      if (field === "firstNames") this.firstNames = value;
+      else this.lastNames = value;
+      if (!this.#displayNameEdited)
+        this.displayName = `${this.firstNames} ${this.lastNames}`.trim();
+    } else if (field === "displayName") {
       this.displayName = value;
       this.#displayNameEdited = true;
     } else if (field === "email") this.email = value;
