@@ -33,6 +33,32 @@ const GUIDES = [
   },
 ];
 
+/** One guide's content: the steps, then the FNMT page they came from. */
+function guideBody(guide: (typeof GUIDES)[number]) {
+  return html`<ol>
+      ${guide.steps.map((step) => html`<li>${step}</li>`)}
+    </ol>
+    <a href=${guide.href} target="_blank" rel="noopener noreferrer">FNMT export instructions</a>`;
+}
+
+function closedGuide(guide: (typeof GUIDES)[number]) {
+  return html`<details>
+    <summary>${guide.title}</summary>
+    ${guideBody(guide)}
+  </details>`;
+}
+
+const TRANSFER =
+  "If your certificate is on another computer, export it there and transfer the file to this device.";
+
+/**
+ * Export help for the computer the operator is on, guessed from the user-agent.
+ *
+ * The guess is promoted OUT of the list rather than pre-opened inside it. Pre-opening was the first
+ * shape, and the owner read it as "a list of all available combos" on a Mac (2026-09-13): the open
+ * entry sat below Windows, so the first heading a Mac reader met was the wrong computer's. When the
+ * user-agent names nothing we recognise, the plain list is still the right answer and comes back.
+ */
 export function certificateExportHelp(userAgent: string) {
   const mobile = /Android|iPhone|iPad|Mobile/i.test(userAgent);
   const platform = mobile
@@ -44,27 +70,29 @@ export function certificateExportHelp(userAgent: string) {
         : /Macintosh/.test(userAgent)
           ? "mac"
           : undefined;
+  const chosen = GUIDES.find((guide) => guide.id === platform);
   return html`<section
     data-test="certificate-export-help"
     aria-label="Export your signing certificate"
   >
     <h2>Get your certificate file</h2>
     <p>
-      Export the signing certificate on the computer where it is installed. Choose the instructions
-      for that computer or browser below.
+      Export the signing certificate on the computer where it is
+      installed.${chosen ? nothing : " Choose the instructions for that computer or browser below."}
     </p>
-    ${platform === undefined ? html`<p>If your certificate is on another computer, export it there and transfer the file to this device.</p>` : nothing}
-    ${GUIDES.map(
-      (guide) =>
-        html`<details ?open=${guide.id === platform}>
-          <summary>${guide.title}</summary>
-          <ol>
-            ${guide.steps.map((step) => html`<li>${step}</li>`)}
-          </ol>
-          <a href=${guide.href} target="_blank" rel="noopener noreferrer"
-            >FNMT export instructions</a
-          >
-        </details>`,
-    )}
+    ${chosen === undefined ? html`<p>${TRANSFER}</p>` : nothing}
+    ${
+      chosen
+        ? html`<div data-test="export-guide">
+              <h3>${chosen.title}</h3>
+              ${guideBody(chosen)}
+            </div>
+            <details data-test="other-guides">
+              <summary>Exporting from a different computer or browser?</summary>
+              <p>${TRANSFER}</p>
+              ${GUIDES.filter((guide) => guide !== chosen).map(closedGuide)}
+            </details>`
+        : GUIDES.map(closedGuide)
+    }
   </section>`;
 }

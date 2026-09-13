@@ -1232,6 +1232,11 @@ open is under *A2* in Track A, not here.
    certificate store, the macOS Keychain, or Firefox's own store — each a different sequence of
    dialogs. Detect which system the browser is running on and show the steps for that one, the others
    behind a link. Screenshots only if somebody owns keeping them current.
+   **Reopened and closed again 2026-09-13:** #334 detected the system but kept all three guides in
+   one list with the match merely pre-opened, and the owner read that on a Mac as "a list of all
+   available combos" — the first heading they met was Windows, above the open one. The match is now
+   promoted out of the list, with the rest behind one closed disclosure, matching the certificate
+   page. Pre-opening an entry inside a list of every entry does not read as detection.
 
 2. *A mistyped address during setup gives a blank page.* The setup box serves the wizard at the
    origin root with no history fallback, so `/manage` (the dashboard's address once trading) answers a

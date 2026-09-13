@@ -313,29 +313,50 @@ describe("setup-cert-screen", () => {
   });
 });
 
+/**
+ * Pre-opening one entry inside a list of every entry does not read as detection: the owner reported
+ * seeing "a list of all available combos" on a Mac, where the guess was open but sat below Windows
+ * (2026-09-13). So the guess is promoted OUT of the list, and the rest fold behind one disclosure.
+ */
 it.each([
-  ["Mozilla/5.0 (Windows NT 10.0) Chrome/130", "Windows"],
-  ["Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605", "macOS"],
+  ["Mozilla/5.0 (Windows NT 10.0) Chrome/130", "Windows (Chrome)"],
+  ["Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605", "macOS (Keychain Access)"],
   ["Mozilla/5.0 (Windows NT 10.0) Firefox/140", "Firefox"],
-  ["Mozilla/5.0 (iPhone; CPU iPhone OS) Safari/605", "another computer"],
-])(
-  "offers export help for %s with the alternatives still accessible",
-  async (userAgent, expected) => {
-    const ua = vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
-    try {
-      const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
-      const help = q(el, "[data-test=certificate-export-help]");
-      expect(help).not.toBeNull();
-      expect(help!.textContent).toContain(expected);
-      expect(help!.querySelectorAll("details")).toHaveLength(3);
-      const open = help!.querySelector("details[open]");
-      if (expected === "another computer") expect(open).toBeNull();
-      else expect(open!.querySelector("summary")!.textContent).toContain(expected);
-    } finally {
-      ua.mockRestore();
-    }
-  },
-);
+])("promotes %s's own steps and folds the other guides away", async (userAgent, expected) => {
+  const ua = vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
+  try {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    const help = q(el, "[data-test=certificate-export-help]")!;
+    // The guess is a heading with its steps already on the page, not a row to be noticed.
+    const promoted = help.querySelector("[data-test=export-guide] h3")!;
+    expect(promoted.textContent).toContain(expected);
+    expect(help.querySelector("[data-test=export-guide] ol")!.children.length).toBeGreaterThan(0);
+    // Nothing else is loose on the page: the other two sit inside one closed disclosure.
+    const others = help.querySelector<HTMLDetailsElement>("[data-test=other-guides]")!;
+    expect(others.open).toBe(false);
+    expect(others.querySelectorAll("details")).toHaveLength(2);
+    expect(others.textContent).not.toContain(expected);
+  } finally {
+    ua.mockRestore();
+  }
+});
+
+it("lists every guide, and says so, when the browser names no computer it knows", async () => {
+  const ua = vi
+    .spyOn(navigator, "userAgent", "get")
+    .mockReturnValue("Mozilla/5.0 (iPhone; CPU iPhone OS) Safari/605");
+  try {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    const help = q(el, "[data-test=certificate-export-help]")!;
+    expect(help.querySelector("[data-test=export-guide]")).toBeNull();
+    expect(help.querySelector("[data-test=other-guides]")).toBeNull();
+    expect(help.querySelectorAll("details")).toHaveLength(3);
+    expect(help.querySelector("details[open]")).toBeNull();
+    expect(help.textContent).toContain("another computer");
+  } finally {
+    ua.mockRestore();
+  }
+});
 
 it("uses the icon reveal control for the certificate passphrase", async () => {
   const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
