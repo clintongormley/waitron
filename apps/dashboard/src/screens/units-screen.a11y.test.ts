@@ -21,11 +21,15 @@ function api(): DashboardApi {
     getContentLanguages,
     createUnit: vi.fn(),
     updateUnit: vi.fn(),
-    deleteUnit: vi.fn(),
-    productsUsingUnit: vi.fn().mockResolvedValue([
-      { id: "p1", name: { es: "Café", en: "Coffee" }, available: true },
-      { id: "p2", name: { es: "Té", en: "Tea" }, available: false },
-    ]),
+    deleteUnit: vi.fn().mockRejectedValue({
+      code: "unit.in_use",
+      params: {
+        products: [
+          { id: "p1", name: { es: "Café", en: "Coffee" }, available: true },
+          { id: "p2", name: { es: "Té", en: "Tea" }, available: false },
+        ],
+      },
+    }),
   } as unknown as DashboardApi;
 }
 
@@ -53,7 +57,10 @@ describe.each(["light", "dark"] as const)("units-screen a11y (%s theme)", (theme
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    el.reopenUnitId = "u1";
+    // Deleting an in-use unit is refused and opens the modal.
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!
+      .click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     await expectNoA11yViolations(host);

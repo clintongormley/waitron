@@ -28,7 +28,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     createUnit: vi.fn().mockResolvedValue({ id: "u3", name: { es: "caja" }, precision: 0 }),
     updateUnit: vi.fn().mockResolvedValue(units[0]),
     deleteUnit: vi.fn().mockResolvedValue(undefined),
-    productsUsingUnit: vi.fn().mockResolvedValue([]),
     reassignProductsUnit: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
@@ -210,7 +209,7 @@ describe("units-screen", () => {
     expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual(["p2"]);
   });
 
-  it("emits an edit-product event carrying the unit to return to", async () => {
+  it("emits an edit-product event to open the product's editor", async () => {
     const el = await mount(inUseApi());
     const dialog = await openInUseModal(el);
     const edited = new Promise<CustomEvent>((resolve) =>
@@ -223,7 +222,7 @@ describe("units-screen", () => {
       .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-product-p1]")!
       .click();
     const event = await edited;
-    expect(event.detail).toEqual({ productId: "p1", returnToUnitId: "u1" });
+    expect(event.detail).toEqual({ productId: "p1" });
   });
 
   it("deletes the unit from the modal once nothing uses it", async () => {
@@ -255,43 +254,31 @@ describe("units-screen", () => {
     expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual(["p2"]);
   });
 
-  it("reopens the modal for a unit on request, fetching its current products", async () => {
-    const productsUsingUnit = vi.fn().mockResolvedValue([inUseProducts[0]]);
-    const el = await mount(stubApi({ productsUsingUnit }));
-    const consumed = new Promise<void>((resolve) =>
-      el.addEventListener("wt-reopen-consumed", () => resolve(), { once: true }),
-    );
-    el.reopenUnitId = "u1";
-    await consumed;
+  it("shows an empty state after the last product is reassigned, then deletes from the modal", async () => {
+    const deleteUnit = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "unit.in_use", params: { products: [inUseProducts[0]] } })
+      .mockResolvedValueOnce(undefined);
+    const reassignProductsUnit = vi.fn().mockResolvedValue([]);
+    const el = await mount(stubApi({ deleteUnit, reassignProductsUnit }));
+    const dialog = await openInUseModal(el);
+    dialog
+      .querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
+      .click();
+    await el.updateComplete;
+    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
+    select.value = "u2";
+    select.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
     await flush(el);
-    expect(productsUsingUnit).toHaveBeenCalledWith("u1");
-    const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-      "[data-test=in-use-dialog]",
-    )!;
-    expect(dialog.open).toBe(true);
-    expect(
-      (dialog.querySelector("wt-data-table")!.rows as ProductUsingUnit[]).map((p) => p.id),
-    ).toEqual(["p1"]);
-  });
-
-  it("shows an empty state and deletes once no product is left, from the modal", async () => {
-    const deleteUnit = vi.fn().mockResolvedValue(undefined);
-    const productsUsingUnit = vi.fn().mockResolvedValue([]);
-    const el = await mount(stubApi({ deleteUnit, productsUsingUnit }));
-    const consumed = new Promise<void>((resolve) =>
-      el.addEventListener("wt-reopen-consumed", () => resolve(), { once: true }),
-    );
-    el.reopenUnitId = "u1";
-    await consumed;
-    await flush(el);
-    const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-      "[data-test=in-use-dialog]",
-    )!;
-    expect(dialog.open).toBe(true);
+    expect(reassignProductsUnit).toHaveBeenCalledWith("u1", ["p1"], "u2");
     expect(dialog.querySelector("wt-data-table")).toBeNull();
+
     dialog.querySelector<HTMLElement>("[data-test=delete-unit]")!.click();
     await flush(el);
-    expect(deleteUnit).toHaveBeenCalledWith("u1");
+    expect(deleteUnit).toHaveBeenLastCalledWith("u1");
     expect(dialog.open).toBe(false);
   });
 

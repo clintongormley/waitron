@@ -482,12 +482,6 @@ export class DashboardApp extends LitElement {
    * screen id (`string`); the `& {}` keeps the literal autocomplete while admitting any module id. */
   @state() private screen: ScreenId = "login";
 
-  /** Cross-screen "edit this product, then come back" wiring for the units in-use modal. The unit to
-   * reopen is remembered while the product editor is open, then handed to the units screen on save;
-   * `unitsReopen` is the one-shot the units screen consumes (it replies `wt-reopen-consumed`). */
-  #pendingUnitReopen: string | null = null;
-  @state() private unitsReopen: string | null = null;
-
   /** Each active module's mounted screen, keyed by its screen id: the contribution (its nav placement +
    * permission) alongside the handle (its rendered screen). This is the ENABLED set — `me.modules` gates
    * it, the per-permission gate is layered on in `#navGroups`. The generic mount path `#renderScreen`
@@ -1054,15 +1048,7 @@ export class DashboardApp extends LitElement {
             }
             <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
                  screen subtree, repainting every child in the new language (screens hold no controller). -->
-            <div
-              class="body"
-              @wt-edit-product=${this.#onEditProduct}
-              @wt-product-saved=${this.#returnFromProductEditor}
-              @wt-product-editor-closed=${this.#returnFromProductEditor}
-              @wt-reopen-consumed=${() => {
-                this.unitsReopen = null;
-              }}
-            >
+            <div class="body" @wt-edit-product=${this.#onEditProduct}>
               ${
                 this.contentLanguagesReady
                   ? keyed(currentLocale(), this.#renderScreen())
@@ -1148,40 +1134,20 @@ export class DashboardApp extends LitElement {
    * flip is inert (the drawer is never shown there). Keeps the `screen` set the nav has always done. */
   #selectScreen(screen: ScreenId): void {
     diag.record("info", "nav", { screen });
-    // An explicit navigation cancels any pending "reopen the unit modal" one-shot.
-    this.unitsReopen = null;
     this.screen = this.#permittedScreen(screen);
     this.#writeScreenUrl(this.screen);
     this.drawerOpen = false;
   }
 
-  /** A screen (the units in-use modal) asks to edit a product; open its editor on the catalogue
-   * screen, remembering the unit so a save can return there. */
-  #onEditProduct(event: CustomEvent<{ productId: string; returnToUnitId?: string | null }>): void {
+  /** A screen (the units in-use modal) asks to open a product's editor; navigate to the catalogue
+   * screen with that product deep-linked. No automatic return — the person navigates back themselves. */
+  #onEditProduct(event: CustomEvent<{ productId: string }>): void {
     event.stopPropagation();
-    this.#pendingUnitReopen = event.detail.returnToUnitId ?? null;
     const screen = this.#permittedScreen("catalogue");
-    if (screen !== "catalogue") {
-      this.#pendingUnitReopen = null;
-      return;
-    }
-    this.unitsReopen = null;
+    if (screen !== "catalogue") return;
     this.screen = screen;
     this.#url.write({ dashboard: "catalogue", product: event.detail.productId });
     this.drawerOpen = false;
-  }
-
-  /** Closing the product editor — by save or cancel — returns to the unit that sent us here (if
-   * any) and reopens its in-use modal. */
-  #returnFromProductEditor(): void {
-    const reopen = this.#pendingUnitReopen;
-    this.#pendingUnitReopen = null;
-    if (reopen === null) return;
-    const screen = this.#permittedScreen("units");
-    if (screen !== "units") return;
-    this.unitsReopen = reopen;
-    this.screen = screen;
-    this.#writeScreenUrl(screen);
   }
 
   /** A URL selects a destination only within the authenticated person's visible navigation — the core
@@ -1446,10 +1412,7 @@ export class DashboardApp extends LitElement {
       case "catalogue":
         return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
       case "units":
-        return html`<dashboard-units-screen
-          .api=${this.api}
-          .reopenUnitId=${this.unitsReopen}
-        ></dashboard-units-screen>`;
+        return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
       case "location-settings":
         return html`<dashboard-location-settings-screen
           .api=${this.api}

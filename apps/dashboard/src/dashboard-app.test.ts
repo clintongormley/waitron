@@ -1479,14 +1479,10 @@ describe("dashboard-app", () => {
 
   // The logged-in shell gains a nav between the staff and catalogue screens. It opens on overview (the
   // probe's landing, Task 9), and the nav switches the mounted screen — exactly one shows at a time.
-  it("sends a product from the units in-use modal to its editor and reopens the unit on save", async () => {
-    const productsUsingUnit = vi
-      .fn()
-      .mockResolvedValue([{ id: "p1", name: { es: "Café" }, available: true }]);
+  it("opens a product's editor on the catalogue screen from the units in-use modal", async () => {
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
       listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
-      productsUsingUnit,
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -1496,70 +1492,6 @@ describe("dashboard-app", () => {
 
     units(el)!.dispatchEvent(
       new CustomEvent("wt-edit-product", {
-        detail: { productId: "p1", returnToUnitId: "u1" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(catalogue(el)).toBeTruthy();
-    expect(units(el)).toBeNull();
-
-    catalogue(el)!.dispatchEvent(
-      new CustomEvent("wt-product-saved", {
-        detail: { productId: "p1" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(units(el)).toBeTruthy();
-    expect(productsUsingUnit).toHaveBeenCalledWith("u1");
-    const dialog = units(el)!.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-      "[data-test=in-use-dialog]",
-    )!;
-    expect(dialog.open).toBe(true);
-  });
-
-  it("returns to the unit when the product editor is cancelled", async () => {
-    const productsUsingUnit = vi
-      .fn()
-      .mockResolvedValue([{ id: "p1", name: { es: "Café" }, available: true }]);
-    const api = stubApi({
-      listStaff: vi.fn().mockResolvedValue([]),
-      listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
-      productsUsingUnit,
-    });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
-    await flush(el);
-    navUnits(el)!.click();
-    await flush(el);
-    units(el)!.dispatchEvent(
-      new CustomEvent("wt-edit-product", {
-        detail: { productId: "p1", returnToUnitId: "u1" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(catalogue(el)).toBeTruthy();
-
-    catalogue(el)!.dispatchEvent(
-      new CustomEvent("wt-product-editor-closed", { bubbles: true, composed: true }),
-    );
-    await flush(el);
-    expect(units(el)).toBeTruthy();
-    expect(productsUsingUnit).toHaveBeenCalledWith("u1");
-  });
-
-  it("does not return to a unit when a product is saved on its own", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
-    await flush(el);
-    navCatalogue(el)!.click();
-    await flush(el);
-    catalogue(el)!.dispatchEvent(
-      new CustomEvent("wt-product-saved", {
         detail: { productId: "p1" },
         bubbles: true,
         composed: true,
@@ -1568,6 +1500,7 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(catalogue(el)).toBeTruthy();
     expect(units(el)).toBeNull();
+    expect(location.pathname).toContain("/manage/catalogue/product/p1");
   });
 
   it("navigates between the staff and catalogue screens", async () => {

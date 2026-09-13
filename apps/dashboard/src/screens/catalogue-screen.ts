@@ -216,19 +216,10 @@ export class CatalogueScreen extends LitElement {
     this.busy = true;
     this.errorKey = null;
     try {
-      const saved =
-        this.editorValue === null
-          ? await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value)
-          : await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
+      if (this.editorValue === null)
+        await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
+      else await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
       this.#closeEditor();
-      // A caller (e.g. the units in-use modal) can navigate here to edit a product and return on save.
-      this.dispatchEvent(
-        new CustomEvent("wt-product-saved", {
-          detail: { productId: saved.id },
-          bubbles: true,
-          composed: true,
-        }),
-      );
       await this.#reloadProducts();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -346,10 +337,6 @@ export class CatalogueScreen extends LitElement {
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
           this.#closeEditor();
-          // Let a caller that sent us here (the units in-use modal) return without a save.
-          this.dispatchEvent(
-            new CustomEvent("wt-product-editor-closed", { bubbles: true, composed: true }),
-          );
         }}
         @wt-create-related=${(event: CustomEvent<{ kind: ProductChildKind }>) => {
           event.stopPropagation();

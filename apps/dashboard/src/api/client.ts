@@ -1974,12 +1974,6 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/units/${id}`, "DELETE");
   }
 
-  /** `GET /management-api/units/:id/products` — the products that assign this unit. Active read
-   * (the person is acting, not polling): it drives the deletion-blocked modal and its refresh. */
-  productsUsingUnit(id: string): Promise<ProductUsingUnit[]> {
-    return this.#request<ProductUsingUnit[]>(`/management-api/units/${id}/products`, "GET");
-  }
-
   /** Move the listed products onto `targetUnitId` and return the products still using `id`. */
   reassignProductsUnit(
     id: string,

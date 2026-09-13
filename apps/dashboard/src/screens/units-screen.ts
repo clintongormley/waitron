@@ -1,7 +1,7 @@
 import type { ContentLanguages } from "@waitron/shared";
 import { baseStyles, selectStyles, setContentLanguages } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { DashboardApi, ProductUsingUnit, Unit, UnitInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -94,10 +94,6 @@ export class UnitsScreen extends LitElement {
   /** The products ticked for a bulk unit change, and the unit to move them onto. */
   @state() private selectedProducts: string[] = [];
   @state() private reassignTarget = "";
-  /** Set by the shell after a product save to reopen the in-use modal for that unit with a fresh
-   * list; consumed once (the shell clears it on the `wt-reopen-consumed` reply). */
-  @property({ attribute: false }) reopenUnitId: string | null = null;
-  #reopenHandled: string | null = null;
   private focusTarget: HTMLElement | null = null;
 
   override connectedCallback(): void {
@@ -260,41 +256,17 @@ export class UnitsScreen extends LitElement {
     }
   }
 
-  /** The shell navigates to the product's editor and, on save or cancel, returns and reopens this
-   * modal. */
+  /** Jump to the product's editor on the catalogue screen. The person navigates back themselves;
+   * the modal reopens fresh the next time they attempt the delete. */
   #editProduct(productId: string, event: Event): void {
     event.stopPropagation();
     this.dispatchEvent(
       new CustomEvent("wt-edit-product", {
-        detail: { productId, returnToUnitId: this.inUseUnitId },
+        detail: { productId },
         bubbles: true,
         composed: true,
       }),
     );
-  }
-
-  override updated(changed: PropertyValues): void {
-    if (!changed.has("reopenUnitId")) return;
-    if (this.reopenUnitId === null) {
-      this.#reopenHandled = null;
-    } else if (this.reopenUnitId !== this.#reopenHandled) {
-      this.#reopenHandled = this.reopenUnitId;
-      void this.#reopenInUse(this.reopenUnitId);
-    }
-  }
-
-  async #reopenInUse(unitId: string): Promise<void> {
-    this.inUseSearch = "";
-    this.selectedProducts = [];
-    this.reassignTarget = "";
-    this.inUseUnitId = unitId;
-    try {
-      this.inUseProducts = await this.api.productsUsingUnit(unitId);
-    } catch (error) {
-      this.error = error as UnitError;
-      this.inUseUnitId = null;
-    }
-    this.dispatchEvent(new CustomEvent("wt-reopen-consumed", { bubbles: true, composed: true }));
   }
 
   #productColumns(): DataTableColumn<ProductUsingUnit>[] {

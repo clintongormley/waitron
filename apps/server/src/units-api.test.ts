@@ -97,41 +97,6 @@ describe("unit management routes", () => {
     expect(response.status).toBe(401);
   });
 
-  it("lists the products using a unit with availability, and 404s a foreign unit", async () => {
-    const unit = (await (
-      await send("POST", "/management-api/units", { name: { en: "portion" }, precision: 0 })
-    ).json()) as { id: string };
-
-    const empty = await send("GET", `/management-api/units/${unit.id}/products`);
-    expect(empty.status).toBe(200);
-    expect(await empty.json()).toEqual([]);
-
-    const productId = await withTenant(suite.db, tenantId, async (tx) => {
-      const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
-      const product = await tx.execute<{ id: string }>(sql`
-        insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class, active)
-        values (${tenantId}, ${menu.rows[0]!.id}, ${JSON.stringify({ en: "Soup" })}::jsonb, 'each', '1', 'general', false)
-        returning id`);
-      await tx.execute(sql`
-        insert into product_units (tenant_id, product_id, unit_id)
-        values (${tenantId}, ${product.rows[0]!.id}, ${unit.id})`);
-      return product.rows[0]!.id;
-    });
-
-    const listed = await send("GET", `/management-api/units/${unit.id}/products`);
-    expect(listed.status).toBe(200);
-    expect(await listed.json()).toEqual([
-      { id: productId, name: { en: "Soup" }, available: false },
-    ]);
-
-    const foreign = await send(
-      "GET",
-      "/management-api/units/00000000-0000-4000-8000-000000000000/products",
-    );
-    expect(foreign.status).toBe(404);
-  });
-
   it("reassigns selected products to another unit and returns the shrunk list", async () => {
     const from = (await (
       await send("POST", "/management-api/units", { name: { en: "each" }, precision: 0 })
