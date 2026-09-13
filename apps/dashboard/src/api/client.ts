@@ -1643,8 +1643,17 @@ export class DashboardApi {
     password: string;
     totp?: string;
     recoveryCode?: string;
-  }): Promise<{ personId: string }> {
-    return this.#request<{ personId: string }>("/management-api/session", "POST", input);
+  }): Promise<{ personId: string; offerPasskey: boolean }> {
+    return this.#request<{ personId: string; offerPasskey: boolean }>(
+      "/management-api/session",
+      "POST",
+      input,
+    );
+  }
+
+  /** Record that the sign-in passkey offer was resolved, by adding a passkey or by skipping. */
+  passkeyOfferSeen(): Promise<void> {
+    return this.#request<void>("/management-api/session/me/passkey-offer", "POST");
   }
 
   requestPasswordReset(email: string): Promise<void> {

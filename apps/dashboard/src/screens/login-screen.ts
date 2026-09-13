@@ -410,7 +410,7 @@ export class LoginScreen extends LitElement {
     this.busy = true;
     this.errorKey = null;
     try {
-      const out = await this.api.login({
+      const { personId, offerPasskey } = await this.api.login({
         email: this.email,
         password: this.password,
         ...(this.secondFactor === ""
@@ -420,13 +420,16 @@ export class LoginScreen extends LitElement {
             : { recoveryCode: this.secondFactor }),
       });
       if (!this.isConnected) return;
+      // Named apart from the rest of the response rather than spread: `offerPasskey` answers this
+      // screen's question about which step comes next, and is not part of what a completed sign-in
+      // tells the app shell.
       const detail: CompletedLogin = {
-        ...out,
+        personId,
         accountSetup: false,
         loginMethod: "password",
         ...this.#preferenceDetail(),
       };
-      if (this.offerAfterLogin) this.#offerPasskey(detail);
+      if (this.offerAfterLogin || offerPasskey) this.#offerPasskey(detail);
       else this.#announceLogin(detail);
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -546,6 +549,19 @@ export class LoginScreen extends LitElement {
     this.passkeyNameError = "";
   }
 
+  /**
+   * Record that the offer was resolved, then sign in regardless. A failed bookkeeping call must never
+   * be a reason somebody cannot reach their own dashboard; the worst case is being offered once more.
+   */
+  async #resolvePasskeyOffer(detail: CompletedLogin): Promise<void> {
+    try {
+      await this.api.passkeyOfferSeen();
+    } catch {
+      // Deliberately swallowed — see above.
+    }
+    if (this.isConnected) this.#announceLogin(detail);
+  }
+
   async #setupPasskey(): Promise<void> {
     if (this.busy || this.completedLogin === null) return;
     this.passkeyNameError =
@@ -572,7 +588,7 @@ export class LoginScreen extends LitElement {
         name: this.passkeyName.trim(),
       });
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      this.#announceLogin(this.completedLogin);
+      await this.#resolvePasskeyOffer(this.completedLogin);
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
       if (
@@ -971,7 +987,7 @@ export class LoginScreen extends LitElement {
                     ?disabled=${this.busy}
                     @click=${() => {
                       if (!this.busy && this.completedLogin !== null)
-                        this.#announceLogin(this.completedLogin);
+                        void this.#resolvePasskeyOffer(this.completedLogin);
                     }}
                     >${t("account.skip_passkey")}</wt-button
                   >

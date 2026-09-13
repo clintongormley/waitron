@@ -53,6 +53,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     // never calls it — the screen itself no longer has a roster picker.
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
+    passkeyOfferSeen: vi.fn().mockResolvedValue(undefined),
     requestPasswordReset: vi.fn().mockResolvedValue(undefined),
     inspectAccountAction: vi.fn((_token, purpose) =>
       Promise.resolve({ email: "new@example.test", purpose }),
@@ -114,6 +115,18 @@ async function mountPasskeyOffer(overrides: Partial<DashboardApi> = {}) {
   input(el, "new-password", "new password");
   input(el, "new-pin", "4321");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
+  await flush(el);
+  return { el, api };
+}
+
+/** Mounts the screen, opens the password step and submits — an ordinary sign-in. */
+async function signInWithPassword(overrides: Partial<DashboardApi> = {}) {
+  const api = stubApi(overrides);
+  const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+  await flush(el);
+  await openPassword(el, "clinton@example.com");
+  input(el, "password", "correct horse battery");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
   await flush(el);
   return { el, api };
 }
@@ -253,6 +266,7 @@ describe("login-screen", () => {
     const loggedIn = vi.fn();
     el.addEventListener("logged-in", loggedIn);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
+    await flush(el);
     expect(loggedIn).toHaveBeenCalledTimes(1);
   });
 
@@ -1290,13 +1304,112 @@ describe("login-screen", () => {
       "passkey.verification_failed",
     );
   });
+  it("offers a passkey when the server says to", async () => {
+    const { el } = await signInWithPassword({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).not.toBeNull();
+  });
+
+  it("signs straight in when the server says not to", async () => {
+    const api = stubApi({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: false }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    const events: CustomEvent[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e as CustomEvent));
+    await flush(el);
+    await openPassword(el, "clinton@example.com");
+    input(el, "password", "correct horse battery");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).toBeNull();
+    expect(events).toHaveLength(1);
+    // `offerPasskey` answers this screen's question about which step to show next; it is not part of
+    // what the app shell is told about the completed sign-in.
+    expect(events[0]!.detail).toEqual({
+      personId: "p1",
+      accountSetup: false,
+      loginMethod: "password",
+      rememberEmail: false,
+    });
+  });
+
+  it("records the resolution when the offer is skipped, then signs in", async () => {
+    const { el, api } = await signInWithPassword({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+    });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
+    await flush(el);
+    expect(api.passkeyOfferSeen).toHaveBeenCalledTimes(1);
+    expect(events).toHaveLength(1);
+  });
+
+  it("records the resolution when a passkey is added from the offer, then signs in", async () => {
+    vi.spyOn(navigator.credentials, "create").mockResolvedValue({
+      id: "new-key",
+      rawId: new Uint8Array([1]).buffer,
+      type: "public-key",
+      authenticatorAttachment: "platform",
+      response: {
+        clientDataJSON: new Uint8Array([2]).buffer,
+        attestationObject: new Uint8Array([3]).buffer,
+        getTransports: () => ["internal"],
+      },
+      getClientExtensionResults: () => ({}),
+    } as unknown as PublicKeyCredential);
+    const { el, api } = await signInWithPassword({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+      passkeyRegisterOptions: vi.fn().mockResolvedValue({
+        challengeHandle: "register",
+        options: {
+          challenge: "AQID",
+          rp: { name: "Waitron", id: "localhost" },
+          user: { id: "BAUG", name: "clinton@example.com", displayName: "Clinton" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+        },
+      }),
+      passkeyRegisterVerify: vi.fn().mockResolvedValue({ credentialId: "new-key" }),
+    });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
+    await flush(el);
+    expect(api.passkeyRegisterVerify).toHaveBeenCalledTimes(1);
+    expect(api.passkeyOfferSeen).toHaveBeenCalledTimes(1);
+    expect(events).toHaveLength(1);
+  });
+
+  // The offer screen was reachable from an invitation long before it was reachable from an ordinary
+  // sign-in, and that older path recorded nothing — so skipping there meant being asked again at the
+  // next sign-in. Both entrances now leave through the same two exits, and this pins that.
+  it("records the resolution when the offer is skipped after an invitation", async () => {
+    const { el, api } = await mountPasskeyOffer();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
+    await flush(el);
+    expect(api.passkeyOfferSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it("still signs in when recording the skip fails", async () => {
+    const { el } = await signInWithPassword({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+      passkeyOfferSeen: vi.fn().mockRejectedValue(new Error("network")),
+    });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
+    await flush(el);
+    expect(events).toHaveLength(1);
+  });
 });
 
 it("Enter submits current shadow input values once while login is pending", async () => {
-  let resolve!: (value: { personId: string }) => void;
+  let resolve!: (value: { personId: string; offerPasskey: boolean }) => void;
   const login = vi.fn(
     () =>
-      new Promise<{ personId: string }>((done) => {
+      new Promise<{ personId: string; offerPasskey: boolean }>((done) => {
         resolve = done;
       }),
   );
@@ -1321,6 +1434,6 @@ it("Enter submits current shadow input values once while login is pending", asyn
     email: "owner@example.com",
     password: "secret",
   });
-  resolve({ personId: "p1" });
+  resolve({ personId: "p1", offerPasskey: false });
   await flush(el);
 });
