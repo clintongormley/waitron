@@ -48,6 +48,7 @@ describe("category authoring", () => {
       id: food.id,
       name: { en: "Food", fr: "Cuisine" },
       image: null,
+      color: null,
       parentId: null,
     });
     await app((tx) =>
@@ -75,7 +76,7 @@ describe("category authoring", () => {
       ]);
     expect(await app((tx) => listCategories(tx, tenantId))).toEqual([food, drinks]);
   });
-  it("requires an explicit replacement primary and rolls back invalid saves", async () => {
+  it("validates replacement primaries and rolls back invalid saves", async () => {
     const { tenantId, app, food, drinks, product } = await fixture();
     await app((tx) =>
       replaceProductCategories(tx, tenantId, product.id, {
@@ -84,10 +85,8 @@ describe("category authoring", () => {
       }),
     );
     for (const [input, code] of [
-      [{ categoryIds: [drinks.id] }, "category.primary_required"],
       [{ categoryIds: [food.id, food.id] }, "category.membership_invalid"],
       [{ categoryIds: [food.id], primaryCategoryId: drinks.id }, "category.membership_invalid"],
-      [{ categoryIds: [food.id], primaryCategoryId: null }, "category.membership_invalid"],
       [{ categoryIds: [], primaryCategoryId: food.id }, "category.membership_invalid"],
       [{ categoryIds: [crypto.randomUUID()], primaryCategoryId: food.id }, "category.not_found"],
     ] as const) {
@@ -115,6 +114,40 @@ describe("category authoring", () => {
       categoryIds: [],
       primaryCategoryId: null,
     });
+  });
+  it("resolves an omitted reporting category and allows an explicit null", async () => {
+    const { tenantId, app, food, drinks, product } = await fixture();
+    // No memberships and an omitted primary -> null.
+    expect(
+      await app((tx) => replaceProductCategories(tx, tenantId, product.id, { categoryIds: [] })),
+    ).toEqual({ categoryIds: [], primaryCategoryId: null });
+    // No current primary and an omitted primary -> the first submitted id.
+    expect(
+      await app((tx) =>
+        replaceProductCategories(tx, tenantId, product.id, { categoryIds: [food.id, drinks.id] }),
+      ),
+    ).toEqual({ categoryIds: [food.id, drinks.id].sort(), primaryCategoryId: food.id });
+    // The current primary survives the new set and is omitted -> keep it.
+    expect(
+      await app((tx) =>
+        replaceProductCategories(tx, tenantId, product.id, { categoryIds: [drinks.id, food.id] }),
+      ),
+    ).toEqual({ categoryIds: [food.id, drinks.id].sort(), primaryCategoryId: food.id });
+    // The current primary was removed and none is chosen -> null.
+    expect(
+      await app((tx) =>
+        replaceProductCategories(tx, tenantId, product.id, { categoryIds: [drinks.id] }),
+      ),
+    ).toEqual({ categoryIds: [drinks.id], primaryCategoryId: null });
+    // An explicit null with a non-empty set is allowed.
+    expect(
+      await app((tx) =>
+        replaceProductCategories(tx, tenantId, product.id, {
+          categoryIds: [food.id, drinks.id],
+          primaryCategoryId: null,
+        }),
+      ),
+    ).toEqual({ categoryIds: [food.id, drinks.id].sort(), primaryCategoryId: null });
   });
   it("rejects deep cycles and dependencies, without assigning children to parents", async () => {
     const { tenantId, app, food, drinks, product } = await fixture();

@@ -56,10 +56,26 @@ it.each([
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
 });
-it("requires a primary among the selected categories", () => {
-  expect(() => parseProductEditorInput({ ...input, categoryIds: [categoryId] })).toThrow(
+it("allows memberships with no reporting category but rejects a primary outside the set", () => {
+  const other = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  // A non-empty set with a null reporting category is now accepted.
+  expect(
+    parseProductEditorInput({ ...input, categoryIds: [categoryId], primaryCategoryId: null })
+      .primaryCategoryId,
+  ).toBeNull();
+  // A non-null primary must be one of the selected categories.
+  expect(() =>
+    parseProductEditorInput({ ...input, categoryIds: [categoryId], primaryCategoryId: other }),
+  ).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "primaryCategoryId" } }),
   );
+  // An empty set with a non-null primary stays invalid.
+  expect(() =>
+    parseProductEditorInput({ ...input, categoryIds: [], primaryCategoryId: categoryId }),
+  ).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "primaryCategoryId" } }),
+  );
+  // A non-null primary that IS in the set is normalized to lower case.
   expect(
     parseProductEditorInput({
       ...input,

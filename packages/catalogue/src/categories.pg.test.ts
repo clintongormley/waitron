@@ -216,3 +216,44 @@ it("stores and validates a category colour", async () => {
     ),
   ).rejects.toMatchObject({ code: "category.color_invalid" });
 });
+const seedProduct = (tenantId: Awaited<ReturnType<typeof seedTenant>>) =>
+  app(suite.admin, tenantId, async (tx) => {
+    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    return (
+      await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: null,
+        descriptions: { en: "P" },
+        pricingUnit: "each",
+        unitPrice: "1",
+        vatClass: "general",
+      })
+    ).id;
+  });
+it("allows memberships with no reporting category", async () => {
+  const { tenantId, a, b } = await fixture();
+  const productId = await seedProduct(tenantId);
+  const saved = await app(suite.admin, tenantId, (tx) =>
+    replaceProductCategories(tx, tenantId, productId, {
+      categoryIds: [a.id, b.id],
+      primaryCategoryId: null,
+    }),
+  );
+  expect(saved.primaryCategoryId).toBeNull();
+  expect(saved.categoryIds).toEqual([a.id, b.id].sort());
+});
+it("clears reporting category when the current one is removed and none is chosen", async () => {
+  const { tenantId, a, b } = await fixture();
+  const productId = await seedProduct(tenantId);
+  await app(suite.admin, tenantId, (tx) =>
+    replaceProductCategories(tx, tenantId, productId, {
+      categoryIds: [a.id, b.id],
+      primaryCategoryId: a.id,
+    }),
+  );
+  const saved = await app(suite.admin, tenantId, (tx) =>
+    replaceProductCategories(tx, tenantId, productId, { categoryIds: [b.id] }),
+  );
+  expect(saved.primaryCategoryId).toBeNull();
+  expect(saved.categoryIds).toEqual([b.id]);
+});

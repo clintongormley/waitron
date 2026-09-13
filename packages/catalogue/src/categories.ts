@@ -227,19 +227,19 @@ export async function replaceProductCategories(
   )
     throw new AppError("category.membership_invalid", {});
   for (const id of input.categoryIds) await readCategory(tx, tenantId, id);
+  // A reporting category is optional. When omitted, keep a surviving current one, fall back to the
+  // first submitted id only when there was none, and otherwise leave it cleared.
   let primary = input.primaryCategoryId;
   if (primary === undefined) {
     if (!input.categoryIds.length) primary = null;
     else if (current.primaryCategoryId === null) primary = input.categoryIds[0]!;
     else if (input.categoryIds.includes(current.primaryCategoryId))
       primary = current.primaryCategoryId;
-    else throw new AppError("category.primary_required", {});
+    else primary = null;
   }
-  if (
-    input.categoryIds.length
-      ? primary === null || !input.categoryIds.includes(primary)
-      : primary !== null
-  )
+  if (primary !== null && !input.categoryIds.includes(primary))
+    throw new AppError("category.membership_invalid", {});
+  if (input.categoryIds.length === 0 && primary !== null)
     throw new AppError("category.membership_invalid", {});
   await tx
     .delete(productCategories)

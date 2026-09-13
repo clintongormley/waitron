@@ -74,7 +74,7 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
     body.primaryCategoryId === null ? null : id(body.primaryCategoryId, "primaryCategoryId");
   if (
     categoryIds.length
-      ? primaryCategoryId === null || !categoryIds.includes(primaryCategoryId)
+      ? primaryCategoryId !== null && !categoryIds.includes(primaryCategoryId)
       : primaryCategoryId !== null
   )
     invalid("primaryCategoryId");
