@@ -30,7 +30,7 @@ const product = {
           priceDelta: "1.00",
           available: true,
           maxQuantity: 3,
-          defaultQuantity: 2,
+          preselected: true,
         },
       ],
     },
@@ -47,8 +47,6 @@ const product = {
       name: { es: "Cortar" },
       available: true,
       type: "yes-no",
-      yesLabel: { es: "Sí" },
-      noLabel: { es: "No" },
       defaultValue: false,
     },
   ],
@@ -72,21 +70,82 @@ it("seeds all four modes once and sends explicit false, literal text and selecte
   )!;
   input.value = " <b>Happy day</b> ";
   input.dispatchEvent(new Event("input"));
-  picker!.shadowRoot!.querySelector<HTMLElement>('[data-test="opt-cheese-dec"]')!.click();
+  // Cheese seeds at 1 (preselected); bump it to 2, then re-set the product to prove the seeded
+  // draft is applied once — the bumped quantity survives rather than being reset to 1.
+  picker!.shadowRoot!.querySelector<HTMLElement>('[data-test="opt-cheese-inc"]')!.click();
   await picker!.updateComplete;
   picker!.product = structuredClone(product);
   await picker!.updateComplete;
   picker!.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
   expect(store.lines[0]?.modifierSelections).toEqual([
     { modifierId: "note", type: "text", text: " <b>Happy day</b> " },
-    { modifierId: "extra", type: "extras", choices: [{ choiceId: "cheese", quantity: 1 }] },
+    { modifierId: "extra", type: "extras", choices: [{ choiceId: "cheese", quantity: 2 }] },
     { modifierId: "side", type: "options", choiceId: "salad" },
     { modifierId: "cut", type: "yes-no", value: false },
   ]);
-  expect(formatMoney(store.total)).toBe(formatMoney("9.00"));
+  expect(formatMoney(store.total)).toBe(formatMoney("10.00"));
   expect(store.lines[0]?.modifierSnapshots?.find((entry) => entry.type === "text")).toMatchObject({
     text: " <b>Happy day</b> ",
   });
+});
+
+it("renders a yes/no modifier as a toggle and preserves an explicit no", async () => {
+  const store = new WorkingOrderStore();
+  const yesNo = {
+    ...product,
+    modifiers: [
+      { id: "cut", name: { es: "Cortar" }, available: true, type: "yes-no", defaultValue: true },
+    ],
+  } satisfies TillProduct;
+  const { el: grid } = await mountWidget<TillProductGrid>("till-product-grid", {
+    products: [yesNo],
+    store,
+  });
+  grid.shadowRoot!.querySelector<HTMLElement>(".tile")!.click();
+  await grid.updateComplete;
+  const picker = grid.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+  await picker.updateComplete;
+  const toggle = picker.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="modifier-cut"]');
+  expect(toggle).not.toBeNull();
+  // The default answer is yes; the operator switches it off, and the explicit no must survive.
+  toggle!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: false } }));
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+  expect(store.lines[0]?.modifierSelections).toContainEqual({
+    modifierId: "cut",
+    type: "yes-no",
+    value: false,
+  });
+});
+
+it("pre-fills quantity 1 for a preselected extras choice", async () => {
+  const preselected = {
+    ...product,
+    modifiers: [
+      {
+        id: "extra",
+        name: { es: "Extras" },
+        available: true,
+        type: "extras",
+        required: false,
+        maxTotalQuantity: null,
+        choices: [
+          {
+            id: "cheese",
+            name: { es: "Queso" },
+            priceDelta: "1.00",
+            available: true,
+            maxQuantity: 3,
+            preselected: true,
+          },
+        ],
+      },
+    ],
+  } satisfies TillProduct;
+  const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+    product: preselected,
+  });
+  expect(el.shadowRoot!.querySelector('[data-test="opt-cheese-count"]')!.textContent).toBe("1");
 });
 
 it("keeps an available required modifier with no usable choices visible and blocks Add with a reason", async () => {
@@ -211,7 +270,13 @@ it("enforces the sum cap on extras, while an unlimited cap still respects each c
     el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
       '[data-test="opt-cheese-inc"]',
     )!;
+  // Cheese seeds at 1 (preselected); one more reaches the cap of 2 and the sum cap disables it.
+  expect(increment().disabled).toBe(false);
+  increment().click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="opt-cheese-count"]')!.textContent).toBe("2");
   expect(increment().disabled).toBe(true);
+  // The uncapped product keeps the seeded-once draft (2); only the per-choice maximum of 3 limits it.
   el.product = product;
   await el.updateComplete;
   expect(increment().disabled).toBe(false);

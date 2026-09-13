@@ -335,7 +335,7 @@ export type Modifier = { id: string; name: Record<string, string>; available: bo
       choices: (Pick<TillOptionItem, "id" | "name" | "priceDelta" | "maxQuantity"> &
         Partial<Omit<TillOptionItem, "id" | "name" | "priceDelta" | "maxQuantity">> & {
           available: boolean;
-          defaultQuantity: number;
+          preselected: boolean;
         })[];
     }
   | {
@@ -353,8 +353,6 @@ export type Modifier = { id: string; name: Record<string, string>; available: bo
     }
   | {
       type: "yes-no";
-      yesLabel: Record<string, string>;
-      noLabel: Record<string, string>;
       defaultValue: boolean;
     }
 );
@@ -372,7 +370,7 @@ export type ModifierSnapshot = { modifierId: string; name: Record<string, string
       choices: { choiceId: string; name: Record<string, string>; quantity: number }[];
     }
   | { type: "options"; choiceId: string; choiceName: Record<string, string> }
-  | { type: "yes-no"; value: boolean; label: Record<string, string> }
+  | { type: "yes-no"; value: boolean }
 );
 
 /** One sellable product from `GET /api/products` (mirrors catalogue's `AvailableProduct`). */

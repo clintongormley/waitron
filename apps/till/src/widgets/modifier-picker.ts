@@ -1,3 +1,4 @@
+import "@waitron/ui/src/components/wt-switch.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -165,8 +166,7 @@ export class TillModifierPicker extends LitElement {
         this.answers[modifier.id] = modifier.defaultChoiceId;
       if (modifier.type === "extras")
         for (const choice of modifier.choices) {
-          if (choice.available && choice.defaultQuantity > 0)
-            this.quantities[choice.id] = choice.defaultQuantity;
+          if (choice.available && choice.preselected) this.quantities[choice.id] = 1;
         }
     }
   }
@@ -473,12 +473,7 @@ export class TillModifierPicker extends LitElement {
       } else if (modifier.type === "yes-no") {
         const value = this.answers[modifier.id] === true;
         modifierSelections.push({ modifierId: modifier.id, type: "yes-no", value });
-        modifierSnapshots.push({
-          ...common,
-          type: "yes-no",
-          value,
-          label: value ? modifier.yesLabel : modifier.noLabel,
-        });
+        modifierSnapshots.push({ ...common, type: "yes-no", value });
       } else {
         const choices = modifier.choices
           .filter((choice) => (this.quantities[choice.id] ?? 0) > 0)
@@ -540,20 +535,15 @@ export class TillModifierPicker extends LitElement {
                       />${descriptionFor(choice.name, choice.id)}</label
                     >`,
                 )
-            : [false, true].map(
-                (value) =>
-                  html`<label class="option"
-                    ><input
-                      type="radio"
-                      name=${`modifier-${modifier.id}`}
-                      .checked=${this.answers[modifier.id] === value}
-                      @change=${(event: Event) => {
-                        event.stopPropagation();
-                        this.answers = { ...this.answers, [modifier.id]: value };
-                      }}
-                    />${descriptionFor(value ? modifier.yesLabel : modifier.noLabel, String(value))}</label
-                  >`,
-              )
+            : html`<wt-switch
+                name=${`modifier-${modifier.id}`}
+                label=${name}
+                .checked=${this.answers[modifier.id] === true}
+                @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                  event.stopPropagation();
+                  this.answers = { ...this.answers, [modifier.id]: event.detail.checked };
+                }}
+              ></wt-switch>`
       }
       ${required && noChoices ? html`<p role="alert">${name}: ${t("modifier.unavailable_choices")}</p>` : nothing}
     </fieldset>`;

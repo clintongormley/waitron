@@ -1314,8 +1314,7 @@ it("shows a retained table line's recorded name and modifier answer after live n
             modifierId: "cut",
             name: { "es-ES": "Cortar" },
             type: "yes-no",
-            value: false,
-            label: { "es-ES": "No" },
+            value: true,
           },
         ],
       },
@@ -1324,6 +1323,7 @@ it("shows a retained table line's recorded name and modifier answer after live n
   await openDrawer(el);
   const row = el.shadowRoot!.querySelector(".pending-line")!;
   expect(row.textContent).toContain("Nombre guardado");
-  expect(row.textContent).toContain("Cortar: No");
+  // Ruling C: an affirmative yes/no shows the modifier name alone, resolved from the snapshot.
+  expect(row.textContent).toContain("Cortar");
   expect(row.textContent).not.toContain("Nuevo nombre");
 });

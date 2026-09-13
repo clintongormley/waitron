@@ -326,7 +326,7 @@ export class TillBasket extends LitElement {
               </div>
             `,
           )}
-          ${(line.modifierSnapshots ?? []).filter((snapshot) => snapshot.type !== "extras").map((snapshot) => html`<div class="option modifier-answer"><span class="name">${this.#lineText(line, snapshot.name, "")}: ${snapshot.type === "text" ? snapshot.text : snapshot.type === "options" ? this.#lineText(line, snapshot.choiceName, "") : snapshot.type === "yes-no" ? this.#lineText(line, snapshot.label, "") : nothing}</span></div>`)}
+          ${(line.modifierSnapshots ?? []).filter((snapshot) => snapshot.type !== "extras" && !(snapshot.type === "yes-no" && !snapshot.value)).map((snapshot) => (snapshot.type === "yes-no" ? html`<div class="option modifier-answer"><span class="name">${this.#lineText(line, snapshot.name, "")}</span></div>` : html`<div class="option modifier-answer"><span class="name">${this.#lineText(line, snapshot.name, "")}: ${snapshot.type === "text" ? snapshot.text : snapshot.type === "options" ? this.#lineText(line, snapshot.choiceName, "") : nothing}</span></div>`))}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
         `,
       )}
