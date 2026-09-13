@@ -149,7 +149,7 @@ describe("category authoring", () => {
       ),
     ).toEqual({ categoryIds: [food.id, drinks.id].sort(), primaryCategoryId: null });
   });
-  it("rejects deep cycles and dependencies, without assigning children to parents", async () => {
+  it("rejects deep cycles, and cascades a delete through children and memberships", async () => {
     const { tenantId, app, food, drinks, product } = await fixture();
     const child = await app((tx) =>
       createCategory(tx, tenantId, { name: { en: "Sandwiches" }, parentId: food.id }),
@@ -161,24 +161,20 @@ describe("category authoring", () => {
       await expect(
         app((tx) => updateCategory(tx, tenantId, food.id, { parentId })),
       ).rejects.toMatchObject({ code: "category.parent_cycle" });
-    await expect(app((tx) => deleteCategory(tx, tenantId, food.id))).rejects.toMatchObject({
-      code: "category.in_use",
-      params: { children: 1, products: 0, routes: 0 },
-    });
+    // Deleting a parent reparents its children rather than refusing; food's parent is null.
+    await app((tx) => deleteCategory(tx, tenantId, food.id));
+    expect((await app((tx) => readCategory(tx, tenantId, child.id))).parentId).toBeNull();
+    // Deleting a category a product belongs to unassigns the product rather than refusing.
     await app((tx) =>
       replaceProductCategories(tx, tenantId, product.id, { categoryIds: [leaf.id] }),
     );
-    expect(await app((tx) => listCategoryProducts(tx, tenantId, food.id))).toEqual([]);
-    await expect(app((tx) => deleteCategory(tx, tenantId, leaf.id))).rejects.toMatchObject({
-      code: "category.in_use",
+    await app((tx) => deleteCategory(tx, tenantId, leaf.id));
+    expect(await app((tx) => readProductCategories(tx, tenantId, product.id))).toEqual({
+      categoryIds: [],
+      primaryCategoryId: null,
     });
-    await app((tx) => updateCategory(tx, tenantId, child.id, { parentId: null }));
-    await app((tx) => deleteCategory(tx, tenantId, food.id));
     await app((tx) => deleteCategory(tx, tenantId, drinks.id));
-    expect((await app((tx) => listCategories(tx, tenantId))).map((c) => c.id)).toEqual([
-      child.id,
-      leaf.id,
-    ]);
+    expect((await app((tx) => listCategories(tx, tenantId))).map((c) => c.id)).toEqual([child.id]);
   });
   it("scopes reads and rejects foreign parents, products and categories", async () => {
     const { tenantId, app, food, product } = await fixture();

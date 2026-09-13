@@ -33,7 +33,7 @@ async function blocked(pid: number) {
     .toBe(true);
 }
 
-it("waits for a route attachment before refusing the category deletion", async () => {
+it("waits for a route attachment, then cascades the route away with the category", async () => {
   const tenantId = await seedTenant(suite.admin);
   const location = await suite.admin.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
@@ -78,15 +78,17 @@ it("waits for a route attachment before refusing the category deletion", async (
     const [attachment, deletion] = await settled;
     expect(attachment.status).toBe("fulfilled");
     if (attachment.status !== "fulfilled") throw attachment.reason;
-    expect(deletion).toMatchObject({
-      status: "rejected",
-      reason: { code: "category.in_use", params: { children: 0, products: 0, routes: 1 } },
-    });
+    // The delete serializes behind the committed route insert, then deletes the route and category.
+    expect(deletion.status).toBe("fulfilled");
     const routes = await suite.admin.execute<{ id: string }>(sql`
       select id from preparation_routes
       where tenant_id = ${tenantId} and category_id = ${category.id}
     `);
-    expect(routes.rows).toEqual([{ id: attachment.value }]);
+    expect(routes.rows).toEqual([]);
+    const remaining = await suite.admin.execute<{ id: string }>(sql`
+      select id from categories where tenant_id = ${tenantId} and id = ${category.id}
+    `);
+    expect(remaining.rows).toEqual([]);
   } finally {
     release();
     await settled;

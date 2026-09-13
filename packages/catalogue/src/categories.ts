@@ -162,30 +162,37 @@ export async function updateCategory(
 }
 export async function deleteCategory(tx: Transaction, tenantId: string, id: string): Promise<void> {
   await lockCategories(tx, tenantId);
-  await readCategory(tx, tenantId, id);
-  // Lock the identity too: route inserts hold its FK's KEY SHARE lock.
+  const category = await readCategory(tx, tenantId, id); // 404s a foreign/absent id, tenant-scoped
+  // Lock the identity: route inserts hold its FK's KEY SHARE lock.
   await tx
     .select({ id: categories.id })
     .from(categories)
     .where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)))
     .for("update");
-  const result = await tx.execute<{ children: number; products: number; routes: number }>(sql`
-    select (select count(*)::int from category_details where tenant_id = ${tenantId} and parent_id = ${id}) as children,
-    (select count(*)::int from product_categories where tenant_id = ${tenantId} and category_id = ${id}) as products,
-    0 as routes`);
-  const dependencies = result.rows[0]!;
-  // Venue service is optional; catalogue must also work without its route table.
+  // 1. memberships
+  await tx
+    .delete(productCategories)
+    .where(and(eq(productCategories.tenantId, tenantId), eq(productCategories.categoryId, id)));
+  // 2. clear reporting category where it was this one
+  await tx
+    .update(products)
+    .set({ categoryId: null, updatedAt: sql`now()` })
+    .where(and(eq(products.tenantId, tenantId), eq(products.categoryId, id)));
+  // 3. reparent direct children to this category's own parent (clears the RESTRICT parent FK)
+  await tx
+    .update(categoryDetails)
+    .set({ parentId: category.parentId })
+    .where(and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.parentId, id)));
+  // 4. drop preparation routes for this category, if the (optional) venue table exists.
+  // Raw SQL and the to_regclass guard follow validateImage's precedent for optional module tables.
   const routeTable = await tx.execute<{ present: boolean }>(
     sql`select to_regclass('public.preparation_routes') is not null as present`,
   );
   if (routeTable.rows[0]!.present)
-    dependencies.routes = (
-      await tx.execute<{ count: number }>(
-        sql`select count(*)::int as count from preparation_routes where tenant_id = ${tenantId} and category_id = ${id}`,
-      )
-    ).rows[0]!.count;
-  if (dependencies.children || dependencies.products || dependencies.routes)
-    throw new AppError("category.in_use", dependencies);
+    await tx.execute(
+      sql`delete from preparation_routes where tenant_id = ${tenantId} and category_id = ${id}`,
+    );
+  // 5. the category row (category_details cascades via its FK)
   await tx.delete(categories).where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
 }
 export async function readProductCategories(

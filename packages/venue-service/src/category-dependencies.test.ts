@@ -7,6 +7,7 @@ import {
   createProduct,
   createUnit,
   deleteCategory,
+  readCategory,
   replaceProductCategories,
 } from "@waitron/catalogue";
 import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
@@ -14,7 +15,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { createPreparationRoute, deletePreparationRoute } from "./operations.js";
+import { createPreparationRoute } from "./operations.js";
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -29,27 +30,24 @@ async function venue() {
   return { tenantId, locationId: location.rows[0]!.id as LocationId };
 }
 
-it("refuses to delete a category referenced only by a preparation route", async () => {
+it("deleting a category removes its preparation routes and the category", async () => {
   const { tenantId, locationId } = await venue();
   await withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
     const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
-    const routeId = await createPreparationRoute(
+    await createPreparationRoute(
       tx,
       { tenantId, locationId },
-      {
-        categoryId: category.id,
-        target: { kind: "no_preparation" },
-      },
+      { categoryId: category.id, target: { kind: "no_preparation" } },
     );
-
-    await expect(deleteCategory(tx, tenantId, category.id)).rejects.toMatchObject({
-      code: "category.in_use",
-      params: { children: 0, products: 0, routes: 1 },
-    });
-
-    await deletePreparationRoute(tx, { tenantId, locationId }, routeId);
     await expect(deleteCategory(tx, tenantId, category.id)).resolves.toBeUndefined();
+    const routes = await tx.execute(
+      sql`select 1 from preparation_routes where tenant_id = ${tenantId} and category_id = ${category.id}`,
+    );
+    expect(routes.rows).toHaveLength(0);
+    await expect(readCategory(tx, tenantId, category.id)).rejects.toMatchObject({
+      code: "category.not_found",
+    });
   });
 });
 
