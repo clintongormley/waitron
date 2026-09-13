@@ -25,7 +25,7 @@ async function mountActions() {
 }
 
 describe("row actions", () => {
-  it("positions the popup beside the trigger before the first painted frame", async () => {
+  it("aligns the popup's left edge under the trigger before the first painted frame", async () => {
     const { el: table } = await mountWidget<WtDataTable>("wt-data-table", {
       ariaLabel: "Print agents",
       rows: [{}],
@@ -42,6 +42,8 @@ describe("row actions", () => {
         },
       ],
     });
+    // A narrow table leaves room on both sides so alignment is observed, not clamped to the viewport.
+    table.style.width = "320px";
     table.style.marginTop = "150px";
     const actions = table.shadowRoot!.querySelector<RowActions>("dashboard-row-actions")!;
     await actions.updateComplete;
@@ -58,7 +60,7 @@ describe("row actions", () => {
     const bounds = await firstFrame;
     const anchor = trigger.getBoundingClientRect();
     expect(bounds.top).toBeCloseTo(anchor.bottom, 0);
-    expect(bounds.right).toBeCloseTo(anchor.right, 0);
+    expect(bounds.left).toBeCloseTo(anchor.left, 0);
   });
 
   it("allows an action to keep the popup open while it asks for confirmation", async () => {

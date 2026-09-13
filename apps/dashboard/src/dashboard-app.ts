@@ -1048,7 +1048,7 @@ export class DashboardApp extends LitElement {
             }
             <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
                  screen subtree, repainting every child in the new language (screens hold no controller). -->
-            <div class="body">
+            <div class="body" @wt-edit-product=${this.#onEditProduct}>
               ${
                 this.contentLanguagesReady
                   ? keyed(currentLocale(), this.#renderScreen())
@@ -1103,6 +1103,7 @@ export class DashboardApp extends LitElement {
           ? html`<div class="banner-actions">
               <wt-row-actions
                 icon="person"
+                align="end"
                 .iconSize=${"lg"}
                 label=${t("nav.account_menu")}
                 data-test="account-menu"
@@ -1136,6 +1137,19 @@ export class DashboardApp extends LitElement {
     this.screen = this.#permittedScreen(screen);
     this.#writeScreenUrl(this.screen);
     this.drawerOpen = false;
+  }
+
+  /** A screen (the units in-use modal) asks to open a product's editor; navigate to the catalogue
+   * screen with that product deep-linked. No automatic return — the person navigates back themselves. */
+  #onEditProduct(event: CustomEvent<{ productId: string }>): void {
+    event.stopPropagation();
+    const screen = this.#permittedScreen("catalogue");
+    if (screen !== "catalogue") return;
+    // An ordinary screen change (so the previous screen's `view` segment is cleared), then the
+    // product on top of it — `write` merges into what the URL already holds. The second write
+    // REPLACES, so the jump is a single Back-button stop rather than two.
+    this.#selectScreen(screen);
+    this.#url.write({ product: event.detail.productId }, true);
   }
 
   /** A URL selects a destination only within the authenticated person's visible navigation — the core

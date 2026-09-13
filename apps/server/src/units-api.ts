@@ -7,6 +7,8 @@ import {
   deleteUnit,
   getUnit,
   listUnits,
+  productsUsingUnit,
+  reassignProductsToUnit,
   updateUnit,
   type UpdateUnitInput,
 } from "@waitron/catalogue";
@@ -33,6 +35,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "unit.precision_invalid": 400,
   "unit.not_found": 404,
   "unit.in_use": 409,
+  "product.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "units.failed");
 
@@ -77,6 +80,33 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       return c.json(await gated(sessionId, (tx) => getUnit(tx, deps.cfg.tenantId, unitId(c))));
+    }),
+  );
+
+  app.post("/management-api/units/:id/products/reassign", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = unitId(c);
+      const body = await readJsonBody<{ productIds?: unknown; unitId?: unknown }>(c);
+      if (
+        !Array.isArray(body.productIds) ||
+        body.productIds.length === 0 ||
+        body.productIds.some((value) => typeof value !== "string" || !isUuid(value))
+      ) {
+        throw new AppError("management.request_invalid", { field: "productIds" });
+      }
+      if (typeof body.unitId !== "string" || !isUuid(body.unitId)) {
+        throw new AppError("management.request_invalid", { field: "unitId" });
+      }
+      const productIds = body.productIds as string[];
+      const targetUnitId = body.unitId;
+      return c.json(
+        await gated(sessionId, async (tx) => {
+          await getUnit(tx, deps.cfg.tenantId, id); // 404 for an unknown or foreign source unit
+          await reassignProductsToUnit(tx, deps.cfg.tenantId, id, productIds, targetUnitId);
+          return productsUsingUnit(tx, deps.cfg.tenantId, id);
+        }),
+      );
     }),
   );
 

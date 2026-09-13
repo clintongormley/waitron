@@ -148,8 +148,8 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
-| `wt-row-actions` | `label`; default slot of action buttons | native events from actions |
-| `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label` | native events from consumer-provided cells |
+| `wt-row-actions` | `label`, `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with); default slot of action buttons | native events from actions |
+| `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel` | `wt-selection-change` — `detail: { selected: string[] }`; native events from consumer-provided cells |
 
 `wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
 action in progress: it disables the button, sets `aria-busy`, and leads the label with a decorative
@@ -903,6 +903,12 @@ centred label reads oddly once the button has been stretched to the popover's fu
 dropdown menu item never centres its text. This applies to every `wt-row-actions` popover, not just
 per-row kebab menus — the account menu in the banner uses the same primitive and the same
 alignment.
+
+The menu itself is left-aligned by default: `wt-row-actions` pins the popup's left edge under its
+trigger (`align="start"`), so the menu grows rightward, and a per-row kebab at the end of a table row
+opens into the margin beside the table. A menu anchored at the trailing edge of a wide surface — the
+banner's account menu — passes `align="end"` instead, pinning the popup's right edge so it grows
+leftward, inward over the page rather than off the screen.
 
 Open create and edit forms in `wt-modal`, with `wt-form-actions` in its footer. Keep validation
 messages inside the modal, retain entered values after a failed save, and refresh the table after

@@ -175,6 +175,39 @@ The printer modal close test stalled on its own paused `requestAnimationFrame`; 
 native dialog's closed state avoids mixing that clock with the browser's queued close event
 (`apps/dashboard/src/screens/printers-screen.test.ts`, "closing Add printer…").
 
+## The mouse cursor belongs to the shared page, so a hover outlives the test — and the file — that moved it.
+
+In browser mode every test file in a worker runs in its own iframe but shares ONE browser page, and
+the cursor position is the page's. So `userEvent.click` or `userEvent.hover` parks the real cursor at
+those coordinates for every test that runs afterwards, in that file and in every file scheduled after
+it in the same worker. Whatever renders under those coordinates next is `:hover`ed with nothing in the
+test asking for it, and Blink re-evaluates that after layout, so it lands on a freshly mounted element
+even though no mouse event was sent. `wt-button`'s hover rule then dims the button to
+`--wt-opacity-hover`, and an axe scan reports a colour-contrast violation for a button that looks
+correct in the app.
+
+Measured, 2026-09-13: `test-dashboard` failed three times on PR #350 on
+`floor-screen.a11y.test.ts`'s "renders accessibly with empty lists" (light theme) — always
+`wt-button[data-add-zone=""]`, always `#fefefe` on `#3f83ed` at 3.66:1. `#3f83ed` is no design token.
+It is `--wt-color-primary` `#1f6feb` at opacity `0.85` over the light `--wt-color-bg` `#f7f7f8`, and
+`#fefefe` is `--wt-color-on-primary` `#ffffff` composited the same way — all six channels exact. The
+failure was reproduced locally by running a file that hovers a `wt-button` immediately before the
+untouched `floor-screen.a11y.test.ts` in one worker (`--no-file-parallelism`): the same one test of
+the eight failed, with the same element and the same two colours.
+
+The fix is a reset in the shared harness, not in the test that happened to be scanned:
+`apps/dashboard/src/widgets/test-helpers.ts` calls a `parkPointer` browser command
+(`apps/dashboard/vitest.config.ts`) in a `beforeEach`, which moves the Playwright cursor to `(-1, -1)`
+— outside the viewport, so no element can be under it. **`userEvent.unhover()` cannot do this job**:
+@vitest/browser implements it as a hover of `html > body`, which parks the cursor in the MIDDLE of the
+page, on top of whatever the next test mounts. Guard:
+`apps/dashboard/src/widgets/pointer-reset.test.ts`, proven by deleting the `beforeEach`. Cost of the
+reset, measured over the package's 1,827 tests: about 0.5s of a 6s run.
+
+`packages/ui` and `apps/till` have no such reset, and `packages/ui/src/components/wt-button.test.ts`
+ends a test hovering a button without unhovering it — the same latent failure lives there, unpaid for
+so far.
+
 ## Dispatch events when testing a `composedPath()` guard.
 
 An undispatched `KeyboardEvent` has an empty path, so a missing-action test can pass at the

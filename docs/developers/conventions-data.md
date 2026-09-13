@@ -157,6 +157,19 @@ exactly once) and `scripts/append-only-enable-always.test.ts` (every `reject_mut
 `ENABLE ALWAYS`); `packages/fiscal-verifactu`'s `inmutabilidad` suite still scans the triggers
 themselves. Run them after adding any table anywhere.
 
+A table that ends up in one of those publications also needs a PRIMARY KEY, not a bare UNIQUE
+constraint: a published table with no replica identity accepts INSERTs and refuses UPDATEs, with
+`ERROR: 55000: cannot update table "t" because it does not have a replica identity and publishes
+updates`. Reproduced on a real PostgreSQL server on 2026-09-13 — `create table t (a int, b int,
+unique (a, b)); create publication p for table t; insert; update` gives the error above, and the same
+sequence with `primary key (a, b)` instead reports `UPDATE 1`. Cost: `product_units` shipped with only
+a unique `(tenant_id, product_id)`, so creating a product worked and changing its unit answered 500;
+`packages/catalogue/drizzle/0010_product_units_primary_key.sql` promotes that pair to the primary key.
+No guard covers this: the defect passed every existing test because no test published the table
+(`packages/catalogue/src/units.pg.test.ts` now creates the publication to reproduce it), and a
+per-table check would have to read each module's `_CLASSIFICATION` list against its schema file's
+primary keys.
+
 ## The two publications a node holds are created by the table OWNER, and the replication role is a bootstrap the app provisioner only verifies
 
 `waitron_migrator` creates `waitron_<env>_ledger` / `_state` from the module classification

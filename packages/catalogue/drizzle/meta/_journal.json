@@ -71,6 +71,13 @@
       "when": 1789291683976,
       "tag": "0009_product_variants_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789323924885,
+      "tag": "0010_product_units_primary_key",
+      "breakpoints": true
     }
   ]
 }

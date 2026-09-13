@@ -274,6 +274,13 @@ export interface UnitPatch {
   precision?: number;
 }
 
+/** A product that assigns a unit — the row shape the deletion-blocked modal lists and links from. */
+export interface ProductUsingUnit {
+  id: string;
+  name: Record<string, string>;
+  available: boolean;
+}
+
 export interface ProductEditorVariant {
   id?: string;
   name: Record<string, string>;
@@ -1965,6 +1972,19 @@ export class DashboardApi {
 
   deleteUnit(id: string): Promise<void> {
     return this.#request<void>(`/management-api/units/${id}`, "DELETE");
+  }
+
+  /** Move the listed products onto `targetUnitId` and return the products still using `id`. */
+  reassignProductsUnit(
+    id: string,
+    productIds: string[],
+    targetUnitId: string,
+  ): Promise<ProductUsingUnit[]> {
+    return this.#request<ProductUsingUnit[]>(
+      `/management-api/units/${id}/products/reassign`,
+      "POST",
+      { productIds, unitId: targetUnitId },
+    );
   }
 
   /** `GET /management-api/catalogues/:id/products` — the products of one catalogue. */

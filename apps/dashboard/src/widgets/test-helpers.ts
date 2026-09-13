@@ -1,6 +1,15 @@
 import axe from "axe-core";
+import { commands } from "@vitest/browser/context";
 import { beforeEach, expect } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+
+declare module "@vitest/browser/context" {
+  interface BrowserCommands {
+    // Moves the real cursor off every element, clearing CSS `:hover`. See `parkPointer` in
+    // apps/dashboard/vitest.config.ts for why `userEvent.unhover()` cannot be used for this.
+    parkPointer: () => Promise<void>;
+  }
+}
 
 /**
  * Test support for the dashboard's Lit widgets. It mirrors `packages/ui/src/test-helpers.ts` and
@@ -11,6 +20,14 @@ import { applyTokens, setContentLanguages } from "@waitron/ui";
 
 // Standalone widget fixtures use a Spanish venue; app roots replace this with their API configuration.
 beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] }));
+
+/**
+ * Starts every test with the mouse cursor off the page, so nothing inherits a `:hover` that an
+ * earlier test's click or hover left behind — the cursor belongs to the shared page, not to the test
+ * that moved it, and it outlives the file that moved it. Without this an a11y scan can catch a button
+ * dimmed by `wt-button`'s hover rule and report a colour-contrast violation nobody can see in the app.
+ */
+beforeEach(() => commands.parkPointer());
 
 export type Theme = "light" | "dark";
 

@@ -10,6 +10,8 @@ import {
   deleteUnit,
   getUnit,
   listUnits,
+  productsUsingUnit,
+  reassignProductsToUnit,
   updateUnit,
 } from "./units.js";
 import { assertQuantityPrecision } from "./units.js";
@@ -46,8 +48,32 @@ describe("unit operations", () => {
         update products set active = false where tenant_id = ${tenantId} and id = ${productId}`);
       await expect(deleteUnit(tx, tenantId, unit.id)).rejects.toMatchObject({
         code: "unit.in_use",
-        params: { products: [{ en: "Soup" }] },
+        params: { products: [{ id: productId, name: { en: "Soup" }, available: false }] },
       });
+    });
+  });
+
+  it("lists the products using a unit, with each product's availability", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const unit = await createUnit(tx, tenantId, { name: { en: "portion" }, precision: 0 }, "en");
+      expect(await productsUsingUnit(tx, tenantId, unit.id)).toEqual([]);
+
+      const soup = await product(tx, tenantId, "Soup");
+      const tea = await product(tx, tenantId, "Tea");
+      await assignProductUnit(tx, tenantId, soup, unit.id);
+      await assignProductUnit(tx, tenantId, tea, unit.id);
+      await tx.execute(sql`
+        update products set active = false where tenant_id = ${tenantId} and id = ${tea}`);
+
+      const using = await productsUsingUnit(tx, tenantId, unit.id);
+      expect(using).toHaveLength(2);
+      expect(using).toEqual(
+        expect.arrayContaining([
+          { id: soup, name: { en: "Soup" }, available: true },
+          { id: tea, name: { en: "Tea" }, available: false },
+        ]),
+      );
     });
   });
 
@@ -69,6 +95,75 @@ describe("unit operations", () => {
       await expect(assignProductUnit(tx, other, productId, unit.id)).rejects.toMatchObject({
         code: "unit.not_found",
       });
+    });
+  });
+
+  it("reassigns products from one unit to another", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const from = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
+      const to = await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en");
+      const a = await product(tx, tenantId, "A");
+      const b = await product(tx, tenantId, "B");
+      await assignProductUnit(tx, tenantId, a, from.id);
+      await assignProductUnit(tx, tenantId, b, from.id);
+      expect(await productsUsingUnit(tx, tenantId, from.id)).toHaveLength(2);
+
+      await reassignProductsToUnit(tx, tenantId, from.id, [a, b], to.id);
+      expect(await productsUsingUnit(tx, tenantId, from.id)).toEqual([]);
+      expect((await productsUsingUnit(tx, tenantId, to.id)).map((p) => p.id).sort()).toEqual(
+        [a, b].sort(),
+      );
+    });
+  });
+
+  // The contract the single-statement reassignment settled on: an id the source unit does not
+  // currently hold is not an error, it is simply not matched.
+  it("skips an unknown or another tenant's product id instead of failing the reassignment", async () => {
+    const owner = await seedTenant(suite.db);
+    const other = await seedTenant(suite.db);
+    const [foreignProduct, foreignUnit] = await withTenant(suite.db, other, async (tx) => {
+      const unit = await createUnit(tx, other, { name: { en: "each" }, precision: 0 }, "en");
+      const productId = await product(tx, other, "Foreign");
+      await assignProductUnit(tx, other, productId, unit.id);
+      return [productId, unit] as const;
+    });
+    await withTenant(suite.db, owner, async (tx) => {
+      const from = await createUnit(tx, owner, { name: { en: "each" }, precision: 0 }, "en");
+      const to = await createUnit(tx, owner, { name: { en: "kg" }, precision: 3 }, "en");
+      const a = await product(tx, owner, "A");
+      await assignProductUnit(tx, owner, a, from.id);
+
+      await expect(
+        reassignProductsToUnit(
+          tx,
+          owner,
+          from.id,
+          [a, foreignProduct, "00000000-0000-4000-8000-0000000000aa"],
+          to.id,
+        ),
+      ).resolves.toBeUndefined();
+
+      // The valid id moved; neither unmatched id stopped it or was itself touched.
+      expect(await productsUsingUnit(tx, owner, from.id)).toEqual([]);
+      expect((await productsUsingUnit(tx, owner, to.id)).map((p) => p.id)).toEqual([a]);
+    });
+    await withTenant(suite.db, other, async (tx) => {
+      expect((await productsUsingUnit(tx, other, foreignUnit.id)).map((p) => p.id)).toEqual([
+        foreignProduct,
+      ]);
+    });
+  });
+
+  it("refuses to reassign to a unit that does not exist", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const from = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
+      const a = await product(tx, tenantId, "A");
+      await assignProductUnit(tx, tenantId, a, from.id);
+      await expect(
+        reassignProductsToUnit(tx, tenantId, from.id, [a], "00000000-0000-4000-8000-000000000000"),
+      ).rejects.toMatchObject({ code: "unit.not_found" });
     });
   });
 

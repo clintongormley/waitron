@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
@@ -15,6 +15,13 @@ export interface Unit {
   id: string;
   name: Record<string, string>;
   precision: number;
+}
+
+/** A product that assigns a given unit — the shape both the deletion refusal and the read return. */
+export interface ProductUsingUnit {
+  id: string;
+  name: Record<string, string>;
+  available: boolean;
 }
 
 export interface SellableUnit extends Unit {
@@ -151,6 +158,38 @@ export async function assignProductUnit(
     });
 }
 
+/** Move the listed products onto the target unit, in ONE statement scoped to the products still on
+ * `sourceUnitId`. Both halves matter: a product another manager has already moved elsewhere since
+ * the caller's list was read is left where it is rather than overwritten, and a single UPDATE takes
+ * its row locks in one scan instead of interleaving N separate statements' locks across a loop. The
+ * scan order is PostgreSQL's choice, not the caller's list order, which is what `units.pg.test.ts`
+ * runs two opposite-order reassignments against. An id that is not currently on `sourceUnitId` —
+ * an unknown id or another tenant's included — matches no row and is skipped, never an error. */
+export async function reassignProductsToUnit(
+  tx: Transaction,
+  tenantId: string,
+  sourceUnitId: string,
+  productIds: readonly string[],
+  targetUnitId: string,
+): Promise<void> {
+  const [target] = await tx
+    .select({ id: units.id })
+    .from(units)
+    .where(and(eq(units.tenantId, tenantId), eq(units.id, targetUnitId)))
+    .for("key share");
+  if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
+  await tx
+    .update(productUnits)
+    .set({ unitId: targetUnitId })
+    .where(
+      and(
+        eq(productUnits.tenantId, tenantId),
+        eq(productUnits.unitId, sourceUnitId),
+        inArray(productUnits.productId, productIds),
+      ),
+    );
+}
+
 export async function readProductUnitId(
   tx: Transaction,
   tenantId: string,
@@ -169,15 +208,15 @@ export async function readProductUnitId(
   return row.unitId;
 }
 
-export async function deleteUnit(tx: Transaction, tenantId: string, unitId: string): Promise<void> {
-  const [locked] = await tx
-    .select({ id: units.id })
-    .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
-    .for("update");
-  if (locked === undefined) throw new AppError("unit.not_found", { unitId });
-  const references = await tx
-    .select({ name: products.descriptions })
+/** The products that assign this unit, each with its availability, ordered stably by product id.
+ * Tenant-scoped on both tables (one tenant per database is not the query's isolation boundary). */
+export async function productsUsingUnit(
+  tx: Transaction,
+  tenantId: string,
+  unitId: string,
+): Promise<ProductUsingUnit[]> {
+  return tx
+    .select({ id: products.id, name: products.descriptions, available: products.active })
     .from(productUnits)
     .innerJoin(
       products,
@@ -185,8 +224,18 @@ export async function deleteUnit(tx: Transaction, tenantId: string, unitId: stri
     )
     .where(and(eq(productUnits.tenantId, tenantId), eq(productUnits.unitId, unitId)))
     .orderBy(asc(products.id));
+}
+
+export async function deleteUnit(tx: Transaction, tenantId: string, unitId: string): Promise<void> {
+  const [locked] = await tx
+    .select({ id: units.id })
+    .from(units)
+    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .for("update");
+  if (locked === undefined) throw new AppError("unit.not_found", { unitId });
+  const references = await productsUsingUnit(tx, tenantId, unitId);
   if (references.length > 0) {
-    throw new AppError("unit.in_use", { products: references.map(({ name }) => name) });
+    throw new AppError("unit.in_use", { products: references });
   }
   await tx.delete(units).where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
 }

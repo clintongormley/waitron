@@ -279,6 +279,9 @@ const overview = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-o
 const sales = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-sales-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
+const units = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-units-screen");
+const navUnits = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-units]");
 const receipt = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-receipt-screen");
 const statuses = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-service-status-screen");
@@ -822,6 +825,8 @@ describe("dashboard-app", () => {
     const bannerBox = banner.getBoundingClientRect();
     const trailingPadding = Number.parseFloat(getComputedStyle(banner).paddingRight);
     expect(trigger.getBoundingClientRect().right).toBeCloseTo(bannerBox.right - trailingPadding, 0);
+    // Anchored at the trailing edge, it must open inward (right edge under the trigger), not off-screen.
+    expect(trigger.getAttribute("align")).toBe("end");
   });
 
   it("puts the full-width banner above both the sidebar and page content", async () => {
@@ -1474,6 +1479,57 @@ describe("dashboard-app", () => {
 
   // The logged-in shell gains a nav between the staff and catalogue screens. It opens on overview (the
   // probe's landing, Task 9), and the nav switches the mounted screen — exactly one shows at a time.
+  it("opens a product's editor on the catalogue screen from the units in-use modal", async () => {
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navUnits(el)!.click();
+    await flush(el);
+    expect(units(el)).toBeTruthy();
+
+    units(el)!.dispatchEvent(
+      new CustomEvent("wt-edit-product", {
+        detail: { productId: "p1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(catalogue(el)).toBeTruthy();
+    expect(units(el)).toBeNull();
+    expect(location.pathname).toContain("/manage/catalogue/product/p1");
+  });
+
+  // The jump is an ordinary screen change, so it clears the previous screen's `view` segment the
+  // way every nav click does — otherwise a units URL reached by deep link carries its `view` into
+  // the catalogue URL, where it means something else entirely.
+  it("clears a stale view segment when opening a product's editor from the units modal", async () => {
+    history.replaceState(null, "", "/manage/units/view/detail");
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(units(el)).toBeTruthy();
+    // Without this the test passes even if the units URL never carries a `view` segment at all,
+    // which is the very thing the navigation is supposed to clear.
+    expect(location.pathname).toBe("/manage/units/view/detail");
+
+    units(el)!.dispatchEvent(
+      new CustomEvent("wt-edit-product", {
+        detail: { productId: "p1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(location.pathname).toBe("/manage/catalogue/product/p1");
+  });
+
   it("navigates between the staff and catalogue screens", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

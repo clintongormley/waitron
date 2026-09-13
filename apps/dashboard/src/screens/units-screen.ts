@@ -1,9 +1,9 @@
 import type { ContentLanguages } from "@waitron/shared";
-import { baseStyles, setContentLanguages } from "@waitron/ui";
+import { baseStyles, selectStyles, setContentLanguages } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { DashboardApi, Unit, UnitInput } from "../api/client.js";
+import type { DashboardApi, ProductUsingUnit, Unit, UnitInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage } from "../i18n/codes.js";
 import { localizedName } from "../i18n/localized.js";
@@ -11,17 +11,18 @@ import { t } from "../i18n/t.js";
 import "../widgets/unit-form.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
-import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 
-type UnitError = { code?: string; params?: { products?: Record<string, string>[] } };
+type UnitError = { code?: string; params?: { products?: ProductUsingUnit[] } };
 
 @customElement("dashboard-units-screen")
 export class UnitsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
@@ -46,8 +47,25 @@ export class UnitsScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      .references {
-        margin: var(--wt-space-2) 0 0;
+      .in-use-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+        align-items: end;
+        margin: var(--wt-space-3) 0;
+      }
+      .in-use-toolbar .in-use-search {
+        flex: 1;
+        min-width: 12rem;
+      }
+      .reassign {
+        display: flex;
+        gap: var(--wt-space-2);
+        align-items: center;
+      }
+      .reassign select {
+        width: auto;
+        min-width: 10rem;
       }
     `,
   ];
@@ -69,7 +87,13 @@ export class UnitsScreen extends LitElement {
   @state() private busy = false;
   @state() private error: UnitError | null = null;
   @state() private fieldErrors: { name?: string; precision?: string } = {};
-  @state() private deleteTarget: Unit | null = null;
+  /** The unit whose deletion is blocked, driving the in-use modal; null when the modal is closed. */
+  @state() private inUseUnitId: string | null = null;
+  @state() private inUseProducts: ProductUsingUnit[] = [];
+  @state() private inUseSearch = "";
+  /** The products ticked for a bulk unit change, and the unit to move them onto. */
+  @state() private selectedProducts: string[] = [];
+  @state() private reassignTarget = "";
   private focusTarget: HTMLElement | null = null;
 
   override connectedCallback(): void {
@@ -120,11 +144,6 @@ export class UnitsScreen extends LitElement {
     requestAnimationFrame(() => this.focusTarget?.focus());
   }
 
-  #closeDelete(): void {
-    this.deleteTarget = null;
-    requestAnimationFrame(() => this.focusTarget?.focus());
-  }
-
   async #save(event: CustomEvent<{ value: UnitInput }>): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
@@ -158,21 +177,126 @@ export class UnitsScreen extends LitElement {
     }
   }
 
-  async #delete(): Promise<void> {
-    if (!this.deleteTarget || this.busy) return;
-    const target = this.deleteTarget;
+  /** The row's Delete action, and the modal's own Delete, both run this: no confirmation step —
+   * a delete is attempted straight away. A refusal because products use it opens the in-use modal
+   * (or refreshes it, when the modal is the caller); any other error is an inline banner. */
+  async #deleteUnit(id: string): Promise<void> {
+    if (id === "" || this.busy) return;
     this.busy = true;
     this.error = null;
     try {
-      await this.api.deleteUnit(target.id);
-      this.units = this.units.filter((unit) => unit.id !== target.id);
-      this.#closeDelete();
+      await this.api.deleteUnit(id);
+      this.units = this.units.filter((unit) => unit.id !== id);
+      this.#closeInUse();
     } catch (error) {
-      this.error = error as UnitError;
-      this.#closeDelete();
+      const failure = error as UnitError;
+      if (failure.code === "unit.in_use") {
+        this.#openInUse(id, failure.params?.products ?? []);
+      } else {
+        this.error = failure;
+        this.#closeInUse();
+      }
     } finally {
       this.busy = false;
     }
+  }
+
+  #requestDelete(unit: Unit, event: Event): void {
+    event.stopPropagation();
+    const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
+    this.focusTarget = menu?.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? null;
+    void this.#deleteUnit(unit.id);
+  }
+
+  #openInUse(unitId: string, products: ProductUsingUnit[]): void {
+    this.inUseUnitId = unitId;
+    this.inUseProducts = products;
+    this.inUseSearch = "";
+    this.selectedProducts = [];
+    this.reassignTarget = "";
+  }
+
+  #closeInUse(): void {
+    this.inUseUnitId = null;
+    this.inUseProducts = [];
+    this.inUseSearch = "";
+    this.selectedProducts = [];
+    this.reassignTarget = "";
+    requestAnimationFrame(() => this.focusTarget?.focus());
+  }
+
+  #onSelectionChange(event: CustomEvent<{ selected: string[] }>): void {
+    event.stopPropagation();
+    this.selectedProducts = event.detail.selected;
+  }
+
+  /** Move the ticked products onto the chosen unit; they then drop out of the refreshed list. */
+  async #changeUnit(): Promise<void> {
+    if (
+      this.inUseUnitId === null ||
+      this.selectedProducts.length === 0 ||
+      this.reassignTarget === "" ||
+      this.busy
+    )
+      return;
+    this.busy = true;
+    this.error = null;
+    try {
+      this.inUseProducts = await this.api.reassignProductsUnit(
+        this.inUseUnitId,
+        this.selectedProducts,
+        this.reassignTarget,
+      );
+      this.selectedProducts = [];
+      this.reassignTarget = "";
+    } catch (error) {
+      this.error = error as UnitError;
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Jump to the product's editor on the catalogue screen. The person navigates back themselves;
+   * the modal reopens fresh the next time they attempt the delete. */
+  #editProduct(productId: string, event: Event): void {
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("wt-edit-product", {
+        detail: { productId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #productColumns(): DataTableColumn<ProductUsingUnit>[] {
+    return [
+      {
+        key: "name",
+        label: t("units.name"),
+        cell: (product) => localizedName(product.name),
+        sortValue: (product) => localizedName(product.name),
+      },
+      {
+        key: "availability",
+        label: t("units.availability"),
+        cell: (product) =>
+          product.available ? t("product.active_badge") : t("product.inactive_badge"),
+        sortValue: (product) => (product.available ? 1 : 0),
+      },
+      {
+        key: "actions",
+        label: t("units.actions"),
+        cell: (product) => html`
+          <wt-button
+            data-test=${`edit-product-${product.id}`}
+            variant="ghost"
+            @click=${(event: Event) => this.#editProduct(product.id, event)}
+            >${t("action.edit")}</wt-button
+          >
+        `,
+      },
+    ];
   }
 
   #columns(): DataTableColumn<Unit>[] {
@@ -203,13 +327,7 @@ export class UnitsScreen extends LitElement {
             <wt-button
               data-test=${`delete-${unit.id}`}
               variant="ghost"
-              @click=${(event: Event) => {
-                event.stopPropagation();
-                const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
-                this.focusTarget = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
-                this.deleteTarget = unit;
-                this.error = null;
-              }}
+              @click=${(event: Event) => this.#requestDelete(unit, event)}
               >${t("action.delete")}</wt-button
             >
           </wt-row-actions>
@@ -226,7 +344,16 @@ export class UnitsScreen extends LitElement {
         : this.units.filter((unit) =>
             Object.values(unit.name).some((name) => name.toLocaleLowerCase().includes(needle)),
           );
-    const references = this.error?.params?.products ?? [];
+    const productNeedle = this.inUseSearch.trim().toLocaleLowerCase();
+    const inUseRows =
+      productNeedle === ""
+        ? this.inUseProducts
+        : this.inUseProducts.filter((product) =>
+            Object.values(product.name).some((name) =>
+              name.toLocaleLowerCase().includes(productNeedle),
+            ),
+          );
+    const otherUnits = this.units.filter((unit) => unit.id !== this.inUseUnitId);
     return html`
       <h1>${t("units.title")}</h1>
       <p class="description">${t("units.description")}</p>
@@ -249,18 +376,9 @@ export class UnitsScreen extends LitElement {
         this.error
           ? html`<div class="error" role="alert">
               ${
-                this.error.code === "unit.in_use"
-                  ? codeMessage("unit.in_use")
-                  : this.editorOpen && this.error.code
-                    ? codeMessage(this.error.code)
-                    : t("units.load_error")
-              }
-              ${
-                references.length
-                  ? html`<ul class="references">
-                      ${references.map((name) => html`<li>${localizedName(name)}</li>`)}
-                    </ul>`
-                  : nothing
+                // A failure carrying a domain code states itself; only a codeless failure (a
+                // network drop during the initial load) falls back to the load message.
+                this.error.code ? codeMessage(this.error.code) : t("units.load_error")
               }
             </div>`
           : nothing
@@ -285,29 +403,89 @@ export class UnitsScreen extends LitElement {
           this.#closeEditor();
         }}
       ></dashboard-unit-form>
-      <wt-dialog
-        .open=${this.deleteTarget !== null}
-        heading=${t("units.delete_title")}
-        @wt-close=${this.#closeDelete}
+      <wt-modal
+        data-test="in-use-dialog"
+        .open=${this.inUseUnitId !== null}
+        heading=${this.inUseProducts.length === 0 ? t("units.delete_unit") : t("units.in_use_title")}
+        @wt-close=${this.#closeInUse}
       >
-        <p>${t("units.delete_body")}</p>
+        <p>${this.inUseProducts.length === 0 ? t("units.in_use_empty") : t("units.in_use_body")}</p>
+        ${
+          this.inUseProducts.length > 0
+            ? html`
+                <div class="in-use-toolbar">
+                  <wt-input
+                    class="in-use-search"
+                    data-test="in-use-search"
+                    name="in-use-search"
+                    label=${t("units.in_use_search")}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      this.inUseSearch = event.detail.value;
+                    }}
+                  ></wt-input>
+                  <div class="reassign">
+                    <select
+                      data-test="reassign-unit"
+                      name="reassign-unit"
+                      aria-label=${t("units.change_unit")}
+                      .value=${this.reassignTarget}
+                      @change=${(event: Event) => {
+                        event.stopPropagation();
+                        this.reassignTarget = (event.target as HTMLSelectElement).value;
+                      }}
+                    >
+                      <option value="">${t("units.change_unit_placeholder")}</option>
+                      ${otherUnits.map(
+                        (unit) =>
+                          html`<option value=${unit.id}>${localizedName(unit.name)}</option>`,
+                      )}
+                    </select>
+                    <wt-button
+                      data-test="change-unit"
+                      variant="secondary"
+                      ?disabled=${
+                        this.selectedProducts.length === 0 ||
+                        this.reassignTarget === "" ||
+                        this.busy
+                      }
+                      @click=${() => void this.#changeUnit()}
+                      >${t("units.change_unit")}</wt-button
+                    >
+                  </div>
+                </div>
+                <wt-data-table
+                  aria-label=${t("units.in_use_title")}
+                  .rows=${inUseRows}
+                  .columns=${this.#productColumns()}
+                  .rowKey=${(product: ProductUsingUnit) => product.id}
+                  .selectable=${true}
+                  .selected=${this.selectedProducts}
+                  .selectionLabel=${(product: ProductUsingUnit) =>
+                    `${t("units.select_product")}: ${localizedName(product.name)}`}
+                  selectAllLabel=${t("units.select_all")}
+                  @wt-selection-change=${this.#onSelectionChange}
+                ></wt-data-table>
+              `
+            : nothing
+        }
         <wt-form-actions slot="footer">
           <wt-button
             slot="cancel"
-            data-test="cancel-delete"
+            data-test="cancel-in-use"
             variant="secondary"
-            @click=${this.#closeDelete}
+            @click=${this.#closeInUse}
             >${t("action.cancel")}</wt-button
           >
           <wt-button
-            data-test="confirm-delete"
+            data-test="delete-unit"
             variant="danger"
             ?disabled=${this.busy}
-            @click=${() => void this.#delete()}
+            @click=${() => void this.#deleteUnit(this.inUseUnitId ?? "")}
             >${t("action.delete")}</wt-button
           >
         </wt-form-actions>
-      </wt-dialog>
+      </wt-modal>
     `;
   }
 }

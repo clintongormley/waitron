@@ -21,7 +21,15 @@ function api(): DashboardApi {
     getContentLanguages,
     createUnit: vi.fn(),
     updateUnit: vi.fn(),
-    deleteUnit: vi.fn(),
+    deleteUnit: vi.fn().mockRejectedValue({
+      code: "unit.in_use",
+      params: {
+        products: [
+          { id: "p1", name: { es: "Café", en: "Coffee" }, available: true },
+          { id: "p2", name: { es: "Té", en: "Tea" }, available: false },
+        ],
+      },
+    }),
   } as unknown as DashboardApi;
 }
 
@@ -38,6 +46,23 @@ describe.each(["light", "dark"] as const)("units-screen a11y (%s theme)", (theme
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
     await el.shadowRoot!.querySelector("dashboard-unit-form")!.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the in-use modal accessibly", async () => {
+    const { el, host } = await mountWidget<UnitsScreen>(
+      "dashboard-units-screen",
+      { api: api() },
+      theme,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    // Deleting an in-use unit is refused and opens the modal.
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

@@ -1,0 +1,2 @@
+ALTER TABLE "product_units" DROP CONSTRAINT "product_units_product_key";--> statement-breakpoint
+ALTER TABLE "product_units" ADD CONSTRAINT "product_units_tenant_id_product_id_pk" PRIMARY KEY("tenant_id","product_id");

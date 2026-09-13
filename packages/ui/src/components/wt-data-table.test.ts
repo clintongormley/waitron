@@ -104,3 +104,63 @@ test("keeps the table in a horizontally scrollable region", async () => {
   expect(getComputedStyle(region).overflowX).toBe("auto");
   expect(region.tabIndex).toBe(0);
 });
+
+test("shows no selection checkboxes unless selectable", async () => {
+  const el = await table();
+  expect(el.shadowRoot!.querySelector("[data-test=select-all]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("input[type=checkbox]")).toBeNull();
+});
+
+test("renders a checkbox per row and a select-all header when selectable", async () => {
+  const el = await table({ selectable: true });
+  expect(el.shadowRoot!.querySelector("[data-test=select-all]")).toBeTruthy();
+  expect(el.shadowRoot!.querySelectorAll("tbody input[type=checkbox]").length).toBe(2);
+});
+
+test("reflects the selected keys and adds a row on toggle", async () => {
+  const el = await table({ selectable: true, selected: ["a"] });
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-a]")!.checked).toBe(
+    true,
+  );
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-b]")!.checked).toBe(
+    false,
+  );
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent<{ selected: string[] }>).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-b]")!.click();
+  expect(seen.at(-1)).toEqual(["a", "b"]);
+});
+
+test("removes a row from the selection on toggle", async () => {
+  const el = await table({ selectable: true, selected: ["a", "b"] });
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent<{ selected: string[] }>).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-a]")!.click();
+  expect(seen.at(-1)).toEqual(["b"]);
+});
+
+test("select-all selects every visible row, then clears them", async () => {
+  const el = await table({ selectable: true, selected: [] });
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent<{ selected: string[] }>).detail.selected),
+  );
+  const all = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+  all.click();
+  expect([...seen.at(-1)!].sort()).toEqual(["a", "b"]);
+  el.selected = ["a", "b"];
+  await el.updateComplete;
+  all.click();
+  expect(seen.at(-1)).toEqual([]);
+});
+
+test("select-all is indeterminate when only some rows are selected", async () => {
+  const el = await table({ selectable: true, selected: ["a"] });
+  const all = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+  expect(all.indeterminate).toBe(true);
+  expect(all.checked).toBe(false);
+});

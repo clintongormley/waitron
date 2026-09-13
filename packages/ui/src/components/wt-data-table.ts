@@ -91,6 +91,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
         text-align: center;
       }
 
+      th.select,
+      td.select {
+        width: var(--wt-tap-min);
+        text-align: center;
+      }
+
+      .select input {
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
+        cursor: pointer;
+        accent-color: var(--wt-color-primary);
+      }
+
       .message {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -111,9 +124,44 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() emptyMessage = "No results";
   @property() errorMessage = "";
   @property({ attribute: "aria-label" }) override ariaLabel = "";
+  /** When set, a leading column of checkboxes (plus a select-all header box) lets the caller pick
+   * rows. Selection is controlled: the caller passes `selected` and updates it on wt-selection-change. */
+  @property({ type: Boolean }) selectable = false;
+  @property({ attribute: false }) selected: readonly string[] = [];
+  /** Accessible name for each row's checkbox; defaults to a generic label when not supplied. */
+  @property({ attribute: false }) selectionLabel: (row: Row) => string = () => "Select row";
+  @property() selectAllLabel = "Select all";
 
   @state() private sortKey: string | null = null;
   @state() private sortDirection: SortDirection = "ascending";
+
+  #emitSelection(next: string[]): void {
+    this.dispatchEvent(
+      new CustomEvent("wt-selection-change", {
+        detail: { selected: next },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #toggleRow(key: string): void {
+    this.#emitSelection(
+      this.selected.includes(key)
+        ? this.selected.filter((each) => each !== key)
+        : [...this.selected, key],
+    );
+  }
+
+  #toggleAll(visibleKeys: string[]): void {
+    const allSelected =
+      visibleKeys.length > 0 && visibleKeys.every((key) => this.selected.includes(key));
+    this.#emitSelection(
+      allSelected
+        ? this.selected.filter((key) => !visibleKeys.includes(key))
+        : [...this.selected, ...visibleKeys.filter((key) => !this.selected.includes(key))],
+    );
+  }
 
   #sort(column: DataTableColumn<Row>): void {
     if (column.sortValue === undefined) return;
@@ -157,11 +205,33 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return html`<p class="message" role="status">${this.emptyMessage}</p>`;
 
     const label = this.ariaLabel || undefined;
+    const sorted = this.#sortedRows();
+    const visibleKeys = sorted.map((row, index) => this.rowKey(row, index));
+    const allSelected =
+      visibleKeys.length > 0 && visibleKeys.every((key) => this.selected.includes(key));
+    const someSelected = visibleKeys.some((key) => this.selected.includes(key));
     return html`
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table>
           <thead>
             <tr>
+              ${
+                this.selectable
+                  ? html`<th scope="col" class="select">
+                      <input
+                        type="checkbox"
+                        data-test="select-all"
+                        aria-label=${this.selectAllLabel}
+                        .checked=${allSelected}
+                        .indeterminate=${someSelected && !allSelected}
+                        @change=${(event: Event) => {
+                          event.stopPropagation();
+                          this.#toggleAll(visibleKeys);
+                        }}
+                      />
+                    </th>`
+                  : nothing
+              }
               ${this.columns.map(
                 (column) => html`
                   <th
@@ -200,17 +270,34 @@ export class WtDataTable<Row = unknown> extends LitElement {
             </tr>
           </thead>
           <tbody>
-            ${this.#sortedRows().map(
-              (row, index) => html`
-                <tr data-row-key=${this.rowKey(row, index)}>
+            ${sorted.map((row, index) => {
+              const key = this.rowKey(row, index);
+              return html`
+                <tr data-row-key=${key}>
+                  ${
+                    this.selectable
+                      ? html`<td class="select">
+                          <input
+                            type="checkbox"
+                            data-test=${`select-${key}`}
+                            aria-label=${this.selectionLabel(row)}
+                            .checked=${this.selected.includes(key)}
+                            @change=${(event: Event) => {
+                              event.stopPropagation();
+                              this.#toggleRow(key);
+                            }}
+                          />
+                        </td>`
+                      : nothing
+                  }
                   ${this.columns.map(
                     (column) => html`
                       <td data-align=${column.align ?? "start"}>${column.cell(row)}</td>
                     `,
                   )}
                 </tr>
-              `,
-            )}
+              `;
+            })}
           </tbody>
         </table>
       </div>

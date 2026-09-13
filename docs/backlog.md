@@ -407,6 +407,13 @@ What it left open:
   The consequence is that a unit you invent yourself, and the volume units, can never be filled in by
   weighing — the quantity is typed. That is the intended design, not an oversight, but it is the kind
   of boundary somebody will otherwise rediscover by trying it.
+- **Deleting a unit no longer asks first, and a blocked delete now offers a way out.** Delete attempts
+  the delete straight away; when products still use the unit, a searchable modal lists them, lets them
+  be ticked and moved onto another unit in one go, and deletes the unit once none are left
+  (`apps/dashboard/src/screens/units-screen.ts`). That work also found the table recording a product's
+  unit had only a unique constraint, so Postgres refused the reassignment's UPDATE on a published
+  table with `55000` — `packages/catalogue/drizzle/0010_product_units_primary_key.sql` gives it a
+  primary key. The design doc's older deletion paragraph is marked superseded rather than rewritten.
 - **Its migrations cannot run over a populated development database, and nothing here said so.**
   `packages/venue-service/drizzle/0005_unit_snapshots.sql` and `0006_unit_snapshot_identity.sql` add
   three `NOT NULL` columns to `working_line_contexts` with no default — the same shape as
@@ -1007,6 +1014,33 @@ image constraints under *Detail → Box image*.
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
+- **A fifth, with a real hypothesis this time: `test-dashboard`'s browser a11y suite fails on a stray
+  `:hover` state left over from a prior test in the same shared browser page.** Seen three times the
+  same day (2026-09-13), on two unrelated PRs, in code neither branch touched: `products-editor`'s CI
+  run failed `dashboard-app.a11y.test.ts`'s recipe-screen heading-order case (job 103718734296); this
+  branch's PR #350 failed `floor-screen.a11y.test.ts`'s "renders accessibly with empty lists" on a
+  color-contrast check TWICE in a row across two separate pushes (jobs 103778327703 and
+  103778897882), always the same element (`wt-button[data-add-zone=""]`), always the same colors
+  (foreground `#fefefe`, background `#3f83ed`, ratio 3.66 against a 4.5 minimum) — and passed cleanly,
+  8/8, run locally against the identical commit both times. `#3f83ed` is not a real design token
+  (`--wt-color-primary` is `#1f6feb`); blending `#1f6feb` toward white at `--wt-opacity-hover: 0.85`
+  (`packages/ui/src/components/wt-button.ts`'s `:hover` rule) lands almost exactly on `#3f83ed`. That
+  matches axe capturing the button mid-hover rather than at rest — most likely a leftover pointer
+  position from an earlier test in the same file, in a browser-mode suite that reuses one page across
+  tests in a file. **Confirmed and fixed the same day, on this branch.** The colour is exact, not
+  approximate: `#1f6feb` at opacity `0.85` over the light `--wt-color-bg` `#f7f7f8` is `#3f83ed` on
+  every channel, and `#ffffff` composited the same way is `#fefefe`. The failure was reproduced
+  locally by running a file that hovers a `wt-button` immediately before the untouched
+  `floor-screen.a11y.test.ts` in one worker — the same one test of the eight failed, with the same
+  element and the same two colours. The cursor turned out to belong to the shared PAGE, so it outlives
+  the file that moved it, not just the test. `apps/dashboard/src/widgets/test-helpers.ts` now parks the
+  cursor off-page before every test, via a `parkPointer` browser command in
+  `apps/dashboard/vitest.config.ts`; guard `apps/dashboard/src/widgets/pointer-reset.test.ts`, receipt
+  in [testing-guide.md](developers/testing-guide.md). **Two pieces are still open.** The
+  `dashboard-app.a11y.test.ts` heading-order sighting is a different rule with no colour evidence, so
+  nothing here explains it — treat it as still unexplained. And `packages/ui` and `apps/till` have the
+  same harness with no reset, with `packages/ui/src/components/wt-button.test.ts` ending a test
+  hovering a button, so the same flake is waiting there.
 - **Comments across the tree still say PGlite cannot check a database permission** — the belief
   CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
   session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column

@@ -29,4 +29,26 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  test("selectable rows with a select-all and per-row checkboxes", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+      { key: "status", label: "Status", cell: (row) => row.status },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = [
+      { id: "1", name: "Ada", status: "Active" },
+      { id: "2", name: "Bea", status: "Inactive" },
+    ];
+    el.rowKey = (row) => row.id;
+    el.selectable = true;
+    el.selected = ["1"];
+    el.selectionLabel = (row) => `Select ${row.name}`;
+    el.selectAllLabel = "Select all products";
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });

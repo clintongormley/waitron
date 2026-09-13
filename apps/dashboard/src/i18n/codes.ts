@@ -78,8 +78,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se ha encontrado esa unidad.",
   },
   "unit.in_use": {
-    en: "Change the listed products before deleting this unit.",
-    es: "Cambia los productos indicados antes de eliminar esta unidad.",
+    en: "That unit can't be deleted because products are still using it.",
+    es: "Esa unidad no se puede eliminar porque todavía la usan algunos productos.",
   },
   "management_session.required": {
     en: "Please log in to continue",

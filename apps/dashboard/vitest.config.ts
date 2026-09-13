@@ -6,6 +6,7 @@ type ColorScheme = "light" | "dark" | null;
 interface PlaywrightPage {
   emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
   setViewportSize(size: { width: number; height: number }): Promise<void>;
+  mouse: { move(x: number, y: number): Promise<void> };
 }
 
 /**
@@ -38,6 +39,25 @@ const setViewportSize: BrowserCommand<[width: number, height: number]> = async (
   await page.setViewportSize({ width, height });
 };
 
+/**
+ * Moves the real mouse cursor off every element, so nothing is left matching CSS `:hover`.
+ *
+ * The cursor position belongs to the PAGE, and every test file in a worker shares one page — so a
+ * `userEvent` click or hover parks the cursor at those coordinates for every later test, in this
+ * file and in every file that runs after it. Whatever then renders under those coordinates is
+ * `:hover`ed with no test having asked for it, and `wt-button`'s hover rule dims it to
+ * `--wt-opacity-hover`, which axe scores as a colour-contrast violation.
+ *
+ * `userEvent.unhover()` cannot do this: @vitest/browser implements it as a hover of `html > body`,
+ * which parks the cursor in the MIDDLE of the page, on top of whatever is mounted there. Negative
+ * coordinates are outside the viewport, so no element can be under them. Same narrow cast at the
+ * boundary as the two commands above.
+ */
+const parkPointer: BrowserCommand<[]> = async (context) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  await page.mouse.move(-1, -1);
+};
+
 export default defineConfig({
   // axe-core is imported only by the a11y suites (via src/widgets/test-helpers.ts), so Vite
   // discovers it mid-run and re-optimises — which reloads the in-flight test file and prints a
@@ -60,6 +80,7 @@ export default defineConfig({
       commands: {
         emulateColorScheme,
         setViewportSize,
+        parkPointer,
       },
     },
     coverage: {

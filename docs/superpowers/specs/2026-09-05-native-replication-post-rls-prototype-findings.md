@@ -62,6 +62,12 @@ Every one of the 82 tables has a primary key (the query for tables with `relrepl
 primary index returned nothing), so replica identity needs no per-table work. Three sequences exist:
 `time_entries_ingest_seq_seq`, `sync_log_seq_seq`, `sync_config_conflicts_id_seq` (see finding 5).
 
+**2026-09-13 update:** "no per-table work" held for the 82 tables surveyed here, but not for tables
+added since. `product_units` arrived with only a UNIQUE constraint on `(tenant_id, product_id)` and no
+primary key, so once published it refused UPDATEs with `55000` — fixed by
+`packages/catalogue/drizzle/0010_product_units_primary_key.sql`, which promotes that pair to the
+table's primary key. Every new table still needs the check this survey ran once.
+
 Seeded on A as the owner: tenant → location → node → till → series → `registro_sif` +
 `contadores_instalacion` → sale → `cadenas`. Registro 1 was inserted as `waitron_app` after
 `set_config('app.tenant_id', …)`, the way the app writes: `1 registros; chain head seq 1; sync_log

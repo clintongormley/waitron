@@ -6,6 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   unique,
   uuid,
@@ -60,7 +61,9 @@ export const productUnits = pgTable(
     unitId: uuid("unit_id").notNull(),
   },
   (t) => [
-    unique("product_units_product_key").on(t.tenantId, t.productId),
+    // A PRIMARY KEY, not a bare UNIQUE: this table publishes for replication, and Postgres refuses to
+    // UPDATE (the upsert that changes a product's unit) a published table with no replica identity.
+    primaryKey({ columns: [t.tenantId, t.productId] }),
     foreignKey({
       columns: [t.tenantId, t.productId],
       foreignColumns: [products.tenantId, products.id],
