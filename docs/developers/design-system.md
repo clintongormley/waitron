@@ -150,6 +150,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with); default slot of action buttons | native events from actions |
 | `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel` | `wt-selection-change` — `detail: { selected: string[] }`; native events from consumer-provided cells |
+| `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 
 `wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
 action in progress: it disables the button, sets `aria-busy`, and leads the label with a decorative

@@ -68,13 +68,20 @@ false, regardless of search text.
 
 Follows the ARIA combobox pattern rather than inventing one:
 
-- The always-visible trigger is `role="combobox"`, with `aria-expanded`, `aria-controls` (pointing
-  at the panel's listbox id) and `aria-activedescendant` (pointing at the currently active option,
-  for arrow-key navigation without moving real DOM focus off the search input).
+- The always-visible trigger is a plain `<button>` carrying `aria-haspopup="listbox"` and
+  `aria-expanded`: it says a listbox will open, and whether it is open right now.
+- The combobox role itself lives on the search `<input>` inside the open panel, which carries
+  `role="combobox"`, `aria-expanded`, `aria-controls` (pointing at the panel's listbox id) and
+  `aria-activedescendant` (pointing at the currently active option). That is where keyboard focus
+  stays while the panel is open, and the ARIA combobox pattern wants the `aria-controls` and
+  `aria-activedescendant` wiring on the focused element — so arrow keys move the active option
+  without moving real DOM focus off the search box.
 - The floating panel is `role="listbox"`, with `aria-multiselectable="true"` when `multiple`. Each
-  row is `role="option"` with `aria-selected` reflecting its selection state; the visible checkbox
-  in multi-select mode is presentational (`aria-hidden`) since `aria-selected` on the option already
-  carries that state to assistive tech.
+  row is `role="option"` with `aria-selected` reflecting its selection state; the visible selection
+  indicator in multi-select mode is a decorative `<span>`, not a real checkbox, and is
+  `aria-hidden` since `aria-selected` on the option already carries that state to assistive tech.
+  (An `<input type="checkbox">` inside `role="option"` is an axe `nested-interactive` violation —
+  found by the real axe run in `packages/ui/src/components/wt-combobox.a11y.test.ts`.)
 - Keyboard: ArrowUp/ArrowDown move the active option, Enter selects/toggles it, Escape closes the
   panel and returns focus to the trigger, typing filters the list and resets the active option to
   the first match.
