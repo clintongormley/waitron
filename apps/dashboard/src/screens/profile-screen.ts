@@ -7,6 +7,7 @@ import {
 } from "@simplewebauthn/browser";
 import { toDataURL } from "qrcode";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-tabs.js";
@@ -359,8 +360,27 @@ export class ProfileScreen extends LitElement {
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        this.fields = { ...this.fields, [field]: event.detail.value };
+        const prev = this.fields;
+        const value = event.detail.value;
+        this.fields = { ...this.fields, [field]: value };
         this.errors = { ...this.errors, [field]: "" };
+        // Editing a first/last name re-derives the display name unless the person has customised it
+        // (deriveDisplayName decides that from the previous values), so the details form auto-fills
+        // the same way the setup wizard and the new-staff form do.
+        if (field === "firstNames" || field === "lastNames") {
+          const nextFirst = field === "firstNames" ? value : prev.firstNames;
+          const nextLast = field === "lastNames" ? value : prev.lastNames;
+          this.fields = {
+            ...this.fields,
+            displayName: deriveDisplayName(
+              prev.displayName,
+              prev.firstNames,
+              prev.lastNames,
+              nextFirst,
+              nextLast,
+            ),
+          };
+        }
       }}
     >
       ${
@@ -389,12 +409,16 @@ export class ProfileScreen extends LitElement {
   #detailsErrors(): Partial<Record<Field, string>> {
     const f = this.fields;
     const errors: Partial<Record<Field, string>> = {};
-    if (!f.displayName.trim()) errors.displayName = t("form.name_required");
+    if (!f.displayName.trim()) errors.displayName = t("form.display_name_required");
     if (!f.firstNames.trim()) errors.firstNames = t("form.first_names_required");
     if (!f.lastNames.trim()) errors.lastNames = t("form.last_names_required");
     if (!f.email.trim()) errors.email = t("form.email_required");
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
       errors.email = codeMessage("person.email_invalid");
+    // Telephone is optional (see the false-on-empty note on isValidTelephone) — only a non-blank
+    // number is format-checked, using the same shared check the server write path applies.
+    const tel = f.telephone.trim();
+    if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
     return errors;
   }
 
@@ -491,7 +515,22 @@ export class ProfileScreen extends LitElement {
       await this.#load();
       this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
     } catch (error) {
-      const code = codeOf(error);
+      // A passkey ceremony fails through @simplewebauthn/browser's WebAuthnError, whose `.code` is a
+      // library constant (e.g. ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED), not a wire code — so the
+      // codeOf path below would degrade every one of them to the generic banner. Read `.name` first.
+      if (this.mode === "passkey" && error instanceof Error) {
+        // A cancelled or aborted prompt is not a failure: leave the modal open, show nothing (the
+        // finally clears busy). Matches login-screen.ts's cancelled-ceremony handling.
+        if (error.name === "NotAllowedError" || error.name === "AbortError") return;
+        if (error.name === "InvalidStateError") {
+          this.error = codeMessage("passkey.already_registered");
+          return;
+        }
+      }
+      // For any other passkey failure fall back to a passkey-specific message rather than
+      // server.internal; server wire codes (password.invalid, totp.invalid, …) still resolve and map.
+      const code =
+        this.mode === "passkey" ? codeOf(error, "passkey.verification_failed") : codeOf(error);
       this.error = codeMessage(code);
       const field =
         code === "password.invalid"
@@ -581,7 +620,7 @@ export class ProfileScreen extends LitElement {
       >
         <div slot="details">
           <div class="row">
-            <span class="field-label">${t("profile.name")}</span>
+            <span class="field-label">${t("person.display_name")}</span>
             <span class="field-value">${p.displayName}</span>
           </div>
           <div class="row">
@@ -787,7 +826,7 @@ export class ProfileScreen extends LitElement {
     return html`
       ${
         this.mode === "details"
-          ? html`${this.#input("firstNames", "person.first_names", "text", "given-name")}${this.#input("lastNames", "person.last_names", "text", "family-name")}${this.#input("displayName", "profile.name", "text", "nickname")}${this.#input("email", "login.email", "email", "email")}${this.#input("telephone", "person.telephone", "text", "tel", false)}
+          ? html`${this.#input("firstNames", "person.first_names", "text", "given-name")}${this.#input("lastNames", "person.last_names", "text", "family-name")}${this.#input("displayName", "person.display_name", "text", "nickname")}${this.#input("email", "login.email", "email", "email")}${this.#input("telephone", "person.telephone", "text", "tel", false)}
               <label
                 >${t("profile.language")} *<select
                   name="locale"

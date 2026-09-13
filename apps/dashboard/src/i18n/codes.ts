@@ -129,6 +129,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Passkey added",
     es: "Passkey añadida",
   },
+  "passkey.already_registered": {
+    en: "This device already holds a passkey for your account. Remove it first, or add a passkey from a different device or password manager.",
+    es: "Este dispositivo ya tiene una passkey para tu cuenta. Elimínala primero o añade una passkey desde otro dispositivo o gestor de contraseñas.",
+  },
   "google.invalid": {
     en: "Google could not complete the login. Try again or use another login method.",
     es: "Google no pudo completar el inicio de sesión. Inténtalo de nuevo o usa otro método.",
@@ -175,6 +179,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "person.email_taken": {
     en: "That email is already in use",
     es: "Ese correo ya está en uso",
+  },
+  "person.telephone_invalid": {
+    en: "Enter a valid telephone number, or leave it blank.",
+    es: "Introduce un número de teléfono válido o déjalo en blanco.",
   },
   "person.display_name_taken": {
     en: "That display name is already in use. Add a surname or nickname.",

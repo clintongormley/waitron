@@ -461,6 +461,110 @@ describe("your profile", () => {
     await click(el, "save");
     expect(api.unlinkGoogle).toHaveBeenCalledWith({ currentPassword: "current", totp: "123456" });
   });
+
+  it("labels the field 'Display name' and requires it under its own message", async () => {
+    const { el } = await mount();
+    // Read-only view: the first detail row is the display name.
+    const label = el.shadowRoot!.querySelector(".field-label")!;
+    expect(label.textContent).toBe(t("person.display_name"));
+    await editDetails(el);
+    const displayName = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
+      "wt-input[name=displayName]",
+    )!;
+    expect(displayName.label).toBe(t("person.display_name"));
+    input(el, "displayName", "");
+    await click(el, "save");
+    expect(displayName.error).toBe(t("form.display_name_required"));
+  });
+
+  it("regenerates the display name from first and last names until it is customised", async () => {
+    const { el } = await mount({
+      getProfile: vi.fn().mockResolvedValue({
+        displayName: "Ada Lovelace",
+        firstNames: "Ada",
+        lastNames: "Lovelace",
+        telephone: null,
+        email: "ada@example.com",
+        pendingEmail: null,
+        locale: "en-GB",
+        hasPassword: true,
+        hasTotp: false,
+        hasGoogle: false,
+        passkeys: [],
+      }),
+    });
+    await editDetails(el);
+    const displayName = () =>
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=displayName]")!
+        .value;
+    // A first-name change while the display name still equals the generated one regenerates it.
+    input(el, "firstNames", "Grace");
+    await flush(el);
+    expect(displayName()).toBe("Grace Lovelace");
+    // Customising the display name pins it: a later last-name change leaves it alone.
+    input(el, "displayName", "Nick");
+    await flush(el);
+    input(el, "lastNames", "Hopper");
+    await flush(el);
+    expect(displayName()).toBe("Nick");
+    // Clearing it makes the next name change regenerate again.
+    input(el, "displayName", "");
+    await flush(el);
+    input(el, "lastNames", "Byron");
+    await flush(el);
+    expect(displayName()).toBe("Grace Byron");
+  });
+
+  it("blocks a malformed telephone client-side and marks the field without calling the API", async () => {
+    const { el, api } = await mount();
+    await editDetails(el);
+    input(el, "telephone", "12345"); // only five digits — too short to be valid
+    await click(el, "save");
+    expect(api.saveProfile).not.toHaveBeenCalled();
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=telephone]")!
+        .error,
+    ).toBe(codeMessage("person.telephone_invalid"));
+  });
+
+  it("shows the already-registered message when the device holds a passkey, without verifying", async () => {
+    const { el, api } = await mount();
+    vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
+      new DOMException("already registered", "InvalidStateError"),
+    );
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toContain(
+      codeMessage("passkey.already_registered"),
+    );
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  });
+
+  it("stays quiet and keeps the modal open when the passkey prompt is cancelled", async () => {
+    const { el } = await mount();
+    vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
+      new DOMException("cancelled", "NotAllowedError"),
+    );
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toEqual([]);
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  });
+
+  it("still surfaces a specific server verify failure for a passkey", async () => {
+    const { el } = await mount({
+      passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+    });
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toContain(
+      codeMessage("passkey.challenge_expired"),
+    );
+  });
 });
 
 it("refreshes displayed profile data after an external change", async () => {
