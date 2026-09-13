@@ -22,12 +22,12 @@ Content-Type: application/json
 {
   "type": "yes-no",
   "name": { "en": "Cutlery" },
-  "yesLabel": { "en": "With cutlery" },
-  "noLabel": { "en": "Without cutlery" }
+  "defaultValue": true
 }
 ```
 
-The response includes the new UUID and normalized defaults:
+A yes-no modifier carries no label fields: its own name is what the till shows. The response
+includes the new UUID and normalized defaults:
 
 ```json
 {
@@ -35,10 +35,8 @@ The response includes the new UUID and normalized defaults:
     "id": "11111111-1111-4111-8111-111111111111",
     "type": "yes-no",
     "name": { "en": "Cutlery" },
-    "yesLabel": { "en": "With cutlery" },
-    "noLabel": { "en": "Without cutlery" },
     "available": true,
-    "defaultValue": false
+    "defaultValue": true
   }
 }
 ```
@@ -52,8 +50,10 @@ the combined catalogue screen, which the Products integration removes. They addr
 `dashboard-modifier-form` in `apps/dashboard/src/widgets/modifier-form.ts` accepts `open`, `busy`,
 `locales: string[]`, `value: Modifier | null` and `fieldErrors: Record<string, string>`. It emits
 `wt-submit` with `{ value: ModifierInput }` and `wt-cancel` with `{}`. The screen owns the API call
-and closes the editor after a successful write. Server choice-index errors map to stable choice IDs
-before reordering. The screen's reads use the existing option-group, item and content-language live
+and closes the editor after a successful write. A choice-level validation error — the form's own
+check, or a `choices.<index>.<field>` rejection from the server — is shown as one message under the
+choices table naming the choice by its current label, so a rejection never lands on a field the
+manager cannot see. The screen's reads use the existing option-group, item and content-language live
 sources.
 
 Products can compose this form directly and select the saved definition. The optional choice
