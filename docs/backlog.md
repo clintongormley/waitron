@@ -278,8 +278,10 @@ other memberships and any parent categories add no destinations and no routes. C
 own dashboard page at `/manage/categories`, where you can translate a category's name, give it a
 picture from the shared library, put it under a parent (not itself and not one of its own
 descendants), and see the products assigned directly to it — a child's products do not count towards
-its parent. Deleting a category is refused while children, products or preparation routes still point
-at it, and the refusal tells you how many of each. Labels already written onto past orders stay
+its parent. Deleting a category is confirmed and then goes ahead rather than refused: the confirmation
+first lists what will change — the products losing that membership (and any that lose their
+reporting category with it), the child categories moving up to the deleted category's own parent,
+and the kitchen preparation routes being dropped. Labels already written onto past orders stay
 readable and never block a deletion. Under the hood the single stored category name became translated
 JSON in the existing core row, and the new hierarchy, picture and membership tables belong to the
 catalogue module. [Design](superpowers/specs/2026-09-12-product-categories-design.md),
@@ -318,6 +320,12 @@ What it left open:
 - **Routing from category memberships is still not designed** — that item is unchanged and sits under
   A9 below. This merge kept the existing single-route behaviour on purpose; choosing the primary
   category as the reporting label does not decide anything about the later routing design.
+- **A category's colour is stored but shown nowhere outside the categories screen.** Nothing on the
+  till, in menus or in reports reads it yet. The colour is data a future consumer can follow; nobody
+  has decided whether or how one should.
+- **No "category dependants" seat exists on the module contract.** The delete-preview route
+  (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
+  dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
 
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers are now written once and attached to as
 many products as you like, instead of being retyped per product. There are four kinds: free text (a

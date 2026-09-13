@@ -88,6 +88,16 @@ Colours are semantic, not literal. There is no `--wt-color-blue`. `--wt-color-sc
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
 overlay/veil colour elsewhere, reuse it rather than inventing a new one.
 
+A user-chosen data colour (a category's colour, so far) is the one deliberate exception to "no
+hex, no hardcoded chrome": `wt-lozenge` fills its background with that colour directly and computes
+black or white text for contrast, because the label still carries the meaning and the colour is
+never the only signal. This is a different idiom from the one the floor plan and service statuses
+already use for a data colour — a neutral chip with the colour shown only as a border and a dot —
+which was tried for categories and declined: a pale colour nearly disappears as a border in the
+theme where it's already pale (light colours in light mode, dark colours in dark mode). Reach for
+the filled-background idiom only for a colour that is itself the data, never as a shortcut around a
+`--wt-color-*` token.
+
 ### Structure
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
@@ -140,6 +150,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
+| `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
@@ -149,8 +160,13 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with); default slot of action buttons | native events from actions |
-| `wt-data-table` | `rows`, `columns`, `rowKey`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel` | `wt-selection-change` — `detail: { selected: string[] }`; native events from consumer-provided cells |
+| `wt-data-table` | `rows`, `columns`, `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel` | `wt-selection-change` — `detail: { selected: string[] }`; native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
+
+`wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
+one icon with its own `aria-label` rather than a text label — the round "Add" button beside a table
+heading, for one. It replaces the button's own padding and border radius; it does not change what
+`variant` paints.
 
 `wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
 action in progress: it disables the button, sets `aria-busy`, and leads the label with a decorative
@@ -164,6 +180,16 @@ canvases. Define columns and cell content in the consuming screen so domain acti
 primitive. Always supply `aria-label`; use its loading, empty and error properties instead of
 replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
+
+Supply `rowParent` — a `(row) => string | null` returning the parent row's own key, or `null` for a
+top-level row — to switch the same table into tree mode, as the categories screen does for its
+hierarchy. A row whose declared parent key isn't present among the current rows floats to the top
+level rather than disappearing. Each row that has children gets its own expand/collapse toggle
+(`collapseLabel`/`expandLabel` give it a localized accessible name); collapsed state lives inside the
+component, not the caller. The table renders `role="treegrid"` with `aria-level`/`aria-expanded` on
+each row, and a sortable column sorts each level of siblings independently rather than flattening the
+whole tree into one sort. Leave `rowParent` unset for the ordinary flat table — the two modes share
+every other property.
 
 Use `wt-modal` for an add or edit form. Its portrait panel fills the viewport height with 24px
 top and bottom margins. The body scrolls independently, so your footer actions stay visible.
