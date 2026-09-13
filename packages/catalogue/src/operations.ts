@@ -47,8 +47,8 @@ import {
 import { productUnits, units } from "./schema/units.js";
 import {
   assignProductUnit,
+  getSeededUnit,
   getSellableUnit,
-  getUnit,
   type SellableUnit,
   type Unit,
 } from "./units.js";
@@ -386,19 +386,11 @@ function sellableUnit(
       hardwareUnit: hardwareUnit as SellableUnit["hardwareUnit"],
     };
   }
-  return legacy === "weight"
-    ? {
-        id: "00000000-0000-0000-0000-000000000002",
-        name: { en: "kg" },
-        precision: 3,
-        hardwareUnit: "kg",
-      }
-    : {
-        id: "00000000-0000-0000-0000-000000000001",
-        name: { en: "each" },
-        precision: 0,
-        hardwareUnit: null,
-      };
+  throw new AppError("unit.not_found", { unitId: id ?? legacy });
+}
+
+function legacyPricingUnit(unit: SellableUnit): PricingUnit {
+  return unit.hardwareUnit === null ? "each" : "weight";
 }
 
 export async function createCatalogue(
@@ -1120,7 +1112,12 @@ export async function createProduct(
     throw new AppError("management.request_invalid", { field: "unitId" });
   }
   const selectedUnit =
-    input.unitId === undefined ? null : await getSellableUnit(tx, tenantId, input.unitId);
+    input.unitId === undefined
+      ? await getSeededUnit(tx, tenantId, input.pricingUnit === "weight" ? "kg" : "each")
+      : await getSellableUnit(tx, tenantId, input.unitId);
+  if (selectedUnit === null) {
+    throw new AppError("management.request_invalid", { field: "unitId" });
+  }
   // Validate before the write: an unreviewed product stores null, a supplied map is checked against
   // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
   // before any row is inserted. The map is the MANUAL overlay; at create there is no recipe, so the
@@ -1144,7 +1141,7 @@ export async function createProduct(
       catalogueId: input.catalogueId,
       categoryId: null,
       descriptions: input.descriptions,
-      pricingUnit: input.pricingUnit ?? (selectedUnit?.hardwareUnit === null ? "each" : "weight"),
+      pricingUnit: legacyPricingUnit(selectedUnit),
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
       active: input.active ?? true,
@@ -1155,7 +1152,7 @@ export async function createProduct(
       image: input.image ?? null,
     })
     .returning({ id: products.id });
-  if (input.unitId !== undefined) await assignProductUnit(tx, tenantId, row!.id, input.unitId);
+  await assignProductUnit(tx, tenantId, row!.id, selectedUnit.id);
   const membership = await replaceProductCategories(tx, tenantId, row!.id, {
     categoryIds: input.categoryId === null ? [] : [input.categoryId],
     primaryCategoryId: input.categoryId,
@@ -1266,11 +1263,12 @@ export async function updateProduct(
   // column, and `diet` is republished only when the override was in the patch — an unrelated edit
   // must not disturb the published diet profile. Mirrors the allergen republish guard exactly.
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
-  if (unitId !== undefined) await getUnit(tx, tenantId, unitId);
+  const selectedUnit = unitId === undefined ? null : await getSellableUnit(tx, tenantId, unitId);
   await tx
     .update(products)
     .set({
       ...rest,
+      ...(selectedUnit === null ? {} : { pricingUnit: legacyPricingUnit(selectedUnit) }),
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
       ...(dietOverride !== undefined ? { dietOverride } : {}),
       updatedAt: sql`now()`,

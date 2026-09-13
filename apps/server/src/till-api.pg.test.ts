@@ -1465,6 +1465,14 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // the location's `invoice_locales` at `priceOrderLines` before the working-order line insert.
             descriptions: { "es-ES": "Agua mineral" },
             quantity: "2.000",
+            unitName: {
+              ca: "unitat",
+              en: "each",
+              es: "unidad",
+              eu: "unitatea",
+              gl: "unidade",
+            },
+            unitPrecision: 0,
             // KDS-2: this product carries no course, so the item serialises `course: null` and fires
             // IMMEDIATELY (a null course is treated as earliest, §2b) — `firedAt` is a timestamp, not null.
             course: null,

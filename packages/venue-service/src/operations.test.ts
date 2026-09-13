@@ -59,10 +59,27 @@ async function scoped<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>):
   });
 }
 
+async function seedUnitTenant(): Promise<{
+  tenantId: ReturnType<typeof brandTenantId>;
+  eachUnitId: string;
+  kgUnitId: string;
+}> {
+  const tenantId = brandTenantId(await seedTenant(db));
+  const seeded = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
+    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, 3, 'kg')
+    returning id, seed_key`);
+  return {
+    tenantId,
+    eachUnitId: seeded.rows.find((unit) => unit.seed_key === "each")!.id,
+    kgUnitId: seeded.rows.find((unit) => unit.seed_key === "kg")!.id,
+  };
+}
+
 describe("venue service routing", () => {
   it("reports incomplete active zones and refuses to deactivate their department", async () => {
-    const rawTenantId = await seedTenant(db);
-    const tenantId = brandTenantId(rawTenantId);
+    const { tenantId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
@@ -175,8 +192,7 @@ describe("venue service routing", () => {
   });
 
   it("routes one cocktail to the bar serving its service zone", async () => {
-    const rawTenantId = await seedTenant(db);
-    const tenantId = brandTenantId(rawTenantId);
+    const { tenantId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
@@ -282,8 +298,7 @@ describe("venue service routing", () => {
   });
 
   it("inherits service mode, lists zone offers, and freezes the order context", async () => {
-    const rawTenantId = await seedTenant(db);
-    const tenantId = brandTenantId(rawTenantId);
+    const { tenantId, kgUnitId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
@@ -445,7 +460,10 @@ describe("venue service routing", () => {
           menuItemId: offer.id,
           menuName: "Deli takeaway",
           categoryName: "Cold cuts",
-          pricingUnit: "weight",
+          unitId: kgUnitId,
+          unitName: { en: "kg" },
+          unitPrecision: 3,
+          hardwareUnit: "kg",
           vatClass: "reduced",
         }),
       ]);
@@ -511,8 +529,7 @@ describe("venue service routing", () => {
   });
 
   it("refuses missing configuration and supports explicit no-preparation", async () => {
-    const rawTenantId = await seedTenant(db);
-    const tenantId = brandTenantId(rawTenantId);
+    const { tenantId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
@@ -628,8 +645,7 @@ describe("venue service routing", () => {
   });
 
   it("refuses a missing route and a route to an inactive station", async () => {
-    const rawTenantId = await seedTenant(db);
-    const tenantId = brandTenantId(rawTenantId);
+    const { tenantId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);

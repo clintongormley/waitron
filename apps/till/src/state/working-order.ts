@@ -23,6 +23,7 @@
  * snapshot, not a bug.
  */
 import { priceBasket } from "@waitron/catalogue/src/pricing.js";
+import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import { sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
@@ -276,6 +277,7 @@ export class WorkingOrderStore {
       modifierSnapshots?: ModifierSnapshot[];
     },
   ): void {
+    assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
     const line: OrderLine = { product, quantity };
     if (options !== undefined) {
       line.options = options;
@@ -325,6 +327,9 @@ export class WorkingOrderStore {
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
+    assertQuantityPrecision(quantity, productUnit(this.#lines[index]!.product).precision, {
+      positive: true,
+    });
     this.#lines[index]!.quantity = quantity;
     this.#invalidatePricing();
     this.#dirty = true;

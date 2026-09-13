@@ -32,7 +32,7 @@ export const units = pgTable(
     }).onDelete("restrict"),
     check("units_precision_ck", sql`${t.precision} between 0 and 3`),
     check("units_hardware_unit_ck", sql`${t.hardwareUnit} in ('kg', 'g', 'mg')`),
-    index("units_tenant_name_idx").on(t.tenantId),
+    index("units_tenant_idx").on(t.tenantId),
   ],
 );
 

@@ -58,6 +58,10 @@ interface Seeded {
 /** A fresh tenant/location/till/node + a two-product catalogue (Café 1.50, Agua 2.00, both general). */
 async function setupVenue(): Promise<Seeded> {
   const tenantId = await seedTenant(db);
+  await db.execute(sql`
+    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, 3, 'kg')`);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);

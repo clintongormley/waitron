@@ -1374,7 +1374,7 @@ export class TillTableOrderScreen extends LitElement {
       precision === 0 ? /^[1-9]\d*$/ : new RegExp(`^(?:0|[1-9]\\d*)(?:\\.\\d{1,${precision}})?$`);
     if (!pattern.test(value)) {
       return t(
-        precision === 0 ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+        precision === 0 ? "table.split_quantity_whole_error" : "table.split_quantity_decimal_error",
       );
     }
     try {
@@ -1384,12 +1384,14 @@ export class TillTableOrderScreen extends LitElement {
         compareDecimal(quantity, decimal(line.quantity)) > 0
       ) {
         return t(
-          precision === 0 ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+          precision === 0
+            ? "table.split_quantity_whole_error"
+            : "table.split_quantity_decimal_error",
         );
       }
     } catch {
       return t(
-        precision === 0 ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+        precision === 0 ? "table.split_quantity_whole_error" : "table.split_quantity_decimal_error",
       );
     }
     return "";

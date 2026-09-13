@@ -404,8 +404,8 @@ export const en = {
   "table.split_confirm": "Create bill",
   "table.split_no_lines": "No items to split",
   "table.split_quantity": "Quantity",
-  "table.split_quantity_each_error": "Choose a whole quantity from 1 up to the amount ordered",
-  "table.split_quantity_weight_error":
+  "table.split_quantity_whole_error": "Choose a whole quantity from 1 up to the amount ordered",
+  "table.split_quantity_decimal_error":
     "Enter a quantity greater than zero and no more than the amount ordered",
   "table.split_options_together": "Dishes with options must be moved in full",
   "table.split_modifier_error": "Dishes with options must be moved in full",
@@ -737,8 +737,8 @@ export const es: Record<StringKey, string> = {
   "table.split_confirm": "Crear cuenta",
   "table.split_no_lines": "No hay artículos para dividir",
   "table.split_quantity": "Cantidad",
-  "table.split_quantity_each_error": "Elige una cantidad entera entre 1 y la cantidad pedida",
-  "table.split_quantity_weight_error":
+  "table.split_quantity_whole_error": "Elige una cantidad entera entre 1 y la cantidad pedida",
+  "table.split_quantity_decimal_error":
     "Introduce una cantidad mayor que cero y no superior a la cantidad pedida",
   "table.split_options_together": "Los platos con opciones deben moverse completos",
   "table.split_modifier_error": "Los platos con opciones deben moverse completos",

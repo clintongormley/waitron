@@ -34,6 +34,15 @@ export interface UpdateUnitInput {
 const UNIT_COLUMNS = { id: units.id, name: units.name, precision: units.precision };
 const SELLABLE_UNIT_COLUMNS = { ...UNIT_COLUMNS, hardwareUnit: units.hardwareUnit };
 
+function toSellableUnit(row: {
+  id: string;
+  name: Record<string, string>;
+  precision: number;
+  hardwareUnit: string | null;
+}): SellableUnit {
+  return { ...row, hardwareUnit: row.hardwareUnit as SellableUnit["hardwareUnit"] };
+}
+
 export async function createUnit(
   tx: Transaction,
   tenantId: string,
@@ -77,7 +86,20 @@ export async function getSellableUnit(
     .from(units)
     .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
-  return { ...row, hardwareUnit: row.hardwareUnit as SellableUnit["hardwareUnit"] };
+  return toSellableUnit(row);
+}
+
+/** Resolve a legacy product choice to the tenant's retained seed, never to a made-up identifier. */
+export async function getSeededUnit(
+  tx: Transaction,
+  tenantId: string,
+  seedKey: "each" | "kg",
+): Promise<SellableUnit | null> {
+  const [row] = await tx
+    .select(SELLABLE_UNIT_COLUMNS)
+    .from(units)
+    .where(and(eq(units.tenantId, tenantId), eq(units.seedKey, seedKey)));
+  return row === undefined ? null : toSellableUnit(row);
 }
 
 export async function updateUnit(
@@ -109,7 +131,12 @@ export async function assignProductUnit(
   productId: string,
   unitId: string,
 ): Promise<void> {
-  await getUnit(tx, tenantId, unitId);
+  const [unit] = await tx
+    .select({ id: units.id })
+    .from(units)
+    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .for("key share");
+  if (unit === undefined) throw new AppError("unit.not_found", { unitId });
   const [product] = await tx
     .select({ id: products.id })
     .from(products)

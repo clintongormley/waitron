@@ -110,6 +110,7 @@ interface SeededVenue {
   zoneId: string;
   cafeOfferId: string;
   premiumCafeOfferId: string;
+  eachUnitId: string;
 }
 
 /**
@@ -121,6 +122,12 @@ interface SeededVenue {
  */
 async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
+  const seededUnits = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
+    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, 3, 'kg')
+    returning id, seed_key`);
+  const eachUnitId = seededUnits.rows.find((unit) => unit.seed_key === "each")!.id;
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
@@ -219,7 +226,16 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.
     orderFlow,
   };
-  return { cfg, cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId };
+  return {
+    cfg,
+    cafeId,
+    aguaId,
+    catalogueId,
+    zoneId,
+    cafeOfferId,
+    premiumCafeOfferId,
+    eachUnitId,
+  };
 }
 
 describe("parkOrder", () => {
@@ -892,7 +908,7 @@ describe("getHeldOrder", () => {
   });
 
   it("returns the parked offer's identity and snapshots after its live product changes", async () => {
-    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const { cfg, zoneId, cafeId, premiumCafeOfferId, eachUnitId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -921,7 +937,7 @@ describe("getHeldOrder", () => {
           menuItemId: premiumCafeOfferId,
           descriptions: { [LOCALE]: "Café" },
           unit: {
-            id: "00000000-0000-0000-0000-000000000001",
+            id: eachUnitId,
             name: { en: "each" },
             precision: 0,
             hardwareUnit: null,

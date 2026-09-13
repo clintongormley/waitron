@@ -144,3 +144,53 @@ it("serializes assignment against deletion so the committed product reference wi
     await Promise.all([assigningDb.close(), deletingDb.close()]);
   }
 });
+
+it("reports unit.not_found when deletion commits before a concurrent assignment", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  const productId = await product(tenantId);
+  const unit = await app(suite.admin, tenantId, (tx) =>
+    createUnit(tx, tenantId, { name: { en: "portion" }, precision: 0 }, "en"),
+  );
+  const [deletingDb, assigningDb] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let deleted!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    deleted = resolve;
+  });
+  try {
+    const assigningPid = (
+      await assigningDb.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+    ).rows[0]!.pid;
+    const deletion = app(deletingDb, tenantId, async (tx) => {
+      await deleteUnit(tx, tenantId, unit.id);
+      deleted();
+      await wait;
+    });
+    await ready;
+    const assignment = app(assigningDb, tenantId, (tx) =>
+      assignProductUnit(tx, tenantId, productId, unit.id),
+    );
+    const settled = Promise.allSettled([deletion, assignment]);
+    try {
+      await blocked(assigningPid);
+    } finally {
+      release();
+    }
+    const [deletedResult, assignedResult] = await settled;
+    expect(deletedResult.status).toBe("fulfilled");
+    expect(assignedResult.status).toBe("rejected");
+    if (assignedResult.status === "rejected") {
+      expect(assignedResult.reason).toMatchObject({ code: "unit.not_found" });
+    }
+    const assignments = await suite.admin.execute<{ count: string }>(sql`
+      select count(*)::text as count from product_units
+      where tenant_id = ${tenantId} and product_id = ${productId}`);
+    expect(assignments.rows).toEqual([{ count: "0" }]);
+  } finally {
+    release();
+    await Promise.all([deletingDb.close(), assigningDb.close()]);
+  }
+});

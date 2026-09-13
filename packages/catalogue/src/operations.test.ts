@@ -314,7 +314,10 @@ describe("catalogue operations", () => {
         .id;
       kgUnitId = (await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en")).id;
       await tx.execute(
-        sql`update units set hardware_unit = 'kg' where tenant_id = ${tenantId} and id = ${kgUnitId}`,
+        sql`update units
+            set seed_key = case when id = ${eachUnitId} then 'each' else 'kg' end,
+                hardware_unit = case when id = ${kgUnitId} then 'kg' else null end
+            where tenant_id = ${tenantId} and id in (${eachUnitId}, ${kgUnitId})`,
       );
     });
   });
@@ -391,6 +394,55 @@ describe("catalogue operations", () => {
       expect(seenHam.vatClass).toBe("reduced");
       expect(seenHam.descriptions).toEqual({ en: "sliced ham" });
       expect(seenHam.active).toBe(true);
+    });
+  });
+
+  it("attaches legacy product creates to the tenant's real seeded unit", async () => {
+    await asTenant(async (tx) => {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const ham = await createProduct(tx, tenantId, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        pricingUnit: "weight",
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      const assignments = await tx.execute<{ unit_id: string }>(sql`
+        select unit_id from product_units
+        where tenant_id = ${tenantId} and product_id = ${ham.id}`);
+      expect(assignments.rows).toEqual([{ unit_id: kgUnitId }]);
+      expect(ham.unit).toEqual({
+        id: kgUnitId,
+        name: { en: "kg" },
+        precision: 3,
+        hardwareUnit: "kg",
+      });
+    });
+  });
+
+  it("keeps the legacy pricing sentinel coherent when a product's unit changes", async () => {
+    await asTenant(async (tx) => {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const ham = await createProduct(tx, tenantId, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, tenantId, ham.id, { unitId: eachUnitId });
+      const stored = await tx.execute<{ pricing_unit: string }>(sql`
+        select pricing_unit from products
+        where tenant_id = ${tenantId} and id = ${ham.id}`);
+      expect(stored.rows).toEqual([{ pricing_unit: "each" }]);
+      const [updated] = await listProducts(tx, tenantId, catalogue.id);
+      expect(updated).toMatchObject({
+        unitId: eachUnitId,
+        pricingUnit: "each",
+        unit: { id: eachUnitId, precision: 0, hardwareUnit: null },
+      });
     });
   });
 
