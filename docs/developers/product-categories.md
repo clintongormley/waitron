@@ -11,10 +11,12 @@ products. A child's products do not count towards its parent. Create and edit fo
 the name, choose an image from the shared library, and choose or clear a parent. You cannot choose
 the category itself or any of its descendants.
 
-A primary category is now optional in the data model and the API: a product may hold memberships
-with no reporting category at all. The dashboard does not offer that yet. The membership picker
-still refuses to submit while categories are selected and none of them is primary, so through
-today's screens you always choose or keep one. Removing the last membership clears primary.
+A primary category is optional in the data model, the API, and the dashboard: a product may hold
+memberships with no reporting category at all. `dashboard-category-membership-picker`'s
+reporting-category select offers an explicit "None" option, and the product editor's category
+picker can be left on its default "Choose…" placeholder; both submit with `primaryCategoryId: null`
+in that state. The only remaining check is that a primary, if set, must be one of the currently
+selected categories. Removing the last membership clears primary.
 
 Deleting a category is confirmed and then goes ahead. It is no longer refused when something refers
 to it. The delete removes the product memberships, clears the reporting category from any product
