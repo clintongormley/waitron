@@ -120,9 +120,89 @@ describe("planVenue", () => {
     expect(actions[1]).toEqual({
       kind: "seed-admin",
       displayName: "Owner",
+      firstNames: null,
+      lastNames: null,
+      locale: null,
       pinHash: "scrypt$00$00",
       passwordHash: "scrypt$aa$bb",
       email: "owner@example.test",
+    });
+  });
+
+  it("carries the admin's real names into the seed-admin action", () => {
+    const actions = planVenue(
+      request({
+        admin: {
+          displayName: "Clint",
+          firstNames: "Clinton",
+          lastNames: "Gormley",
+          pinHash: "pin-hash",
+          passwordHash: "password-hash",
+          email: "clinton@example.com",
+        },
+      }),
+      MODULES,
+    );
+    expect(actions.find((a) => a.kind === "seed-admin")).toMatchObject({
+      displayName: "Clint",
+      firstNames: "Clinton",
+      lastNames: "Gormley",
+    });
+  });
+
+  it("carries the admin's UI language into the seed-admin action, and plans an absent one as null", () => {
+    // The applier writes the column unconditionally, so the action always carries it; `null` is what
+    // `persons.locale`'s `is null or length > 0` check accepts for "this person has no preference",
+    // which makes the apps fall back to the venue default.
+    const withLocale = planVenue(
+      request({
+        admin: {
+          displayName: "Clint",
+          locale: "en-GB",
+          pinHash: "pin-hash",
+          passwordHash: "password-hash",
+          email: "clinton@example.com",
+        },
+      }),
+      MODULES,
+    );
+    expect(withLocale.find((a) => a.kind === "seed-admin")).toMatchObject({ locale: "en-GB" });
+    expect(planVenue(request(), MODULES).find((a) => a.kind === "seed-admin")).toMatchObject({
+      locale: null,
+    });
+  });
+
+  it("REFUSES a UI language the apps cannot render rather than storing it", () => {
+    // `persons.locale` is a plain text column whose only constraint is non-empty, so an unrenderable
+    // code would be stored happily and then show the operator a screen of missing strings. The
+    // person's own write boundary (`setPersonLocale`) refuses one; the planner refuses it here so
+    // provisioning is not the one path that can write it, and so the refusal costs no connection.
+    try {
+      planVenue(
+        request({
+          admin: {
+            displayName: "Clint",
+            locale: "fr-FR",
+            pinHash: "pin-hash",
+            passwordHash: "password-hash",
+            email: "clinton@example.com",
+          },
+        }),
+        MODULES,
+      );
+      expect.unreachable("should have refused an unsupported UI language");
+    } catch (error) {
+      expect(isAppError(error) && error.code).toBe("locale.unsupported");
+    }
+  });
+
+  it("plans an admin with no real names as null rather than dropping the field", () => {
+    // The applier writes both columns unconditionally, so the action always carries them; `null` is
+    // what the column's `is null or length > 0` check accepts for "not given".
+    const actions = planVenue(request(), MODULES);
+    expect(actions.find((a) => a.kind === "seed-admin")).toMatchObject({
+      firstNames: null,
+      lastNames: null,
     });
   });
 
@@ -324,17 +404,36 @@ describe("describeVenueAction", () => {
     ]);
   });
 
+  it("shows only the parts of the admin a plan actually carries", () => {
+    const admin = {
+      kind: "seed-admin" as const,
+      displayName: "Owner",
+      firstNames: null,
+      lastNames: null,
+      locale: null,
+      pinHash: "scrypt$00$00",
+      passwordHash: "scrypt$aa$bb",
+      email: "owner@example.test",
+    };
+    expect(describeVenueAction(admin)).toBe("seed admin Owner");
+    expect(describeVenueAction({ ...admin, locale: "en-GB" })).toBe("seed admin Owner (en-GB)");
+    expect(describeVenueAction({ ...admin, lastNames: "Ruiz" })).toBe("seed admin Owner (Ruiz)");
+  });
+
   it("names the admin but NEVER the pin hash — the description is operator-facing", () => {
     // The pin_hash is a secret: it must not reach a plan summary an operator sees. Uses a distinctive
     // hash so the negative assertion cannot pass by coincidence.
     const line = describeVenueAction({
       kind: "seed-admin",
       displayName: "Alicia",
+      firstNames: "Alicia Maria",
+      lastNames: "Fernandez Ruiz",
+      locale: "es-ES",
       pinHash: "scrypt$deadbeef$cafef00d",
       passwordHash: "scrypt$feedface$0ddba11",
       email: "owner@example.test",
     });
-    expect(line).toBe("seed admin Alicia");
+    expect(line).toBe("seed admin Alicia (Alicia Maria Fernandez Ruiz, es-ES)");
     expect(line).not.toContain("scrypt");
     expect(line).not.toContain("deadbeef");
     expect(line).not.toContain("cafef00d");

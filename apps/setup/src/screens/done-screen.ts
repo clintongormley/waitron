@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import { actionsStyles, statusStyles } from "../form-styles.js";
 import type { SetupApi } from "../api/client.js";
 
@@ -162,62 +161,60 @@ export class SetupDoneScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <wt-card>
-        <h1>Setup complete</h1>
-        ${
-          this.onboardingIntent === undefined
-            ? nothing
-            : html`<p class="mode-indicator" data-test="mode-indicator">
-                ${{ demo: "Demo", prepare: "Preparation", live: "Live" }[this.onboardingIntent]}
-              </p>`
-        }
-        <p>The server is restarting into trading mode.</p>
-        <div class="links" data-test="links">
-          <p>Once the server is trading, reach it here:</p>
-          <ul>
-            <li><a href="/">Till</a></li>
-            <li><a href="/manage">Dashboard</a></li>
-            <li><a href="/manage/email">Email inbox</a></li>
-            <li><a href=${`http://${this.hostname}:9110`}>Print agent</a></li>
-          </ul>
-        </div>
-        ${
-          this.breakGlassSecret !== undefined
-            ? html`<div class="break-glass" data-test="break-glass">
-                <h2>Save your break-glass code now</h2>
-                <p class="break-glass-warning" data-test="break-glass-warning">
-                  Write this down and store it offline. It is shown once and will not be shown
-                  again. You need it to promote this server if the primary is unreachable.
-                </p>
-                <code class="break-glass-secret" data-test="break-glass-secret"
-                  >${this.breakGlassSecret}</code
-                >
-              </div>`
-            : null
-        }
-        ${
-          this.onboardingIntent === "demo"
-            ? nothing
-            : html`<div class="backup-nudge" data-test="backup-nudge">
-                <p>
-                  Your server is trading — but it has no backups yet, so there is no way back from a
-                  disk failure.
-                </p>
-                <a class="nudge-link" href=${BACKUP_SETUP_URL}>Set up backups now</a>
-              </div>`
-        }
-        ${
-          this.ready
-            ? html`<div class="actions">
-                <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
-                  >Reload to open the till</wt-button
-                >
-              </div>`
-            : html`<p class="status" data-test="status">
-                Waiting for the server to come back online…
-              </p>`
-        }
-      </wt-card>
+      <h1>Setup complete</h1>
+      ${
+        this.onboardingIntent === undefined
+          ? nothing
+          : html`<p class="mode-indicator" data-test="mode-indicator">
+              ${{ demo: "Demo", prepare: "Preparation", live: "Live" }[this.onboardingIntent]}
+            </p>`
+      }
+      <p>The server is restarting into trading mode.</p>
+      <div class="links" data-test="links">
+        <p>Once the server is trading, reach it here:</p>
+        <ul>
+          <li><a href="/">Till</a></li>
+          <li><a href="/manage">Dashboard</a></li>
+          <li><a href="/manage/email">Email inbox</a></li>
+          <li><a href=${`http://${this.hostname}:9110`}>Print agent</a></li>
+        </ul>
+      </div>
+      ${
+        this.breakGlassSecret !== undefined
+          ? html`<div class="break-glass" data-test="break-glass">
+              <h2>Save your break-glass code now</h2>
+              <p class="break-glass-warning" data-test="break-glass-warning">
+                Write this down and store it offline. It is shown once and will not be shown again.
+                You need it to promote this server if the primary is unreachable.
+              </p>
+              <code class="break-glass-secret" data-test="break-glass-secret"
+                >${this.breakGlassSecret}</code
+              >
+            </div>`
+          : null
+      }
+      ${
+        this.onboardingIntent === "demo"
+          ? nothing
+          : html`<div class="backup-nudge" data-test="backup-nudge">
+              <p>
+                Your server is trading — but it has no backups yet, so there is no way back from a
+                disk failure.
+              </p>
+              <a class="nudge-link" href=${BACKUP_SETUP_URL}>Set up backups now</a>
+            </div>`
+      }
+      ${
+        this.ready
+          ? html`<div class="actions">
+              <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
+                >Reload to open the till</wt-button
+              >
+            </div>`
+          : html`<p class="status" data-test="status">
+              Waiting for the server to come back online…
+            </p>`
+      }
     `;
   }
 }

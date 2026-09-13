@@ -139,6 +139,41 @@ components, then make the guard and both documents agree — one of them is curr
 something CI will not enforce. Whoever picks up the next screen should settle this first, because
 every screen after it inherits the answer.
 
+**Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
+page background, in the light theme.** Measured against the shipped values in
+`packages/ui/src/tokens/colors.css`: light `--wt-color-primary` (`#1f6feb`) on `--wt-color-bg`
+(`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text. The dark theme is
+fine (`#4c8dff` on `#101216`, 5.86 to 1), and so is the same blue on a card or modal surface (4.63
+to 1 on white) — which is why it goes unnoticed: only primary-coloured text sitting directly on the
+light theme's page background falls short, and the token is used as text in a number of places
+across the dashboard and the shared components. Recorded rather than fixed there (owner scope,
+2026-09-13), because changing a shared colour token mid-branch touches every app.
+
+**No test renders the failing pairing, and none did before the 2026-09-13 corrections either.** On
+`main` every setup screen carrying primary-coloured text wrapped itself in a `wt-card`, which paints
+`--wt-color-surface` — `#ffffff` in the light theme, so what those screens actually tested was the
+4.63-to-1 pairing that passes. The corrections dropped the card and painted the test host
+`--wt-color-surface-raised`, also `#ffffff`, so the pairing under test did not change. The branch
+neither created a gap nor closed one.
+
+**The contrast check itself is live, and would catch the pairing if anything painted it.** Receipt,
+run at the branch tip: forcing the host in `apps/setup/src/widgets/test-helpers.ts` back to the
+pre-correction `--wt-color-bg` turns the three light-theme tests in
+`apps/setup/src/screens/done-screen.a11y.test.ts` red (the three dark-theme ones stay green), with
+axe reporting `insufficient color contrast of 4.32 (foreground color: #1f6feb, background color:
+#f7f7f8, font size: 11.3pt (15px), font weight: normal). Expected contrast ratio of 4.5:1`.
+
+**What is missing is a check on the tokens themselves.** The `*.a11y.test.ts` suites do run axe's
+full default ruleset, colour contrast included — a bare `axe.run` with no rule filtering, in
+`apps/setup/src/widgets/test-helpers.ts` for the wizard and `packages/ui/src/a11y-helpers.ts` for
+the shared components, each painting the themed background so the check means what it means in the
+app. But axe only ever sees a pairing some mounted component happens to paint, so a pairing no
+component paints is unchecked however many a11y suites run. Nothing enumerates the tokens against
+each other, and `packages/ui/src/no-hardcoded-chrome.test.ts` scans for hardcoded colours, not for
+contrast. **Next action:** an owner colour call — darken the light theme's primary until it clears
+4.5 to 1 as text, or rule that the token is never text on the page background and add a check that
+says so.
+
 Done so far: the dashboard shell itself — the sidebar, the banner and the account menu — plus
 **Account settings** (Your profile) and the **user administration** section (#333; what changed is
 under A7).
@@ -516,6 +551,14 @@ Landed in #334 (2026-09-12). [Design](superpowers/specs/2026-09-12-setup-wizard-
 
 **Still open after #334**, each one something the branch consciously did not take:
 
+- *The wizard has no translated text and no language chooser.* It is English only, on a box whose
+  venue may well not be. The account it creates now gets the operator's browser language, so the
+  dashboard opens in the right language, but the wizard itself does not. Translating it means every
+  visible string across its screens plus the per-operating-system certificate instructions, into
+  English and Spanish, using the same catalogue the dashboard registers through
+  `@waitron/dashboard-kit`, and a chooser seeded from the browser's preference. Deferred from the
+  2026-09-13 corrections by owner decision, as much bigger than everything else in that branch put
+  together.
 - *The certificate export help has never been followed on a real machine.* Nobody exported a
   certificate through Windows', macOS' or Firefox's own certificate store while reading the new
   guidance, so the instructions are unverified against the thing they describe. Fold this into the
@@ -708,6 +751,15 @@ ongoing overhaul listed at the top of Track A.
 
 ### A9. Product depth — after the primary works
 
+- **Product languages are hard-coded at setup** (owner, 2026-09-13). A Spanish venue is seeded with
+  Spanish as its default product language and Catalan and English alongside, whatever its province —
+  right for the deli, wrong for a Spanish venue outside Catalonia. It replaced a derivation that gave
+  a Barcelona venue Catalan alone, which was worse. The proper fix drives the list from the venue's
+  region and the languages it actually chose, which probably means setup asking. Do it when there is
+  a second region or a second country to be wrong about. The hard-code is in
+  `packages/catalogue/src/provisioning.ts` and names this entry; every other country still derives
+  its language from geography. Receipt languages are a separate setting and already follow the
+  province.
 - **Category-driven routing to multiple printers/destinations** (owner, 2026-09-12): deferred from
   the [Products overhaul](superpowers/specs/2026-09-12-products-overhaul-design.md). Decide how a
   product's category memberships select one or more preparation/printing destinations, how matching
@@ -885,6 +937,13 @@ image constraints under *Detail → Box image*.
   versus keep-serving, to settle before the first consumer relies on it.
 - **Two near-identical node-forge certificate builders** (`self-signed-cert.ts`, `testing/tls.ts`,
   plus the fiscal module's byte-copy). Extract one; its own PR, it touches the mTLS fixture.
+- **The same hand-built SQL array appears in several packages** — `sql.join` of each value inside
+  `array[...]::text[]`, in `packages/catalogue/src/provisioning.ts`,
+  `packages/provisioning/src/venue-apply.ts` and `apps/server/src/configuration-transfer.ts` (find
+  others with `grep -rn "::text\[\]"`). It is rebuilt by hand because interpolating a JavaScript
+  array as one value makes Drizzle emit a list of values rather than an array, which PostgreSQL
+  refuses. One shared helper would stop a wrong copy being written; its home has to be added to
+  `@waitron/db`'s enumerated `exports` map, which is why it is not a five-minute change.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
 - **Hardening from onboarding 2b:** a DB-level advisory lock on `tenantId` spanning
@@ -937,6 +996,17 @@ image constraints under *Detail → Box image*.
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
+- **Comments across the tree still say PGlite cannot check a database permission** — the belief
+  CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
+  session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
+  permissions included (receipt in `docs/developers/testing-guide.md`). Many test comments give the
+  old belief as their reason for using a real PostgreSQL container, often citing "CLAUDE.md §4" by
+  number, which now points at text saying the opposite. The ones in source files the onboarding
+  corrections touched were fixed; that branch's dated plan still quotes the old belief in a code
+  snippet and is left as written. Find the rest with `grep -rn "PGlite" apps packages scripts`. A
+  sweep, not a one-liner: for each suite, check whether anything else still needs the container
+  (concurrency, triggers running as the deployment role, or who connected) before moving it, and
+  correct the comment either way.
 - **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`);
   if it flakes on `test-server` it needs a `--shard`-compatible isolation.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
@@ -992,12 +1062,37 @@ turns out to need a design moves to its track.
 
 **Dashboard, till and setup:**
 
+- **An imported configuration carries "already offered a passkey" but no passkeys** (found
+  2026-09-13, not fixed). A configuration transfer copies the `persons` rows with six columns
+  stripped — `packages/identity/src/configuration-transfer.ts` names them, and the import in
+  `apps/server/src/configuration-transfer.ts` blanks them again on the way in — but
+  `passkey_offered_at` is not one of them, so it travels. No passkey rows travel at all: identity
+  contributes only `persons`, and nothing contributes `webauthn_credentials`. So a person who had
+  been offered a passkey on the source box arrives on the new one holding none and already stamped,
+  and `shouldOfferPasskey` (`packages/identity/src/passkey-offer.ts`) never offers again. It does
+  not bite immediately, because imported people arrive suspended with their PIN and password wiped —
+  it bites once someone reactivates them and they sign in for the first time. The fix is one line:
+  strip the column on transfer, the way the six secrets are stripped.
+
+  Two things to know before making that one-line change. The import does not merely blank a stripped
+  column on the way in — it REFUSES a bundle that carries one at all
+  (`apps/server/src/configuration-transfer.ts:316-318`, throwing `setup.request_invalid` named for
+  the table and the column), which is a separate check from the overwrite at lines 427-433 that
+  blanks the six secret fields and forces `status = "suspended"`. So adding `passkey_offered_at` to
+  the stripped list makes every bundle exported before the change invalid outright, rather than
+  importable with the column blanked. That is acceptable only because nothing is in production yet;
+  the day a real venue is live, this stops being a one-line change.
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
   (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
 - Profile follow-ups (owner, 2026-09-12): keep Display name in step with the person's name as it is
   typed, in all three forms (`person-form.ts`, `person-edit.ts`, `profile-screen.ts` under
   `apps/dashboard/src`); Your profile calls the display name just "Name" (`profile.name`) — one
-  field, one label.
+  field, one label. Since 2026-09-13 two forms work the display name out independently, each with
+  its own tests: the add-person form (`person-form.ts`) and the setup wizard's account screen
+  (`apps/setup/src/screens/admin-screen.ts`). Extract one shared helper before a third copy appears.
+  Decide one thing first: that branch's review judged an EDIT form should not follow the names as
+  they are typed, because it would overwrite a display name somebody chose while they correct a
+  surname — which is in tension with "all three forms" above. An owner call.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish

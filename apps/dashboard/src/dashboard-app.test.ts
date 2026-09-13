@@ -73,6 +73,25 @@ const people: PersonSummary[] = [
 ];
 
 /**
+ * The default WHOAMI body every `stubApi` hands back — the one fixture the locale tests extend, so a
+ * field added to the real response is added here once rather than in a second, drifting copy.
+ * `locale` is null (nobody has chosen a language) and `sessionDefault` is the server's
+ * Accept-Language match, which for this Spanish venue's default browser is the venue's own language.
+ */
+const meResponse = {
+  personId: "p1",
+  role: "manager",
+  email: "manager@example.com",
+  locale: null as string | null,
+  venueLocale: "es-ES",
+  sessionDefault: "es-ES",
+  venueName: "Deli Test SL",
+  onboardingIntent: "prepare",
+  permissions: ["booking.manage"],
+  modules: ["bookings"],
+};
+
+/**
  * A fake `DashboardApi` covering every method the shell (and the screens it mounts) calls: the shell
  * itself calls `getMe` (the WHOAMI session probe) and `logout`; the login screen it mounts calls
  * `getStaffRoster`/`login`, the manager staff screen calls `listStaff`/`createPerson`, and the staff
@@ -90,17 +109,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // Module gating (Task 4): the default probe is a manager HOLDING `booking.manage` with `bookings`
     // enabled — reproducing the prior always-on bookings module for the Task-3 nav/screen tests. A test
     // that gates on the module supplies its own `permissions`/`modules`.
-    getMe: vi.fn().mockResolvedValue({
-      personId: "p1",
-      role: "manager",
-      email: "manager@example.com",
-      locale: null,
-      venueLocale: "es-ES",
-      venueName: "Deli Test SL",
-      onboardingIntent: "prepare",
-      permissions: ["booking.manage"],
-      modules: ["bookings"],
-    }),
+    getMe: vi.fn().mockResolvedValue({ ...meResponse }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [
         { code: "es-ES", label: "Español" },
@@ -216,6 +225,7 @@ it.each(["staff", "supervisor", "manager", "admin"])(
         role,
         locale: null,
         venueLocale: "en-GB",
+        sessionDefault: "en-GB",
         permissions: [],
         modules: [],
         venueName: "Venue",
@@ -512,6 +522,106 @@ describe("dashboard-app", () => {
     await vi.waitFor(() => expect(currentContentLanguages().defaultLanguage).toBe("fr"));
     expect(currentLocale()).toBe("es-ES");
   });
+  // The signed-in twin of the login screen's late-`getLocales` guard: a probe already in flight when
+  // someone picks a language answers with the language from before the pick.
+  it("keeps a signed-in language pick when a session probe started before it answers late", async () => {
+    let resolveLate!: (value: unknown) => void;
+    const stale = {
+      ...meResponse,
+      locale: null,
+      venueLocale: "es-ES",
+      sessionDefault: "es-ES",
+    };
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce(stale)
+      .mockReturnValueOnce(new Promise((resolve) => (resolveLate = resolve)));
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi({ getMe }) });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    // A background probe starts (tab regains focus) and is still in flight...
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    // ...while the person explicitly picks English, which persists and repaints.
+    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+    // The probe now answers with the pre-pick row.
+    resolveLate(stale);
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+  });
+
+  // The other ordering, and nothing orders the two replies: the probe STARTS after the pick, so the
+  // pick's own bump does not invalidate it, and it ANSWERS after the save has already repainted. The
+  // second bump — the one the save lands — is what stops the stale answer winning the last word.
+  it("keeps a signed-in language pick when a probe started after it answers after the save", async () => {
+    let resolveProbe!: (value: unknown) => void;
+    let resolvePut!: () => void;
+    const stale = {
+      ...meResponse,
+      locale: null,
+      venueLocale: "es-ES",
+      sessionDefault: "es-ES",
+    };
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce(stale)
+      .mockReturnValueOnce(new Promise((resolve) => (resolveProbe = resolve)));
+    const putLocale = vi.fn(() => new Promise<void>((resolve) => (resolvePut = resolve)));
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe, putLocale }),
+    });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    // The person picks English; the save is still in flight, so nothing has repainted yet.
+    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    // NOW a background probe starts — after the pick, so it captures the already-bumped counter.
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    // The save lands and the choice is applied.
+    resolvePut();
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+    // The probe answers last, with the row from before the pick. It must not win.
+    resolveProbe(stale);
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+  });
+
+  it("opens in the browser's language when the person has never chosen one", async () => {
+    // Nobody invited to an existing venue has a stored language, so the browser's preference — which
+    // the server has already matched against the languages we ship — is what they should see. The
+    // venue default is deliberately the OTHER language, so a shell still reading `venueLocale` fails.
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        locale: null,
+        venueLocale: "es-ES",
+        sessionDefault: "en-GB",
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("en-GB");
+  });
+
+  it("keeps an explicit choice whatever the browser asks for", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        locale: "es-ES",
+        venueLocale: "es-ES",
+        sessionDefault: "en-GB",
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+  });
+
   it("returns to login when the known session deadline passes without another request", async () => {
     vi.useFakeTimers();
     try {
@@ -521,6 +631,7 @@ describe("dashboard-app", () => {
           role: "manager",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           venueName: "Deli Test SL",
           permissions: [],
           modules: [],
@@ -572,6 +683,7 @@ describe("dashboard-app", () => {
           role: "manager",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           venueName: "Deli Test SL",
           permissions: [],
           modules: [],
@@ -603,6 +715,7 @@ describe("dashboard-app", () => {
         role: "manager",
         locale: null,
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         venueName: "Deli Test SL",
         permissions: [],
         modules: [],
@@ -629,6 +742,7 @@ describe("dashboard-app", () => {
       role: "manager",
       locale: null,
       venueLocale: "es-ES",
+      sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       permissions: [],
       modules: [],
@@ -677,6 +791,7 @@ describe("dashboard-app", () => {
       role: "manager",
       locale: null,
       venueLocale: "es-ES",
+      sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       permissions: [],
       modules: [],
@@ -741,6 +856,7 @@ describe("dashboard-app", () => {
           role: "manager",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           venueName: "Deli Test SL",
           permissions: [],
           modules: [],
@@ -781,6 +897,7 @@ describe("dashboard-app", () => {
         role: "staff",
         locale: null,
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -800,6 +917,7 @@ describe("dashboard-app", () => {
         role: "staff",
         locale: null,
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -821,6 +939,7 @@ describe("dashboard-app", () => {
         role: "staff",
         locale: null,
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -840,6 +959,7 @@ describe("dashboard-app", () => {
           role: "staff",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           permissions: [],
           modules: [],
         }),
@@ -864,6 +984,7 @@ describe("dashboard-app", () => {
           role: "staff",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           permissions: [],
           modules: [],
         }),
@@ -1132,6 +1253,7 @@ describe("dashboard-app", () => {
           role: "manager",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           permissions: [],
           modules: [],
         }),
@@ -1161,6 +1283,7 @@ describe("dashboard-app", () => {
           email: "new@example.test",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           venueName: "Deli",
           permissions: [],
           modules: [],
@@ -1195,6 +1318,7 @@ describe("dashboard-app", () => {
           email: "actual@example.com",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           venueName: "Deli Test SL",
           permissions: [],
           modules: [],
@@ -1232,6 +1356,7 @@ describe("dashboard-app", () => {
           email: "other@example.com",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           venueName: "Deli Test SL",
           permissions: [],
           modules: [],
@@ -1274,6 +1399,7 @@ describe("dashboard-app", () => {
       email: "google@example.com",
       locale: null,
       venueLocale: "es-ES",
+      sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       permissions: [],
       modules: [],
@@ -1308,6 +1434,7 @@ describe("dashboard-app", () => {
                 email: "other@example.com",
                 locale: null,
                 venueLocale: "es-ES",
+                sessionDefault: "es-ES",
                 venueName: "Deli Test SL",
                 permissions: [],
                 modules: [],
@@ -1723,6 +1850,7 @@ describe("dashboard-app", () => {
           role: "manager",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           permissions: [],
           modules: ["bookings"],
         }),
@@ -1749,6 +1877,7 @@ describe("dashboard-app", () => {
           role: "manager",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           permissions: ["booking.manage"],
           modules: [],
         }),
@@ -1769,6 +1898,7 @@ describe("dashboard-app", () => {
           role: "manager",
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           permissions: ["booking.manage"],
           modules: ["bookings"],
         }),
@@ -1793,6 +1923,7 @@ describe("dashboard-app", () => {
       role: "manager",
       locale: null,
       venueLocale: "es-ES",
+      sessionDefault: "es-ES",
       permissions: ["booking.manage"],
       modules: ["bookings"],
     };
@@ -1870,6 +2001,7 @@ describe("dashboard-app", () => {
         role: "supervisor",
         locale: null,
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -2179,6 +2311,7 @@ describe("dashboard-app", () => {
         role: "staff",
         locale: null,
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -2195,6 +2328,7 @@ describe("dashboard-app", () => {
         role: "staff",
         locale: null,
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -2267,6 +2401,7 @@ type MeResponse = {
   role: string;
   locale: string | null;
   venueLocale: string;
+  sessionDefault: string;
   venueName: string;
   permissions: string[];
   modules: string[];
@@ -2302,6 +2437,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
           role: "manager",
           locale: "es-ES",
           venueLocale: "en-GB",
+          sessionDefault: "en-GB",
           venueName: "Test SL",
           permissions: [],
           modules: [],
@@ -2335,6 +2471,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         role: "manager",
         locale: "en-GB",
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         venueName: "Test SL",
         permissions: [],
         modules: [],
@@ -2388,6 +2525,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
           role: "manager",
           locale: "es-ES",
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           venueName: "Test SL",
           permissions: [],
           modules: [],
@@ -2470,6 +2608,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         role: "staff",
         locale: "en-GB",
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -2486,13 +2625,15 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("falls back to the venue default when the person has no stored locale", async () => {
-    // resolveActiveLocale(null, "es-ES") === "es-ES": a person with no preference gets the venue UI.
+    // A person with no preference gets the venue UI, because the server's browser match already
+    // floored itself at the venue default for a browser asking for a language we do not ship.
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
         role: "manager",
         locale: null,
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -2515,6 +2656,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
           role: "manager",
           locale: "en-GB",
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           permissions: [],
           modules: [],
         }),
@@ -2621,6 +2763,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         role: "manager",
         locale: "en-GB",
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -2678,6 +2821,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
       role: "manager",
       locale: "en-GB",
       venueLocale: "es-ES",
+      sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       permissions: [],
       modules: [],
@@ -2717,6 +2861,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         role: "manager",
         locale: "en-GB",
         venueLocale: "es-ES",
+        sessionDefault: "es-ES",
         permissions: [],
         modules: [],
       }),
@@ -2753,6 +2898,7 @@ describe("dashboard URL navigation", () => {
             role: "manager",
             locale: "en",
             venueLocale: "en",
+            sessionDefault: "en",
             modules,
             permissions,
           }),
@@ -2778,6 +2924,7 @@ describe("dashboard URL navigation", () => {
         role: "manager",
         locale: "en-GB",
         venueLocale: "en-GB",
+        sessionDefault: "en-GB",
         permissions: ["venue_service.manage"],
         modules: ["venue-service"],
         venueName: "Venue",
@@ -2855,6 +3002,7 @@ describe("dashboard URL navigation", () => {
       role: "manager",
       locale: "en-GB",
       venueLocale: "en-GB",
+      sessionDefault: "en-GB",
       permissions: ["venue_service.manage"],
       modules: ["venue-service"],
       venueName: "Venue",
@@ -2932,6 +3080,7 @@ describe("dashboard URL navigation", () => {
           role,
           locale: null,
           venueLocale: "es-ES",
+          sessionDefault: "es-ES",
           permissions: [],
           modules: [],
         }),
@@ -2955,6 +3104,7 @@ describe("dashboard URL navigation", () => {
       role: "manager",
       locale: null,
       venueLocale: "es-ES",
+      sessionDefault: "es-ES",
       permissions: [],
       modules: [],
     });

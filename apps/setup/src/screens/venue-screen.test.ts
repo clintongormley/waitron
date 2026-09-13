@@ -49,6 +49,12 @@ async function toggleLocale(el: SetupVenueScreen, locale: string, checked: boole
   await el.updateComplete;
 }
 
+/** The invoice-locale checkboxes currently ticked, in render order. */
+const ticked = (el: SetupVenueScreen): string[] =>
+  [...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="invoiceLocales"]')]
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+
 /** The valid text-field values a complete venue carries; `addressLine2` is deliberately left blank. */
 const VALID: Record<string, string> = {
   country: "ES",
@@ -670,5 +676,83 @@ it("derives invoice language from the retained province after leaving Demo", asy
     },
   });
   expect((q(el, "[data-test=locale-ca-ES]") as HTMLInputElement).checked).toBe(true);
-  expect((q(el, "[data-test=locale-es-ES]") as HTMLInputElement).checked).toBe(false);
+  // Spanish as well as Catalan: a shop in Catalonia issues in both.
+  expect((q(el, "[data-test=locale-es-ES]") as HTMLInputElement).checked).toBe(true);
+});
+
+it("shows the fiscal territory under the province, not above the address", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  const nodes = [...el.shadowRoot!.querySelectorAll("[data-test]")].map((n) =>
+    n.getAttribute("data-test"),
+  );
+  // The line that answers "which fiscal territory?" must come after the control that decides it.
+  expect(nodes.indexOf("fiscalTerritory")).toBeGreaterThan(nodes.indexOf("province"));
+  // And it sits with the other province-derived fact.
+  expect(Math.abs(nodes.indexOf("fiscalTerritory") - nodes.indexOf("timeZone"))).toBe(1);
+});
+
+it("pre-ticks Spanish alongside a regional language", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  await type(el, "country", "ES");
+  await type(el, "province", "08"); // Barcelona — Catalan
+  expect(ticked(el)).toEqual(["es-ES", "ca-ES"]);
+});
+
+it("puts Spanish first in the invoice languages it emits", async () => {
+  // The checkbox reader above cannot see this: the boxes always render in the pack's own order, so a
+  // helper that returned Catalan first would still read as ["es-ES", "ca-ES"]. The emitted patch is
+  // where the order is observable, and the order is what decides the first language on the invoice.
+  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  const events = collect(host);
+  await fillValid(el, { postalCode: "08001", province: "08", city: "Barcelona" });
+  q(el, "[data-test=next]")!.click();
+  const patch = (events[0]!.detail as { patch: DeepPartial<ProvisionBody> }).patch;
+  expect(patch.venue?.location?.invoiceLocales).toEqual(["es-ES", "ca-ES"]);
+});
+
+it("pre-ticks only Spanish where there is no regional language", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  await type(el, "country", "ES");
+  await type(el, "province", "28"); // Madrid
+  expect(ticked(el)).toEqual(["es-ES"]);
+});
+
+it("lets the province re-seed languages that arrived from the draft unchanged", async () => {
+  // The SEED half of the follow-the-province flag: a draft carrying exactly the province's own
+  // defaults is not an operator choice, so a later province change still re-seeds.
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: {
+      venue: {
+        country: "ES",
+        location: { province: "Barcelona", invoiceLocales: ["es-ES", "ca-ES"] },
+      },
+    },
+  });
+  expect(ticked(el)).toEqual(["es-ES", "ca-ES"]);
+  await type(el, "province", "15"); // A Coruña — Galician
+  expect(ticked(el)).toEqual(["es-ES", "gl-ES"]);
+});
+
+it("keeps languages the draft customised when the province changes", async () => {
+  // The other side of the same flag: these are not the province's defaults, so somebody chose them
+  // and the province must not overwrite the choice.
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: {
+      venue: {
+        country: "ES",
+        location: { province: "Barcelona", invoiceLocales: ["es-ES", "en-GB"] },
+      },
+    },
+  });
+  await type(el, "province", "15");
+  expect(ticked(el)).toEqual(["es-ES", "en-GB"]);
+});
+
+it("keeps the operator's own choice when the province changes", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  await type(el, "country", "ES");
+  await type(el, "province", "08");
+  await toggleLocale(el, "ca-ES", false); // the operator unticks Catalan
+  await type(el, "province", "17"); // Girona — also Catalan
+  expect(ticked(el)).toEqual(["es-ES"]);
 });

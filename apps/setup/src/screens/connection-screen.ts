@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import { helpLinkStyles, actionsStyles, errorStyles } from "../form-styles.js";
 
 /**
@@ -54,7 +53,7 @@ export class SetupConnectionScreen extends LitElement {
   @property({ type: Boolean }) setupUnavailable = false;
 
   override render(): TemplateResult {
-    return html`<wt-card>
+    return html`
       <h1>Is your connection to this page secure?</h1>
       <p>
         Check your browser's address bar to see whether this page is secure or not. If it says
@@ -79,7 +78,7 @@ export class SetupConnectionScreen extends LitElement {
               </wt-button>
             </div>`
       }
-    </wt-card>`;
+    `;
   }
 }
 

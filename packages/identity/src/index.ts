@@ -21,6 +21,7 @@ export {
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
 } from "./passkey.js";
+export { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
 export {
   PERMISSIONS,
   permissionsForRole,

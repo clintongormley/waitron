@@ -65,7 +65,7 @@ async function flush(el: SetupApp): Promise<void> {
 }
 
 /** The shell's event-listening container, from which composed screen events are dispatched in tests. */
-const wizard = (el: SetupApp) => el.shadowRoot!.querySelector<HTMLElement>(".wizard")!;
+const wizard = (el: SetupApp) => el.shadowRoot!.querySelector<HTMLElement>("wt-modal")!;
 
 /**
  * The real `mode`/`admin`/`review` screens each render into their OWN shadow root, so the shell's
@@ -1307,5 +1307,28 @@ describe("A2 mode boundaries", () => {
     expect(((await screenHost(el, "venue")) as unknown as { defaults: unknown }).defaults).toEqual(
       defaults,
     );
+  });
+});
+
+describe("modal shell", () => {
+  it("renders the wizard inside an open, non-dismissible modal", async () => {
+    const el = await mountSetupApp();
+    const modal = el.shadowRoot!.querySelector("wt-modal") as HTMLElement & {
+      open: boolean;
+      dismissible: boolean;
+    };
+    expect(modal).not.toBeNull();
+    expect(modal.open).toBe(true);
+    expect(modal.dismissible).toBe(false);
+    // The screens keep their own h1, so the modal is named by a label rather than its heading —
+    // setting `heading` would paint a second title above the first.
+    expect(modal.getAttribute("aria-label")).toBe("Set up your server");
+    expect(modal.getAttribute("heading")).toBeNull();
+  });
+
+  it("mounts the current screen inside the modal, not beside it", async () => {
+    const el = await mountSetupApp();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(modal.querySelector("[data-test^=screen-]")).not.toBeNull();
   });
 });

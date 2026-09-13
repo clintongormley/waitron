@@ -9,9 +9,9 @@ import {
   findAdministrativeAreaByPostalCode,
   resolveFiscalJurisdiction,
 } from "@waitron/country";
-import { getVenueSetupCountryPack } from "@waitron/country-packs";
+import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
@@ -20,6 +20,7 @@ import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
+import { resolveLoginLocale } from "./login-locale.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
@@ -277,6 +278,21 @@ function asNullableString(value: unknown, field: string): string | null {
   return value === null ? null : asString(value, field);
 }
 
+/**
+ * A person's real name. An ABSENT field reads as `null`, unlike `asNullableString`, which only
+ * accepts an explicit null. A present one is TRIMMED, and a value with nothing left after trimming is
+ * refused rather than stored: the column's check refuses an empty string, and identity's own write
+ * boundary normalizes a name the same way (`requiredText`, packages/identity/src/staff.ts), so
+ * provisioning must not be the one path that stores `"Clinton "`.
+ */
+function asOptionalName(value: unknown, field: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") invalidRequest(field);
+  const trimmed = value.trim();
+  if (trimmed === "") invalidRequest(field);
+  return trimmed;
+}
+
 function asStringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value) || value.length === 0) invalidRequest(field);
   for (const item of value) {
@@ -294,7 +310,7 @@ function asStringArray(value: unknown, field: string): string[] {
  * before any provisioning. The plan retains its country/territory and other domain guards as a
  * second boundary for non-setup callers.
  */
-function parseVenue(venueRaw: unknown): VenueRequest {
+function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): VenueRequest {
   const v = asObject(venueRaw, "venue");
   const loc = asObject(v.location, "location");
   const admin = asObject(v.admin, "admin");
@@ -340,6 +356,11 @@ function parseVenue(venueRaw: unknown): VenueRequest {
     invalidRequest("location.invoiceLocales");
   }
 
+  // The province as it will be STORED (`locations.province`), which is also what the venue-default
+  // locale is derived from below — so the language the admin falls back to is derived from the same
+  // value `readVenueLocale` will read back off the row at boot.
+  const province = area?.name ?? provinceInput;
+
   return {
     country: country.countryCode,
     taxId: taxId?.valid === true ? taxId.normalized : taxIdInput,
@@ -353,7 +374,7 @@ function parseVenue(venueRaw: unknown): VenueRequest {
       addressLine2: asNullableString(loc.addressLine2, "location.addressLine2"),
       postalCode: postalCode?.valid === true ? postalCode.normalized : postalCodeInput,
       city: asString(loc.city, "location.city"),
-      province: area?.name ?? provinceInput,
+      province,
       timeZone: area?.timeZone ?? country.defaultTimeZone,
       dayCutover: asString(loc.dayCutover, "location.dayCutover"),
     },
@@ -362,6 +383,34 @@ function parseVenue(venueRaw: unknown): VenueRequest {
     rectificativeSeriesCode: asString(v.rectificativeSeriesCode, "rectificativeSeriesCode"),
     admin: {
       displayName: asString(admin.displayName, "admin.displayName"),
+      // The person's REAL name, written to `persons.first_names` / `persons.last_names` by
+      // `applyVenue`'s seed-admin insert (packages/provisioning/src/venue-apply.ts). An absent field
+      // reads as null, which the nullable columns accept; a present one must hold a non-empty name
+      // after trimming, because `persons_first_names_ck` / `persons_last_names_ck` refuse an empty
+      // string (packages/identity/src/schema/persons.ts). Trimmed here so provisioning stores a name
+      // the same shape identity's own write boundary would (`requiredText`,
+      // packages/identity/src/staff.ts).
+      firstNames: asOptionalName(admin.firstNames, "admin.firstNames"),
+      lastNames: asOptionalName(admin.lastNames, "admin.lastNames"),
+      // The first operator's UI language, written to `persons.locale` — the DISPLAY language, not
+      // `location.invoiceLocales`, which is a fiscal value. Never null: `resolveLoginLocale` returns
+      // the browser's Accept-Language match when Waitron ships that language and the venue's
+      // geography-derived locale otherwise, so the stored value always has a catalogue. The dashboard
+      // could do without it, since it falls back to each request's own browser match; the till after
+      // a PIN sign-in and account emails have no browser header and fall back to the venue default,
+      // which for a Spanish venue is Spanish. The fallback here is `readVenueLocale`'s area → country
+      // → English chain without its `WAITRON_TILL_LOCALE` override, which a box in setup has no
+      // trading config to read. Never storing null means the row cannot tell "chose Spanish" from
+      // "said nothing", and a later change to the venue default does not move this person; see
+      // docs/superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md.
+      locale: resolveLoginLocale(
+        acceptLanguage,
+        resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
+          area: province,
+          country: country.countryCode,
+          fallback: FALLBACK_LOCALE,
+        }),
+      ),
       pinHash: hashPin(asString(admin.pin, "admin.pin")),
       passwordHash: hashPassword(asString(admin.password, "admin.password")),
       // The admin's REQUIRED dashboard-login email. Presence/shape screened by `asString`
@@ -379,6 +428,7 @@ function parseVenue(venueRaw: unknown): VenueRequest {
 function parseProvisionPayload(
   parsed: unknown,
   devMode: boolean,
+  acceptLanguage: string | undefined,
 ): {
   mode: "demo" | "prepare" | "live";
   request: ProvisionRequest;
@@ -398,7 +448,7 @@ function parseProvisionPayload(
   }
   if (body.configurationImport === true && mode !== "live") invalidRequest("configurationImport");
 
-  const venue = parseVenue(body.venue);
+  const venue = parseVenue(body.venue, acceptLanguage);
   const environment: DeploymentEnvironment =
     mode === "live" && !devMode ? "production" : "preproduction";
   const selection = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
@@ -541,7 +591,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       try {
         if (deps.runFiscalTest === undefined) return directError(c, log, "setup.not_ready", 503);
         const parsed = await c.req.json().catch(() => null);
-        const payload = parseProvisionPayload(parsed, deps.devMode === true);
+        const payload = parseProvisionPayload(
+          parsed,
+          deps.devMode === true,
+          c.req.header("Accept-Language"),
+        );
         if (payload.mode !== "live" || payload.request.environment !== "production") {
           invalidRequest("mode");
         }
@@ -617,7 +671,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // Parse defensively: `c.req.json()` throws on a malformed body and returns `null` for a
         // literal JSON `null` — both are a bad request, not a 500.
         const parsed: unknown = await c.req.json().catch(() => null);
-        const payload = parseProvisionPayload(parsed, deps.devMode === true);
+        const payload = parseProvisionPayload(
+          parsed,
+          deps.devMode === true,
+          c.req.header("Accept-Language"),
+        );
         const {
           mode,
           request,

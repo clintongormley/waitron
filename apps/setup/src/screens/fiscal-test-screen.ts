@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import { actionsStyles, errorStyles } from "../form-styles.js";
 import { dispatchFiscalTestRequested, dispatchSetupGoto } from "../events.js";
 
@@ -28,7 +27,7 @@ export class SetupFiscalTestScreen extends LitElement {
   @property() errorMessage?: string;
 
   override render(): TemplateResult {
-    return html`<wt-card>
+    return html`
       <h1>Check fiscal readiness</h1>
       <p>
         Waitron will file one small sample with the AEAT test service using this restaurant's tax
@@ -70,7 +69,7 @@ export class SetupFiscalTestScreen extends LitElement {
               >`
         }
       </div>
-    </wt-card>`;
+    `;
   }
 }
 

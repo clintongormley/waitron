@@ -43,19 +43,26 @@ async function storedUnits(tenantId: string) {
 
 describe("catalogue provisioning", () => {
   it.each([
-    ["ES", "Madrid", "en-GB", "es"],
-    ["ES", "Barcelona", "es-ES", "ca"],
-    ["ES", "A Coruña", "en-GB", "gl"],
-    ["ES", "Bizkaia", "en-GB", "eu"],
-    ["GB", "London", "es-ES", "en"],
-    ["XX", "Unknown", "es-ES", "en"],
+    // Spain is hard-coded to the same three languages whatever the province. The four Spanish rows
+    // vary both inputs the seed could plausibly read — province AND receipt locale — and all four
+    // expect one identical set: that sameness is the hard-code, written where it can be read. The
+    // varied receipt column is what keeps it checkable, so do not level it: with the three en-GB
+    // rows changed to es-ES, a seed deriving the Spanish default from the receipt locale passed all
+    // eight tests instead of failing three. See the comment in provisioning.ts.
+    ["ES", "Madrid", "en-GB", "es", ["es", "ca", "en"]],
+    ["ES", "Barcelona", "es-ES", "es", ["es", "ca", "en"]],
+    ["ES", "A Coruña", "en-GB", "es", ["es", "ca", "en"]],
+    ["ES", "Bizkaia", "en-GB", "es", ["es", "ca", "en"]],
+    // Everywhere else still takes its one language from geography.
+    ["GB", "London", "es-ES", "en", ["en"]],
+    ["XX", "Unknown", "es-ES", "en", ["en"]],
   ])(
     "seeds %s/%s content independently of the %s receipt locale",
-    async (country, province, receipt, language) => {
+    async (country, province, receipt, language, languages) => {
       const node = await venue(country, province, receipt);
       await suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
       expect(await storedLanguages(node.tenantId)).toEqual([
-        { default_language: language, languages: [language] },
+        { default_language: language, languages },
       ]);
       const location = await suite.db.execute<{ invoice_locales: string[] }>(sql`
       select invoice_locales from locations where tenant_id = ${node.tenantId} and id = ${node.locationId}`);

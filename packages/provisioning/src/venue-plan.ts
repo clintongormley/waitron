@@ -1,4 +1,4 @@
-import { AppError } from "@waitron/shared";
+import { AppError, assertSupportedLocale } from "@waitron/shared";
 import {
   DEFAULT_DEVICE_PROFILES,
   defaultProfileName,
@@ -47,8 +47,27 @@ export interface VenueRequest {
    * authorize privileged actions from day one. Both secrets are already HASHED here (hashed at the CLI
    * boundary by `hashPin` / `hashPassword`) — `pinHash` for the till, `passwordHash` for the dashboard,
    * never a plaintext secret, so neither enters the plan or any action. `email` is required because
-   * the admin is a dashboard account as well as a till PIN holder. */
-  admin: { displayName: string; pinHash: string; passwordHash: string; email: string };
+   * the admin is a dashboard account as well as a till PIN holder. `firstNames`/`lastNames` are the
+   * person's real name. They are OPTIONAL because callers that do not care about the seeded person's
+   * real name build this request without them — several test fixtures do, `venue-apply.test.ts`'s
+   * among them. The two callers that do care, the setup wizard and `waitron-provision venue`, always
+   * pass both. */
+  admin: {
+    displayName: string;
+    pinHash: string;
+    passwordHash: string;
+    email: string;
+    firstNames?: string | null;
+    lastNames?: string | null;
+    /** The person's own UI language, a `SUPPORTED_LOCALE_CODES` code. OPTIONAL for the same reason
+     * the names are: callers that have no preference to offer omit it. Null or absent means the
+     * person has none of their own, and the apps fall back to the venue default
+     * (`resolveActiveLocale`, packages/shared/src/locales.ts). The setup wizard always resolves a
+     * value from the operator's browser, so in practice a null here now comes from the command-line
+     * `venue` command or from a dev/demo script. This is the DISPLAY language only — it is not
+     * `location.invoiceLocales`, which decides what language an invoice is printed in. */
+    locale?: string | null;
+  };
 }
 
 export type VenueAction =
@@ -56,6 +75,12 @@ export type VenueAction =
   | {
       kind: "seed-admin";
       displayName: string;
+      // Not optional on the ACTION, unlike on the request: the applier writes all three columns
+      // unconditionally, so the planner resolves "not given" to `null` here and the applier never
+      // has to decide what an absent field means.
+      firstNames: string | null;
+      lastNames: string | null;
+      locale: string | null;
       pinHash: string;
       passwordHash: string;
       email: string;
@@ -145,6 +170,15 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       fiscalTerritory: request.location.fiscalTerritory,
     });
   }
+  // The admin's UI language goes straight into `persons.locale`, a plain text column whose only
+  // constraint is non-empty, so a code the apps have no catalogue for would be stored and then shown
+  // to the operator as a screen of missing strings. A person's own write boundary refuses one
+  // (`setPersonLocale`, packages/identity/src/staff.ts); refuse it here too, in the pure planner, so
+  // provisioning is not the one path that can write an unrenderable language and so the refusal
+  // costs no admin connection. `null` is "this person has no preference", a valid state that leaves
+  // them on the venue default — not an unsupported code.
+  const adminLocale =
+    request.admin.locale == null ? null : assertSupportedLocale(request.admin.locale);
   const tenantId = deriveTenantId(country, taxId);
 
   return [
@@ -161,6 +195,9 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     {
       kind: "seed-admin",
       displayName: request.admin.displayName,
+      firstNames: request.admin.firstNames ?? null,
+      lastNames: request.admin.lastNames ?? null,
+      locale: adminLocale,
       pinHash: request.admin.pinHash,
       passwordHash: request.admin.passwordHash,
       email: request.admin.email,
@@ -217,10 +254,15 @@ export function describeVenueAction(action: VenueAction): string {
   switch (action.kind) {
     case "ensure-tenant":
       return `ensure tenant ${action.country}/${action.taxId} (${action.legalName})`;
-    case "seed-admin":
-      // The admin's NAME only — never the pin hash. This line goes into the plan summary an operator
-      // reads, and the hash is a secret (§ SECRET DISCIPLINE).
-      return `seed admin ${action.displayName}`;
+    case "seed-admin": {
+      // The admin's name and language only — never a hash. This line goes into the plan summary an
+      // operator reads, and the hashes are secrets (§ SECRET DISCIPLINE).
+      const realName = [action.firstNames, action.lastNames].filter(Boolean).join(" ");
+      const details = [realName, action.locale].filter(Boolean).join(", ");
+      return details === ""
+        ? `seed admin ${action.displayName}`
+        : `seed admin ${action.displayName} (${details})`;
+    }
     case "seed-device-profiles":
       return `seed device profiles ${action.profiles.map((p) => p.name).join(", ")}`;
     case "create-location":

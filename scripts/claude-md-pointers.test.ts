@@ -33,6 +33,7 @@ const TOPIC_FILES = [
   "docs/developers/testing-guide.md",
   "docs/developers/workflow-guide.md",
   "docs/developers/design-system.md",
+  "docs/developers/writing-claims.md",
 ];
 
 /**

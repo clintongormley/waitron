@@ -45,13 +45,11 @@ export class SetupRoleScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <wt-card>
-        <h1>Join or recover an existing restaurant</h1>
-        <p class="intro">
-          Add this server as a mirror while another primary is available, or restore a backup after
-          a disaster when no usable peer survives.
-        </p>
-      </wt-card>
+      <h1>Join or recover an existing restaurant</h1>
+      <p class="intro">
+        Add this server as a mirror while another primary is available, or restore a backup after a
+        disaster when no usable peer survives.
+      </p>
 
       <div class="choices">
         <wt-card raised>

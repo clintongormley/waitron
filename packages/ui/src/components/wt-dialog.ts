@@ -50,6 +50,12 @@ export class WtDialog extends LitElement {
   @property({ type: Boolean, reflect: true }) open = false;
   @property() heading = "";
 
+  /** Whether Escape may close this dialog. Off for a surface with nothing behind it — the setup
+   * wizard is the whole page, so a dismissed dialog would strand the operator on an empty document.
+   * An absent boolean attribute reads as false in Lit, so a caller turns this off with the property
+   * binding `.dismissible=${false}`, never `?dismissible`. */
+  @property({ type: Boolean }) dismissible = true;
+
   // Shadows the native ARIAMixin accessor (same pattern as wt-button) so a caller-supplied
   // aria-label reaches the inner shadow <dialog> when there is no `heading` to derive a name
   // from. When `heading` IS set, aria-labelledby (pointing at the <h2>) takes precedence — see
@@ -79,6 +85,10 @@ export class WtDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   }
 
+  private onCancel(event: Event): void {
+    if (!this.dismissible) event.preventDefault();
+  }
+
   // Toggled imperatively (not via a reactive property) so that discovering
   // footer content — at first render and again on every later `slotchange` —
   // never schedules an extra Lit update cycle just to flip a CSS class. The
@@ -94,6 +104,7 @@ export class WtDialog extends LitElement {
     return html`
       <dialog
         @close=${this.onClose}
+        @cancel=${this.onCancel}
         role="dialog"
         aria-labelledby=${this.heading ? this.headingId : nothing}
         aria-label=${!this.heading && this.ariaLabel ? this.ariaLabel : nothing}

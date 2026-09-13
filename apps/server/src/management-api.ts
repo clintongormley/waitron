@@ -46,6 +46,7 @@ import {
   reactivatePersonForInvitation,
   resolveManagementSession,
   resetPersonLogin,
+  shouldOfferPasskey,
   requestAccountRecoveryAction,
   readOwnProfile,
   updatePersonDetails,
@@ -823,7 +824,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       try {
         session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
           await asAppUser(tx);
-          return loginManager(tx, {
+          const opened = await loginManager(tx, {
             tenantId: deps.cfg.tenantId,
             email,
             password,
@@ -831,6 +832,21 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
             recoveryCode,
             totpKeyRing: credentialKeyRing,
           });
+          // Whether to offer this person a passkey, read on the same connection and inside the same
+          // transaction as the sign-in that asks the question, so it sees what the sign-in has just
+          // written and not yet committed, and it commits or rolls back together with the session
+          // row. That second half is a deliberate trade: if this read throws, the sign-in goes with
+          // it — no session row, no cookie, a 500 — because a session left half open is worse than
+          // one that plainly failed. Only a sign-in that has already succeeded reaches here, so the
+          // answer never reaches an unauthenticated caller and says nothing about anyone but the
+          // person now signed in.
+          return {
+            ...opened,
+            offerPasskey: await shouldOfferPasskey(tx, {
+              tenantId: deps.cfg.tenantId,
+              personId: opened.personId,
+            }),
+          };
         });
       } catch (error) {
         finishAttempt(
@@ -842,7 +858,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       finishAttempt("success");
       setManagementCookie(c, session.id, deps.secureCookies);
-      return c.json({ personId: session.personId });
+      return c.json({ personId: session.personId, offerPasskey: session.offerPasskey });
     }),
   );
 

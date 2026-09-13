@@ -22,12 +22,11 @@ import type { AccountEmail } from "./account-email.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// PGlite, not real Postgres: the me routes are LOGIC (management session → verb → JSON) over mutable
-// planning rows, the browser twin of `schedule-api.ts`. Every DB touch runs through `withTenant` +
-// `asAppUser` exactly as production does, but the app role's grants and — the crux — the
-// "requester is the SESSION's personId, never the body's" identity property need a real non-superuser
-// role to MEAN anything, so they are proven against real Postgres in `me-api.pg.test.ts`. Here we
-// prove the route mechanics: whoami, the happy paths, the request-shape 400s and the not-logged-in 401.
+// The me routes are LOGIC (management session → verb → JSON) over mutable planning rows, the browser
+// twin of `schedule-api.ts`. Every DB touch runs through `withTenant` + `asAppUser` exactly as
+// production does. The crux — "the requester is the SESSION's personId, never the body's" — is
+// proven in `me-api.pg.test.ts`; here we prove the route mechanics: whoami, the happy paths, the
+// request-shape 400s and the not-logged-in 401.
 
 const noopLog: Logger = () => {};
 let tenantId: string;
@@ -124,9 +123,13 @@ async function send(
   app: Hono,
   method: string,
   path: string,
-  opts: { body?: unknown; cookie?: string | null } = {},
+  opts: {
+    body?: unknown;
+    cookie?: string | null;
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...opts.headers };
   if (opts.body !== undefined) headers["content-type"] = "application/json";
   if (opts.cookie != null) headers["cookie"] = opts.cookie;
   return app.request(path, {
@@ -180,6 +183,7 @@ describe("mountMeApi — whoami", () => {
         email: string | null;
         locale: string | null;
         venueLocale: string;
+        sessionDefault: string;
         venueName: string;
         onboardingIntent: string;
         permissions: string[];
@@ -193,6 +197,7 @@ describe("mountMeApi — whoami", () => {
       email: null,
       locale: null,
       venueLocale: VENUE_LOCALE,
+      sessionDefault: VENUE_LOCALE,
       venueName: "Test SL",
       onboardingIntent: "prepare",
       permissions: [],
@@ -234,6 +239,7 @@ describe("mountMeApi — whoami", () => {
         email: string | null;
         locale: string | null;
         venueLocale: string;
+        sessionDefault: string;
         venueName: string;
         onboardingIntent: string;
         permissions: string[];
@@ -247,6 +253,7 @@ describe("mountMeApi — whoami", () => {
       email: null,
       locale: "es-ES",
       venueLocale: VENUE_LOCALE,
+      sessionDefault: VENUE_LOCALE,
       venueName: "Test SL",
       onboardingIntent: "prepare",
       permissions: [],
@@ -276,6 +283,68 @@ describe("mountMeApi — whoami", () => {
     expect(body.permissions).toContain("booking.manage");
     expect(body.permissions).not.toContain("mirror.create");
     expect(body.modules).toEqual(MODULES);
+  });
+
+  // `sessionDefault` is the Accept-Language match for THIS request — the language a person who has
+  // never chosen one should see. The venue default here is es-ES while the browser asks for en-GB, so
+  // the two sources are pinned apart: a mutant echoing `deps.venueLocale` into `sessionDefault` fails.
+  it("matches the browser's language for a signed-in person who has never chosen one", async () => {
+    const res = await send(
+      mountApp({ venueLocale: "es-ES" }),
+      "GET",
+      "/management-api/session/me",
+      {
+        cookie: await cookieFor(me),
+        headers: { "Accept-Language": "en-GB,en;q=0.9" },
+      },
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { sessionDefault: string; venueLocale: string }).toMatchObject({
+      sessionDefault: "en-GB",
+      venueLocale: "es-ES",
+    });
+  });
+
+  it("falls back to the venue's language when the browser asks for one we do not ship", async () => {
+    const res = await send(
+      mountApp({ venueLocale: "es-ES" }),
+      "GET",
+      "/management-api/session/me",
+      {
+        cookie: await cookieFor(me),
+        headers: { "Accept-Language": "fr-FR" },
+      },
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { sessionDefault: string }).toMatchObject({
+      sessionDefault: "es-ES",
+    });
+  });
+
+  it("tells every cache not to store the whoami at all", async () => {
+    const res = await send(
+      mountApp({ venueLocale: "es-ES" }),
+      "GET",
+      "/management-api/session/me",
+      {
+        cookie: await cookieFor(me),
+        headers: { "Accept-Language": "en-GB" },
+      },
+    );
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("varies on the language header so a cache cannot serve one browser's match to another", async () => {
+    const res = await send(
+      mountApp({ venueLocale: "es-ES" }),
+      "GET",
+      "/management-api/session/me",
+      {
+        cookie: await cookieFor(me),
+        headers: { "Accept-Language": "en-GB" },
+      },
+    );
+    expect(res.headers.get("Vary")).toBe("Accept-Language");
   });
 
   it("401s (management_session.required) when no session cookie is sent", async () => {

@@ -1635,16 +1635,25 @@ export class DashboardApi {
   }
 
   /**
-   * `POST /management-api/session` — log in with an email + password. Returns who is now logged in;
-   * a bad credential rejects with the server's `{ code }`.
+   * `POST /management-api/session` — log in with an email + password. Returns who is now logged in
+   * and whether to offer them a passkey; a bad credential rejects with the server's `{ code }`.
    */
   login(input: {
     email: string;
     password: string;
     totp?: string;
     recoveryCode?: string;
-  }): Promise<{ personId: string }> {
-    return this.#request<{ personId: string }>("/management-api/session", "POST", input);
+  }): Promise<{ personId: string; offerPasskey: boolean }> {
+    return this.#request<{ personId: string; offerPasskey: boolean }>(
+      "/management-api/session",
+      "POST",
+      input,
+    );
+  }
+
+  /** Record that the sign-in passkey offer was resolved, by adding a passkey or by skipping. */
+  passkeyOfferSeen(): Promise<void> {
+    return this.#request<void>("/management-api/session/me/passkey-offer", "POST");
   }
 
   requestPasswordReset(email: string): Promise<void> {
@@ -2918,9 +2927,11 @@ export class DashboardApi {
    * dropped it to the login screen. (A request with no session still 401s via `management_session.required`.)
    *
    * Per-user-language-preference (Task 5): the response also carries the signed-in person's stored UI
-   * `locale` (`null` when they have never chosen one) and the geography-derived `venueLocale` fallback —
-   * the same value `GET /management-api/locales` echoes as `venueDefault`. The shell resolves the two via
-   * `resolveActiveLocale(locale, venueLocale)` on boot/login to pick the operator-UI language.
+   * `locale` (`null` when they have never chosen one), the geography-derived `venueLocale` — the same
+   * value `GET /management-api/locales` echoes as `venueDefault` — and `sessionDefault`, the server's
+   * Accept-Language match for THIS browser, already floored at `venueLocale`. The shell resolves
+   * `resolveActiveLocale(locale, sessionDefault)` on boot/login: a stored choice wins, then the
+   * browser's language, and the venue default is reached through `sessionDefault`'s own fallback.
    *
    * Module gating (SP2 Task 4): the response also carries the signed-in person's effective
    * `permissions` (a hint set) and the enabled `modules`; the shell shows a module's nav/screen only
@@ -2932,6 +2943,7 @@ export class DashboardApi {
     email: string | null;
     locale: string | null;
     venueLocale: string;
+    sessionDefault: string;
     permissions: string[];
     modules: string[];
     venueName: string;
@@ -2945,6 +2957,7 @@ export class DashboardApi {
       email: string | null;
       locale: string | null;
       venueLocale: string;
+      sessionDefault: string;
       permissions: string[];
       modules: string[];
       venueName: string;

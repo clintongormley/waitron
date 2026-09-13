@@ -47,10 +47,17 @@ export const persons = pgTable(
      * the venue account key shared with mirrors so authenticator verification works after failover. */
     totpSecret: text("totp_secret"),
     /** The person's preferred UI language (a SUPPORTED_LOCALES code). Null = no
-     * preference; the app falls back to the venue default. Validated at the
-     * write boundary (setPersonLocale), not by a DB enum, so a new locale is a
-     * catalogue + constant change with no migration. */
+     * preference; the app falls back to the venue default. Validated at each
+     * write boundary — setPersonLocale for a person changing their own, planVenue
+     * for the admin a venue is provisioned with — not by a DB enum, so a new
+     * locale is a catalogue + constant change with no migration. Nothing stops a
+     * writer that skips both: the only constraint here is non-empty. */
     locale: text("locale"),
+    /** When this person was offered a passkey at sign-in. Null = never offered, which is what
+     * makes the offer appear exactly once: it is stamped when they resolve it, by adding one or by
+     * skipping, so a browser that dies mid-offer asks again. Nullable and unstamped for everyone who
+     * existed before the offer did, so each of them is offered once too. */
+    passkeyOfferedAt: timestamp("passkey_offered_at", { withTimezone: true, mode: "string" }),
     /** The person's login email — required at every human-account boundary and used for dashboard
      * sign-in, activation, and recovery. The column stays nullable for internal principals and
      * low-level fixtures. Unique per tenant, case-insensitively, through the custom migration's

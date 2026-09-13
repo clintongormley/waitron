@@ -139,18 +139,64 @@ describe("applyVenue", () => {
     const people = await suite.db.execute<{
       display_name: string;
       role: string;
+      first_names: string | null;
+      last_names: string | null;
+      locale: string | null;
       pin_hash: string;
       password_hash: string;
     }>(sql`
-      select display_name, role, pin_hash, password_hash
+      select display_name, role, first_names, last_names, locale, pin_hash, password_hash
       from persons where tenant_id = ${result.tenantId}`);
     expect(people.rows).toHaveLength(1);
+    // This request carries no real names and no UI-language preference, so the insert binds null for
+    // all three columns and the row stores null — the `is null or length > 0` checks accept that,
+    // which is why the planner resolves an absent value to null rather than to an empty string. A
+    // null `locale` is what leaves this person on the venue default.
     expect(people.rows[0]).toEqual({
       display_name: "Alicia",
       role: "admin",
+      first_names: null,
+      last_names: null,
+      locale: null,
       pin_hash: "scrypt$abc$def",
       password_hash: "scrypt$pwd$hash",
     });
+  });
+
+  it("writes the admin's real names and UI language onto the seeded person when the request carries them", async () => {
+    // PGlite, not the real-container sibling. CLAUDE.md §4 sends a suite to real PostgreSQL for
+    // privileges, triggers as the deployment role, or concurrency; none applies here. The insert is
+    // made by the OWNER of `persons` on both targets, so no grant separates them, and PGlite runs the
+    // real migration manifest (see the suite's `usePgliteDb` options), so the nullable columns and
+    // their `is null or length > 0` checks are the real ones — a value this test stores is a value
+    // the shipped schema accepts. A distinct tenant, because seed-admin is idempotent per tenant and
+    // the suite shares one database.
+    const seedRequest = request("B31313131");
+    seedRequest.admin = {
+      displayName: "Clint",
+      firstNames: "Clinton",
+      lastNames: "Gormley",
+      locale: "en-GB",
+      pinHash: "scrypt$abc$def",
+      passwordHash: "scrypt$pwd$hash",
+      email: "clinton@example.test",
+    };
+    const result = await applyVenue(planVenue(seedRequest, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+
+    const people = await suite.db.execute<{
+      display_name: string;
+      first_names: string | null;
+      last_names: string | null;
+      locale: string | null;
+    }>(sql`
+      select display_name, first_names, last_names, locale
+      from persons where tenant_id = ${result.tenantId}`);
+    expect(people.rows).toEqual([
+      { display_name: "Clint", first_names: "Clinton", last_names: "Gormley", locale: "en-GB" },
+    ]);
   });
 
   it("seeds exactly the three starter device profiles (names per the venue locale, no canvas, form-factor caps)", async () => {

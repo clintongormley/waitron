@@ -62,7 +62,14 @@ const provisionBody: ProvisionBody = {
     tillName: "Barra",
     seriesCode: "A",
     rectificativeSeriesCode: "RA",
-    admin: { displayName: "Ada", email: "ada@example.com", pin: "1234", password: "correct horse" },
+    admin: {
+      firstNames: "Ada",
+      lastNames: "Lovelace",
+      displayName: "Ada",
+      email: "ada@example.com",
+      pin: "1234",
+      password: "correct horse",
+    },
   },
   aeatCert: { pfxBase64: "AAAA", passphrase: "pw", certKind: "sello" },
 };

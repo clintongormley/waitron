@@ -14,7 +14,14 @@ const draft: DeepPartial<ProvisionBody> = {
     location: { name: "Calle Mayor", fiscalTerritory: "ES-common", invoiceLocales: ["es-ES"] },
     seriesCode: "FA",
     rectificativeSeriesCode: "RF",
-    admin: { displayName: "Alba", email: "alba@example.com", pin: "9137", password: "pw" },
+    admin: {
+      firstNames: "Alba",
+      lastNames: "Ramos",
+      displayName: "Alba",
+      email: "alba@example.com",
+      pin: "9137",
+      password: "pw",
+    },
   },
   aeatCert: { pfxBase64: "AAAA", passphrase: "pp", certKind: "sello" },
 };

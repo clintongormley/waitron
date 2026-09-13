@@ -151,30 +151,27 @@ export class SetupModeScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <wt-card>
-        <h1>Set up this Waitron server</h1>
-        <p class="intro">
-          This server runs the till and files fiscal records. Set it up once here, then it restarts
-          into everyday trading mode.
-        </p>
-        <p class="cert-note">
-          A certificate warning needs attention before you continue.
-          <a href="/setup/trust" target="_blank" rel="noopener">Open certificate help</a>.
-        </p>
-        ${
-          this.environment
-            ? html`<p class="env" data-test="environment">${this.environment}</p>`
-            : nothing
-        }
-        ${
-          this.environment === "production"
-            ? html`<p class="production-warning" role="alert" data-test="production-warning">
-                This server is stamped for production — provisioning files real records to AEAT.
-              </p>`
-            : nothing
-        }
-      </wt-card>
-
+      <h1>Set up this Waitron server</h1>
+      <p class="intro">
+        This server runs the till and files fiscal records. Set it up once here, then it restarts
+        into everyday trading mode.
+      </p>
+      <p class="cert-note">
+        A certificate warning needs attention before you continue.
+        <a href="/setup/trust" target="_blank" rel="noopener">Open certificate help</a>.
+      </p>
+      ${
+        this.environment
+          ? html`<p class="env" data-test="environment">${this.environment}</p>`
+          : nothing
+      }
+      ${
+        this.environment === "production"
+          ? html`<p class="production-warning" role="alert" data-test="production-warning">
+              This server is stamped for production — provisioning files real records to AEAT.
+            </p>`
+          : nothing
+      }
       ${this.confirming ? this.#renderConfirm() : this.#renderChoices()}
     `;
   }

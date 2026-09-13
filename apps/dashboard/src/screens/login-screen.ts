@@ -410,7 +410,7 @@ export class LoginScreen extends LitElement {
     this.busy = true;
     this.errorKey = null;
     try {
-      const out = await this.api.login({
+      const { personId, offerPasskey } = await this.api.login({
         email: this.email,
         password: this.password,
         ...(this.secondFactor === ""
@@ -420,13 +420,16 @@ export class LoginScreen extends LitElement {
             : { recoveryCode: this.secondFactor }),
       });
       if (!this.isConnected) return;
+      // Named apart from the rest of the response rather than spread: `offerPasskey` answers this
+      // screen's question about which step comes next, and is not part of what a completed sign-in
+      // tells the app shell.
       const detail: CompletedLogin = {
-        ...out,
+        personId,
         accountSetup: false,
         loginMethod: "password",
         ...this.#preferenceDetail(),
       };
-      if (this.offerAfterLogin) this.#offerPasskey(detail);
+      if (this.offerAfterLogin || offerPasskey) this.#offerPasskey(detail);
       else this.#announceLogin(detail);
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -546,6 +549,32 @@ export class LoginScreen extends LitElement {
     this.passkeyNameError = "";
   }
 
+  /**
+   * Record that the offer was resolved, then sign in regardless: a failed piece of bookkeeping must
+   * never be why somebody cannot reach their own dashboard, and the worst case is being offered once
+   * more. One kind of failure ends somewhere else — a session-shaped code
+   * (`management_session.required`, `management_session.expired`, `person.suspended`) reaches the
+   * shell through the request primitive's `onError`, which runs BEFORE it throws
+   * (`packages/dashboard-kit/src/request.ts`), and `main.ts`'s `waitron-session-invalid` — so by the
+   * time the catch below swallows anything, the shell has already put this screen back in front of
+   * the person.
+   *
+   * `busy` holds the screen for the round trip the recording added, because the render disables both
+   * buttons on it: without it a second Skip, or Add pressed on top of a pending Skip, signs the same
+   * person in twice. It is released again before announcing, since that session-shaped rejection
+   * leaves this screen mounted and it has to stay usable.
+   */
+  async #resolvePasskeyOffer(detail: CompletedLogin): Promise<void> {
+    this.busy = true;
+    try {
+      await this.api.passkeyOfferSeen();
+    } catch {
+      // Deliberately swallowed — see above.
+    }
+    this.busy = false;
+    if (this.isConnected) this.#announceLogin(detail);
+  }
+
   async #setupPasskey(): Promise<void> {
     if (this.busy || this.completedLogin === null) return;
     this.passkeyNameError =
@@ -572,7 +601,7 @@ export class LoginScreen extends LitElement {
         name: this.passkeyName.trim(),
       });
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      this.#announceLogin(this.completedLogin);
+      await this.#resolvePasskeyOffer(this.completedLogin);
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
       if (
@@ -971,7 +1000,7 @@ export class LoginScreen extends LitElement {
                     ?disabled=${this.busy}
                     @click=${() => {
                       if (!this.busy && this.completedLogin !== null)
-                        this.#announceLogin(this.completedLogin);
+                        void this.#resolvePasskeyOffer(this.completedLogin);
                     }}
                     >${t("account.skip_passkey")}</wt-button
                   >

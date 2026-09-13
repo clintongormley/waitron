@@ -26,7 +26,7 @@ const UNIT_NAMES = {
 
 export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
   seed: {
-    summary: "Create the venue's initial menu and content language",
+    summary: "Create the venue's initial menu and content languages",
     async run(tx, node) {
       const location = await tx.execute<{
         catalogue_id: string | null;
@@ -36,16 +36,39 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         select l.catalogue_id, l.province, t.country from locations l
         join tenants t on t.id = l.tenant_id
         where l.tenant_id = ${node.tenantId} and l.id = ${node.locationId}`);
-      const defaultLanguage = contentLanguageCode(
-        resolveInstalledCountryLocale(geographicLocales, {
-          country: location.rows[0]?.country,
-          area: location.rows[0]?.province,
-          fallback: FALLBACK_LOCALE,
-        }),
-      );
+      const country = location.rows[0]?.country;
+      // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: the deli writes its
+      // menu in Spanish, Catalan and English, and nothing in setup asks which languages a venue
+      // wants. Driving the list from the venue's region and its own choices is the proper fix —
+      // docs/backlog.md → A9, "Product languages are hard-coded at setup". Every other country
+      // keeps taking its one language from geography, so the hard-code does not spread. All of it
+      // is editable from the dashboard afterwards.
+      const languages =
+        country === "ES"
+          ? ["es", "ca", "en"]
+          : [
+              contentLanguageCode(
+                resolveInstalledCountryLocale(geographicLocales, {
+                  country,
+                  area: location.rows[0]?.province,
+                  fallback: FALLBACK_LOCALE,
+                }),
+              ),
+            ];
+      // The default has to be one of the languages: `content_languages_default_ck`.
+      const defaultLanguage = languages[0]!;
+      // Each element is its own bound parameter. A JavaScript array interpolated as one value is
+      // expanded by Drizzle into a value list — `($3, $4, $5)` — which Postgres rejects instead of
+      // reading as an array. The `::text[]` cast is not needed for this insert, whose target column
+      // supplies the type — the suite is green without it — and is kept only so this reads the same
+      // as its sibling in `packages/provisioning/src/venue-apply.ts`.
+      const languageArray = sql`array[${sql.join(
+        languages.map((language) => sql`${language}`),
+        sql`, `,
+      )}]::text[]`;
       await tx.execute(sql`
         insert into content_languages (tenant_id, default_language, languages)
-        values (${node.tenantId}, ${defaultLanguage}, array[${defaultLanguage}])
+        values (${node.tenantId}, ${defaultLanguage}, ${languageArray})
         on conflict (tenant_id) do nothing`);
       const claimed = await tx.execute(sql`
         insert into unit_seed_states (tenant_id) values (${node.tenantId})

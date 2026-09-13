@@ -18,6 +18,10 @@ function change(el: PersonForm, testId: string, value: string): void {
   );
 }
 
+const displayName = (el: PersonForm): string =>
+  (el.shadowRoot!.querySelector("[data-test=display-name]") as HTMLElement & { value: string })
+    .value;
+
 async function fillRequired(el: PersonForm): Promise<void> {
   change(el, "first-names", "Ada");
   change(el, "last-names", "Lovelace");
@@ -94,21 +98,33 @@ describe("person-form", () => {
     expect(el.shadowRoot!.querySelector('[name="pin"]')).toBeNull();
   });
 
-  it("uses first names as the display-name default until that field is edited", async () => {
+  it("uses both names as the display-name default until that field is edited", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     change(el, "first-names", "Alex Maria");
+    change(el, "last-names", "Ramos");
     await el.updateComplete;
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=display-name]")!
-        .value,
-    ).toBe("Alex Maria");
+    expect(displayName(el)).toBe("Alex Maria Ramos");
     change(el, "display-name", "Lex");
     change(el, "first-names", "Alexandra");
     await el.updateComplete;
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=display-name]")!
-        .value,
-    ).toBe("Lex");
+    expect(displayName(el)).toBe("Lex");
+  });
+
+  it("fills the display name in from both names", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "first-names", "Clinton");
+    change(el, "last-names", "Gormley");
+    await el.updateComplete;
+    expect(displayName(el)).toBe("Clinton Gormley");
+  });
+
+  it("stops following the names once the display name is edited", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "first-names", "Clinton");
+    change(el, "display-name", "Clint");
+    change(el, "last-names", "Gormley");
+    await el.updateComplete;
+    expect(displayName(el)).toBe("Clint");
   });
 
   it("explains every missing required field in one form summary", async () => {

@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import type { ConfigurationPreview } from "../api/client.js";
 import { actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto } from "../events.js";
@@ -30,9 +29,8 @@ export class SetupConfigurationPreviewScreen extends LitElement {
   @property({ attribute: false }) preview?: ConfigurationPreview;
 
   override render(): TemplateResult {
-    if (this.preview === undefined)
-      return html`<wt-card><h1>Review prepared configuration</h1></wt-card>`;
-    return html`<wt-card raised>
+    if (this.preview === undefined) return html`<h1>Review prepared configuration</h1>`;
+    return html`
       <h1>Review prepared configuration</h1>
       <p>
         This will create a fresh production restaurant for
@@ -66,7 +64,7 @@ export class SetupConfigurationPreviewScreen extends LitElement {
           >Continue</wt-button
         >
       </div>
-    </wt-card>`;
+    `;
   }
 }
 

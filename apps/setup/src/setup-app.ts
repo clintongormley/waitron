@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-modal.js";
 // Side-effect imports register the screen custom elements this shell only names as tags below.
 import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
@@ -33,7 +34,7 @@ import { SERVER_FIELDS } from "./server-fields.js";
  * connection and offers certificate help.
  * The following `mode` screen offers the four product journeys:
  *
- * - Demo or Prepare → `admin` (first operator) → `venue` (tenant + location + series) → `review`
+ * - Demo or Prepare → `admin` (your account) → `venue` (tenant + location + series) → `review`
  *   (confirm + POST) → `provisioning` (in flight) → `done` (restarting).
  * - Go live → `live-source`; importing a prepared configuration adds `configuration-preview`, then
  *   both sources follow `admin` → `venue` → `cert` (AEAT, live ES-common only) → `fiscal-test` →
@@ -214,10 +215,6 @@ export class SetupApp extends LitElement {
     css`
       :host {
         display: block;
-      }
-
-      .wizard {
-        padding: var(--wt-space-4);
       }
     `,
   ];
@@ -749,8 +746,10 @@ export class SetupApp extends LitElement {
     // here against the draft), and `provision-requested` (review's Provision and the provisioning
     // screen's retry both fire it). Wiring them on the container means each screen talks back without
     // the shell knowing which one is mounted.
-    return html`<div
-      class="wizard"
+    return html`<wt-modal
+      open
+      .dismissible=${false}
+      aria-label="Set up your server"
       @setup-defaults-requested=${(event: CustomEvent) => {
         event.stopPropagation();
         void this.#loadVenueDefaults();
@@ -767,7 +766,7 @@ export class SetupApp extends LitElement {
       @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
     >
       ${this.#renderScreen()}
-    </div>`;
+    </wt-modal>`;
   }
 
   /**

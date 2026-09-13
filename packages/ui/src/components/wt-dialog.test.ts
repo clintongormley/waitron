@@ -169,3 +169,26 @@ test("backdrop paints from the scrim token", async () => {
   const dialog = el.shadowRoot!.querySelector("dialog")!;
   expect(getComputedStyle(dialog, "::backdrop").backgroundColor).toBe("rgb(9, 10, 11)");
 });
+
+test("closes on Escape by default", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
+  // A cancel that nobody prevents is what the browser turns into a close.
+  const cancel = new Event("cancel", { cancelable: true });
+  dialog.dispatchEvent(cancel);
+  expect(cancel.defaultPrevented).toBe(false);
+});
+
+test("refuses Escape when dismissible is off", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable & { dismissible: boolean };
+  el.dismissible = false;
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
+  const cancel = new Event("cancel", { cancelable: true });
+  dialog.dispatchEvent(cancel);
+  expect(cancel.defaultPrevented).toBe(true);
+  expect(el.open).toBe(true);
+});

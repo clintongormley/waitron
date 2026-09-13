@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
@@ -148,42 +147,38 @@ export class SetupConnectScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <wt-card>
-        <h1>Connect to the primary</h1>
-        <p>
-          Point this mirror at the primary server and sign in with an admin login for it. The mirror
-          copies the venue and then shows its data read-only — it never trades or files anything.
-        </p>
-        ${this.#field("Primary server address", "primaryUrl", "url")}
-        ${this.#field("Admin login (person ID)", "personId")}
-        ${this.#field("Admin password", "password", "password")}
-        ${this.#field("Authenticator code (if required)", "totp")}
-        ${
-          // A SINGLE live alert region — two simultaneous `role="alert"` nodes double-announce to a
-          // screen reader (backlog #149 (j)). The client-validation banner takes precedence: it names
-          // a problem in what the operator just typed, so a stale server-routed message must not sit
-          // beside it. The routed-back server banner shows only when there is NO client error.
-          this.showError
-            ? html`<wt-form-error-summary
-                data-test="error"
-                heading="There is a problem with this form"
-                .errors=${[...this.invalid].map((key) => `Check the ${{ primaryUrl: "primary server address", personId: "admin person ID", password: "admin password", totp: "authenticator code" }[key]}.`)}
-              ></wt-form-error-summary>`
-            : this.errorMessage === undefined
-              ? nothing
-              : html`<p class="error" role="alert" data-test="server-error">
-                  ${this.errorMessage}
-                </p>`
-        }
-        <wt-form-actions>
-          <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
-            >Back</wt-button
-          >
-          <wt-button variant="primary" data-test="connect" @click=${() => this.#connect()}
-            >Connect</wt-button
-          >
-        </wt-form-actions>
-      </wt-card>
+      <h1>Connect to the primary</h1>
+      <p>
+        Point this mirror at the primary server and sign in with an admin login for it. The mirror
+        copies the venue and then shows its data read-only — it never trades or files anything.
+      </p>
+      ${this.#field("Primary server address", "primaryUrl", "url")}
+      ${this.#field("Admin login (person ID)", "personId")}
+      ${this.#field("Admin password", "password", "password")}
+      ${this.#field("Authenticator code (if required)", "totp")}
+      ${
+        // A SINGLE live alert region — two simultaneous `role="alert"` nodes double-announce to a
+        // screen reader (backlog #149 (j)). The client-validation banner takes precedence: it names
+        // a problem in what the operator just typed, so a stale server-routed message must not sit
+        // beside it. The routed-back server banner shows only when there is NO client error.
+        this.showError
+          ? html`<wt-form-error-summary
+              data-test="error"
+              heading="There is a problem with this form"
+              .errors=${[...this.invalid].map((key) => `Check the ${{ primaryUrl: "primary server address", personId: "admin person ID", password: "admin password", totp: "authenticator code" }[key]}.`)}
+            ></wt-form-error-summary>`
+          : this.errorMessage === undefined
+            ? nothing
+            : html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>`
+      }
+      <wt-form-actions>
+        <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+          >Back</wt-button
+        >
+        <wt-button variant="primary" data-test="connect" @click=${() => this.#connect()}
+          >Connect</wt-button
+        >
+      </wt-form-actions>
     `;
   }
 }

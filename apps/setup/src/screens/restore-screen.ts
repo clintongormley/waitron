@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -45,7 +44,7 @@ export class SetupRestoreScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    return html`<wt-card>
+    return html`
       <h1>Restore from backup</h1>
       <p>
         Use cold recovery only when no primary or mirror with newer restaurant data is available.
@@ -152,7 +151,7 @@ export class SetupRestoreScreen extends LitElement {
           >Restore backup</wt-button
         >
       </wt-form-actions>
-    </wt-card>`;
+    `;
   }
 }
 

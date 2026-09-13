@@ -62,9 +62,11 @@ describe("setup-admin-screen", () => {
     });
   });
 
-  it("collects the four fields and advances to venue with the admin patch", async () => {
+  it("collects every field and advances to venue with the admin patch", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
+    await type(el, "firstNames", "Alba");
+    await type(el, "lastNames", "Ramos");
     await type(el, "displayName", "Alba");
     await type(el, "email", "alba@example.com");
     await type(el, "password", "correct horse");
@@ -77,6 +79,8 @@ describe("setup-admin-screen", () => {
           patch: {
             venue: {
               admin: {
+                firstNames: "Alba",
+                lastNames: "Ramos",
                 displayName: "Alba",
                 email: "alba@example.com",
                 pin: "1234",
@@ -94,6 +98,8 @@ describe("setup-admin-screen", () => {
   it("blocks Next and marks email invalid when email is left blank", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
+    await type(el, "firstNames", "Alba");
+    await type(el, "lastNames", "Ramos");
     await type(el, "displayName", "Alba");
     await type(el, "password", "correct horse");
     await type(el, "pin", "1234");
@@ -146,6 +152,8 @@ describe("setup-admin-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(q(el, "[data-test=error]")).not.toBeNull();
+    await type(el, "firstNames", "Alba");
+    await type(el, "lastNames", "Ramos");
     await type(el, "displayName", "Alba");
     await type(el, "email", "alba@example.com");
     await type(el, "password", "pw");
@@ -221,6 +229,8 @@ it("Enter advances the admin step using current shadow input values", async () =
   const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
   const events = collect(host);
   for (const [field, value] of Object.entries({
+    firstNames: "Alba",
+    lastNames: "Ramos",
     displayName: "Alba",
     email: "alba@example.com",
     password: "secret",
@@ -244,6 +254,8 @@ it("Enter advances the admin step using current shadow input values", async () =
         patch: {
           venue: {
             admin: {
+              firstNames: "Alba",
+              lastNames: "Ramos",
               displayName: "Alba",
               email: "alba@example.com",
               password: "secret",
@@ -280,3 +292,107 @@ it.each(["password", "pin"])(
     expect(events).toEqual([]);
   },
 );
+
+it("is titled for the person filling it in", async () => {
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+  expect(q(el, "h1")!.textContent!.trim()).toBe("Your account");
+});
+
+it("fills the display name in from both names while it is untouched", async () => {
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+  await type(el, "firstNames", "Clinton");
+  await type(el, "lastNames", "Gormley");
+  expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe(
+    "Clinton Gormley",
+  );
+});
+
+it("stops following the names once the display name is edited by hand", async () => {
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+  await type(el, "firstNames", "Clinton");
+  await type(el, "displayName", "Clint");
+  await type(el, "lastNames", "Gormley");
+  expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe("Clint");
+});
+
+/** The error summary's rendered bullet list — the words the operator actually reads. */
+async function summaryItems(el: SetupAdminScreen): Promise<string[]> {
+  const summary = q(el, "[data-test=error]") as
+    (HTMLElement & { updateComplete: Promise<unknown> }) | null;
+  if (summary === null) return [];
+  await summary.updateComplete;
+  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
+}
+
+// Both directions, because a rule proven for one name says nothing about the other: drop either
+// name from `#next`'s required-field loop and exactly one of these two cases flips red. The summary
+// assertion reads the rendered words, so a missing label — which renders as "Enter your undefined."
+// — fails here rather than reaching an operator.
+it.each([
+  ["first", "firstNames", "lastNames", "Enter your first name."],
+  ["last", "lastNames", "firstNames", "Enter your last name."],
+] as const)(
+  "does not advance without a %s name, and names it in the summary",
+  async (_which, blank, filled, message) => {
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    const events = collect(el);
+    await type(el, filled, "Clinton");
+    await type(el, "displayName", "Clinton");
+    await type(el, "email", "clinton@example.com");
+    await type(el, "password", "correct horse battery");
+    await type(el, "pin", "1234");
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([]);
+    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(q(el, `[data-test=${blank}]`)!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, `[data-test=${filled}]`)!.hasAttribute("invalid")).toBe(false);
+    expect(await summaryItems(el)).toEqual([message]);
+  },
+);
+
+it("carries both names up in the patch", async () => {
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+  const events = collect(el);
+  await type(el, "firstNames", "Clinton");
+  await type(el, "lastNames", "Gormley");
+  await type(el, "email", "clinton@example.com");
+  await type(el, "password", "correct horse battery");
+  await type(el, "pin", "1234");
+  q(el, "[data-test=next]")!.click();
+  await el.updateComplete;
+  const patch = events.find((e) => e.kind === "patch")!.detail as {
+    patch: { venue: { admin: Record<string, string> } };
+  };
+  expect(patch.patch.venue.admin).toMatchObject({
+    firstNames: "Clinton",
+    lastNames: "Gormley",
+    displayName: "Clinton Gormley",
+  });
+});
+
+it("restores both names when the operator steps back", async () => {
+  const draft: DeepPartial<ProvisionBody> = {
+    venue: { admin: { firstNames: "Clinton", lastNames: "Gormley", displayName: "Clint" } },
+  };
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", { draft });
+  const value = (key: string) =>
+    (q(el, `[data-test=${key}]`) as HTMLElement & { value: string }).value;
+  expect([value("firstNames"), value("lastNames"), value("displayName")]).toEqual([
+    "Clinton",
+    "Gormley",
+    "Clint",
+  ]);
+});
+
+// A display name that arrived in the draft was chosen by the operator, so correcting a name on the
+// way back must not overwrite it. Prove-by-deletion: drop the seeding line that marks the display
+// name as edited in `#seedFromDraft` and this flips red — the display name would follow again.
+it("keeps a display name that came from the draft when a name is corrected", async () => {
+  const draft: DeepPartial<ProvisionBody> = {
+    venue: { admin: { firstNames: "Clinton", lastNames: "Gormley", displayName: "Clint" } },
+  };
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", { draft });
+  await type(el, "lastNames", "Gormsley");
+  expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe("Clint");
+});
