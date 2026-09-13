@@ -986,6 +986,7 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
       role: "staff",
       locale: "en-GB",
       venueLocale: "es-ES",
+      sessionDefault: "es-ES",
       venueName: "Deli Test SL",
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
@@ -1003,6 +1004,7 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
       role: "manager",
       locale: null,
       venueLocale: "es-ES",
+      sessionDefault: "es-ES",
       venueName: "Deli Test SL",
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));

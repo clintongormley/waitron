@@ -635,6 +635,10 @@ export class DashboardApp extends LitElement {
   #venueLocale = "es-ES";
   #loginLocale?: string;
   #loginLocaleChoice = 0;
+  /** Bumped by a signed-in language pick, the twin of `#loginLocaleChoice` for the login screen. A
+   * session probe whose answer was decided BEFORE the pick took effect carries the language from
+   * before it, so that answer must not repaint over the person's choice. */
+  #sessionLocaleChoice = 0;
 
   constructor() {
     super();
@@ -722,11 +726,12 @@ export class DashboardApp extends LitElement {
    */
   async #probeSession(preference?: PendingLoginPreference): Promise<void> {
     const generation = this.sessionGeneration;
+    const localeChoice = this.#sessionLocaleChoice;
     const wasAuthenticated = this.sessionRole !== undefined;
     try {
       const me = await this.api.getMe();
       if (!this.isConnected || generation !== this.sessionGeneration) return;
-      this.#applyMe(me, preference);
+      this.#applyMe(me, preference, localeChoice === this.#sessionLocaleChoice);
     } catch (error) {
       if (!this.isConnected || generation !== this.sessionGeneration) return;
       const code = codeOf(error);
@@ -745,7 +750,9 @@ export class DashboardApp extends LitElement {
   }
 
   /** Restore a permitted URL destination after authentication and apply the person's language.
-   * The disconnect guard protects both browser history and the shared locale from a late response. */
+   * The disconnect guard protects both browser history and the shared locale from a late response,
+   * and `mayApplyLocale` is false when the probe predates a signed-in language pick, whose answer
+   * still carries the language from before it. */
   #applyMe(
     me: {
       personId: string;
@@ -753,6 +760,7 @@ export class DashboardApp extends LitElement {
       email: string | null;
       locale: string | null;
       venueLocale: string;
+      sessionDefault: string;
       permissions: string[];
       modules: string[];
       venueName: string;
@@ -760,7 +768,8 @@ export class DashboardApp extends LitElement {
       sessionExpiresInSeconds?: number;
       sessionIdleTimeoutSeconds?: number;
     },
-    preference?: PendingLoginPreference,
+    preference: PendingLoginPreference | undefined,
+    mayApplyLocale: boolean,
   ): void {
     if (!this.isConnected) return;
     this.sessionNoticeCode = null;
@@ -789,7 +798,9 @@ export class DashboardApp extends LitElement {
     this.#scheduleSessionExpiry(remainingSeconds);
     this.#broadcastSessionDeadline(Date.now() + remainingSeconds * 1000);
     this.#writeCurrentUrl(true);
-    setLocale(resolveActiveLocale(me.locale, me.venueLocale));
+    // A person's own choice wins; otherwise their browser's language, which the server has already
+    // floored at the venue default for a browser asking for a language we do not ship.
+    if (mayApplyLocale) setLocale(resolveActiveLocale(me.locale, me.sessionDefault));
     this.#loadContentLanguages();
   }
 
@@ -949,9 +960,15 @@ export class DashboardApp extends LitElement {
       setLocale(code);
       return;
     }
+    // Bumped twice on purpose. The first invalidates a probe already in flight; the second
+    // invalidates one that started while the write was still going, whose answer also predates the
+    // choice. Nothing orders the two replies, so without the second the probe can answer last and
+    // put the old language back for good.
+    this.#sessionLocaleChoice += 1;
     try {
       await this.api.putLocale(code);
       if (!this.isConnected) return;
+      this.#sessionLocaleChoice += 1;
       setLocale(code);
     } catch {
       // Leave the language unchanged on a failed save — the switch is gated behind the durable write.

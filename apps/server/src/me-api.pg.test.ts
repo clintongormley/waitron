@@ -293,6 +293,7 @@ describe("Me API over real Postgres (the identity property: the session's person
         email: string | null;
         locale: string | null;
         venueLocale: string;
+        sessionDefault: string;
         venueName: string;
         sessionExpiresInSeconds: number;
         sessionIdleTimeoutSeconds: number;
@@ -307,6 +308,8 @@ describe("Me API over real Postgres (the identity property: the session's person
       sessionIdleTimeoutSeconds: 1800,
       locale: null,
       venueLocale: "es-ES",
+      // No Accept-Language on this request, so the browser match lands on the venue default.
+      sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       // A staff person holds no permission; this fixture injects no enabled modules.
       permissions: [],

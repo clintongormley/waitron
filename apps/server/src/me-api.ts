@@ -407,8 +407,10 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   // 403 — this is the endpoint the dashboard shell probes to decide whether to open the staff
   // view or the manager screens. `locale` is the signed-in person's OWN UI-language preference
   // (`persons.locale`, null when unset); `venueLocale` is the geography-derived boot default
-  // (`deps.venueLocale`) the dashboard falls back to when that preference is null — the same
-  // value `GET /management-api/locales` echoes as `venueDefault`.
+  // (`deps.venueLocale`) — the same value `GET /management-api/locales` echoes as `venueDefault`.
+  // `sessionDefault` is this request's Accept-Language match, already floored at `venueLocale` when
+  // the browser asks for nothing we ship — what the dashboard shows a person with no stored
+  // preference. It is DERIVED PER REQUEST and never stored: an explicit `locale` still wins.
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -416,6 +418,11 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         ...(await resolveManagementSession(tx, sessionId, { touch: false })),
         venueName: await readVenueName(tx),
       }));
+      // This body describes ONE person in ONE browser: it turns on the session cookie AND on
+      // Accept-Language, so no cache may keep a copy, and any cache that ignores `no-store` must at
+      // least key on the language it varies by.
+      c.header("Cache-Control", "no-store");
+      c.header("Vary", "Accept-Language");
       // `permissions` is the signed-in person's EFFECTIVE set (core catalog + registered module
       // permissions, folded through identity's ladder) and `modules` the enabled-module names — a
       // client-side HINT the dashboard gates a module's nav/screen on, NEVER a substitute for the
@@ -426,6 +433,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         email,
         locale,
         venueLocale: deps.venueLocale,
+        sessionDefault: resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
         venueName,
         onboardingIntent: deps.onboardingIntent,
         permissions: permissionsForRole(role),
