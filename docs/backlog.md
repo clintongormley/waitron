@@ -232,9 +232,18 @@ What it left open:
   with no translation and no backfill. A disposable probe ran the real SQL against a category that had
   a text name and it failed with `23502` (a required column left empty), which is the expected and
   documented outcome. So any preproduction or development database with categories in it goes through
-  the normal reset workflow (`wa-wt reset demo` or `wa-wt reset onboarding`), not a plain migrate. No shared development database was
-  reset during the build, which means **the first person to run the dev stack after this merge is the
-  one who hits this.**
+  the normal reset workflow (`wa-wt reset demo` or `wa-wt reset onboarding`), not a plain migrate.
+  **This happened, on 2026-09-13** — the next person to start the dev stack got a dead server, a raw
+  driver stack trace, and a dashboard that answered a sign-in attempt with nothing more than its
+  generic "Something went wrong, try again". Boot now names the reset as a conditional remedy
+  instead of leaving the stack trace to decode
+  (`apps/server/src/dev-migration-hint.ts`, `WAITRON_ENV=dev` only); the mechanism and the limits of
+  what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
+  trap is unchanged: **a populated development database still has to be reset by hand.** It has
+  already recurred — #342's `packages/venue-service/drizzle/0005_unit_snapshots.sql` and `0006`
+  add three `NOT NULL` columns to `working_line_contexts`, so any dev database holding an open
+  order line fails the same way. That table was empty when this was written, which is the only
+  reason it did not bite immediately.
 - **Category authoring serialises per tenant, and nobody has measured what that costs.** Hierarchy
   edits, membership replacement and category deletion all take the same one lock per tenant, which is
   the design's deliberate choice and is what makes the races safe. The review confirmed the specific
