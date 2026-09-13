@@ -151,6 +151,24 @@ export async function assignProductUnit(
     });
 }
 
+export async function readProductUnitId(
+  tx: Transaction,
+  tenantId: string,
+  productId: string,
+): Promise<string> {
+  const [row] = await tx
+    .select({ productId: products.id, unitId: productUnits.unitId })
+    .from(products)
+    .leftJoin(
+      productUnits,
+      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
+    )
+    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+  if (row === undefined) throw new AppError("product.not_found", { productId });
+  if (row.unitId === null) throw new AppError("unit.not_found", { unitId: productId });
+  return row.unitId;
+}
+
 export async function deleteUnit(tx: Transaction, tenantId: string, unitId: string): Promise<void> {
   const [locked] = await tx
     .select({ id: units.id })

@@ -137,10 +137,14 @@ export function toWireLineExtras(line: { note?: string; doneness?: Doneness }): 
 export function toWireProductIdentity(product: {
   id: string;
   menuItemId?: string;
-}): Pick<SaleLine, "menuItemId" | "productId"> {
+  variantId?: string;
+}): Pick<SaleLine, "menuItemId" | "productId" | "variantId"> {
   return product.menuItemId === undefined
     ? { productId: product.id }
-    : { menuItemId: product.menuItemId };
+    : {
+        menuItemId: product.menuItemId,
+        ...(product.variantId === undefined ? {} : { variantId: product.variantId }),
+      };
 }
 
 /** Canonical selections carry identities and values; local price previews never enter the request. */

@@ -326,3 +326,17 @@ price and quantity defaults. `value ?? default` initially accepted those nulls, 
 `String(vatClass)` accepted an array such as `["general"]`. Defaults now use `undefined` explicitly,
 and enum comparison follows a string type check. Receipt:
 `packages/catalogue/src/modifier-contract.test.ts` (the adversarial cases failed before the fix).
+
+## Order new unique targets before their foreign keys
+
+When you generate a table that references a new unique constraint on an existing table, inspect the
+statement order and run the migration. Products' generated catalogue migration created the
+`menu_item_variants` foreign key before adding its `(tenant_id, id, product_id)` unique target to
+`menu_items`. PostgreSQL rejected the migration with `42830`. Moving the generated unique-constraint
+statement before that foreign key made the real migration succeed; the journal and snapshot were
+unchanged.
+
+Receipt, 2026-09-13: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/catalogue test
+src/variants.pg.test.ts` exercised the migration, actual `app_user` writes and a publication/removal
+race. The fiscal migration checks also passed with `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
+@waitron/fiscal-verifactu test src/privileges.test.ts src/inmutabilidad.test.ts`.

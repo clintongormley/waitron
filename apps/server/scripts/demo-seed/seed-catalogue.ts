@@ -12,6 +12,10 @@ import {
   createMenuItem,
   createMenuSection,
   createProduct,
+  createUnit,
+  replaceProductCategories,
+  setMenuVariants,
+  setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
 import {
@@ -105,9 +109,13 @@ export async function seedCatalogues(
   { locationId, locale }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
   const stationIds = await resolveStationIds(tx, tenantId, locationId);
-  await writeContentLanguages(tx, tenantId, { defaultLanguage: locale, languages: [locale] });
+  await writeContentLanguages(tx, tenantId, {
+    defaultLanguage: locale,
+    languages: locale === "en" ? ["en", "es"] : ["es", "en"],
+  });
   const productsByImage = new Map<string, string>();
   const menuItemsByProduct = new Map<string, string>();
+  const categoriesByEnglishName = new Map<string, string>();
 
   const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
     select default_menu_id as id from zone_service_policies
@@ -127,6 +135,7 @@ export async function seedCatalogues(
     }
     for (const [categoryIndex, cat] of data.categories.entries()) {
       const category = await createCategory(tx, tenantId, { name: cat.name });
+      categoriesByEnglishName.set(cat.name.en, category.id);
       if (cat.station !== null) {
         // The create op takes no station; set the route with a parameterised update. Both the id and
         // the category id are bound params.
@@ -143,17 +152,30 @@ export async function seedCatalogues(
         )`);
       const section = await createMenuSection(tx, tenantId, {
         menuId: catalogue.id,
-        name: { [locale]: cat.name[locale] },
+        name: cat.name,
         displayOrder: categoryIndex,
       });
       for (const [productIndex, product] of cat.products.entries()) {
+        const unitId = product.unit
+          ? (
+              await createUnit(
+                tx,
+                tenantId,
+                { name: product.unit.name, precision: product.unit.precision },
+                locale,
+              )
+            ).id
+          : undefined;
         const created = await createProduct(tx, tenantId, {
           catalogueId: catalogue.id,
           categoryId: category.id,
           // Only the active locale's text — the till reads the venue's locale, and a single-locale
           // description is what the demo needs (the other locale lives in menu.ts for reuse).
-          descriptions: { [locale]: product.descriptions[locale] },
-          pricingUnit: product.pricingUnit,
+          descriptions: product.descriptions,
+          description: product.description,
+          kitchenName: product.kitchenName,
+          dietaryDeclarations: product.dietaryDeclarations,
+          ...(unitId === undefined ? { pricingUnit: product.pricingUnit } : { unitId }),
           unitPrice: product.unitPrice,
           vatClass: product.vatClass,
         });
@@ -165,6 +187,29 @@ export async function seedCatalogues(
           displayOrder: productIndex,
         });
         menuItemsByProduct.set(created.id, menuItem.id);
+        if (product.variants?.length) {
+          const variants = await setProductVariants(
+            tx,
+            tenantId,
+            created.id,
+            product.variants.map((variant) => ({
+              name: variant.name,
+              unitPrice: variant.productPrice,
+              available: variant.available,
+            })),
+            locale,
+          );
+          await setMenuVariants(
+            tx,
+            tenantId,
+            menuItem.id,
+            variants.map((variant, index) => ({
+              variantId: variant.id,
+              unitPrice: product.variants![index]!.menuPrice,
+              available: product.variants![index]!.available,
+            })),
+          );
+        }
         if (productsByImage.has(product.image)) {
           throw new Error(
             `demo-seed: duplicate image basename '${product.image}' — image basenames must be unique across the menu`,
@@ -180,11 +225,23 @@ export async function seedCatalogues(
   const diaId = await seedOne(MENU_DEL_DIA);
   const deliId = await seedOne(DELI_TAKEAWAY);
 
+  const coffeeId = productsByImage.get("cafe-solo.png");
+  const drinksId = categoriesByEnglishName.get("Drinks");
+  if (coffeeId === undefined || drinksId === undefined)
+    throw new Error("demo-seed: Coffee or Drinks was not created");
+  const hotDrinks = await createCategory(tx, tenantId, {
+    name: { en: "Hot drinks", es: "Bebidas calientes" },
+  });
+  await replaceProductCategories(tx, tenantId, coffeeId, {
+    categoryIds: [drinksId, hotDrinks.id],
+    primaryCategoryId: drinksId,
+  });
+
   const negroniId = productsByImage.get("negroni.png");
   if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");
   const cocktailSection = await createMenuSection(tx, tenantId, {
     menuId: diaId,
-    name: { [locale]: locale === "en" ? "Cocktails" : "Cócteles" },
+    name: { en: "Cocktails", es: "Cócteles" },
     displayOrder: MENU_DEL_DIA.categories.length,
   });
   await createMenuItem(tx, tenantId, {

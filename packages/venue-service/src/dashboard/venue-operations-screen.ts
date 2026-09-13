@@ -121,6 +121,7 @@ export class VenueOperationsScreen extends LitElement {
   @state() private editor?: Editor;
   @state() private menuId = "";
   @state() private zoneId = "";
+  @state() private offerProductId = "";
   #opener?: HTMLElement;
   #editorLanguages = currentContentLanguages();
 
@@ -178,6 +179,9 @@ export class VenueOperationsScreen extends LitElement {
     // A live language change must not relabel text already entered in an open editor.
     this.#editorLanguages = currentContentLanguages();
     this.editor = editor;
+    if (editor.kind === "offer") {
+      this.offerProductId = editor.row?.productId ?? this.model?.products[0]?.id ?? "";
+    }
     this.fieldErrors = {};
     this.error = undefined;
   }
@@ -253,6 +257,7 @@ export class VenueOperationsScreen extends LitElement {
     value?: string,
     required = true,
     disabled = false,
+    onChange?: (value: string) => void,
   ) {
     return html`<label
       ><span>${label}${required ? html` <span class="required">*</span>` : nothing}</span
@@ -262,6 +267,11 @@ export class VenueOperationsScreen extends LitElement {
         ?disabled=${disabled}
         aria-invalid=${!!this.fieldErrors[name]}
         aria-describedby=${this.fieldErrors[name] ? `error-${name}` : nothing}
+        @change=${
+          onChange === undefined
+            ? nothing
+            : (event: Event) => onChange((event.currentTarget as HTMLSelectElement).value)
+        }
       >
         ${choices.map((choice) => html`<option value=${choice.id} ?selected=${choice.id === value}>${choice.name}</option>`)}</select
       >${this.#fieldError(name)}</label
@@ -850,6 +860,17 @@ export class VenueOperationsScreen extends LitElement {
             ),
         );
         const priceName = `offer-price-${row?.id ?? menuId}`;
+        const selectedProduct = model.products.find(
+          (product) => product.id === (row?.productId ?? this.offerProductId),
+        );
+        const publishedById = new Map(
+          (row?.variants ?? []).map((variant) => [variant.id, variant]),
+        );
+        const offerVariants = (selectedProduct?.variants ?? []).map((variant) => ({
+          ...variant,
+          unitPrice: publishedById.get(variant.id)?.unitPrice ?? variant.unitPrice,
+          available: publishedById.get(variant.id)?.available ?? false,
+        }));
         const { defaultLanguage, languages } = this.#editorLanguages;
         const sectionField = (language: string) =>
           `offer-section-${menuId}${language === defaultLanguage ? "" : `-${language}`}`;
@@ -870,6 +891,12 @@ export class VenueOperationsScreen extends LitElement {
                     id: product.id,
                     name: this.#name(product.descriptions),
                   })),
+                  this.offerProductId,
+                  true,
+                  false,
+                  (value) => {
+                    this.offerProductId = value;
+                  },
                 )}`
           }${sectionLanguages.map((language) =>
             this.#input(
@@ -879,7 +906,31 @@ export class VenueOperationsScreen extends LitElement {
               "text",
               language === defaultLanguage,
             ),
-          )}${this.#input(priceName, t("venue.price"), row?.grossPrice)}`,
+          )}${this.#input(priceName, t("venue.price"), row?.grossPrice)}${
+            offerVariants.length === 0
+              ? nothing
+              : html`<fieldset>
+                  <legend>${t("venue.variants")}</legend>
+                  ${offerVariants.map(
+                    (variant) =>
+                      html`<div>
+                        ${this.#input(
+                          `offer-variant-price-${variant.id}`,
+                          `${this.#name(variant.name)} · ${t("venue.price")}`,
+                          variant.unitPrice,
+                        )}
+                        <label>
+                          <input
+                            name=${`offer-variant-available-${variant.id}`}
+                            type="checkbox"
+                            .checked=${variant.available}
+                          />
+                          <span>${t("venue.available")}</span>
+                        </label>
+                      </div>`,
+                  )}
+                </fieldset>`
+          }`,
           save: () => {
             if (
               !this.#validate([
@@ -892,6 +943,23 @@ export class VenueOperationsScreen extends LitElement {
             const grossPrice = this.#value(priceName).trim();
             if (!/^\d+(?:\.\d{1,2})?$/.test(grossPrice)) {
               this.fieldErrors = { [priceName]: t("venue.price_invalid") };
+              return;
+            }
+            const variants = offerVariants.map((variant) => ({
+              variantId: variant.id,
+              unitPrice: this.#value(`offer-variant-price-${variant.id}`).trim(),
+              available:
+                this.renderRoot.querySelector<HTMLInputElement>(
+                  `[name="offer-variant-available-${variant.id}"]`,
+                )?.checked ?? false,
+            }));
+            const badVariant = variants.find(
+              (variant) => !/^\d+(?:\.\d{1,2})?$/.test(variant.unitPrice),
+            );
+            if (badVariant) {
+              this.fieldErrors = {
+                [`offer-variant-price-${badVariant.variantId}`]: t("venue.price_invalid"),
+              };
               return;
             }
             const productId = this.#value(`offer-product-${menuId}`);
@@ -922,7 +990,10 @@ export class VenueOperationsScreen extends LitElement {
                 );
                 if (changed) await this.api.updateMenuSection(existing.sectionId, { name });
               }
-              if (row) return this.api.updateMenuItem(menuId, row.id, { grossPrice });
+              if (row) {
+                await this.api.updateMenuItem(menuId, row.id, { grossPrice });
+                return this.api.setMenuVariants(menuId, row.id, variants);
+              }
               const sectionId =
                 existing?.sectionId ??
                 (
@@ -931,12 +1002,13 @@ export class VenueOperationsScreen extends LitElement {
                     displayOrder: 0,
                   })
                 ).id;
-              await this.api.createMenuItem(menuId, {
+              const created = await this.api.createMenuItem(menuId, {
                 sectionId,
                 productId,
                 grossPrice,
                 displayOrder: 0,
               });
+              await this.api.setMenuVariants(menuId, created.id, variants);
             });
           },
         };

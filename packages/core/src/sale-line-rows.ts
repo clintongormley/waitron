@@ -20,5 +20,8 @@ export function saleLineRows(tenantId: string, saleId: string, lines: readonly R
     vatRate: line.vatRate,
     lineTotal: line.lineTotal,
     category: line.category ?? null,
+    variantId: line.variantId ?? null,
+    variantName: line.variantName ?? null,
+    kitchenName: line.kitchenName ?? null,
   }));
 }

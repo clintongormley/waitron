@@ -2,7 +2,7 @@ import { uploadImage } from "@waitron/media";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 // Real PostgreSQL checks startup through app_user connections and contending backends.
-import { X509Certificate } from "node:crypto";
+import { randomUUID, X509Certificate } from "node:crypto";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -699,6 +699,11 @@ describe("startServer, against a real container as the deployment role", () => {
       expect((await catalogues.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
       });
+
+      const recipe = await fetch(
+        `http://127.0.0.1:${port}/management-api/products/${randomUUID()}/recipe`,
+      );
+      expect(recipe.status).toBe(404);
 
       // The recovery-bundle download (slice 4b-i) is mounted on the same app (`mountRecoveryBundleApi`
       // in `boot.ts`), gated by the SAME management session as box-status. An UNAUTHENTICATED

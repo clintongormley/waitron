@@ -2,6 +2,10 @@
 
 Read the [shared design](2026-09-12-products-overhaul-design.md) first.
 
+Naming decision, 2026-09-13: display the product's selected reporting category as **Reporting
+Category**, including in category-side membership editing and replacement prompts. “Primary” below
+refers to this field (`primaryCategoryId`); see the shared design's confirmed naming decision.
+
 You can place a product in several categories, such as Breakfast and Sandwiches, and organize
 categories under parents such as Food. Categories describe your library. Menu sections still
 describe where products appear on a particular menu.

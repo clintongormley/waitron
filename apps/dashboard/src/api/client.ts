@@ -182,6 +182,16 @@ export const DIETARY_ORIGINS = [
   "other_animal",
 ] as const;
 
+export const DIETARY_LABELS = [
+  "vegan",
+  "vegetarian",
+  "halal",
+  "kosher",
+  "no_meat",
+  "no_fish",
+] as const;
+export type DietaryLabel = (typeof DIETARY_LABELS)[number];
+
 /** The contains-tags a diet override may hand-assert / hand-strip — the strictly-smaller subset of
  * {@link DietaryOrigin} the derivation surfaces as `contains`. A LOCAL copy of `@waitron/catalogue`'s
  * `CONTAINS_TAGS` union (no runtime import — the #70 bundle rule). */
@@ -262,6 +272,36 @@ export interface UnitInput {
 export interface UnitPatch {
   name?: Record<string, string>;
   precision?: number;
+}
+
+export interface ProductEditorVariant {
+  id?: string;
+  name: Record<string, string>;
+  unitPrice: string;
+  available: boolean;
+}
+
+export interface ProductEditorInput {
+  name: Record<string, string>;
+  description: Record<string, string> | null;
+  kitchenName: string | null;
+  image: string | null;
+  unitId: string;
+  unitPrice: string;
+  available: boolean;
+  vatClass: VatClass;
+  variants: ProductEditorVariant[];
+  categoryIds: string[];
+  primaryCategoryId: string | null;
+  modifierIds: string[];
+  allergens: Record<string, { presence: "contains" | "may_contain" }> | null;
+  dietaryDeclarations: ("vegan" | "vegetarian" | "halal" | "kosher" | "no_meat" | "no_fish")[];
+}
+
+export interface ProductEditorValue extends ProductEditorInput {
+  id: string;
+  stationId: string | null;
+  courseId: string | null;
 }
 
 /**
@@ -368,6 +408,7 @@ export interface ModifierEffects {
   removeAllergens?: string[] | null;
   addOrigins?: string[] | null;
   removeOrigins?: string[] | null;
+  dietaryEffect?: { invalidates: DietaryLabel[] } | null;
 }
 export interface ModifierChoice extends ModifierEffects {
   id: string;
@@ -1920,6 +1961,22 @@ export class DashboardApi {
   /** `GET /management-api/catalogues/:id/products` — the products of one catalogue. */
   listProducts(catalogueId: string): Promise<Product[]> {
     return this.#request<Product[]>(`/management-api/catalogues/${catalogueId}/products`, "GET");
+  }
+
+  getProductEditor(id: string): Promise<ProductEditorValue> {
+    return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "GET");
+  }
+
+  createProductEditor(catalogueId: string, input: ProductEditorInput): Promise<ProductEditorValue> {
+    return this.#request<ProductEditorValue>(
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      "POST",
+      input,
+    );
+  }
+
+  updateProductEditor(id: string, input: ProductEditorInput): Promise<ProductEditorValue> {
+    return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "PUT", input);
   }
 
   /** `POST /management-api/products` — create a product; returns the created `Product` (201). */

@@ -151,13 +151,14 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products.
    Categories has landed (#340, see below), with [integration notes](developers/product-categories.md),
    and Modifiers has landed (#341, see below), with its
-   [integration contract](developers/modifiers.md). Units has landed too (#342, see below). Products
-   is the only one left, and still has just its
-   [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md). See the
-   [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) for the branch contracts.
-   Products still owns integrating the three supporting sections into the replacement product editor;
-   recipes are deferred for this workflow and
-   their authoring withdrawal belongs to that build.
+   [integration contract](developers/modifiers.md). Units has landed too (#342, see below). The Products
+   branch now integrates all three sections into the replacement editor, withdraws recipe authoring,
+   carries variants through menus and saved sales, and adds [operator guidance](products.md). Its
+   remaining blocker is the fiscal cause for the explicit No tax choice: AEAT requires choosing N1 or
+   N2, while the current product decision establishes only that no VAT applies. See the
+   [checkpoint](superpowers/plans/2026-09-13-product-editor-checkpoint.md),
+   [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md) and
+   [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md).
 3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319 and
    #327 reworked these recently, so read them against the rules before changing anything.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and

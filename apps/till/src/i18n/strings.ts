@@ -67,6 +67,7 @@ export const en = {
   "modifier.decrease": "Decrease",
   "modifier.edit": "Modifiers",
   "modifier.save": "Save",
+  "modifier.variant": "Variant",
   "modifier.selection_changed":
     "A selected extra is no longer available. Cancel and reopen the product to choose again.",
   "modifier.selected_total": "Selected",
@@ -528,6 +529,7 @@ export const es: Record<StringKey, string> = {
   "modifier.decrease": "Disminuir",
   "modifier.edit": "Modificadores",
   "modifier.save": "Guardar",
+  "modifier.variant": "Variante",
   "modifier.selection_changed":
     "Un extra seleccionado ya no está disponible. Cancela y vuelve a abrir el producto para elegir de nuevo.",
   "modifier.selected_total": "Seleccionados",

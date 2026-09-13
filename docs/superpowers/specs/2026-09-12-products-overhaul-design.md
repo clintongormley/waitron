@@ -23,6 +23,11 @@ planning session; each implementation starts with failing behavioral tests.
 
 ## Confirmed decisions and working assumptions
 
+Owner decision, 2026-09-13: name the product's category-selection field **Reporting Category**.
+It selects the category used to group the product's sales in reports. References below to the
+primary or default category mean this field; its shared API identifier is `primaryCategoryId`.
+Use the same label in Products and category-side membership editing, including validation messages.
+
 The owner confirmed extras, variants and no tax on 2026-09-12, and deferred multi-destination
 category routing to the backlog. The category-versus-label model is being discussed; the working
 proposal below keeps the original multiple categories and no separate labels. Any later answer

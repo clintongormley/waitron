@@ -769,7 +769,7 @@ describe("option-group-manager", () => {
     );
     const picker = el.shadowRoot!.querySelector("[data-test=item-add-i1]")!;
     picker.dispatchEvent(
-      new CustomEvent("allergens-changed", {
+      new CustomEvent("wt-allergens-change", {
         detail: { value: { fish: { presence: "contains" } } },
         bubbles: true,
         composed: true,

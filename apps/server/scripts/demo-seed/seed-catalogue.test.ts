@@ -15,7 +15,11 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
+import {
+  listAccessibleCatalogues,
+  listAvailableProducts,
+  readContentLanguages,
+} from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -79,6 +83,7 @@ describe("seedCatalogues", () => {
       const out = await seedCatalogues(tx, brandTenantId(tenantId), { locationId, locale: LOCALE });
       const menus = await listAccessibleCatalogues(tx, locationId);
       const { products } = await listAvailableProducts(tx, locationId);
+      const contentLanguages = await readContentLanguages(tx, brandTenantId(tenantId), LOCALE);
       // Read back the two stations and one category's route per menu, as app_user, to prove routing.
       const { rows: stations } = await tx.execute<{ name: string; is_default: boolean }>(sql`
         select name, is_default from kitchen_stations where location_id = ${locationId}`);
@@ -92,12 +97,55 @@ describe("seedCatalogues", () => {
         from categories c
         left join kitchen_stations ks on ks.id = c.station_id
         where c.name->>'en' = 'Charcuterie'`);
-      return { out, menus, products, stations, drinksRoute, charcuterieRoute };
+      const { rows: editorDemo } = await tx.execute<{
+        description: Record<string, string> | null;
+        kitchen_name: string | null;
+        dietary_declarations: string[];
+        category_count: number;
+        primary_category: string;
+        variant_prices: string[];
+        menu_variant_prices: string[];
+      }>(sql`
+        select p.description, p.kitchen_name, p.dietary_declarations,
+          count(distinct pc.category_id)::int as category_count,
+          c.name->>'en' as primary_category,
+          array_agg(distinct pv.unit_price::text order by pv.unit_price::text) as variant_prices,
+          array_agg(distinct mv.unit_price::text order by mv.unit_price::text) as menu_variant_prices
+        from products p
+        join categories c on c.id = p.category_id and c.tenant_id = p.tenant_id
+        join product_categories pc on pc.product_id = p.id and pc.tenant_id = p.tenant_id
+        join product_variants pv on pv.product_id = p.id and pv.tenant_id = p.tenant_id
+        join menu_item_variants mv on mv.product_id = p.id and mv.variant_id = pv.id and mv.tenant_id = p.tenant_id
+        where p.descriptions->>'en' = 'Coffee'
+        group by p.id, c.name`);
+      const { rows: customUnit } = await tx.execute<{
+        precision: number;
+        name: Record<string, string>;
+      }>(sql`
+        select u.precision, u.name from units u
+        join product_units pu on pu.unit_id = u.id and pu.tenant_id = u.tenant_id
+        join products p on p.id = pu.product_id and p.tenant_id = pu.tenant_id
+        where p.descriptions->>'en' = 'Mixed salad'`);
+      return {
+        out,
+        menus,
+        products,
+        contentLanguages,
+        stations,
+        drinksRoute,
+        charcuterieRoute,
+        editorDemo,
+        customUnit,
+      };
     });
 
     expect(res.menus.map((m) => m.name)).toEqual(["Casa Delgado", "Deli takeaway", "Menú del Día"]);
     expect(res.menus.find((m) => m.name === "Casa Delgado")!.isDefault).toBe(true);
     expect(res.menus.find((m) => m.name === "Menú del Día")!.isDefault).toBe(false);
+    expect(res.contentLanguages).toEqual({
+      defaultLanguage: "en",
+      languages: ["en", "es"],
+    });
 
     // Products span BOTH menus and clear the demo floor.
     expect(res.products.length).toBeGreaterThan(35);
@@ -122,6 +170,22 @@ describe("seedCatalogues", () => {
     // Routing: a drinks category → the bar (Barra); a food category → the kitchen (Cocina).
     expect(res.drinksRoute[0]?.station_name).toBe("Downstairs bar");
     expect(res.charcuterieRoute[0]?.station_name).toBe("Deli counter");
+
+    expect(res.editorDemo).toEqual([
+      {
+        description: {
+          en: "Freshly ground espresso from the downstairs bar",
+          es: "Espresso recién molido de la barra de abajo",
+        },
+        kitchen_name: "COFFEE · DOWNSTAIRS BAR",
+        dietary_declarations: ["vegetarian", "halal"],
+        category_count: 2,
+        primary_category: "Drinks",
+        variant_prices: ["1.40", "2.10"],
+        menu_variant_prices: ["1.75", "2.60"],
+      },
+    ]);
+    expect(res.customUnit).toEqual([{ precision: 2, name: { en: "serving", es: "ración" } }]);
 
     // The returned map covers every seeded product and points at a real created id.
     expect(res.out.productsByImage.size).toBe(res.products.length);

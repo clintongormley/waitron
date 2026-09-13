@@ -8,12 +8,57 @@ import {
   readContentLanguages,
   writeContentLanguages,
   validateContentTranslations,
+  listContentTranslationGaps,
 } from "./content-languages.js";
+import { createCatalogue, createProduct } from "./operations.js";
+import { setProductVariants } from "./variants.js";
+import { createUnit } from "./units.js";
 
 // These tests exercise configuration queries. Privileges and concurrent edits use real Postgres.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 describe("site content languages", () => {
+  it("requires variant names in a new default language but leaves descriptions optional", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Bar" });
+      const unit = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "each", fr: "unité" }, precision: 0 },
+        "en",
+      );
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        descriptions: { en: "Coffee", fr: "Café" },
+        description: { en: "Freshly roasted" },
+        unitPrice: "9.00",
+        unitId: unit.id,
+        vatClass: "reduced",
+      });
+      const [variant] = await setProductVariants(
+        tx,
+        tenantId,
+        product.id,
+        [{ name: { en: "Small" }, unitPrice: "2.00", available: true }],
+        "en",
+      );
+      expect(await listContentTranslationGaps(tx, tenantId, "fr")).toEqual([
+        { kind: "variant", id: variant!.id },
+      ]);
+      await setProductVariants(
+        tx,
+        tenantId,
+        product.id,
+        [{ ...variant!, name: { en: "Small", fr: "Petit" } }],
+        "en",
+      );
+      expect(await listContentTranslationGaps(tx, tenantId, "fr")).toEqual([]);
+      await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr", "en"] });
+      expect((await readContentLanguages(tx, tenantId, "en")).defaultLanguage).toBe("fr");
+    });
+  });
   it.each(["", "invalid_locale", "und"])(
     "uses the shared fallback for an absent setting and invalid preference %j",
     async (fallbackLanguage) => {

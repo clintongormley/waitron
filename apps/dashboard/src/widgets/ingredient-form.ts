@@ -51,7 +51,7 @@ export interface UpdateIngredientDetail {
  * null) starts it blank. The allergen picker is seeded through its `declaration` property (a separate
  * `seedAllergens` bound ONLY on reseed, never to the live value, so it does not fight the operator's
  * edits) — seeded from the ingredient's SINGLE `allergens` field (no manual/published split like a
- * product). The picker announces its own changes back through `allergens-changed`, which this form
+ * product). The picker announces its own changes back through `wt-allergens-change`, which this form
  * captures (with `stopPropagation`, the house pattern) into `allergens`.
  *
  * THE CREATE-VS-PATCH ALLERGEN ASYMMETRY is load-bearing. On CREATE a PENDING picker (`value === null`)
@@ -248,7 +248,7 @@ export class IngredientForm extends LitElement {
         <dashboard-allergen-picker
           data-test="allergens"
           .declaration=${this.seedAllergens}
-          @allergens-changed=${(e: CustomEvent<{ value: AllergenDeclaration }>) =>
+          @wt-allergens-change=${(e: CustomEvent<{ value: AllergenDeclaration }>) =>
             this.#onAllergensChanged(e)}
         ></dashboard-allergen-picker>
         ${

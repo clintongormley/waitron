@@ -8,6 +8,7 @@ import { selectStyles } from "../select-styles.js";
 import { lineGross } from "../state/order-line.js";
 import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
+import { resolveSnapshotText } from "@waitron/shared";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { OrderLine, SelectedLineOption } from "../state/working-order.js";
 import type {
@@ -180,6 +181,34 @@ export class TillModifierPicker extends LitElement {
 
   @state() private doneness: Doneness | "" = "";
 
+  @state() private variantId = "";
+
+  get #variants() {
+    return (this.product.variants ?? []).filter((variant) => variant.available);
+  }
+
+  get #selectedProduct(): TillProduct {
+    const variant = this.#variants.find((candidate) => candidate.id === this.variantId);
+    if (variant === undefined) return this.product;
+    const productFallback = Object.keys(this.product.descriptions)[0] ?? "en";
+    const variantFallback = Object.keys(variant.name)[0] ?? productFallback;
+    const descriptions = Object.fromEntries(
+      [...new Set([...Object.keys(this.product.descriptions), ...Object.keys(variant.name)])].map(
+        (locale) => [
+          locale,
+          `${resolveSnapshotText(this.product.descriptions, locale, productFallback)} · ${resolveSnapshotText(variant.name, locale, variantFallback)}`,
+        ],
+      ),
+    );
+    return {
+      ...this.product,
+      descriptions,
+      unitPrice: variant.unitPrice,
+      variantId: variant.id,
+      variantName: variant.name,
+    };
+  }
+
   // Available required modifiers keep their constraint even when every choice is unavailable.
   get #renderableGroups(): TillOptionGroup[] {
     if (this.product.modifiers !== undefined)
@@ -236,6 +265,7 @@ export class TillModifierPicker extends LitElement {
 
   get #allSatisfied(): boolean {
     return (
+      (this.#variants.length === 0 || this.variantId !== "") &&
       this.#renderableGroups.every(
         (group) => this.#satisfied(group) && this.#groupQuantity(group) <= group.maxSelect,
       ) &&
@@ -283,7 +313,7 @@ export class TillModifierPicker extends LitElement {
 
   get #runningPrice(): string {
     const previewLine: OrderLine = {
-      product: this.product,
+      product: this.#selectedProduct,
       quantity: this.quantity,
       options: this.#selectedOptions(),
     };
@@ -321,7 +351,7 @@ export class TillModifierPicker extends LitElement {
     if (!this.#allSatisfied) return;
     e?.stopPropagation();
     const detail: ModifierConfirmDetail = {
-      product: this.product,
+      product: this.#selectedProduct,
       options: this.#selectedOptions(),
       ...(this.product.modifiers === undefined ? {} : this.#selectedModifiers()),
     };
@@ -354,6 +384,30 @@ export class TillModifierPicker extends LitElement {
       .heading=${productName(this.product)}
       @wt-close=${(event: Event) => this.#cancel(event)}
     >
+      ${
+        this.#variants.length === 0
+          ? nothing
+          : html`<fieldset class="group">
+              <legend class="group-name">${t("modifier.variant")} *</legend>
+              ${this.#variants.map(
+                (variant) =>
+                  html`<label class="option">
+                    <input
+                      type="radio"
+                      name="product-variant"
+                      value=${variant.id}
+                      .checked=${this.variantId === variant.id}
+                      @change=${(event: Event) => {
+                        event.stopPropagation();
+                        this.variantId = variant.id;
+                      }}
+                    />
+                    <span class="option-name">${descriptionFor(variant.name, variant.id)}</span>
+                    <span class="option-delta">${formatMoney(variant.unitPrice)}</span>
+                  </label>`,
+              )}
+            </fieldset>`
+      }
       ${this.product.modifiers === undefined ? this.#renderableGroups.map((group) => this.#renderGroup(group)) : this.#modifiers.map((modifier) => this.#renderModifier(modifier))}
       ${
         this.initialSelections !== undefined

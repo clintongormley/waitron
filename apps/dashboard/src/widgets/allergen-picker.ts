@@ -1,21 +1,15 @@
-import { LitElement, type PropertyValues, css, html } from "lit";
+import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-dialog.js";
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
-import type { AllergenDeclaration, AllergenEntry, AllergenPresence } from "../api/client.js";
+import type { AllergenDeclaration, AllergenPresence } from "../api/client.js";
 
-/**
- * The 14 EU allergens (Regulation (EU) No 1169/2011, Annex II) in DISPLAY order, redefined LOCALLY
- * exactly as `apps/till/src/screens/till-allergen-screen.ts:24` and `api/client.ts` redefine catalogue
- * shapes: a runtime import from `@waitron/catalogue` would drag its barrel — and through it
- * `@waitron/db` and Node builtins — into the browser bundle (the #70 rule). These raw codes stay the
- * WIRE VALUES (the `data-test`/`id`/aria wiring and the emitted declaration keys); each renders its
- * localised display name at the render edge through `allergenName` (i18n/domain.ts), the same
- * render-edge translation `staff-list` uses for its role/status tokens.
- */
 const ALLERGEN_DISPLAY_ORDER = [
   "gluten",
   "crustaceans",
@@ -33,27 +27,7 @@ const ALLERGEN_DISPLAY_ORDER = [
   "molluscs",
 ] as const;
 
-/** The per-code presence selection, including the empty "unset" state the value getter drops. */
-type Presence = AllergenPresence | "unset";
-
-/**
- * The management dashboard's ALLERGEN PICKER — the UI counterpart of the three declaration states the
- * till renders (`till-allergen-screen.ts:52-60`), and the reason "empty" must NEVER silently mean
- * "allergen-free". A top-level "Revisado" (reviewed) `wt-switch` gates the whole declaration:
- *
- *  - switch OFF → `value` is `null` (unreviewed / PENDING), regardless of any per-code entries; the
- *    per-code controls are disabled. Fourteen blank cells nobody has reviewed must not claim
- *    "contains none of them".
- *  - switch ON, no code set to contains/may_contain → `value` is `{}` (reviewed, none of the 14).
- *  - switch ON with entries → `value` is `{ code: { presence, source? } }`.
- *
- * Each of the 14 codes is a native token-styled `<select>` (unset / contains / may_contain) plus an
- * optional free-text `source` `wt-input` (the Annex II specificity, e.g. "trigo"). The picker holds no
- * API and validates nothing for shape client-side — the server's `validateAllergens` (`allergen.*`)
- * stays the authority; the picker only assembles the three-state map and announces every change with a
- * bubbling, composed `allergens-changed { value }` so the product form can read it without reaching
- * into this widget's internals. `value` is exposed as a getter so tests and the form read it directly.
- */
+/** Review is explicit: null is unreviewed, while {} is reviewed with none declared. */
 @customElement("dashboard-allergen-picker")
 export class AllergenPicker extends LitElement {
   static override styles = [
@@ -63,91 +37,62 @@ export class AllergenPicker extends LitElement {
       :host {
         display: block;
       }
-      .reviewed {
-        margin-bottom: var(--wt-space-4);
-      }
-      .grid {
+      .grid,
+      .choices {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
       }
       .row {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        align-items: end;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
         gap: var(--wt-space-3);
       }
       .name {
-        color: var(--wt-color-text);
+        flex: 1;
         font-size: var(--wt-font-size-sm);
+      }
+      .reviewed,
+      .grid {
+        margin-bottom: var(--wt-space-4);
       }
     `,
   ];
 
-  /**
-   * The SEED declaration for edit mode — the product form sets this from a loaded product's allergens
-   * so the picker opens pre-filled. It is an INPUT, distinct from the computed `value` getter (which
-   * stays the live read of the internal state): assigning it reconstructs `reviewed`/`entries` once,
-   * in `willUpdate`, after which the per-code controls drive the state as usual. `null` (the default,
-   * and a CREATE) seeds the PENDING state, exactly as an untouched picker already holds. Bound only on
-   * (re)seed by the form — never to the live value — so it does not fight the operator's edits.
-   */
   @property({ attribute: false }) declaration: AllergenDeclaration = null;
-
-  /** Whether the operator has reviewed this product's allergens — the null-vs-`{}` gate. */
   @state() private reviewed = false;
+  @state() private entries: Record<string, { presence: AllergenPresence }> = {};
+  @state() private picking = false;
+  @state() private search = "";
+  private pickerGeneration = 0;
 
-  /** Per-code presence + free-text source. A code absent here reads as `unset` with no source. */
-  @state() private entries: Record<string, { presence: Presence; source: string }> = {};
-
-  /**
-   * Seed the internal three-state from a freshly-assigned `declaration` (edit-mode pre-fill). Runs only
-   * when `declaration` actually changes — a user edit changes `reviewed`/`entries`, not `declaration`,
-   * so it is never re-seeded out from under the operator. `null` → reviewed off (PENDING); `{}` →
-   * reviewed on, nothing marked; `{ code: {…} }` → reviewed on with each code's presence + source
-   * (an absent `source` becomes `""`, the empty the `value` getter drops). Does NOT emit
-   * `allergens-changed` — seeding is not an operator change; the form reads the seed it just set.
-   */
   override willUpdate(changed: PropertyValues): void {
     if (!changed.has("declaration")) return;
-    const declaration = this.declaration;
-    if (declaration === null) {
-      this.reviewed = false;
-      this.entries = {};
-      return;
-    }
-    this.reviewed = true;
-    const entries: Record<string, { presence: Presence; source: string }> = {};
-    for (const [code, entry] of Object.entries(declaration)) {
-      entries[code] = { presence: entry.presence, source: entry.source ?? "" };
-    }
-    this.entries = entries;
+    this.reviewed = this.declaration !== null;
+    this.entries = Object.fromEntries(
+      Object.entries(this.declaration ?? {}).map(([code, entry]) => [
+        code,
+        { presence: entry.presence },
+      ]),
+    );
+    this.picking = false;
+    this.search = "";
   }
 
-  /**
-   * The three-state declaration this picker currently holds (design §7): `null` while unreviewed,
-   * `{}` when reviewed with nothing marked, else the declared `{ code: { presence, source? } }` map.
-   * The optional `source` key is OMITTED (never emitted as `""`) so the shape matches `AllergenEntry`.
-   */
   get value(): AllergenDeclaration {
     if (!this.reviewed) return null;
-    const out: Record<string, AllergenEntry> = {};
-    for (const code of ALLERGEN_DISPLAY_ORDER) {
-      const entry = this.entries[code];
-      if (!entry || entry.presence === "unset") continue;
-      const source = entry.source.trim();
-      out[code] = source ? { presence: entry.presence, source } : { presence: entry.presence };
-    }
-    return out;
+    return Object.fromEntries(
+      ALLERGEN_DISPLAY_ORDER.filter((code) => this.entries[code]).map((code) => [
+        code,
+        { presence: this.entries[code]!.presence },
+      ]),
+    );
   }
 
-  /**
-   * Announce the new value. `bubbles`+`composed` so it crosses this widget's shadow boundary to the
-   * product form (a later task), which assembles the create/update body from it.
-   */
   #emit(): void {
     this.dispatchEvent(
-      new CustomEvent<{ value: AllergenDeclaration }>("allergens-changed", {
+      new CustomEvent("wt-allergens-change", {
         detail: { value: this.value },
         bubbles: true,
         composed: true,
@@ -155,83 +100,167 @@ export class AllergenPicker extends LitElement {
     );
   }
 
-  /**
-   * The "Revisado" switch changed. `stopPropagation` keeps the wt-switch's own composed `wt-change`
-   * inside this shadow boundary, so the form hears only the semantic `allergens-changed` (the house
-   * pattern — the person-form field handlers stop their composed events the same way).
-   */
   #onReviewed(event: CustomEvent<{ checked: boolean }>): void {
     event.stopPropagation();
     this.reviewed = event.detail.checked;
     this.#emit();
   }
 
-  /** A code's presence `<select>` changed. Native `change` is `composed: false`, so `stopPropagation`
-   * here is defensive consistency with the composed handlers, not a boundary guard. */
   #onPresence(event: Event, code: string): void {
     event.stopPropagation();
-    const presence = (event.target as HTMLSelectElement).value as Presence;
-    this.entries = {
-      ...this.entries,
-      [code]: { presence, source: this.entries[code]?.source ?? "" },
-    };
+    if (!this.reviewed) return;
+    const presence = (event.target as HTMLSelectElement).value as AllergenPresence;
+    this.entries = { ...this.entries, [code]: { presence } };
     this.#emit();
   }
 
-  /** A code's free-text source `wt-input` changed; stops its composed `wt-change` from leaking out. */
-  #onSource(event: CustomEvent<{ value: string }>, code: string): void {
+  #remove(event: Event, code: string): void {
     event.stopPropagation();
-    this.entries = {
-      ...this.entries,
-      [code]: { presence: this.entries[code]?.presence ?? "unset", source: event.detail.value },
-    };
+    if (!this.reviewed) return;
+    const entries = { ...this.entries };
+    delete entries[code];
+    this.entries = entries;
     this.#emit();
+  }
+
+  #setPicking(open: boolean): void {
+    if (open) this.pickerGeneration++;
+    this.picking = open;
+    this.dispatchEvent(
+      new CustomEvent("wt-picker-state", {
+        detail: { open },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #closePicker(event: Event): void {
+    event.stopPropagation();
+    this.#setPicking(false);
+    const generation = this.pickerGeneration;
+    void this.updateComplete.then(async () => {
+      await this.shadowRoot!.querySelector("wt-dialog")?.updateComplete;
+      if (!this.picking && generation === this.pickerGeneration)
+        this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-allergen]")?.focus();
+    });
+  }
+
+  #add(event: Event, code: string): void {
+    event.stopPropagation();
+    if (!this.reviewed || this.entries[code]) return;
+    this.entries = { ...this.entries, [code]: { presence: "contains" } };
+    this.#emit();
+    this.#closePicker(event);
   }
 
   override render() {
-    const disabled = !this.reviewed;
-    // Locale-invariant across the 14 rows — resolve once per render, not once per row.
-    const containsLabel = t("allergen.contains");
-    const mayContainLabel = t("allergen.may_contain");
-    const originLabel = t("allergen.origin");
+    const generation = this.pickerGeneration;
+    const selected = ALLERGEN_DISPLAY_ORDER.filter((code) => this.entries[code]);
+    const choices = ALLERGEN_DISPLAY_ORDER.filter(
+      (code) =>
+        !this.entries[code] &&
+        allergenName(code).toLocaleLowerCase().includes(this.search.trim().toLocaleLowerCase()),
+    );
     return html`
       <wt-switch
         class="reviewed"
         data-test="reviewed"
+        name="allergens-reviewed"
         label=${t("allergen.reviewed")}
         .checked=${this.reviewed}
-        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onReviewed(e)}
+        @wt-change=${this.#onReviewed}
       ></wt-switch>
       <div class="grid">
-        ${ALLERGEN_DISPLAY_ORDER.map((code) => {
-          const entry = this.entries[code];
-          const presence = entry?.presence ?? "unset";
-          const name = allergenName(code);
-          return html`
-            <div class="row" role="group" aria-label=${name}>
-              <span class="name" id=${`name-${code}`}>${name}</span>
+        ${selected.map(
+          (code) => html`
+            <div class="row" role="group" aria-label=${allergenName(code)}>
+              <span class="name" id=${`name-${code}`}>${allergenName(code)}</span>
               <select
+                name=${`allergen-${code}-presence`}
                 data-test=${`presence-${code}`}
                 aria-labelledby=${`name-${code}`}
-                .value=${presence}
-                ?disabled=${disabled}
-                @change=${(e: Event) => this.#onPresence(e, code)}
+                .value=${this.entries[code]!.presence}
+                ?disabled=${!this.reviewed}
+                @change=${(event: Event) => this.#onPresence(event, code)}
               >
-                <option value="unset">—</option>
-                <option value="contains">${containsLabel}</option>
-                <option value="may_contain">${mayContainLabel}</option>
+                <option value="contains">${t("allergen.contains")}</option>
+                <option value="may_contain">${t("allergen.may_contain")}</option>
               </select>
-              <wt-input
-                data-test=${`source-${code}`}
-                label=${`${originLabel} (${name})`}
-                .value=${entry?.source ?? ""}
-                ?disabled=${disabled || presence === "unset"}
-                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSource(e, code)}
-              ></wt-input>
+              <wt-button
+                variant="secondary"
+                data-test=${`remove-${code}`}
+                aria-label=${`${t("action.remove")}: ${allergenName(code)}`}
+                ?disabled=${!this.reviewed}
+                @click=${(event: Event) => this.#remove(event, code)}
+              >
+                ${t("action.remove")}
+              </wt-button>
             </div>
-          `;
-        })}
+          `,
+        )}
       </div>
+      <wt-button
+        variant="secondary"
+        data-test="add-allergen"
+        ?disabled=${!this.reviewed || selected.length === ALLERGEN_DISPLAY_ORDER.length}
+        @click=${(event: Event) => {
+          event.stopPropagation();
+          if (!this.reviewed) return;
+          this.search = "";
+          this.#setPicking(true);
+        }}
+        >${t("allergen.add")}</wt-button
+      >
+      ${keyed(
+        generation,
+        html`<wt-dialog
+          .open=${this.picking}
+          heading=${t("allergen.add")}
+          @keydown=${(event: KeyboardEvent) => event.stopPropagation()}
+          @wt-close=${(event: Event) => {
+            if (event.target === event.currentTarget && generation === this.pickerGeneration)
+              this.#closePicker(event);
+          }}
+        >
+          ${
+            this.picking
+              ? html`
+                  <wt-input
+                    name="allergen-search"
+                    data-test="allergen-search"
+                    label=${t("allergen.search")}
+                    .value=${this.search}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      this.search = event.detail.value;
+                    }}
+                  ></wt-input>
+                  <div class="choices">
+                    ${choices.map(
+                      (code) => html`
+                        <wt-button
+                          variant="secondary"
+                          data-test=${`choose-${code}`}
+                          @click=${(event: Event) => this.#add(event, code)}
+                          >${allergenName(code)}</wt-button
+                        >
+                      `,
+                    )}
+                    ${choices.length ? nothing : html`<p>${t("allergen.no_matches")}</p>`}
+                  </div>
+                `
+              : nothing
+          }
+          <wt-button
+            slot="footer"
+            variant="secondary"
+            data-test="cancel-allergen"
+            @click=${this.#closePicker}
+            >${t("action.cancel")}</wt-button
+          >
+        </wt-dialog>`,
+      )}
     `;
   }
 }

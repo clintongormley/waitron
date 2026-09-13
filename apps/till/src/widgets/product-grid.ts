@@ -76,6 +76,7 @@ export class TillProductGrid extends LitElement {
   }
 
   #hasModifiers(product: TillProduct): boolean {
+    if ((product.variants ?? []).some((variant) => variant.available)) return true;
     if (product.modifiers !== undefined)
       return product.modifiers.some((modifier) => modifier.available);
     return (product.optionGroups ?? []).some((group) => group.items.length > 0);

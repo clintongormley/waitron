@@ -45,6 +45,8 @@ import {
   menuSections,
 } from "./schema/menu.js";
 import { productUnits, units } from "./schema/units.js";
+import { menuItemVariants, productVariants } from "./schema/variants.js";
+import type { ProductVariant } from "./variants.js";
 import {
   assignProductUnit,
   getSeededUnit,
@@ -52,6 +54,7 @@ import {
   type SellableUnit,
   type Unit,
 } from "./units.js";
+import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
 
 /**
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
@@ -103,9 +106,11 @@ export interface MenuOffer extends MenuItem {
   diet: DietProfile | null;
   dietDerivation: DietDerivation | null;
   dietOverride: DietOverride | null;
+  dietaryDeclarations: DietaryLabel[];
   courseId: string | null;
   optionGroups: MenuOfferOptionGroup[];
   modifiers: Modifier[];
+  variants: ProductVariant[];
 }
 
 export interface MenuOfferOptionGroup {
@@ -127,6 +132,7 @@ export interface MenuOfferOption {
   removeAllergens: string[] | null;
   addOrigins: string[] | null;
   removeOrigins: string[] | null;
+  dietaryEffect?: { invalidates: string[] } | null;
 }
 
 export interface Product {
@@ -139,6 +145,9 @@ export interface Product {
   descriptions: Record<string, string>;
   unitId: string;
   unit: Unit;
+  description: Record<string, string> | null;
+  kitchenName: string | null;
+  dietaryDeclarations: DietaryLabel[];
   pricingUnit: PricingUnit;
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
@@ -158,6 +167,7 @@ export interface Product {
   dietOverride: DietOverride | null;
   /** Content-addressed photo filename served at `/media/<image>`, or null when there is no picture. */
   image: string | null;
+  variants: ProductVariant[];
 }
 
 export interface CreateProductInput {
@@ -179,6 +189,9 @@ export interface CreateProductInput {
   /** Omitted leaves it active, mirroring the `products.active` column default. Set `false` to create
    * a product that is not yet sellable at the till — atomic in the one insert, no follow-up patch. */
   active?: boolean;
+  description?: Record<string, string> | null;
+  kitchenName?: string | null;
+  dietaryDeclarations?: DietaryLabel[];
 }
 
 /** The mutable slice of a product. Absent keys are left unchanged (the object literal a caller
@@ -199,6 +212,9 @@ export interface UpdateProductInput {
   image?: string | null;
   /** Toggle active/inactive through the edit route; omitted leaves it unchanged. */
   active?: boolean;
+  description?: Record<string, string> | null;
+  kitchenName?: string | null;
+  dietaryDeclarations?: DietaryLabel[];
 }
 
 /**
@@ -228,6 +244,7 @@ export interface ResolvedOptionItem {
    * folds these into the dish's as-served diet (`deriveAsServedDiet`). */
   addOrigins: string[] | null;
   removeOrigins: string[] | null;
+  dietaryEffect?: { invalidates: string[] } | null;
 }
 
 /**
@@ -271,6 +288,7 @@ export interface AvailableProduct {
    * from `diet` (the published union) so an editor seeds its picker without double-counting, mirroring
    * `manualAllergens`. */
   dietOverride: DietOverride | null;
+  dietaryDeclarations: DietaryLabel[];
   /** The product's DEFAULT kitchen course (KDS-2 `products.course_id`), or null when it has none. The
    * ring-time resolver reads it as the fallback (`<override> ?? course_id`), and the till's tab course
    * picker reads it as the per-line PRE-SELECTED default. An extra field beyond `PriceableProduct`, so
@@ -311,6 +329,9 @@ const PRODUCT_BASE_COLUMNS = {
   manualAllergens: products.manualAllergens,
   dietOverride: products.dietOverride,
   image: products.image,
+  description: products.description,
+  kitchenName: products.kitchenName,
+  dietaryDeclarations: products.dietaryDeclarations,
 };
 
 const PRODUCT_COLUMNS = {
@@ -331,6 +352,9 @@ interface RawProduct {
   unitName: Record<string, string> | null;
   unitPrecision: number | null;
   hardwareUnit: string | null;
+  description: Record<string, string> | null;
+  kitchenName: string | null;
+  dietaryDeclarations: string[];
   pricingUnit: string;
   unitPrice: string;
   vatClass: string;
@@ -355,7 +379,11 @@ interface RawProduct {
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), so the value
 // read back is always a `PricingUnit`/`VatClass`; the cast re-attaches the type the column's runtime
 // CHECK already guarantees.
-function toProduct(row: RawProduct, categoryIds: string[]): Product {
+function toProduct(
+  row: RawProduct,
+  categoryIds: string[],
+  variants: ProductVariant[] = [],
+): Product {
   const { unitName, unitPrecision, hardwareUnit, ...product } = row;
   const unit = sellableUnit(row.unitId, unitName, unitPrecision, row.pricingUnit, hardwareUnit);
   return {
@@ -367,7 +395,9 @@ function toProduct(row: RawProduct, categoryIds: string[]): Product {
     unitId: unit.id,
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
+    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     dietOverride: row.dietOverride as DietOverride | null,
+    variants,
   };
 }
 
@@ -793,6 +823,7 @@ export async function listMenuOffers(
       diet: products.diet,
       dietDerivation: products.dietDerivation,
       dietOverride: products.dietOverride,
+      dietaryDeclarations: products.dietaryDeclarations,
       courseId: products.courseId,
     })
     .from(menuItems)
@@ -849,6 +880,7 @@ export async function listMenuOffers(
       removeAllergens: optionGroupItems.removeAllergens,
       addOrigins: optionGroupItems.addOrigins,
       removeOrigins: optionGroupItems.removeOrigins,
+      dietaryEffect: optionGroupItems.dietaryEffect,
     })
     .from(menuItemOptionGroups)
     .innerJoin(
@@ -920,6 +952,7 @@ export async function listMenuOffers(
       removeAllergens: option.removeAllergens as string[] | null,
       addOrigins: option.addOrigins as string[] | null,
       removeOrigins: option.removeOrigins as string[] | null,
+      dietaryEffect: option.dietaryEffect as { invalidates: string[] } | null,
     });
   }
   const content = await readContentLanguages(tx, tenantId, FALLBACK_LOCALE);
@@ -928,6 +961,33 @@ export async function listMenuOffers(
     tenantId,
     rows.map((row) => row.id),
   );
+  const variantRows = await tx
+    .select({
+      menuItemId: menuItemVariants.menuItemId,
+      id: productVariants.id,
+      name: productVariants.name,
+      unitPrice: menuItemVariants.unitPrice,
+      available: menuItemVariants.available,
+    })
+    .from(menuItemVariants)
+    .innerJoin(
+      productVariants,
+      and(
+        eq(productVariants.tenantId, menuItemVariants.tenantId),
+        eq(productVariants.productId, menuItemVariants.productId),
+        eq(productVariants.id, menuItemVariants.variantId),
+      ),
+    )
+    .where(
+      and(
+        eq(menuItemVariants.tenantId, tenantId),
+        inArray(
+          menuItemVariants.menuItemId,
+          rows.map((row) => row.id),
+        ),
+      ),
+    )
+    .orderBy(menuItemVariants.displayOrder, menuItemVariants.variantId);
   return rows.map((row) => ({
     id: row.id,
     menuId: row.menuId,
@@ -956,9 +1016,18 @@ export async function listMenuOffers(
     diet: row.diet as DietProfile | null,
     dietDerivation: row.dietDerivation as DietDerivation | null,
     dietOverride: row.dietOverride as DietOverride | null,
+    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,
     optionGroups: groupsByItem.get(row.id) ?? [],
     modifiers: modifiersByItem.get(row.id) ?? [],
+    variants: variantRows
+      .filter((variant) => variant.menuItemId === row.id)
+      .map((variant) => ({
+        id: variant.id,
+        name: variant.name,
+        unitPrice: variant.unitPrice,
+        available: variant.available,
+      })),
   }));
 }
 
@@ -1147,6 +1216,9 @@ export async function createProduct(
       catalogueId: input.catalogueId,
       categoryId: null,
       descriptions: input.descriptions,
+      description: input.description ?? null,
+      kitchenName: input.kitchenName?.trim() || null,
+      dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
       pricingUnit: legacyPricingUnit(selectedUnit),
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
@@ -1231,8 +1303,31 @@ export async function listProducts(
       ),
     )
     .orderBy(productOptionGroups.sort, productOptionGroups.groupId);
+  const variantRows = await tx
+    .select({
+      productId: productVariants.productId,
+      id: productVariants.id,
+      name: productVariants.name,
+      unitPrice: productVariants.unitPrice,
+      available: productVariants.available,
+    })
+    .from(productVariants)
+    .where(
+      and(
+        eq(productVariants.tenantId, tenantId),
+        inArray(
+          productVariants.productId,
+          rows.map((row) => row.id),
+        ),
+      ),
+    )
+    .orderBy(productVariants.displayOrder, productVariants.id);
   return rows.map((row) => ({
-    ...toProduct(row, row.categoryIds),
+    ...toProduct(
+      row,
+      row.categoryIds,
+      variantRows.filter((variant) => variant.productId === row.id),
+    ),
     modifierIds: attachments
       .filter((attachment) => attachment.productId === row.id)
       .map((attachment) => attachment.groupId),
@@ -1251,7 +1346,8 @@ export async function updateProduct(
   // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
   // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
   // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
-  const { allergens, dietOverride, categoryId, unitId, pricingUnit, ...rest } = patch;
+  const { allergens, dietOverride, dietaryDeclarations, categoryId, unitId, pricingUnit, ...rest } =
+    patch;
   if (categoryId !== undefined) {
     // Choosing a primary retains other memberships; clearing is allowed only for the final membership.
     await lockCategories(tx, tenantId);
@@ -1269,6 +1365,10 @@ export async function updateProduct(
   // column, and `diet` is republished only when the override was in the patch — an unrelated edit
   // must not disturb the published diet profile. Mirrors the allergen republish guard exactly.
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
+  const directDietary =
+    dietaryDeclarations === undefined
+      ? undefined
+      : validateDietaryDeclarations(dietaryDeclarations);
   const selectedUnit =
     unitId !== undefined
       ? await getSellableUnit(tx, tenantId, unitId)
@@ -1285,6 +1385,7 @@ export async function updateProduct(
       ...(selectedUnit === null ? {} : { pricingUnit: legacyPricingUnit(selectedUnit) }),
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
       ...(dietOverride !== undefined ? { dietOverride } : {}),
+      ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
       updatedAt: sql`now()`,
     })
     .where(and(eq(products.tenantId, tenantId), eq(products.id, id)));
@@ -1512,6 +1613,7 @@ export async function listAvailableProducts(
       diet: products.diet,
       dietDerivation: products.dietDerivation,
       dietOverride: products.dietOverride,
+      dietaryDeclarations: products.dietaryDeclarations,
       courseId: products.courseId,
       catalogueId: catalogues.id,
       catalogueName: catalogues.name,
@@ -1567,6 +1669,7 @@ export async function listAvailableProducts(
         removeAllergens: optionGroupItems.removeAllergens,
         addOrigins: optionGroupItems.addOrigins,
         removeOrigins: optionGroupItems.removeOrigins,
+        dietaryEffect: optionGroupItems.dietaryEffect,
       })
       .from(productOptionGroups)
       .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
@@ -1617,6 +1720,7 @@ export async function listAvailableProducts(
           removeAllergens: r.removeAllergens as string[] | null,
           addOrigins: r.addOrigins as string[] | null,
           removeOrigins: r.removeOrigins as string[] | null,
+          dietaryEffect: r.dietaryEffect as { invalidates: string[] } | null,
         });
       }
     }
@@ -1653,6 +1757,7 @@ export async function listAvailableProducts(
     diet: row.diet as DietProfile | null,
     dietDerivation: row.dietDerivation as DietDerivation | null,
     dietOverride: row.dietOverride as DietOverride | null,
+    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,
     catalogueId: row.catalogueId,
     catalogueName: row.catalogueName,
@@ -2107,12 +2212,15 @@ export async function setProductOptionGroups(
  * product form (Task 12) uses to show which groups are attached and in what order. */
 export async function listProductOptionGroupIds(
   tx: Transaction,
+  tenantId: TenantId,
   productId: string,
 ): Promise<string[]> {
   const rows = await tx
     .select({ groupId: productOptionGroups.groupId })
     .from(productOptionGroups)
-    .where(eq(productOptionGroups.productId, productId))
+    .where(
+      and(eq(productOptionGroups.tenantId, tenantId), eq(productOptionGroups.productId, productId)),
+    )
     .orderBy(asc(productOptionGroups.sort), asc(productOptionGroups.groupId));
   return rows.map((r) => r.groupId);
 }

@@ -479,7 +479,7 @@ export class OptionGroupManager extends LitElement {
             <dashboard-allergen-picker
               data-test=${`item-add-${item.id}`}
               .declaration=${item.addAllergens ?? null}
-              @allergens-changed=${(e: CustomEvent<{ value: AllergenDeclaration }>) => {
+              @wt-allergens-change=${(e: CustomEvent<{ value: AllergenDeclaration }>) => {
                 e.stopPropagation();
                 this.#updateItem(groupId, item.id, { addAllergens: e.detail.value });
               }}

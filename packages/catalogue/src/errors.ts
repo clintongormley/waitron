@@ -38,6 +38,7 @@ declare module "@waitron/shared" {
     /** An option's allergen overlay adds and removes the same EU-14 code — a contradiction. */
     "allergen.add_remove_conflict": { code: string };
     /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */
+    "diet.declaration_invalid": Record<string, never>;
     "diet.invalid_origin": { origin: string };
     /** A supplied diet label (`vegan`/`vegetarian`/…) is not an accepted value for `field`. */
     "diet.invalid_label": { field: string; value: string };
@@ -63,6 +64,13 @@ declare module "@waitron/shared" {
     "catalogue.not_found": { catalogueId: string };
     /** A menu offer operation names no active item; menuId is present when the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };
+    "product.variant_invalid": { field: string };
+    "product.variant_not_found": { variantId: string };
+    "product.variant_in_use": { variantId: string; menuItemIds: string[] };
+    "product.unavailable": { productId: string };
+    "product.variant_required": { productId: string };
+    "product.variant_unavailable": { variantId: string };
+    "product.invalid": { field: string };
     "product.not_found": { productId: string };
     "menu_section.not_found": { menuId?: string; sectionId: string };
     /**

@@ -126,7 +126,6 @@ import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
-import { mountRecipeApi } from "./recipe-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
@@ -2093,14 +2092,6 @@ export async function startServer(
   // only — no database work at boot; the `report.export`/`report.view` gates run per request,
   // SELECTs only.
   mountReportApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: dataNodeId } }, log);
-  // The deployment holds one tenant per database. The dashboard's gated recipe-authoring surface
-  // (ingredient CRUD + product-recipe get/set) on the SAME app, the identical convention. Reuses
-  // the EXACT `db`, tenant and `nodeId` `mountCatalogueApi` above receives
-  // (`till.tenantId`/`till.nodeId`) — a recipe write UPDATEs the sync-enrolled `products` table
-  // (via applyRecipeDerivation), so it threads `nodeId` for the same origin-attribution reason
-  // catalogue does. No fiscal backend, clock, card provider or media store. Routes only — no
-  // database work at boot; the `recipe.manage` gate runs per request.
-  mountRecipeApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
   // The deployment holds one tenant per database. The dashboard's gated shift-planning surface
   // (roster authoring + publish) on the SAME app, the identical convention. Reuses the EXACT db +
   // tenant (till.tenantId); no fiscal backend, clock, card provider or media store — these routes

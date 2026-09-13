@@ -307,6 +307,7 @@ export interface TillOptionItem {
    */
   addOrigins: string[] | null;
   removeOrigins: string[] | null;
+  dietaryEffect?: { invalidates: string[] } | null;
 }
 
 /**
@@ -342,7 +343,10 @@ export type Modifier = { id: string; name: Record<string, string>; available: bo
       defaultChoiceId: string | null;
       choices: (Pick<TillOptionItem, "id" | "name"> &
         Partial<
-          Pick<TillOptionItem, "addAllergens" | "removeAllergens" | "addOrigins" | "removeOrigins">
+          Pick<
+            TillOptionItem,
+            "addAllergens" | "removeAllergens" | "addOrigins" | "removeOrigins" | "dietaryEffect"
+          >
         > & {
           available: boolean;
         })[];
@@ -378,6 +382,15 @@ export interface TillProduct {
   productId?: string;
   /** The selling identity whose menu, price and offered modifiers were selected. */
   menuItemId?: string;
+  variantId?: string;
+  variantName?: Record<string, string>;
+  kitchenName?: string | null;
+  variants?: {
+    id: string;
+    name: Record<string, string>;
+    unitPrice: string;
+    available: boolean;
+  }[];
   descriptions: Record<string, string>;
   unit?: {
     id: string;
@@ -438,6 +451,7 @@ export interface TillProduct {
    * Null/absent = no override. Mirrors `AvailableProduct.dietOverride`; OPTIONAL for the fixture reason
    * above. NOT imported. */
   dietOverride?: DietOverride | null;
+  dietaryDeclarations?: string[];
 }
 
 /**
@@ -480,7 +494,14 @@ export interface TillMenuOffer {
   diet: DietProfile | null;
   dietDerivation: DietDerivation | null;
   dietOverride: DietOverride | null;
+  dietaryDeclarations?: string[];
   courseId: string | null;
+  variants?: {
+    id: string;
+    name: Record<string, string>;
+    unitPrice: string;
+    available: boolean;
+  }[];
   optionGroups: {
     id: string;
     name: Record<string, string>;
@@ -540,7 +561,11 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     courseId: offer.courseId,
     catalogueId: offer.menuId,
     catalogueName: offer.menuName,
+    ...(offer.variants === undefined ? {} : { variants: offer.variants }),
     ...(offer.modifiers === undefined ? {} : { modifiers: offer.modifiers }),
+    ...(offer.dietaryDeclarations === undefined
+      ? {}
+      : { dietaryDeclarations: offer.dietaryDeclarations }),
     optionGroups: offer.optionGroups.map((group) => ({
       id: group.id,
       name: group.name,
@@ -594,6 +619,7 @@ export interface SaleLine {
   workingOrderLineId?: string;
   productId?: string;
   menuItemId?: string;
+  variantId?: string;
   quantity: string;
   options?: { optionGroupItemId: string; quantity?: number }[];
   modifierSelections?: ModifierSelection[];

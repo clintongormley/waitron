@@ -285,6 +285,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
   snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
   RUNNING the grant assertions and `inmutabilidad`.
+- **A new unique target must precede the foreign key that references it in generated SQL.** Drizzle
+  emitted the reverse order for a new table referencing an altered existing table; PostgreSQL rejected
+  it with `42830`. See [conventions-data.md](docs/developers/conventions-data.md).
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
   so an entry at or below a recorded watermark never runs and drizzle raises nothing. The core journal
   is already in a shape no edit repairs — a database at core release points 1–6 cannot reach HEAD.

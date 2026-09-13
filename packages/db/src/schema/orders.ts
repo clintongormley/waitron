@@ -168,6 +168,9 @@ export const workingOrderLines = pgTable(
     // extraConfig below (null-permissive under MATCH SIMPLE, so a NULL product_id skips it and parent
     // rows are unaffected), so this column carries no plain single-column `.references()` of its own.
     productId: uuid("product_id"),
+    variantId: uuid("variant_id"),
+    variantName: jsonb("variant_name").$type<Record<string, string>>(),
+    kitchenName: text("kitchen_name"),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     modifierSnapshots: jsonb("modifier_snapshots")
       .$type<ModifierSnapshot[]>()

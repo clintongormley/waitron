@@ -106,7 +106,9 @@ export function useCatalogueDb(): { readonly db: Database } {
     await fx.db.transaction(async (tx) => {
       await tx.execute(sql`delete from menu_item_options`);
       await tx.execute(sql`delete from menu_item_option_groups`);
+      await tx.execute(sql`delete from menu_item_variants`);
       await tx.execute(sql`delete from menu_items`);
+      await tx.execute(sql`delete from product_variants`);
       await tx.execute(sql`delete from menu_sections`);
       await tx.execute(sql`delete from product_option_groups`);
       await tx.execute(sql`delete from product_units`);

@@ -3,6 +3,9 @@
 Read the [shared design](2026-09-12-products-overhaul-design.md) first. This section owns the
 product editor and the final integration of Units, Categories and Modifiers.
 
+Naming decision, 2026-09-13: display `primaryCategoryId` as **Reporting Category**. Use this name
+in its label and validation messages, as confirmed in the shared design.
+
 You build a product from a name, unit, price and tax choice, then add the detail it needs. You can
 choose existing categories/modifiers/units or create them without leaving the product draft. The
 list and editor are product-library screens; menus continue to decide which products are offered
@@ -31,7 +34,7 @@ memberships and modifier attachments. It never makes a temporary product just to
 | Tax/VAT             | Configured tax choice or explicit None; labels include the effective percentage.           |
 | Variants            | Ordered list, each with translated name, absolute price per unit and availability.         |
 | Modifiers           | Ordered selection of zero or more reusable definitions; picker plus Add modifier.          |
-| Categories          | Zero or more memberships, with one marked Primary if any; picker plus Add category.        |
+| Categories          | Zero or more memberships, with one selected as Reporting Category if any; picker plus Add category.        |
 | Allergens           | Selected-item picker, with contains/may contain and review status; no origin/source input. |
 | Dietary suitability | Selected-item picker; no long grid of auto/yes/no or origin controls.                      |
 

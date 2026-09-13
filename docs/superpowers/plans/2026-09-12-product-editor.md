@@ -2,8 +2,10 @@
 
 Branch: `products-editor`. Read the [spec](../specs/2026-09-12-product-editor-design.md),
 [shared contract](../specs/2026-09-12-products-overhaul-design.md) and the three supporting specs.
-Implementation is not started. This branch can begin immediately; completing it needs real sibling
-implementations, not only test doubles.
+Implementation is in progress. The independent model, editor widget and supporting tests are in
+this worktree; the replacement screen and selling paths are not connected yet. Completing the build
+needs real sibling implementations, not only test doubles. See the
+[execution checkpoint](2026-09-13-product-editor-checkpoint.md) before continuing.
 
 ## 1. Trace field meanings and write failing tests
 
@@ -111,7 +113,7 @@ Run this combined journey using actual routes and a real browser, with a databas
 
 1. Configure two content languages. Create a custom precision-2 unit from a dirty product draft.
 2. Create a translated parent/child category, select an image, assign the product to two categories
-   and mark its primary. Verify image-only category references prevent library deletion.
+   and choose its Reporting Category. Verify image-only category references prevent library deletion.
 3. Create and attach text, extras, options and yes/no modifiers from the product form. Set repeated
    extra limits, a total cap, defaults and an unavailable choice. The original draft must survive.
 4. Add translated name/description, kitchen name, image, tax choice, two differently priced variants,

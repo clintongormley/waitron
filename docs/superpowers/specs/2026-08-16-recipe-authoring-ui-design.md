@@ -1,5 +1,9 @@
 # Recipes / BOM — slice 2: recipe-authoring UI (sub-project 18)
 
+> **2026-09-13 update:** The [Products design](2026-09-12-product-editor-design.md) replaces this
+> authoring surface with direct allergen and dietary declarations. The production dashboard no longer
+> mounts recipe authoring. Purchasing data and historical recipe snapshots remain intact.
+
 **Date:** 2026-08-16. **Status:** design; plan alongside. **Builds on:** #89 (recipes/BOM allergen-inheritance
 BACKEND — `@waitron/recipes`, tables `ingredients`/`recipe_lines`, `products.manual_allergens` +
 `products.recipe_derivation` overlays, computed `products.allergens`).

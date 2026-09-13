@@ -4,7 +4,7 @@ import {
   validateAllergens,
   validateRemoveAllergens,
 } from "./allergens.js";
-import { validateOrigins } from "./dietary.js";
+import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import type { VatClass } from "./pricing.js";
 import "./errors.js";
 
@@ -59,7 +59,7 @@ function id(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) invalid(field);
   return value;
 }
-const effectKeys = ["addAllergens", "removeAllergens", "addOrigins", "removeOrigins"];
+const effectKeys = ["addAllergens", "removeAllergens", "dietaryEffect"];
 function effects(row: Record<string, unknown>): ModifierEffects {
   const out: ModifierEffects = {};
   if (row.addAllergens !== undefined)
@@ -68,10 +68,14 @@ function effects(row: Record<string, unknown>): ModifierEffects {
     out.removeAllergens =
       row.removeAllergens === null ? null : validateRemoveAllergens(row.removeAllergens);
   assertAllergenOverlayDisjoint(out.addAllergens ?? null, out.removeAllergens ?? null);
-  if (row.addOrigins !== undefined)
-    out.addOrigins = row.addOrigins === null ? null : validateOrigins(row.addOrigins);
-  if (row.removeOrigins !== undefined)
-    out.removeOrigins = row.removeOrigins === null ? null : validateOrigins(row.removeOrigins);
+  if (row.dietaryEffect !== undefined) {
+    if (row.dietaryEffect === null) out.dietaryEffect = null;
+    else {
+      const effect = record(row.dietaryEffect, "dietaryEffect");
+      keys(effect, ["invalidates"], "dietaryEffect");
+      out.dietaryEffect = { invalidates: validateDietaryDeclarations(effect.invalidates) };
+    }
+  }
   return out;
 }
 

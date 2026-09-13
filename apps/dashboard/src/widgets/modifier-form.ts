@@ -8,7 +8,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
-  DIETARY_ORIGINS,
+  DIETARY_LABELS,
   type Modifier,
   type ModifierInput,
   type ModifierEffects,
@@ -229,8 +229,7 @@ export class ModifierForm extends LitElement {
       available: choice.available,
       ...(choice.addAllergens === undefined ? {} : { addAllergens: choice.addAllergens }),
       ...(choice.removeAllergens === undefined ? {} : { removeAllergens: choice.removeAllergens }),
-      ...(choice.addOrigins === undefined ? {} : { addOrigins: choice.addOrigins }),
-      ...(choice.removeOrigins === undefined ? {} : { removeOrigins: choice.removeOrigins }),
+      ...(choice.dietaryEffect === undefined ? {} : { dietaryEffect: choice.dietaryEffect }),
     }));
     let value: ModifierInput;
     switch (this.type) {
@@ -336,15 +335,12 @@ export class ModifierForm extends LitElement {
   }
   #effectList(
     choice: ChoiceDraft,
-    key: "removeAllergens" | "addOrigins" | "removeOrigins",
+    key: "removeAllergens",
     label: string,
     options: readonly string[],
   ) {
     const selected = choice[key] ?? [];
-    const display = (code: string) =>
-      key === "removeAllergens"
-        ? allergenName(code)
-        : t(`origin.${code}` as `origin.${(typeof DIETARY_ORIGINS)[number]}`);
+    const display = (code: string) => allergenName(code);
     return html`<label
         >${label}<select
           name=${`${key}-${choice.id}`}
@@ -360,6 +356,58 @@ export class ModifierForm extends LitElement {
           ${options.filter((code) => !selected.includes(code)).map((code) => html`<option value=${code}>${display(code)}</option>`)}
         </select></label
       >${selected.map((code) => html`<div class="selected"><span>${display(code)}</span><wt-button variant="secondary" .disabled=${this.busy} aria-label=${`${t("action.remove")}: ${label} ${display(code)}`} @click=${() => this.#changeChoice(choice.id, { [key]: selected.filter((value) => value !== code) })}>${t("action.remove")}</wt-button></div>`)}`;
+  }
+  #dietaryEffect(choice: ChoiceDraft) {
+    const reviewed = choice.dietaryEffect !== undefined && choice.dietaryEffect !== null;
+    const selected = choice.dietaryEffect?.invalidates ?? [];
+    return html`${this.#toggle(
+      `dietary-reviewed-${choice.id}`,
+      t("modifiers.dietary_reviewed"),
+      reviewed,
+      (checked) =>
+        this.#changeChoice(choice.id, { dietaryEffect: checked ? { invalidates: [] } : null }),
+    )}${
+      reviewed
+        ? html`<label
+              >${t("modifiers.invalidates_dietary")}
+              <select
+                name=${`dietaryEffect-${choice.id}`}
+                .disabled=${this.busy}
+                @change=${(event: Event) => {
+                  event.stopPropagation();
+                  const select = event.target as HTMLSelectElement;
+                  if (select.value)
+                    this.#changeChoice(choice.id, {
+                      dietaryEffect: {
+                        invalidates: [...selected, select.value as (typeof DIETARY_LABELS)[number]],
+                      },
+                    });
+                  select.value = "";
+                }}
+              >
+                <option value="">${t("modifiers.choose")}</option>
+                ${DIETARY_LABELS.filter((label) => !selected.includes(label)).map(
+                  (label) => html`<option value=${label}>${t(`editor.diet.${label}`)}</option>`,
+                )}
+              </select></label
+            >
+            ${selected.map(
+              (label) =>
+                html`<div class="selected">
+                  <span>${t(`editor.diet.${label}`)}</span
+                  ><wt-button
+                    variant="secondary"
+                    .disabled=${this.busy}
+                    @click=${() =>
+                      this.#changeChoice(choice.id, {
+                        dietaryEffect: { invalidates: selected.filter((value) => value !== label) },
+                      })}
+                    >${t("action.remove")}</wt-button
+                  >
+                </div>`,
+            )}`
+        : nothing
+    }`;
   }
   #effects(choice: ChoiceDraft) {
     const added = choice.addAllergens ?? {};
@@ -434,7 +482,7 @@ export class ModifierForm extends LitElement {
           t("modifiers.remove_allergen"),
           ALLERGEN_CODES.filter((code) => !added[code]),
         )}
-        ${this.#effectList(choice, "addOrigins", t("modifiers.add_food"), DIETARY_ORIGINS)}${this.#effectList(choice, "removeOrigins", t("modifiers.remove_food"), DIETARY_ORIGINS)}
+        ${this.#dietaryEffect(choice)}
       </div>
     </details>`;
   }

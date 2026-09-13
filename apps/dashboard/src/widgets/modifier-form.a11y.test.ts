@@ -28,7 +28,7 @@ const values: Modifier[] = [
         maxQuantity: 1,
         defaultQuantity: 0,
         addAllergens: { milk: { presence: "contains" } },
-        addOrigins: ["dairy"],
+        dietaryEffect: { invalidates: ["vegetarian"] },
       },
     ],
   },

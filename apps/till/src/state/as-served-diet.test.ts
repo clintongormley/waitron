@@ -61,6 +61,39 @@ function line(prod: TillProduct, ...selectedItemIds: string[]): OrderLine {
 }
 
 describe("asServedDiet", () => {
+  it("uses direct product declarations and selected direct invalidations", () => {
+    const prod = product(null, []);
+    prod.dietaryDeclarations = ["vegan", "halal"];
+    prod.modifiers = [
+      {
+        id: "extras",
+        name: { en: "Extras" },
+        type: "extras",
+        available: true,
+        required: false,
+        maxTotalQuantity: null,
+        choices: [
+          {
+            ...item("bacon", {}),
+            dietaryEffect: { invalidates: ["no_meat", "halal"] },
+            available: true,
+            defaultQuantity: 0,
+          },
+        ],
+      },
+    ];
+    delete prod.optionGroups;
+    expect(asServedDiet(line(prod))).toMatchObject({
+      vegan: "yes",
+      vegetarian: "yes",
+      halal: "yes",
+    });
+    expect(asServedDiet(line(prod, "bacon"))).toMatchObject({
+      vegan: "unknown",
+      vegetarian: "unknown",
+    });
+    expect(asServedDiet(line(prod, "bacon")).halal).toBeUndefined();
+  });
   it("a 'no cheese' option flips a {plant,dairy} line to vegan as-served", () => {
     // Base: plant + dairy, reviewed (not pending) ⇒ vegetarian but NOT vegan.
     const prod = product({ origins: ["plant", "dairy"], pending: false }, [

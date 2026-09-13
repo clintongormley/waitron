@@ -51,6 +51,11 @@ import {
   updateMenuItem,
   updateMenuSection,
   updateProduct,
+  listMenuVariants,
+  setMenuVariants,
+  type MenuVariant,
+  readProductEditor,
+  saveProductEditor,
   type CreateOptionGroupInput,
   type CreateOptionGroupItemInput,
   type DietOverride,
@@ -176,6 +181,27 @@ const run = createErrorBoundary(STATUS, "catalogue.failed");
 function requireUuidParam(id: string, kind: string): string {
   if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind, value: id });
   return id;
+}
+
+function parseMenuVariants(value: unknown): MenuVariant[] {
+  if (!Array.isArray(value)) {
+    throw new AppError("management.request_invalid", { field: "variants" });
+  }
+  return value.map((entry, index) => {
+    if (
+      !isPlainObject(entry) ||
+      typeof entry.variantId !== "string" ||
+      typeof entry.unitPrice !== "string" ||
+      typeof entry.available !== "boolean"
+    ) {
+      throw new AppError("management.request_invalid", { field: `variants.${index}` });
+    }
+    return {
+      variantId: requireUuidParam(entry.variantId, "ProductVariantId"),
+      unitPrice: entry.unitPrice,
+      available: entry.available,
+    };
+  });
 }
 
 /**
@@ -573,6 +599,30 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
+  app.get("/management-api/catalogues/:id/items/:itemId/variants", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
+      return c.json(
+        await gated(sessionId, (tx) => listMenuVariants(tx, tenantId, menuItemId, menuId)),
+      );
+    }),
+  );
+
+  app.put("/management-api/catalogues/:id/items/:itemId/variants", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const variants = parseMenuVariants(body.variants);
+      return c.json(
+        await gated(sessionId, (tx) => setMenuVariants(tx, tenantId, menuItemId, variants, menuId)),
+      );
+    }),
+  );
+
   // ── Location menus ───────────────────────────────────────────────────────────────────────────────
   // The deployment holds one tenant per database.
   // The dashboard's location↔menu membership screen: which catalogues a location may SELL (its
@@ -739,6 +789,53 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
       const rows = await gated(sessionId, (tx) => listProducts(tx, tenantId, catalogueId));
       return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/catalogues/:id/product-editor", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
+      const body = await readJsonBody(c);
+      const saved = await gated(sessionId, (tx) =>
+        saveProductEditor(
+          tx,
+          tenantId,
+          null,
+          catalogueId,
+          body,
+          deps.venueLocale ?? FALLBACK_LOCALE,
+        ),
+      );
+      return c.json(saved, 201);
+    }),
+  );
+
+  app.get("/management-api/products/:id/editor", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const productId = requireUuidParam(c.req.param("id"), "ProductId");
+      return c.json(await gated(sessionId, (tx) => readProductEditor(tx, tenantId, productId)));
+    }),
+  );
+
+  app.put("/management-api/products/:id/editor", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const productId = requireUuidParam(c.req.param("id"), "ProductId");
+      const body = await readJsonBody(c);
+      return c.json(
+        await gated(sessionId, (tx) =>
+          saveProductEditor(
+            tx,
+            tenantId,
+            productId,
+            "00000000-0000-0000-0000-000000000000",
+            body,
+            deps.venueLocale ?? FALLBACK_LOCALE,
+          ),
+        ),
+      );
     }),
   );
 
@@ -960,7 +1057,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      const ids = await gated(sessionId, (tx) => listProductOptionGroupIds(tx, productId));
+      const ids = await gated(sessionId, (tx) =>
+        listProductOptionGroupIds(tx, tenantId, productId),
+      );
       return c.json(ids);
     }),
   );

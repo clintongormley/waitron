@@ -14,7 +14,8 @@ import type { VatBreakdownLine } from "@waitron/fiscal";
 import { assertQuantityPrecision } from "./unit-validation.js";
 
 export type PricingUnit = "each" | "weight";
-export type VatClass = "general" | "reduced" | "super_reduced" | "zero";
+export const VAT_CLASSES = ["general", "reduced", "super_reduced", "zero"] as const;
+export type VatClass = (typeof VAT_CLASSES)[number];
 
 export interface UnitSnapshot {
   name: Record<string, string>;
@@ -29,6 +30,9 @@ export interface PriceableProduct {
   vatClass: VatClass;
   /** Snapshotted analytics label, copied onto the sale line. */
   category: string | null;
+  variantId?: string | null;
+  variantName?: Record<string, string> | null;
+  kitchenName?: string | null;
 }
 
 export interface BasketItem {
@@ -65,6 +69,9 @@ export interface LockedLine {
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
   modifierSnapshots?: ModifierSnapshot[];
+  variantId?: string | null;
+  variantName?: Record<string, string> | null;
+  kitchenName?: string | null;
 }
 
 // The standing Spanish VAT set. RECEIPT (Step 6): the four rates below were confirmed on 2026-08-05
@@ -131,6 +138,9 @@ interface PricingRow {
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
   modifierSnapshots?: ModifierSnapshot[];
+  variantId?: string | null;
+  variantName?: Record<string, string> | null;
+  kitchenName?: string | null;
 }
 
 // THE ONE arithmetic core. `priceBasket` (live catalogue) and `priceLockedLines` (stored lock) both
@@ -168,6 +178,9 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
       // (`priceBasket`/`priceLockedLines`, which never set it) emitting exactly `null` here, so a
       // basket priced with empty options stays line-for-line identical to `priceBasket`.
       parentLineNo: row.parentLineNo ?? null,
+      variantId: row.variantId ?? null,
+      variantName: row.variantName ?? null,
+      kitchenName: row.kitchenName ?? null,
     });
     grossLineTotals.push(gross); // parallel to `lines`; the customer-facing gross of this same line
     grossUnitPrices.push(grossUnit); // parallel to `lines`; the per-UNIT gross stored as unit_price_gross
@@ -205,6 +218,9 @@ export function priceBasket(items: readonly BasketItem[]): PricedLines {
         category: item.product.category,
         unitName: item.product.unit.name,
         unitPrecision: item.product.unit.precision,
+        variantId: item.product.variantId ?? null,
+        variantName: item.product.variantName ?? null,
+        kitchenName: item.product.kitchenName ?? null,
       };
     }),
   );
@@ -233,6 +249,9 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
       // walk-up does. `?? null` keeps a no-modifier locked line (which never sets it) emitting `null`,
       // so a plain basket stays line-for-line identical.
       parentLineNo: line.parentLineNo ?? null,
+      variantId: line.variantId ?? null,
+      variantName: line.variantName ?? null,
+      kitchenName: line.kitchenName ?? null,
     })),
   );
 }
@@ -292,6 +311,9 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       unitPrecision: item.product.unit.precision,
       parentLineNo: null,
       modifierSnapshots: item.modifierSnapshots ?? [],
+      variantId: item.product.variantId ?? null,
+      variantName: item.product.variantName ?? null,
+      kitchenName: item.product.kitchenName ?? null,
     });
     for (const opt of item.options) {
       rows.push({

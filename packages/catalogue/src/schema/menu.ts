@@ -80,6 +80,7 @@ export const menuItems = pgTable(
   },
   (t) => [
     unique("menu_items_tenant_id_key").on(t.tenantId, t.id),
+    unique("menu_items_tenant_product_id_key").on(t.tenantId, t.id, t.productId),
     unique("menu_items_menu_product_key").on(t.tenantId, t.menuId, t.productId),
     foreignKey({
       columns: [t.tenantId],
