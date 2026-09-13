@@ -1,5 +1,7 @@
 // A bare side-effect import so TypeScript augments the real "@waitron/shared" module.
 import "@waitron/shared";
+// Type-only, so it adds no runtime edge back to the module that side-effect-imports this file.
+import type { ProductUsingUnit } from "./units.js";
 
 /** @waitron/catalogue's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {
@@ -21,9 +23,7 @@ declare module "@waitron/shared" {
     "unit.not_found": { unitId: string };
     /** A unit cannot be deleted while products retain real assignments to it; each product carries
      * its id and availability so a caller can list them and link to each product's editor. */
-    "unit.in_use": {
-      products: { id: string; name: Record<string, string>; available: boolean }[];
-    };
+    "unit.in_use": { products: ProductUsingUnit[] };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
     /** A translation map contains a non-text value. */
