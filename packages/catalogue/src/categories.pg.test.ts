@@ -13,6 +13,7 @@ import {
 } from "./categories.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
+import { seedLegacySellingUnits } from "../test/fixtures.js";
 const suite = useTemplateDb({ template: "core" });
 const app = <T>(db: Database, tenant: string, action: (tx: Transaction) => Promise<T>) =>
   withTenant(db, tenant, async (tx) => {
@@ -21,6 +22,7 @@ const app = <T>(db: Database, tenant: string, action: (tx: Transaction) => Promi
   });
 async function fixture() {
   const tenantId = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
   const a = await app(suite.admin, tenantId, (tx) =>
     createCategory(tx, tenantId, { name: { en: "A" } }),
   );

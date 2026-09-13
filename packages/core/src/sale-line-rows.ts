@@ -13,6 +13,8 @@ export function saleLineRows(tenantId: string, saleId: string, lines: readonly R
     parentLineId: line.parentLineNo == null ? null : (byLineNo.get(line.parentLineNo) ?? null),
     descriptions: line.descriptions,
     modifierSnapshots: line.modifierSnapshots ?? [],
+    unitName: line.unitName ?? null,
+    unitPrecision: line.unitPrecision ?? null,
     quantity: line.quantity,
     unitPrice: line.unitPrice,
     vatRate: line.vatRate,

@@ -111,6 +111,7 @@ interface SeededVenue {
   cafeOfferId: string;
   premiumCafeOfferId: string;
   eachUnitId: string;
+  kgUnitId: string;
 }
 
 /**
@@ -128,6 +129,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, 3, 'kg')
     returning id, seed_key`);
   const eachUnitId = seededUnits.rows.find((unit) => unit.seed_key === "each")!.id;
+  const kgUnitId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
@@ -235,6 +237,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     cafeOfferId,
     premiumCafeOfferId,
     eachUnitId,
+    kgUnitId,
   };
 }
 
@@ -4496,7 +4499,7 @@ describe("canonical modifier selections", () => {
   it.each(["menu", "product"])(
     "preserves %s selections and prices through a fractional quantity edit",
     async (source) => {
-      const { cfg, cafeId, cafeOfferId, zoneId } = await setupVenue();
+      const { cfg, cafeId, cafeOfferId, zoneId, kgUnitId } = await setupVenue();
       const choiceId = randomUUID();
       const optionId = randomUUID();
       const definitions = await withTenant(db, cfg.tenantId, async (tx) => {
@@ -4529,9 +4532,7 @@ describe("canonical modifier selections", () => {
           cafeId,
           definitions.map((d) => d.id),
         );
-        await tx.execute(
-          sql`update products set pricing_unit = 'weight' where tenant_id = ${cfg.tenantId} and id = ${cafeId}`,
-        );
+        await catalogue.assignProductUnit(tx, cfg.tenantId, cafeId, kgUnitId);
         await catalogue.setMenuItemOptionGroups(
           tx,
           cfg.tenantId,

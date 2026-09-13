@@ -428,6 +428,8 @@ describe("structured modifier snapshots", () => {
         descriptions: { en: "item" },
         category: null,
         modifierSnapshots,
+        unitName: { en: "each" },
+        unitPrecision: 0,
       },
     ]);
     expect(locked).toEqual(live);

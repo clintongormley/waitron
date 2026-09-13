@@ -2428,6 +2428,8 @@ it("files all four modifier modes through cash checkout and reprints their saved
       gross: "3.00",
       parentLineNo: null,
       modifierSnapshots: snapshots,
+      unitName: { ca: "unitat", en: "each", es: "unidad", eu: "unitatea", gl: "unidade" },
+      unitPrecision: 0,
     },
     {
       descriptions: { [LOCALE]: "Queso" },
@@ -2435,6 +2437,8 @@ it("files all four modifier modes through cash checkout and reprints their saved
       gross: "1.40",
       parentLineNo: 1,
       modifierSnapshots: [],
+      unitName: null,
+      unitPrecision: null,
     },
   ]);
   expect(ticket.vatBreakdown).toEqual([
@@ -2447,8 +2451,10 @@ it("files all four modifier modes through cash checkout and reprints their saved
       quantity: string;
       vat_rate: string;
       modifier_snapshots: ModifierSnapshot[];
+      unit_name: Record<string, string> | null;
+      unit_precision: number | null;
     }>(
-      sql`select quantity,vat_rate,modifier_snapshots from sale_lines where tenant_id=${cfg.tenantId} order by line_no`,
+      sql`select quantity,vat_rate,modifier_snapshots,unit_name,unit_precision from sale_lines where tenant_id=${cfg.tenantId} order by line_no`,
     );
     const records = await tx
       .select()
@@ -2457,8 +2463,20 @@ it("files all four modifier modes through cash checkout and reprints their saved
     return { rows: rows.rows, records };
   });
   expect(stored.rows).toEqual([
-    { quantity: "2.000", vat_rate: "21.00", modifier_snapshots: snapshots },
-    { quantity: "4.000", vat_rate: "10.00", modifier_snapshots: [] },
+    {
+      quantity: "2.000",
+      vat_rate: "21.00",
+      modifier_snapshots: snapshots,
+      unit_name: { ca: "unitat", en: "each", es: "unidad", eu: "unitatea", gl: "unidade" },
+      unit_precision: 0,
+    },
+    {
+      quantity: "4.000",
+      vat_rate: "10.00",
+      modifier_snapshots: [],
+      unit_name: null,
+      unit_precision: null,
+    },
   ]);
   expect(stored.records).toHaveLength(1);
   expect(stored.records[0]!.huella).toMatch(/^[0-9A-F]{64}$/);

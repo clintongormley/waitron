@@ -27,6 +27,14 @@ export interface SeededVenue {
   seriesId: SeriesId;
 }
 
+/** Seed the two legacy product choices with real tenant-scoped unit identities. */
+export async function seedLegacySellingUnits(db: Database, tenantId: string): Promise<void> {
+  await db.execute(sql`
+    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each","fr":"unité"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg","fr":"kg"}'::jsonb, 3, 'kg')`);
+}
+
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`

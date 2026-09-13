@@ -19,13 +19,14 @@ import {
   listMenuOffers,
   setMenuItemOptionGroups,
 } from "./operations.js";
-import { seedVenue, useCatalogueDb } from "../test/fixtures.js";
+import { seedLegacySellingUnits, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
 // PGlite verifies publication/projection; definition-publication locking races use real PostgreSQL.
 const suite = useCatalogueDb();
 
 it("publishes attached text and yes-no modifiers without requiring choice rows", async () => {
   const { tenantId, locationId } = await seedVenue(suite.db);
+  await seedLegacySellingUnits(suite.db, tenantId);
   await withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
     const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
@@ -85,6 +86,7 @@ it("publishes attached text and yes-no modifiers without requiring choice rows",
 
 it("projects only published available choices, clears excluded defaults, and keeps empty required modifiers", async () => {
   const { tenantId } = await seedVenue(suite.db);
+  await seedLegacySellingUnits(suite.db, tenantId);
   await withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
     const menu = await createCatalogue(tx, tenantId, { name: "Menu" });

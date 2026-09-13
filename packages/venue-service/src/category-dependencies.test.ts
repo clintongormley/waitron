@@ -5,6 +5,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
+  createUnit,
   deleteCategory,
   replaceProductCategories,
 } from "@waitron/catalogue";
@@ -62,11 +63,12 @@ it("allows deletion after memberships clear even when an open order keeps the co
     `);
     const catalogue = await createCatalogue(tx, tenantId, { name: "Menu" });
     const category = await createCategory(tx, tenantId, { name: { en: "Bakery" } });
+    const unit = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
     const product = await createProduct(tx, tenantId, {
       catalogueId: catalogue.id,
       categoryId: category.id,
       descriptions: { en: "Bread" },
-      pricingUnit: "each",
+      unitId: unit.id,
       unitPrice: "2.00",
       vatClass: "general",
     });
