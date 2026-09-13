@@ -1297,6 +1297,68 @@ describe("runCli venue", () => {
     expect(transcript).toContain("seed admin Owner");
   });
 
+  it("carries the admin's real names from the two optional flags into seed-admin", async () => {
+    const h = harness({ env: VENUE_ENV });
+    const code = await runCli(
+      [...VENUE_ARGS, "--admin-first-names", "Clinton", "--admin-last-names", "Gormley", "--yes"],
+      h.deps,
+    );
+    expect(code).toBe(0);
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    expect(actions.find((action) => action.kind === "seed-admin")).toMatchObject({
+      displayName: "Owner",
+      firstNames: "Clinton",
+      lastNames: "Gormley",
+    });
+  });
+
+  it("trims a padded real-name flag rather than planning the padding", async () => {
+    // Every other venue option is trimmed on its way in (`resolveOption`), and the wizard boundary
+    // trims the same two fields, so the CLI must not be the one path that stores `"  Clinton  "`.
+    const h = harness({ env: VENUE_ENV });
+    const code = await runCli(
+      [...VENUE_ARGS, "--admin-first-names", "  Clinton  ", "--yes"],
+      h.deps,
+    );
+    expect(code).toBe(0);
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    expect(actions.find((action) => action.kind === "seed-admin")).toMatchObject({
+      firstNames: "Clinton",
+    });
+  });
+
+  it.each([
+    ["an empty", ""],
+    ["a whitespace-only", "   "],
+  ])("treats %s real-name flag as not given, never as an empty string", async (_label, value) => {
+    // `--admin-last-names ""` is how a script says "no last name". An empty string reaches
+    // `persons_last_names_ck`, which refuses it, so the operator would see a raw SQLSTATE from inside
+    // applyVenue instead of a plan that simply leaves the name unset.
+    const h = harness({ env: VENUE_ENV });
+    const code = await runCli([...VENUE_ARGS, "--admin-last-names", value, "--yes"], h.deps);
+    expect(code).toBe(0);
+    expect(h.asked).toEqual([]); // and it still asks nothing rather than prompting for the blank
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    expect(actions.find((action) => action.kind === "seed-admin")).toMatchObject({
+      lastNames: null,
+    });
+  });
+
+  it("asks no new question when neither real-name flag is given, and plans both as null", async () => {
+    // The two flags are read but NEVER prompted for, so a script that drove `venue` non-interactively
+    // before this existed still runs to completion instead of blocking on a question.
+    const h = harness({ env: VENUE_ENV });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(0);
+    expect(h.asked).toEqual([]);
+    expect(h.askedSecretly).toEqual([]);
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    expect(actions.find((action) => action.kind === "seed-admin")).toMatchObject({
+      firstNames: null,
+      lastNames: null,
+    });
+  });
+
   it("refuses --admin-pin as a flag — a login PIN is a secret and never comes from argv", async () => {
     // The PIN follows the admin-connection-string discipline: argv is world-readable in `ps` and
     // lands in shell history, so the PIN is read from WAITRON_ADMIN_PIN or an echo-off prompt and

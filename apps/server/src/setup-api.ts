@@ -277,6 +277,21 @@ function asNullableString(value: unknown, field: string): string | null {
   return value === null ? null : asString(value, field);
 }
 
+/**
+ * A person's real name. An ABSENT field reads as `null`, unlike `asNullableString`, which only
+ * accepts an explicit null. A present one is TRIMMED, and a value with nothing left after trimming is
+ * refused rather than stored: the column's check refuses an empty string, and identity's own write
+ * boundary normalizes a name the same way (`requiredText`, packages/identity/src/staff.ts), so
+ * provisioning must not be the one path that stores `"Clinton "`.
+ */
+function asOptionalName(value: unknown, field: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") invalidRequest(field);
+  const trimmed = value.trim();
+  if (trimmed === "") invalidRequest(field);
+  return trimmed;
+}
+
 function asStringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value) || value.length === 0) invalidRequest(field);
   for (const item of value) {
@@ -362,6 +377,15 @@ function parseVenue(venueRaw: unknown): VenueRequest {
     rectificativeSeriesCode: asString(v.rectificativeSeriesCode, "rectificativeSeriesCode"),
     admin: {
       displayName: asString(admin.displayName, "admin.displayName"),
+      // The person's REAL name, written to `persons.first_names` / `persons.last_names` by
+      // `applyVenue`'s seed-admin insert (packages/provisioning/src/venue-apply.ts). An absent field
+      // reads as null, which the nullable columns accept; a present one must hold a non-empty name
+      // after trimming, because `persons_first_names_ck` / `persons_last_names_ck` refuse an empty
+      // string (packages/identity/src/schema/persons.ts). Trimmed here so provisioning stores a name
+      // the same shape identity's own write boundary would (`requiredText`,
+      // packages/identity/src/staff.ts).
+      firstNames: asOptionalName(admin.firstNames, "admin.firstNames"),
+      lastNames: asOptionalName(admin.lastNames, "admin.lastNames"),
       pinHash: hashPin(asString(admin.pin, "admin.pin")),
       passwordHash: hashPassword(asString(admin.password, "admin.password")),
       // The admin's REQUIRED dashboard-login email. Presence/shape screened by `asString`

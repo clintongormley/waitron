@@ -95,9 +95,13 @@ export async function applyVenue(
           // secret. `role='admin'` is the whole point: this person can log in and authorize privileged
           // actions from day one. `email` is the admin's required dashboard-login address, validated
           // and normalized at the request boundary and written verbatim here.
+          // `first_names`/`last_names` are the person's real name, nullable columns each carrying an
+          // `is null or length > 0` check — so the planner's `null` for "not given" is accepted and an
+          // empty string would not be.
           await tx.execute(sql`
-            insert into persons (tenant_id, display_name, pin_hash, password_hash, email, role)
-            select ${tenantId}, ${action.displayName}, ${action.pinHash}, ${action.passwordHash}, ${action.email}, 'admin'
+            insert into persons (tenant_id, display_name, first_names, last_names, pin_hash, password_hash, email, role)
+            select ${tenantId}, ${action.displayName}, ${action.firstNames}, ${action.lastNames},
+                   ${action.pinHash}, ${action.passwordHash}, ${action.email}, 'admin'
             where not exists (
               select 1 from persons where tenant_id = ${tenantId} and role = 'admin')`);
           break;

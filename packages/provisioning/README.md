@@ -59,11 +59,14 @@ usage: waitron-provision <command> [options]
            [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]
-           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>] [--yes]
+           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]
+           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]
 ```
 
 Every option is prompted for when omitted, so a bare `waitron-provision instance` is a complete
-interactive session.
+interactive session. The two exceptions are `--admin-first-names` and `--admin-last-names`: they are
+read from a flag but never prompted for, so a script that already drives `venue` non-interactively
+is not stopped by a question it did not expect.
 
 ### `keyring`
 
@@ -218,7 +221,10 @@ admin connection string — read from an environment variable or an echo-off pro
 (`WAITRON_ADMIN_PASSWORD`, for the management dashboard, ≥8 characters). Each is hashed at the CLI
 boundary (`assertPinLength` / `assertPasswordLength` enforce the same floors the identity package
 does), so only the hash ever reaches the plan or the database. The display name (`--admin-name`) and
-required email (`--admin-email`) are not secrets, so they stay as flags. This is the ONLY place either
+required email (`--admin-email`) are not secrets, so they stay as flags. So are the admin's optional
+real names (`--admin-first-names` / `--admin-last-names`), which land in `persons.first_names` /
+`persons.last_names`; omit both and the person is seeded without a real name against them, which the
+dashboard can fill in later. This is the ONLY place either
 secret is set for the FIRST admin: `setPassword` and passkey enrollment are gated on an
 already-authenticated management session.
 

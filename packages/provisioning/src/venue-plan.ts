@@ -47,8 +47,19 @@ export interface VenueRequest {
    * authorize privileged actions from day one. Both secrets are already HASHED here (hashed at the CLI
    * boundary by `hashPin` / `hashPassword`) — `pinHash` for the till, `passwordHash` for the dashboard,
    * never a plaintext secret, so neither enters the plan or any action. `email` is required because
-   * the admin is a dashboard account as well as a till PIN holder. */
-  admin: { displayName: string; pinHash: string; passwordHash: string; email: string };
+   * the admin is a dashboard account as well as a till PIN holder. `firstNames`/`lastNames` are the
+   * person's real name. They are OPTIONAL because callers that do not care about the seeded person's
+   * real name build this request without them — several test fixtures do, `venue-apply.test.ts`'s
+   * among them. The two callers that do care, the setup wizard and `waitron-provision venue`, always
+   * pass both. */
+  admin: {
+    displayName: string;
+    pinHash: string;
+    passwordHash: string;
+    email: string;
+    firstNames?: string | null;
+    lastNames?: string | null;
+  };
 }
 
 export type VenueAction =
@@ -56,6 +67,11 @@ export type VenueAction =
   | {
       kind: "seed-admin";
       displayName: string;
+      // Not optional on the ACTION, unlike on the request: the applier writes both columns
+      // unconditionally, so the planner resolves "not given" to `null` here and the applier never
+      // has to decide what an absent field means.
+      firstNames: string | null;
+      lastNames: string | null;
       pinHash: string;
       passwordHash: string;
       email: string;
@@ -161,6 +177,8 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     {
       kind: "seed-admin",
       displayName: request.admin.displayName,
+      firstNames: request.admin.firstNames ?? null,
+      lastNames: request.admin.lastNames ?? null,
       pinHash: request.admin.pinHash,
       passwordHash: request.admin.passwordHash,
       email: request.admin.email,

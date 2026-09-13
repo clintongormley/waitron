@@ -237,10 +237,11 @@ WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
     --yes
 ```
 
-The command seeds the venue's first **admin** person. `--admin-name` and the required `--admin-email`
-are not secrets, so they stay as flags. The admin's two login secrets are read only from the
-environment or an echo-off prompt, never from `argv`: `WAITRON_ADMIN_PIN` (the till PIN) and
-`WAITRON_ADMIN_PASSWORD` (the dashboard password, ≥8 characters), both required.
+The command seeds the venue's first **admin** person. `--admin-name`, the required `--admin-email`
+and the optional `--admin-first-names` / `--admin-last-names` are not secrets, so they stay as
+flags. The admin's two login secrets are read only from the environment or an echo-off prompt, never
+from `argv`: `WAITRON_ADMIN_PIN` (the till PIN) and `WAITRON_ADMIN_PASSWORD` (the dashboard
+password, ≥8 characters), both required.
 
 Dashboard management login is **email + password**: `loginManager` resolves the person by email. Both
 the setup UI and the bare `venue` CLI require the first admin's email and thread it into `seed-admin`,
@@ -248,8 +249,10 @@ so the provisioned admin can sign in immediately. The provisioned password is al
 mirror-bundle adoption route authenticates **by id** via `loginManagerById`, because that
 server-to-server flow carries the admin's id rather than the dashboard form.
 
-Every option is prompted for when omitted, so a bare `venue` is a complete interactive session;
-`--yes` skips the confirmation for a non-interactive run. `--territory` currently accepts only
+Every option is prompted for when omitted, so a bare `venue` is a complete interactive session; the
+exceptions are `--admin-first-names` and `--admin-last-names`, which are read from a flag but never
+prompted for, so an existing non-interactive script gains no new question. `--yes` skips the
+confirmation for a non-interactive run. `--territory` currently accepts only
 `ES-common` (common-territory Spain, filing under Veri\*Factu with IVA); any other territory is
 refused with `fiscal.regime_not_implemented`. The SIF's `id_sistema_informatico` is **not** an
 option — it is the `WAITRON_ID_SISTEMA` product constant (`W1`), because it identifies Waitron's

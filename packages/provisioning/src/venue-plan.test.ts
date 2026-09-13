@@ -120,9 +120,42 @@ describe("planVenue", () => {
     expect(actions[1]).toEqual({
       kind: "seed-admin",
       displayName: "Owner",
+      firstNames: null,
+      lastNames: null,
       pinHash: "scrypt$00$00",
       passwordHash: "scrypt$aa$bb",
       email: "owner@example.test",
+    });
+  });
+
+  it("carries the admin's real names into the seed-admin action", () => {
+    const actions = planVenue(
+      request({
+        admin: {
+          displayName: "Clint",
+          firstNames: "Clinton",
+          lastNames: "Gormley",
+          pinHash: "pin-hash",
+          passwordHash: "password-hash",
+          email: "clinton@example.com",
+        },
+      }),
+      MODULES,
+    );
+    expect(actions.find((a) => a.kind === "seed-admin")).toMatchObject({
+      displayName: "Clint",
+      firstNames: "Clinton",
+      lastNames: "Gormley",
+    });
+  });
+
+  it("plans an admin with no real names as null rather than dropping the field", () => {
+    // The applier writes both columns unconditionally, so the action always carries them; `null` is
+    // what the column's `is null or length > 0` check accepts for "not given".
+    const actions = planVenue(request(), MODULES);
+    expect(actions.find((a) => a.kind === "seed-admin")).toMatchObject({
+      firstNames: null,
+      lastNames: null,
     });
   });
 
@@ -330,6 +363,8 @@ describe("describeVenueAction", () => {
     const line = describeVenueAction({
       kind: "seed-admin",
       displayName: "Alicia",
+      firstNames: "Alicia Maria",
+      lastNames: "Fernandez Ruiz",
       pinHash: "scrypt$deadbeef$cafef00d",
       passwordHash: "scrypt$feedface$0ddba11",
       email: "owner@example.test",

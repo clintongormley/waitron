@@ -146,6 +146,8 @@ function demoBody(): Record<string, unknown> {
       rectificativeSeriesCode: "R",
       admin: {
         displayName: "Administradora",
+        firstNames: "Ana Maria",
+        lastNames: "Lopez Garcia",
         pin: "1357",
         password: "correct-horse-battery",
         email: "admin@waitron.dev",
@@ -507,6 +509,106 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     await tick();
     // Normalized to lowercase/trimmed, and not hashed — the email is not a credential.
     expect(provisionRequests[0].venue.admin.email).toBe("owner@x.com");
+  });
+
+  it("threads the admin's real names through to the provision request", async () => {
+    // The wizard asks for both; `parseVenue` used to build a fresh admin object from four named
+    // reads, so they were dropped between the request body and the `persons` row.
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody());
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].venue.admin).toMatchObject({
+      firstNames: "Ana Maria",
+      lastNames: "Lopez Garcia",
+    });
+  });
+
+  it.each(["admin.firstNames", "admin.lastNames"] as const)(
+    "refuses an empty %s rather than storing it",
+    async (field) => {
+      // The column's check refuses an empty string, so the boundary does too rather than letting the
+      // write fail deep inside `applyVenue`.
+      const app = new Hono();
+      const { deps, provision } = makeDeps();
+      mountSetup(app, deps, noopLog);
+
+      const body = demoBody();
+      asRec(asRec(body.venue).admin)[field.slice("admin.".length)] = "";
+      const res = await postProvision(app, body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "setup.request_invalid", params: { field } },
+      });
+      expect(provision).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["admin.firstNames", "admin.lastNames"] as const)(
+    "refuses a %s that is only whitespace, exactly as it refuses an empty one",
+    async (field) => {
+      // The column's check counts `" "` as a length of one and would store it. Identity's own write
+      // boundary trims and refuses what is left when empty (`requiredText`,
+      // packages/identity/src/staff.ts), so provisioning refuses it here too.
+      const app = new Hono();
+      const { deps, provision } = makeDeps();
+      mountSetup(app, deps, noopLog);
+
+      const body = demoBody();
+      asRec(asRec(body.venue).admin)[field.slice("admin.".length)] = "   ";
+      const res = await postProvision(app, body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "setup.request_invalid", params: { field } },
+      });
+      expect(provision).not.toHaveBeenCalled();
+    },
+  );
+
+  it("trims a padded real name rather than storing the padding", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    const admin = asRec(asRec(body.venue).admin);
+    admin.firstNames = "  Ana Maria  ";
+    admin.lastNames = "\tLopez Garcia\n";
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].venue.admin).toMatchObject({
+      firstNames: "Ana Maria",
+      lastNames: "Lopez Garcia",
+    });
+  });
+
+  it("accepts a provision with no real names and passes them through as null", async () => {
+    // `waitron-provision venue` never prompts for them, so an absent field is legitimate and must
+    // reach the planner as `null`, not as a refusal.
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    const admin = asRec(asRec(body.venue).admin);
+    delete admin.firstNames;
+    delete admin.lastNames;
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(200);
+    await tick();
+    expect(provisionRequests[0].venue.admin).toMatchObject({
+      firstNames: null,
+      lastNames: null,
+    });
   });
 
   it("normalizes country fields and derives fiscal territory and time zone before provisioning", async () => {

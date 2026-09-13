@@ -108,11 +108,14 @@ const USAGE = [
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]",
-  "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>] [--yes]",
+  "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
+  "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]",
   "",
   `  <env> is one of: ${ENVIRONMENTS.join(", ")}`,
   "",
-  "Every option is prompted for when omitted.",
+  "Every option is prompted for when omitted, except --admin-first-names and",
+  "--admin-last-names: the admin's real name is left unset when neither is given, so a",
+  "script driving this command is never stopped by a question it did not expect.",
   "",
   "The admin connection string is NOT an option. It carries a password, and argv is",
   "world-readable in `ps` and lands in shell history, so it is read from",
@@ -378,6 +381,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "series-code": { type: "string" },
       "rectificative-code": { type: "string" },
       "admin-name": { type: "string" },
+      "admin-first-names": { type: "string" },
+      "admin-last-names": { type: "string" },
       "admin-email": { type: "string" },
       yes: { type: "boolean" },
     }));
@@ -437,6 +442,13 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     );
     // The admin's DISPLAY NAME is not a secret, so it is a normal flag-or-prompt field.
     const adminName = await resolveOption(values["admin-name"], "admin name: ", deps);
+    // The admin's REAL name: read from a flag but NEVER prompted for, unlike every other venue
+    // option, so a script that already drives this command non-interactively does not gain a question
+    // it cannot answer. The setup wizard always supplies both; a CLI-seeded admin can fill them in
+    // from the dashboard later. Trimmed, and a blank read as "not given", exactly as every sibling
+    // option is — see `resolveWithoutPrompt` for why that cannot be `resolveOption` itself.
+    const adminFirstNames = resolveWithoutPrompt(values["admin-first-names"]);
+    const adminLastNames = resolveWithoutPrompt(values["admin-last-names"]);
     const adminEmail = normalizeAndValidateEmail(
       await resolveOption(values["admin-email"], "admin email: ", deps),
     );
@@ -476,6 +488,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       rectificativeSeriesCode,
       admin: {
         displayName: adminName,
+        firstNames: adminFirstNames,
+        lastNames: adminLastNames,
         pinHash: hashPin(adminPin),
         passwordHash: hashPassword(adminPassword),
         email: adminEmail,
@@ -781,6 +795,21 @@ async function resolveOption(
   const trimmed = value?.trim();
   if (trimmed !== undefined && trimmed !== "") return trimmed;
   return (await deps.io.prompt(question)).trim();
+}
+
+/**
+ * `resolveOption`'s two lines of flag handling — the same trim, and the same reading of a blank as
+ * "not given" — for an option with NO prompt behind it, which is why it cannot simply call
+ * `resolveOption`: that asks a question when the value is blank, and an option whose whole point is
+ * that it never interrupts a script cannot do that. A blank becomes `null` rather than an empty
+ * string because `persons_first_names_ck` / `persons_last_names_ck` refuse an empty string
+ * (packages/identity/src/schema/persons.ts), so `--admin-last-names ""` — how a script says "no last
+ * name" — would otherwise surface as a SQLSTATE from inside `applyVenue` rather than as a plan that
+ * leaves the name unset.
+ */
+function resolveWithoutPrompt(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed === "" ? null : trimmed;
 }
 
 /**
