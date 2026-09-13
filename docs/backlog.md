@@ -339,6 +339,15 @@ What it left open:
   The consequence is that a unit you invent yourself, and the volume units, can never be filled in by
   weighing — the quantity is typed. That is the intended design, not an oversight, but it is the kind
   of boundary somebody will otherwise rediscover by trying it.
+- **Its migrations cannot run over a populated development database, and nothing here said so.**
+  `packages/venue-service/drizzle/0005_unit_snapshots.sql` and `0006_unit_snapshot_identity.sql` add
+  three `NOT NULL` columns to `working_line_contexts` with no default — the same shape as
+  `0020_category_names`, which killed a dev boot on 2026-09-13 (#340's row above). Any development or
+  preproduction database holding an open order line fails the same way, with `23502`. It has not bitten
+  yet only because that table was empty when #343 checked it (`select count(*)` → 0); the first open
+  order on the till changes that. **Next action:** none beyond knowing it — the remedy is the ordinary
+  `wa-wt reset demo`, and since #343 the boot names that remedy itself instead of leaving a driver
+  stack trace to decode.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
@@ -862,6 +871,27 @@ turns out to need a design moves to its track.
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
 4. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
    `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
+
+**The development stack:**
+
+- **A stale dev database is only reported AFTER the boot dies, never before it** (#343). The hint
+  fires from inside the failed migration run, so the sequence is still: start the stack, watch it
+  die, read one line, reset, start again. A pre-flight check was offered and deliberately not built
+  (owner chose the message and the documentation instead, 2026-09-13): compare each set's applied
+  rows against its journal entry count — `packages/migrations/migrations.manifest.json` gives the
+  set-to-table mapping, and the whole probe is one query per set — and warn before launching that
+  the branch carries migrations this database has not taken. Worth doing only if the after-the-fact
+  line turns out not to be enough.
+- **The hint's cover stops at the migration run, and provisioning runs after it** (#343). A module's
+  provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units per tenant) executes once
+  migrations succeed, outside `withDevMigrationHint`. A seeding failure there on a stale database
+  gets no curated line. Nobody has hit this; it is recorded so the next reader does not assume the
+  wrapper covers the whole boot.
+- **The hint cannot fire for the other "database too old" failure** (#343). An ahead-of-image
+  database throws `provisioning.database_ahead`, an `AppError` carrying no SQLSTATE, and its
+  operator text deliberately never suggests wiping — the remedy there is restore or reinstall (owner
+  decision 2026-09-10). Intended, not a gap, but it means "boot names the remedy" is true of one
+  version-mismatch failure and not the other.
 
 **Dashboard, till and setup:**
 
