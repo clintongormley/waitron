@@ -466,7 +466,7 @@ export class ModifierForm extends LitElement {
         }
       </td>
       <td>
-        <wt-row-actions label=${`${t("modifiers.edit_choice")}: ${label}`}
+        <wt-row-actions align="end" label=${`${t("modifiers.edit_choice")}: ${label}`}
           ><wt-button
             align="start"
             variant="secondary"

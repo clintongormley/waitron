@@ -927,7 +927,8 @@ The menu itself is left-aligned by default: `wt-row-actions` pins the popup's le
 trigger (`align="start"`), so the menu grows rightward, and a per-row kebab at the end of a table row
 opens into the margin beside the table. A menu anchored at the trailing edge of a wide surface — the
 banner's account menu — passes `align="end"` instead, pinning the popup's right edge so it grows
-leftward, inward over the page rather than off the screen.
+leftward, inward over the page rather than off the screen. A per-row menu in a table inside a modal
+also passes `align="end"`, since a modal has no margin beside the table.
 
 Open create and edit forms in `wt-modal`, with `wt-form-actions` in its footer. Keep validation
 messages inside the modal, retain entered values after a failed save, and refresh the table after

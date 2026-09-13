@@ -1,3 +1,4 @@
+import { page, userEvent } from "@vitest/browser/context";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ModifierForm } from "./modifier-form.js";
@@ -146,6 +147,35 @@ it("uses a radio for the options default and clears it", async () => {
   await el.updateComplete;
   await click(el, "save");
   expect(submit.mock.calls[0]![0].detail.value.defaultChoiceId).toBeNull();
+});
+it("opens a choice row's menu inside the modal at desktop width", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 800);
+  try {
+    const el = await mount(extra);
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    const actions = el.shadowRoot!.querySelector('tr[data-choice="a"] wt-row-actions')!;
+    const trigger = actions.shadowRoot!.querySelector("button")!;
+    const popup = actions.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const firstFrame = new Promise<DOMRect>((resolve) => {
+      trigger.addEventListener(
+        "click",
+        () => requestAnimationFrame(() => resolve(popup.getBoundingClientRect())),
+        { once: true },
+      );
+    });
+    await userEvent.click(trigger);
+    const menu = await firstFrame;
+    const panel = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+    expect(menu.width).toBeGreaterThan(0);
+    // The table fills the modal, so a menu that grows rightward from the last column spills out.
+    expect(menu.right).toBeLessThanOrEqual(panel.right);
+    expect(menu.left).toBeGreaterThanOrEqual(panel.left);
+  } finally {
+    await page.viewport(width, height);
+  }
 });
 it("opens the choice modal to add and to edit, and removes a row", async () => {
   const el = await mount(extra);
