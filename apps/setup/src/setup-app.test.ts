@@ -281,10 +281,13 @@ describe("setup-app", () => {
       }),
     );
     await flush(el);
-    const body = (await screenHost(el, "connection")).shadowRoot!.textContent!;
+    const host = await screenHost(el, "connection");
+    const body = host.shadowRoot!.textContent!;
     expect(body).toContain("already set up");
     expect(body).not.toContain("could not reach");
     expect(body).not.toContain("power");
+    // A server that is already set up cannot be set up again — Continue would just fail the same way.
+    expect(host.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
   });
 
   it("says it could not reach the server when nothing answers at all", async () => {
@@ -295,9 +298,12 @@ describe("setup-app", () => {
       }),
     );
     await flush(el);
-    const body = (await screenHost(el, "connection")).shadowRoot!.textContent!;
+    const host = await screenHost(el, "connection");
+    const body = host.shadowRoot!.textContent!;
     expect(body).toContain("could not reach");
     expect(body).not.toContain("already set up");
+    // An unreachable server may come back, so the retry stays.
+    expect(host.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
   });
 
   // A 5xx is the box answering that IT is broken — neither "unreachable" nor "already set up".

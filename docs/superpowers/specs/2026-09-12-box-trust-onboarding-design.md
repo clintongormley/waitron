@@ -117,6 +117,12 @@ presence means the box is ALIVE. Three messages replace the one: 404 — "This s
 up. Reload to open it."; any other status — "This server reported a problem. Try again in a moment.";
 no status — "We could not reach the server. Check its power and your network connection."
 
+A failure also says whether retrying is worth anything. A server that is already set up cannot be
+set up again, so the whole "Otherwise: Continue to setup" row goes rather than offering a door back
+to the same failure (owner, 2026-09-13). The question and the install link STAY in that state: the
+operator still needs this server's certificate trusted to use the till it is now serving. The other
+two failures keep Continue, because a server that is off or briefly broken may come back.
+
 What the 404 branch cannot tell apart, stated because nothing guards it: a wrong base URL or a proxy
 could also answer 404, and the message would then name the wrong reason. The wizard is served
 same-origin by the box, so neither arises on a box an operator has in front of them.

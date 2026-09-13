@@ -79,6 +79,32 @@ describe("setup-connection-screen", () => {
     expect(text(q(el, "[data-test=otherwise]")!)).toBe("Otherwise:");
   });
 
+  /**
+   * A server that is already set up cannot be set up again, so offering "Otherwise: Continue to
+   * setup" offers a door that leads back to the same failure. The QUESTION above stays, and so does
+   * the install link: the operator still needs this server's certificate trusted to use the till.
+   */
+  it("drops the Continue row when this server cannot be set up from here", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {
+      setupUnavailable: true,
+      errorMessage: "This server is already set up. Reload to open it.",
+    });
+    expect(q(el, "[data-test=continue]")).toBeNull();
+    expect(q(el, "[data-test=otherwise]")).toBeNull();
+    // What the operator still needs is all still there.
+    expect(text(q(el, "h1")!)).toBe("Is your connection to this page secure?");
+    expect(q(el, "[data-test=trust-help]")).not.toBeNull();
+    expect(text(q(el, ".error")!)).toContain("already set up");
+  });
+
+  it("keeps the Continue row for a failure that is worth retrying", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {
+      errorMessage: "We could not reach the server. Check its power and your network connection.",
+    });
+    expect(q(el, "[data-test=continue]")).not.toBeNull();
+    expect(q(el, "[data-test=otherwise]")).not.toBeNull();
+  });
+
   it("announces a connection error and hides the slot when there is none", async () => {
     const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
     expect(el.shadowRoot!.querySelector(".error")).toBeNull();

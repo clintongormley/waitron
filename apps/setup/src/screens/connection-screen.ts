@@ -46,6 +46,12 @@ export class SetupConnectionScreen extends LitElement {
   ];
   @property() errorMessage?: string;
   @property({ type: Boolean }) checking = false;
+  /**
+   * Set when this server cannot be set up from here at all — today, when it is already set up.
+   * Continue would lead straight back to the same failure, so the whole row goes. The question and
+   * the install link stay: the operator still needs this server's certificate trusted to use it.
+   */
+  @property({ type: Boolean }) setupUnavailable = false;
 
   override render(): TemplateResult {
     return html`<wt-card>
@@ -58,17 +64,21 @@ export class SetupConnectionScreen extends LitElement {
         >.
       </p>
       ${this.errorMessage ? html`<p class="error" role="alert">${this.errorMessage}</p>` : nothing}
-      <div class="actions">
-        <p class="otherwise" data-test="otherwise">Otherwise:</p>
-        <wt-button
-          variant="primary"
-          data-test="continue"
-          ?disabled=${this.checking}
-          @click=${() => this.dispatchEvent(new CustomEvent("connection-continue"))}
-        >
-          ${this.checking ? "Checking connection…" : "Continue to setup"}
-        </wt-button>
-      </div>
+      ${
+        this.setupUnavailable
+          ? nothing
+          : html`<div class="actions">
+              <p class="otherwise" data-test="otherwise">Otherwise:</p>
+              <wt-button
+                variant="primary"
+                data-test="continue"
+                ?disabled=${this.checking}
+                @click=${() => this.dispatchEvent(new CustomEvent("connection-continue"))}
+              >
+                ${this.checking ? "Checking connection…" : "Continue to setup"}
+              </wt-button>
+            </div>`
+      }
     </wt-card>`;
   }
 }

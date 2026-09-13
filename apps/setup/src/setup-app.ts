@@ -185,11 +185,20 @@ const ADOPT_GENERIC_ERROR =
  * the wrong reason. The wizard is served same-origin by the box itself, so neither arises on a box
  * an operator actually has in front of them.
  */
-function connectionFailure(error: unknown): string {
+function connectionFailure(error: unknown): {
+  message: string;
+  /** False when retrying is pointless, so the screen drops its Continue action entirely. */
+  canRetry: boolean;
+} {
   const status = (error as { status?: number } | null)?.status;
-  if (status === 404) return "This server is already set up. Reload to open it.";
-  if (status !== undefined) return "This server reported a problem. Try again in a moment.";
-  return "We could not reach the server. Check its power and your network connection.";
+  if (status === 404)
+    return { message: "This server is already set up. Reload to open it.", canRetry: false };
+  if (status !== undefined)
+    return { message: "This server reported a problem. Try again in a moment.", canRetry: true };
+  return {
+    message: "We could not reach the server. Check its power and your network connection.",
+    canRetry: true,
+  };
 }
 
 @customElement("setup-app")
@@ -215,6 +224,8 @@ export class SetupApp extends LitElement {
   /** Certificate setup precedes collecting credentials and business details. */
   @state() private screen: Screen = "connection";
   @state() private connectionError?: string;
+  /** True once a failure proves this server can never be set up from here — see `connectionFailure`. */
+  @state() private connectionSetupUnavailable = false;
   @state() private connectionChecking = false;
   #connectionGeneration = 0;
   @state() private venueDefaults: VenueDefaults = {};
@@ -338,8 +349,11 @@ export class SetupApp extends LitElement {
       // Availability describes the box, not whether this browser has installed its CA.
       if (this.screen === "connection" && !discovery.caDownloadAvailable) this.screen = "mode";
     } catch (error) {
-      if (this.isConnected && generation === this.#connectionGeneration)
-        this.connectionError = connectionFailure(error);
+      if (this.isConnected && generation === this.#connectionGeneration) {
+        const failure = connectionFailure(error);
+        this.connectionError = failure.message;
+        this.connectionSetupUnavailable = !failure.canRetry;
+      }
     }
   }
 
@@ -355,8 +369,11 @@ export class SetupApp extends LitElement {
       this.developmentMode = status.developmentMode === true;
       this.screen = "mode";
     } catch (error) {
-      if (this.isConnected && generation === this.#connectionGeneration)
-        this.connectionError = connectionFailure(error);
+      if (this.isConnected && generation === this.#connectionGeneration) {
+        const failure = connectionFailure(error);
+        this.connectionError = failure.message;
+        this.connectionSetupUnavailable = !failure.canRetry;
+      }
     } finally {
       if (generation === this.#connectionGeneration) this.connectionChecking = false;
     }
@@ -765,6 +782,7 @@ export class SetupApp extends LitElement {
           data-test="screen-connection"
           .errorMessage=${this.connectionError}
           .checking=${this.connectionChecking}
+          .setupUnavailable=${this.connectionSetupUnavailable}
           @connection-continue=${() => void this.#continueConnection()}
         ></setup-connection-screen>`;
       case "role":
