@@ -124,6 +124,23 @@ it("edits from an existing colour and can clear it", async () => {
   expect((await saved).detail.value.color).toBeNull();
 });
 
+it("submits a custom colour picked via the native colour input", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    locales: ["en"],
+    value: food,
+  });
+  const saved = new Promise<CustomEvent>((resolve) =>
+    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
+  );
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="color"]')!;
+  input.value = "#123456";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  expect((await saved).detail.value.color).toBe("#123456");
+});
+
 it("creates inside a host draft, selects the saved category and leaves the draft intact", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
