@@ -10,11 +10,13 @@ describe("DEVICE_HELP", () => {
   // The owner asked for "restart browser" in every device's steps. Without this, a device added
   // later silently ships instructions that leave the operator staring at a cached warning.
   it.each(Object.keys(DEVICE_HELP) as DeviceId[])(
-    "%s ends its install steps by closing and reopening the browser",
+    "%s ends its install steps by closing the browser and reopening THIS page",
     (id) => {
       const last = DEVICE_HELP[id].install.at(-1) ?? "";
       expect(last).toMatch(/\b(quit|close)\b/i);
-      expect(last).toMatch(/reopen/i);
+      // Not "open this server again": the operator is already looking at the page that tells them
+      // whether it worked, so sending them back to it is one instruction instead of two.
+      expect(last.endsWith("then reopen this page.")).toBe(true);
     },
   );
 

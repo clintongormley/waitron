@@ -36,7 +36,7 @@ of its own database.
 It finishes by printing a setup address and QR code, also shown on an attached monitor:
 `http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's
 connection certificate, then continue to the secure site. The guide covers common operating systems
-and browsers, including replacing the old certificate after a re-image and fully quitting the browser.
+and browsers, and walks through removing any old certificate first and fully quitting the browser.
 If the name does not resolve, use the box's IP address at the same path.
 
 A browser may upgrade HTTP to HTTPS before the guide opens. Both listeners serve the guide and

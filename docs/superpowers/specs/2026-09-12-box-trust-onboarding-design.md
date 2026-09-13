@@ -132,3 +132,40 @@ A defect found on the way, and fixed: `SetupApi` assumed every failed response c
 `404 Not Found` as `text/plain` — run against a dev box — so the parse threw a `SyntaxError` that
 escaped as though the network had failed. That affected every wizard call, not only this one: a proxy
 error page during provisioning read as "network down". The parse is now defensive.
+
+## The guide restructured, 2026-09-13 (owner)
+
+Four numbered steps replace the earlier three, and removing an old certificate is now step ONE
+rather than a disclosure inside the install step. The reason it has to come first: installing a new
+certificate while the old one is still trusted does nothing the operator can SEE — the browser keeps
+using the entry it already has and the page still warns, so an operator who skipped removal has no
+way to tell that is what happened. The steps are: remove any old Waitron certificate; get the
+certificate; install it on this device; open Waitron. Every device's install steps now end "then
+reopen this page", because the page the operator is reading is also the page that tells them whether
+it worked.
+
+The heading marks the word *securely*, and the opening line names what the certificate is FOR —
+entering passwords and sensitive information — rather than describing the mechanism. Step 4 shows
+the browser's own warning words, ``"not secure"``, in the browser's own red, and sends the operator
+back to step 1 rather than into setup. "Do not ask operators to remove an ambiguous entry" survives
+as the second sentence of step 1.
+
+Three things were DELETED. Two are only recorded here, because nothing else now says they existed:
+
+- *"This is the connection certificate, not your business's tax-agency certificate."* Nothing on this
+  page offers a tax-agency certificate, so the distinction answered a question the page had not
+  raised.
+- The **"If you cannot open this page or download the file"** box. This retires the Operator flow
+  claim above that "the guide explains using HTTP where the browser permits it, or transferring the
+  certificate from another device that can reach the box" — the guide no longer says either.
+  **Worth knowing before anyone relies on that paragraph again:** the box also carried the only
+  written route for a browser whose policy forbids the HTTP version, and the only advice to check the
+  device's clock. What remains for the other-device case is the QR section. Deleted on the owner's
+  instruction, 2026-09-13; the deletion is cheap to reverse and this is the note that says what to
+  put back.
+- The QR caption *"This QR opens the server address."*, which explained a QR code to someone already
+  holding a phone up to it. Its heading now says the same thing: "Open this page on another device".
+
+Also retired by this change, and fixed in the same commit: `deploy/README.md` claimed the guide
+covers "replacing the old certificate after a re-image". The guide no longer names re-imaging; it
+tells the operator to remove any old certificate first, whatever put it there.

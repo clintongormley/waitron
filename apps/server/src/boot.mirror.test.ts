@@ -618,7 +618,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(await status.json()).toEqual({ adoption: "pending" });
       const trust = await fetch(`${base}/setup/trust`);
       expect(trust.status).toBe(200);
-      expect(await trust.text()).toContain("Connect to this Waitron server");
+      expect(await trust.text()).toContain("to this Waitron server");
       expect((await fetch(`${base}/setup-api/discovery`)).status).toBe(404);
 
       // No mirror ambient session / dashboard read path is mounted: a dashboard read that the normal

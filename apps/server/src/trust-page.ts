@@ -24,53 +24,60 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * Why an old certificate has to go before a new one works. It heads every device's removal
- * disclosure rather than standing as its own section: a re-image is the reason an operator has an
- * old certificate, not a separate procedure.
+ * Step one, not an aside. Installing a new certificate while the old one is still trusted does
+ * nothing an operator can see: the browser keeps using the entry it already has, and the page still
+ * warns. The spec's "do not ask operators to remove an ambiguous entry" is why the caution about
+ * removing only Waitron's own entry travels with it.
  */
-const REMOVAL_INTRO = `<p>A re-imaged server has a <strong>new</strong> certificate, so the one you
-  installed before will not work. Remove Waitron's old entry first, then install the new file.
-  Remove only Waitron's own entry and leave everything else alone. If you see several entries with
-  the same name and cannot tell which is this server's, ask whoever installed it before you remove
-  anything.</p>`;
+const REMOVAL_INTRO = `If you have installed a Waitron certificate on this computer before, then you
+  will need to remove it before installing the new certificate. Remove only Waitron's own entry — if
+  you cannot tell which one it is, ask whoever installed this server.`;
 
 function notes(help: DeviceHelp): string {
   return (help.notes ?? []).map((n) => `<p class="note">${n}</p>`).join("");
 }
 
-function removal(help: DeviceHelp): string {
-  const steps = help.removal.map((r) => `<li>${r}</li>`).join("");
-  return `<details class="removal"><summary>Already installed a Waitron certificate?</summary>
-    ${REMOVAL_INTRO}<ul>${steps}</ul></details>`;
+/** The remove step for the device we guessed; otherwise a pointer at the list in step 3. */
+function removeSection(device: DeviceId | "unknown"): string {
+  const body =
+    device === "unknown"
+      ? `<p class="note">Find your device in step 3 — each one's steps begin with how to remove an
+         old certificate.</p>`
+      : `<ul>${DEVICE_HELP[device].removal.map((r) => `<li>${r}</li>`).join("")}</ul>
+         <p>Then quit your browser completely and reopen this page.</p>`;
+  return `<section><h2>1. Remove any old Waitron certificate</h2>
+    <p>${REMOVAL_INTRO}</p>${body}</section>`;
 }
 
-/** One device's full instructions: install steps, any asides, and how to clear an old certificate. */
-function deviceBody(help: DeviceHelp): string {
-  const steps = help.install.map((s) => `<li>${s}</li>`).join("");
-  return `<ol>${steps}</ol>${notes(help)}${removal(help)}`;
-}
-
+/** One device inside a fold: how to clear an old certificate, then how to install the new one. */
 function deviceDetails(id: DeviceId): string {
   const help = DEVICE_HELP[id];
-  return `<details><summary>${help.summary}</summary>${deviceBody(help)}</details>`;
+  const removal = help.removal.map((r) => `<li>${r}</li>`).join("");
+  const install = help.install.map((i) => `<li>${i}</li>`).join("");
+  return `<details><summary>${help.summary}</summary>
+    <p class="note">First, remove any old Waitron certificate:</p><ul>${removal}</ul>
+    <p class="note">Then install the new one:</p><ol>${install}</ol>${notes(help)}</details>`;
 }
+
+const MANAGED = `<p class="note">These steps use your device's own settings, with no terminal. Menu
+  names vary by version. On a device your employer manages, an administrator may have to install the
+  certificate for you.</p>`;
 
 /**
  * The install step. When the request's headers named a device, its steps are open and every other
  * device folds into one disclosure; when they did not, the page falls back to the plain list.
  */
 function installSection(device: DeviceId | "unknown"): string {
-  const managed = `<p class="note">These steps use your device's own settings, with no terminal.
-    Menu names vary by version. On a device your employer manages, an administrator may have to
-    install the certificate for you.</p>`;
   if (device === "unknown")
-    return `<section><h2>2. Install it on your device</h2>${managed}
+    return `<section><h2>3. Install it on your device</h2>${MANAGED}
       ${DEVICE_ORDER.map(deviceDetails).join("")}</section>`;
-  const others = DEVICE_ORDER.filter((d) => d !== device);
-  return `<section><h2>2. ${DEVICE_HELP[device].heading}</h2>${deviceBody(DEVICE_HELP[device])}
-    </section>
-    <details class="others"><summary>Using a different device?</summary>${managed}
-    ${others.map(deviceDetails).join("")}</details>`;
+  const help = DEVICE_HELP[device];
+  const steps = help.install.map((i) => `<li>${i}</li>`).join("");
+  return `<section><h2>3. ${help.heading}</h2><ol>${steps}</ol>${notes(help)}</section>
+    <details class="others"><summary>Using a different device?</summary>${MANAGED}
+    ${DEVICE_ORDER.filter((d) => d !== device)
+      .map(deviceDetails)
+      .join("")}</details>`;
 }
 
 /** No external assets: certificate recovery must remain readable without internet access. */
@@ -80,16 +87,17 @@ export function renderTrustPage(input: TrustPageInput): string {
     .map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`)
     .join("");
 
-  const caBlock = caAvailable
-    ? `<p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">Download the certificate</a></p>
+  const steps = caAvailable
+    ? `${removeSection(device)}
+       <section><h2>2. Get the certificate</h2>
+       <p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">Download the certificate</a></p>
        <p class="note">Your browser may ask you to confirm the download — choose <strong>Keep</strong>,
-       or the file never reaches the disk. This is the connection certificate, not your business's
-       tax-agency certificate.</p>`
-    : `<p>This server has no certificate to download. If it uses one your installer supplied, ask
+       or the file never reaches the disk.</p></section>
+       ${installSection(device)}`
+    : `<section><h2>1. Get the certificate</h2>
+       <p>This server has no certificate to download. If it uses one your installer supplied, ask
        whoever installed it to check its trust, its expiry, and the address you are opening. A
-       certificate downloaded before a re-image may no longer apply.</p>`;
-
-  const steps = caAvailable ? installSection(device) : "";
+       certificate downloaded before a re-image may no longer apply.</p></section>`;
 
   return `<!doctype html>
 <html lang="en"><head>
@@ -102,11 +110,13 @@ h1 { line-height: 1.2; font-size: 1.5rem; } h2 { font-size: 1.2rem; } section { 
 a { color: light-dark(#174da1, #9ec5ff); } li { margin-block: .5rem; }
 details { border: 1px solid light-dark(#c4cbd4, #637080); border-radius: .5rem; padding: .8rem 1rem; margin-block: .7rem; }
 details[open] { padding-bottom: .3rem; }
-/* Three levels are reachable (other devices > one device > its removal steps); without this the
-   indents compound and the innermost text column collapses on a phone. */
 details details { padding-inline: .6rem; }
 summary { cursor: pointer; font-weight: 600; }
 .note { color: light-dark(#5c626e, #a1a7b3); font-size: .92rem; }
+/* The browser's own warning, in the browser's own colour. The words carry the meaning; the colour
+   is emphasis, so a reader who cannot see it loses nothing. */
+.accent, .warning-words { color: light-dark(#b3261e, #ff6b5e); }
+.warning-words { font-weight: 600; }
 .button { display: inline-block; padding: .7rem 1.1rem; border-radius: .4rem; font-weight: 600;
   text-decoration: none; background: light-dark(#1f6feb, #4c8dff); color: light-dark(#ffffff, #16181d); }
 code, a { overflow-wrap: anywhere; }
@@ -115,27 +125,15 @@ code, a { overflow-wrap: anywhere; }
 :focus-visible { outline: 3px solid light-dark(#174da1, #9ec5ff); outline-offset: 4px; }
 </style></head><body><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
-<h1>Connect to this Waitron server</h1>
-<p>Do this before you enter passwords or business details. When it has worked, you can reopen this
-server with no certificate warning. Clicking “continue anyway” past a warning is not the same thing.</p>
-<section><h2>1. Get the certificate</h2>${caBlock}</section>
+<h1>Connect <span class="accent">securely</span> to this Waitron server</h1>
+<p>You need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>
 ${steps}
-<section class="go"><h2>${caAvailable ? "3" : "2"}. Open Waitron</h2>
-<p>Reopen your browser and follow this link. If it still warns you, go back to the steps above
-rather than entering setup details.</p>
+<section class="go"><h2>${caAvailable ? "4" : "2"}. Open Waitron</h2>
+<p>Reopen this page. If your address bar still shows that the page is
+<span class="warning-words">“not secure”</span>, then start again from the beginning of this page,
+otherwise:</p>
 <p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">Continue to Waitron</a></p>
 <ul>${urlItems}</ul></section>
-<details id="connection-help"><summary>If you cannot open this page or download the file</summary>
-<p>Check that the server is on and that your device is on its network. Open this guide at
-<code>http://&lt;server-address&gt;/setup/trust</code>, using the server's IP address if its name
-does not work.</p>
-<p>Some browsers change HTTP to HTTPS on their own. This guide and the download exist on both, but
-HTTPS can show a certificate warning before the page opens. Take the browser's option to visit the
-HTTP version of this local server if it offers one. If your browser or your administrator forbids
-that, download the file on another device that can reach this server and transfer it across.</p>
-<p>If a warning remains after you installed the certificate, check the address, your device's date
-and time, and the trust settings of the browser you are using.</p>
-</details>
-${qrSvg ? `<section class="qr"><h2>Open on another device</h2><figure>${qrSvg}<figcaption>This QR opens the server address.</figcaption></figure></section>` : ""}
+${qrSvg ? `<section class="qr"><h2>Open this page on another device</h2><figure>${qrSvg}</figure></section>` : ""}
 </main></body></html>\n`;
 }
