@@ -54,6 +54,7 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
         ...(item.removeAllergens === null ? {} : { removeAllergens: item.removeAllergens }),
         ...(item.addOrigins === null ? {} : { addOrigins: item.addOrigins }),
         ...(item.removeOrigins === null ? {} : { removeOrigins: item.removeOrigins }),
+        dietaryEffect: item.dietaryEffect,
         ...(group.type === "extras"
           ? {
               priceDelta: item.priceDelta,
@@ -177,6 +178,7 @@ async function writeChoices(
       removeAllergens: choice.removeAllergens ?? null,
       addOrigins: choice.addOrigins ?? null,
       removeOrigins: choice.removeOrigins ?? null,
+      dietaryEffect: choice.dietaryEffect ?? null,
     };
     if (old.some((item) => item.id === choice.id)) {
       await tx

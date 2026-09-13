@@ -450,6 +450,39 @@ describe("till-modifier-picker", () => {
     expect(pickerOf(el)).toBeNull();
   });
 
+  it("requires an available variant and rings its menu price and translated identity", async () => {
+    const store = new WorkingOrderStore();
+    const variantProduct: TillProduct = {
+      ...cafe,
+      menuItemId: "offer-coffee",
+      variants: [
+        { id: "single", name: { en: "Single", es: "Solo" }, unitPrice: "1.75", available: true },
+        { id: "double", name: { en: "Double", es: "Doble" }, unitPrice: "2.60", available: false },
+      ],
+    };
+    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+      products: [variantProduct],
+      store,
+    });
+    tapTile(el, "Café");
+    await el.updateComplete;
+    const picker = pickerOf(el)!;
+    await picker.updateComplete;
+    expect(addButton(picker).disabled).toBe(true);
+    expect(picker.shadowRoot!.textContent).not.toContain("Doble");
+    picker.shadowRoot!.querySelector<HTMLInputElement>('[value="single"]')!.click();
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.75"));
+    addButton(picker).click();
+    await el.updateComplete;
+    expect(store.lines[0]!.product).toMatchObject({
+      variantId: "single",
+      variantName: { en: "Single", es: "Solo" },
+      unitPrice: "1.75",
+      descriptions: { en: "Café · Single", es: "Café · Solo" },
+    });
+  });
+
   it("rings up a product whose only groups are empty straight away (no wedged dialog)", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillProductGrid>("till-product-grid", {

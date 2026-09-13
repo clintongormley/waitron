@@ -59,7 +59,9 @@ Delete a modifier only when it is unused. A product, menu offer or retained orde
 deletion; the message identifies which kind of use remains. Deactivate it if you want to stop new
 selections. Changing a modifier's type is also refused while it is attached to a product or menu.
 
-The optional **Allergens and dietary effects** section describes what a choice adds or removes.
-Use the selected food and allergen controls to describe the served dish. Their effects apply to
-both extras and unpriced options. Recorded answer labels stay fixed; allergen and dietary effects
-continue to use the current declarations.
+The optional **Allergens and dietary effects** section describes how a choice changes the served
+dish. Add or remove allergens directly. For dietary suitability, select the declarations that the
+choice invalidates. Adding bacon, for example, invalidates the meat-free claim and therefore stops
+the served dish from claiming vegan or vegetarian suitability. These effects apply to both extras
+and unpriced options. Recorded answer labels stay fixed; allergen and dietary effects continue to use
+the current declarations.

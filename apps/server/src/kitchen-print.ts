@@ -81,6 +81,16 @@ function ticketName(descriptions: Record<string, string>, locale: string): strin
   return Object.values(descriptions)[0]!;
 }
 
+function kitchenTicketName(
+  descriptions: Record<string, string>,
+  kitchenName: string | null,
+  variantName: Record<string, string> | null,
+  locale: string,
+): string {
+  if (kitchenName === null) return ticketName(descriptions, locale);
+  return variantName === null ? kitchenName : `${kitchenName} · ${ticketName(variantName, locale)}`;
+}
+
 /**
  * The active station→printer mappings for `stationIds`, joined to `printers` for each printer's ticket
  * scope, FILTERED to ACTIVE printers, under a `FOR SHARE OF printers` row lock. Factored out of the fire
@@ -145,6 +155,8 @@ async function buildTicketItems(
       descriptions: workingOrderLines.descriptions,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       unitName: workingOrderLines.unitName,
+      kitchenName: workingOrderLines.kitchenName,
+      variantName: workingOrderLines.variantName,
       // Per-line customisation (order-line customisation, spec §2/§3): the note/doneness printed as a
       // prominent doneness line + a note sub-line (`emitItem`). Read here so BOTH the fire path and the
       // recall/void correction slip carry them — a correction slip shows the same detail the cook has.
@@ -197,7 +209,7 @@ async function buildTicketItems(
       item: {
         qty: row.quantity,
         unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
-        name: ticketName(row.descriptions, cfg.locale),
+        name: kitchenTicketName(row.descriptions, row.kitchenName, row.variantName, cfg.locale),
         // Nullable columns → `?? undefined` so a plain line carries neither key and prints exactly as
         // before; `emitItem` prints doneness prominently and the note as a sub-line.
         doneness: row.doneness ?? undefined,

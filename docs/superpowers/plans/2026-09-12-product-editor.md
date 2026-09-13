@@ -2,8 +2,9 @@
 
 Branch: `products-editor`. Read the [spec](../specs/2026-09-12-product-editor-design.md),
 [shared contract](../specs/2026-09-12-products-overhaul-design.md) and the three supporting specs.
-Implementation is not started. This branch can begin immediately; completing it needs real sibling
-implementations, not only test doubles.
+Implementation is complete on `products-editor`, rebased over the three landed supporting builds.
+The replacement screen, selling paths, demo data and focused validation receipts are recorded in the
+[execution checkpoint](2026-09-13-product-editor-checkpoint.md).
 
 ## 1. Trace field meanings and write failing tests
 
@@ -85,12 +86,14 @@ Tax labels can be built now from the existing authoritative resolver. Test with 
 including a fractional rate in a controlled fixture, and assert the percentage shown equals the
 percentage used by pricing. Do not infer the venue's rate from the example 23%.
 
-The owner confirmed that No tax means no VAT/tax, and may be an applicable selector entry. Trace the tax
-choice through `packages/catalogue/src/pricing.ts`, order locks, reporting, `packages/fiscal` and
-the enabled backend. Write failing tests for explicit None, zero rate, missing input and invalid
-choice. Reuse an existing treatment only if it matches that meaning, and run the real backend record validation; do not settle
-for testing that a dropdown contains the word None. Any external tax-rule claim needs a current
-primary-source receipt with its wording and scope.
+The owner confirmed that No tax means no VAT/tax and may be an applicable selector entry. Trace the
+tax choice through `packages/catalogue/src/pricing.ts`, order locks, reporting, `packages/fiscal` and
+the enabled backend. Write failing tests for the explicit No tax/zero-rate choice, missing input and
+invalid choice. Run the real backend record validation; checking the selector label alone is not
+enough. Any external tax-rule claim needs a current primary-source receipt with its wording and scope.
+
+Decision update, 2026-09-13: use the existing `zero` VAT class for the **No tax (0%)** entry and keep
+its current `S1` filing treatment. The possible need for `N1` or `N2` is a non-blocking asesor question.
 
 ## 7. Integrate all four sections
 
@@ -111,7 +114,7 @@ Run this combined journey using actual routes and a real browser, with a databas
 
 1. Configure two content languages. Create a custom precision-2 unit from a dirty product draft.
 2. Create a translated parent/child category, select an image, assign the product to two categories
-   and mark its primary. Verify image-only category references prevent library deletion.
+   and choose its Reporting Category. Verify image-only category references prevent library deletion.
 3. Create and attach text, extras, options and yes/no modifiers from the product form. Set repeated
    extra limits, a total cap, defaults and an unavailable choice. The original draft must survive.
 4. Add translated name/description, kitchen name, image, tax choice, two differently priced variants,

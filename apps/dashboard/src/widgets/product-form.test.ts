@@ -71,7 +71,7 @@ async function setSwitch(el: ProductForm, testId: string, checked: boolean): Pro
 async function emitAllergens(el: ProductForm, value: AllergenDeclaration): Promise<void> {
   const picker = el.shadowRoot!.querySelector("dashboard-allergen-picker")!;
   picker.dispatchEvent(
-    new CustomEvent("allergens-changed", { detail: { value }, bubbles: true, composed: true }),
+    new CustomEvent("wt-allergens-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }

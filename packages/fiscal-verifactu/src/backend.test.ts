@@ -61,6 +61,65 @@ describe("id", () => {
   });
 });
 
+describe("zero-rate sales", () => {
+  it("files the existing zero-rate product treatment as S1 with a zero cuota", async () => {
+    const { saleId } = await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return recordSale(
+        tx,
+        backend,
+        saleInput({
+          tenantId,
+          tillId,
+          nodeId,
+          seriesId,
+          total: "5.00",
+          lines: [
+            {
+              lineNo: 1,
+              descriptions: { "es-ES": "Producto sin impuestos" },
+              quantity: "1",
+              unitPrice: "5.00",
+              vatRate: "0.00",
+              lineTotal: "5.00",
+            },
+          ],
+          settlement: {
+            kind: "immediate",
+            tenders: [
+              {
+                method: "cash",
+                amount: "5.00",
+                tipAmount: "0.00",
+                settledAt: new Date("2026-03-01T12:05:00.000Z"),
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    const [row] = await pg.db
+      .select({
+        desglose: registrosFacturacion.desglose,
+        cuotaTotal: registrosFacturacion.cuotaTotal,
+      })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, saleId));
+    expect(row).toEqual({
+      cuotaTotal: "0.00",
+      desglose: [
+        expect.objectContaining({
+          CalificacionOperacion: "S1",
+          BaseImponibleOimporteNoSujeto: "5.00",
+          TipoImpositivo: "0.00",
+          CuotaRepercutida: "0.00",
+        }),
+      ],
+    });
+  });
+});
+
 describe("registerNode", () => {
   it("reports the node's live SIF registration", async () => {
     const registration = await withTenant(pg.db, tenantId, (tx) =>

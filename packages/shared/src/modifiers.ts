@@ -4,6 +4,7 @@ export interface ModifierEffects {
   removeAllergens?: string[] | null;
   addOrigins?: string[] | null;
   removeOrigins?: string[] | null;
+  dietaryEffect?: { invalidates: string[] } | null;
 }
 export interface ModifierChoice extends ModifierEffects {
   id: string;

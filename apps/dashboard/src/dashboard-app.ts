@@ -53,7 +53,6 @@ import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
 import "./screens/planned-actual-screen.js";
 import "./screens/purchases-screen.js";
-import "./screens/recipe-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
 import "./screens/printing-rules-screen.js";
@@ -107,7 +106,6 @@ type CoreScreen =
   | "approvals"
   | "planned-actual"
   | "purchases"
-  | "recipe"
   | "devices"
   | "printers"
   | "printing-rules"
@@ -166,7 +164,6 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "categories", labelKey: "nav.categories" },
       { screen: "modifiers", labelKey: "nav.modifiers", requiresManager: true },
       { screen: "units", labelKey: "nav.units" },
-      { screen: "recipe", labelKey: "nav.recipe" },
     ],
   },
   {
@@ -1410,8 +1407,6 @@ export class DashboardApp extends LitElement {
         ></dashboard-planned-actual-screen>`;
       case "purchases":
         return html`<dashboard-purchases-screen .api=${this.api}></dashboard-purchases-screen>`;
-      case "recipe":
-        return html`<dashboard-recipe-screen .api=${this.api}></dashboard-recipe-screen>`;
       case "devices":
         return html`<dashboard-devices-screen .api=${this.api}></dashboard-devices-screen>`;
       case "printing-rules":

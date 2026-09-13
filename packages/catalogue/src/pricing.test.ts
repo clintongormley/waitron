@@ -42,6 +42,37 @@ describe("resolveVatRate", () => {
 });
 
 describe("priceBasket — difference method", () => {
+  it("carries selected variant presentation facts through live and locked pricing", () => {
+    const product = {
+      ...each("4.10", "general"),
+      variantId: "11111111-1111-4111-8111-111111111111",
+      variantName: { en: "Double" },
+      kitchenName: "COFFEE BAR",
+    };
+    const live = priceBasket([{ product, quantity: "1" }]);
+    expect(live.lines[0]).toMatchObject({
+      variantId: product.variantId,
+      variantName: { en: "Double" },
+      kitchenName: "COFFEE BAR",
+    });
+    const locked = priceLockedLines([
+      {
+        grossUnitPrice: "4.10",
+        quantity: "1",
+        vatRate: "21.00",
+        descriptions: { en: "Coffee · Double" },
+        category: "Drinks",
+        variantId: product.variantId,
+        variantName: product.variantName,
+        kitchenName: product.kitchenName,
+      },
+    ]);
+    expect(locked.lines[0]).toMatchObject({
+      variantId: product.variantId,
+      variantName: { en: "Double" },
+      kitchenName: "COFFEE BAR",
+    });
+  });
   it("prices a fractional quantity for a custom two-decimal unit", () => {
     const r = priceBasket([
       {

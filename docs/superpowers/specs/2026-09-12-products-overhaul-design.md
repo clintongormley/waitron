@@ -23,10 +23,20 @@ planning session; each implementation starts with failing behavioral tests.
 
 ## Confirmed decisions and working assumptions
 
+Owner decision, 2026-09-13: name the product's category-selection field **Reporting Category**.
+It selects the category used to group the product's sales in reports. References below to the
+primary or default category mean this field; its shared API identifier is `primaryCategoryId`.
+Use the same label in Products and category-side membership editing, including validation messages.
+
 The owner confirmed extras, variants and no tax on 2026-09-12, and deferred multi-destination
 category routing to the backlog. The category-versus-label model is being discussed; the working
 proposal below keeps the original multiple categories and no separate labels. Any later answer
 supersedes the proposal and must be copied into the affected specs before coding.
+
+Owner clarification, 2026-09-13: the existing `zero` VAT class is the intended **No tax** choice.
+It keeps the current zero-rate `S1` treatment throughout pricing and filing; do not add a distinct
+non-subject classification to this product field. Ask the fiscal asesor to confirm that this matches
+the venue's intended real products before live use.
 
 - Confirmed: extras have an optional total quantity cap, counting repeated extras as well as distinct ones.
   Blank means unlimited. Each extra defaults to a maximum of one and a preselected quantity of zero.
@@ -43,10 +53,8 @@ supersedes the proposal and must be copied into the affected specs before coding
   is explicitly deferred, not settled by choosing a reporting category.
 - Assumption: options select exactly one choice, with an optional default. Yes/no selects one of two translated
   labels and defaults to No. Text is optional, limited to 500 characters, and has no price.
-- Confirmed: “No tax” means no VAT/tax applies. It can appear as an applicable entry in the tax
-  selector rather than a separate checkbox. It is an explicit choice, not missing configuration;
-  use an existing tax treatment only if its meaning matches. The Products plan requires checking
-  the actual backend mapping instead of assuming that no tax and every 0% treatment are identical.
+- Confirmed: “No tax” is the existing zero-rate class, shown as an applicable entry in the tax
+  selector rather than a separate checkbox. It is an explicit choice, not missing configuration.
 
 ## Existing seams and their consequences
 

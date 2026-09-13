@@ -4,6 +4,9 @@ Branch: `products-categories`. Read the [spec](../specs/2026-09-12-product-categ
 [shared contract](../specs/2026-09-12-products-overhaul-design.md).
 Implementation and validation receipts are recorded below.
 
+Naming update, 2026-09-13: label the product field and replacement prompts **Reporting Category**;
+see the dated decision in the shared contract. This plan's primary-category references use that label.
+
 ## 1. Trace the single-category consumers
 
 Read data, UI and testing conventions. Run

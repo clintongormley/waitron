@@ -293,6 +293,7 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       menuName: product.catalogueName ?? catalogue.menus[0]?.name ?? "Menu",
       sectionName: { en: product.category ?? "Other" },
       descriptions: product.descriptions,
+      kitchenName: product.kitchenName ?? null,
       pricingUnit: product.pricingUnit,
       vatClass: product.vatClass,
       category: product.category ?? "Other",

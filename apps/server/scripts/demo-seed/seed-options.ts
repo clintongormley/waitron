@@ -1,7 +1,6 @@
-// `seedOptions` — the demo-seed's option-group step (Phase 4, Task 13). Attaches the demo modifier
-// groups authored in `menu.ts` (`PRODUCT_OPTION_GROUPS`) — Size/Milk on the coffee, Extras/Cooking on
-// the steak — so the till shows a picker on those two products, the receipt/basket group their
-// modifier lines, and the dashboard's option-group manager has real content to show off.
+// Seeds the retained option-group examples and the four canonical modifier types. The coffee also
+// demonstrates defaults, caps, an unavailable choice, a direct dietary invalidation and a menu price
+// that differs from the product definition.
 //
 // The deployment holds one tenant per database. `seedOptions` runs inside the CALLER's
 // transaction, under the app_user role the caller selected with `withTenant`/`asAppUser` — the same posture
@@ -11,7 +10,9 @@
 // so — like `seedCatalogues`'s `createProduct` — this calls them directly rather than
 // raw-inserting.
 //
+import { randomUUID } from "node:crypto";
 import {
+  createModifier,
   createOptionGroup,
   createOptionGroupItem,
   setMenuItemOptionGroups,
@@ -32,9 +33,8 @@ export interface SeedOptionsInput {
 }
 
 /**
- * Create every group in `PRODUCT_OPTION_GROUPS` and attach it to its named product, in order. Each
- * product's groups are created fresh and attached via `setProductOptionGroups` (a full replace, but
- * this always runs against a just-seeded, group-less product, so it is equivalent to an append here).
+ * Create every group in `PRODUCT_OPTION_GROUPS` and attach it to its named product, in order. The
+ * coffee also receives one text, extras, options and yes/no modifier through the canonical contract.
  */
 export async function seedOptions(
   tx: Transaction,
@@ -72,6 +72,119 @@ export async function seedOptions(
       }
       groupIds.push(created.id);
       menuGroups.push({ groupId: created.id, options: menuOptions });
+    }
+    if (productImage === "cafe-solo.png") {
+      const demoModifiers = [
+        await createModifier(
+          tx,
+          tenantId,
+          {
+            type: "text",
+            name: { en: "Demo preparation note", es: "Nota de preparación demo" },
+            available: true,
+          },
+          locale,
+        ),
+        await createModifier(
+          tx,
+          tenantId,
+          {
+            type: "extras",
+            name: { en: "Demo add-ons", es: "Extras demo" },
+            available: true,
+            required: false,
+            maxTotalQuantity: 3,
+            choices: [
+              {
+                id: randomUUID(),
+                name: { en: "Extra shot", es: "Café extra" },
+                available: true,
+                priceDelta: "1.00",
+                maxQuantity: 2,
+                defaultQuantity: 1,
+                dietaryEffect: { invalidates: [] },
+              },
+              {
+                id: randomUUID(),
+                name: { en: "Marshmallows", es: "Nubes" },
+                available: true,
+                priceDelta: "0.60",
+                maxQuantity: 1,
+                defaultQuantity: 0,
+                dietaryEffect: { invalidates: ["no_meat"] },
+              },
+              {
+                id: randomUUID(),
+                name: { en: "Seasonal syrup", es: "Sirope de temporada" },
+                available: false,
+                priceDelta: "0.75",
+                maxQuantity: 1,
+                defaultQuantity: 0,
+                dietaryEffect: null,
+              },
+            ],
+          },
+          locale,
+        ),
+        await createModifier(
+          tx,
+          tenantId,
+          {
+            type: "options",
+            name: { en: "Demo cup", es: "Taza demo" },
+            available: true,
+            defaultChoiceId: null,
+            choices: [
+              {
+                id: randomUUID(),
+                name: { en: "Ceramic cup", es: "Taza de cerámica" },
+                available: true,
+                dietaryEffect: { invalidates: [] },
+              },
+              {
+                id: randomUUID(),
+                name: { en: "Takeaway cup", es: "Vaso para llevar" },
+                available: true,
+                dietaryEffect: { invalidates: [] },
+              },
+            ],
+          },
+          locale,
+        ),
+        await createModifier(
+          tx,
+          tenantId,
+          {
+            type: "yes-no",
+            name: { en: "Demo decaf", es: "Descafeinado demo" },
+            available: true,
+            yesLabel: { en: "Decaf", es: "Descafeinado" },
+            noLabel: { en: "Regular", es: "Normal" },
+            defaultValue: false,
+          },
+          locale,
+        ),
+      ];
+      for (const modifier of demoModifiers) {
+        groupIds.push(modifier.id);
+        const options =
+          modifier.type === "extras"
+            ? modifier.choices
+                .filter((choice) => choice.available)
+                .map((choice) => ({
+                  optionId: choice.id,
+                  priceDelta: choice.name.en === "Extra shot" ? "1.25" : choice.priceDelta,
+                }))
+            : modifier.type === "options"
+              ? modifier.choices
+                  .filter((choice) => choice.available)
+                  .map((choice) => ({ optionId: choice.id, priceDelta: "0.00" }))
+              : [];
+        menuGroups.push({
+          groupId: modifier.id,
+          options,
+        });
+      }
     }
     await setProductOptionGroups(tx, tenantId, productId, groupIds);
     const menuItemId = menuItemsByProduct.get(productId);

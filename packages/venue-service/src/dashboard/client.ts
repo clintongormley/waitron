@@ -83,6 +83,18 @@ export interface Product {
   descriptions: Record<string, string>;
   pricingUnit: "each" | "weight";
   active: boolean;
+  variants?: ProductVariant[];
+}
+export interface ProductVariant {
+  id: string;
+  name: Record<string, string>;
+  unitPrice: string;
+  available: boolean;
+}
+export interface MenuVariantPublication {
+  variantId: string;
+  unitPrice: string;
+  available: boolean;
 }
 export interface MenuSection {
   id: string;
@@ -99,6 +111,7 @@ export interface MenuOffer {
   sectionName: Record<string, string>;
   descriptions: Record<string, string>;
   grossPrice: string;
+  variants?: ProductVariant[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
@@ -212,6 +225,20 @@ export class VenueServiceApi {
 
   updateMenuItem(menuId: string, menuItemId: string, input: { grossPrice: string }): Promise<void> {
     return this.request(`/management-api/catalogues/${menuId}/items/${menuItemId}`, "PATCH", input);
+  }
+
+  setMenuVariants(
+    menuId: string,
+    menuItemId: string,
+    variants: MenuVariantPublication[],
+  ): Promise<MenuVariantPublication[]> {
+    return this.request(
+      `/management-api/catalogues/${menuId}/items/${menuItemId}/variants`,
+      "PUT",
+      {
+        variants,
+      },
+    );
   }
 
   deactivateMenuItem(menuId: string, menuItemId: string): Promise<void> {

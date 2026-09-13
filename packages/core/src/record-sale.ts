@@ -66,6 +66,10 @@ export interface RecordSaleLine {
    * generated id at the `sale_lines` insert (Task 5); presentation metadata only, NEVER hashed. */
   parentLineNo?: number | null;
   modifierSnapshots?: ModifierSnapshot[];
+  /** Selected product variant and its presentation facts, frozen with the line. */
+  variantId?: string | null;
+  variantName?: Record<string, string> | null;
+  kitchenName?: string | null;
 }
 
 export interface RecordSaleTender {

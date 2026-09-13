@@ -13,10 +13,14 @@ export { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { CATALOGUE_PROVISIONING } from "./provisioning.js";
 export { CATALOGUE_CLASSIFICATION } from "./classification.js";
 export { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
-
 export * from "./categories.js";
 export * from "./schema/categories.js";
 
 export * from "./modifier-contract.js";
 export * from "./modifiers.js";
 export { lockModifierDefinitions } from "./modifier-lock.js";
+
+export * from "./variants.js";
+export * from "./dietary-declarations.js";
+export * from "./product-editor.js";
+export * from "./product-presentation.js";

@@ -11,6 +11,11 @@ import type {
 // The DIET twin of the allergen leaf (dietary-classification, Task 6). Deep-imported from the same
 // runtime-dependency-free leaf module (`dietary.ts`, not the barrel) for the identical bundle reason.
 import { deriveAsServedDiet } from "@waitron/catalogue/src/dietary.js";
+import {
+  applyDietaryEffects,
+  expandDietaryDeclarations,
+} from "@waitron/catalogue/src/dietary-declarations.js";
+import type { DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
 import type {
   DietaryOrigin,
   DietDerivation,
@@ -51,8 +56,19 @@ export function asServedAllergens(line: OrderLine): AsServedAllergens {
   return deriveAsServedAllergens(line.product.allergens ?? null, overlays);
 }
 
-/** Unknown derivations remain pending; staff overrides are applied after selected origin effects. */
+/** Direct declarations take precedence; an omitted field retains the derived-profile fallback. */
 export function asServedDiet(line: OrderLine): DietProfile {
+  if (line.product.dietaryDeclarations !== undefined) {
+    const declarations = asServedDietaryDeclarations(line);
+    const result: DietProfile = {
+      vegan: declarations.includes("vegan") ? "yes" : "unknown",
+      vegetarian: declarations.includes("vegetarian") ? "yes" : "unknown",
+      contains: [],
+    };
+    if (declarations.includes("halal")) result.halal = "yes";
+    if (declarations.includes("kosher")) result.kosher = "yes";
+    return result;
+  }
   const overlays: OptionOriginOverlay[] = selectedItems(line).map((item) => ({
     add: (item?.addOrigins ?? null) as DietaryOrigin[] | null,
     remove: (item?.removeOrigins ?? null) as DietaryOrigin[] | null,
@@ -60,4 +76,22 @@ export function asServedDiet(line: OrderLine): DietProfile {
   const derivation: DietDerivation = line.product.dietDerivation ?? { origins: [], pending: true };
   const override: DietOverride | null = line.product.dietOverride ?? null;
   return deriveAsServedDiet(derivation, override, overlays);
+}
+
+/** Direct suitability declarations after every selected modifier's reviewed invalidation. */
+export function asServedDietaryDeclarations(line: OrderLine): DietaryLabel[] {
+  const base = line.product.dietaryDeclarations as DietaryLabel[] | undefined;
+  if (base === undefined) return [];
+  const effects = selectedItems(line)
+    .filter((item) => item !== undefined)
+    .map((item) =>
+      item!.dietaryEffect === undefined
+        ? null
+        : item!.dietaryEffect === null
+          ? null
+          : { invalidates: item!.dietaryEffect.invalidates as DietaryLabel[] },
+    );
+  return effects.length === 0
+    ? expandDietaryDeclarations(base)
+    : applyDietaryEffects(base, effects);
 }

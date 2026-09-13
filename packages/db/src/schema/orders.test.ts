@@ -481,16 +481,11 @@ describe("working_order_lines", () => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries only product_id and option_group_item_id as catalogue links on the draft line", async () => {
-    // Park & retrieve (Task 1) inverts the old "no catalogue reference at all" rule — but only for
-    // the MUTABLE draft. A working_order_line keeps a product_id so a retrieved order can be
-    // repriced (orders.ts); it is a pricing INPUT, not a snapshot. Ordering modifiers (Task 2) add
-    // option_group_item_id — authoring TRACEABILITY only (the option's price/name/VAT are snapshotted
-    // onto the line by value), and working-order-ONLY: it is never copied to the filed sale_lines,
-    // which stay decoupled from the mutable catalogue (asserted in sales.test.ts's "carries no
-    // reference to a catalogue on sale_lines"). So exactly these TWO catalogue-shaped columns are
-    // expected here — product_id and option_group_item_id — with category_id/menu_id/sku_id/variant_id
-    // all still absent, the guard that a stale catalogue can never reach back into a completed record.
+  it("carries only product_id, variant_id and option_group_item_id as catalogue-shaped identifiers", async () => {
+    // The mutable draft keeps product_id as a pricing input and option_group_item_id for modifier
+    // authoring traceability. variant_id records which variant was selected; it is copied into the
+    // filed line as a snapshot identifier without a catalogue FK. Names and prices are snapshotted by
+    // value, so none of these identifiers lets a catalogue edit change a completed record.
     const cols = await rows<{ column_name: string }>(
       db,
       sql`select column_name from information_schema.columns
@@ -500,7 +495,7 @@ describe("working_order_lines", () => {
       .map((c) => c.column_name)
       .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category)_id$/i.test(n))
       .sort();
-    expect(references).toEqual(["option_group_item_id", "product_id"]);
+    expect(references).toEqual(["option_group_item_id", "product_id", "variant_id"]);
   });
 
   it("carries nullable note + doneness columns (KDS-only, NON-FISCAL — spec §2/§3)", async () => {

@@ -77,7 +77,15 @@ const model: VenueServiceView = {
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
   ],
-  products: [{ id: "p1", descriptions: { en: "Negroni" }, pricingUnit: "each", active: true }],
+  products: [
+    {
+      id: "p1",
+      descriptions: { en: "Negroni" },
+      pricingUnit: "each",
+      active: true,
+      variants: [{ id: "v1", name: { en: "Double" }, unitPrice: "13.00", available: true }],
+    },
+  ],
   sections: [],
   offers: [
     {
@@ -88,6 +96,7 @@ const model: VenueServiceView = {
       sectionName: { en: "Cocktails" },
       descriptions: { en: "Negroni" },
       grossPrice: "11.00",
+      variants: [{ id: "v1", name: { en: "Double" }, unitPrice: "15.00", available: true }],
     },
   ],
 };
@@ -543,6 +552,7 @@ describe("venue operations screen", () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
       updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
       deactivateMenuItem: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -550,8 +560,13 @@ describe("venue operations screen", () => {
     table(el, "menu-offers-m1");
     await action(el, "edit-offer-i1");
     expect(field(el, "offer-price-i1").value).toBe("11.00");
+    expect(field(el, "offer-variant-price-v1").value).toBe("15.00");
     field(el, "offer-price-i1").value = "12.50";
+    field(el, "offer-variant-price-v1").value = "16.50";
     await action(el, "save-editor");
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i1", [
+      { variantId: "v1", unitPrice: "16.50", available: true },
+    ]);
     expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: "12.50" });
     await action(el, "remove-offer-i1");
     expect(api.deactivateMenuItem).not.toHaveBeenCalled();

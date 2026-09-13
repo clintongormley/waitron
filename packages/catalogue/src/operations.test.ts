@@ -58,6 +58,33 @@ import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixture
 const fx = useCatalogueDb();
 
 describe("catalogue operations", () => {
+  it("round-trips independent product description and kitchen name, and clears both", async () => {
+    await asTenant(async (tx) => {
+      const menu = await createCatalogue(tx, tenantId, { name: "Lunch" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: null,
+        descriptions: { en: "Coffee", es: "Café" },
+        description: { en: "Freshly roasted beans", es: "Granos recién tostados" },
+        kitchenName: "BAR COFFEE",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "reduced",
+      });
+      expect(product).toMatchObject({
+        descriptions: { en: "Coffee", es: "Café" },
+        description: { en: "Freshly roasted beans", es: "Granos recién tostados" },
+        kitchenName: "BAR COFFEE",
+      });
+      expect((await listProducts(tx, tenantId, menu.id))[0]).toEqual(product);
+      await updateProduct(tx, tenantId, product.id, { description: null, kitchenName: null });
+      expect((await listProducts(tx, tenantId, menu.id))[0]).toMatchObject({
+        descriptions: { en: "Coffee", es: "Café" },
+        description: null,
+        kitchenName: null,
+      });
+    });
+  });
   it("offers one product on two menus with distinct identities and prices", async () => {
     await asTenant(async (tx) => {
       const category = await createCategory(tx, tenantId, { name: { en: "Cocktails" } });
@@ -140,6 +167,7 @@ describe("catalogue operations", () => {
                   removeAllergens: null,
                   addOrigins: null,
                   removeOrigins: null,
+                  dietaryEffect: null,
                 },
               ],
             },
@@ -167,6 +195,7 @@ describe("catalogue operations", () => {
                   removeAllergens: null,
                   addOrigins: null,
                   removeOrigins: null,
+                  dietaryEffect: null,
                 },
               ],
             },
@@ -839,6 +868,7 @@ describe("catalogue operations", () => {
         removeAllergens: null,
         addOrigins: null,
         removeOrigins: null,
+        dietaryEffect: null,
       });
       expect(group.items[1]).toMatchObject({
         name: { en: "Bacon" },
@@ -1616,6 +1646,7 @@ describe("catalogue operations", () => {
       diet: null,
       dietDerivation: null,
       dietOverride: null,
+      dietaryDeclarations: [],
       courseId: null,
       catalogueId: "00000000-0000-0000-0000-000000000001",
       catalogueName: "Deli",
@@ -2038,19 +2069,19 @@ describe("catalogue operations", () => {
         const g2 = await createOptionGroup(tx, tenantId, { name: { en: "B" } });
 
         // No attach yet.
-        expect(await listProductOptionGroupIds(tx, product.id)).toEqual([]);
+        expect(await listProductOptionGroupIds(tx, tenantId, product.id)).toEqual([]);
 
         // Attach [g1, g2] — order preserved via the per-attachment sort.
         await setProductOptionGroups(tx, tenantId, product.id, [g1.id, g2.id]);
-        expect(await listProductOptionGroupIds(tx, product.id)).toEqual([g1.id, g2.id]);
+        expect(await listProductOptionGroupIds(tx, tenantId, product.id)).toEqual([g1.id, g2.id]);
 
         // Replace with [g2] — g1 detaches.
         await setProductOptionGroups(tx, tenantId, product.id, [g2.id]);
-        expect(await listProductOptionGroupIds(tx, product.id)).toEqual([g2.id]);
+        expect(await listProductOptionGroupIds(tx, tenantId, product.id)).toEqual([g2.id]);
 
         // Empty list detaches everything.
         await setProductOptionGroups(tx, tenantId, product.id, []);
-        expect(await listProductOptionGroupIds(tx, product.id)).toEqual([]);
+        expect(await listProductOptionGroupIds(tx, tenantId, product.id)).toEqual([]);
       });
     });
   });

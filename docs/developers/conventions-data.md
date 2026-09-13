@@ -107,6 +107,15 @@ resolves outward, but a base table's bare `"id"` binds to the SUBQUERY's table â
 answer (#152: a null table label). Copying a correlated subquery: check base-vs-join and READ the
 emitted SQL with `.toSQL()`.
 
+## Resolve shared catalogue data once before a basket's line loop
+
+The Products review found that each basket line called `resolveZoneOffer`, which reloaded the whole
+zone offer catalogue, then performed separate product-variant and menu-variant reads. Repeated items
+therefore repeated the same sequential database work. `priceOrderLines` now reads one zone snapshot
+and one tenant-scoped batch of product variants before its in-memory line loop. The focused
+`working-order.test.ts` probe spies on both contribution methods: one `listZoneOffers` call and no
+per-line `resolveZoneOffer` calls for a repeated-offer basket.
+
 **Grants and roles**
 
 ## Never widen a grant to make a test pass
@@ -326,3 +335,17 @@ price and quantity defaults. `value ?? default` initially accepted those nulls, 
 `String(vatClass)` accepted an array such as `["general"]`. Defaults now use `undefined` explicitly,
 and enum comparison follows a string type check. Receipt:
 `packages/catalogue/src/modifier-contract.test.ts` (the adversarial cases failed before the fix).
+
+## Order new unique targets before their foreign keys
+
+When you generate a table that references a new unique constraint on an existing table, inspect the
+statement order and run the migration. Products' generated catalogue migration created the
+`menu_item_variants` foreign key before adding its `(tenant_id, id, product_id)` unique target to
+`menu_items`. PostgreSQL rejected the migration with `42830`. Moving the generated unique-constraint
+statement before that foreign key made the real migration succeed; the journal and snapshot were
+unchanged.
+
+Receipt, 2026-09-13: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/catalogue test
+src/variants.pg.test.ts` exercised the migration, actual `app_user` writes and a publication/removal
+race. The fiscal migration checks also passed with `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
+@waitron/fiscal-verifactu test src/privileges.test.ts src/inmutabilidad.test.ts`.

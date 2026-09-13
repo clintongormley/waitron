@@ -11,7 +11,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { listAvailableProducts } from "@waitron/catalogue";
+import { listAvailableProducts, listModifiers } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedOptions } from "./seed-options.js";
 
@@ -69,10 +69,10 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
 }
 
 describe("seedOptions", () => {
-  it("attaches Size+Milk to the coffee and Extras+Cooking to the steak, and leaves a plain dish alone", async () => {
+  it("seeds legacy groups and all four canonical modifier types with product and menu behavior", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
-    const products = await withTenant(suite.admin, tenantId, async (tx) => {
+    const { products, modifiers } = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
       const { productsByImage, menuItemsByProduct } = await seedCatalogues(
         tx,
@@ -87,7 +87,10 @@ describe("seedOptions", () => {
         menuItemsByProduct,
         locale: LOCALE,
       });
-      return (await listAvailableProducts(tx, locationId)).products;
+      return {
+        products: (await listAvailableProducts(tx, locationId)).products,
+        modifiers: await listModifiers(tx, tenantId),
+      };
     });
 
     const coffee = products.find((p) => p.descriptions[LOCALE] === "Coffee");
@@ -99,7 +102,7 @@ describe("seedOptions", () => {
 
     // Coffee: Size (required, 1 of 2) + Milk (required, 1 of 3), in that order.
     const coffeeGroupNames = coffee!.optionGroups.map((g) => g.name[LOCALE]);
-    expect(coffeeGroupNames).toEqual(["Size", "Milk"]);
+    expect(coffeeGroupNames.slice(0, 2)).toEqual(["Size", "Milk"]);
     const size = coffee!.optionGroups.find((g) => g.name[LOCALE] === "Size")!;
     expect(size.required).toBe(true);
     expect(size.minSelect).toBe(1);
@@ -113,6 +116,26 @@ describe("seedOptions", () => {
       "Oat milk",
       "Semi-skimmed milk",
     ]);
+    expect(
+      coffee!.modifiers
+        .filter((modifier) => modifier.name.en?.startsWith("Demo "))
+        .map((modifier) => modifier.type),
+    ).toEqual(["text", "extras", "options", "yes-no"]);
+    const toppings = modifiers.find((modifier) => modifier.name.en === "Demo add-ons")!;
+    expect(toppings).toMatchObject({
+      type: "extras",
+      maxTotalQuantity: 3,
+      choices: [
+        expect.objectContaining({ maxQuantity: 2, defaultQuantity: 1, available: true }),
+        expect.objectContaining({ maxQuantity: 1, defaultQuantity: 0, available: true }),
+        expect.objectContaining({ available: false }),
+      ],
+    });
+    if (toppings.type !== "extras") throw new Error("expected demo extras modifier");
+    expect(toppings.choices[1]).toMatchObject({
+      name: { en: "Marshmallows", es: "Nubes" },
+      dietaryEffect: { invalidates: ["no_meat"] },
+    });
 
     // Steak: Extras (optional, 0..3) + Cooking (required, 1 of 3), in that order.
     const steakGroupNames = steak!.optionGroups.map((g) => g.name[LOCALE]);

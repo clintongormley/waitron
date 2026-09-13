@@ -580,6 +580,132 @@ describe("mountCatalogueApi — products", () => {
     expect(rows.some((r) => r.id === product.id)).toBe(true);
   });
 
+  it("round-trips the complete product editor through its canonical routes", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Editor catalogue");
+    const unitId = (
+      await suite.db.execute<{ id: string }>(
+        sql`select id from units where tenant_id = ${tenantId} and seed_key = 'each'`,
+      )
+    ).rows[0]!.id;
+    const category = await send(app, "POST", "/management-api/categories", {
+      body: { name: { es: "Cafés" } },
+    });
+    const categoryId = ((await category.json()) as { id: string }).id;
+    const modifier = await send(app, "POST", "/management-api/modifiers", {
+      body: { type: "text", name: { es: "Nota" }, available: true },
+    });
+    const modifierId = ((await modifier.json()) as { modifier: { id: string } }).modifier.id;
+    const value = {
+      name: { es: "Café" },
+      description: { es: "Recién molido" },
+      kitchenName: "CAFÉ BAR",
+      image: null,
+      unitId,
+      unitPrice: "2.00",
+      available: true,
+      vatClass: "general",
+      variants: [{ name: { es: "Doble" }, unitPrice: "3.25", available: true }],
+      categoryIds: [categoryId],
+      primaryCategoryId: categoryId,
+      modifierIds: [modifierId],
+      allergens: {},
+      dietaryDeclarations: ["vegetarian", "halal"],
+    };
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: value },
+    );
+    expect(created.status).toBe(201);
+    const saved = (await created.json()) as { id: string; variants: { id: string }[] };
+    expect(saved).toMatchObject(value);
+    const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toEqual(saved);
+    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
+      body: { name: { es: "Cafés" }, displayOrder: 0 },
+    });
+    const sectionId = ((await section.json()) as { id: string }).id;
+    const offer = await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
+      body: { productId: saved.id, sectionId, grossPrice: "2.40", displayOrder: 0 },
+    });
+    const offerId = ((await offer.json()) as { id: string }).id;
+    const published = await send(
+      app,
+      "PUT",
+      `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`,
+      {
+        body: {
+          variants: [{ variantId: saved.variants[0]!.id, unitPrice: "4.10", available: true }],
+        },
+      },
+    );
+    expect(published.status).toBe(200);
+    expect(await published.json()).toEqual([
+      { variantId: saved.variants[0]!.id, unitPrice: "4.10", available: true },
+    ]);
+    const otherCatalogueId = await createCatalogueVia(app, "Other catalogue");
+    const mismatched = await send(
+      app,
+      "GET",
+      `/management-api/catalogues/${otherCatalogueId}/items/${offerId}/variants`,
+    );
+    expect(mismatched.status).toBe(404);
+    expect(await mismatched.json()).toMatchObject({ error: { code: "menu_item.not_found" } });
+    const offers = await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`);
+    expect(((await offers.json()) as { variants: unknown[] }[])[0]!.variants).toEqual([
+      expect.objectContaining({ id: saved.variants[0]!.id, unitPrice: "4.10" }),
+    ]);
+    await send(app, "PUT", `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`, {
+      body: { variants: [] },
+    });
+    const updated = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: { ...value, available: false, kitchenName: null, variants: [] },
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+      available: false,
+      kitchenName: null,
+      variants: [],
+    });
+  });
+
+  it("round-trips direct modifier dietary effects and rejects origin authoring", async () => {
+    const app = mountApp("es-ES");
+    const choiceId = crypto.randomUUID();
+    const body = {
+      type: "extras",
+      name: { es: "Extras" },
+      available: true,
+      required: false,
+      maxTotalQuantity: 2,
+      choices: [
+        {
+          id: choiceId,
+          name: { es: "Bacon" },
+          available: true,
+          priceDelta: "1.00",
+          maxQuantity: 2,
+          defaultQuantity: 0,
+          dietaryEffect: { invalidates: ["vegan", "halal"] },
+        },
+      ],
+    };
+    const created = await send(app, "POST", "/management-api/modifiers", { body });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ modifier: body });
+    const legacy = await send(app, "POST", "/management-api/modifiers", {
+      body: {
+        ...body,
+        choices: [{ ...body.choices[0], addOrigins: ["meat"] }],
+      },
+    });
+    expect(legacy.status).toBe(400);
+    expect(await legacy.json()).toMatchObject({ error: { code: "modifier.invalid" } });
+  });
+
   it("POST /management-api/products with active:false → 201 and the created product is inactive", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Create-inactive catalogue");

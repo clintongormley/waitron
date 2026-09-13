@@ -53,23 +53,25 @@ import {
 import type { AllergenMap, Database, Doneness, Transaction } from "@waitron/db";
 import {
   deriveAsServedAllergens,
-  deriveAsServedDiet,
+  applyDietaryEffects,
+  expandDietaryDeclarations,
+  listProductVariantsForProducts,
   listAvailableProducts,
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
   toInvoiceLineDescriptions,
   readContentLanguages,
+  selectMenuVariant,
+  productPresentationName,
 } from "@waitron/catalogue";
 import type {
   BasketItemWithOptions,
   AvailableProduct,
-  DietaryOrigin,
-  DietDerivation,
-  DietOverride,
+  DietaryEffect,
+  DietaryLabel,
   DietProfile,
   LockedLine,
-  OptionOriginOverlay,
   PricedLines,
   ProductAllergens,
 } from "@waitron/catalogue";
@@ -123,7 +125,7 @@ type PricedBasket = PricedLines;
  * NEVER threaded into any sale/fiscal projection or huella. Intersected into each request/parameter
  * line shape so the field pair (and this rationale) is declared ONCE rather than re-copied per site.
  */
-export type LineExtras = { note?: string; doneness?: Doneness };
+export type LineExtras = { note?: string; doneness?: Doneness; variantId?: string };
 
 /**
  * Price requested lines from a zone's menu offers, or from the legacy location catalogue when the
@@ -180,18 +182,32 @@ async function priceOrderLines(
     Awaited<ReturnType<typeof VENUE_SERVICE.resolveZoneOffer>>
   >();
   if (usesOffers) {
+    const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId!);
+    const availableById = new Map(offers.offers.map((offer) => [offer.id, offer]));
     for (const line of requestedLines) {
       if (line.menuItemId === undefined || line.productId !== undefined) {
         throw new AppError("management.request_invalid", { field: "lines" });
       }
-      const offer = await VENUE_SERVICE.resolveZoneOffer(tx, cfg, zoneId!, line.menuItemId);
+      const offer = availableById.get(line.menuItemId);
+      if (offer === undefined) {
+        throw new AppError("service_zone.offer_not_allowed", {
+          zoneId: zoneId!,
+          menuItemId: line.menuItemId,
+        });
+      }
       offerBySelectionId.set(line.menuItemId, offer);
     }
   }
+  const productVariantsByProduct = usesOffers
+    ? await listProductVariantsForProducts(tx, cfg.tenantId, [
+        ...new Set([...offerBySelectionId.values()].map((offer) => offer.productId)),
+      ])
+    : new Map();
   const available = usesOffers
     ? [...offerBySelectionId.values()].map((offer) => ({
         id: offer.id,
         descriptions: offer.descriptions,
+        kitchenName: offer.kitchenName,
         unit: offer.unit,
         pricingUnit: offer.unit.hardwareUnit === null ? "each" : "weight",
         unitPrice: offer.grossPrice,
@@ -201,6 +217,7 @@ async function priceOrderLines(
         diet: offer.diet as AvailableProduct["diet"],
         dietDerivation: offer.dietDerivation as AvailableProduct["dietDerivation"],
         dietOverride: offer.dietOverride as AvailableProduct["dietOverride"],
+        dietaryDeclarations: offer.dietaryDeclarations,
         courseId: offer.courseId,
         catalogueId: offer.menuId,
         catalogueName: offer.menuName,
@@ -222,6 +239,7 @@ async function priceOrderLines(
             removeAllergens: option.removeAllergens as string[] | null,
             addOrigins: option.addOrigins as string[] | null,
             removeOrigins: option.removeOrigins as string[] | null,
+            dietaryEffect: option.dietaryEffect,
           })),
         })),
       }))
@@ -249,6 +267,9 @@ async function priceOrderLines(
         note: string | null;
         doneness: Doneness | null;
         modifierSnapshots: ModifierSnapshot[];
+        variantId: string | null;
+        variantName: Record<string, string> | null;
+        kitchenName: string | null;
       }
     | { kind: "child"; optionGroupItemId: string; menuItemId: string | null };
   const items: BasketItemWithOptions[] = [];
@@ -263,11 +284,44 @@ async function priceOrderLines(
     Map<string, { item: OptionItemRow; groupId: string }>
   >();
   for (const line of lines) {
-    const product = byId.get(line.productId);
-    if (product === undefined) {
+    const baseProduct = byId.get(line.productId);
+    if (baseProduct === undefined) {
       throw new AppError("sale.unknown_product", { productId: line.productId });
     }
     const underlyingProductId = offerBySelectionId.get(line.productId)?.productId ?? line.productId;
+    const offer = offerBySelectionId.get(line.productId);
+    const presentation =
+      offer === undefined
+        ? null
+        : selectMenuVariant(
+            offer,
+            productVariantsByProduct.get(offer.productId) ?? [],
+            line.variantId ?? null,
+          );
+    if (!usesOffers && line.variantId !== undefined) {
+      throw new AppError("management.request_invalid", { field: "variantId" });
+    }
+    const product =
+      presentation === null
+        ? baseProduct
+        : {
+            ...baseProduct,
+            unitPrice: presentation.unitPrice,
+            descriptions: Object.fromEntries(
+              [
+                ...new Set([
+                  ...Object.keys(presentation.productName),
+                  ...Object.keys(presentation.variantName ?? {}),
+                ]),
+              ].map((locale) => [
+                locale,
+                productPresentationName(presentation, locale, cfg.locale),
+              ]),
+            ),
+            variantId: presentation.variantId,
+            variantName: presentation.variantName,
+            kitchenName: presentation.kitchenName,
+          };
 
     // Per-line customisation (spec §2/§3), NON-FISCAL. Validate + normalise BEFORE pricing so a bad
     // value aborts the whole basket rather than half-persisting. The wire type is a lie (JSON), so the
@@ -455,6 +509,9 @@ async function priceOrderLines(
       note,
       doneness,
       modifierSnapshots,
+      variantId: presentation?.variantId ?? null,
+      variantName: presentation?.variantName ?? null,
+      kitchenName: presentation?.kitchenName ?? null,
     });
     for (const option of selectedOptions) {
       lineMeta.push({
@@ -567,6 +624,9 @@ async function priceOrderLines(
       // ticket item at fire (`fireLines`), never onto the sale.
       note: meta.kind === "parent" ? meta.note : null,
       doneness: meta.kind === "parent" ? meta.doneness : null,
+      variantId: meta.kind === "parent" ? meta.variantId : null,
+      variantName: meta.kind === "parent" ? meta.variantName : null,
+      kitchenName: meta.kind === "parent" ? meta.kitchenName : null,
     };
   });
   const lineContexts = lineMeta.flatMap((meta, index) =>
@@ -615,6 +675,9 @@ export async function readLockedLines(
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
+      variantId: workingOrderLines.variantId,
+      variantName: workingOrderLines.variantName,
+      kitchenName: workingOrderLines.kitchenName,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
@@ -649,6 +712,9 @@ export async function readLockedLines(
     unitName: line.unitName,
     unitPrecision: line.unitPrecision,
     parentLineNo: line.parentLineId == null ? null : (positionById.get(line.parentLineId) ?? null),
+    variantId: line.variantId,
+    variantName: line.variantName,
+    kitchenName: line.kitchenName,
   }));
 }
 
@@ -2388,6 +2454,9 @@ async function carveOffLines(
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
+      variantId: workingOrderLines.variantId,
+      variantName: workingOrderLines.variantName,
+      kitchenName: workingOrderLines.kitchenName,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
@@ -2522,6 +2591,11 @@ async function carveOffLines(
         vatRate: line.vatRate,
         lineTotal: grossLineTotal(line.unitPriceGross, quantity),
         category: line.category,
+        unitName: line.unitName,
+        unitPrecision: line.unitPrecision,
+        variantId: line.variantId,
+        variantName: line.variantName,
+        kitchenName: line.kitchenName,
       });
       await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
     }
@@ -2863,6 +2937,9 @@ export async function getHeldOrder(
         optionGroupItemId: workingOrderLines.optionGroupItemId,
         note: workingOrderLines.note,
         doneness: workingOrderLines.doneness,
+        variantId: workingOrderLines.variantId,
+        variantName: workingOrderLines.variantName,
+        kitchenName: workingOrderLines.kitchenName,
       })
       .from(workingOrderLines)
       .where(
@@ -2924,11 +3001,15 @@ export async function getHeldOrder(
           ...(options.length === 0 ? {} : { options }),
           ...(line.note === null ? {} : { note: line.note }),
           ...(line.doneness === null ? {} : { doneness: line.doneness }),
+          ...(line.variantId === null ? {} : { variantId: line.variantId }),
           product: {
             id: line.productId,
             productId: line.productId,
             menuItemId: context.menuItemId,
             descriptions: line.descriptions,
+            ...(line.variantId === null ? {} : { variantId: line.variantId }),
+            ...(line.variantName === null ? {} : { variantName: line.variantName }),
+            kitchenName: line.kitchenName,
             unit: {
               id: context.unitId,
               name: context.unitName,
@@ -3667,10 +3748,9 @@ export interface StationQueueItem {
    *  `{ allergens: {}, pending: true }` when the parent line is absent from the read (belt-and-braces).
    *  The fold's `removed` rides as the sibling {@link removed} field, not nested here. */
   asServed: { allergens: ProductAllergens; pending: boolean };
-  /** The AS-SERVED diet profile (Task 5) — the diet twin of {@link asServed}: the parent product's
-   *  recipe-derived origins folded with its selected options' origin overlays (a `remove` strips an
-   *  origin, an `add` merges one), then the staff override re-applied. `vegan`/`vegetarian` read
-   *  "unknown" while the derivation is pending. Display-only; defaults to a derived-empty
+  /** The AS-SERVED diet profile — the product's direct suitability declarations after every selected
+   *  food-changing choice's reviewed invalidations. An unreviewed effect withholds all positive claims.
+   *  Display-only; defaults to
    *  `{ vegan: "unknown", vegetarian: "unknown", contains: [] }` when the parent line is absent from
    *  the read (belt-and-braces, parity with {@link asServed}'s `{ allergens: {}, pending: true }`). */
   asServedDiet?: DietProfile;
@@ -3785,8 +3865,7 @@ async function readQueueSubItems(
       descriptions: workingOrderLines.descriptions,
       addAllergens: optionGroupItems.addAllergens,
       removeAllergens: optionGroupItems.removeAllergens,
-      addOrigins: optionGroupItems.addOrigins,
-      removeOrigins: optionGroupItems.removeOrigins,
+      dietaryEffect: optionGroupItems.dietaryEffect,
     })
     .from(workingOrderLines)
     .leftJoin(
@@ -3807,9 +3886,8 @@ async function readQueueSubItems(
     string,
     { add: AllergenMap | null; remove: string[] | null }[]
   >();
-  // The DIET twin of `overlaysByParent` (Task 5) — each parent's options' ORIGIN overlays, built from
-  // the SAME child rows/join, so the diet fold rides the one child read the allergen fold already does.
-  const originOverlaysByParent = new Map<string, OptionOriginOverlay[]>();
+  // A null effect means the selected choice has not been reviewed; it withholds positive suitability.
+  const dietaryEffectsByParent = new Map<string, (DietaryEffect | null)[]>();
   for (const child of childRows) {
     // `parentLineId` is non-null on every row (the `inArray` matched it).
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
@@ -3818,14 +3896,9 @@ async function readQueueSubItems(
     const overlays = overlaysByParent.get(child.parentLineId!) ?? [];
     overlays.push({ add: child.addAllergens ?? null, remove: child.removeAllergens ?? null });
     overlaysByParent.set(child.parentLineId!, overlays);
-    const originOverlays = originOverlaysByParent.get(child.parentLineId!) ?? [];
-    // `add_origins`/`remove_origins` are stored `string[]`; narrow to the origin union at the query
-    // boundary, as the allergen fold casts `AllergenMap`.
-    originOverlays.push({
-      add: (child.addOrigins ?? null) as DietaryOrigin[] | null,
-      remove: (child.removeOrigins ?? null) as DietaryOrigin[] | null,
-    });
-    originOverlaysByParent.set(child.parentLineId!, originOverlays);
+    const effects = dietaryEffectsByParent.get(child.parentLineId!) ?? [];
+    effects.push(child.dietaryEffect as DietaryEffect | null);
+    dietaryEffectsByParent.set(child.parentLineId!, effects);
   }
 
   // Base allergens per parent line — the PARENT line's product (LEFT join: a null/pending base is
@@ -3835,8 +3908,7 @@ async function readQueueSubItems(
       lineId: workingOrderLines.id,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       allergens: products.allergens,
-      dietDerivation: products.dietDerivation,
-      dietOverride: products.dietOverride,
+      dietaryDeclarations: products.dietaryDeclarations,
     })
     .from(workingOrderLines)
     .leftJoin(
@@ -3861,8 +3933,7 @@ async function readQueueSubItems(
             id: optionGroupItems.id,
             addAllergens: optionGroupItems.addAllergens,
             removeAllergens: optionGroupItems.removeAllergens,
-            addOrigins: optionGroupItems.addOrigins,
-            removeOrigins: optionGroupItems.removeOrigins,
+            dietaryEffect: optionGroupItems.dietaryEffect,
           })
           .from(optionGroupItems)
           .where(
@@ -3877,27 +3948,26 @@ async function readQueueSubItems(
       const overlays = overlaysByParent.get(parent.lineId) ?? [];
       overlays.push({ add: choice.addAllergens, remove: choice.removeAllergens });
       overlaysByParent.set(parent.lineId, overlays);
-      const origins = originOverlaysByParent.get(parent.lineId) ?? [];
-      origins.push({
-        add: choice.addOrigins as DietaryOrigin[] | null,
-        remove: choice.removeOrigins as DietaryOrigin[] | null,
-      });
-      originOverlaysByParent.set(parent.lineId, origins);
+      const effects = dietaryEffectsByParent.get(parent.lineId) ?? [];
+      effects.push(choice.dietaryEffect as DietaryEffect | null);
+      dietaryEffectsByParent.set(parent.lineId, effects);
     }
   }
   for (const p of parents) {
     const base = (p.allergens ?? null) as ProductAllergens | null;
     const asServed = deriveAsServedAllergens(base, overlaysByParent.get(p.lineId) ?? []);
-    // The DIET twin (Task 5) — fold the product's recipe-derived origins with its options' origin
-    // overlays, then re-apply the staff override. A null derivation folds as "no recipe" (empty
-    // origins but PENDING), the same default `republishProductDiet` uses when publishing the product's
-    // own diet, so the as-served vegan/vegetarian read "unknown" for an unreviewed dish (the CAUTIOUS
-    // posture — never assert a positive diet claim on a plate whose ingredients were never reviewed).
-    const asServedDiet = deriveAsServedDiet(
-      (p.dietDerivation ?? { origins: [], pending: true }) as DietDerivation,
-      (p.dietOverride ?? null) as DietOverride | null,
-      originOverlaysByParent.get(p.lineId) ?? [],
+    const declarations = applyDietaryEffects(
+      p.dietaryDeclarations as DietaryLabel[],
+      dietaryEffectsByParent.get(p.lineId) ?? [],
     );
+    const expanded = expandDietaryDeclarations(declarations);
+    const asServedDiet: DietProfile = {
+      vegan: expanded.includes("vegan") ? "yes" : "unknown",
+      vegetarian: expanded.includes("vegetarian") ? "yes" : "unknown",
+      contains: [],
+      ...(expanded.includes("halal") ? { halal: "yes" as const } : {}),
+      ...(expanded.includes("kosher") ? { kosher: "yes" as const } : {}),
+    };
     // Project only `{ allergens, pending }` onto the wire — `removed` rides as a sibling top-level field
     // (the client reads that one), so the nested copy would be dead weight.
     asServedByParent.set(p.lineId, {
@@ -4124,9 +4194,8 @@ export interface ExpoItem {
    *  true }` when the parent line is absent from the read. The fold's `removed` rides as the sibling
    *  {@link removed} field, not nested here. */
   asServed: { allergens: ProductAllergens; pending: boolean };
-  /** The AS-SERVED diet profile (Task 5) — the same fold {@link StationQueueItem.asServedDiet} carries:
-   *  the parent product's recipe-derived origins minus the options' removes plus their adds, the staff
-   *  override re-applied, "unknown" while the derivation is pending. Display-only; defaults to a
+  /** The AS-SERVED diet profile — the same direct-declaration and reviewed-invalidation fold
+   *  {@link StationQueueItem.asServedDiet} carries. Display-only; defaults to a
    *  derived-empty `{ vegan: "unknown", vegetarian: "unknown", contains: [] }` when the parent line is
    *  absent from the read. */
   asServedDiet?: DietProfile;

@@ -18,7 +18,7 @@ const extra: Modifier = {
       priceDelta: "1.00",
       maxQuantity: 2,
       defaultQuantity: 1,
-      addOrigins: ["dairy"],
+      dietaryEffect: { invalidates: ["halal"] },
     },
     {
       id: "b",
@@ -102,7 +102,9 @@ it("reorders choices, adds and removes a stable choice, and preserves effects", 
     "b",
     "a",
   ]);
-  expect(submit.mock.calls[0]![0].detail.value.choices[1].addOrigins).toEqual(["dairy"]);
+  expect(submit.mock.calls[0]![0].detail.value.choices[1].dietaryEffect).toEqual({
+    invalidates: ["halal"],
+  });
 });
 it("rejects negative prices, fractional limits and defaults above the total cap", async () => {
   const el = await mount(extra);
@@ -173,7 +175,7 @@ it("retains a draft across busy/server errors and emits cancel once", async () =
   expect(cancel).toHaveBeenCalledTimes(1);
   expect(cancel.mock.calls[0]![0].detail).toEqual({});
 });
-it("authors source-free allergen and food effects while preserving existing specificity", async () => {
+it("authors source-free allergen and direct dietary effects while preserving existing specificity", async () => {
   const el = await mount({
     ...extra,
     choices: [
@@ -184,16 +186,14 @@ it("authors source-free allergen and food effects while preserving existing spec
   el.addEventListener("wt-submit", submit);
   await change(el, "addAllergens-a", "eggs");
   await change(el, "presence-a-eggs", "may_contain");
-  await change(el, "addOrigins-a", "meat");
-  await change(el, "removeOrigins-a", "dairy");
+  await change(el, "dietaryEffect-a", "vegan");
   await click(el, "save");
   expect(submit.mock.calls[0]![0].detail.value.choices[0]).toMatchObject({
     addAllergens: {
       milk: { presence: "contains", source: "queso" },
       eggs: { presence: "may_contain" },
     },
-    addOrigins: ["dairy", "meat"],
-    removeOrigins: ["dairy"],
+    dietaryEffect: { invalidates: ["halal", "vegan"] },
   });
   expect(el.shadowRoot!.querySelector('input[name*="source"]')).toBeNull();
 });

@@ -4,6 +4,10 @@
 > supersedes the each-only selection gate and the skip-empty-required-group behavior. Extras retain
 > decimal child-line pricing; text, options and Yes/no now use saved presentation snapshots.
 > Allergen and dietary effects still use current declarations, with source-free authoring controls.
+>
+> **2026-09-13 update:** The [Products design](2026-09-12-product-editor-design.md) makes suitability
+> a direct product declaration and modifier effects explicit invalidations. Recipe-derived origins no
+> longer control supported product writes or the till and kitchen suitability displays.
 
 **Date:** 2026-08-31
 **Status:** design, awaiting review

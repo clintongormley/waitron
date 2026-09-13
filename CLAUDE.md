@@ -241,6 +241,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A `sql` scalar subquery correlated to the OUTER query's table breaks silently when that table is
   the `.from()` base rather than a join** — no error, a wrong answer. Check base-vs-join and READ the
   emitted SQL with `.toSQL()`.
+- **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
+  variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
+  per-line resolver).
 - **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
   deliberately. If a test needs a privilege the role does not have, the test is asserting the wrong
   thing or the code is reaching somewhere it should not — establish which before touching any grant.
@@ -285,6 +288,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
   snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
   RUNNING the grant assertions and `inmutabilidad`.
+- **A new unique target must precede the foreign key that references it in generated SQL.** Drizzle
+  emitted the reverse order for a new table referencing an altered existing table; PostgreSQL rejected
+  it with `42830`. See [conventions-data.md](docs/developers/conventions-data.md).
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
   so an entry at or below a recorded watermark never runs and drizzle raises nothing. The core journal
   is already in a shape no edit repairs — a database at core release points 1–6 cannot reach HEAD.

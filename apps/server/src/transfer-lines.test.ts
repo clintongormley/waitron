@@ -136,6 +136,8 @@ async function linesOf(tabId: string): Promise<
     quantity: string;
     unitPriceGross: string;
     lineTotal: string;
+    unitName: Record<string, string> | null;
+    unitPrecision: number | null;
   }[]
 > {
   return db
@@ -145,6 +147,8 @@ async function linesOf(tabId: string): Promise<
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       lineTotal: workingOrderLines.lineTotal,
+      unitName: workingOrderLines.unitName,
+      unitPrecision: workingOrderLines.unitPrecision,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -281,6 +285,8 @@ describe("transferLines — partial split", () => {
         quantity: "1.000",
         unitPriceGross: "1.50",
         lineTotal: "1.50",
+        unitName: expect.objectContaining({ en: "each" }),
+        unitPrecision: 0,
       }),
     ]);
     // Quantity conserved: 2 + 1 = the original 3. Money conserved for `each`: 3.00 + 1.50 = 4.50.

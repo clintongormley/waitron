@@ -111,7 +111,7 @@ export interface UpdateProductDetail {
  * starts it blank. The allergen picker is seeded through its `declaration` property (a separate
  * `seedAllergens` bound ONLY on reseed, never to the live value, so it does not fight the operator's
  * edits) and the image control through its `image` property; both children also announce their own
- * changes back through `allergens-changed` / `image-changed`, which this form captures (with
+ * changes back through `wt-allergens-change` / `image-changed`, which this form captures (with
  * `stopPropagation`, the house pattern) into `allergens` / `image`.
  *
  * CREATE and PATCH treat a pending allergen declaration differently. On CREATE a PENDING picker (`value === null`)
@@ -231,6 +231,7 @@ export class ProductForm extends LitElement {
 
   /** Single-flight gate: the screen sets it true while a create/update is in flight; confirm is a no-op. */
   @property({ type: Boolean }) busy = false;
+  @state() private allergenPickerOpen = false;
   @state() private imagePickerOpen = false;
 
   @state() private descriptions: Record<string, string> = {};
@@ -488,7 +489,7 @@ export class ProductForm extends LitElement {
    */
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy || this.imagePickerOpen) return;
+    if (this.busy || this.imagePickerOpen || this.allergenPickerOpen) return;
     const primary = this.locales[0];
     if ((this.descriptions[primary] ?? "").trim() === "") {
       this.validationError = "product.description_required";
@@ -796,8 +797,12 @@ export class ProductForm extends LitElement {
         ${this.#renderOptionGroups()}
         <dashboard-allergen-picker
           data-test="allergens"
+          @wt-picker-state=${(e: CustomEvent<{ open: boolean }>) => {
+            e.stopPropagation();
+            this.allergenPickerOpen = e.detail.open;
+          }}
           .declaration=${this.seedAllergens}
-          @allergens-changed=${(e: CustomEvent<{ value: AllergenDeclaration }>) =>
+          @wt-allergens-change=${(e: CustomEvent<{ value: AllergenDeclaration }>) =>
             this.#onAllergensChanged(e)}
         ></dashboard-allergen-picker>
         ${this.#renderDietOverride()}
@@ -823,14 +828,14 @@ export class ProductForm extends LitElement {
             slot="cancel"
             variant="secondary"
             data-test="cancel"
-            ?disabled=${this.busy || this.imagePickerOpen}
+            ?disabled=${this.busy || this.imagePickerOpen || this.allergenPickerOpen}
             @click=${() => this.#onClose()}
             >${t("action.cancel")}</wt-button
           >
           <wt-button
             variant="primary"
             data-test="confirm"
-            ?disabled=${this.busy || this.imagePickerOpen}
+            ?disabled=${this.busy || this.imagePickerOpen || this.allergenPickerOpen}
             @click=${(e: Event) => this.#confirm(e)}
             >${this.product ? t("action.save") : t("action.create")}</wt-button
           >

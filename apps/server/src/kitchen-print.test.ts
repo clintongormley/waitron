@@ -794,3 +794,27 @@ it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", asy
   expect(paper).toContain("Milk: Oat");
   expect(paper).toContain("Ice: Without ice");
 });
+
+it("prints the frozen kitchen name with the selected variant", async () => {
+  const { cfg, catalogueId } = await setupVenue();
+  const jobs = await asApp(cfg, async (tx) => {
+    const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+    const printerId = await makePrinter(tx, cfg, "Kitchen printer", "station");
+    await attachPrinterToStation(tx, printCfg(cfg), { stationId: station.id, printerId });
+    const productId = await makeProduct(tx, cfg, catalogueId, "Coffee", { stationId: station.id });
+    const orderId = randomUUID();
+    const { lineRows } = await createOpenOrder(tx, cfg, orderId, [line(productId)], null);
+    const parent = lineRows[0]!;
+    await tx
+      .update(workingOrderLines)
+      .set({ kitchenName: "COFFEE BAR", variantName: { [LOCALE]: "Doble" } })
+      .where(eq(workingOrderLines.id, parent.id!));
+    await enqueueKitchenTickets(tx, cfg, orderId, [
+      { workingOrderLineId: parent.id!, stationId: station.id },
+    ]);
+    return printJobsFor(tx);
+  });
+  const paper = decodeTicket(jobs[0]!.payload);
+  expect(paper).toContain("COFFEE BAR · Doble");
+  expect(paper).not.toContain("Coffee");
+});

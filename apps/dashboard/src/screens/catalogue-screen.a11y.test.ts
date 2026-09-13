@@ -8,6 +8,7 @@ import type {
   DashboardApi,
   OptionGroup,
   Product,
+  Modifier,
 } from "../api/client.js";
 
 /**
@@ -66,7 +67,7 @@ const optionGroups: OptionGroup[] = [
 ];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
-  return {
+  const api = {
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue(categories),
@@ -74,8 +75,16 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStations: vi.fn().mockResolvedValue(stations),
     listCourses: vi.fn().mockResolvedValue(courses),
     listOptionGroups: vi.fn().mockResolvedValue(optionGroups),
+    listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "unidad" }, precision: 0 }]),
+    listModifiers: vi
+      .fn()
+      .mockResolvedValue([
+        { id: "m1", type: "text", name: { es: "Nota" }, available: true } as Modifier,
+      ]),
     ...overrides,
   } as unknown as DashboardApi;
+  Object.defineProperty(api, "background", { get: () => api });
+  return api;
 }
 
 async function flush(el: CatalogueScreen): Promise<void> {

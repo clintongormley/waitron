@@ -218,6 +218,9 @@ export const saleLines = pgTable(
     saleId: uuid("sale_id").notNull(),
     lineNo: integer("line_no").notNull(),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
+    variantId: uuid("variant_id"),
+    variantName: jsonb("variant_name").$type<Record<string, string>>(),
+    kitchenName: text("kitchen_name"),
     modifierSnapshots: jsonb("modifier_snapshots")
       .$type<ModifierSnapshot[]>()
       .notNull()

@@ -113,6 +113,7 @@ export interface ZoneMenuOffer {
   readonly menuName: string;
   readonly sectionName: Readonly<Record<string, string>>;
   readonly descriptions: Readonly<Record<string, string>>;
+  readonly kitchenName: string | null;
   readonly unit: {
     readonly id: string;
     readonly name: Readonly<Record<string, string>>;
@@ -127,6 +128,13 @@ export interface ZoneMenuOffer {
   readonly diet: unknown;
   readonly dietDerivation: unknown;
   readonly dietOverride: unknown;
+  readonly dietaryDeclarations: readonly string[];
+  readonly variants: readonly {
+    readonly id: string;
+    readonly name: Readonly<Record<string, string>>;
+    readonly unitPrice: string;
+    readonly available: boolean;
+  }[];
   readonly courseId: string | null;
   readonly optionGroups: readonly {
     readonly id: string;
@@ -146,6 +154,7 @@ export interface ZoneMenuOffer {
       readonly removeAllergens: readonly string[] | null;
       readonly addOrigins: readonly string[] | null;
       readonly removeOrigins: readonly string[] | null;
+      readonly dietaryEffect?: { readonly invalidates: readonly string[] } | null;
     }[];
   }[];
 }

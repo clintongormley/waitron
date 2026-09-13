@@ -9,8 +9,9 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-08-26** — Q17 (F3 *canje*) and Q18 (*modelo 303* IVA soportado) added, Q16
-sharpened; see the 2026-08-26 banner. Prior substantive pass **2026-08-01**.
+Last revised **2026-09-13** — Q20 (zero-rate products shown as **No tax**) added. Q17 (F3 *canje*)
+and Q18 (*modelo 303* IVA soportado) were added on 2026-08-26; Q16 was sharpened then. Prior
+substantive pass **2026-08-01**.
 
 > **2026-09-09:** Added the separate preparation-environment question below for
 > [node onboarding](../superpowers/specs/2026-09-09-node-onboarding-design.md). This does not
@@ -1106,6 +1107,41 @@ deducible figure turns on it:
 > inversión (43), regla de **prorrata definitiva** (44) y operaciones intracomunitarias e
 > importaciones (32–39)?
 
+### Q20. Products shown as **No tax (0%)** — zero-rated `S1` or non-subject `N1`/`N2`? (added 2026-09-13)
+
+**Why it matters.** The Products screen exposes the catalogue's existing zero-rate VAT class as
+**No tax (0%)**. Pricing puts the whole gross amount in the base and records zero VAT. The current
+Veri*Factu backend files that line with `TipoImpositivo: 0.00`, `CuotaRepercutida: 0.00` and
+`CalificacionOperacion: S1` (taxable, non-exempt). It does not classify the operation as non-subject.
+
+AEAT's record description says a non-subject operation must include its amount and the cause of
+non-subjection. The current schema distinguishes `N1` (Articles 7, 14 or other causes) from `N2`
+(place-of-supply rules). We need the asesor to confirm whether the venue has a real product case for
+the existing zero-rated `S1` treatment, and to identify any intended “No tax” case that actually
+belongs in `N1` or `N2` instead.
+
+> En la ficha de producto mostramos la clase de IVA existente de tipo cero como **«Sin impuestos
+> (0 %)»**. El cálculo considera todo el importe como base y cero como cuota. En el registro
+> Veri*Factu enviamos `TipoImpositivo: 0.00`, `CuotaRepercutida: 0.00` y
+> `CalificacionOperacion: S1` (operación sujeta y no exenta); no la marcamos como no sujeta.
+>
+> **(a)** Para los productos reales de este restaurante o delicatessen que se quieran configurar de
+> esta forma, ¿es correcta la calificación **S1 con tipo 0 %**? ¿Qué supuestos concretos de su
+> actividad pueden usarla?
+>
+> **(b)** Si alguno de esos supuestos es en realidad una operación **no sujeta**, ¿debemos exigir la
+> causa **N1** (artículos 7, 14 u otros) o **N2** (reglas de localización) en lugar de permitir la
+> clase de tipo cero?
+>
+> **(c)** ¿Recomienda mostrar la etiqueta **«IVA 0 %»** en vez de **«Sin impuestos»** para evitar que
+> el personal confunda una operación sujeta a tipo cero con una operación no sujeta?
+
+Primary-source boundary checked 2026-09-13:
+[AEAT, contenido del registro de facturación de alta](https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/cuestiones-generales/contenido-registro-facturacion-alta_.html)
+requires the cause for a non-subject operation; the committed AEAT
+`SuministroInformacion.xsd` defines the separate `N1` and `N2` values. Neither source determines the
+correct treatment for the venue's particular product.
+
 ---
 
 ## Separate preparation environment (added 2026-09-09)
@@ -1164,6 +1200,9 @@ This records a question; no enquiry has been sent.
   both built, neither blocking, but each has one point to settle **before the first live filing**: the
   foreign-recipient `IDType` shape (Q17a) and the prorrata base treatment (Q18a). These are ordinary
   asesor-fiscal territory, unlike the SIF-architecture questions — a filer will answer them readily.
+- **Q20 asks about the product label No tax (0%).** The implementation deliberately reuses the
+  existing zero-rate `S1` treatment. Confirm which real venue products, if any, fit that treatment and
+  whether the operator-facing label risks being confused with a non-subject `N1`/`N2` operation.
 - **Do not open with "can I use multiple series".** It is settled, it is boring, and it
   invites a confident answer to a question we did not need to ask. The series is not the
   mechanism — the SIF is.

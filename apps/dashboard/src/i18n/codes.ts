@@ -21,12 +21,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Elige una categoría superior fuera de esta categoría y sus descendientes.",
   },
   "category.primary_required": {
-    en: "Choose a replacement primary category.",
-    es: "Elige una categoría principal de reemplazo.",
+    en: "Choose a replacement Reporting Category.",
+    es: "Elige una Categoría de informes de reemplazo.",
   },
   "category.membership_invalid": {
-    en: "Choose distinct categories and a primary from those selected.",
-    es: "Elige categorías distintas y una principal entre las seleccionadas.",
+    en: "Choose distinct categories and a Reporting Category from those selected.",
+    es: "Elige categorías distintas y una Categoría de informes entre las seleccionadas.",
   },
   "category.image_not_found": {
     en: "Choose an image from your image library.",

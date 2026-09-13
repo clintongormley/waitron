@@ -57,6 +57,20 @@
       "when": 1789288783131,
       "tag": "0007_product_units_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789291673375,
+      "tag": "0008_product_variants",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789291683976,
+      "tag": "0009_product_variants_grants",
+      "breakpoints": true
     }
   ]
 }

@@ -35,7 +35,7 @@ const VAT_CLASS_NAMES: NameTable = {
   general: { en: "General", es: "General" },
   reduced: { en: "Reduced", es: "Reducido" },
   super_reduced: { en: "Super-reduced", es: "Superreducido" },
-  zero: { en: "Zero", es: "Cero" },
+  zero: { en: "No tax", es: "Sin impuestos" },
 };
 
 const UNIT_NAMES: NameTable = {

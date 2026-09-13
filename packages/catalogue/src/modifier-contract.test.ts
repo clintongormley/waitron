@@ -23,6 +23,24 @@ const extras = {
 };
 
 describe("modifier definition contract", () => {
+  it("accepts direct dietary invalidations and rejects legacy origin authoring", () => {
+    expect(
+      parseModifierInput({
+        type: "extras",
+        name,
+        choices: [{ ...extra, dietaryEffect: { invalidates: ["no_meat", "halal"] } }],
+      }),
+    ).toMatchObject({
+      choices: [{ dietaryEffect: { invalidates: ["no_meat", "halal"] } }],
+    });
+    expect(() =>
+      parseModifierInput({
+        type: "extras",
+        name,
+        choices: [{ ...extra, addOrigins: ["meat"] }],
+      }),
+    ).toThrow(expect.objectContaining({ code: "modifier.invalid" }));
+  });
   it("accepts all four types with canonical defaults", () => {
     expect(parseModifierInput({ type: "text", name })).toEqual({
       type: "text",

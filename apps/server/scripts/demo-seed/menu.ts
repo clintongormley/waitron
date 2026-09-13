@@ -21,7 +21,7 @@
 // (21%) EXCEPT bottled water, which is `reduced` (10%). The spread is deliberate: the demo wants a
 // mix of rates in one basket so the desglose (per-rate VAT breakdown) is non-trivial.
 
-import type { PricingUnit, VatClass } from "@waitron/catalogue";
+import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
 
 /** The two BARE content locales every demo menu string carries (feature B "author bare"). */
 export type SeedLocale = "en" | "es";
@@ -40,6 +40,16 @@ export const SEED_INVOICE_LOCALE: Record<SeedLocale, string> = {
 /** A demo product: both-locale descriptions, its pricing/VAT, and the PNG basename Task 9 supplies. */
 export interface SeedProduct {
   descriptions: Record<SeedLocale, string>;
+  description?: Record<SeedLocale, string>;
+  kitchenName?: string;
+  dietaryDeclarations?: DietaryLabel[];
+  unit?: { name: Record<SeedLocale, string>; precision: number };
+  variants?: {
+    name: Record<SeedLocale, string>;
+    productPrice: string;
+    menuPrice: string;
+    available: boolean;
+  }[];
   pricingUnit: PricingUnit;
   /** GROSS (VAT-inclusive): per item for `each`, per kg for `weight`. A `numeric(12,2)` string. */
   unitPrice: string;
@@ -502,6 +512,26 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
         },
         {
           descriptions: { en: "Coffee", es: "Café" },
+          description: {
+            en: "Freshly ground espresso from the downstairs bar",
+            es: "Espresso recién molido de la barra de abajo",
+          },
+          kitchenName: "COFFEE · DOWNSTAIRS BAR",
+          dietaryDeclarations: ["vegetarian", "halal"],
+          variants: [
+            {
+              name: { en: "Single", es: "Solo" },
+              productPrice: "1.40",
+              menuPrice: "1.75",
+              available: true,
+            },
+            {
+              name: { en: "Double", es: "Doble" },
+              productPrice: "2.10",
+              menuPrice: "2.60",
+              available: true,
+            },
+          ],
           pricingUnit: "each",
           unitPrice: "1.60",
           vatClass: "general",
@@ -550,6 +580,13 @@ export const MENU_DEL_DIA: SeedCatalogue = {
       products: [
         {
           descriptions: { en: "Mixed salad", es: "Ensalada mixta" },
+          description: {
+            en: "Tomato, leaves and onion with dressing on the side",
+            es: "Tomate, hojas y cebolla con el aliño aparte",
+          },
+          kitchenName: "MIXED SALAD",
+          dietaryDeclarations: ["vegan"],
+          unit: { name: { en: "serving", es: "ración" }, precision: 2 },
           pricingUnit: "each",
           unitPrice: "6.00",
           vatClass: "reduced",

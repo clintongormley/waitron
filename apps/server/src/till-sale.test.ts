@@ -20,6 +20,9 @@ import {
   createMenuSection,
   createProduct,
   listAvailableProducts,
+  setMenuVariants,
+  setProductVariants,
+  updateProduct,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -109,11 +112,13 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  * `weight` product (24.90 €/kg, reduced/10%). Each test gets its OWN tenant so the
  * `registros_facturacion` count is that test's alone, order-independent (CLAUDE.md §4).
  */
-async function setupVenue(): Promise<{
+async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   cfg: TillConfig;
   available: AvailableProduct[];
   zoneId: string;
   waterOfferId: string;
+  waterProductId: string;
+  variantIds?: { double: string; unavailable: string };
 }> {
   const venue = await applyVenue(
     planVenue(
@@ -170,6 +175,7 @@ async function setupVenue(): Promise<{
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
+      kitchenName: "COLD BAR",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     const zone = await tx.execute<{ id: string }>(sql`
@@ -186,6 +192,24 @@ async function setupVenue(): Promise<{
       sectionId: section.id,
       grossPrice: "2.25",
     });
+    let variantIds: { double: string; unavailable: string } | undefined;
+    if (options.variants) {
+      const variants = await setProductVariants(
+        tx,
+        cfg.tenantId,
+        water.id,
+        [
+          { name: { [LOCALE]: "Doble" }, unitPrice: "3.20", available: true },
+          { name: { [LOCALE]: "Fuera" }, unitPrice: "3.80", available: true },
+        ],
+        LOCALE,
+      );
+      await setMenuVariants(tx, cfg.tenantId, offer.id, [
+        { variantId: variants[0]!.id, unitPrice: "4.10", available: true },
+        { variantId: variants[1]!.id, unitPrice: "4.80", available: false },
+      ]);
+      variantIds = { double: variants[0]!.id, unavailable: variants[1]!.id };
+    }
     await tx.execute(sql`
       insert into zone_menus (tenant_id, zone_id, menu_id)
       values (${cfg.tenantId}, ${zone.rows[0]!.id}, ${cat.id})`);
@@ -201,6 +225,8 @@ async function setupVenue(): Promise<{
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
       zoneId: zone.rows[0]!.id,
       waterOfferId: offer.id,
+      waterProductId: water.id,
+      variantIds,
     };
   });
   return { cfg, ...catalogue };
@@ -219,6 +245,143 @@ beforeAll(() => {
 });
 
 describe("recordTillSale", () => {
+  it("requires a published variant and freezes its menu price and presentation facts", async () => {
+    const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
+    const deps = { db: suite.admin, backend, clock };
+    await expect(
+      recordTillSale(deps, cfg, {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+        tender: { method: "cash", amount: "4.10" },
+      }),
+    ).rejects.toMatchObject({ code: "product.variant_required" });
+    await expect(
+      recordTillSale(deps, cfg, {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
+        tender: { method: "cash", amount: "4.80" },
+      }),
+    ).rejects.toMatchObject({ code: "product.variant_unavailable" });
+
+    const result = await recordTillSale(deps, cfg, {
+      zoneId,
+      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "2" }],
+      tender: { method: "cash", amount: "8.20" },
+    });
+    expect(result.total).toBe("8.20");
+    const snapshots = await suite.admin.execute<{
+      variant_id: string;
+      variant_name: Record<string, string>;
+      kitchen_name: string;
+      descriptions: Record<string, string>;
+      unit_price_gross?: string;
+    }>(sql`
+      select variant_id, variant_name, kitchen_name, descriptions, unit_price_gross
+      from working_order_lines where tenant_id = ${cfg.tenantId}
+      union all
+      select variant_id, variant_name, kitchen_name, descriptions, null
+      from sale_lines where tenant_id = ${cfg.tenantId}
+      order by unit_price_gross nulls last`);
+    expect(snapshots.rows).toEqual([
+      {
+        variant_id: variantIds!.double,
+        variant_name: { [LOCALE]: "Doble" },
+        kitchen_name: "COLD BAR",
+        descriptions: { [LOCALE]: "Agua mineral · Doble" },
+        unit_price_gross: "4.10",
+      },
+      {
+        variant_id: variantIds!.double,
+        variant_name: { [LOCALE]: "Doble" },
+        kitchen_name: "COLD BAR",
+        descriptions: { [LOCALE]: "Agua mineral · Doble" },
+        unit_price_gross: null,
+      },
+    ]);
+  });
+  it("keeps distinct variants and their parked facts after live catalogue edits", async () => {
+    const { cfg, zoneId, waterOfferId, waterProductId, variantIds } = await setupVenue({
+      variants: true,
+    });
+    const workingOrderId = randomUUID();
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await setMenuVariants(tx, cfg.tenantId, waterOfferId, [
+        { variantId: variantIds!.double, unitPrice: "4.10", available: true },
+        { variantId: variantIds!.unavailable, unitPrice: "4.80", available: true },
+      ]);
+      await createOpenOrder(
+        tx,
+        cfg,
+        workingOrderId,
+        [
+          { menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" },
+          { menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" },
+        ],
+        null,
+        { zoneId },
+      );
+      await updateProduct(tx, cfg.tenantId, waterProductId, {
+        descriptions: { [LOCALE]: "Agua renombrada" },
+        kitchenName: "NEW BAR",
+        unitPrice: "99.00",
+      });
+      await setProductVariants(
+        tx,
+        cfg.tenantId,
+        waterProductId,
+        [
+          {
+            id: variantIds!.double,
+            name: { [LOCALE]: "Doble nuevo" },
+            unitPrice: "30.00",
+            available: true,
+          },
+          {
+            id: variantIds!.unavailable,
+            name: { [LOCALE]: "Fuera nuevo" },
+            unitPrice: "40.00",
+            available: true,
+          },
+        ],
+        LOCALE,
+      );
+      await setMenuVariants(tx, cfg.tenantId, waterOfferId, [
+        { variantId: variantIds!.double, unitPrice: "31.00", available: true },
+        { variantId: variantIds!.unavailable, unitPrice: "41.00", available: true },
+      ]);
+    });
+
+    const result = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: workingOrderId,
+      lines: [],
+      tender: { method: "cash", amount: "8.90" },
+    });
+    expect(result.total).toBe("8.90");
+    const stored = await suite.admin.execute<{
+      variant_id: string;
+      variant_name: Record<string, string>;
+      kitchen_name: string;
+      descriptions: Record<string, string>;
+    }>(sql`
+      select variant_id, variant_name, kitchen_name, descriptions
+      from sale_lines where tenant_id = ${cfg.tenantId}
+      order by line_no`);
+    expect(stored.rows).toEqual([
+      {
+        variant_id: variantIds!.double,
+        variant_name: { [LOCALE]: "Doble" },
+        kitchen_name: "COLD BAR",
+        descriptions: { [LOCALE]: "Agua mineral · Doble" },
+      },
+      {
+        variant_id: variantIds!.unavailable,
+        variant_name: { [LOCALE]: "Fuera" },
+        kitchen_name: "COLD BAR",
+        descriptions: { [LOCALE]: "Agua mineral · Fuera" },
+      },
+    ]);
+  });
   it("files a walk-up from the selected zone's menu price and stores its attribution", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
 
