@@ -362,9 +362,25 @@ During the Categories review on 2026-09-13, deleting the duplicate-membership gu
 `categories.test.ts` green: the later unique-constraint failure also matched `toBeInstanceOf(Error)`.
 Keep rollback assertions, and assert the domain code that the API maps to its client response.
 
-In the disposable review checkout, replacing the duplicate-set condition with `false` and running
+Replacing the duplicate-set condition in `replaceProductCategories` with `false` and running
 `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/catalogue test -- src/categories.test.ts
--t 'requires an explicit replacement'` then failed: expected `category.membership_invalid`, received
-a wrapped PostgreSQL `23505`. Removing the category identity row lock similarly makes
-`apps/server/src/category-route-race.pg.test.ts` fail on the missing `category.in_use` code after
-an uncommitted route insert. Both controls passed again with the production guards restored.
+-t 'validates replacement primaries and rolls back invalid saves'` fails: expected
+`category.membership_invalid`, received a wrapped PostgreSQL `23505`, "duplicate key value violates
+unique constraint product_categories_tenant_id_product_id_category_id_pk". Re-verified 2026-09-13.
+Note the test name — an earlier version of this paragraph named a test that no longer exists, and
+because a `-t` filter matching nothing skips every test and still exits 0, following it produced a
+green run that looked like a passing control.
+
+The second guard in the same function family is the category identity row lock — the `for("update")`
+on the category row in `deleteCategory`. Removing it makes
+`apps/server/src/category-route-race.pg.test.ts` fail, but not where you would expect, and no longer
+on a `category.in_use` code: since that delete cascades rather than refusing, nothing throws that
+code on this path any more. What happens instead is that the delete still waits, because its final
+`delete from categories` collides with the KEY SHARE lock the concurrent route insert holds through
+its foreign key — it just waits too late. By then the earlier step that clears `preparation_routes`
+has already run and seen nothing, because the insert had not committed when it looked. So once the
+insert does commit, PostgreSQL rejects the category delete with `23503` on
+`preparation_routes_category_fk`, "Key (id)=(…) is still referenced from table preparation_routes",
+and the test fails on `expected 'rejected' to be 'fulfilled'`. The lock's job is to move the wait in
+front of the cascade reads, not to create the wait. Both controls passed again with the production
+guards restored.
