@@ -50,7 +50,7 @@ test("discovers at least one interactive primitive", () => {
   expect(interactiveComponents.length).toBeGreaterThan(0);
 });
 
-test("the interactive set is exactly wt-button, wt-input, and wt-switch", () => {
+test("the interactive set is exactly wt-button, wt-combobox, wt-input, and wt-switch", () => {
   // The ">0" check above only catches total collapse. It does NOT catch a single primitive
   // silently leaving (or a new one silently failing to join) the set — that only shows up as a
   // change in how many per-tag tests get generated below, which a diff can easily miss (proven
@@ -69,6 +69,7 @@ test("the interactive set is exactly wt-button, wt-input, and wt-switch", () => 
   // hand.
   expect(interactiveComponents.map(({ tag }) => tag).sort()).toEqual([
     "wt-button",
+    "wt-combobox",
     "wt-input",
     "wt-switch",
   ]);

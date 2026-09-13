@@ -13,6 +13,7 @@ import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
 import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
+import "../src/components/wt-combobox.js";
 
 registerIcons({
   check: "M2 8 L6 12 L14 4",
@@ -22,6 +23,7 @@ registerIcons({
   // path for the real app).
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
+  "chevron-down": "M3 6 L8 11 L13 6",
 });
 
 const panel = (theme: "light" | "dark") => `
@@ -50,6 +52,21 @@ const panel = (theme: "light" | "dark") => `
       <div class="row" style="margin-top:16px">
         <wt-switch label="Modo formación"></wt-switch>
         <wt-switch label="Activado" checked></wt-switch>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <wt-combobox
+          label="Favourite tag"
+          placeholder="Choose a tag"
+          class="demo-combobox"
+          allow-add
+        ></wt-combobox>
+        <wt-combobox
+          label="Dietary tags"
+          placeholder="Choose tags"
+          class="demo-multi-combobox"
+          multiple
+          allow-add
+        ></wt-combobox>
       </div>
     </wt-card>
     <wt-tabs label="Venue settings">
@@ -161,6 +178,35 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
       `,
     },
   ];
+
+  const DEMO_TAGS = [
+    { value: "dairy-free", label: "Dairy-free" },
+    { value: "gluten-free", label: "Gluten-free" },
+    { value: "halal", label: "Halal" },
+    { value: "kosher", label: "Kosher" },
+    { value: "nut-free", label: "Nut-free" },
+    { value: "vegan", label: "Vegan" },
+    { value: "vegetarian", label: "Vegetarian" },
+  ];
+  const single = el.querySelector<HTMLElementTagNameMap["wt-combobox"]>(".demo-combobox")!;
+  single.options = DEMO_TAGS;
+  // A property, not a `search-placeholder` attribute: only `allowAdd` declares a kebab-case
+  // attribute name, so lit would look for `searchplaceholder` and silently keep the default.
+  single.searchPlaceholder = "Search or add new";
+  single.addEventListener("wt-combobox-add", ((e: CustomEvent<{ text: string }>) => {
+    const option = { value: e.detail.text.toLowerCase(), label: e.detail.text };
+    single.options = [...single.options, option];
+    single.value = option.value;
+  }) as EventListener);
+
+  const multi = el.querySelector<HTMLElementTagNameMap["wt-combobox"]>(".demo-multi-combobox")!;
+  multi.options = DEMO_TAGS;
+  multi.searchPlaceholder = "Search or add new";
+  multi.addEventListener("wt-combobox-add", ((e: CustomEvent<{ text: string }>) => {
+    const option = { value: e.detail.text.toLowerCase(), label: e.detail.text };
+    multi.options = [...multi.options, option];
+    multi.values = [...multi.values, option.value];
+  }) as EventListener);
 }
 
 for (const trigger of app.querySelectorAll<HTMLElement>(".open-dialog")) {
