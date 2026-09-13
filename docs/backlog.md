@@ -151,11 +151,13 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products.
    Categories has landed (#340, see below), with [integration notes](developers/product-categories.md),
    and Modifiers has landed (#341, see below), with its
-   [integration contract](developers/modifiers.md). Units has landed too (#342, see below). The Products
-   branch now integrates all three sections into the replacement editor, withdraws recipe authoring,
-   carries variants through menus and saved sales, and adds [operator guidance](products.md). The
-   existing zero-rate class is shown as **No tax (0%)**; asesor Q20 asks whether the venue has any
-   intended case that legally needs N1 or N2 instead before live use. See the
+   [integration contract](developers/modifiers.md). Units has landed too (#342, see below), and
+   Products has now landed as well (#345, see below), which completes the overhaul: all four builds
+   are in. Products integrated the three supporting sections into one replacement editor, withdrew
+   recipe authoring from the dashboard, carried variants through menus and saved sales, and added
+   [operator guidance](products.md). One question is left hanging over it: the existing zero-rate class
+   is shown as **No tax (0%)**, and asesor Q20 asks whether any intended case legally needs N1 or N2
+   instead — to be answered before the first live filing, not before more building. See the
    [checkpoint](superpowers/plans/2026-09-13-product-editor-checkpoint.md),
    [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md) and
    [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md).
@@ -247,15 +249,10 @@ catalogue module. [Design](superpowers/specs/2026-09-12-product-categories-desig
 
 What it left open:
 
-- **The old combined catalogue screen is still the product editor, and its category picker is
-  add-only.** `catalogue-screen.ts` keeps its single-category selector, which can add a category and
-  make it primary but deliberately refuses to clear a product that has more than one membership —
-  so the only way to remove a membership today is from the Categories page. The two reusable pieces
-  the replacement editor needs already exist and are tested (`dashboard-category-form` and
-  `dashboard-category-membership-picker`, both in `apps/dashboard/src/widgets/`). **Next action:** the
-  Products build composes them into the new product editor and retires the single selector; the
-  property and event contracts it should use are written out in
-  [the integration guide](developers/product-categories.md).
+- ~~The old combined catalogue screen is still the product editor, and its category picker is
+  add-only.~~ **Closed by #345.** The replacement product editor assigns and removes category
+  memberships and carries an explicit Reporting Category selector, which clears itself when you remove
+  the category it points at. Verified in `apps/dashboard/src/widgets/product-editor.ts`.
 - **A populated database cannot be migrated onto this — it has to be reset.** Core migration
   `0020_category_names` drops the old text `categories.name` column and recreates it as required JSON,
   with no translation and no backfill. A disposable probe ran the real SQL against a category that had
@@ -299,12 +296,13 @@ choice availability still win.
 
 What it left open:
 
-- **Two ways to attach a modifier to a product exist side by side, and you must not use both at
-  once.** The new ordered `modifierIds` field is the canonical one; the old `optionGroupIds` field and
-  its group/item endpoints stay alive purely because the combined catalogue screen still uses them.
-  They write to the same underlying tables, so this is one store with two doors, not two stores — but
-  sending both fields in a single request is rejected. **Next action:** the Products build deletes the
-  combined editor and the old field with it. Until then, anything new writes `modifierIds`.
+- **Two ways to attach a modifier to a product still exist side by side — half closed by #345.**
+  The combined catalogue editor that was the reason for keeping the old door is gone. The door itself
+  is not: `apps/server/src/catalogue-api.ts` still accepts `optionGroupIds` as an alternative to the
+  canonical ordered `modifierIds`, still rejects a request that sends both, and still writes the same
+  underlying tables either way. Nothing in the dashboard sends the old field any more. **Next action:**
+  delete the `optionGroupIds` branch from the product POST/PATCH handler and its parser, confirm no
+  other caller sends it, and drop the mutual-exclusion check with it.
 - **Catalogue rows created before this migration keep their old caps, and nothing upgrades them.**
   The old per-group `max_select` limit does not become the new `maxTotalQuantity` cap. Following the
   repo's no-backfill rule, the fix is to recreate disposable pre-production catalogue data under the
@@ -315,9 +313,12 @@ What it left open:
   that quantity is fractional. **Next action:** whoever builds Units adds its validator alongside this
   one and does not gate either on `pricingUnit === "each"` — that shortcut would silently skip
   modifier validation for anything not sold by the each.
-- **The Products build inherits a small cleanup in the modifier editor.** `dashboard-modifier-form`
-  renders allergen and origin effects through its own private methods; the shared pickers exist and
-  should replace them during Products integration. Cosmetic, but it is the sort of duplication that
+- **The modifier editor's own allergen list survives — the origins half of this went away.** #345
+  removed ingredient origins from the modifier model altogether and replaced them with a direct
+  dietary effect, so half of this duplication no longer exists. What remains is that
+  `dashboard-modifier-form` still renders its allergen list with its own private method rather than
+  the shared allergen picker, which gained a compact mode in #345 for exactly this shape of use.
+  Cosmetic, but it is the sort of duplication that
   hardens if nobody names it.
 - **The independent review did not cover the browser and rendering paths.** Claude's run-it reviewer
   worked to a bounded brief and said so; what it did run found a real repricing bug — reordering
@@ -342,16 +343,15 @@ order line and carried through park and resume, the kitchen screen, the receipt 
 
 What it left open:
 
-- **This is the only one of the three supporting sections that wrote no integration guide, and its
-  plan carries no receipts.** Categories and Modifiers each left a `docs/developers/` document telling
-  the Products build which API shapes and reusable widgets to compose against, and each recorded the
-  commands it ran in its plan. `docs/superpowers/plans/2026-09-12-product-units.md` was last edited by
-  the Categories merge, so it is still the plan as written and not the plan as carried out — the
-  units build committed no developer doc and no receipts at all. **Next action:** whoever starts
-  Products writes the equivalent of `developers/units.md` from the code first (the shapes are in
-  `packages/catalogue/src/units.ts` and `unit-validation.ts`, the widget is
-  `apps/dashboard/src/widgets/unit-form.ts`), because Products has to integrate against it either way
-  and reconstructing it later from a merged diff is the expensive version of this task.
+- **Units still has no written contract, but the reason to write one has passed.** Categories and
+  Modifiers each left a `docs/developers/` document for the Products build to compose against; Units
+  left none, and `docs/superpowers/plans/2026-09-12-product-units.md` is still the plan as written
+  rather than as carried out — it was last edited by the Categories merge. Products has since
+  integrated Units anyway (#345), so the consumer this document existed to serve no longer needs it.
+  Operators get what they need from [the products guide](products.md). **What is actually left:** no
+  dedicated page describes units the way `modifiers.md` describes modifiers. Worth writing if a second
+  consumer appears or an operator asks; not worth writing on a schedule. The shapes, if somebody does,
+  are in `packages/catalogue/src/units.ts` and `unit-validation.ts`.
 - **The old `pricing_unit` column survives on products as a compatibility field, and it is derived,
   not chosen.** Nothing in production code branches on it any more — the till now decides whether to
   ask for a quantity from the unit's own precision and scale mapping — but the column and its
@@ -377,6 +377,55 @@ What it left open:
   order on the till changes that. **Next action:** none beyond knowing it — the remedy is the ordinary
   `wa-wt reset demo`, and since #343 the boot names that remedy itself instead of leaving a driver
   stack trace to decode.
+
+**The integrated product editor — LANDED #345 (2026-09-13), and the overhaul is complete.** The
+dashboard now has one Products list and one editor, replacing the old combined catalogue screen. A
+product carries a translated name and optional description, a separate kitchen name, an image, a tax
+choice, its selling unit, its categories with one marked as the Reporting Category, its ordered
+reusable modifiers, direct allergen and dietary declarations, and ordered variants — Small and Large,
+each with its own price. One transaction saves the whole thing. You can create a unit, a category or a
+modifier without leaving the product you are editing: the draft survives cancelling the nested form, a
+rejected save, a failed refresh and a late response. Menus publish variants explicitly and can override
+each variant's price and availability, and the till picks a variant with the server resolving which
+price actually wins. Held orders, kitchen tickets, receipts and reprints keep the product and variant
+names, kitchen name and prices they were sold under, so later catalogue edits do not rewrite history.
+Allergens and dietary suitability are now declared directly on the product rather than derived from a
+recipe, and a modifier choice can invalidate a claim — adding bacon stops the till and kitchen calling
+the dish vegan. [Operator guide](products.md),
+[checkpoint and receipts](superpowers/plans/2026-09-13-product-editor-checkpoint.md),
+[design](superpowers/specs/2026-09-12-product-editor-design.md).
+
+What it left open:
+
+- **"No tax (0%)" is an open fiscal question, and it must be answered before the first live filing.**
+  The selector shows the catalogue's existing zero-rate class under that name. Pricing puts the whole
+  gross amount in the base with zero VAT, and Veri\*Factu files it as `S1` — taxable, not exempt — at a
+  0.00 rate. That is a real treatment, not a placeholder, and the real backend was run against it. But
+  AEAT separately requires a *non-subject* operation to record its cause, distinguishing `N1`
+  (Articles 7, 14 and others) from `N2` (place-of-supply rules), and nothing established that any of
+  this venue's products is legally non-subject. Asesor question Q20 asks which of the venue's intended
+  cases genuinely belong in the zero-rate `S1` treatment and which need `N1` or `N2` instead, and
+  whether the label should read "IVA 0%" rather than "Sin impuestos" so staff do not read a zero-rated
+  sale as a non-subject one. **Non-blocking while pre-production; blocking before going live.** If the
+  answer moves a case to `N1`/`N2`, that is an explicit classification threaded through sale facts,
+  reporting and every Veri\*Factu sale, correction and substitution path — never a quiet redefinition
+  of what `zero` means.
+- **Recipe authoring is gone from the dashboard, and nothing replaces it as a surface.** The route and
+  screen are withdrawn; product allergens and dietary suitability are now maintained by hand in
+  Products. Purchasing data and recorded historical recipe facts are untouched and still readable, and
+  the 2026-08-16 recipe-authoring design carries a dated note saying it was superseded. What nobody has
+  decided is whether recipe authoring returns later as its own surface — the parked recipe depth work
+  (nested sub-recipes, plate costing, stock depletion) assumes an authoring surface that no longer
+  exists. **Next action:** whoever reopens recipe depth decides that first, rather than discovering it.
+- **The combined end-to-end journey is not recorded as having been walked.** The checkpoint lists
+  substantial focused evidence — 188 catalogue tests, 183 API and boot tests, 82 real-Chromium
+  dashboard tests including both-theme accessibility, the fiscal privilege and immutability suites, and
+  the real Veri\*Factu backend accepting a controlled zero-rate sale. What it does not record is the
+  plan's own step 8: the single journey through the actual routes against a real database, creating a
+  unit, a category and all four modifier types from inside a dirty product draft and taking the result
+  through the till. That is the shape of check that #344 showed matters — the image library passed
+  review and CI and still returned a 500 to the first person who opened it. **Next action:** walk it
+  once on a dev stack before treating the overhaul as finished.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
@@ -1136,7 +1185,7 @@ partial scope; the detail for a live thread is in its track.
 | 15 | Online ordering | — | not started (later phase) |
 | 16 | Workforce | *registro de jornada* (chain per node since #268), D2 scheduling, roster authoring + approvals, staff request path + portal | **wage-computation engine** (convenio-gated); D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI, product images, location↔menu membership, modifiers and option groups, per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu draft/publish + schedule; customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, modifiers and option groups, per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu draft/publish + schedule; customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 
