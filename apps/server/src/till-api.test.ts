@@ -38,6 +38,7 @@ import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -63,6 +64,12 @@ let venueTaxId: string;
 // the route reads back — id, descriptions, unit price, VAT class, the resolved category NAME, and its
 // EU-14 allergen declaration, which the route carries through unchanged.
 let aguaProduct: { id: string; catalogueId: string };
+let eachUnit: {
+  id: string;
+  name: Record<string, string>;
+  precision: number;
+  hardwareUnit: string | null;
+};
 // A SECOND catalogue, attached to the location as a non-default accessible menu via
 // `addCatalogueToLocation` (not `locations.catalogue_id`), with its own product — so the multi-menu
 // `GET /api/products` response can be proven to carry BOTH the `menus` list (default flagged) and
@@ -83,6 +90,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
+    await seedLegacySellingUnits(db, tenantId);
     // `seedTenant` sets legal_name = 'Test SL' and a generated tax_id; read the tax_id back so the
     // `GET /api/till` assertion can pin the exact NIF the route must echo.
     const tenant = await db.execute<{ tax_id: string }>(
@@ -214,6 +222,7 @@ const suite = usePgliteDb({
     );
     aguaProduct = { id: agua.id, catalogueId: agua.catalogueId };
     cervezaProduct = { id: cerveza.id, catalogueId: cerveza.catalogueId };
+    eachUnit = { ...agua.unit, hardwareUnit: null };
     counterZoneId = zoneId;
     aguaOfferId = offerId;
     hiddenAguaOfferId = hiddenOfferId;
@@ -1526,6 +1535,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           id: aguaProduct.id,
           descriptions: { es: "Agua mineral" },
           pricingUnit: "each",
+          unit: eachUnit,
           unitPrice: "1.50",
           vatClass: "general",
           category: "Bebidas",
@@ -1548,6 +1558,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           id: cervezaProduct.id,
           descriptions: { es: "Cerveza" },
           pricingUnit: "each",
+          unit: eachUnit,
           unitPrice: "2.50",
           vatClass: "general",
           category: "Bebidas",

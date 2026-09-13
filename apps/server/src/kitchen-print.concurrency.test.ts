@@ -19,6 +19,7 @@ import { createStation } from "./kitchen.js";
 import { createOpenOrder } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { enqueueKitchenTickets } from "./kitchen-print.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
 // REAL Postgres, NOT PGlite: this proves a LOCK interaction between two concurrent backends, and PGlite
@@ -84,6 +85,7 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
   it("a concurrent deactivatePrinter WAITS for the fire to commit instead of aborting it", async () => {
     // ---- Setup, committed on the admin connection so both racing backends see it ----
     const tenantId = await seedTenant(suite.admin);
+    await seedLegacySellingUnits(suite.admin, tenantId);
     const loc = await suite.admin.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
