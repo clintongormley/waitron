@@ -13,6 +13,13 @@ import {
   validateContentTranslations,
   createCatalogue,
   createCategory,
+  readCategory,
+  updateCategory,
+  deleteCategory,
+  replaceProductCategories,
+  readProductCategories,
+  listCategoryProducts,
+  type CategoryInput,
   createMenuItem,
   createMenuSection,
   createOptionGroup,
@@ -81,16 +88,32 @@ export interface CatalogueApiDeps {
  */
 const CATALOGUE_WRITE_PERMISSION: Permission = "person.manage";
 
-/**
- * Every AppError CODE these routes answer, and the HTTP status it maps to — the catalogue parallel of
- * `management-api.ts`'s `STATUS`. Mostly CLIENT faults. `catalogue.not_found` (404) is thrown by the
- * LOCATION-MENU writes' `assertCatalogueVisible` pre-check on an untrusted `catalogueId`; the PRODUCT
- * routes keep the older opaque posture — a well-formed-but-foreign `catalogueId` there hits the FK
- * (PG `23503`) and reaches `run` as a NON-AppError → opaque 500 (the `category.not_found` pre-check for
- * that path is still a noted later-slice follow-up, not an oversight). Any other genuine SERVER fault (a
- * driver error, a malformed-uuid id reaching a `uuid` column) is likewise an opaque 500. A registered
- * code absent from this table defaults to 400 via `run`'s `?? 400`.
- */
+function categoryInput(body: Record<string, unknown>, creating: boolean): Partial<CategoryInput> {
+  const result: Partial<CategoryInput> = {};
+  if (creating || body.name !== undefined) {
+    if (
+      !body.name ||
+      typeof body.name !== "object" ||
+      Array.isArray(body.name) ||
+      Object.values(body.name).some((value) => typeof value !== "string")
+    )
+      throw new AppError("management.request_invalid", { field: "name" });
+    result.name = body.name as Record<string, string>;
+  }
+  if (body.parentId !== undefined) {
+    if (body.parentId !== null && (typeof body.parentId !== "string" || !isUuid(body.parentId)))
+      throw new AppError("management.request_invalid", { field: "parentId" });
+    result.parentId = body.parentId as string | null;
+  }
+  if (body.image !== undefined) {
+    if (body.image !== null && typeof body.image !== "string")
+      throw new AppError("management.request_invalid", { field: "image" });
+    result.image = body.image as string | null;
+  }
+  return result;
+}
+
+/** Domain faults are client errors; unclassified driver failures remain opaque server errors. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -99,6 +122,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "catalogue.not_found": 404,
+  "category.not_found": 404,
+  "category.in_use": 409,
   "menu_item.not_found": 404,
   "product.not_found": 404,
   "menu_section.not_found": 404,
@@ -560,7 +585,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.get("/management-api/categories", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listCategories(tx));
+      const rows = await gated(sessionId, (tx) => listCategories(tx, tenantId));
       return c.json(rows);
     }),
   );
@@ -568,13 +593,88 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.post("/management-api/categories", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ name?: unknown }>(c);
-      if (typeof body.name !== "string") {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      const { name } = body;
-      const created = await gated(sessionId, (tx) => createCategory(tx, tenantId, { name }));
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const input = categoryInput(body, true) as CategoryInput;
+      const created = await gated(sessionId, (tx) =>
+        createCategory(tx, tenantId, input, deps.venueLocale ?? FALLBACK_LOCALE),
+      );
       return c.json(created, 201);
+    }),
+  );
+
+  app.get("/management-api/categories/:id", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CategoryId");
+      return c.json(await gated(session, (tx) => readCategory(tx, tenantId, id)));
+    }),
+  );
+  app.patch("/management-api/categories/:id", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CategoryId");
+      const input = categoryInput(await readJsonBody<Record<string, unknown>>(c), false);
+      return c.json(
+        await gated(session, (tx) =>
+          updateCategory(tx, tenantId, id, input, deps.venueLocale ?? FALLBACK_LOCALE),
+        ),
+      );
+    }),
+  );
+  app.delete("/management-api/categories/:id", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CategoryId");
+      await gated(session, (tx) => deleteCategory(tx, tenantId, id));
+      return c.body(null, 204);
+    }),
+  );
+  app.get("/management-api/categories/:id/products", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CategoryId");
+      return c.json(await gated(session, (tx) => listCategoryProducts(tx, tenantId, id)));
+    }),
+  );
+  app.get("/management-api/products", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      return c.json(await gated(session, (tx) => listProducts(tx, tenantId)));
+    }),
+  );
+  app.get("/management-api/products/:id/categories", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "ProductId");
+      return c.json(await gated(session, (tx) => readProductCategories(tx, tenantId, id)));
+    }),
+  );
+  app.put("/management-api/products/:id/categories", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "ProductId");
+      const body = await readJsonBody<{ categoryIds?: unknown; primaryCategoryId?: unknown }>(c);
+      if (
+        !Array.isArray(body.categoryIds) ||
+        body.categoryIds.some((id) => typeof id !== "string" || !isUuid(id))
+      )
+        throw new AppError("management.request_invalid", { field: "categoryIds" });
+      if (
+        body.primaryCategoryId !== undefined &&
+        body.primaryCategoryId !== null &&
+        (typeof body.primaryCategoryId !== "string" || !isUuid(body.primaryCategoryId))
+      )
+        throw new AppError("management.request_invalid", { field: "primaryCategoryId" });
+      return c.json(
+        await gated(session, (tx) =>
+          replaceProductCategories(tx, tenantId, id, {
+            categoryIds: body.categoryIds as string[],
+            ...(body.primaryCategoryId === undefined
+              ? {}
+              : { primaryCategoryId: body.primaryCategoryId as string | null }),
+          }),
+        ),
+      );
     }),
   );
 
@@ -762,7 +862,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             patch.descriptions,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
-        await updateProduct(tx, productId, patch);
+        await updateProduct(tx, tenantId, productId, patch);
         if (optionGroupIds !== undefined) {
           await setProductOptionGroups(tx, tenantId, productId, optionGroupIds);
         }

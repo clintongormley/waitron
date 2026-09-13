@@ -153,8 +153,8 @@ async function setupVenue(): Promise<{
   const catalogue = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+    const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
@@ -424,7 +424,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const productId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+      const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
       const product = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
@@ -564,7 +564,7 @@ describe("ordering modifiers — parent + child lines", () => {
     const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
+      const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
       const burger = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,

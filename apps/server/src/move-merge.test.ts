@@ -79,7 +79,7 @@ async function setupVenue(): Promise<Seeded> {
   const { cafeId, aguaId } = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+    const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
     const cafe = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
@@ -536,7 +536,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     // intoTab: café at 1.50. Then raise the catalogue price and open fromTab: café at 9.99. A re-price
     // would make both 9.99; the move must keep each line's OWN locked gross (the load-bearing check).
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
-    await asApp(cfg, (tx) => updateProduct(tx, cafeId, { unitPrice: "9.99" }));
+    await asApp(cfg, (tx) => updateProduct(tx, cfg.tenantId, cafeId, { unitPrice: "9.99" }));
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
     // A manual status on the source (TS-2 schema) must clear when it is freed.
     const status = await seedStatus(cfg, "Needs cleaning");

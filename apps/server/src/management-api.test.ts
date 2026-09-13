@@ -1368,7 +1368,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
         name: unique("Carta"),
       });
       const category = await createCategory(tx, brandTenantId(venue.tenantId), {
-        name: unique("Cat"),
+        name: { [LOCALE]: unique("Cat") },
       });
       const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
@@ -1634,7 +1634,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         name: unique("Carta"),
       });
       const category = await createCategory(tx, brandTenantId(venue.tenantId), {
-        name: unique("Cat"),
+        name: { [LOCALE]: unique("Cat") },
       });
       const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,

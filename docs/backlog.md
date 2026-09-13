@@ -147,7 +147,13 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 `design-system.md`:
 
 1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
-2. **Catalogue and product depth** — `catalogue-screen.ts`, `recipe-screen.ts`, `purchases-screen.ts`.
+2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The owner-requested
+   Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products;
+   Categories is implemented on `products-categories` (pending branch finishing and merge), with
+   [API and reusable-form integration notes](developers/product-categories.md). The
+   [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) defines the branch contracts.
+   Products integrates the other three; recipes are deferred for
+   this workflow and their authoring withdrawal belongs to that build.
 3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319 and
    #327 reworked these recently, so read them against the rules before changing anything.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
@@ -468,6 +474,12 @@ ongoing overhaul listed at the top of Track A.
 
 ### A9. Product depth — after the primary works
 
+- **Category-driven routing to multiple printers/destinations** (owner, 2026-09-12): deferred from
+  the [Products overhaul](superpowers/specs/2026-09-12-products-overhaul-design.md). Decide how a
+  product's category memberships select one or more preparation/printing destinations, how matching
+  rules combine and how duplicate output is prevented. Keep reporting attribution separate so one
+  sale is counted once. The overhaul retains the current routing path; its reporting-category
+  choice does not settle this later routing design.
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; department hours and calendar exceptions; workforce
   assignments; immutable department attribution and reporting; batched readiness and offer queries;

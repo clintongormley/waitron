@@ -720,7 +720,8 @@ export class VenueOperationsScreen extends LitElement {
             label: t("venue.product_or_category"),
             cell: (row) =>
               row.productId === null
-                ? (model.categories.find((c) => c.id === row.categoryId)?.name ?? row.categoryId)
+                ? this.#name(model.categories.find((c) => c.id === row.categoryId)?.name ?? {}) ||
+                  row.categoryId
                 : this.#name(
                     model.products.find((p) => p.id === row.productId)?.descriptions ?? {},
                   ),
@@ -1045,7 +1046,7 @@ export class VenueOperationsScreen extends LitElement {
         const row = editor.row;
         return {
           heading: t(row ? "venue.edit_route" : "venue.add_route"),
-          body: html`${this.#select("route-subject", t("venue.product_or_category"), [...model.categories.map((category) => ({ id: `category:${category.id}`, name: `${t("venue.category")}: ${category.name}` })), ...model.products.map((product) => ({ id: `product:${product.id}`, name: `${t("venue.product")}: ${this.#name(product.descriptions)}` }))], row ? (row.productId === null ? `category:${row.categoryId}` : `product:${row.productId}`) : undefined)}${this.#select("route-zone", t("venue.zone"), [{ id: "", name: t("venue.all_zones") }, ...model.floorZones], row?.zoneId ?? "", false)}${this.#select("route-target", t("venue.station"), [...model.stations, { id: "none", name: t("venue.no_preparation") }], row?.noPreparation ? "none" : (row?.stationId ?? undefined))}`,
+          body: html`${this.#select("route-subject", t("venue.product_or_category"), [...model.categories.map((category) => ({ id: `category:${category.id}`, name: `${t("venue.category")}: ${this.#name(category.name)}` })), ...model.products.map((product) => ({ id: `product:${product.id}`, name: `${t("venue.product")}: ${this.#name(product.descriptions)}` }))], row ? (row.productId === null ? `category:${row.categoryId}` : `product:${row.productId}`) : undefined)}${this.#select("route-zone", t("venue.zone"), [{ id: "", name: t("venue.all_zones") }, ...model.floorZones], row?.zoneId ?? "", false)}${this.#select("route-target", t("venue.station"), [...model.stations, { id: "none", name: t("venue.no_preparation") }], row?.noPreparation ? "none" : (row?.stationId ?? undefined))}`,
           save: () => {
             if (
               !this.#validate([

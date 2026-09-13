@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { AppError, type TenantId } from "@waitron/shared";
+import { AppError, resolveContentText, FALLBACK_LOCALE, type TenantId } from "@waitron/shared";
 import {
   catalogues,
   categories,
@@ -10,6 +10,11 @@ import {
   productOptionGroups,
   products,
 } from "@waitron/db";
+import { productCategories } from "./schema/categories.js";
+import { readContentLanguages } from "./content-languages.js";
+import { replaceProductCategories, readProductCategories, lockCategories } from "./categories.js";
+export { createCategory, listCategories, updateCategory } from "./categories.js";
+export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
 import "./errors.js"; // load the code registry for `options.group_invalid`/`options.item_invalid` thrown below
 import {
@@ -29,7 +34,13 @@ import {
   type DietProfile,
 } from "./dietary.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
-import { menuItemOptionGroups, menuItemOptions, menuItems, menuSections } from "./schema/menu.js";
+import {
+  contentLanguages,
+  menuItemOptionGroups,
+  menuItemOptions,
+  menuItems,
+  menuSections,
+} from "./schema/menu.js";
 
 /**
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
@@ -49,11 +60,6 @@ export interface Catalogue {
   active: boolean;
   /** The sync seam, bumped by a future replication task; created at 1. */
   version: number;
-}
-
-export interface Category {
-  id: string;
-  name: string;
 }
 
 export interface MenuSection {
@@ -115,6 +121,8 @@ export interface Product {
   id: string;
   catalogueId: string;
   categoryId: string | null;
+  categoryIds: string[];
+  primaryCategoryId: string | null;
   descriptions: Record<string, string>;
   pricingUnit: PricingUnit;
   /** GROSS (VAT-inclusive): per item for `each`, per kg for `weight`. */
@@ -271,11 +279,6 @@ const CATALOGUE_COLUMNS = {
   version: catalogues.version,
 };
 
-const CATEGORY_COLUMNS = {
-  id: categories.id,
-  name: categories.name,
-};
-
 const PRODUCT_COLUMNS = {
   id: products.id,
   catalogueId: products.catalogueId,
@@ -322,9 +325,11 @@ interface RawProduct {
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), so the value
 // read back is always a `PricingUnit`/`VatClass`; the cast re-attaches the type the column's runtime
 // CHECK already guarantees.
-function toProduct(row: RawProduct): Product {
+function toProduct(row: RawProduct, categoryIds: string[]): Product {
   return {
     ...row,
+    categoryIds,
+    primaryCategoryId: row.categoryId,
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
     dietOverride: row.dietOverride as DietOverride | null,
@@ -827,8 +832,13 @@ export async function listMenuOffers(
       removeOrigins: option.removeOrigins as string[] | null,
     });
   }
+  const content = await readContentLanguages(tx, tenantId, FALLBACK_LOCALE);
   return rows.map((row) => ({
     ...row,
+    category:
+      row.category === null
+        ? null
+        : resolveContentText(row.category, content.defaultLanguage, content.defaultLanguage),
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
     diet: row.diet as DietProfile | null,
@@ -871,29 +881,6 @@ export async function deactivateCatalogue(tx: Transaction, id: string): Promise<
     .update(catalogues)
     .set({ active: false, updatedAt: sql`now()` })
     .where(eq(catalogues.id, id));
-}
-
-export async function createCategory(
-  tx: Transaction,
-  tenantId: TenantId,
-  input: { name: string },
-): Promise<Category> {
-  const [row] = await tx
-    .insert(categories)
-    .values({ tenantId, name: input.name })
-    .returning(CATEGORY_COLUMNS);
-  return row!;
-}
-
-export async function listCategories(tx: Transaction): Promise<Category[]> {
-  return tx.select(CATEGORY_COLUMNS).from(categories).orderBy(categories.createdAt, categories.id);
-}
-
-export async function renameCategory(tx: Transaction, id: string, name: string): Promise<void> {
-  await tx
-    .update(categories)
-    .set({ name, updatedAt: sql`now()` })
-    .where(eq(categories.id, id));
 }
 
 /**
@@ -1034,7 +1021,7 @@ export async function createProduct(
     .values({
       tenantId,
       catalogueId: input.catalogueId,
-      categoryId: input.categoryId,
+      categoryId: null,
       descriptions: input.descriptions,
       pricingUnit: input.pricingUnit,
       unitPrice: input.unitPrice,
@@ -1047,24 +1034,47 @@ export async function createProduct(
       image: input.image ?? null,
     })
     .returning(PRODUCT_COLUMNS);
-  return toProduct(row!);
+  const membership = await replaceProductCategories(tx, tenantId, row!.id, {
+    categoryIds: input.categoryId === null ? [] : [input.categoryId],
+    primaryCategoryId: input.categoryId,
+  });
+  return toProduct({ ...row!, categoryId: membership.primaryCategoryId }, membership.categoryIds);
 }
 
 export async function listProducts(
   tx: Transaction,
   tenantId: TenantId,
-  catalogueId: string,
+  catalogueId?: string,
 ): Promise<Product[]> {
   const rows = await tx
-    .select(PRODUCT_COLUMNS)
+    .select({
+      ...PRODUCT_COLUMNS,
+      categoryIds: sql<
+        string[]
+      >`coalesce(array_agg(${productCategories.categoryId}::text order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null), array[]::text[])`,
+    })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.catalogueId, catalogueId)))
+    .leftJoin(
+      productCategories,
+      and(
+        eq(productCategories.tenantId, products.tenantId),
+        eq(productCategories.productId, products.id),
+      ),
+    )
+    .where(
+      and(
+        eq(products.tenantId, tenantId),
+        catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId),
+      ),
+    )
+    .groupBy(products.id)
     .orderBy(products.createdAt, products.id);
-  return rows.map(toProduct);
+  return rows.map((row) => toProduct(row, row.categoryIds));
 }
 
 export async function updateProduct(
   tx: Transaction,
+  tenantId: string,
   id: string,
   patch: UpdateProductInput,
 ): Promise<void> {
@@ -1074,7 +1084,18 @@ export async function updateProduct(
   // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
   // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
   // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
-  const { allergens, dietOverride, ...rest } = patch;
+  const { allergens, dietOverride, categoryId, ...rest } = patch;
+  if (categoryId !== undefined) {
+    // Choosing a primary retains other memberships; clearing is allowed only for the final membership.
+    await lockCategories(tx, tenantId);
+    const current = await readProductCategories(tx, tenantId, id);
+    if (categoryId === null && current.categoryIds.length > 1)
+      throw new AppError("category.primary_required", {});
+    await replaceProductCategories(tx, tenantId, id, {
+      categoryIds: categoryId === null ? [] : [...new Set([...current.categoryIds, categoryId])],
+      primaryCategoryId: categoryId,
+    });
+  }
   if (allergens != null) validateAllergens(allergens);
   // The diet override is split out like `allergens`: a supplied override is checked disjoint before
   // the write (`null`/`undefined` skip it), only a non-`undefined` value reaches the `diet_override`
@@ -1089,7 +1110,7 @@ export async function updateProduct(
       ...(dietOverride !== undefined ? { dietOverride } : {}),
       updatedAt: sql`now()`,
     })
-    .where(eq(products.id, id));
+    .where(and(eq(products.tenantId, tenantId), eq(products.id, id)));
   // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
   // (`republishProductOverlays`) does the work of the two single-overlay round trips, landing the same
   // `allergens` and `diet` values; when only one changed, the matching single-overlay function runs so
@@ -1303,6 +1324,7 @@ export async function listAvailableProducts(
       unitPrice: products.unitPrice,
       vatClass: products.vatClass,
       category: categories.name,
+      categoryLanguage: contentLanguages.defaultLanguage,
       allergens: products.allergens,
       diet: products.diet,
       dietDerivation: products.dietDerivation,
@@ -1314,6 +1336,7 @@ export async function listAvailableProducts(
     .from(products)
     .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
     .leftJoin(categories, eq(categories.id, products.categoryId))
+    .leftJoin(contentLanguages, eq(contentLanguages.tenantId, products.tenantId))
     .where(
       and(
         inArray(catalogues.id, accessible),
@@ -1415,7 +1438,14 @@ export async function listAvailableProducts(
     pricingUnit: row.pricingUnit as PricingUnit,
     unitPrice: row.unitPrice,
     vatClass: row.vatClass as VatClass,
-    category: row.category,
+    category:
+      row.category === null
+        ? null
+        : resolveContentText(
+            row.category,
+            row.categoryLanguage ?? FALLBACK_LOCALE,
+            row.categoryLanguage ?? FALLBACK_LOCALE,
+          ),
     allergens: row.allergens,
     diet: row.diet as DietProfile | null,
     dietDerivation: row.dietDerivation as DietDerivation | null,

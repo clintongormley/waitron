@@ -71,7 +71,7 @@ const model: VenueServiceView = {
     { id: "m1", name: "Casa Delgado", active: true },
     { id: "m2", name: "Deli takeaway", active: true },
   ],
-  categories: [{ id: "c1", name: "Cocktails" }],
+  categories: [{ id: "c1", name: { en: "Cocktails" } }],
   stations: [{ id: "s1", name: "Bar" }],
   floorZones: [
     { id: "z1", name: "Dining room" },

@@ -18,8 +18,8 @@ import type {
 afterEach(cleanupWidgets);
 
 const CATEGORIES: CategorySummary[] = [
-  { id: "cat-bebidas", name: "Bebidas" },
-  { id: "cat-postres", name: "Postres" },
+  { id: "cat-bebidas", name: { es: "Bebidas" }, image: null, parentId: null },
+  { id: "cat-postres", name: { es: "Postres" }, image: null, parentId: null },
 ];
 
 const COURSES: Course[] = [
@@ -341,6 +341,8 @@ describe("product-form", () => {
     id: "prod-1",
     catalogueId: "cat-1",
     categoryId: "cat-postres",
+    categoryIds: ["cat-postres"],
+    primaryCategoryId: "cat-postres",
     descriptions: { es: "Té verde" },
     pricingUnit: "weight",
     unitPrice: "1.20",
@@ -440,6 +442,8 @@ describe("product-form", () => {
       id: "11111111-1111-1111-1111-111111111111",
       catalogueId: "c",
       categoryId: null,
+      categoryIds: [],
+      primaryCategoryId: null,
       descriptions: { es: "bocadillo" },
       pricingUnit: "each" as const,
       unitPrice: "3.00",

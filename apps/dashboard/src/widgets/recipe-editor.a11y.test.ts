@@ -34,6 +34,8 @@ const PRODUCT: Product = {
   id: "prod-1",
   catalogueId: "cat-1",
   categoryId: null,
+  categoryIds: [],
+  primaryCategoryId: null,
   descriptions: { es: "Bizcocho" },
   pricingUnit: "each",
   unitPrice: "3.50",

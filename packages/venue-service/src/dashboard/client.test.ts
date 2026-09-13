@@ -56,7 +56,9 @@ describe("VenueServiceApi", () => {
         }),
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "m1", name: "Restaurant", active: true }]))
-      .mockResolvedValueOnce(jsonResponse([{ id: "c1", name: "Cocktails" }]))
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: "c1", name: { en: "Cocktails" }, image: null, parentId: null }]),
+      )
       .mockResolvedValueOnce(jsonResponse([{ id: "s1", name: "Bar", isDefault: false }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "p1", descriptions: { en: "Negroni" } }]))
@@ -76,7 +78,7 @@ describe("VenueServiceApi", () => {
 
     await expect(api.load()).resolves.toMatchObject({
       menus: [{ id: "m1", name: "Restaurant" }],
-      categories: [{ id: "c1", name: "Cocktails" }],
+      categories: [{ id: "c1", name: { en: "Cocktails" }, image: null, parentId: null }],
       stations: [{ id: "s1", name: "Bar" }],
       floorZones: [{ id: "z1", name: "Upstairs" }],
       sections: [

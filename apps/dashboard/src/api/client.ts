@@ -225,7 +225,27 @@ export interface LocationCatalogueSummary extends CatalogueSummary {
 /** One `GET/POST /management-api/categories` row — mirrors catalogue's `Category`. */
 export interface CategorySummary {
   id: string;
-  name: string;
+  name: Record<string, string>;
+  image: string | null;
+  parentId: string | null;
+}
+export interface CategoryInput {
+  name: Record<string, string>;
+  image?: string | null;
+  parentId?: string | null;
+}
+export interface ProductCategories {
+  categoryIds: string[];
+  primaryCategoryId: string | null;
+}
+export interface ProductCategoriesInput {
+  categoryIds: string[];
+  primaryCategoryId?: string | null;
+}
+export interface CategoryProduct extends ProductCategories {
+  id: string;
+  descriptions: Record<string, string>;
+  active: boolean;
 }
 
 /**
@@ -234,7 +254,7 @@ export interface CategorySummary {
  * (VAT-inclusive) `numeric(12,2)` decimal STRING, never a number; `image` is a bare `<sha256>.<ext>`
  * filename served at `/media/<image>`, or null when there is no picture.
  */
-export interface Product {
+export interface Product extends ProductCategories {
   id: string;
   catalogueId: string;
   categoryId: string | null;
@@ -1795,14 +1815,36 @@ export class DashboardApi {
     });
   }
 
-  /** `GET /management-api/categories` — every category (id, name). */
+  /** `GET /management-api/categories` — every category with translations, parent and image. */
   listCategories(): Promise<CategorySummary[]> {
     return this.#request<CategorySummary[]>("/management-api/categories", "GET");
   }
 
-  /** `POST /management-api/categories` — create a category by name; returns the created row (201). */
-  createCategory(name: string): Promise<CategorySummary> {
-    return this.#request<CategorySummary>("/management-api/categories", "POST", { name });
+  /** `POST /management-api/categories` — create a translated category; returns the saved category (201). */
+  createCategory(input: CategoryInput): Promise<CategorySummary> {
+    return this.#request<CategorySummary>("/management-api/categories", "POST", input);
+  }
+
+  getCategory(id: string): Promise<CategorySummary> {
+    return this.#request(`/management-api/categories/${id}`, "GET");
+  }
+  updateCategory(id: string, input: Partial<CategoryInput>): Promise<CategorySummary> {
+    return this.#request(`/management-api/categories/${id}`, "PATCH", input);
+  }
+  deleteCategory(id: string): Promise<void> {
+    return this.#request(`/management-api/categories/${id}`, "DELETE");
+  }
+  listCategoryProducts(id: string): Promise<CategoryProduct[]> {
+    return this.#request(`/management-api/categories/${id}/products`, "GET");
+  }
+  listLibraryProducts(): Promise<Product[]> {
+    return this.#request("/management-api/products", "GET");
+  }
+  getProductCategories(id: string): Promise<ProductCategories> {
+    return this.#request(`/management-api/products/${id}/categories`, "GET");
+  }
+  replaceProductCategories(id: string, input: ProductCategoriesInput): Promise<ProductCategories> {
+    return this.#request(`/management-api/products/${id}/categories`, "PUT", input);
   }
 
   /** `GET /management-api/catalogues/:id/products` — the products of one catalogue. */

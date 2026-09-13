@@ -552,3 +552,22 @@ it("keeps draft translations under their languages when the default changes live
     }),
   );
 });
+
+it("links category-only image usage to its category without an inactive-product label", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image,
+    uses: [{ kind: "category", id: "food", names: { es: "Comida" } }],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector('a[href="/manage/categories?category=food"]'),
+    ).not.toBeNull(),
+  );
+  expect(
+    el.shadowRoot!.querySelector('a[href="/manage/categories?category=food"]')!.textContent,
+  ).toBe("Comida");
+  expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+});

@@ -30,7 +30,9 @@ import {
   createProduct,
   listAvailableProducts,
   priceBasket,
+  replaceProductCategories,
   setMenuItemOptionGroups,
+  updateCategory,
 } from "@waitron/catalogue";
 import * as catalogue from "@waitron/catalogue";
 import {
@@ -134,7 +136,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+      const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
       const cafe = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
@@ -1509,7 +1511,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
-      const drinks = await createCategory(tx, cfg.tenantId, { name: "Copas" });
+      const drinks = await createCategory(tx, cfg.tenantId, { name: { en: "Copas" } });
       await setCategoryStation(tx, cfg, drinks.id, barra.id);
       const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
       const cafe = await makeProduct(tx, cfg, catalogueId, {
@@ -1528,6 +1530,42 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await setCategoryStation(tx, cfg, drinks.id, cocina.id);
       const after = await ticketItemsFor(tx, orderId);
       expect(byProduct(after, cana).stationId).toBe(barra.id);
+    });
+  });
+
+  it("routes a multi-category product by its primary category and freezes that label on its line", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const bar = await createStation(tx, cfg, { name: "Bar" });
+      const drinks = await createCategory(tx, cfg.tenantId, { name: { en: "Drinks" } });
+      const food = await createCategory(tx, cfg.tenantId, { name: { en: "Food" } });
+      await setCategoryStation(tx, cfg, drinks.id, bar.id);
+      await setCategoryStation(tx, cfg, food.id, kitchen.id);
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      await replaceProductCategories(tx, cfg.tenantId, product, {
+        categoryIds: [food.id, drinks.id],
+        primaryCategoryId: drinks.id,
+      });
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(product)]);
+      expect(byProduct(await ticketItemsFor(tx, orderId), product).stationId).toBe(bar.id);
+      const [before] = await tx
+        .select({ category: workingOrderLines.category })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      expect(before).toEqual({ category: "Drinks" });
+
+      await updateCategory(tx, cfg.tenantId, drinks.id, {
+        name: { en: "Cocktails" },
+        parentId: food.id,
+      });
+      const [after] = await tx
+        .select({ category: workingOrderLines.category })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      expect(after).toEqual({ category: "Drinks" });
     });
   });
 

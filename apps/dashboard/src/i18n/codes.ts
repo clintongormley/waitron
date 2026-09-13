@@ -12,6 +12,27 @@ import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-ki
 // English is the source of truth here too, and `apps/*` is exempt from the english-only guard, so the
 // Spanish below is user-facing translation, not schema vocabulary. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "category.not_found": {
+    en: "This category no longer exists. Refresh the list.",
+    es: "Esta categoría ya no existe. Actualiza la lista.",
+  },
+  "category.parent_cycle": {
+    en: "Choose a parent outside this category and its descendants.",
+    es: "Elige una categoría superior fuera de esta categoría y sus descendientes.",
+  },
+  "category.primary_required": {
+    en: "Choose a replacement primary category.",
+    es: "Elige una categoría principal de reemplazo.",
+  },
+  "category.membership_invalid": {
+    en: "Choose distinct categories and a primary from those selected.",
+    es: "Elige categorías distintas y una principal entre las seleccionadas.",
+  },
+  "category.image_not_found": {
+    en: "Choose an image from your image library.",
+    es: "Elige una imagen de tu biblioteca.",
+  },
+
   "printer.probe_busy": {
     en: "Several addresses are being checked. Wait a moment and try again.",
     es: "Se están comprobando varias direcciones. Espera un momento e inténtalo de nuevo.",
@@ -33,8 +54,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Introduce el texto obligatorio en el idioma predeterminado del sitio.",
   },
   "content.default_missing": {
-    en: "Some products, menu sections, modifiers or images need translating before this can become the default language.",
-    es: "Debes traducir algunos productos, secciones del menú, modificadores o imágenes antes de usar este idioma como predeterminado.",
+    en: "Some products, categories, menu sections, modifiers or images need translating before this can become the default language.",
+    es: "Debes traducir algunos productos, categorías, secciones del menú, modificadores o imágenes antes de usar este idioma como predeterminado.",
   },
   "management_session.required": {
     en: "Please log in to continue",

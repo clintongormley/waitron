@@ -95,7 +95,7 @@ const suite = usePgliteDb({
       entCourseId = ent.id;
       priCourseId = pri.id;
       const catalogue = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const category = await createCategory(tx, tenantId, { name: "Comida" });
+      const category = await createCategory(tx, tenantId, { name: { en: "Comida" } });
       const mk = async (description: string): Promise<string> => {
         const p = await createProduct(tx, tenantId, {
           catalogueId: catalogue.id,

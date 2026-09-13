@@ -34,6 +34,7 @@ import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant }
 import type { Database } from "@waitron/db";
 import {
   ALLERGEN_CODES,
+  CATALOGUE_MIGRATIONS,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -172,6 +173,7 @@ async function main(): Promise<void> {
   const db = await createPgliteDb();
   try {
     await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, CATALOGUE_MIGRATIONS);
     const venue = await seedVenue(db);
 
     // Author the catalogue as the application role (not the superuser owner), exactly as the
@@ -180,8 +182,8 @@ async function main(): Promise<void> {
     await withTenant(db, venue.tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, venue.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, venue.tenantId, { name: "Comida" });
-      const postres = await createCategory(tx, venue.tenantId, { name: "Postres" });
+      const comida = await createCategory(tx, venue.tenantId, { name: { en: "Comida" } });
+      const postres = await createCategory(tx, venue.tenantId, { name: { en: "Postres" } });
 
       // 1. `contains` WITH a source — the richest declaration.
       await createProduct(tx, venue.tenantId, {

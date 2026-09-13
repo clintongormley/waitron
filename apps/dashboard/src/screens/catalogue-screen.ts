@@ -359,7 +359,9 @@ export class CatalogueScreen extends LitElement {
     this.#savingCategory = true;
     this.errorKey = null;
     try {
-      await this.api.createCategory(event.detail.name);
+      await this.api.createCategory({
+        name: { [this.contentLanguages?.defaultLanguage ?? "en"]: event.detail.name },
+      });
       this.categories = await this.api.listCategories();
     } catch (error) {
       this.errorKey = codeOf(error);

@@ -21,7 +21,9 @@ import { CatalogueScreen } from "./catalogue-screen.js";
 
 const catalogues: CatalogueSummary[] = [{ id: "cat-a", name: "Comida", active: true, version: 1 }];
 
-const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes" }];
+const categories: CategorySummary[] = [
+  { id: "c1", name: { es: "Entrantes" }, image: null, parentId: null },
+];
 
 const stations: Station[] = [
   {
@@ -72,6 +74,8 @@ const products: Product[] = [
     id: "p1",
     catalogueId: "cat-a",
     categoryId: "c1",
+    categoryIds: ["c1"],
+    primaryCategoryId: "c1",
     descriptions: { es: "Croquetas" },
     pricingUnit: "each",
     unitPrice: "8.50",
@@ -111,7 +115,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listCourses: vi.fn().mockResolvedValue(courses),
     createProduct: vi.fn().mockResolvedValue({ ...products[0], id: "p-new" }),
     updateProduct: vi.fn().mockResolvedValue(undefined),
-    createCategory: vi.fn().mockResolvedValue({ id: "c2", name: "Postres" }),
+    createCategory: vi
+      .fn()
+      .mockResolvedValue({ id: "c2", name: { es: "Postres" }, image: null, parentId: null }),
     createCatalogue: vi
       .fn()
       .mockResolvedValue({ id: "cat-new", name: "Nueva", active: true, version: 1 }),
@@ -378,7 +384,7 @@ describe("catalogue-screen", () => {
     emit(categoryManager(el), "create-category", { name: "Postres" });
     await flush(el);
 
-    expect(api.createCategory).toHaveBeenCalledWith("Postres");
+    expect(api.createCategory).toHaveBeenCalledWith({ name: { es: "Postres" } });
     expect(api.listCategories).toHaveBeenCalledTimes(2); // reloaded
   });
 

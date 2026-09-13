@@ -6,7 +6,7 @@ import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
-import { createCatalogue, createProduct } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS, createCatalogue, createProduct } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -23,8 +23,8 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 
 // This node's origin id — threaded into every recipe write's withTenant (a recipe write UPDATEs the
-// sync-enrolled `products` table). This PGlite suite carries no sync triggers (CORE + IDENTITY
-// migrations only), so it is never read here; any valid uuid serves, kept for parity with production.
+// sync-enrolled `products` table). This PGlite suite carries no sync triggers (core, catalogue and
+// identity migrations only), so it is never read here; any valid uuid serves, kept for parity with production.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 let tenantId: string;
@@ -33,7 +33,7 @@ let staffCookie: string;
 let productId: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     tenantId = await seedTenant(db);

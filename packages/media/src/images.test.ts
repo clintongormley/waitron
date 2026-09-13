@@ -476,3 +476,66 @@ it("maps the bundled PostgreSQL stemmers and keeps unknown dictionary languages 
   );
   expect(norwegian.rows).toEqual([{ same: true }]);
 });
+
+it("protects an image used only by a category and releases it after clearing the reference", async () => {
+  const { createCategory, updateCategory } = await import("@waitron/catalogue");
+  const tenantId = await seedTenant(suite.db);
+  await withTenant(suite.db, tenantId, async (tx) => {
+    const { image } = await uploadImage(
+      tx,
+      tenantId,
+      { bytes: photo, names: { en: "Food" }, altText: { en: "Food on a plate" }, labels: [] },
+      { maxUploadBytes: 100 },
+    );
+    const category = await createCategory(tx, tenantId, {
+      name: { en: "Food" },
+      image: image.filename,
+    });
+    const menu = await tx.execute<{ id: string }>(sql`
+      insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id
+    `);
+    const product = await tx.execute<{ id: string }>(sql`
+      insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class, image)
+      values (${tenantId}, ${menu.rows[0]!.id}, '{"en":"Bread"}'::jsonb, 'each', 2, 'general', ${image.filename})
+      returning id
+    `);
+    const uses = [
+      {
+        kind: "product" as const,
+        id: product.rows[0]!.id,
+        catalogueId: menu.rows[0]!.id,
+        names: { en: "Bread" },
+        active: true,
+      },
+      { kind: "category" as const, id: category.id, names: category.name },
+    ];
+    expect(await listImageUsages(tx, tenantId, image.id)).toEqual(uses);
+    expect((await readImage(tx, tenantId, image.id)).usageCount).toBe(2);
+    expect((await listImages(tx, tenantId, {})).images[0]!.usageCount).toBe(2);
+    expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: false, uses });
+    await updateCategory(tx, tenantId, category.id, { image: null });
+    await tx.execute(
+      sql`update products set image = null where tenant_id = ${tenantId} and id = ${product.rows[0]!.id}`,
+    );
+    expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
+it("rejects another tenant's category image", async () => {
+  const { createCategory } = await import("@waitron/catalogue");
+  const tenantId = await seedTenant(suite.db);
+  const other = await seedTenant(suite.db);
+  const { image } = await withTenant(suite.db, other, (tx) =>
+    uploadImage(
+      tx,
+      other,
+      { bytes: photo, names: { en: "Food" }, altText: { en: "Plate" }, labels: [] },
+      { maxUploadBytes: 100 },
+    ),
+  );
+  await expect(
+    withTenant(suite.db, tenantId, (tx) =>
+      createCategory(tx, tenantId, { name: { en: "Food" }, image: image.filename }),
+    ),
+  ).rejects.toMatchObject({ code: "category.image_not_found" });
+});

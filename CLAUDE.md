@@ -377,6 +377,9 @@ container or browser test** — most of these rules exist because a test passed 
 - **Treat "there is a test" as an unfinished sentence.** Coverage proves a line executed, not that
   anything asserted on the result. Ask which assertion would fail if the behaviour were deleted; "it
   doesn't throw" is not an answer. `pnpm --filter @waitron/ui mutation` checks this systematically.
+- **Rejected writes assert the domain error code.** A database constraint error also satisfies
+  `toBeInstanceOf(Error)`. The duplicate-category mutation escaped that assertion; receipt in
+  [testing-guide.md](docs/developers/testing-guide.md).
 - **`errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`.** Thirteen
   hand-copied per-package versions were deleted; six of them passed with `errors.ts` fully
   unreachable. It reads TEXT, so a `from "./errors.js"` inside a comment fakes an edge.

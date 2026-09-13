@@ -51,6 +51,7 @@ import { IDENTITY_MIGRATIONS, hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../src/modules.js";
 import {
+  CATALOGUE_MIGRATIONS,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -104,11 +105,11 @@ async function main(): Promise<void> {
 
   const db = await createPostgresDb(databaseUrl);
   try {
-    // Self-migrate a blank database, exactly as till-demo does. CORE first (identity's persons FK onto
-    // core's tenants/tills; the fiscal chain reads core's sales), then identity (applyVenue's
-    // seed-admin needs `persons`), then fiscal (registerSif needs `registro_sif`/`cadenas`;
+    // Self-migrate a blank database, exactly as till-demo does. CORE first, then catalogue for the
+    // seeded products, identity (applyVenue's seed-admin needs `persons`), then fiscal (registerSif needs `registro_sif`/`cadenas`;
     // recordSale's chain needs `registros_facturacion`).
     await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, CATALOGUE_MIGRATIONS);
     await runMigrations(db, IDENTITY_MIGRATIONS);
     await runMigrations(db, FISCAL_MIGRATIONS);
 
@@ -186,8 +187,8 @@ async function main(): Promise<void> {
     const available = await withTenant(db, caja1.tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, caja1.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, caja1.tenantId, { name: "Comida" });
-      const bebidas = await createCategory(tx, caja1.tenantId, { name: "Bebidas" });
+      const comida = await createCategory(tx, caja1.tenantId, { name: { es: "Comida" } });
+      const bebidas = await createCategory(tx, caja1.tenantId, { name: { es: "Bebidas" } });
       await createProduct(tx, caja1.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,

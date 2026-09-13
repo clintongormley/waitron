@@ -21,6 +21,7 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../src/modules.js";
 import {
+  CATALOGUE_MIGRATIONS,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -78,15 +79,16 @@ async function main(): Promise<void> {
 
   const db = await createPostgresDb(databaseUrl);
   try {
-    // Self-migrate a blank database, exactly as catalogue-demo does. CORE first (identity's persons
-    // FK onto core's tenants/tills; the fiscal chain reads core's sales), then identity (applyVenue's
-    // seed-admin needs `persons`, and the login route verifies a person's PIN), then fiscal
+    // Self-migrate a blank database, exactly as catalogue-demo does. CORE first, then catalogue for
+    // the seeded products, identity (applyVenue's seed-admin needs `persons`, and the login route
+    // verifies a person's PIN), then fiscal
     // (registerSif needs `registro_sif`/`cadenas`; recordSale's chain needs `registros_facturacion`),
     // then payments (a manual card tender's `recordManualCardPayment` needs the `payments` table) —
     // the same order the production manifest runs them in
     // (`packages/migrations/migrations.manifest.json`: core, identity, …, fiscal, payments). Omitted
     // before this slice because a cash-only walk-up never touched `payments`; a card sale does.
     await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, CATALOGUE_MIGRATIONS);
     await runMigrations(db, IDENTITY_MIGRATIONS);
     await runMigrations(db, FISCAL_MIGRATIONS);
     await runMigrations(db, PAYMENTS_MIGRATIONS);
@@ -155,8 +157,8 @@ async function main(): Promise<void> {
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
-      const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+      const comida = await createCategory(tx, cfg.tenantId, { name: { es: "Comida" } });
+      const bebidas = await createCategory(tx, cfg.tenantId, { name: { es: "Bebidas" } });
       await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,

@@ -107,7 +107,7 @@ describe("venue service routing", () => {
         },
       ]);
 
-      const category = await createCategory(tx, tenantId, { name: "Drinks" });
+      const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -239,7 +239,7 @@ describe("venue service routing", () => {
         },
       ]);
       const menu = await createCatalogue(tx, tenantId, { name: "Drinks" });
-      const category = await createCategory(tx, tenantId, { name: "Cocktails" });
+      const category = await createCategory(tx, tenantId, { name: { en: "Cocktails" } });
       const negroni = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -314,7 +314,7 @@ describe("venue service routing", () => {
         },
       );
       const menu = await createCatalogue(tx, tenantId, { name: "Deli takeaway" });
-      const category = await createCategory(tx, tenantId, { name: "Cold cuts" });
+      const category = await createCategory(tx, tenantId, { name: { en: "Cold cuts" } });
       const ham = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -589,7 +589,7 @@ describe("venue service routing", () => {
         ),
       ).rejects.toMatchObject({ code: "order.service_context_missing" });
 
-      const category = await createCategory(tx, tenantId, { name: "Packaged" });
+      const category = await createCategory(tx, tenantId, { name: { en: "Packaged" } });
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -659,7 +659,7 @@ describe("venue service routing", () => {
         },
       );
       const menu = await createCatalogue(tx, tenantId, { name: "Drinks" });
-      const category = await createCategory(tx, tenantId, { name: "Cocktails" });
+      const category = await createCategory(tx, tenantId, { name: { en: "Cocktails" } });
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,

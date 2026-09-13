@@ -265,7 +265,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
   await withTenant(admin, MIRROR_TENANT_ID, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenant, { name: "Delicatessen" });
-    const drinks = await createCategory(tx, tenant, { name: "Bebidas" });
+    const drinks = await createCategory(tx, tenant, { name: { en: "Bebidas" } });
     await createProduct(tx, tenant, {
       catalogueId: cat.id,
       categoryId: drinks.id,

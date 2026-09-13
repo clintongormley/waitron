@@ -167,7 +167,7 @@ describe("seedDemoRestaurant", () => {
         join categories c on c.tenant_id = r.tenant_id and c.id = r.category_id
         join floor_zones z on z.tenant_id = r.tenant_id and z.id = r.zone_id
         join kitchen_stations s on s.tenant_id = r.tenant_id and s.id = r.station_id
-        where c.name = 'Drinks'
+        where c.name->>'en' = 'Drinks'
         order by z.name`);
       return {
         menus,
