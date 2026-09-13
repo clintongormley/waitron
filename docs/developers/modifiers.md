@@ -53,13 +53,15 @@ the combined catalogue screen, which the Products integration removes. They addr
 and closes the editor after a successful write. A choice-level validation error — the form's own
 check, or a `choices.<index>.<field>` rejection from the server — is shown as one message under the
 choices table naming the choice by its current label, so a rejection never lands on a field the
-manager cannot see. The screen's reads use the existing option-group, item and content-language live
-sources.
+manager cannot see. Every error is also listed in the form's `wt-form-error-summary`, including a
+server refusal that names no field (such as `modifier.in_use`), which appears only there. The
+screen's reads use the existing option-group, item and content-language live sources.
 
 One choice is edited in `dashboard-choice-form` (`apps/dashboard/src/widgets/choice-form.ts`), a
 modal inside the modifier form. It accepts `open`, `busy`, `locales`, `kind: "extras" | "options"`,
-`value: ChoiceDraft | null` and `fieldErrors`, validates its own fields, and emits
-`wt-choice-save` with `{ value: ChoiceDraft }` or `wt-choice-cancel` with `{}`. Nothing reaches the
+`value: ChoiceDraft | null`, validates its own fields against the server's price and quantity
+limits (`packages/catalogue/src/modifier-limits.ts`), lists what is wrong in its own error summary,
+and emits `wt-choice-save` with `{ value: ChoiceDraft }` or `wt-choice-cancel` with `{}`. Nothing reaches the
 server until the modifier itself is saved.
 
 Products can compose the modifier form directly and select the saved definition. The optional choice
