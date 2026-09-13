@@ -260,6 +260,42 @@ describe("Me API over real Postgres (the identity property: the session's person
     expect(row.rows[0]!.requested_by_person_id).toBe(p); // the session's person, not the body's Q
   });
 
+  it("records the passkey offer against the SESSION's person, never the body's", async () => {
+    // Same identity property as the swap above, on the route that retires the sign-in passkey offer.
+    // P is signed in; the body hostilely names Q. The stamp must land on P and never on Q — a stamp on
+    // Q would silently cancel an offer Q has not yet seen. Run as the non-superuser app_user.
+    const venue = await setupVenue();
+    const p = await seedPerson(venue.tenantId, "P");
+    const q = await seedPerson(venue.tenantId, "Q");
+    const app = mountApp(venue.tenantId);
+
+    const anonymous = await send(app, "POST", "/management-api/session/me/passkey-offer", null);
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+
+    const res = await send(
+      app,
+      "POST",
+      "/management-api/session/me/passkey-offer",
+      await cookieFor(venue.tenantId, p),
+      // Hostile: this must be IGNORED — identity comes from the session, not the body.
+      { personId: q },
+    );
+    expect(res.status).toBe(204);
+
+    const rows = await suite.admin.execute<{ id: string; stamped: boolean }>(
+      sql`select id, (passkey_offered_at is not null) as stamped from persons where id in (${p},${q})`,
+    );
+    expect(rows.rows).toEqual(
+      expect.arrayContaining([
+        { id: p, stamped: true }, // the session's person
+        { id: q, stamped: false }, // the body's person, untouched
+      ]),
+    );
+  });
+
   it("whoami and the reads scope to the session's person — P sees only P's shifts, never Q's", async () => {
     const venue = await setupVenue();
     const p = await seedPerson(venue.tenantId, "P");

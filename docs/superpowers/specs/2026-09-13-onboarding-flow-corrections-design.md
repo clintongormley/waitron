@@ -70,9 +70,9 @@ Spanish for a Spanish venue. Two separate fixes:
   or by skipping. So it asks exactly once and never nags, and a browser that dies mid-offer gets
   asked again.
 - `POST /management-api/session` returns whether to offer, computed inside the login transaction.
-  A new `POST /management-api/session/me/passkey-offer` records a skip. Someone who signs in with a
-  passkey holds one by definition, so the same condition covers every sign-in path without a special
-  case.
+  A new `POST /management-api/session/me/passkey-offer` records a skip; who it stamps comes from the
+  session, never from the request body. Someone who signs in with a passkey holds one by definition,
+  so that path needs no special case. The Google sign-in does — see Out of scope.
 - Adding a passkey from the profile screen stays available regardless.
 
 ### Languages for receipts and for products
@@ -135,3 +135,10 @@ current head before calling the branch green.
   English.
 - Moving Back and Next into the modal's fixed footer.
 - Driving product languages from the venue's region and chosen languages. Backlog entry added.
+- Offering a passkey after a Google sign-in. The offer rides on the password sign-in's response, and
+  the Google callback finishes with a redirect to the dashboard that the sign-in screen never reads a
+  body from. Google can only be linked from the profile screen while already signed in
+  (`POST /management-api/session/me/google` requires a management session, and `completeGoogleLink`
+  is the only code that ever writes a NON-NULL `persons.google_subject` — every other writer of that
+  column sets it to null), so a genuinely first sign-in is a password one and anyone else can add a
+  passkey from their profile.

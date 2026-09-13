@@ -15,6 +15,7 @@ import {
 import {
   permissionsForRole,
   IDLE_TIMEOUT_MS,
+  markPasskeyOffered,
   resolveManagementSession,
   setPersonLocale,
   readOwnProfile,
@@ -464,6 +465,24 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
         await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Record that the sign-in passkey offer was settled — by adding a passkey or by skipping — so it is
+  // never made again. Identity is the SESSION's person (`resolveManagementSession`'s `personId`,
+  // resolved INSIDE `asStaff`), NEVER a body field: a body naming someone else would cancel an offer
+  // that person has never seen. The body is not read at all, so no body, an empty one and a malformed
+  // one all behave the same. Returns 204 and no body: a write on this surface answers with a body
+  // only when the caller needs something back from it — a newly minted id, a generated code — and
+  // the stamp gives the caller nothing to carry away.
+  app.post("/management-api/session/me/passkey-offer", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      await asStaff(async (tx) => {
+        const { personId } = await resolveManagementSession(tx, sessionId);
+        await markPasskeyOffered(tx, { tenantId: deps.cfg.tenantId, personId });
       });
       return c.body(null, 204);
     }),

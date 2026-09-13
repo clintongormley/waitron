@@ -7,6 +7,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountMeApi } from "./me-api.js";
 
 // Real Postgres, not PGlite: the four passkey routes below all run their DB work through `withTenant` +
 // `asAppUser`, so the credential write and the session lookup are subject to app_user's grants —
@@ -166,6 +167,23 @@ function mountApp(tenantId: string): Hono {
   return app;
 }
 
+/** The same app with the me API mounted beside the management API, as `boot.ts` mounts them: the
+ * passkey offer is answered by sign-in on one surface and recorded as resolved on the other. */
+function mountAppWithMe(tenantId: string): Hono {
+  const app = mountApp(tenantId);
+  mountMeApi(
+    app,
+    {
+      db: suite.admin,
+      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      venueLocale: LOCALE,
+      modules: [],
+    },
+    noopLog,
+  );
+  return app;
+}
+
 it("refuses another tenant's session on both passkey registration endpoints", async () => {
   const first = await setupTenant();
   const second = await setupTenant();
@@ -187,6 +205,16 @@ it("refuses another tenant's session on both passkey registration endpoints", as
     });
   }
 });
+
+/** Sign in over HTTP as the seeded manager and hand back the whole response, so a caller can read the
+ * body as well as the cookie — `login` below returns only the cookie. */
+async function signIn(app: Hono, email = MANAGER_EMAIL): Promise<Response> {
+  return app.request("/management-api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password: PASSWORD }),
+  });
+}
 
 /** Log in over HTTP by `email` with `password`, returning just the `waitron_management_session=…`
  * cookie pair (the part a browser echoes back). Asserts the 200 so a caller never carries a stale or
@@ -506,6 +534,57 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
 
     expect(mockVerifyReg).not.toHaveBeenCalled();
     expect(await readCredentials(tenantId)).toHaveLength(0);
+  });
+});
+
+/**
+ * The sign-in passkey offer. Real Postgres because the whole point is what the sign-in route reads
+ * back out of the database as `app_user` — a PGlite superuser connection would prove nothing about
+ * the app role, and the offer's two reads run on it.
+ *
+ * The offer's story spans BOTH dashboard surfaces: sign-in answers it (management API) and the route
+ * that records it as resolved lives on the me API, so the round-trip test mounts both on one app,
+ * exactly as `boot.ts` does.
+ */
+describe("the sign-in passkey offer", () => {
+  it("tells a first-time signer-in to offer a passkey", async () => {
+    const { tenantId } = await setupTenant();
+    const response = await signIn(mountApp(tenantId));
+    expect(response.status).toBe(200);
+    expect((await response.json()) as { offerPasskey: boolean }).toMatchObject({
+      offerPasskey: true,
+    });
+  });
+
+  it("does not offer a passkey to someone who already holds one", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    await registerPasskey(app, await login(app, MANAGER_EMAIL), "cred-already-held");
+    expect(await readCredentials(tenantId)).toHaveLength(1);
+
+    const response = await signIn(app);
+    expect(response.status).toBe(200);
+    expect((await response.json()) as { offerPasskey: boolean }).toMatchObject({
+      offerPasskey: false,
+    });
+  });
+
+  it("does not offer again once the offer was resolved", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountAppWithMe(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const resolved = await app.request("/management-api/session/me/passkey-offer", {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(resolved.status).toBe(204);
+
+    const again = await signIn(app);
+    expect(again.status).toBe(200);
+    expect((await again.json()) as { offerPasskey: boolean }).toMatchObject({
+      offerPasskey: false,
+    });
   });
 });
 
