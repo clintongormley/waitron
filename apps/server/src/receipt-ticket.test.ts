@@ -561,7 +561,7 @@ it("prints an unpaid invoice without claiming a cash or card payment", () => {
     expect(text).not.toContain(label);
 });
 
-it("prints saved nonprice modifier labels including explicit false on original and duplicate receipts", () => {
+it("prints saved nonprice modifier labels on original and duplicate receipts", () => {
   const result: TillSaleResult = {
     ...FILED_SALE,
     lines: [
@@ -598,5 +598,39 @@ it("prints saved nonprice modifier labels including explicit false on original a
     expect(paper).toContain("Mensaje: Happy birthday");
     expect(paper).toContain("Milk: Oat");
     expect(paper).toContain("Hielo");
+  }
+});
+
+it("leaves a saved negative yes-no answer off the original and the duplicate", () => {
+  const result: TillSaleResult = {
+    ...FILED_SALE,
+    lines: [
+      {
+        ...FILED_SALE.lines[0]!,
+        modifierSnapshots: [
+          {
+            modifierId: "message",
+            name: { "es-ES": "Mensaje" },
+            type: "text",
+            text: "Happy birthday",
+          },
+          {
+            modifierId: "ice",
+            name: { "es-ES": "Hielo" },
+            type: "yes-no",
+            value: false,
+          },
+        ],
+      },
+    ],
+  };
+  for (const duplicate of [false, true]) {
+    const paper = decodeTicket(
+      formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", duplicate }),
+    );
+    // The text modifier on the same line is the control: snapshot labels do print on this receipt,
+    // so the missing "Hielo" is the negative answer being left out, not a receipt printing nothing.
+    expect(paper).toContain("Mensaje: Happy birthday");
+    expect(paper).not.toContain("Hielo");
   }
 });

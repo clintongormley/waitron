@@ -2356,7 +2356,7 @@ it("files all four modifier modes through cash checkout and reprints their saved
   );
   const selections: ModifierSelection[] = [
     { modifierId: note.id, type: "text", text: "sin sal" },
-    { modifierId: answer.id, type: "yes-no", value: false },
+    { modifierId: answer.id, type: "yes-no", value: true },
     { modifierId: option.id, type: "options", choiceId: optionId },
     { modifierId: extra.id, type: "extras", choices: [{ choiceId: extraId, quantity: 2 }] },
   ];
@@ -2366,7 +2366,7 @@ it("files all four modifier modes through cash checkout and reprints their saved
       modifierId: answer.id,
       name: { es: "Cubiertos" },
       type: "yes-no",
-      value: false,
+      value: true,
     },
     {
       modifierId: option.id,
@@ -2529,9 +2529,9 @@ it("files all four modifier modes through cash checkout and reprints their saved
   expect(printed.rows).toHaveLength(1);
   const text = decodeTicket(new Uint8Array(printed.rows[0]!.payload));
   expect(text).toContain("sin sal");
-  // The yes/no answer here is "no"; a negative yes/no no longer prints a line, so snapshot
-  // immutability on the reprint is proven by the options choice below (original "Frío" prints,
-  // the edited "Nuevo frío" does not).
+  // The yes/no answer here is "yes", so the modifier's saved name prints and proves snapshot
+  // immutability directly: the original "Cubiertos" appears and the renamed "Nuevo nombre" does not.
+  expect(text).toContain("Cubiertos");
   expect(text).toContain("Frío");
   expect(text).not.toContain("Nuevo nombre");
   expect(text).not.toContain("Nuevo frío");

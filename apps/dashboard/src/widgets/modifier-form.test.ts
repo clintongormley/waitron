@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ModifierForm } from "./modifier-form.js";
 import type { Modifier } from "../api/client.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 const base = { id: "m", name: { es: "Extras", fr: "Suppléments" }, available: true };
@@ -67,6 +68,10 @@ async function click(el: ModifierForm, id: string) {
 }
 function choiceById(detail: { value: { choices: { id: string }[] } }, id: string) {
   return detail.value.choices.find((choice) => choice.id === id) as Record<string, unknown>;
+}
+/** The message under the choices table — not the form-wide alert above the fields. */
+function choicesError(el: ModifierForm) {
+  return el.shadowRoot!.querySelector(".choices-wrap + p.error")?.textContent ?? "";
 }
 it("shows required name feedback and emits the shared event with translations", async () => {
   const el = await mount();
@@ -143,6 +148,11 @@ it("opens the choice modal to add and to edit, and removes a row", async () => {
   const modal = el.shadowRoot!.querySelector("dashboard-choice-form")!;
   expect(modal.getAttribute("open")).not.toBeNull();
   expect((modal as unknown as { value: unknown }).value).toBeNull();
+  // Both row-menu buttons are start-aligned, as every wt-row-actions popover requires.
+  for (const id of ["edit-a", "remove-a"])
+    expect(el.shadowRoot!.querySelector(`[data-test="${id}"]`)!.getAttribute("align")).toBe(
+      "start",
+    );
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-a"]')!.click();
   await el.updateComplete;
   expect(modal.getAttribute("open")).not.toBeNull();
@@ -217,13 +227,60 @@ it("rejects more preselected extras than the total quantity cap allows", async (
   await change(el, "maxTotalQuantity", "1");
   await click(el, "save");
   expect(submit).not.toHaveBeenCalled();
+  // The cap itself is a valid number, so the problem is reported where the manager can act on it —
+  // under the choices table, not as a bad value on the cap field.
+  expect(choicesError(el)).toContain(t("modifiers.too_many_preselected"));
+  expect(
+    (el.shadowRoot!.querySelector('[name="maxTotalQuantity"]') as unknown as { invalid: boolean })
+      .invalid,
+  ).toBe(false);
+  await change(el, "maxTotalQuantity", "2");
+  await click(el, "save");
+  expect(submit).toHaveBeenCalledTimes(1);
+});
+it("reports a malformed total quantity cap on the cap field", async () => {
+  const el = await mount(extra);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await change(el, "maxTotalQuantity", "two");
+  await click(el, "save");
+  expect(submit).not.toHaveBeenCalled();
   expect(
     (el.shadowRoot!.querySelector('[name="maxTotalQuantity"]') as unknown as { invalid: boolean })
       .invalid,
   ).toBe(true);
-  await change(el, "maxTotalQuantity", "2");
+  expect(choicesError(el)).toBe("");
+});
+it("blocks a save when a choice has no name in the default content language", async () => {
+  const el = await mount({
+    ...extra,
+    choices: [extra.choices[0]!, { ...extra.choices[1]!, name: {} }],
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
   await click(el, "save");
-  expect(submit).toHaveBeenCalledTimes(1);
+  expect(submit).not.toHaveBeenCalled();
+  // The nameless choice has no label of its own, so the message falls back to the generic word.
+  expect(choicesError(el)).toContain(t("modifiers.choice"));
+  expect(choicesError(el)).toContain(t("modifiers.choice_problem"));
+});
+it("blocks a save when an extras choice has a malformed price", async () => {
+  const el = await mount({
+    ...extra,
+    choices: [extra.choices[0]!, { ...extra.choices[1]!, priceDelta: "1.2.3" }],
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await click(el, "save");
+  expect(submit).not.toHaveBeenCalled();
+  expect(choicesError(el)).toContain("Bacon");
+});
+it("names the choice a server-rejected choice field belongs to", async () => {
+  const el = await mount(extra);
+  el.fieldErrors = { "choices.1.priceDelta": "Rejected" };
+  await el.updateComplete;
+  expect(choicesError(el)).toContain("Bacon");
+  expect(choicesError(el)).toContain(t("modifiers.choice_problem"));
 });
 it("blocks an available required empty choice set", async () => {
   const el = await mount({ ...extra, required: true, choices: [extra.choices[0]!] });
@@ -344,7 +401,16 @@ it("ignores a second finger while a drag is live", async () => {
   );
   await el.updateComplete;
   expect(choiceOrder(el)).toEqual(["b", "a"]);
+  // pointercancel ends the gesture the same way pointerup does: a later move reorders nothing.
+  // boxB.top is where the OTHER row sits once the two have swapped, so a still-live gesture would
+  // move the row back and fail the assertion below; centreOfB would land on the dragged row itself
+  // and pass either way.
   document.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerId: 1 }));
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientY: boxB.top }),
+  );
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["b", "a"]);
 });
 it("retains a draft across busy/server errors and emits cancel once", async () => {
   const el = await mount();

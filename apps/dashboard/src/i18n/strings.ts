@@ -78,6 +78,8 @@ export const en = {
   "modifiers.price_invalid": "Enter a nonnegative price with up to two decimal places.",
   "modifiers.quantity_invalid": "Enter a whole number within the allowed limit.",
   "modifiers.choices_required": "Add an available choice or make this modifier unavailable.",
+  "modifiers.choice_problem": "There is a problem with this choice:",
+  "modifiers.too_many_preselected": "Preselect fewer choices, or raise the total maximum.",
   "modifiers.search": "Search modifiers",
   "modifiers.loading": "Loading modifiers…",
   "modifiers.empty": "No modifiers to show.",
@@ -1239,6 +1241,8 @@ export const es: Record<StringKey, string> = {
   "modifiers.quantity_invalid": "Introduce un número entero dentro del límite permitido.",
   "modifiers.choices_required":
     "Añade una opción disponible o marca este modificador como no disponible.",
+  "modifiers.choice_problem": "Hay un problema con esta opción:",
+  "modifiers.too_many_preselected": "Preselecciona menos opciones o aumenta el máximo total.",
   "modifiers.search": "Buscar modificadores",
   "modifiers.loading": "Cargando modificadores…",
   "modifiers.empty": "No hay modificadores que mostrar.",

@@ -1,7 +1,13 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, selectStyles, currentContentLanguages, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  selectStyles,
+  disabledStyles,
+  currentContentLanguages,
+  submitOnEnter,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -87,8 +93,10 @@ export class ModifierForm extends LitElement {
            gesture and scrolls the modal instead. Not a themed value, so no token. */
         touch-action: none;
       }
+      /* The handle is a bespoke button, so it needs the shared disabled treatment the primitives in
+         the same row apply themselves. */
       .handle:disabled {
-        cursor: default;
+        ${disabledStyles}
       }
       .visually-hidden {
         position: absolute;
@@ -126,12 +134,17 @@ export class ModifierForm extends LitElement {
   #refocus: string | null = null;
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("fieldErrors")) {
-      this.serverErrors = Object.fromEntries(
-        Object.entries(this.fieldErrors).map(([key, message]) => [
-          key.replace(/^name\./, "name-"),
-          message,
-        ]),
-      );
+      const errors: Record<string, string> = {};
+      for (const [key, message] of Object.entries(this.fieldErrors)) {
+        // The server names a bad choice field by the choice's POSITION in the array it was sent, so
+        // turn that position into the choice's own label; nothing shows a key the table cannot
+        // place, and the array may have changed shape since the request went out.
+        const position = /^choices\.(\d+)\./.exec(key)?.[1];
+        const choice = position === undefined ? undefined : this.choices[Number(position)];
+        if (choice === undefined) errors[key.replace(/^name\./, "name-")] = message;
+        else errors.choices ??= this.#choiceProblem(choice);
+      }
+      this.serverErrors = errors;
     }
     if (!(changed.has("open") && this.open) && !changed.has("value")) return;
     const value = this.value;
@@ -158,6 +171,11 @@ export class ModifierForm extends LitElement {
   }
   #error(key: string): string {
     return this.errors[key] ?? this.serverErrors[key] ?? "";
+  }
+  /** A message under the choices table naming the choice it is about, as its row labels do. */
+  #choiceProblem(choice: FormChoice): string {
+    const language = currentContentLanguages().defaultLanguage;
+    return `${t("modifiers.choice_problem")} ${choice.name[language] || t("modifiers.choice")}`;
   }
   #changeChoice(id: string, patch: Partial<FormChoice>): void {
     this.choices = this.choices.map((choice) =>
@@ -296,14 +314,39 @@ export class ModifierForm extends LitElement {
       !this.choices.some((choice) => choice.available)
     )
       errors.choices = t("modifiers.choices_required");
+    // Every choice is checked, not just one the modal happens to have open: the modal validates what
+    // it saves, but a choice can also reach the table already broken — from an earlier save, or from
+    // a field this form edits inline.
+    if (!errors.choices) {
+      const extras = this.type === "extras";
+      const broken = this.choices.find((choice) => {
+        if (!choice.name[language]?.trim()) return true;
+        if (!extras) return false;
+        // The defaults mirror what #save submits for an absent value, so this checks the number the
+        // server will actually receive.
+        const quantity = choice.maxQuantity ?? 1;
+        return (
+          !/^\d+(?:\.\d{1,2})?$/.test(choice.priceDelta ?? "0.00") ||
+          !Number.isSafeInteger(quantity) ||
+          quantity < 1
+        );
+      });
+      if (broken !== undefined) errors.choices = this.#choiceProblem(broken);
+    }
     if (this.type === "extras" && this.cap !== "") {
       if (
         !/^\d+$/.test(this.cap) ||
         !Number.isSafeInteger(Number(this.cap)) ||
-        Number(this.cap) < 1 ||
-        this.choices.filter((choice) => choice.preselected).length > Number(this.cap)
+        Number(this.cap) < 1
       )
         errors.maxTotalQuantity = t("modifiers.quantity_invalid");
+      // A well-formed cap that the preselections exceed is not a bad cap: say which side to change,
+      // beside the choices that are the problem.
+      else if (
+        !errors.choices &&
+        this.choices.filter((choice) => choice.preselected).length > Number(this.cap)
+      )
+        errors.choices = t("modifiers.too_many_preselected");
     }
     this.errors = errors;
     if (Object.keys(errors).length) return;
@@ -467,12 +510,14 @@ export class ModifierForm extends LitElement {
       <td>
         <wt-row-actions label=${`${t("modifiers.edit_choice")}: ${label}`}
           ><wt-button
+            align="start"
             variant="secondary"
             data-test=${`edit-${choice.id}`}
             .disabled=${this.busy}
             @click=${() => this.#openChoice(choice)}
             >${t("action.edit")}</wt-button
           ><wt-button
+            align="start"
             variant="danger"
             data-test=${`remove-${choice.id}`}
             .disabled=${this.busy}
