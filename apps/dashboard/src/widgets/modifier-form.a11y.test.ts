@@ -7,7 +7,7 @@ afterEach(cleanupWidgets);
 const common = { id: "m", name: { es: "Modificador" }, available: true };
 const values: Modifier[] = [
   { ...common, type: "text" },
-  { ...common, type: "yes-no", yesLabel: { es: "Sí" }, noLabel: { es: "No" }, defaultValue: false },
+  { ...common, type: "yes-no", defaultValue: false },
   {
     ...common,
     type: "options",
@@ -26,7 +26,7 @@ const values: Modifier[] = [
         available: true,
         priceDelta: "1.00",
         maxQuantity: 1,
-        defaultQuantity: 0,
+        preselected: false,
         addAllergens: { milk: { presence: "contains" } },
         dietaryEffect: { invalidates: ["vegetarian"] },
       },
@@ -56,7 +56,7 @@ describe.each(["light", "dark"] as const)("modifier form (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 });
-it("focuses the modal, submits Enter and cancels Escape", async () => {
+it("submits on Enter and cancels on Escape from a focused field", async () => {
   const { el } = await mountWidget<ModifierForm>("dashboard-modifier-form", {
     open: true,
     locales: ["es"],

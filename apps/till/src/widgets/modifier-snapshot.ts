@@ -8,10 +8,10 @@ export function modifierSnapshotLabels(
 ): string[] {
   return snapshots.flatMap((snapshot) => {
     if (snapshot.type === "extras") return [];
-    const value =
-      snapshot.type === "text"
-        ? snapshot.text
-        : resolve(snapshot.type === "options" ? snapshot.choiceName : snapshot.label, "");
+    // A yes/no is an on/off switch labelled with the modifier name: a yes shows the name alone, a
+    // no shows nothing (as the receipt and kitchen ticket print it).
+    if (snapshot.type === "yes-no") return snapshot.value ? [resolve(snapshot.name, "")] : [];
+    const value = snapshot.type === "text" ? snapshot.text : resolve(snapshot.choiceName, "");
     return [`${resolve(snapshot.name, "")}: ${value}`];
   });
 }

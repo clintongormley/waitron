@@ -126,8 +126,8 @@ describe("seedOptions", () => {
       type: "extras",
       maxTotalQuantity: 3,
       choices: [
-        expect.objectContaining({ maxQuantity: 2, defaultQuantity: 1, available: true }),
-        expect.objectContaining({ maxQuantity: 1, defaultQuantity: 0, available: true }),
+        expect.objectContaining({ maxQuantity: 2, preselected: true, available: true }),
+        expect.objectContaining({ maxQuantity: 1, preselected: false, available: true }),
         expect.objectContaining({ available: false }),
       ],
     });

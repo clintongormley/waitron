@@ -1,35 +1,42 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, selectStyles, currentContentLanguages, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  selectStyles,
+  disabledStyles,
+  currentContentLanguages,
+  submitOnEnter,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import {
-  DIETARY_LABELS,
-  type Modifier,
-  type ModifierInput,
-  type ModifierEffects,
-  type ModifierExtraChoice,
-  type VatClass,
-} from "../api/client.js";
-import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-icon.js";
+import "./choice-form.js";
+import type { ChoiceDraft } from "./choice-form.js";
+import { reorder } from "./reorder.js";
+import { type Modifier, type ModifierInput, type ModifierExtraChoice } from "../api/client.js";
+import { isModifierPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
+import {
+  isModifierQuantity,
+  nameFields,
+  nonBlankNames,
+  switchField,
+  textField,
+  type FieldContext,
+} from "./form-fields.js";
 
-type ChoiceDraft = ModifierEffects & {
-  id: string;
-  name: Record<string, string>;
-  available: boolean;
-  priceDelta: string;
-  maxQuantity: string;
-  defaultQuantity: string;
-  vatClass?: VatClass | null;
-};
+/** A choice as the modifier form holds it while editing: the modal's `ChoiceDraft` (name,
+ * availability, and — for an extra — price, quantity, tax and effects) plus `preselected`, which
+ * the table owns because it is edited inline, not in the modal. For an options choice `preselected`
+ * is unused; the single options default is tracked separately as `defaultChoiceId`. */
+type FormChoice = ChoiceDraft & { preselected: boolean };
 const TYPES = ["text", "extras", "options", "yes-no"] as const;
-const clean = (value: Record<string, string>) =>
-  Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 
 @customElement("dashboard-modifier-form")
 export class ModifierForm extends LitElement {
@@ -40,24 +47,15 @@ export class ModifierForm extends LitElement {
       :host {
         display: block;
       }
-      .fields,
-      fieldset,
-      .choices {
+      .fields {
         display: grid;
         gap: var(--wt-space-3);
-      }
-      fieldset {
-        margin: var(--wt-space-3) 0;
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
       }
       label {
         display: grid;
         gap: var(--wt-space-2);
       }
-      .actions,
-      .selected {
+      .choice-actions {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -66,9 +64,58 @@ export class ModifierForm extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      summary {
-        cursor: pointer;
-        padding-block: var(--wt-space-3);
+      /* The table is the one element allowed to be wider than the modal; its own scroller keeps the
+         dialog from scrolling sideways at phone width. */
+      .choices-wrap {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: var(--wt-space-2) var(--wt-space-1);
+        text-align: start;
+        vertical-align: middle;
+        border-bottom: 1px solid var(--wt-color-border);
+      }
+      /* The name is the widest cell; let it wrap and cap it so the switch, default control and menu
+         stay on screen at phone width instead of pushing the row into a horizontal scroll. */
+      td:nth-child(2) {
+        max-width: 140px;
+      }
+      .handle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        border-radius: var(--wt-radius-md);
+        background: transparent;
+        color: var(--wt-color-text);
+        cursor: grab;
+        /* A touch that starts on the handle drags the row; without this the browser claims the
+           gesture and scrolls the modal instead. Not a themed value, so no token. */
+        touch-action: none;
+      }
+      /* The handle is a bespoke button, so it needs the shared disabled treatment the primitives in
+         the same row apply themselves. */
+      .handle:disabled {
+        ${disabledStyles}
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
     `,
   ];
@@ -84,32 +131,31 @@ export class ModifierForm extends LitElement {
   @state() private available = true;
   @state() private required = false;
   @state() private cap = "";
-  @state() private choices: ChoiceDraft[] = [];
+  @state() private choices: FormChoice[] = [];
   @state() private defaultChoiceId: string | null = null;
-  @state() private yesLabel: Record<string, string> = {};
-  @state() private noLabel: Record<string, string> = {};
   @state() private defaultValue = false;
+  @state() private choiceOpen = false;
+  @state() private editingChoice: FormChoice | null = null;
+  /** The live pointer drag: the choice being dragged and the pointer that owns the gesture. */
+  #drag: { id: string; pointerId: number } | null = null;
+  /** Each row's choice id and vertical bounds, measured from the top of the table body so scrolling
+   * the modal does not move them. Valid until the next render; null means measure again. */
+  #rowBounds: { id: string; top: number; bottom: number }[] | null = null;
+  /** Set by a keyboard move so the next update can return focus to the handle that moved. */
+  #refocus: string | null = null;
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("fieldErrors")) {
-      this.serverErrors = Object.fromEntries(
-        Object.entries(this.fieldErrors).map(([key, message]) => {
-          const match = /^choices\.(\d+)\.(.+)$/.exec(key);
-          if (!match) return [key.replace(/^(name|yesLabel|noLabel)\./, "$1-"), message];
-          const choice =
-            this.choices[Number(match[1])] ??
-            (this.value && "choices" in this.value
-              ? this.value.choices[Number(match[1])]
-              : undefined);
-          if (!choice) return ["_form", message];
-          const field = match[2]!;
-          const mapped = field.startsWith("name.")
-            ? `name-${choice.id}-${field.slice(5)}`
-            : field === "id"
-              ? `choice-${choice.id}`
-              : `${field}-${choice.id}`;
-          return [mapped, message];
-        }),
-      );
+      const errors: Record<string, string> = {};
+      for (const [key, message] of Object.entries(this.fieldErrors)) {
+        // The server names a bad choice field by the choice's POSITION in the array it was sent, so
+        // turn that position into the choice's own label; nothing shows a key the table cannot
+        // place, and the array may have changed shape since the request went out.
+        const position = /^choices\.(\d+)\./.exec(key)?.[1];
+        const choice = position === undefined ? undefined : this.choices[Number(position)];
+        if (choice === undefined) errors[key.replace(/^name\./, "name-")] = message;
+        else errors.choices ??= this.#choiceProblem(choice);
+      }
+      this.serverErrors = errors;
     }
     if (!(changed.has("open") && this.open) && !changed.has("value")) return;
     const value = this.value;
@@ -125,30 +171,34 @@ export class ModifierForm extends LitElement {
       value && (value.type === "extras" || value.type === "options")
         ? value.choices.map((choice) => ({
             ...structuredClone(choice),
-            priceDelta: "priceDelta" in choice ? choice.priceDelta : "0.00",
-            maxQuantity: "maxQuantity" in choice ? String(choice.maxQuantity) : "1",
-            defaultQuantity: "defaultQuantity" in choice ? String(choice.defaultQuantity) : "0",
+            preselected: "preselected" in choice ? choice.preselected : false,
           }))
         : [];
     this.defaultChoiceId = value?.type === "options" ? value.defaultChoiceId : null;
-    this.yesLabel = value?.type === "yes-no" ? { ...value.yesLabel } : {};
-    this.noLabel = value?.type === "yes-no" ? { ...value.noLabel } : {};
     this.defaultValue = value?.type === "yes-no" ? value.defaultValue : false;
+    this.choiceOpen = false;
+    this.editingChoice = null;
     this.errors = {};
   }
   #error(key: string): string {
     return this.errors[key] ?? this.serverErrors[key] ?? "";
   }
-  #changeChoice(id: string, patch: Partial<ChoiceDraft>): void {
+  /** A message under the choices table naming the choice it is about, as its row labels do. */
+  #choiceProblem(choice: FormChoice): string {
+    const language = currentContentLanguages().defaultLanguage;
+    return `${t("modifiers.choice_problem")} ${choice.name[language] || t("modifiers.choice")}`;
+  }
+  /** An unavailable choice is neither preselected nor the single default, because the till reads
+   * both. A row edit and a modal save pass through here. */
+  #clearSelectionIfUnavailable(choice: FormChoice): FormChoice {
+    if (choice.available) return choice;
+    if (this.defaultChoiceId === choice.id) this.defaultChoiceId = null;
+    return { ...choice, preselected: false };
+  }
+  #changeChoice(id: string, patch: Partial<FormChoice>): void {
     this.choices = this.choices.map((choice) =>
-      choice.id === id ? { ...choice, ...patch } : choice,
+      choice.id === id ? this.#clearSelectionIfUnavailable({ ...choice, ...patch }) : choice,
     );
-    if (patch.available === false) {
-      this.choices = this.choices.map((choice) =>
-        choice.id === id ? { ...choice, defaultQuantity: "0" } : choice,
-      );
-      if (this.defaultChoiceId === id) this.defaultChoiceId = null;
-    }
   }
   #switchType(type: ModifierInput["type"]): void {
     this.type = type;
@@ -156,10 +206,114 @@ export class ModifierForm extends LitElement {
     this.required = false;
     this.cap = "";
     this.defaultChoiceId = null;
-    this.yesLabel = {};
-    this.noLabel = {};
     this.defaultValue = false;
+    this.choiceOpen = false;
+    this.editingChoice = null;
     this.errors = {};
+  }
+  #openChoice(choice: FormChoice | null): void {
+    this.editingChoice = choice;
+    this.choiceOpen = true;
+  }
+  #choiceSaved(event: CustomEvent<{ value: ChoiceDraft }>): void {
+    event.stopPropagation();
+    const value = event.detail.value;
+    const existing = this.choices.find((choice) => choice.id === value.id);
+    const merged = this.#clearSelectionIfUnavailable({
+      ...value,
+      preselected: existing?.preselected ?? false,
+    });
+    this.choices = existing
+      ? this.choices.map((choice) => (choice.id === value.id ? merged : choice))
+      : [...this.choices, merged];
+    this.choiceOpen = false;
+    this.editingChoice = null;
+  }
+  #choiceCancelled(event: Event): void {
+    event.stopPropagation();
+    this.choiceOpen = false;
+    this.editingChoice = null;
+  }
+  #removeChoice(id: string): void {
+    this.choices = this.choices.filter((choice) => choice.id !== id);
+    if (this.defaultChoiceId === id) this.defaultChoiceId = null;
+  }
+  #indexOfChoice(id: string): number {
+    return this.choices.findIndex((choice) => choice.id === id);
+  }
+  /** The choices array order IS the saved order, so a move rewrites the array rather than a rank. */
+  #moveChoice(id: string, to: number): void {
+    const from = this.#indexOfChoice(id);
+    if (from < 0) return;
+    this.choices = reorder(this.choices, from, to);
+  }
+  #reorderKey(event: KeyboardEvent, id: string): void {
+    const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+    if (delta === 0 || this.busy) return;
+    // Without this the arrow scrolls the modal, carrying the row out from under the handle.
+    event.preventDefault();
+    this.#moveChoice(id, this.#indexOfChoice(id) + delta);
+    // The move re-inserts the handle's DOM node, which drops focus; restore it after the update so
+    // repeated presses keep moving the same choice.
+    this.#refocus = id;
+  }
+  #startDrag(event: PointerEvent, id: string): void {
+    if (this.busy || this.#drag !== null) return;
+    // Keep the press from selecting the row's text or starting the browser's own drag.
+    event.preventDefault();
+    this.#drag = { id, pointerId: event.pointerId };
+    document.addEventListener("pointermove", this.#onPointerMove);
+    document.addEventListener("pointerup", this.#onPointerEnd);
+    document.addEventListener("pointercancel", this.#onPointerEnd);
+  }
+  readonly #onPointerMove = (event: PointerEvent): void => {
+    const drag = this.#drag;
+    // Ignore a stray second pointer: only the one that started the gesture moves the row.
+    if (drag === null || event.pointerId !== drag.pointerId) return;
+    const over = this.#choiceAt(event.clientY);
+    if (over === null || over === drag.id) return;
+    this.#moveChoice(drag.id, this.#indexOfChoice(over));
+  };
+  /** Ends the gesture. A cancelled pointer (the OS interrupting a touch) needs no separate handler:
+   * each crossed row has already been committed to `choices`, so there is nothing to commit here. */
+  readonly #onPointerEnd = (event: PointerEvent): void => {
+    if (this.#drag !== null && event.pointerId !== this.#drag.pointerId) return;
+    this.#endDrag();
+  };
+  #endDrag(): void {
+    this.#drag = null;
+    this.#rowBounds = null;
+    document.removeEventListener("pointermove", this.#onPointerMove);
+    document.removeEventListener("pointerup", this.#onPointerEnd);
+    document.removeEventListener("pointercancel", this.#onPointerEnd);
+  }
+  /** The choice whose row box contains `clientY`, or null when `clientY` is outside every row. */
+  #choiceAt(clientY: number): string | null {
+    const body = this.shadowRoot!.querySelector("tbody");
+    if (body === null) return null;
+    const origin = body.getBoundingClientRect().top;
+    this.#rowBounds ??= [...body.querySelectorAll("tr")].map((row) => {
+      const box = row.getBoundingClientRect();
+      return {
+        id: row.getAttribute("data-choice")!,
+        top: box.top - origin,
+        bottom: box.bottom - origin,
+      };
+    });
+    const y = clientY - origin;
+    return this.#rowBounds.find((row) => y >= row.top && y <= row.bottom)?.id ?? null;
+  }
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#endDrag();
+  }
+  override updated(): void {
+    // A render can move rows (a committed drag step re-inserts them), so the next move re-measures.
+    this.#rowBounds = null;
+    const id = this.#refocus;
+    if (id === null) return;
+    this.#refocus = null;
+    this.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
   }
   #cancel(event: Event): void {
     event.stopPropagation();
@@ -171,61 +325,47 @@ export class ModifierForm extends LitElement {
     if (this.busy) return;
     const errors: Record<string, string> = {};
     const language = currentContentLanguages().defaultLanguage;
-    const name = (value: Record<string, string>, key: string) => {
-      if (!value[language]?.trim()) errors[key] = t("modifiers.name_required");
-    };
-    name(this.name, "name");
-    if (this.type === "yes-no") {
-      name(this.yesLabel, "yesLabel");
-      name(this.noLabel, "noLabel");
-    }
-    if (this.type === "extras" || this.type === "options") {
-      if (
-        this.available &&
-        (this.type === "options" || this.required) &&
-        !this.choices.some((choice) => choice.available)
-      )
-        errors.choices = t("modifiers.choices_required");
-      for (const choice of this.choices) {
-        name(choice.name, `name-${choice.id}`);
-        if (this.type === "extras") {
-          if (!/^\d+(?:\.\d{1,2})?$/.test(choice.priceDelta))
-            errors[`priceDelta-${choice.id}`] = t("modifiers.price_invalid");
-          if (
-            !/^\d+$/.test(choice.maxQuantity) ||
-            !Number.isSafeInteger(Number(choice.maxQuantity)) ||
-            Number(choice.maxQuantity) < 1
-          )
-            errors[`maxQuantity-${choice.id}`] = t("modifiers.quantity_invalid");
-          if (
-            !/^\d+$/.test(choice.defaultQuantity) ||
-            !Number.isSafeInteger(Number(choice.defaultQuantity)) ||
-            Number(choice.defaultQuantity) > Number(choice.maxQuantity) ||
-            (!choice.available && Number(choice.defaultQuantity) > 0)
-          )
-            errors[`defaultQuantity-${choice.id}`] = t("modifiers.quantity_invalid");
-        }
-      }
+    if (!this.name[language]?.trim()) errors.name = t("modifiers.name_required");
+    if (
+      (this.type === "extras" || this.type === "options") &&
+      this.available &&
+      (this.type === "options" || this.required) &&
+      !this.choices.some((choice) => choice.available)
+    )
+      errors.choices = t("modifiers.choices_required");
+    // Every choice is checked, not just one the modal happens to have open: the modal validates what
+    // it saves, but a choice can also reach the table already broken — from an earlier save, or from
+    // a field this form edits inline.
+    if (!errors.choices) {
+      const extras = this.type === "extras";
+      const broken = this.choices.find((choice) => {
+        if (!choice.name[language]?.trim()) return true;
+        if (!extras) return false;
+        // The defaults mirror what #save submits for an absent value, so this checks the number the
+        // server will actually receive.
+        return (
+          !isModifierPrice(choice.priceDelta ?? "0.00") ||
+          !isModifierQuantity(String(choice.maxQuantity ?? 1))
+        );
+      });
+      if (broken !== undefined) errors.choices = this.#choiceProblem(broken);
     }
     if (this.type === "extras" && this.cap !== "") {
-      if (
-        !/^\d+$/.test(this.cap) ||
-        !Number.isSafeInteger(Number(this.cap)) ||
-        Number(this.cap) < 1
-      )
-        errors.maxTotalQuantity = t("modifiers.quantity_invalid");
+      if (!isModifierQuantity(this.cap)) errors.maxTotalQuantity = t("modifiers.quantity_invalid");
+      // A well-formed cap that the preselections exceed is not a bad cap: say which side to change,
+      // beside the choices that are the problem.
       else if (
-        this.choices.reduce((sum, choice) => sum + Number(choice.defaultQuantity), 0) >
-        Number(this.cap)
+        !errors.choices &&
+        this.choices.filter((choice) => choice.preselected).length > Number(this.cap)
       )
-        errors.maxTotalQuantity = t("modifiers.defaults_invalid");
+        errors.choices = t("modifiers.too_many_preselected");
     }
     this.errors = errors;
     if (Object.keys(errors).length) return;
-    const common = { name: clean(this.name), available: this.available };
+    const common = { name: nonBlankNames(this.name), available: this.available };
     const choices = this.choices.map((choice) => ({
       id: choice.id,
-      name: clean(choice.name),
+      name: nonBlankNames(choice.name),
       available: choice.available,
       ...(choice.addAllergens === undefined ? {} : { addAllergens: choice.addAllergens }),
       ...(choice.removeAllergens === undefined ? {} : { removeAllergens: choice.removeAllergens }),
@@ -237,13 +377,7 @@ export class ModifierForm extends LitElement {
         value = { ...common, type: "text" };
         break;
       case "yes-no":
-        value = {
-          ...common,
-          type: "yes-no",
-          yesLabel: clean(this.yesLabel),
-          noLabel: clean(this.noLabel),
-          defaultValue: this.defaultValue,
-        };
+        value = { ...common, type: "yes-no", defaultValue: this.defaultValue };
         break;
       case "options":
         value = { ...common, type: "options", choices, defaultChoiceId: this.defaultChoiceId };
@@ -256,9 +390,9 @@ export class ModifierForm extends LitElement {
           maxTotalQuantity: this.cap === "" ? null : Number(this.cap),
           choices: choices.map((choice, index): ModifierExtraChoice => ({
             ...choice,
-            priceDelta: this.choices[index]!.priceDelta,
-            maxQuantity: Number(this.choices[index]!.maxQuantity),
-            defaultQuantity: Number(this.choices[index]!.defaultQuantity),
+            priceDelta: this.choices[index]!.priceDelta ?? "0.00",
+            maxQuantity: this.choices[index]!.maxQuantity ?? 1,
+            preselected: this.choices[index]!.preselected,
             ...(this.choices[index]!.vatClass === undefined
               ? {}
               : { vatClass: this.choices[index]!.vatClass }),
@@ -269,279 +403,146 @@ export class ModifierForm extends LitElement {
       new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
     );
   }
-  #input(
-    key: string,
-    label: string,
-    value: string,
-    change: (value: string) => void,
-    required = false,
-  ) {
-    return html`<wt-input
-      name=${key}
-      label=${label}
-      .value=${value}
-      .required=${required}
-      .disabled=${this.busy}
-      .error=${this.#error(key)}
-      .invalid=${!!this.#error(key)}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        change(event.detail.value);
-      }}
-    ></wt-input>`;
+  #fields(): FieldContext {
+    return { busy: this.busy, locales: this.locales, error: (key) => this.#error(key) };
   }
-  #names(
-    key: string,
-    label: string,
-    value: Record<string, string>,
-    change: (value: Record<string, string>) => void,
-  ) {
-    return this.locales.map((locale) => {
-      const required = locale === currentContentLanguages().defaultLanguage;
-      const error = this.#error(`${key}-${locale}`) || (required ? this.#error(key) : "");
-      return html`<wt-input
-        name=${`${key}-${locale}`}
-        label=${`${label} (${locale})`}
-        .value=${value[locale] ?? ""}
-        .required=${required}
-        .disabled=${this.busy}
-        .error=${error}
-        .invalid=${!!error}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          change({ ...value, [locale]: event.detail.value });
-        }}
-      ></wt-input>`;
-    });
-  }
-  #toggle(key: string, label: string, checked: boolean, change: (checked: boolean) => void) {
-    return html`<wt-switch
-      name=${key}
-      label=${label}
-      .checked=${checked}
-      .disabled=${this.busy}
-      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-        event.stopPropagation();
-        change(event.detail.checked);
-      }}
-    ></wt-switch>`;
-  }
-  #move(id: string, delta: number): void {
-    const index = this.choices.findIndex((choice) => choice.id === id);
-    const next = [...this.choices];
-    const [choice] = next.splice(index, 1);
-    next.splice(index + delta, 0, choice!);
-    this.choices = next;
-  }
-  #effectList(
-    choice: ChoiceDraft,
-    key: "removeAllergens",
-    label: string,
-    options: readonly string[],
-  ) {
-    const selected = choice[key] ?? [];
-    const display = (code: string) => allergenName(code);
-    return html`<label
-        >${label}<select
-          name=${`${key}-${choice.id}`}
+  #choiceRow(choice: FormChoice, language: string, extras: boolean) {
+    const label = choice.name[language] || t("modifiers.choice");
+    return html`<tr data-choice=${choice.id}>
+      <td>
+        <button
+          type="button"
+          class="handle"
+          data-test=${`drag-${choice.id}`}
+          aria-label=${`${t("modifiers.reorder")}: ${label}`}
+          ?disabled=${this.busy}
+          @keydown=${(event: KeyboardEvent) => this.#reorderKey(event, choice.id)}
+          @pointerdown=${(event: PointerEvent) => this.#startDrag(event, choice.id)}
+        >
+          <wt-icon name="grip"></wt-icon>
+        </button>
+      </td>
+      <td>${label}</td>
+      ${extras ? html`<td>${choice.priceDelta ?? "0.00"}</td>` : nothing}
+      <td>
+        <wt-switch
+          name=${`available-${choice.id}`}
+          data-test=${`available-${choice.id}`}
+          label=${t("modifiers.available")}
+          .checked=${choice.available}
           .disabled=${this.busy}
-          @change=${(event: Event) => {
+          @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
             event.stopPropagation();
-            const select = event.target as HTMLSelectElement;
-            if (select.value) this.#changeChoice(choice.id, { [key]: [...selected, select.value] });
-            select.value = "";
+            this.#changeChoice(choice.id, { available: event.detail.checked });
           }}
-        >
-          <option value="">${t("modifiers.choose")}</option>
-          ${options.filter((code) => !selected.includes(code)).map((code) => html`<option value=${code}>${display(code)}</option>`)}
-        </select></label
-      >${selected.map((code) => html`<div class="selected"><span>${display(code)}</span><wt-button variant="secondary" .disabled=${this.busy} aria-label=${`${t("action.remove")}: ${label} ${display(code)}`} @click=${() => this.#changeChoice(choice.id, { [key]: selected.filter((value) => value !== code) })}>${t("action.remove")}</wt-button></div>`)}`;
-  }
-  #dietaryEffect(choice: ChoiceDraft) {
-    const reviewed = choice.dietaryEffect !== undefined && choice.dietaryEffect !== null;
-    const selected = choice.dietaryEffect?.invalidates ?? [];
-    return html`${this.#toggle(
-      `dietary-reviewed-${choice.id}`,
-      t("modifiers.dietary_reviewed"),
-      reviewed,
-      (checked) =>
-        this.#changeChoice(choice.id, { dietaryEffect: checked ? { invalidates: [] } : null }),
-    )}${
-      reviewed
-        ? html`<label
-              >${t("modifiers.invalidates_dietary")}
-              <select
-                name=${`dietaryEffect-${choice.id}`}
-                .disabled=${this.busy}
-                @change=${(event: Event) => {
-                  event.stopPropagation();
-                  const select = event.target as HTMLSelectElement;
-                  if (select.value)
-                    this.#changeChoice(choice.id, {
-                      dietaryEffect: {
-                        invalidates: [...selected, select.value as (typeof DIETARY_LABELS)[number]],
-                      },
-                    });
-                  select.value = "";
+        ></wt-switch>
+      </td>
+      <td>
+        ${
+          extras
+            ? html`<input
+                type="checkbox"
+                name=${`preselect-${choice.id}`}
+                data-test=${`preselect-${choice.id}`}
+                aria-label=${`${t("modifiers.preselected")}: ${label}`}
+                .checked=${choice.preselected}
+                ?disabled=${!choice.available || this.busy}
+                @change=${(event: Event) =>
+                  this.#changeChoice(choice.id, {
+                    preselected: (event.target as HTMLInputElement).checked,
+                  })}
+              />`
+            : html`<input
+                type="radio"
+                name="default"
+                data-test=${`default-${choice.id}`}
+                aria-label=${`${t("modifiers.default")}: ${label}`}
+                .checked=${this.defaultChoiceId === choice.id}
+                ?disabled=${!choice.available || this.busy}
+                @change=${() => {
+                  this.defaultChoiceId = choice.id;
                 }}
-              >
-                <option value="">${t("modifiers.choose")}</option>
-                ${DIETARY_LABELS.filter((label) => !selected.includes(label)).map(
-                  (label) => html`<option value=${label}>${t(`editor.diet.${label}`)}</option>`,
-                )}
-              </select></label
-            >
-            ${selected.map(
-              (label) =>
-                html`<div class="selected">
-                  <span>${t(`editor.diet.${label}`)}</span
-                  ><wt-button
-                    variant="secondary"
-                    .disabled=${this.busy}
-                    @click=${() =>
-                      this.#changeChoice(choice.id, {
-                        dietaryEffect: { invalidates: selected.filter((value) => value !== label) },
-                      })}
-                    >${t("action.remove")}</wt-button
-                  >
-                </div>`,
-            )}`
-        : nothing
-    }`;
-  }
-  #effects(choice: ChoiceDraft) {
-    const added = choice.addAllergens ?? {};
-    return html`<details>
-      <summary>${t("modifiers.effects")}</summary>
-      <div class="fields">
-        <label
-          >${t("modifiers.add_allergen")}<select
-            name=${`addAllergens-${choice.id}`}
+              />`
+        }
+      </td>
+      <td>
+        <wt-row-actions align="end" label=${`${t("modifiers.edit_choice")}: ${label}`}
+          ><wt-button
+            align="start"
+            variant="secondary"
+            data-test=${`edit-${choice.id}`}
             .disabled=${this.busy}
-            @change=${(event: Event) => {
-              event.stopPropagation();
-              const select = event.target as HTMLSelectElement;
-              if (select.value)
-                this.#changeChoice(choice.id, {
-                  addAllergens: { ...added, [select.value]: { presence: "contains" } },
-                  removeAllergens: (choice.removeAllergens ?? []).filter(
-                    (code) => code !== select.value,
-                  ),
-                });
-              select.value = "";
-            }}
-          >
-            <option value="">${t("modifiers.choose")}</option>
-            ${ALLERGEN_CODES.filter((code) => !added[code]).map((code) => html`<option value=${code}>${allergenName(code)}</option>`)}
-          </select></label
+            @click=${() => this.#openChoice(choice)}
+            >${t("action.edit")}</wt-button
+          ><wt-button
+            align="start"
+            variant="danger"
+            data-test=${`remove-${choice.id}`}
+            .disabled=${this.busy}
+            @click=${() => this.#removeChoice(choice.id)}
+            >${t("action.remove")}</wt-button
+          ></wt-row-actions
         >
-        ${Object.entries(added).map(
-          ([code, entry]) =>
-            html`<div class="selected">
-              <label
-                >${allergenName(code)}<select
-                  name=${`presence-${choice.id}-${code}`}
-                  .disabled=${this.busy}
-                  @change=${(event: Event) => {
-                    event.stopPropagation();
-                    this.#changeChoice(choice.id, {
-                      addAllergens: {
-                        ...added,
-                        [code]: {
-                          ...entry,
-                          presence: (event.target as HTMLSelectElement).value as
-                            "contains" | "may_contain",
-                        },
-                      },
-                    });
-                  }}
-                >
-                  <option value="contains" ?selected=${entry.presence === "contains"}>
-                    ${t("modifiers.contains")}
-                  </option>
-                  <option value="may_contain" ?selected=${entry.presence === "may_contain"}>
-                    ${t("modifiers.may_contain")}
-                  </option>
-                </select></label
-              ><wt-button
-                variant="secondary"
-                .disabled=${this.busy}
-                aria-label=${`${t("action.remove")}: ${allergenName(code)}`}
-                @click=${() => {
-                  const next = { ...added };
-                  delete next[code];
-                  this.#changeChoice(choice.id, { addAllergens: next });
-                }}
-                >${t("action.remove")}</wt-button
-              >
-            </div>`,
-        )}
-        ${this.#effectList(
-          choice,
-          "removeAllergens",
-          t("modifiers.remove_allergen"),
-          ALLERGEN_CODES.filter((code) => !added[code]),
-        )}
-        ${this.#dietaryEffect(choice)}
-      </div>
-    </details>`;
+      </td>
+    </tr>`;
   }
-  #choice(choice: ChoiceDraft, index: number) {
-    return html`<fieldset data-choice=${choice.id}>
-      <legend>${t("modifiers.choice")} ${index + 1}</legend>
-      ${this.#error(`choice-${choice.id}`) ? html`<p class="error">${this.#error(`choice-${choice.id}`)}</p>` : nothing}
-      ${this.#names(`name-${choice.id}`, t("modifiers.name"), choice.name, (name) => this.#changeChoice(choice.id, { name }))}
-      ${this.#toggle(`available-${choice.id}`, t("modifiers.available"), choice.available, (available) => this.#changeChoice(choice.id, { available }))}
-      ${
-        this.type === "extras"
-          ? html`${this.#input(`priceDelta-${choice.id}`, t("modifiers.price"), choice.priceDelta, (priceDelta) => this.#changeChoice(choice.id, { priceDelta }), true)}${this.#input(`maxQuantity-${choice.id}`, t("modifiers.max_quantity"), choice.maxQuantity, (maxQuantity) => this.#changeChoice(choice.id, { maxQuantity }), true)}${this.#input(`defaultQuantity-${choice.id}`, t("modifiers.default_quantity"), choice.defaultQuantity, (defaultQuantity) => this.#changeChoice(choice.id, { defaultQuantity }), true)}<label
-                >${t("modifiers.vat")}<select
-                  name=${`vatClass-${choice.id}`}
-                  .disabled=${this.busy}
-                  @change=${(event: Event) => {
-                    event.stopPropagation();
-                    this.#changeChoice(choice.id, {
-                      vatClass: ((event.target as HTMLSelectElement).value as VatClass) || null,
-                    });
-                  }}
-                >
-                  <option value="" ?selected=${!choice.vatClass}>
-                    ${t("modifiers.inherit_vat")}
-                  </option>
-                  ${(["general", "reduced", "super_reduced", "zero"] as const).map((value) => html`<option value=${value} ?selected=${choice.vatClass === value}>${vatClassName(value)}</option>`)}
-                </select></label
-              >`
-          : nothing
-      }
-      ${this.#effects(choice)}
-      <div class="actions">
+  #choicesTable() {
+    const language = currentContentLanguages().defaultLanguage;
+    const extras = this.type === "extras";
+    return html`<table>
+      <thead>
+        <tr>
+          <th scope="col"><span class="visually-hidden">${t("modifiers.reorder")}</span></th>
+          <th scope="col">${t("modifiers.name")}</th>
+          ${extras ? html`<th scope="col">${t("modifiers.price")}</th>` : nothing}
+          <th scope="col">${t("modifiers.available")}</th>
+          <th scope="col">${extras ? t("modifiers.preselected") : t("modifiers.default")}</th>
+          <th scope="col"><span class="visually-hidden">${t("action.edit")}</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${repeat(
+          this.choices,
+          (choice) => choice.id,
+          (choice) => this.#choiceRow(choice, language, extras),
+        )}
+      </tbody>
+    </table>`;
+  }
+  #choicesSection() {
+    return html`<div class="choices-wrap">${this.#choicesTable()}</div>
+      ${this.#error("choices") ? html`<p class="error">${this.#error("choices")}</p>` : nothing}
+      <div class="choice-actions">
         <wt-button
+          data-test="add-choice"
           variant="secondary"
-          data-test=${`up-${choice.id}`}
-          .disabled=${this.busy || index === 0}
-          aria-label=${`${t("modifiers.move_up")}: ${index + 1}`}
-          @click=${() => this.#move(choice.id, -1)}
-          >${t("modifiers.move_up")}</wt-button
-        ><wt-button
-          variant="secondary"
-          data-test=${`down-${choice.id}`}
-          .disabled=${this.busy || index === this.choices.length - 1}
-          aria-label=${`${t("modifiers.move_down")}: ${index + 1}`}
-          @click=${() => this.#move(choice.id, 1)}
-          >${t("modifiers.move_down")}</wt-button
-        ><wt-button
-          variant="danger"
-          data-test=${`remove-${choice.id}`}
           .disabled=${this.busy}
-          aria-label=${`${t("action.remove")}: ${index + 1}`}
-          @click=${() => {
-            this.choices = this.choices.filter((value) => value.id !== choice.id);
-            if (this.defaultChoiceId === choice.id) this.defaultChoiceId = null;
-          }}
-          >${t("action.remove")}</wt-button
-        >
+          @click=${() => this.#openChoice(null)}
+          >${t("modifiers.add_choice")}</wt-button
+        >${
+          this.type === "options" && this.defaultChoiceId !== null
+            ? html`<wt-button
+                data-test="clear-default"
+                variant="ghost"
+                .disabled=${this.busy}
+                @click=${() => {
+                  this.defaultChoiceId = null;
+                }}
+                >${t("modifiers.clear_default")}</wt-button
+              >`
+            : nothing
+        }
       </div>
-    </fieldset>`;
+      <dashboard-choice-form
+        ?open=${this.choiceOpen}
+        .busy=${this.busy}
+        .locales=${this.locales}
+        kind=${this.type === "extras" ? "extras" : "options"}
+        .value=${this.editingChoice}
+        @wt-choice-save=${(event: CustomEvent<{ value: ChoiceDraft }>) => this.#choiceSaved(event)}
+        @wt-choice-cancel=${(event: Event) => this.#choiceCancelled(event)}
+        @keydown=${(event: Event) => event.stopPropagation()}
+      ></dashboard-choice-form>`;
   }
   override render() {
     return html`<wt-modal
@@ -553,9 +554,12 @@ export class ModifierForm extends LitElement {
         submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'));
       }}
     >
-      ${Object.keys(this.errors).length || Object.keys(this.fieldErrors).length ? html`<p class="error" role="alert">${t("modifiers.problem")}</p>` : nothing}${this.#error("_form") ? html`<p class="error">${this.#error("_form")}</p>` : nothing}
+      <wt-form-error-summary
+        heading=${t("form.error_heading")}
+        .errors=${Object.values({ ...this.serverErrors, ...this.errors })}
+      ></wt-form-error-summary>
       <div class="fields">
-        ${this.#names("name", t("modifiers.name"), this.name, (name) => {
+        ${nameFields(this.#fields(), "name", t("modifiers.name"), this.name, (name) => {
           this.name = name;
         })}<label
           >${t("modifiers.type")}<select
@@ -569,84 +573,51 @@ export class ModifierForm extends LitElement {
             ${TYPES.map((type) => html`<option value=${type} ?selected=${this.type === type}>${t(`modifiers.${type}`)}</option>`)}
           </select></label
         >
-        ${this.#toggle("available", t("modifiers.available"), this.available, (value) => {
-          this.available = value;
-        })}
+        ${switchField(
+          this.#fields(),
+          "available",
+          t("modifiers.available"),
+          this.available,
+          (value) => {
+            this.available = value;
+          },
+        )}
         ${this.type === "text" ? html`<p>${t("modifiers.text_help")}</p>` : nothing}
         ${
           this.type === "yes-no"
-            ? html`${this.#names("yesLabel", t("modifiers.yes_label"), this.yesLabel, (value) => {
-                this.yesLabel = value;
-              })}${this.#names("noLabel", t("modifiers.no_label"), this.noLabel, (value) => {
-                this.noLabel = value;
-              })}${this.#toggle(
+            ? switchField(
+                this.#fields(),
                 "defaultValue",
                 t("modifiers.default_value"),
                 this.defaultValue,
                 (value) => {
                   this.defaultValue = value;
                 },
-              )}`
+              )
             : nothing
         }
         ${
           this.type === "extras"
-            ? html`${this.#toggle("required", t("modifiers.required"), this.required, (value) => {
-                this.required = value;
-              })}${this.#input("maxTotalQuantity", t("modifiers.max_total"), this.cap, (value) => {
-                this.cap = value;
-              })}`
+            ? html`${switchField(
+                this.#fields(),
+                "required",
+                t("modifiers.required"),
+                this.required,
+                (value) => {
+                  this.required = value;
+                },
+              )}${textField(
+                this.#fields(),
+                "maxTotalQuantity",
+                t("modifiers.max_total"),
+                this.cap,
+                (value) => {
+                  this.cap = value;
+                },
+              )}`
             : nothing
         }
-        ${
-          this.type === "extras" || this.type === "options"
-            ? html`<div class="choices">
-                  ${repeat(
-                    this.choices,
-                    (choice) => choice.id,
-                    (choice, index) => this.#choice(choice, index),
-                  )}
-                </div>
-                ${this.#error("choices") ? html`<p class="error">${this.#error("choices")}</p>` : nothing}<wt-button
-                  data-test="add-choice"
-                  variant="secondary"
-                  .disabled=${this.busy}
-                  @click=${() => {
-                    this.choices = [
-                      ...this.choices,
-                      {
-                        id: crypto.randomUUID(),
-                        name: {},
-                        available: true,
-                        priceDelta: "0.00",
-                        maxQuantity: "1",
-                        defaultQuantity: "0",
-                      },
-                    ];
-                  }}
-                  >${t("modifiers.add_choice")}</wt-button
-                >`
-            : nothing
-        }
-        ${
-          this.type === "options"
-            ? html`<label
-                >${t("modifiers.default_choice")}<select
-                  name="defaultChoiceId"
-                  .disabled=${this.busy}
-                  @change=${(event: Event) => {
-                    event.stopPropagation();
-                    this.defaultChoiceId = (event.target as HTMLSelectElement).value || null;
-                  }}
-                >
-                  <option value="" ?selected=${this.defaultChoiceId === null}>
-                    ${t("modifiers.no_default")}
-                  </option>
-                  ${this.choices.filter((choice) => choice.available).map((choice) => html`<option value=${choice.id} ?selected=${choice.id === this.defaultChoiceId}>${choice.name[currentContentLanguages().defaultLanguage] || t("modifiers.choice")}</option>`)}
-                </select></label
-              >`
-            : nothing
-        }
+        ${this.type === "extras" || this.type === "options" ? this.#choicesSection() : nothing}
       </div>
       <wt-form-actions slot="footer"
         ><wt-button

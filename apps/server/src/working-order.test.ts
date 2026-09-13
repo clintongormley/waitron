@@ -4554,8 +4554,6 @@ describe("canonical modifier selections", () => {
           {
             type: "yes-no",
             name: { es: "Caliente" },
-            yesLabel: { es: "Sí" },
-            noLabel: { es: "No" },
           },
           {
             type: "options",
@@ -4621,7 +4619,7 @@ describe("canonical modifier selections", () => {
         modifierSelections,
         modifierSnapshots: [
           { type: "text", text: " <b>hello</b> " },
-          { type: "yes-no", value: false, label: { es: "No" } },
+          { type: "yes-no", value: false },
           { type: "options", choiceId: optionId, choiceName: { es: "Grande" } },
           { type: "extras", choices: [{ choiceId, quantity: 2 }] },
         ],
@@ -4652,7 +4650,7 @@ describe("canonical modifier selections", () => {
                 name: { es: "Changed" },
                 priceDelta: "9.00",
                 maxQuantity: 2,
-                defaultQuantity: 0,
+                preselected: false,
               },
             ],
           },
@@ -4668,8 +4666,6 @@ describe("canonical modifier selections", () => {
             {
               type: "yes-no",
               name: { es: "Changed type" },
-              yesLabel: { es: "Sí" },
-              noLabel: { es: "No" },
             },
             "es",
           );

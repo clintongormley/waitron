@@ -22,12 +22,12 @@ Content-Type: application/json
 {
   "type": "yes-no",
   "name": { "en": "Cutlery" },
-  "yesLabel": { "en": "With cutlery" },
-  "noLabel": { "en": "Without cutlery" }
+  "defaultValue": true
 }
 ```
 
-The response includes the new UUID and normalized defaults:
+A yes-no modifier carries no label fields: its own name is what the till shows. The response
+includes the new UUID and normalized defaults:
 
 ```json
 {
@@ -35,10 +35,8 @@ The response includes the new UUID and normalized defaults:
     "id": "11111111-1111-4111-8111-111111111111",
     "type": "yes-no",
     "name": { "en": "Cutlery" },
-    "yesLabel": { "en": "With cutlery" },
-    "noLabel": { "en": "Without cutlery" },
     "available": true,
-    "defaultValue": false
+    "defaultValue": true
   }
 }
 ```
@@ -52,14 +50,27 @@ the combined catalogue screen, which the Products integration removes. They addr
 `dashboard-modifier-form` in `apps/dashboard/src/widgets/modifier-form.ts` accepts `open`, `busy`,
 `locales: string[]`, `value: Modifier | null` and `fieldErrors: Record<string, string>`. It emits
 `wt-submit` with `{ value: ModifierInput }` and `wt-cancel` with `{}`. The screen owns the API call
-and closes the editor after a successful write. Server choice-index errors map to stable choice IDs
-before reordering. The screen's reads use the existing option-group, item and content-language live
-sources.
+and closes the editor after a successful write. A choice-level validation error — the form's own
+check, or a `choices.<index>.<field>` rejection from the server — is shown as one message under the
+choices table naming the choice by its current label, so a rejection never lands on a field the
+manager cannot see. Every error is also listed in the form's `wt-form-error-summary`, including a
+server refusal that names no field (such as `modifier.in_use`) or a field the form does not draw
+an input for (such as `defaultChoiceId`, or a name in a language the form does not show), which
+appears only there. The
+screen's reads use the existing option-group, item and content-language live sources.
 
-Products can compose this form directly and select the saved definition. The optional choice
-fields `addAllergens`, `removeAllergens`, `addOrigins`, `removeOrigins`, and extras `vatClass` keep
-existing effects and tax inheritance. The form uses selected items without source fields; Products
-can replace its private effect-rendering methods with the shared pickers during integration.
+One choice is edited in `dashboard-choice-form` (`apps/dashboard/src/widgets/choice-form.ts`), a
+modal inside the modifier form. It accepts `open`, `busy`, `locales`, `kind: "extras" | "options"`,
+`value: ChoiceDraft | null`, validates its own fields against the server's price and quantity
+limits (`packages/catalogue/src/modifier-limits.ts`), lists what is wrong in its own error summary,
+and emits `wt-choice-save` with `{ value: ChoiceDraft }` or `wt-choice-cancel` with `{}`. Nothing reaches the
+server until the modifier itself is saved.
+
+Products can compose the modifier form directly and select the saved definition. The optional choice
+fields `addAllergens`, `removeAllergens`, `addOrigins`, `removeOrigins`, `dietaryEffect`, and extras
+`vatClass` keep existing effects and tax inheritance. The choice form renders the allergen and
+dietary effects, using selected items without source fields; Products can replace its private
+effect-rendering methods with the shared pickers during integration.
 
 ## Ordering and stored facts
 

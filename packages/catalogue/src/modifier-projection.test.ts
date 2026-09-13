@@ -56,8 +56,6 @@ it("publishes attached text and yes-no modifiers without requiring choice rows",
         type: "yes-no",
         name: { en: "Ice" },
         available: true,
-        yesLabel: { en: "With ice" },
-        noLabel: { en: "Without ice" },
         defaultValue: false,
       },
       "en",
@@ -136,7 +134,7 @@ it("projects only published available choices, clears excluded defaults, and kee
             available: true,
             priceDelta: "1.00",
             maxQuantity: 3,
-            defaultQuantity: 2,
+            preselected: true,
             vatClass: "general",
           },
         ],
@@ -168,6 +166,17 @@ it("projects only published available choices, clears excluded defaults, and kee
         { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "1.00" }] },
       ]),
     ).rejects.toMatchObject({ code: "modifier.invalid" });
+    // The per-item price obeys the same ten-whole-digit limit as a modifier's own price.
+    await expect(
+      setMenuItemOptionGroups(tx, tenantId, item.id, [
+        { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
+        { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "10000000000.00" }] },
+      ]),
+    ).rejects.toMatchObject({ code: "modifier.invalid", params: { field: "priceDelta" } });
+    await setMenuItemOptionGroups(tx, tenantId, item.id, [
+      { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
+      { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "9999999999.99" }] },
+    ]);
     await setMenuItemOptionGroups(tx, tenantId, item.id, [
       { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
       { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "0.75" }] },
@@ -181,7 +190,7 @@ it("projects only published available choices, clears excluded defaults, and kee
     expect(projected[1]).toMatchObject({
       type: "extras",
       maxTotalQuantity: null,
-      choices: [{ id: extraId, priceDelta: "0.75", vatClass: "general", defaultQuantity: 2 }],
+      choices: [{ id: extraId, priceDelta: "0.75", vatClass: "general", preselected: true }],
     });
     await tx
       .update(optionGroupItems)

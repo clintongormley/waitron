@@ -502,7 +502,6 @@ it("retains structured modifier snapshots when a dish quantity is split onto a c
         name: { [LOCALE]: "Ice" },
         type: "yes-no" as const,
         value: false,
-        label: { [LOCALE]: "Without ice" },
       },
     ];
     await tx

@@ -22,7 +22,6 @@ export function snapshotSelections(definitions: readonly Modifier[], value: unkn
         ...common,
         type: "yes-no",
         value: selection.value,
-        label: selection.value ? definition.yesLabel : definition.noLabel,
       });
     if (selection.type === "options" && definition.type === "options")
       snapshots.push({

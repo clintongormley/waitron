@@ -7,6 +7,7 @@ import "./wt-spinner.js";
 export type WtButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 export type WtButtonSize = "sm" | "md" | "lg";
 export type WtButtonAlign = "center" | "start";
+export type WtButtonShape = "default" | "round";
 
 @customElement("wt-button")
 export class WtButton extends LitElement {
@@ -91,12 +92,21 @@ export class WtButton extends LitElement {
       :host([align="start"]) button {
         justify-content: flex-start;
       }
+
+      :host([shape="round"]) button {
+        width: var(--wt-tap-min);
+        min-width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        padding: 0;
+        border-radius: var(--wt-radius-full);
+      }
     `,
   ];
 
   @property({ reflect: true }) variant: WtButtonVariant = "secondary";
   @property({ reflect: true }) size: WtButtonSize = "md";
   @property({ reflect: true }) align: WtButtonAlign = "center";
+  @property({ reflect: true }) shape: WtButtonShape = "default";
   @property({ type: Boolean, reflect: true }) disabled = false;
   /** An in-progress action: the button is disabled, marked `aria-busy`, and a decorative spinner
    * leads the label. The label stays visible — and is the one thing announced — so the caller swaps

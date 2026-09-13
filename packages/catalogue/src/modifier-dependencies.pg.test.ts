@@ -37,8 +37,6 @@ const yesNoDefinition: ModifierInput = {
   type: "yes-no",
   name: { en: "Ice" },
   available: true,
-  yesLabel: { en: "With ice" },
-  noLabel: { en: "Without ice" },
   defaultValue: false,
 };
 

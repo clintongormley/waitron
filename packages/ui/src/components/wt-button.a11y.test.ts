@@ -39,4 +39,12 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
     await mountThemed("<wt-button loading>Buscando…</wt-button>", theme);
     await expectNoA11yViolations(host);
   });
+
+  test("round icon-only button", async () => {
+    await mountThemed(
+      '<wt-button shape="round" variant="primary" aria-label="Añadir"><wt-icon name="plus"></wt-icon></wt-button>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

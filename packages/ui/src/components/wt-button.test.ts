@@ -150,3 +150,27 @@ test("shows no spinner and is not busy when not loading", async () => {
   expect(inner.getAttribute("aria-busy")).toBeNull();
   expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull();
 });
+
+test("round shape is circular and keeps the minimum tap target", async () => {
+  const el = await mount(
+    '<wt-button shape="round" aria-label="Add"><wt-icon name="plus"></wt-icon></wt-button>',
+  );
+  const inner = el.shadowRoot!.querySelector("button")!;
+  const style = getComputedStyle(inner);
+  const rect = el.getBoundingClientRect();
+  expect(rect.width).toBeGreaterThanOrEqual(44);
+  expect(rect.height).toBeGreaterThanOrEqual(44);
+  expect(rect.width).toBeCloseTo(rect.height, 0);
+  // fully-rounded radius, not the default md radius
+  expect(parseFloat(style.borderTopLeftRadius)).toBeGreaterThan(100);
+});
+
+test("round primary paints from the primary token", async () => {
+  const el = await mount(
+    '<wt-button shape="round" variant="primary" aria-label="Add"><wt-icon name="plus"></wt-icon></wt-button>',
+  );
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
+    "rgb(1, 2, 3)",
+  );
+});

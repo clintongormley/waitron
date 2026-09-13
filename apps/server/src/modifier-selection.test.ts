@@ -12,7 +12,7 @@ const snapshots: ModifierSnapshot[] = [
       { choiceId: "b", name: { en: "B" }, quantity: 2 },
     ],
   },
-  { modifierId: "boolean", type: "yes-no", name: { en: "Ice" }, value: false, label: { en: "No" } },
+  { modifierId: "boolean", type: "yes-no", name: { en: "Ice" }, value: false },
 ];
 
 it("compares recorded answers independently of object, modifier and choice ordering", () => {

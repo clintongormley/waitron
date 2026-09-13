@@ -136,7 +136,7 @@ this floor — removing the `min-width` regresses that guard.
 
 | Element | Properties | Events |
 | --- | --- | --- |
-| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `disabled`, `loading`, `aria-label` | native `click` |
+| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label` | native `click` |
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
@@ -231,10 +231,10 @@ An unregistered `name` renders nothing — there is no broken-icon fallback mark
 `packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
 trigger, for one), that name becomes part of the primitive's contract: every consuming app must
 register it itself, or that primitive's icon silently disappears there. The dashboard's own set —
-`hamburger`, `kebab`, `chevron-down`, `gear`, `person`, each a plain geometric shape at the same
-16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (see that file's own header for which of
-these were plotted fresh and which one was scaled from a published glyph's path data) and is
-registered once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
+`hamburger`, `kebab`, `chevron-down`, `gear`, `person`, `plus`, `grip`, each a plain geometric
+shape at the same 16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (see that file's own header
+for which of these were plotted fresh and which one was scaled from a published glyph's path data)
+and is registered once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
 different things at different scales: hamburger opens the whole app's navigation (used once);
 kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
 wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
@@ -913,7 +913,9 @@ Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — th
 hamburger; it opens a small menu of actions for one row, not the app's whole navigation, so it
 needs the icon that means "more options here," not "open navigation" (see "Icons" below) — with a
 label that identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table
-heading, and Edit, Delete or domain-specific actions in each row's menu. The menu uses a native
+heading, and Edit, Delete or domain-specific actions in each row's menu. A screen may instead
+offer Create as a round icon-only `wt-button` (`shape="round"` with the `plus` icon and an
+`aria-label`) beside the heading; the Modifiers screen does, by design choice. The menu uses a native
 popover: clicking outside or pressing Escape closes it. Its action buttons follow normal Tab
 navigation. Give every `wt-button` slotted into a `wt-row-actions` popover `align="start"` — a
 centred label reads oddly once the button has been stretched to the popover's full width, the way a
@@ -925,7 +927,8 @@ The menu itself is left-aligned by default: `wt-row-actions` pins the popup's le
 trigger (`align="start"`), so the menu grows rightward, and a per-row kebab at the end of a table row
 opens into the margin beside the table. A menu anchored at the trailing edge of a wide surface — the
 banner's account menu — passes `align="end"` instead, pinning the popup's right edge so it grows
-leftward, inward over the page rather than off the screen.
+leftward, inward over the page rather than off the screen. A per-row menu in a table inside a modal
+also passes `align="end"`, since a modal has no margin beside the table.
 
 Open create and edit forms in `wt-modal`, with `wt-form-actions` in its footer. Keep validation
 messages inside the modal, retain entered values after a failed save, and refresh the table after

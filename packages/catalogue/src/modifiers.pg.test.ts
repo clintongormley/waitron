@@ -30,7 +30,7 @@ const extra = () => ({
   name: { en: "Bacon" },
   priceDelta: "1.00",
   maxQuantity: 2,
-  defaultQuantity: 1,
+  preselected: true,
 });
 
 it("saves complete definitions as app_user, preserves ids/order, and scopes every operation", async () => {
@@ -57,8 +57,8 @@ it("saves complete definitions as app_user, preserves ids/order, and scopes ever
   );
   expect(changed).toMatchObject({
     choices: [
-      { id: choices[1]!.id, defaultQuantity: 0 },
-      { id: choices[0]!.id, defaultQuantity: 1 },
+      { id: choices[1]!.id, preselected: false },
+      { id: choices[0]!.id, preselected: true },
     ],
   });
   expect(await app(other, (tx) => listModifiers(tx, other))).toEqual([]);
@@ -118,15 +118,7 @@ it("blocks type changes and deletion for attached definitions, but permits deact
     app(tenant, (tx) => deleteModifier(tx, tenant, definition.id)),
   ).rejects.toMatchObject({ code: "modifier.in_use", params: { dependency: "product" } });
   await expect(
-    app(tenant, (tx) =>
-      updateModifier(
-        tx,
-        tenant,
-        definition.id,
-        { type: "yes-no", name, yesLabel: { en: "Yes" }, noLabel: { en: "No" } },
-        "en",
-      ),
-    ),
+    app(tenant, (tx) => updateModifier(tx, tenant, definition.id, { type: "yes-no", name }, "en")),
   ).rejects.toMatchObject({ code: "modifier.in_use" });
   expect(
     await app(tenant, (tx) =>
@@ -194,7 +186,7 @@ it("serializes deletion behind an attachment write and reports its committed dep
   }
 });
 
-it("checks both yes/no labels when changing the default content language", async () => {
+it("blocks a default-language change while a yes/no modifier name is untranslated", async () => {
   const tenant = await seedTenant(suite.admin);
   await app(tenant, async (tx) => {
     const role = await tx.execute<{ role: string; superuser: boolean }>(
@@ -206,16 +198,14 @@ it("checks both yes/no labels when changing the default content language", async
       tenant,
       {
         type: "yes-no",
-        name: { en: "Hot", fr: "Chaud" },
-        yesLabel: { en: "Yes", fr: "Oui" },
-        noLabel: { en: "No" },
+        name: { en: "Hot" },
       },
       "en",
     );
     const { listContentTranslationGaps, writeContentLanguages } =
       await import("./content-languages.js");
     expect(await listContentTranslationGaps(tx, tenant, "fr")).toEqual([
-      { kind: "modifier_no", id: expect.any(String) },
+      { kind: "option_group", id: expect.any(String) },
     ]);
     await expect(
       writeContentLanguages(tx, tenant, { defaultLanguage: "fr", languages: ["en", "fr"] }, "en"),

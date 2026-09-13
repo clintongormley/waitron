@@ -425,7 +425,7 @@ export interface ModifierChoice extends ModifierEffects {
 export interface ModifierExtraChoice extends ModifierChoice {
   priceDelta: string;
   maxQuantity: number;
-  defaultQuantity: number;
+  preselected: boolean;
   vatClass?: VatClass | null;
 }
 type ModifierCommon = { name: Record<string, string>; available: boolean };
@@ -441,8 +441,6 @@ export type ModifierInput = ModifierCommon &
     | { type: "options"; defaultChoiceId: string | null; choices: ModifierChoice[] }
     | {
         type: "yes-no";
-        yesLabel: Record<string, string>;
-        noLabel: Record<string, string>;
         defaultValue: boolean;
       }
   );

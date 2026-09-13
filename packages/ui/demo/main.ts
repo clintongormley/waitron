@@ -18,6 +18,8 @@ import "../src/components/wt-combobox.js";
 registerIcons({
   check: "M2 8 L6 12 L14 4",
   cart: "M1 2 h3 l2 8 h7 l2 -6 H5",
+  // The same centred cross apps/dashboard/src/icons.ts registers for the round add button.
+  plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
   // wt-row-actions requires its consuming app to register this — an unregistered name renders
   // nothing, leaving its trigger a blank button (apps/dashboard/src/icons.ts registers the same
   // path for the real app).
@@ -34,6 +36,9 @@ const panel = (theme: "light" | "dark") => `
       <wt-button variant="secondary">Cancelar</wt-button>
       <wt-button variant="danger">Anular</wt-button>
       <wt-button variant="ghost"><wt-icon name="cart"></wt-icon> Cesta</wt-button>
+      <wt-button shape="round" variant="primary" aria-label="Añadir"
+        ><wt-icon name="plus"></wt-icon
+      ></wt-button>
     </div>
     <div class="row">
       <wt-button size="sm">sm</wt-button>

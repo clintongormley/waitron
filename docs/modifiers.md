@@ -13,8 +13,11 @@ maximum still applies. For two dishes, two bacon portions per dish add 4.00 to t
 
 Use **Options** when you need exactly one unpriced choice, such as a cup or a glass. You can choose
 a default or leave the decision to the operator. Use **Yes/no** for a Boolean answer, such as
-whether to include cutlery. You can translate both labels without changing what Yes and No mean.
-The initial default is No, and an explicit No stays recorded.
+whether to include cutlery. At the till it is one on/off switch labelled with the modifier's own name, so write that
+name as the thing being asked for ("Cutlery"); there is no separate wording for Yes and No to write
+or translate. The initial default is No. The recorded answer is kept even when it is "no" — but only
+an affirmative answer prints on a receipt, kitchen ticket or the till basket; a negative one leaves
+no visible trace.
 
 Use **Text** for an optional message of up to 500 characters. Text is displayed literally and has
 no price. It remains separate from the dish's kitchen note and doneness setting.
@@ -22,13 +25,12 @@ no price. It remains separate from the dish's kitchen note and doneness setting.
 ## Set defaults and availability
 
 Give the modifier and each choice a name in your default content language. You can add other
-translations now or later. The Yes and No labels also need a translation before you change your
-default content language. See [content languages](content-and-images.md).
+translations now or later. See [content languages](content-and-images.md).
 
 A default seeds a new selection once. Changing a default does not change an order you already
-started. An extra's default quantity starts at zero and cannot exceed its individual maximum;
-the sum of defaults cannot exceed the total maximum. A required extras group may have no defaults,
-so the operator must make an active choice.
+started. An extra's choice is either preselected or not — there is no starting quantity to set — and
+you cannot preselect more choices than the total maximum allows. A required extras group may have no
+defaults, so the operator must make an active choice.
 
 Turn off **Available** on a choice to stop new selections of it and clear its default. If an
 available required modifier has no usable choices, you must add a choice or deactivate the

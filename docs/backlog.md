@@ -355,8 +355,10 @@ What it left open:
 - **The modifier editor's own allergen list survives — the origins half of this went away.** #345
   removed ingredient origins from the modifier model altogether and replaced them with a direct
   dietary effect, so half of this duplication no longer exists. What remains is that
-  `dashboard-modifier-form` still renders its allergen list with its own private method rather than
-  the shared allergen picker, which gained a compact mode in #345 for exactly this shape of use.
+  `dashboard-choice-form` (`apps/dashboard/src/widgets/choice-form.ts`, where the markup moved when
+  choice editing became its own modal) still renders its allergen list with its own private method
+  rather than the shared allergen picker, which gained a compact mode in #345 for exactly this shape
+  of use.
   Cosmetic, but it is the sort of duplication that
   hardens if nobody names it.
 - **The independent review did not cover the browser and rendering paths.** Claude's run-it reviewer
@@ -480,6 +482,31 @@ What it left open:
   through the till. That is the shape of check that #344 showed matters — the image library passed
   review and CI and still returned a 500 to the first person who opened it. **Next action:** walk it
   once on a dev stack before treating the overhaul as finished.
+
+**Modifier editing, reworked (2026-09-13, the `modifiers` branch).** Editing a modifier's choices is
+now a table rather than a stack of expanding panels. Each row shows the choice's name and price and
+carries the two things you change most — whether it is available, and whether it starts already
+chosen — while everything else about that choice (its translations, price, maximum quantity, tax
+class and allergen or dietary effects) opens in its own small window. You reorder the choices by
+dragging the handle at the start of a row or, with the handle focused, by pressing the up and down
+arrow keys. Two model changes came with it: a **Yes/no** modifier no longer has its own wording for
+Yes and No, because it is now one on/off switch labelled with the modifier's own name — a "yes" answer
+prints that name and a "no" answer, though still recorded, prints nothing on the receipt, the kitchen
+ticket or the till basket (owner decision 2026-09-13); and an extra's
+choice is either preselected or not, replacing the old starting quantity, so what the total maximum
+limits is how many choices you may preselect. Create on the Modifiers list became a round plus
+button beside the heading.
+[Design](superpowers/specs/2026-09-13-modifiers-editing-rework-design.md),
+[plan](superpowers/plans/2026-09-13-modifiers-editing-rework.md).
+
+What it left open:
+
+- **A keyboard-driven reorder says nothing to a screen reader.** Moving a choice with the arrow keys
+  changes the table and returns focus to the handle, but no live region announces the new position,
+  so somebody who cannot see the table gets no confirmation that the move happened. The accessibility
+  tests cannot catch this — axe checks static markup, and a missing announcement is not a markup
+  defect. **Next action:** add a polite live region to the choices table naming the moved choice and
+  its new position, and cover it with a test that reads the region's text after a key press.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 

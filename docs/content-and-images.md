@@ -3,8 +3,8 @@
 You can add French descriptions to a Spanish menu without changing the language of the dashboard
 or your receipts. Start by choosing the languages your content supports, then add translations as
 you need them. The image library uses the same choices as your products, menu sections and
-[modifiers](modifiers.md). Modifier names, choices and both Yes/no labels participate in the
-default-language translation check.
+[modifiers](modifiers.md). Modifier names and choices participate in the default-language
+translation check.
 
 ## Choose your content languages
 

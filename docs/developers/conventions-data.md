@@ -369,7 +369,7 @@ in [the image-library plan](../superpowers/plans/2026-09-12-image-library.md).
 ## Default optional input only when it is absent
 
 The modifier contract tests rejected explicit null for availability, required, Boolean defaults,
-price and quantity defaults. `value ?? default` initially accepted those nulls, and comparing
+price and preselection. `value ?? default` initially accepted those nulls, and comparing
 `String(vatClass)` accepted an array such as `["general"]`. Defaults now use `undefined` explicitly,
 and enum comparison follows a string type check. Receipt:
 `packages/catalogue/src/modifier-contract.test.ts` (the adversarial cases failed before the fix).

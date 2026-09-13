@@ -1137,7 +1137,7 @@ it("collects fractional quantity before required modifiers and prices extras per
             priceDelta: "1.00",
             available: true,
             maxQuantity: 3,
-            defaultQuantity: 2,
+            preselected: true,
           },
         ],
       },
@@ -1153,6 +1153,9 @@ it("collects fractional quantity before required modifiers and prices extras per
     el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
       "till-modifier-picker",
     )!;
+  await picker.updateComplete;
+  // Cheese seeds at 1 (preselected); bump it to 2 so the fractional-unit pricing has a quantity.
+  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="opt-cheese-inc"]')!.click();
   await picker.updateComplete;
   expect(store.lines).toHaveLength(0);
   expect(picker.shadowRoot!.querySelector(".running-amount")!.textContent).toBe(

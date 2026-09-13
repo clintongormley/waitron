@@ -51,8 +51,6 @@ export async function listContentTranslationGaps(
     union all select 'variant' as kind, id, name as translations from product_variants where tenant_id = ${tenantId}
     union all select 'section' as kind, id, name as translations from menu_sections where tenant_id = ${tenantId}
     union all select 'option_group' as kind, id, name as translations from option_groups where tenant_id = ${tenantId}
-    union all select 'modifier_yes' as kind, id, yes_label as translations from option_groups where tenant_id = ${tenantId} and type = 'yes-no'
-    union all select 'modifier_no' as kind, id, no_label as translations from option_groups where tenant_id = ${tenantId} and type = 'yes-no'
     union all select 'option' as kind, id, name as translations from option_group_items where tenant_id = ${tenantId}
   `);
   return result.rows

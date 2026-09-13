@@ -386,10 +386,10 @@ describe("canonical modifier routes", () => {
       {
         type: "extras",
         name,
-        choices: [{ id: choiceId, name, priceDelta: "1.20", maxQuantity: 2, defaultQuantity: 1 }],
+        choices: [{ id: choiceId, name, priceDelta: "1.20", maxQuantity: 2, preselected: true }],
       },
       { type: "options", name, choices: [{ id: crypto.randomUUID(), name }] },
-      { type: "yes-no", name, yesLabel: { es: "Sí" }, noLabel: { es: "No" }, defaultValue: false },
+      { type: "yes-no", name, defaultValue: false },
     ];
     const saved: unknown[] = [];
     for (const body of bodies) {

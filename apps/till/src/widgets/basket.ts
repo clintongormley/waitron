@@ -10,6 +10,7 @@ import { allergenName } from "../i18n/allergen-names.js";
 import { donenessLabel } from "../i18n/doneness-label.js";
 import { selectStyles } from "../select-styles.js";
 import { descriptionFor, snapshotDescriptionFor } from "./dish-format.js";
+import { modifierSnapshotLabels } from "./modifier-snapshot.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
@@ -326,7 +327,7 @@ export class TillBasket extends LitElement {
               </div>
             `,
           )}
-          ${(line.modifierSnapshots ?? []).filter((snapshot) => snapshot.type !== "extras").map((snapshot) => html`<div class="option modifier-answer"><span class="name">${this.#lineText(line, snapshot.name, "")}: ${snapshot.type === "text" ? snapshot.text : snapshot.type === "options" ? this.#lineText(line, snapshot.choiceName, "") : snapshot.type === "yes-no" ? this.#lineText(line, snapshot.label, "") : nothing}</span></div>`)}
+          ${modifierSnapshotLabels(line.modifierSnapshots ?? [], (labels, fallback) => this.#lineText(line, labels, fallback)).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
         `,
       )}

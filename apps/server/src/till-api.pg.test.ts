@@ -2299,8 +2299,6 @@ it("files all four modifier modes through cash checkout and reprints their saved
         {
           type: "yes-no",
           name: { es: "Cubiertos" },
-          yesLabel: { es: "Con cubiertos" },
-          noLabel: { es: "Sin cubiertos" },
           defaultValue: true,
           available: true,
         },
@@ -2335,7 +2333,7 @@ it("files all four modifier modes through cash checkout and reprints their saved
               priceDelta: "9.00",
               vatClass: "reduced",
               maxQuantity: 2,
-              defaultQuantity: 0,
+              preselected: false,
             },
           ],
         },
@@ -2358,7 +2356,7 @@ it("files all four modifier modes through cash checkout and reprints their saved
   );
   const selections: ModifierSelection[] = [
     { modifierId: note.id, type: "text", text: "sin sal" },
-    { modifierId: answer.id, type: "yes-no", value: false },
+    { modifierId: answer.id, type: "yes-no", value: true },
     { modifierId: option.id, type: "options", choiceId: optionId },
     { modifierId: extra.id, type: "extras", choices: [{ choiceId: extraId, quantity: 2 }] },
   ];
@@ -2368,8 +2366,7 @@ it("files all four modifier modes through cash checkout and reprints their saved
       modifierId: answer.id,
       name: { es: "Cubiertos" },
       type: "yes-no",
-      value: false,
-      label: { es: "Sin cubiertos" },
+      value: true,
     },
     {
       modifierId: option.id,
@@ -2489,8 +2486,6 @@ it("files all four modifier modes through cash checkout and reprints their saved
       {
         type: "yes-no",
         name: { es: "Nuevo nombre" },
-        yesLabel: { es: "Sí nuevo" },
-        noLabel: { es: "No nuevo" },
         defaultValue: true,
         available: true,
       },
@@ -2534,9 +2529,11 @@ it("files all four modifier modes through cash checkout and reprints their saved
   expect(printed.rows).toHaveLength(1);
   const text = decodeTicket(new Uint8Array(printed.rows[0]!.payload));
   expect(text).toContain("sin sal");
-  expect(text).toContain("Sin cubiertos");
+  // The yes/no answer here is "yes", so the modifier's saved name prints and proves snapshot
+  // immutability directly: the original "Cubiertos" appears and the renamed "Nuevo nombre" does not.
+  expect(text).toContain("Cubiertos");
   expect(text).toContain("Frío");
-  expect(text).not.toContain("No nuevo");
+  expect(text).not.toContain("Nuevo nombre");
   expect(text).not.toContain("Nuevo frío");
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTenant(suite.admin, cfg.tenantId, async (tx) => {

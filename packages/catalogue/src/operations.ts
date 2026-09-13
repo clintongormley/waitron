@@ -1,6 +1,7 @@
 import { readMenuModifiers, readProductModifiers } from "./modifier-projection.js";
 import type { Modifier } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
+import { isModifierPrice } from "./modifier-limits.js";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { AppError, resolveContentText, FALLBACK_LOCALE, type TenantId } from "@waitron/shared";
 import {
@@ -731,7 +732,7 @@ export async function setMenuItemOptionGroups(
       for (const option of group.options) {
         if (
           typeof option.priceDelta !== "string" ||
-          !/^\d{1,10}(?:\.\d{1,2})?$/.test(option.priceDelta) ||
+          !isModifierPrice(option.priceDelta) ||
           (definition.type !== "extras" && Number(option.priceDelta) !== 0)
         ) {
           throw new AppError("modifier.invalid", { field: "priceDelta" });
