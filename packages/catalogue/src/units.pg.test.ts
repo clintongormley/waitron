@@ -10,6 +10,7 @@ import {
   getUnit,
   listUnits,
   readProductUnitId,
+  reassignProductsToUnit,
   updateUnit,
 } from "./units.js";
 
@@ -26,13 +27,15 @@ function app<T>(
   });
 }
 
-async function product(tenantId: string): Promise<string> {
+/** `id` is supplied only where a test needs the rows' physical and key order to be predictable. */
+async function product(tenantId: string, id: string | null = null): Promise<string> {
   const menu = await suite.admin.execute<{ id: string }>(sql`
     insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
   return (
     await suite.admin.execute<{ id: string }>(sql`
-      insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-      values (${tenantId}, ${menu.rows[0]!.id}, '{"en":"Soup"}', 'each', 1, 'general') returning id`)
+      insert into products (id, tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
+      values (coalesce(${id}::uuid, gen_random_uuid()), ${tenantId}, ${menu.rows[0]!.id}, '{"en":"Soup"}', 'each', 1, 'general')
+      returning id`)
   ).rows[0]!.id;
 }
 
@@ -218,5 +221,114 @@ it("reports unit.not_found when deletion commits before a concurrent assignment"
   } finally {
     release();
     await Promise.all([deletingDb.close(), assigningDb.close()]);
+  }
+});
+
+// The contract: a bulk reassignment moves only the products STILL on the source unit when it
+// writes, so a selection made stale by another manager's move is skipped, never overwritten.
+it("skips a product another manager moved off the source unit while the selection was stale", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  const productId = await product(tenantId);
+  const [source, other, target] = await app(suite.admin, tenantId, async (tx) => [
+    await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"),
+    await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"),
+    await createUnit(tx, tenantId, { name: { en: "litre" }, precision: 2 }, "en"),
+  ]);
+  await app(suite.admin, tenantId, (tx) => assignProductUnit(tx, tenantId, productId, source!.id));
+
+  const [staleDb, moverDb] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let opened!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    opened = resolve;
+  });
+  try {
+    const stale = app(staleDb, tenantId, async (tx) => {
+      await getUnit(tx, tenantId, source!.id);
+      opened();
+      await wait;
+      await reassignProductsToUnit(tx, tenantId, source!.id, [productId], target!.id);
+    });
+    await ready;
+    await app(moverDb, tenantId, (tx) => assignProductUnit(tx, tenantId, productId, other!.id));
+    release();
+    await stale;
+    expect(
+      await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, productId)),
+    ).toBe(other!.id);
+  } finally {
+    release();
+    await Promise.all([staleDb.close(), moverDb.close()]);
+  }
+});
+
+it("does not deadlock when two bulk reassignments list the same products in opposite orders", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  // Fixed ids, inserted in this order, so the row reached first is the same under a sequential scan
+  // (insertion order) and under an index scan (uuid order) — the lock order has to be predictable
+  // for this test to prove anything.
+  const first = await product(tenantId, "11111111-1111-4111-8111-111111111111");
+  const second = await product(tenantId, "22222222-2222-4222-8222-222222222222");
+  const [source, target] = await app(suite.admin, tenantId, async (tx) => [
+    await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"),
+    await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"),
+  ]);
+  await app(suite.admin, tenantId, async (tx) => {
+    await assignProductUnit(tx, tenantId, first, source!.id);
+    await assignProductUnit(tx, tenantId, second, source!.id);
+  });
+
+  const [aheadDb, behindDb] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let holding!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    holding = resolve;
+  });
+  try {
+    const behindPid = (await behindDb.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
+      .rows[0]!.pid;
+    const ahead = app(aheadDb, tenantId, async (tx) => {
+      // Stands in for a manager whose reassignment already holds the first product's row.
+      await tx.execute(sql`select 1 from product_units
+        where tenant_id = ${tenantId} and product_id = ${first} for update`);
+      holding();
+      await wait;
+      await reassignProductsToUnit(tx, tenantId, source!.id, [first, second], target!.id);
+    });
+    await ready;
+    const behind = app(behindDb, tenantId, (tx) =>
+      reassignProductsToUnit(tx, tenantId, source!.id, [second, first], target!.id),
+    );
+    const settled = Promise.allSettled([ahead, behind]);
+    try {
+      await blocked(behindPid);
+    } finally {
+      release();
+    }
+    const results = await settled;
+    // Names the SQLSTATE so a failure reads as the deadlock (40P01) it is, not "a query failed".
+    expect(
+      results.map((r) =>
+        r.status === "fulfilled"
+          ? "ok"
+          : `sqlstate ${(r.reason as { cause?: { code?: string } }).cause?.code ?? "none"}`,
+      ),
+    ).toEqual(["ok", "ok"]);
+    const assignments = await suite.admin.execute<{ product_id: string; unit_id: string }>(sql`
+      select product_id, unit_id from product_units
+      where tenant_id = ${tenantId} order by product_id`);
+    expect(assignments.rows).toEqual([
+      { product_id: first, unit_id: target!.id },
+      { product_id: second, unit_id: target!.id },
+    ]);
+  } finally {
+    release();
+    await Promise.all([aheadDb.close(), behindDb.close()]);
   }
 });

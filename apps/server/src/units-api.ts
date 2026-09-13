@@ -103,7 +103,7 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
       return c.json(
         await gated(sessionId, async (tx) => {
           await getUnit(tx, deps.cfg.tenantId, id); // 404 for an unknown or foreign source unit
-          await reassignProductsToUnit(tx, deps.cfg.tenantId, productIds, targetUnitId);
+          await reassignProductsToUnit(tx, deps.cfg.tenantId, id, productIds, targetUnitId);
           return productsUsingUnit(tx, deps.cfg.tenantId, id);
         }),
       );

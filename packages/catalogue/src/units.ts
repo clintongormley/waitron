@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
@@ -158,17 +158,36 @@ export async function assignProductUnit(
     });
 }
 
-/** Move every listed product onto the target unit, in one transaction. Reuses the single-product
- * assignment, so a missing product or unit throws the same domain error it does. */
+/** Move the listed products onto the target unit, in ONE statement scoped to the products still on
+ * `sourceUnitId`. Both halves matter: a product another manager has already moved elsewhere since
+ * the caller's list was read is left where it is rather than overwritten, and a single UPDATE takes
+ * its row locks in one scan instead of interleaving N separate statements' locks across a loop. The
+ * scan order is PostgreSQL's choice, not the caller's list order, which is what `units.pg.test.ts`
+ * runs two opposite-order reassignments against. An id that is not currently on `sourceUnitId` —
+ * an unknown id or another tenant's included — matches no row and is skipped, never an error. */
 export async function reassignProductsToUnit(
   tx: Transaction,
   tenantId: string,
+  sourceUnitId: string,
   productIds: readonly string[],
   targetUnitId: string,
 ): Promise<void> {
-  for (const productId of productIds) {
-    await assignProductUnit(tx, tenantId, productId, targetUnitId);
-  }
+  const [target] = await tx
+    .select({ id: units.id })
+    .from(units)
+    .where(and(eq(units.tenantId, tenantId), eq(units.id, targetUnitId)))
+    .for("key share");
+  if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
+  await tx
+    .update(productUnits)
+    .set({ unitId: targetUnitId })
+    .where(
+      and(
+        eq(productUnits.tenantId, tenantId),
+        eq(productUnits.unitId, sourceUnitId),
+        inArray(productUnits.productId, productIds),
+      ),
+    );
 }
 
 export async function readProductUnitId(
