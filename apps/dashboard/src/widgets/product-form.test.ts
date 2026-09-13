@@ -18,8 +18,8 @@ import type {
 afterEach(cleanupWidgets);
 
 const CATEGORIES: CategorySummary[] = [
-  { id: "cat-bebidas", name: { es: "Bebidas" }, image: null, parentId: null },
-  { id: "cat-postres", name: { es: "Postres" }, image: null, parentId: null },
+  { id: "cat-bebidas", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
+  { id: "cat-postres", name: { es: "Postres" }, image: null, color: null, parentId: null },
 ];
 
 const COURSES: Course[] = [

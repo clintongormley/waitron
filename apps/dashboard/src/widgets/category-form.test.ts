@@ -9,12 +9,14 @@ const food: CategorySummary = {
   name: { en: "Food", fr: "Cuisine" },
   parentId: null,
   image: null,
+  color: null,
 };
 const child: CategorySummary = {
   id: "child",
   name: { en: "Sandwiches" },
   parentId: "food",
   image: null,
+  color: null,
 };
 it("renders translated fields and excludes self and descendants from parent choices", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {

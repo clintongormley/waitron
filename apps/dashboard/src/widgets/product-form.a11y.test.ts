@@ -17,7 +17,7 @@ import type { OptionGroup, Product } from "../api/client.js";
 afterEach(cleanupWidgets);
 
 const CATEGORIES: CategorySummary[] = [
-  { id: "cat-1", name: { es: "Bebidas" }, image: null, parentId: null },
+  { id: "cat-1", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
 ];
 
 const OPTION_GROUPS: OptionGroup[] = [

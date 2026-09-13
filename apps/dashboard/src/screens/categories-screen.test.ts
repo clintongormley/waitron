@@ -3,8 +3,20 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { DashboardApi, CategorySummary, Product } from "../api/client.js";
 afterEach(cleanupWidgets);
-const food: CategorySummary = { id: "food", name: { en: "Food" }, image: null, parentId: null };
-const drink: CategorySummary = { id: "drink", name: { en: "Drinks" }, image: null, parentId: null };
+const food: CategorySummary = {
+  id: "food",
+  name: { en: "Food" },
+  image: null,
+  color: null,
+  parentId: null,
+};
+const drink: CategorySummary = {
+  id: "drink",
+  name: { en: "Drinks" },
+  image: null,
+  color: null,
+  parentId: null,
+};
 const product: Product = {
   catalogueId: "menu",
   categoryId: "food",

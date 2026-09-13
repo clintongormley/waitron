@@ -3,7 +3,13 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { CategoryForm } from "./category-form.js";
 import { CategoryMembershipPicker } from "./category-membership-picker.js";
 afterEach(cleanupWidgets);
-const category = { id: "food", name: { en: "Food", fr: "Cuisine" }, image: null, parentId: null };
+const category = {
+  id: "food",
+  name: { en: "Food", fr: "Cuisine" },
+  image: null,
+  color: null,
+  parentId: null,
+};
 describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
   it.each(["create", "edit", "invalid", "busy", "server-error"] as const)(
     "renders %s accessibly",

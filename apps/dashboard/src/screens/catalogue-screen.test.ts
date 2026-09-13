@@ -19,7 +19,7 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
 const categories: CategorySummary[] = [
-  { id: "c1", name: { es: "Entrantes" }, image: null, parentId: null },
+  { id: "c1", name: { es: "Entrantes" }, image: null, color: null, parentId: null },
 ];
 const units: Unit[] = [{ id: "u1", name: { es: "unidad" }, precision: 0 }];
 const modifiers: Modifier[] = [{ id: "m1", type: "text", name: { es: "Nota" }, available: true }];

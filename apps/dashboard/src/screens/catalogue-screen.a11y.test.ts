@@ -28,7 +28,7 @@ const catalogues: CatalogueSummary[] = [
 ];
 
 const categories: CategorySummary[] = [
-  { id: "c1", name: { es: "Entrantes" }, image: null, parentId: null },
+  { id: "c1", name: { es: "Entrantes" }, image: null, color: null, parentId: null },
 ];
 
 const products: Product[] = [
