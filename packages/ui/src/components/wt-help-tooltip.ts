@@ -66,9 +66,7 @@ export class WtHelpTooltip extends LitElement {
 
   private onToggle(event: ToggleEvent): void {
     this.open = event.newState === "open";
-    // Scoped to exactly the window this popover is open — added here, removed below or in
-    // disconnectedCallback — not the component's whole time on the page, which is what the
-    // pre-popover version of this component did.
+    // Listens only while this popover is open: added here, removed below or in disconnectedCallback.
     if (this.open) {
       document.addEventListener("keydown", this.onDocumentKeydown, { capture: true });
     } else {
@@ -108,9 +106,8 @@ export class WtHelpTooltip extends LitElement {
    * component at all, so a keydown bound to the button or the popup (as wt-row-actions binds its
    * own equivalent guard) never sees the key: a bare Escape there closes both the popover and the
    * enclosing dialog in one press (that file's guard test proves this by deletion). This has to be
-   * a CAPTURE-phase document listener rather than a per-element one for exactly that reason, and
-   * it is added and removed here rather than for the component's whole time on the page, unlike
-   * the pre-popover version of this component. */
+   * a CAPTURE-phase document listener rather than a per-element one for exactly that reason; it is
+   * attached only while the popover is open (see onToggle). */
   private readonly onDocumentKeydown = (event: KeyboardEvent): void => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();

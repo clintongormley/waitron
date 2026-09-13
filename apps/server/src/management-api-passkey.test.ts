@@ -9,12 +9,10 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountMeApi } from "./me-api.js";
 
-// Real Postgres, not PGlite: the four passkey routes below all run their DB work through `withTenant` +
-// `asAppUser`, so the credential write and the session lookup are subject to app_user's grants —
-// PGlite connects as a superuser holding every privilege (CLAUDE.md §4), so it cannot show that the
-// credential actually lands as the app role (assertion 2). The register
-// route is also GATED on a management-session cookie, which needs a migrated DB (persons +
-// management_sessions) the container provides. The ceremony LOGIC (options issued/stored/consumed,
+// The passkey routes below run their DB work through `withTenant` + `asAppUser`, so the credential
+// write and the session lookup are subject to app_user's grants: a grant the role lacks fails
+// assertion 2. The register route is also GATED on a management-session cookie, which needs a
+// migrated database (persons + management_sessions). The ceremony LOGIC (options issued/stored/consumed,
 // credential persisted, counter bumped) is proven at the unit layer in `@waitron/identity`'s
 // `passkey.test.ts`; this file proves OUR ROUTE WIRING around it — gating, body screening, the cookie
 // the auth-verify login sets, and persistence as the app role — not the crypto.
@@ -538,9 +536,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
 });
 
 /**
- * The sign-in passkey offer. Real Postgres because the whole point is what the sign-in route reads
- * back out of the database as `app_user` — a PGlite superuser connection would prove nothing about
- * the app role, and the offer's two reads run on it.
+ * The sign-in passkey offer, which the sign-in route reads back out of the database as `app_user`
+ * inside its own transaction.
  *
  * The offer's story spans BOTH dashboard surfaces: sign-in answers it (management API) and the route
  * that records it as resolved lives on the me API, so the round-trip test mounts both on one app,

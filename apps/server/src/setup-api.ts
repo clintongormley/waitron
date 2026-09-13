@@ -392,28 +392,17 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
       // packages/identity/src/staff.ts).
       firstNames: asOptionalName(admin.firstNames, "admin.firstNames"),
       lastNames: asOptionalName(admin.lastNames, "admin.lastNames"),
-      // The first operator's UI language, written to `persons.locale` by `applyVenue`'s seed-admin
-      // insert. This is the DISPLAY language the dashboard and till render in — NOT
-      // `location.invoiceLocales`, which decides the language of an invoice and is a fiscal value.
-      // Setup asks no question for it: the wizard has no translated text and no chooser, so a
-      // question here would be a language picker on an English-only form. The provision request is
-      // sent by the operator's own browser, so its `Accept-Language` IS their preference.
-      // Why it matters that something is written at all: a person whose own locale is null falls
-      // back to the venue default (`resolveActiveLocale`, packages/shared/src/locales.ts:38, called
-      // by apps/dashboard/src/dashboard-app.ts:795 on the pair apps/server/src/me-api.ts:427 returns),
-      // and for a Spanish venue geography derives that default as Spanish — which is how a box set up
-      // from an English browser opened the dashboard in Spanish.
-      // `resolveLoginLocale` only ever returns a member of SUPPORTED_LOCALE_CODES, so the stored
-      // value is always a language the apps have a catalogue for. When the browser asks for a
-      // language we do not ship, it returns the venue's own geography-derived locale — the same
-      // area → country → English chain `readVenueLocale` runs at boot
-      // (apps/server/src/venue-locale.ts:38), except for that chain's `WAITRON_TILL_LOCALE` override,
-      // which a box in setup has no trading config to read.
-      // Two consequences of always resolving a value, so nobody reads this as harmless: this path
-      // never leaves `persons.locale` null, so the row cannot tell "chose Spanish" from "said
-      // nothing", and the operator is pinned to the language stored here if the venue default is
-      // changed afterwards — until they pick one on their own profile screen. That is the accepted
-      // trade for a wizard with no chooser, not an oversight.
+      // The first operator's UI language, written to `persons.locale` — the DISPLAY language, not
+      // `location.invoiceLocales`, which is a fiscal value. Never null: `resolveLoginLocale` returns
+      // the browser's Accept-Language match when Waitron ships that language and the venue's
+      // geography-derived locale otherwise, so the stored value always has a catalogue. The dashboard
+      // could do without it, since it falls back to each request's own browser match; the till after
+      // a PIN sign-in and account emails have no browser header and fall back to the venue default,
+      // which for a Spanish venue is Spanish. The fallback here is `readVenueLocale`'s area → country
+      // → English chain without its `WAITRON_TILL_LOCALE` override, which a box in setup has no
+      // trading config to read. Never storing null means the row cannot tell "chose Spanish" from
+      // "said nothing", and a later change to the venue default does not move this person; see
+      // docs/superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md.
       locale: resolveLoginLocale(
         acceptLanguage,
         resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {

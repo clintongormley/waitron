@@ -11,8 +11,8 @@ import { mountMeApi } from "./me-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: the routes run their DB work as the non-superuser `app_user`, whose
-// grants a PGlite superuser connection would hold unconditionally (CLAUDE.md §4).
+// The routes run their DB work as the non-superuser `app_user`, so a grant the role lacks fails
+// these tests.
 // THE IDENTITY PROPERTY (the crux of this surface): the requester is the SESSION's person, never a
 // body field. A request authenticated as P that puts Q's id in the body still files as P. Proven by
 // deletion — make the swap route read `body.requestedByPersonId` instead of the session personId and

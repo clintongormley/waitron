@@ -532,12 +532,10 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     });
   });
 
-  // The dashboard renders in the signed-in person's own language when they have one
-  // (`resolveActiveLocale`, packages/shared/src/locales.ts:38, called from
-  // apps/dashboard/src/dashboard-app.ts:795 with the `locale` / `venueLocale` pair
-  // apps/server/src/me-api.ts:427 returns). Setup never wrote one, so the first operator always fell
-  // through to the venue default — Spanish for a Spanish venue. These three pin the whole chain the
-  // request boundary now runs: header wins, unshipped language loses to the venue's own locale.
+  // A person's stored language is what the till and account emails use, falling back to the venue
+  // default (Spanish for a Spanish venue) when there is none. These three pin the chain the setup
+  // boundary runs to fill it: the browser's language wins, and a language Waitron does not ship
+  // loses to the venue's own locale.
   it("gives the admin the language their browser asked for", async () => {
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
