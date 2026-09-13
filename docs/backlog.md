@@ -483,7 +483,7 @@ What it left open:
   review and CI and still returned a 500 to the first person who opened it. **Next action:** walk it
   once on a dev stack before treating the overhaul as finished.
 
-**Modifier editing, reworked (2026-09-13, the `modifiers` branch).** Editing a modifier's choices is
+**Modifier editing, reworked — LANDED #352 (2026-09-13).** Editing a modifier's choices is
 now a table rather than a stack of expanding panels. Each row shows the choice's name and price and
 carries the two things you change most — whether it is available, and whether it starts already
 chosen — while everything else about that choice (its translations, price, maximum quantity, tax
