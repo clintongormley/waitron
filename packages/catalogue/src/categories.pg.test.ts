@@ -10,6 +10,7 @@ import {
   readCategory,
   replaceProductCategories,
   readProductCategories,
+  categoryDependants,
 } from "./categories.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
@@ -312,4 +313,64 @@ it("deleting a top-level category makes its children top-level", async () => {
     await deleteCategory(tx, tenantId, breakfast.id);
     expect((await readCategory(tx, tenantId, eggs.id)).parentId).toBeNull();
   });
+});
+async function dependantsFixture() {
+  const tenantId = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
+  const otherTenantId = await seedTenant(suite.admin);
+  const made = await app(suite.admin, tenantId, async (tx) => {
+    const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
+    const x = await createCategory(tx, tenantId, { name: { en: "X" }, parentId: food.id });
+    const eggs = await createCategory(tx, tenantId, { name: { en: "Eggs" }, parentId: x.id });
+    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const p1 = await createProduct(tx, tenantId, {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { en: "P1" },
+      pricingUnit: "each",
+      unitPrice: "1",
+      vatClass: "general",
+    });
+    const p2 = await createProduct(tx, tenantId, {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { en: "P2" },
+      pricingUnit: "each",
+      unitPrice: "1",
+      vatClass: "general",
+    });
+    // p1's reporting category is X (also a member); p2 is a member of X with no reporting category.
+    await replaceProductCategories(tx, tenantId, p1.id, {
+      categoryIds: [x.id],
+      primaryCategoryId: x.id,
+    });
+    await replaceProductCategories(tx, tenantId, p2.id, {
+      categoryIds: [x.id],
+      primaryCategoryId: null,
+    });
+    return { food, x, eggs, p1, p2 };
+  });
+  return {
+    tenantId,
+    otherTenantId,
+    foodId: made.food.id,
+    xId: made.x.id,
+    eggsId: made.eggs.id,
+    p1Id: made.p1.id,
+    p2Id: made.p2.id,
+  };
+}
+it("reports a category's dependants for the delete preview", async () => {
+  const { tenantId, foodId, xId, eggsId, p1Id, p2Id } = await dependantsFixture();
+  const deps = await app(suite.admin, tenantId, (tx) => categoryDependants(tx, tenantId, xId));
+  expect(deps.parentId).toBe(foodId);
+  expect(deps.children.map((c) => c.id)).toEqual([eggsId]);
+  expect(deps.products.find((p) => p.id === p1Id)!.reporting).toBe(true);
+  expect(deps.products.find((p) => p.id === p2Id)!.reporting).toBe(false);
+});
+it("dependants is tenant-scoped", async () => {
+  const { otherTenantId, xId } = await dependantsFixture();
+  await expect(
+    app(suite.admin, otherTenantId, (tx) => categoryDependants(tx, otherTenantId, xId)),
+  ).rejects.toMatchObject({ code: "category.not_found" });
 });

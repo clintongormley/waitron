@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
+  categoryDependants,
   createCatalogue,
   createCategory,
   createProduct,
@@ -15,7 +16,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { createPreparationRoute } from "./operations.js";
+import { configureZone, createDepartment, createPreparationRoute } from "./operations.js";
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -90,5 +91,56 @@ it("allows deletion after memberships clear even when an open order keeps the co
         and working_order_id = ${order.rows[0]!.id}
     `);
     expect(snapshot.rows).toEqual([{ category: "Bakery" }]);
+  });
+});
+
+it("dependants lists a category's preparation routes with station and zone names", async () => {
+  const { tenantId, locationId } = await venue();
+  await withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const category = await createCategory(tx, tenantId, { name: { en: "Grill" } });
+    const zone = await tx.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+    const station = await tx.execute<{ id: string }>(sql`
+      insert into kitchen_stations (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Plancha') returning id`);
+    // A route may carry a zone, and a zoned route requires the zone to be a configured service zone.
+    const department = await createDepartment(
+      tx,
+      { tenantId, locationId },
+      { name: "Restaurant", defaultServiceMode: "table_tab" },
+    );
+    await configureZone(
+      tx,
+      { tenantId, locationId },
+      { zoneId: zone.rows[0]!.id, departmentId: department.id },
+    );
+    const routeId = await createPreparationRoute(
+      tx,
+      { tenantId, locationId },
+      {
+        categoryId: category.id,
+        zoneId: zone.rows[0]!.id,
+        target: { kind: "station", stationId: station.rows[0]!.id },
+      },
+    );
+    const deps = await categoryDependants(tx, tenantId, category.id);
+    expect(deps.routes).toEqual([{ id: routeId, station: "Plancha", zone: "Terrace" }]);
+  });
+});
+
+it("dependants reports a no-preparation route with a null station", async () => {
+  const { tenantId, locationId } = await venue();
+  await withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
+    const routeId = await createPreparationRoute(
+      tx,
+      { tenantId, locationId },
+      { categoryId: category.id, target: { kind: "no_preparation" } },
+    );
+    const deps = await categoryDependants(tx, tenantId, category.id);
+    expect(deps.routes).toEqual([{ id: routeId, station: null, zone: null }]);
   });
 });

@@ -195,6 +195,71 @@ export async function deleteCategory(tx: Transaction, tenantId: string, id: stri
   // 5. the category row (category_details cascades via its FK)
   await tx.delete(categories).where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
 }
+export interface CategoryDependants {
+  products: { id: string; name: Record<string, string>; reporting: boolean }[];
+  children: { id: string; name: Record<string, string> }[];
+  parentId: string | null;
+  routes: { id: string; station: string | null; zone: string | null }[];
+}
+/** What deleting a category would touch — the preview behind the delete confirmation. */
+export async function categoryDependants(
+  tx: Transaction,
+  tenantId: string,
+  id: string,
+): Promise<CategoryDependants> {
+  const category = await readCategory(tx, tenantId, id); // 404s a foreign/absent id, tenant-scoped
+  const productRows = await tx
+    .select({ id: products.id, name: products.descriptions, primary: products.categoryId })
+    .from(products)
+    .innerJoin(
+      productCategories,
+      and(
+        eq(productCategories.tenantId, products.tenantId),
+        eq(productCategories.productId, products.id),
+        eq(productCategories.categoryId, id),
+      ),
+    )
+    .where(eq(products.tenantId, tenantId))
+    .orderBy(products.id);
+  const childRows = await tx
+    .select({ id: categories.id, name: categories.name })
+    .from(categoryDetails)
+    .innerJoin(
+      categories,
+      and(
+        eq(categories.tenantId, categoryDetails.tenantId),
+        eq(categories.id, categoryDetails.categoryId),
+      ),
+    )
+    .where(and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.parentId, id)))
+    .orderBy(categories.id);
+  // Routes live in the optional venue-service module; guard the query on the table's presence,
+  // as validateImage does for media_images. Raw SQL joins two other modules' tables by name.
+  const routes: CategoryDependants["routes"] = [];
+  const routeTable = await tx.execute<{ present: boolean }>(
+    sql`select to_regclass('public.preparation_routes') is not null as present`,
+  );
+  if (routeTable.rows[0]!.present) {
+    const routeRows = await tx.execute<{ id: string; station: string | null; zone: string | null }>(
+      sql`
+      select pr.id,
+             case when pr.no_preparation then null else ks.name end as station,
+             fz.name as zone
+      from preparation_routes pr
+      left join kitchen_stations ks on ks.tenant_id = pr.tenant_id and ks.id = pr.station_id
+      left join floor_zones fz on fz.tenant_id = pr.tenant_id and fz.id = pr.zone_id
+      where pr.tenant_id = ${tenantId} and pr.category_id = ${id}
+      order by pr.id`,
+    );
+    routes.push(...routeRows.rows);
+  }
+  return {
+    products: productRows.map((p) => ({ id: p.id, name: p.name, reporting: p.primary === id })),
+    children: childRows,
+    parentId: category.parentId,
+    routes,
+  };
+}
 export async function readProductCategories(
   tx: Transaction,
   tenantId: string,
