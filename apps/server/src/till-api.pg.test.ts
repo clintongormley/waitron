@@ -135,8 +135,8 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 
 /**
  * Stand up a fresh chained venue + registered SIF (as the owner), seed a catalogue and a staff
- * person with a known PIN (as the app role), and read back the sellable products — one `each`
- * product (1.50 gross, general/21%) and one `weight` product (24.90 €/kg, reduced/10%). Each test
+ * person with a known PIN (as the app role), and read back the sellable products — one unit product
+ * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%). Each test
  * gets its OWN tenant so the `registros_facturacion`/`sales` counts are that test's alone,
  * order-independent (CLAUDE.md §4). Returns the login person's id so the test can log in as them and
  * assert the sale is attributed to them.
@@ -186,11 +186,16 @@ async function setupVenue(): Promise<{
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
+    const seededUnits = await tx.execute<{ id: string; seed_key: string }>(sql`
+      select id, seed_key from units
+      where tenant_id = ${cfg.tenantId} and seed_key in ('each', 'kg')`);
+    const unitId = (seedKey: "each" | "kg") =>
+      seededUnits.rows.find((unit) => unit.seed_key === seedKey)!.id;
     const jamon = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
       descriptions: { es: "Jamón cortado" },
-      pricingUnit: "weight",
+      unitId: unitId("kg"),
       unitPrice: "24.90",
       vatClass: "reduced",
     });
@@ -198,7 +203,7 @@ async function setupVenue(): Promise<{
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { es: "Agua mineral" },
-      pricingUnit: "each",
+      unitId: unitId("each"),
       unitPrice: "1.50",
       vatClass: "general",
     });
@@ -564,7 +569,11 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const { offers } = (await productsRes.json()) as {
       offers: {
         id: string;
-        pricingUnit: "each" | "weight";
+        unit: {
+          name: Record<string, string>;
+          precision: number;
+          hardwareUnit: "kg" | "g" | "mg" | null;
+        };
         descriptions: Record<string, string>;
       }[];
     };
@@ -575,8 +584,21 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       "Agua mineral",
       "Jamón cortado",
     ]);
-    const jamon = products.find((p) => p.pricingUnit === "weight")!; // 24.90 €/kg reduced(10%)
-    const agua = products.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const jamon = products.find((p) => p.unit.hardwareUnit === "kg")!; // 24.90 €/kg reduced(10%)
+    const agua = products.find((p) => p.unit.hardwareUnit === null)!; // 1.50 per unit general(21%)
+
+    const invalidQuantity = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        lines: [{ menuItemId: jamon.menuItemId, quantity: "0.2001" }],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    });
+    expect(invalidQuantity.status).toBe(400);
+    expect(await invalidQuantity.json()).toMatchObject({
+      error: { code: "quantity.invalid", params: { reason: "precision" } },
+    });
 
     // 3. Ring a MIXED basket: 0.200 kg jamón (4.98 gross @10%) + 2 × agua (3.00 gross @21%) = 7.98,
     // tendered 10.00 → 2.02 change. Two rate groups, so the vatBreakdown must carry a per-rate base
@@ -612,6 +634,20 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // The QR is the AEAT verification URL — required on every RRSIF invoice, so a non-empty string.
     expect(typeof ticket.qr).toBe("string");
     expect(ticket.qr.length).toBeGreaterThan(0);
+    const snapshottedLine = await suite.admin.execute<{
+      quantity: string;
+      unit_name: Record<string, string>;
+      unit_precision: number;
+    }>(sql`
+      select quantity, unit_name, unit_precision from sale_lines
+      where tenant_id = ${cfg.tenantId} and quantity = 0.200`);
+    expect(snapshottedLine.rows).toEqual([
+      {
+        quantity: "0.200",
+        unit_name: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
+        unit_precision: 3,
+      },
+    ]);
 
     // 5. Ring a SECOND identical mixed sale so the chain has a predecessor to link to. Same cookie,
     // same app — invoice A/2.
@@ -1429,6 +1465,14 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // the location's `invoice_locales` at `priceOrderLines` before the working-order line insert.
             descriptions: { "es-ES": "Agua mineral" },
             quantity: "2.000",
+            unitName: {
+              ca: "unitat",
+              en: "each",
+              es: "unidad",
+              eu: "unitatea",
+              gl: "unidade",
+            },
+            unitPrecision: 0,
             // KDS-2: this product carries no course, so the item serialises `course: null` and fires
             // IMMEDIATELY (a null course is treated as earliest, §2b) — `firedAt` is a timestamp, not null.
             course: null,
@@ -2384,6 +2428,8 @@ it("files all four modifier modes through cash checkout and reprints their saved
       gross: "3.00",
       parentLineNo: null,
       modifierSnapshots: snapshots,
+      unitName: { ca: "unitat", en: "each", es: "unidad", eu: "unitatea", gl: "unidade" },
+      unitPrecision: 0,
     },
     {
       descriptions: { [LOCALE]: "Queso" },
@@ -2391,6 +2437,8 @@ it("files all four modifier modes through cash checkout and reprints their saved
       gross: "1.40",
       parentLineNo: 1,
       modifierSnapshots: [],
+      unitName: null,
+      unitPrecision: null,
     },
   ]);
   expect(ticket.vatBreakdown).toEqual([
@@ -2403,8 +2451,10 @@ it("files all four modifier modes through cash checkout and reprints their saved
       quantity: string;
       vat_rate: string;
       modifier_snapshots: ModifierSnapshot[];
+      unit_name: Record<string, string> | null;
+      unit_precision: number | null;
     }>(
-      sql`select quantity,vat_rate,modifier_snapshots from sale_lines where tenant_id=${cfg.tenantId} order by line_no`,
+      sql`select quantity,vat_rate,modifier_snapshots,unit_name,unit_precision from sale_lines where tenant_id=${cfg.tenantId} order by line_no`,
     );
     const records = await tx
       .select()
@@ -2413,8 +2463,20 @@ it("files all four modifier modes through cash checkout and reprints their saved
     return { rows: rows.rows, records };
   });
   expect(stored.rows).toEqual([
-    { quantity: "2.000", vat_rate: "21.00", modifier_snapshots: snapshots },
-    { quantity: "4.000", vat_rate: "10.00", modifier_snapshots: [] },
+    {
+      quantity: "2.000",
+      vat_rate: "21.00",
+      modifier_snapshots: snapshots,
+      unit_name: { ca: "unitat", en: "each", es: "unidad", eu: "unitatea", gl: "unidade" },
+      unit_precision: 0,
+    },
+    {
+      quantity: "4.000",
+      vat_rate: "10.00",
+      modifier_snapshots: [],
+      unit_name: null,
+      unit_precision: null,
+    },
   ]);
   expect(stored.records).toHaveLength(1);
   expect(stored.records[0]!.huella).toMatch(/^[0-9A-F]{64}$/);

@@ -363,7 +363,7 @@ declare module "@waitron/shared" {
     "option.not_found": { optionGroupItemId: string; productId: string };
     /** Legacy option payload validation; required groups remain required when no choices are usable. */
     "options.selection_invalid": { productId: string; groupId: string; reason: string };
-    /** @deprecated Modifiers now apply to fractional units too; retained for stored error codes. */
+    /** Legacy option payload validation; canonical modifiers also support fractional units. */
     "options.unsupported_product": { productId: string; pricingUnit: string };
     /**
      * A ring-time line carried a free-text kitchen `note` longer than the 200-character limit (per-line

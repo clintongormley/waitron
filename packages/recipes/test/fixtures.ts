@@ -5,7 +5,12 @@ import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { asAppUser, withTenant } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS, createCatalogue, createProduct } from "@waitron/catalogue";
+import {
+  CATALOGUE_MIGRATIONS,
+  createCatalogue,
+  createProduct,
+  createUnit,
+} from "@waitron/catalogue";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 
@@ -30,11 +35,12 @@ export async function seedProduct(db: Database, tenantId: TenantId): Promise<str
   return withTenant(db, tenantId, async (tx: Transaction) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+    const unit = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
     const p = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: null,
       descriptions: { en: "bocadillo" },
-      pricingUnit: "each",
+      unitId: unit.id,
       unitPrice: "3.50",
       vatClass: "general",
     });

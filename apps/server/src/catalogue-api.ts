@@ -756,6 +756,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         catalogueId?: unknown;
         categoryId?: unknown;
         descriptions?: unknown;
+        unitId?: unknown;
         pricingUnit?: unknown;
         unitPrice?: unknown;
         vatClass?: unknown;
@@ -775,7 +776,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (!isPlainObject(body.descriptions)) {
         throw new AppError("management.request_invalid", { field: "descriptions" });
       }
-      if (typeof body.pricingUnit !== "string") {
+      if (body.unitId !== undefined && (typeof body.unitId !== "string" || !isUuid(body.unitId))) {
+        throw new AppError("management.request_invalid", { field: "unitId" });
+      }
+      if (body.unitId === undefined && body.pricingUnit === undefined) {
+        throw new AppError("management.request_invalid", { field: "unitId" });
+      }
+      if (body.pricingUnit !== undefined && typeof body.pricingUnit !== "string") {
         throw new AppError("management.request_invalid", { field: "pricingUnit" });
       }
       if (typeof body.unitPrice !== "string") {
@@ -806,7 +813,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         catalogueId: body.catalogueId,
         categoryId: body.categoryId,
         descriptions: body.descriptions as Record<string, string>,
-        pricingUnit: body.pricingUnit as never,
+        ...(body.unitId === undefined
+          ? { pricingUnit: body.pricingUnit as never }
+          : { unitId: body.unitId as string }),
         unitPrice: body.unitPrice,
         vatClass: body.vatClass as never,
         ...(body.allergens === undefined ? {} : { allergens: body.allergens as ProductAllergens }),
@@ -846,6 +855,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         descriptions?: unknown;
         unitPrice?: unknown;
         vatClass?: unknown;
+        unitId?: unknown;
         pricingUnit?: unknown;
         categoryId?: unknown;
         allergens?: unknown;
@@ -879,6 +889,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           throw new AppError("management.request_invalid", { field: "pricingUnit" });
         }
         patch.pricingUnit = body.pricingUnit as never;
+      }
+      if (body.unitId !== undefined) {
+        if (typeof body.unitId !== "string" || !isUuid(body.unitId)) {
+          throw new AppError("management.request_invalid", { field: "unitId" });
+        }
+        patch.unitId = body.unitId;
       }
       if (body.categoryId !== undefined) {
         if (typeof body.categoryId !== "string" && body.categoryId !== null) {

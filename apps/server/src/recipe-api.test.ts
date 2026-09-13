@@ -6,7 +6,12 @@ import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS, createCatalogue, createProduct } from "@waitron/catalogue";
+import {
+  CATALOGUE_MIGRATIONS,
+  createCatalogue,
+  createProduct,
+  createUnit,
+} from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -24,7 +29,8 @@ const noopLog: Logger = () => {};
 
 // This node's origin id — threaded into every recipe write's withTenant (a recipe write UPDATEs the
 // sync-enrolled `products` table). This PGlite suite carries no sync triggers (core, catalogue and
-// identity migrations only), so it is never read here; any valid uuid serves, kept for parity with production.
+// identity migrations only), so it is never read here; any valid uuid serves, kept for parity with
+// production.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 let tenantId: string;
@@ -60,11 +66,17 @@ const suite = usePgliteDb({
       const catalogue = await createCatalogue(tx, brandTenantId(tenantId), {
         name: "Recipe catalogue",
       });
+      const unit = await createUnit(
+        tx,
+        brandTenantId(tenantId),
+        { name: { es: "unidad" }, precision: 0 },
+        "es",
+      );
       const product = await createProduct(tx, brandTenantId(tenantId), {
         catalogueId: catalogue.id,
         categoryId: null,
         descriptions: { es: "Tostada" },
-        pricingUnit: "each",
+        unitId: unit.id,
         unitPrice: "1.00",
         vatClass: "general",
       });

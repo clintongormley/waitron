@@ -23,10 +23,12 @@
  * snapshot, not a bug.
  */
 import { priceBasket } from "@waitron/catalogue/src/pricing.js";
+import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import { sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import type { Doneness, TillProduct, ModifierSelection, ModifierSnapshot } from "../api/client.js";
+import { productUnit } from "../widgets/product-name.js";
 
 /**
  * One modifier the operator selected on a basket line (ordering modifiers, Task 9) — the client half
@@ -55,12 +57,12 @@ export interface SelectedLineOption {
   quantity?: number;
 }
 
-/** One rung-up basket line: a product and how much of it (a count for `each`, a kg string for `weight`). */
+/** One rung-up basket line: a product and its decimal-string quantity. */
 export interface OrderLine {
   /** Stable server identity retained while editing a retrieved line. */
   workingOrderLineId?: string;
   product: TillProduct;
-  /** A count (e.g. "2") for an `each` product; a measured kg weight (e.g. "0.320") for `weight`. */
+  /** A decimal string accepted by the product unit's precision. */
   quantity: string;
   /**
    * The modifiers selected on this line (ordering modifiers, Task 9), or ABSENT for a plain line — the
@@ -207,7 +209,12 @@ export class WorkingOrderStore {
   /** The memoised priced basket, recomputed only after a mutation cleared {@link #priced}. */
   get #pricedOrder(): Priced {
     if (this.#priced === null) {
-      this.#priced = priceBasket(this.#lines);
+      this.#priced = priceBasket(
+        this.#lines.map((line) => ({
+          ...line,
+          product: { ...line.product, unit: productUnit(line.product) },
+        })),
+      );
     }
     return this.#priced;
   }
@@ -249,7 +256,7 @@ export class WorkingOrderStore {
   }
 
   /**
-   * Append a line and notify. `quantity` is a count for `each` products, a kg string for `weight`.
+   * Append a line and notify. The server revalidates `quantity` against the selected unit.
    * `options` (ordering modifiers, Task 9) are the modifiers selected on the line; OMITTED — the common
    * tap, and the vast majority — the line carries no `options` key at all, so a no-modifier add is
    * byte-identical to before (the picker, Task 10, is the only caller that passes them).
@@ -270,6 +277,7 @@ export class WorkingOrderStore {
       modifierSnapshots?: ModifierSnapshot[];
     },
   ): void {
+    assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
     const line: OrderLine = { product, quantity };
     if (options !== undefined) {
       line.options = options;
@@ -309,8 +317,8 @@ export class WorkingOrderStore {
 
   /**
    * Set how many of the line at `index` the basket holds (dish-line quantity) and notify. `quantity` is
-   * a count for an `each` line (the basket's +/- stepper is the only caller and never touches a `weight`
-   * line). Out-of-range indices are a no-op, exactly like {@link removeLine}. This does NOT merge lines:
+   * a whole quantity (the basket's +/- stepper is the only caller and never touches a fractional or
+   * hardware-mapped line). Out-of-range indices are a no-op, exactly like {@link removeLine}. This does NOT merge lines:
    * each add stays its own line, so stepping one line's count never folds it into an identical sibling.
    * Re-prices ({@link #invalidatePricing}) and marks the basket {@link #dirty} — a quantity change is a
    * line edit, so a retrieved order re-syncs before pay, the same as add/remove.
@@ -319,6 +327,9 @@ export class WorkingOrderStore {
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
+    assertQuantityPrecision(quantity, productUnit(this.#lines[index]!.product).precision, {
+      positive: true,
+    });
     this.#lines[index]!.quantity = quantity;
     this.#invalidatePricing();
     this.#dirty = true;

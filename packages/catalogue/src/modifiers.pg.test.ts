@@ -13,6 +13,7 @@ import {
 } from "./modifiers.js";
 import { createCatalogue, createProduct, setProductOptionGroups } from "./operations.js";
 import { tenantId as brandTenantId } from "@waitron/shared";
+import { seedLegacySellingUnits } from "../test/fixtures.js";
 
 // Grants and attachment races need independent, non-superuser PostgreSQL connections.
 const suite = useTemplateDb({ template: "core" });
@@ -99,6 +100,7 @@ it("rolls back the whole save when a choice belongs to another modifier", async 
 
 it("blocks type changes and deletion for attached definitions, but permits deactivation", async () => {
   const tenant = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenant);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
   await app(tenant, async (tx) => {
     const catalogue = await createCatalogue(tx, brandTenantId(tenant), { name: "Menu" });
@@ -135,6 +137,7 @@ it("blocks type changes and deletion for attached definitions, but permits deact
 
 it("serializes deletion behind an attachment write and reports its committed dependency", async () => {
   const tenant = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenant);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
   const product = await app(tenant, async (tx) => {
     const catalogue = await createCatalogue(tx, brandTenantId(tenant), { name: "Menu" });
@@ -222,6 +225,7 @@ it("checks both yes/no labels when changing the default content language", async
 
 it("preserves unavailable attachments when editing a product, but refuses a new attachment", async () => {
   const tenant = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenant);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
   const products = await app(tenant, async (tx) => {
     const catalogue = await createCatalogue(tx, brandTenantId(tenant), { name: "Menu" });

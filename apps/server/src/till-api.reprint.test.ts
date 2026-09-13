@@ -28,6 +28,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import type { TillConfig } from "./till-config.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: this file proves the HTTP SHAPE of the reprint route — the
@@ -48,6 +49,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
+    await seedLegacySellingUnits(db, tenantId);
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);

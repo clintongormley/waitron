@@ -28,6 +28,19 @@ async function storedLanguages(tenantId: string) {
   ).rows;
 }
 
+async function storedUnits(tenantId: string) {
+  return (
+    await suite.db.execute<{
+      seed_key: string;
+      name: Record<string, string>;
+      precision: number;
+      hardware_unit: string | null;
+    }>(sql`
+      select seed_key, name, precision, hardware_unit from units
+      where tenant_id = ${tenantId} order by seed_key`)
+  ).rows;
+}
+
 describe("catalogue provisioning", () => {
   it.each([
     ["ES", "Madrid", "en-GB", "es"],
@@ -64,5 +77,64 @@ describe("catalogue provisioning", () => {
     const menus = await suite.db.execute<{ count: number }>(sql`
       select count(*)::int as count from location_catalogues where tenant_id = ${node.tenantId}`);
     expect(menus.rows).toEqual([{ count: 1 }]);
+  });
+
+  it("seeds the six units once and preserves edits and intentional deletion on another node", async () => {
+    const node = await venue("ES", "Madrid", "es-ES");
+    const run = (nodeId = node.nodeId) =>
+      suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, { ...node, nodeId }));
+    await run();
+    expect(await storedUnits(node.tenantId)).toEqual([
+      {
+        seed_key: "each",
+        name: { en: "each", es: "unidad", ca: "unitat", gl: "unidade", eu: "unitatea" },
+        precision: 0,
+        hardware_unit: null,
+      },
+      {
+        seed_key: "g",
+        name: { en: "g", es: "g", ca: "g", gl: "g", eu: "g" },
+        precision: 0,
+        hardware_unit: "g",
+      },
+      {
+        seed_key: "kg",
+        name: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
+        precision: 3,
+        hardware_unit: "kg",
+      },
+      {
+        seed_key: "l",
+        name: { en: "l", es: "l", ca: "l", gl: "l", eu: "l" },
+        precision: 3,
+        hardware_unit: null,
+      },
+      {
+        seed_key: "mg",
+        name: { en: "mg", es: "mg", ca: "mg", gl: "mg", eu: "mg" },
+        precision: 0,
+        hardware_unit: "mg",
+      },
+      {
+        seed_key: "ml",
+        name: { en: "ml", es: "ml", ca: "ml", gl: "ml", eu: "ml" },
+        precision: 0,
+        hardware_unit: null,
+      },
+    ]);
+    await suite.db.execute(sql`
+      update units set name = '{"en":"piece","es":"pieza"}'::jsonb
+      where tenant_id = ${node.tenantId} and seed_key = 'each'`);
+    await suite.db.execute(sql`
+      delete from units where tenant_id = ${node.tenantId} and seed_key = 'mg'`);
+    const otherNode = await seedNode(suite.db, node.tenantId, node.locationId);
+    await run(otherNode);
+    expect(
+      (await storedUnits(node.tenantId)).find((unit) => unit.seed_key === "each")?.name,
+    ).toEqual({
+      en: "piece",
+      es: "pieza",
+    });
+    expect((await storedUnits(node.tenantId)).map((unit) => unit.seed_key)).not.toContain("mg");
   });
 });

@@ -216,6 +216,26 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(s).toContain("VERI*FACTU");
   });
 
+  it("prints the snapshotted localized unit beside an exact fractional quantity", () => {
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      lines: [
+        {
+          descriptions: { "es-ES": "Jamón" },
+          quantity: "0.375",
+          gross: "4.50",
+          unitName: { "es-ES": "kg" },
+          unitPrecision: 3,
+        },
+      ],
+      total: "4.50",
+    };
+    const text = decodeTicket(
+      formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES" }),
+    );
+    expect(text).toMatch(/0\.375 kg\s+Jamón[^\n]*4,50/u);
+  });
+
   it("groups modifier lines under their dish — dish at its price, options indented at their delta, and the lines reconcile with the filed desglose", () => {
     // A filed sale carrying ordering modifiers (Task 8): the dish is a PARENT line
     // (`parentLineNo == null`) and each selected option is a CHILD line (`parentLineNo` = the dish's

@@ -66,9 +66,7 @@ export interface SeedCatalogue {
 // ── Ordering modifiers (Phase 4, Task 13) ──────────────────────────────────────────────────────────
 // Demo `option_groups`/`option_group_items` content, authored bare-locale like everything else in this
 // file. Attached (by `seed-options.ts`, via `seedCatalogues`' image→productId map) to exactly two
-// EACH-priced products below — the sale path rejects options on a `weight` product
-// (`options.unsupported_product`, apps/server/src/working-order.ts) — so both this seed's targets are
-// each-priced by construction: "Coffee" (image `cafe-solo.png`) and "Sirloin in whisky sauce"
+// products below: "Coffee" (image `cafe-solo.png`) and "Sirloin in whisky sauce"
 // (image `solomillo.png`), the closest analogues on this Spanish menu to a size/milk coffee order and a
 // cooked-to-order dish with extras. `vatClass: null` on every item below means INHERIT the dish's own
 // rate — a milk splash or a steak topping follows the same VAT treatment as the dish it rides on.

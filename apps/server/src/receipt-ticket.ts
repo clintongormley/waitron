@@ -260,9 +260,10 @@ export function formatReceipt({
   // grouping only re-orders the already-filed lines — every line still prints at its filed gross, so the
   // list reconciles with `result.total` exactly as before.
   for (const { dish, options } of groupByParent(result.lines)) {
+    const unit = dish.unitName == null ? "" : ` ${lineName(dish.unitName, locale)}`;
     b.line(
       twoColumn(
-        `${dish.quantity}  ${lineName(dish.descriptions, locale)}`,
+        `${dish.quantity}${unit}  ${lineName(dish.descriptions, locale)}`,
         formatMoney(dish.gross, locale),
       ),
     );

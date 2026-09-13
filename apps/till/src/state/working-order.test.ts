@@ -44,6 +44,21 @@ describe("WorkingOrderStore", () => {
     expect(s.total).toBe("3.20");
   });
 
+  it("rejects an invalid unit quantity before changing basket state", () => {
+    const s = new WorkingOrderStore();
+    expect(() => s.addProduct(cafe, "0.5")).toThrowError(
+      expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),
+    );
+    expect(s.lines).toEqual([]);
+
+    s.addProduct(cafe, "1");
+    expect(() => s.setLineQuantity(0, "1.5")).toThrowError(
+      expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),
+    );
+    expect(s.lines[0]!.quantity).toBe("1");
+    expect(s.total).toBe("1.50");
+  });
+
   it("attaches a per-line note and doneness passed as extras", () => {
     const s = new WorkingOrderStore();
     s.addProduct(cafe, "1", undefined, { note: "no mayo", doneness: "medium" });

@@ -66,8 +66,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Introduce el texto obligatorio en el idioma predeterminado del sitio.",
   },
   "content.default_missing": {
-    en: "Some products, categories, menu sections, modifiers or images need translating before this can become the default language.",
-    es: "Debes traducir algunos productos, categorías, secciones del menú, modificadores o imágenes antes de usar este idioma como predeterminado.",
+    en: "Some products, categories, units, menu sections, modifiers or images need translating before this can become the default language.",
+    es: "Debes traducir algunos productos, categorías, unidades, secciones del menú, modificadores o imágenes antes de usar este idioma como predeterminado.",
+  },
+  "unit.precision_invalid": {
+    en: "Choose between 0 and 3 decimal places.",
+    es: "Elige entre 0 y 3 decimales.",
+  },
+  "unit.not_found": {
+    en: "That unit could not be found.",
+    es: "No se ha encontrado esa unidad.",
+  },
+  "unit.in_use": {
+    en: "Change the listed products before deleting this unit.",
+    es: "Cambia los productos indicados antes de eliminar esta unidad.",
   },
   "management_session.required": {
     en: "Please log in to continue",

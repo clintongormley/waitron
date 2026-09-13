@@ -41,6 +41,7 @@ import { readOnlyGate } from "./read-only-gate.js";
 import { parseEnvFile } from "./env-file.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { roleUrl } from "./testing/postgres.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
 // Task 10 — the END-TO-END RECEIPT for the promote endpoint (spec §8/§9.1). No new production code: this
 // suite drives the whole arc over the real HTTP endpoint against REAL Postgres (mandatory, CLAUDE.md §4 —
@@ -238,6 +239,7 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
  * (`token_hash` = scrypt of `DEVICE_TOKEN`, the same shape `acceptDeviceJoinRequest` stores, so the
  * device cookie verifies). */
 async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
+  await seedLegacySellingUnits(admin, MIRROR_TENANT_ID);
   await admin.execute(sql`
     insert into tills (id, tenant_id, location_id, name)
     values (${MIRROR_TILL_ID}, ${MIRROR_TENANT_ID}, ${MIRROR_LOCATION_ID}, 'Barra')

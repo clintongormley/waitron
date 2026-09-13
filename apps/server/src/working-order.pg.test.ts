@@ -66,6 +66,10 @@ import "./errors.js";
 // THROWS its `dockerRequired` message rather than skipping when Docker is absent, so a vanished suite
 // fails loudly instead of reporting a green that proves nothing.
 const LOCALE = "es-ES";
+const EACH_UNIT_SNAPSHOT = {
+  unitName: { en: "each", es: "unidad", ca: "unitat", gl: "unidade", eu: "unitatea" },
+  unitPrecision: 0,
+} as const;
 
 // The accountable operator every placing/cancel amendment is attributed to. `order_amendments.actor_id`
 // is a plain uuid with NO FK (the sale_voids.voided_by shape), so a fixed fixture uuid stands in for
@@ -525,6 +529,7 @@ describe("payWorkingOrder", () => {
         gross: "1.50",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
     ]);
 
@@ -576,6 +581,7 @@ describe("payWorkingOrder", () => {
         gross: "1.50",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
       {
         descriptions: { [LOCALE]: "Agua" },
@@ -583,6 +589,7 @@ describe("payWorkingOrder", () => {
         gross: "2.00",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
     ]);
     expect(res.invoiceNumber).toBe("A/1");
@@ -630,6 +637,7 @@ describe("payWorkingOrder", () => {
         gross: "3.00",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
     ]);
     expect(await filedSaleTotal(id)).toBe("3.00");
@@ -702,6 +710,7 @@ describe("payWorkingOrder", () => {
         gross: "1.50",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
       {
         descriptions: { [LOCALE]: "Agua" },
@@ -709,6 +718,7 @@ describe("payWorkingOrder", () => {
         gross: "4.00",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
     ]);
 
@@ -1561,6 +1571,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
         gross: "1.50",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
       {
         descriptions: { [LOCALE]: "Agua" },
@@ -1568,6 +1579,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
         gross: "2.00",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
     ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -1752,6 +1764,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
         gross: "1.50",
         parentLineNo: null,
         modifierSnapshots: [],
+        ...EACH_UNIT_SNAPSHOT,
       },
     ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });

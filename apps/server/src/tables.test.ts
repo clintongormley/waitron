@@ -47,6 +47,7 @@ import {
   openTab,
 } from "./working-order.js";
 import "./errors.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
 const LOCALE = "es-ES";
 // The whole manifest, not [core]: the tables here belong to several modules that FK into core, and
@@ -506,6 +507,7 @@ async function setupTabVenue(): Promise<{
   tableId: string;
 }> {
   const tenantId = await seedTenant(db);
+  await seedLegacySellingUnits(db, tenantId);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);

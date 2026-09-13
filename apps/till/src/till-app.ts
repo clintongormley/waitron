@@ -64,6 +64,7 @@ import type {
   TillSaleResult,
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
+import { productUnit } from "./widgets/product-name.js";
 import { kindOfFormFactor } from "./layout.js";
 import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
@@ -108,15 +109,15 @@ const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
 /**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
- * quantity at numeric(_,3) scale, so an EACH product's whole count arrives as "2.000" — which the
- * basket would otherwise render verbatim. Trim the trailing zeros (and a bare trailing dot) so an
- * each line reads "2", not "2.000"; a WEIGHT product keeps its decimals ("0.320"). Only the DISPLAY
+ * quantity at numeric(_,3) scale, so a precision-zero unit's whole count arrives as "2.000" — which
+ * the basket would otherwise render verbatim. Trim the trailing zeros (and a bare trailing dot) so it
+ * reads "2", not "2.000"; fractional units keep their decimals ("0.320"). Only the DISPLAY
  * string is cleaned — re-pricing is untouched, because `priceBasket` parses the decimal either way
  * (`decimal("2")` and `decimal("2.000")` are equal), as does the pay-time `recordSale`. Applied here
  * in the app's retrieve mapping, deliberately NOT in the store (which stores lines verbatim).
  */
 function displayQuantity(product: TillProduct, quantity: string): string {
-  if (product.pricingUnit !== "each" || !quantity.includes(".")) return quantity;
+  if (productUnit(product).precision !== 0 || !quantity.includes(".")) return quantity;
   return quantity.replace(/0+$/, "").replace(/\.$/, "");
 }
 
@@ -1659,8 +1660,8 @@ export class TillApp extends LitElement {
    * A contextual line uses the server's stored offer snapshot, so deactivation does not remove it.
    * A legacy product-only line that can no longer resolve is dropped and surfaces `held.product_gone`.
    *
-   * Each `quantity` arrives at numeric(_,3) scale ("2.000"); {@link displayQuantity} cleans an EACH
-   * count's trailing zeros for display without touching re-pricing (a weight keeps its decimals).
+   * Each `quantity` arrives at numeric(_,3) scale ("2.000"); {@link displayQuantity} cleans a
+   * precision-zero count's trailing zeros without touching re-pricing.
    *
    * CROSS-TILL STALE-LIST RACE. The held list has no live push (by design — replication is future
    * shared infra), so between our last `listWorkingOrders` and this tap another register may have paid

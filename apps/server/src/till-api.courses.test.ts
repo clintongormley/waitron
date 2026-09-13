@@ -27,6 +27,7 @@ import { createCourse, setProductCourse } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -65,6 +66,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
+    await seedLegacySellingUnits(db, tenantId);
     // invoice_locales is `es-ES` (full-tag, fiscal). The products are authored under the BARE `es`
     // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the

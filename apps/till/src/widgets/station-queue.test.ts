@@ -155,6 +155,28 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector('[data-item="ti-2"]')!.textContent).toContain("1× Agua");
   });
 
+  it("renders a fractional line with its snapshotted unit", async () => {
+    const fractional: StationQueueGroup = {
+      ...groupA,
+      items: [
+        {
+          ...groupA.items[0]!,
+          quantity: "0.375",
+          unitName: { "es-ES": "kg" },
+          unitPrecision: 3,
+        },
+      ],
+    };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [fractional],
+      view: "rail",
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector('[data-item="ti-1"]')!.textContent).toContain(
+      "0.375 kg× Paella",
+    );
+  });
+
   it("kanban: each cell shows its quantity × dish name alongside the order number", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,

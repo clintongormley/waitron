@@ -67,6 +67,7 @@ export const QUERY_DEPENDENCIES = {
   listCategoryProducts: ["categories", "products", "product_categories"],
   listLibraryProducts: ["products", "product_categories"],
   getProductCategories: ["products", "product_categories"],
+  listUnits: ["units"],
   listProducts: [
     "product_categories",
     "products",

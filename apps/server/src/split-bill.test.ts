@@ -29,6 +29,7 @@ import {
   unjoinTable,
 } from "./working-order.js";
 import { readReceiptOrder } from "./receipt-order.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
 // PGlite is enough HERE: the check being table-less and the line partition are plain row state a single
@@ -59,6 +60,7 @@ interface Seeded {
 
 async function setupVenue(): Promise<Seeded> {
   const tenantId = await seedTenant(db);
+  await seedLegacySellingUnits(db, tenantId);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);

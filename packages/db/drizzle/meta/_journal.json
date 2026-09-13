@@ -155,6 +155,13 @@
       "when": 1789287339361,
       "tag": "0021_product_modifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789288793325,
+      "tag": "0022_unit_snapshots",
+      "breakpoints": true
     }
   ]
 }

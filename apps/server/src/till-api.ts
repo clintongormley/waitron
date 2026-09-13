@@ -355,6 +355,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "modifier.invalid": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
+  "quantity.invalid": 400,
   // A malformed working-order id in a `POST /api/sales` / `POST /api/pay` / `POST /api/working-orders`
   // body — the shared branded-id code (`@waitron/shared`), screened by `requireUuidParam` so it is a
   // clean 400, not a `22P02` → 500.

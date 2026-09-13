@@ -9,7 +9,7 @@ import type { TillProduct } from "../api/client.js";
 const cafe: TillProduct = {
   id: "cafe",
   descriptions: { es: "Café" },
-  pricingUnit: "each",
+  unit: { id: "unit-each", name: { en: "unit", es: "unidad" }, precision: 0, hardwareUnit: null },
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
@@ -19,11 +19,17 @@ const cafe: TillProduct = {
 const jamon: TillProduct = {
   id: "jamon",
   descriptions: { es: "Jamón" },
-  pricingUnit: "weight",
+  unit: { id: "unit-kg", name: { en: "kg", es: "kg" }, precision: 3, hardwareUnit: "kg" },
   unitPrice: "10.00",
   vatClass: "reduced",
   category: "charcutería",
   allergens: null,
+};
+
+const portion: TillProduct = {
+  ...cafe,
+  id: "portion",
+  unit: { id: "unit-portion", name: { en: "portion" }, precision: 2, hardwareUnit: null },
 };
 
 /** Taps one keypad key inside the widget and lets the parent re-render with the new value. */
@@ -300,6 +306,17 @@ describe("till-tender-pay", () => {
     expect(query(el, ".pay")).not.toBeNull();
   });
 
+  it("accepts a fractional custom unit without a hardware mapping", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", portion);
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).not.toContain("kg");
+    await type(el, "0.25");
+    click(el, ".add");
+    expect(store.lines).toEqual([{ product: portion, quantity: "0.25" }]);
+  });
+
   it("disables Add and refuses a zero or empty weight", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
@@ -310,6 +327,17 @@ describe("till-tender-pay", () => {
     await el.updateComplete;
     expect(store.lines).toHaveLength(0);
     await type(el, "0"); // an explicit zero is still non-positive
+    expect(query(el, ".add")!.hasAttribute("disabled")).toBe(true);
+    click(el, ".add");
+    expect(store.lines).toHaveLength(0);
+  });
+
+  it("disables Add when the quantity exceeds the selected unit's precision", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", jamon);
+    await el.updateComplete;
+    await type(el, "0.1234");
     expect(query(el, ".add")!.hasAttribute("disabled")).toBe(true);
     click(el, ".add");
     expect(store.lines).toHaveLength(0);

@@ -173,6 +173,8 @@ export const workingOrderLines = pgTable(
       .$type<ModifierSnapshot[]>()
       .notNull()
       .default([]),
+    unitName: jsonb("unit_name").$type<Record<string, string>>(),
+    unitPrecision: integer("unit_precision"),
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     // The GROSS (VAT-inclusive) unit price LOCKED at add time (line-add snapshot, 7c). `unit_price`
@@ -218,6 +220,10 @@ export const workingOrderLines = pgTable(
     }).onDelete("restrict"),
     unique("working_order_lines_line_no_key").on(t.workingOrderId, t.lineNo),
     unique("working_order_lines_tenant_id_key").on(t.tenantId, t.id),
+    check(
+      "working_order_lines_unit_precision_ck",
+      sql`${t.unitPrecision} is null or ${t.unitPrecision} between 0 and 3`,
+    ),
     index("working_order_lines_order_idx").on(t.workingOrderId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
     check("working_order_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 100`),

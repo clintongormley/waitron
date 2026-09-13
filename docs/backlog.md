@@ -151,12 +151,12 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products.
    Categories has landed (#340, see below), with [integration notes](developers/product-categories.md),
    and Modifiers has landed (#341, see below), with its
-   [integration contract](developers/modifiers.md). Units and Products have specs and plans written
-   but no code yet ([units](superpowers/specs/2026-09-12-product-units-design.md),
-   [products](superpowers/specs/2026-09-12-product-editor-design.md)). The
-   [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) defines the branch contracts.
-   Products integrates the other three; recipes are deferred for
-   this workflow and their authoring withdrawal belongs to that build.
+   [integration contract](developers/modifiers.md). Units is implemented; Products still has its
+   [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md). See the
+   [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) for the branch contracts.
+   Products still owns integrating the three supporting sections into the replacement product editor;
+   recipes are deferred for this workflow and
+   their authoring withdrawal belongs to that build.
 3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319 and
    #327 reworked these recently, so read them against the rules before changing anything.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and

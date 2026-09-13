@@ -51,6 +51,7 @@ import {
 } from "./operations.js";
 import { AppError } from "@waitron/shared";
 import type { AvailableProduct } from "./operations.js";
+import { createUnit } from "./units.js";
 import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
 // Query behaviour runs on PGlite; each case starts with empty authoring tables.
@@ -66,7 +67,7 @@ describe("catalogue operations", () => {
         catalogueId: upstairs.id,
         categoryId: category.id,
         descriptions: { en: "Negroni" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "0.00",
         vatClass: "general",
       });
@@ -213,7 +214,7 @@ describe("catalogue operations", () => {
         catalogueId: menu.id,
         categoryId: null,
         descriptions: { en: "Water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
       });
@@ -241,7 +242,7 @@ describe("catalogue operations", () => {
         catalogueId: menu.id,
         categoryId: null,
         descriptions: { en: "Burger" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "10.00",
         vatClass: "general",
       });
@@ -300,11 +301,25 @@ describe("catalogue operations", () => {
 
   let tenantId: TenantId;
   let locationId: string;
+  let eachUnitId: string;
+  let kgUnitId: string;
 
   beforeEach(async () => {
     const venue = await seedVenue(fx.db);
     tenantId = venue.tenantId;
     locationId = venue.locationId;
+    await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      eachUnitId = (await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"))
+        .id;
+      kgUnitId = (await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en")).id;
+      await tx.execute(
+        sql`update units
+            set seed_key = case when id = ${eachUnitId} then 'each' else 'kg' end,
+                hardware_unit = case when id = ${kgUnitId} then 'kg' else null end
+            where tenant_id = ${tenantId} and id in (${eachUnitId}, ${kgUnitId})`,
+      );
+    });
   });
 
   // Every test body runs as app_user inside the current tenant's context. `tenantId` is refreshed
@@ -345,7 +360,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "sliced ham" },
-        pricingUnit: "weight",
+        unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
       });
@@ -353,7 +368,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -362,18 +377,97 @@ describe("catalogue operations", () => {
         catalogueId: other.id,
         categoryId: null,
         descriptions: { en: "olives" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
       });
       const products = await listProducts(tx, tenantId, cat.id);
       expect(products.map((p) => p.id).sort()).toEqual([ham.id, water.id].sort());
       const seenHam = products.find((p) => p.id === ham.id)!;
-      expect(seenHam.pricingUnit).toBe("weight");
+      expect(seenHam.unit).toEqual({
+        id: kgUnitId,
+        name: { en: "kg" },
+        precision: 3,
+        hardwareUnit: "kg",
+      });
       expect(seenHam.unitPrice).toBe("24.90");
       expect(seenHam.vatClass).toBe("reduced");
       expect(seenHam.descriptions).toEqual({ en: "sliced ham" });
       expect(seenHam.active).toBe(true);
+    });
+  });
+
+  it("attaches legacy product creates to the tenant's real seeded unit", async () => {
+    await asTenant(async (tx) => {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const ham = await createProduct(tx, tenantId, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        pricingUnit: "weight",
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      const assignments = await tx.execute<{ unit_id: string }>(sql`
+        select unit_id from product_units
+        where tenant_id = ${tenantId} and product_id = ${ham.id}`);
+      expect(assignments.rows).toEqual([{ unit_id: kgUnitId }]);
+      expect(ham.unit).toEqual({
+        id: kgUnitId,
+        name: { en: "kg" },
+        precision: 3,
+        hardwareUnit: "kg",
+      });
+    });
+  });
+
+  it("keeps the legacy pricing sentinel coherent when a product's unit changes", async () => {
+    await asTenant(async (tx) => {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const ham = await createProduct(tx, tenantId, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, tenantId, ham.id, { unitId: eachUnitId });
+      const stored = await tx.execute<{ pricing_unit: string }>(sql`
+        select pricing_unit from products
+        where tenant_id = ${tenantId} and id = ${ham.id}`);
+      expect(stored.rows).toEqual([{ pricing_unit: "each" }]);
+      const [updated] = await listProducts(tx, tenantId, catalogue.id);
+      expect(updated).toMatchObject({
+        unitId: eachUnitId,
+        pricingUnit: "each",
+        unit: { id: eachUnitId, precision: 0, hardwareUnit: null },
+      });
+    });
+  });
+
+  it("keeps the real unit assignment coherent when a legacy product changes pricing basis", async () => {
+    await asTenant(async (tx) => {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        pricingUnit: "each",
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, tenantId, product.id, { pricingUnit: "weight" });
+      const assignments = await tx.execute<{ unit_id: string }>(sql`
+        select unit_id from product_units
+        where tenant_id = ${tenantId} and product_id = ${product.id}`);
+      expect(assignments.rows).toEqual([{ unit_id: kgUnitId }]);
+      const [updated] = await listProducts(tx, tenantId, catalogue.id);
+      expect(updated).toMatchObject({
+        unitId: kgUnitId,
+        pricingUnit: "weight",
+        unit: { id: kgUnitId, precision: 3, hardwareUnit: "kg" },
+      });
     });
   });
 
@@ -384,7 +478,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -406,7 +500,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "ham" },
-        pricingUnit: "weight",
+        unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
         image: "x.webp",
@@ -417,7 +511,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -445,7 +539,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -470,7 +564,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "seasonal" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
         active: false,
@@ -481,7 +575,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -500,7 +594,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "bread" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.20",
         vatClass: "general",
         allergens: { gluten: { presence: "contains", source: "wheat" } },
@@ -518,7 +612,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -534,7 +628,7 @@ describe("catalogue operations", () => {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { en: "mystery" },
-          pricingUnit: "each",
+          unitId: eachUnitId,
           unitPrice: "1.00",
           vatClass: "general",
           allergens: { nope: { presence: "contains" } } as never,
@@ -550,7 +644,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "cake" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
         allergens: { eggs: { presence: "contains" } },
@@ -579,7 +673,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "milk" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
         allergens: { milk: { presence: "contains" } },
@@ -597,7 +691,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "burger" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "9.00",
         vatClass: "general",
       });
@@ -606,7 +700,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -767,7 +861,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "falafel wrap" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "6.00",
         vatClass: "general",
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
@@ -818,7 +912,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "sandwich" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } },
@@ -837,7 +931,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "sandwich" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
         allergens: { nuts: { presence: "may_contain" } },
@@ -862,7 +956,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "sandwich" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } }, // → manual_allergens
@@ -893,7 +987,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "falafel" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "4.00",
         vatClass: "general",
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
@@ -902,7 +996,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "plain" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
       });
@@ -922,7 +1016,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "x" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
         allergens: { nuts: { presence: "contains" } },
@@ -980,7 +1074,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "plain" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
       });
@@ -999,7 +1093,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "falafel" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "4.00",
         vatClass: "general",
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
@@ -1018,7 +1112,7 @@ describe("catalogue operations", () => {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { en: "x" },
-          pricingUnit: "each",
+          unitId: eachUnitId,
           unitPrice: "1.00",
           vatClass: "general",
           dietOverride: { addContains: ["fish"], removeContains: ["fish"] },
@@ -1036,7 +1130,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "mystery bowl" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "5.00",
         vatClass: "general",
       });
@@ -1059,7 +1153,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "salad" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "6.00",
         vatClass: "general",
         dietOverride: { vegan: "no" },
@@ -1083,7 +1177,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "salad" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "6.00",
         vatClass: "general",
       });
@@ -1110,7 +1204,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "x" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
       });
@@ -1130,7 +1224,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "x" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
         dietOverride: { vegan: "no" },
@@ -1149,7 +1243,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "veg" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
       });
@@ -1169,7 +1263,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "veg" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
       });
@@ -1222,7 +1316,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: food.id,
         descriptions: { en: "sliced ham" },
-        pricingUnit: "weight",
+        unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
       });
@@ -1230,7 +1324,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -1240,7 +1334,7 @@ describe("catalogue operations", () => {
       expect(available.map((p) => p.id)).toEqual([p1.id]);
       expect(available[0]!.category).toBe("Food");
       expect(available[0]!.unitPrice).toBe("24.90");
-      expect(available[0]!.pricingUnit).toBe("weight");
+      expect(available[0]!.unit).toMatchObject({ id: kgUnitId, name: { en: "kg" }, precision: 3 });
       expect(available[0]!.vatClass).toBe("reduced");
     });
   });
@@ -1254,7 +1348,7 @@ describe("catalogue operations", () => {
         catalogueId: main.id,
         categoryId: null,
         descriptions: { en: "Steak" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "20.00",
         vatClass: "general",
       });
@@ -1262,7 +1356,7 @@ describe("catalogue operations", () => {
         catalogueId: lunch.id,
         categoryId: null,
         descriptions: { en: "Set menu" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "12.00",
         vatClass: "general",
       });
@@ -1270,7 +1364,7 @@ describe("catalogue operations", () => {
         catalogueId: other.id,
         categoryId: null,
         descriptions: { en: "Hidden" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "9.00",
         vatClass: "general",
       });
@@ -1466,7 +1560,7 @@ describe("catalogue operations", () => {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
-        pricingUnit: "each",
+        unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
@@ -1513,6 +1607,7 @@ describe("catalogue operations", () => {
     const sample: AvailableProduct = {
       id: "00000000-0000-0000-0000-000000000000",
       descriptions: { en: "water" },
+      unit: { id: eachUnitId, name: { en: "each" }, precision: 0, hardwareUnit: null },
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -1844,7 +1939,7 @@ describe("catalogue operations", () => {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { en: "burger" },
-          pricingUnit: "each",
+          unitId: eachUnitId,
           unitPrice: "9.00",
           vatClass: "general",
         });
@@ -1935,7 +2030,7 @@ describe("catalogue operations", () => {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { en: "steak" },
-          pricingUnit: "each",
+          unitId: eachUnitId,
           unitPrice: "18.00",
           vatClass: "general",
         });

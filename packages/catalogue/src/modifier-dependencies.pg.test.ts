@@ -14,7 +14,7 @@ import {
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { ModifierInput, TenantId } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
-import { seedVenue } from "../test/fixtures.js";
+import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
 import { createModifier, deleteModifier, getModifier, updateModifier } from "./modifiers.js";
 import {
   createCatalogue,
@@ -55,6 +55,7 @@ function app<T>(
 
 async function fixture() {
   const venue = await seedVenue(suite.admin);
+  await seedLegacySellingUnits(suite.admin, venue.tenantId);
   return app(suite.admin, venue.tenantId, async (tx) => {
     const menu = await createCatalogue(tx, venue.tenantId, { name: "Menu" });
     const section = await createMenuSection(tx, venue.tenantId, {

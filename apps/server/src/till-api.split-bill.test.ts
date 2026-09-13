@@ -28,6 +28,7 @@ import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { joinTable, openTab } from "./working-order.js";
 import "./errors.js";
 
@@ -49,6 +50,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
+    await seedLegacySellingUnits(db, tenantId);
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);

@@ -602,7 +602,7 @@ export class TillExpoScreen extends LitElement {
     </div>`;
   }
 
-  /** An item row: the dish (`qty× name`), its STATION (the cross-station label), its kitchen state, and
+  /** An item row: the dish (`qty unit× name`), its STATION (the cross-station label), its kitchen state, and
    *  — beneath, indented (ordering modifiers, Task 14) — its selected options as `+ <name>` sub-text.
    *  Greyed when HELD (its course unfired) — a non-interactive box (the pass acts per course). A
    *  FORGOTTEN item additionally carries a non-colour tell (design §7.2) — its own station is badly
@@ -611,11 +611,11 @@ export class TillExpoScreen extends LitElement {
   #item(item: ExpoItem): TemplateResult {
     const held = item.firedAt === null;
     const forgotten = this.#itemBand(item) === "forgotten";
+    const unit = item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`;
+    const label = `${trimQuantity(item.qty)}${unit}× ${snapshotDescriptionFor(item.name, "")}`;
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
       <span class="item-main">
-        <span class="item-name"
-          >${trimQuantity(item.qty)}× ${snapshotDescriptionFor(item.name, "")}</span
-        >
+        <span class="item-name">${label}</span>
         <span class="item-station">${item.stationName}</span>
         <span class="item-state">${t(`station.state.${item.state}` as const)}</span>
         ${

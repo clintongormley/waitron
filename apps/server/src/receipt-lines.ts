@@ -24,6 +24,8 @@ export function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
     descriptions: line.descriptions,
     modifierSnapshots: line.modifierSnapshots ?? [],
     quantity: trimQuantityForDisplay(line.quantity),
+    unitName: line.unitName ?? null,
+    unitPrecision: line.unitPrecision ?? null,
     gross: priced.grossLineTotals[i]!,
     // Carry the child→parent link so the receipt can render each option grouped under its dish
     // (Task 8). `?? null` keeps a plain (no-modifier) line's field exactly `null`.

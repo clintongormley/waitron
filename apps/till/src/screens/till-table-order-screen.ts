@@ -19,7 +19,7 @@ import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
-import { productName } from "../widgets/product-name.js";
+import { productName, productUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
@@ -1347,7 +1347,7 @@ export class TillTableOrderScreen extends LitElement {
     this.splitQuantities = next;
   }
 
-  /** Step an each-priced dish by one, bounded to 1..the line's ordered quantity. */
+  /** Step a whole-quantity dish by one, bounded to 1..the line's ordered quantity. */
   #stepSplitQuantity(line: TabLine, delta: -1 | 1): void {
     const current = decimal(
       this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity),
@@ -1363,16 +1363,18 @@ export class TillTableOrderScreen extends LitElement {
     return this.products.find((product) => product.id === line.productId);
   }
 
-  /** Return localized field copy when a selected quantity cannot be sent. Each dishes require a
-   * positive whole number; weight and retired products accept up to three decimal places. Both are
-   * bounded by the exact ordered quantity using shared decimal arithmetic. */
+  /** Return localized field copy when a selected quantity cannot be sent. The product's unit sets
+   * the decimal precision; a retired product falls back to the storage limit of three places. Every
+   * value is bounded by the exact ordered quantity using shared decimal arithmetic. */
   #splitQuantityError(line: TabLine): string {
     const value = this.splitQuantities.get(line.lineNo) ?? "";
-    const unit = this.#splitProduct(line)?.pricingUnit;
-    const pattern = unit === "each" ? /^[1-9]\d*$/ : /^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/;
+    const product = this.#splitProduct(line);
+    const precision = product === undefined ? 3 : productUnit(product).precision;
+    const pattern =
+      precision === 0 ? /^[1-9]\d*$/ : new RegExp(`^(?:0|[1-9]\\d*)(?:\\.\\d{1,${precision}})?$`);
     if (!pattern.test(value)) {
       return t(
-        unit === "each" ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+        precision === 0 ? "table.split_quantity_whole_error" : "table.split_quantity_decimal_error",
       );
     }
     try {
@@ -1382,12 +1384,14 @@ export class TillTableOrderScreen extends LitElement {
         compareDecimal(quantity, decimal(line.quantity)) > 0
       ) {
         return t(
-          unit === "each" ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+          precision === 0
+            ? "table.split_quantity_whole_error"
+            : "table.split_quantity_decimal_error",
         );
       }
     } catch {
       return t(
-        unit === "each" ? "table.split_quantity_each_error" : "table.split_quantity_weight_error",
+        precision === 0 ? "table.split_quantity_whole_error" : "table.split_quantity_decimal_error",
       );
     }
     return "";
@@ -1613,7 +1617,7 @@ export class TillTableOrderScreen extends LitElement {
       </wt-button>
       ${
         selected
-          ? product?.pricingUnit === "each"
+          ? product !== undefined && productUnit(product).precision === 0
             ? this.#splitEachQuantity(line, name, quantity)
             : html`<wt-input
                 class="split-quantity"

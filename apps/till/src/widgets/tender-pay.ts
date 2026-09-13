@@ -12,6 +12,7 @@ import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderFlow, PayOutcome, TillActiveReader, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
+import { productUnit, unitName } from "./product-name.js";
 
 /**
  * The payload of the `confirm-payment` event — either tender the widget can settle:
@@ -64,11 +65,11 @@ export type CardProvider =
  */
 export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
 
-/** Zero, precomputed — the floor a kg entry must clear to be a real weight. */
+/** Zero, precomputed — the floor a quantity entry must clear. */
 const ZERO = decimal("0");
 
 /**
- * One widget, seven VIEWS: the idle buttons, the cash-tender screen, the kg-weight screen, the hold
+ * One widget, seven VIEWS: the idle buttons, the cash-tender screen, the quantity screen, the hold
  * label prompt, the manual card-tender screen, and (Task 9, integrated card terminal) the
  * `"collecting"` spinner and the `"card_outcome"` decline/timeout/network-unavailable screen. Named
  * `View` (not `Mode`) to keep it distinct from the {@link TillTenderPay.mode} property below, which
@@ -77,13 +78,13 @@ const ZERO = decimal("0");
 type View = "idle" | "paying" | "weighing" | "holding" | "card" | "collecting" | "card_outcome";
 
 /**
- * The pay flow and the kg-weight entry — the two moments the walk-up sale needs a numeric keypad.
+ * The pay flow and unit-quantity entry — the two moments the walk-up sale needs a numeric keypad.
  * It owns a small view state (idle → paying / weighing / holding / card → idle) and renders exactly
- * one view at a time, sharing the `till-numeric-pad` between the cash and weight screens.
+ * one view at a time, sharing the `till-numeric-pad` between cash and quantity entry.
  *
  * It coordinates only through the store (spec §3): it subscribes to `"changed"` so the Pay button's
- * enabled state tracks the basket, and to `"product-selected"` so picking a weight tile opens the
- * weigh screen. It never references a sibling widget.
+ * enabled state tracks the basket, and to `"product-selected"` so a unit that needs quantity entry
+ * opens the keypad. It never references a sibling widget.
  *
  * MONEY DISCIPLINE. Every amount is an `@waitron/shared` Decimal, never a float, and both tenders
  * read the store's previewed total, so the number the operator settles against is the same one the
@@ -271,7 +272,7 @@ export class TillTenderPay extends LitElement {
   @state() private labelEntry = "";
   /** The optional bank-terminal operation number typed on the card screen; set only while `"card"`. */
   @state() private refEntry = "";
-  /** The weight product awaiting a kg entry; set only while {@link view} is `"weighing"`. */
+  /** The product awaiting quantity entry; set only while {@link view} is `"weighing"`. */
   @state() private selected?: TillProduct;
   /** The gross tip typed into the integrated-card idle screen (Task 9); read at `#onCardTap` time,
    * shown only when {@link tipsEnabled}. */
@@ -297,7 +298,7 @@ export class TillTenderPay extends LitElement {
     super();
     // Two store channels, each its own controller (spec §3 — coordinate only through the store):
     // `"changed"` re-renders so the Pay button tracks the basket; `"product-selected"` opens the
-    // weigh screen for a picked weight tile. Both `() => this.store` read lazily on connect.
+    // quantity screen. Both `() => this.store` read lazily on connect.
     new StoreChangeController(this, () => this.store);
     new StoreChangeController(
       this,
@@ -307,9 +308,10 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /** Open the weigh screen for a picked weight product; ignore a non-weight pick (never weighed). */
+  /** Open quantity entry for fractional units and units explicitly mapped to hardware. */
   #onProductSelected(product: TillProduct): void {
-    if (product.pricingUnit !== "weight") return;
+    const unit = productUnit(product);
+    if (unit.hardwareUnit === null && unit.precision === 0) return;
     this.selected = product;
     this.entry = "";
     this.view = "weighing";
@@ -506,7 +508,7 @@ export class TillTenderPay extends LitElement {
   /**
    * Abandon the cash, weigh, hold-label or card screen and return to idle WITHOUT settling anything —
    * no terminal tender event, no `park-order`, no line added. It is the way back from any of those
-   * views for an operator who opened Pay/Collect/Hold/Card (or picked a weight tile) by mistake;
+   * views for an operator who opened Pay/Collect/Hold/Card (or quantity entry) by mistake;
    * without it those views are one-way. The basket is left exactly as it was.
    *
    * Also the handler for TWO integrated-card actions (Task 9), both a plain return to idle with no
@@ -581,7 +583,7 @@ export class TillTenderPay extends LitElement {
   }
 
   /**
-   * Ring up the weighed line and return to idle. Guarded so a zero/empty weight is a no-op, and
+   * Ring up the entered quantity and return to idle. A zero/empty value is a no-op, and
    * single-flight so two rapid clicks before Lit re-renders ring the line ONCE: the view is flipped to
    * `"idle"` BEFORE `addProduct`, so the second synchronous call sees `view !== "weighing"` and
    * returns. (The click handler captures `product` from the render closure, so it would otherwise fire
@@ -591,19 +593,28 @@ export class TillTenderPay extends LitElement {
 
   #addWeight(product: TillProduct): void {
     if (this.view !== "weighing") return;
-    const kg = this.#enteredDecimal();
-    if (compareDecimal(kg, ZERO) <= 0) return;
+    const quantity = this.#enteredDecimal();
+    if (compareDecimal(quantity, ZERO) <= 0 || !this.#quantityFitsUnit(product)) return;
     this.selected = undefined;
     this.entry = "";
     this.view = "idle";
     if (product.modifiers?.some((modifier) => modifier.available)) {
-      this.modifierDraft = { product, quantity: kg };
-    } else this.store.addProduct(product, kg);
+      this.modifierDraft = { product, quantity };
+    } else {
+      this.store.addProduct(product, quantity);
+    }
   }
 
   /** What the keypad has entered so far, shown as `"0"` rather than blank when nothing is typed. */
   #entryDisplay(): string {
     return this.entry === "" ? "0" : this.entry;
+  }
+
+  /** Ignore insignificant zeroes, matching the server's exact decimal-string check. */
+  #quantityFitsUnit(product: TillProduct): boolean {
+    const literal = this.entry.endsWith(".") ? this.entry.slice(0, -1) : this.entry;
+    const significantFraction = (literal.split(".")[1] ?? "").replace(/0+$/, "");
+    return significantFraction.length <= productUnit(product).precision;
   }
 
   override render() {
@@ -1018,12 +1029,13 @@ export class TillTenderPay extends LitElement {
     // `view === "weighing"` is only ever entered with a product set (see #onProductSelected), so
     // `selected` is defined here — asserting it keeps a dead, uncoverable runtime guard out.
     const product = this.selected as TillProduct;
-    const invalid = compareDecimal(this.#enteredDecimal(), ZERO) <= 0;
+    const invalid =
+      compareDecimal(this.#enteredDecimal(), ZERO) <= 0 || !this.#quantityFitsUnit(product);
     return html`
       <p class="prompt">${t("weigh.prompt")}</p>
       <div class="summary">
         <div class="row">
-          <span class="label">kg</span>
+          <span class="label">${unitName(product)}</span>
           <span class="amount kg">${this.#entryDisplay()}</span>
         </div>
       </div>

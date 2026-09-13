@@ -1133,7 +1133,7 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(quesoChild!.parentLineId).not.toBe(dish1!.id);
   });
 
-  it("rejects unknown options and invalid selections on each and weight products", async () => {
+  it("rejects unknown options, invalid selections, and legacy options on fractional products", async () => {
     const v = await setupModifierVenue();
     const burger = burgerOf(v);
     const menu = menuOf(v);
@@ -1178,7 +1178,7 @@ describe("ordering modifiers — parent + child lines", () => {
       }),
     ).rejects.toMatchObject({ code: "options.selection_invalid", params: { productId: menu.id } });
 
-    // The same unknown-choice guard applies to fractional products.
+    // (c) The compatibility option payload retains its original each-only contract.
     await expect(
       recordTillSale(deps, v.cfg, {
         lines: [
@@ -1187,8 +1187,8 @@ describe("ordering modifiers — parent + child lines", () => {
         tender: { method: "cash", amount: "20.00" },
       }),
     ).rejects.toMatchObject({
-      code: "option.not_found",
-      params: { productId: jamon.id, optionGroupItemId: bogus },
+      code: "options.unsupported_product",
+      params: { productId: jamon.id, pricingUnit: "weight" },
     });
 
     // (d) fewer than a non-required group's `min_select` (Guarnición demands 2, one picked) →

@@ -12,8 +12,8 @@ const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
 
 // The FILED line list as the server returns it (`TillSaleResult.lines`) — the receipt renders THESE,
 // never a client basket. A mixed-rate ticket with a weighed line: café 2 → 3,00 (21 %), jamón 0,320 kg
-// → 6,40 (10 %). Total 9,40; €10 cash tendered → 0,60 change. The weighed quantity arrives
-// trailing-zero-trimmed ("0.32"): the filed record carries no unit of measure to append "kg".
+// → 6,40 (10 %). Total 9,40; €10 cash tendered → 0,60 change. The quantity and unit label are
+// snapshotted with the filed line.
 const result: TillSaleResult = {
   orderLabel: "Mesa 6",
   orderNumber: 41,
@@ -26,7 +26,13 @@ const result: TillSaleResult = {
   ],
   lines: [
     { descriptions: { "es-ES": "Café", en: "Coffee" }, quantity: "2", gross: "3.00" },
-    { descriptions: { "es-ES": "Jamón", en: "Ham" }, quantity: "0.32", gross: "6.40" },
+    {
+      descriptions: { "es-ES": "Jamón", en: "Ham" },
+      unitName: { "es-ES": "kg" },
+      unitPrecision: 3,
+      quantity: "0.32",
+      gross: "6.40",
+    },
   ],
   tender: { method: "cash", change: "0.60" },
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1&fecha=05-08-2026&importe=9.40",
@@ -111,8 +117,7 @@ describe("till-ticket-view", () => {
   it("identifies each good from the FILED lines: name (invoice locale), quantity and per-line gross (art. 7.1.e)", async () => {
     // The rows come from `result.lines` (the server's filed composition), NOT a client basket — so the
     // printed line list is the invoiced one. Name resolves in the invoice locale, quantity is the filed
-    // display string (weighed "0.32", no "kg" — the fiscal record has no unit of measure), gross is the
-    // filed per-line total.
+    // display string and frozen unit label, gross is the filed per-line total.
     const { el } = await mount();
     const rows = el.shadowRoot!.querySelectorAll(".line");
     expect(rows).toHaveLength(2);
@@ -120,7 +125,7 @@ describe("till-ticket-view", () => {
     expect(rows[0]!.textContent).toContain("2");
     expect(norm(rows[0]!.textContent!)).toContain("3,00 €");
     expect(rows[1]!.textContent).toContain("Jamón");
-    expect(rows[1]!.textContent).toContain("0.32");
+    expect(rows[1]!.textContent).toContain("0.32 kg");
     expect(norm(rows[1]!.textContent!)).toContain("6,40 €");
   });
 

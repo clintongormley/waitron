@@ -19,14 +19,14 @@ const each = (
   category: string | null = null,
 ): PriceableProduct => ({
   descriptions: { en: "item" },
-  pricingUnit: "each",
+  unit: { name: { en: "each" }, precision: 0 },
   unitPrice,
   vatClass,
   category,
 });
 const weight = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): PriceableProduct => ({
   descriptions: { en: "sliced ham" },
-  pricingUnit: "weight",
+  unit: { name: { en: "kg" }, precision: 3 },
   unitPrice,
   vatClass,
   category: "Food",
@@ -42,6 +42,27 @@ describe("resolveVatRate", () => {
 });
 
 describe("priceBasket — difference method", () => {
+  it("prices a fractional quantity for a custom two-decimal unit", () => {
+    const r = priceBasket([
+      {
+        product: {
+          descriptions: { en: "tea service" },
+          unit: { name: { en: "tray" }, precision: 2 },
+          unitPrice: "8.00",
+          vatClass: "general",
+          category: null,
+        },
+        quantity: "0.25",
+      },
+    ]);
+    expect(r.total).toBe(decimal("2.00"));
+    expect(r.lines[0]).toMatchObject({
+      quantity: "0.25",
+      unitName: { en: "tray" },
+      unitPrecision: 2,
+    });
+  });
+
   it("reverses a weighed gross line to base + tax that re-sum to the gross exactly", () => {
     const r = priceBasket([{ product: weight("24.90", "reduced"), quantity: "0.320" }]);
     expect(r.total).toBe(decimal("7.97"));
@@ -137,7 +158,7 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
       {
         product: {
           descriptions: { es: "Café" },
-          pricingUnit: "each",
+          unit: { name: { en: "each" }, precision: 0 },
           unitPrice: "2.50",
           vatClass: "reduced",
           category: "Drinks",
@@ -344,6 +365,8 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         vatRate: "21.00",
         descriptions: { en: "item" },
         category: null,
+        unitName: { en: "each" },
+        unitPrecision: 0,
       },
       {
         grossUnitPrice: "24.90",
@@ -351,6 +374,8 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         vatRate: "10.00",
         descriptions: { en: "sliced ham" },
         category: "Food",
+        unitName: { en: "kg" },
+        unitPrecision: 3,
       },
       {
         grossUnitPrice: "1.30",
@@ -358,6 +383,8 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         vatRate: "4.00",
         descriptions: { en: "item" },
         category: null,
+        unitName: { en: "each" },
+        unitPrecision: 0,
       },
     ];
     expect(priceLockedLines(locked)).toEqual(priceBasket(basket));
@@ -401,6 +428,8 @@ describe("structured modifier snapshots", () => {
         descriptions: { en: "item" },
         category: null,
         modifierSnapshots,
+        unitName: { en: "each" },
+        unitPrecision: 0,
       },
     ]);
     expect(locked).toEqual(live);

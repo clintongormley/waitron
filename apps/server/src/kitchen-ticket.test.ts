@@ -54,6 +54,20 @@ describe("formatKitchenTicket", () => {
       expect(text).toContain("09:05");
     });
 
+    it("prints a snapshotted unit beside a fractional quantity", () => {
+      const text = decodeTicket(
+        formatKitchenTicket({
+          scope: "station",
+          stationName: "Cocina",
+          tableLabel: "Mesa 1",
+          orderNumber: "A-1",
+          firedAt: new Date(2026, 7, 17, 9, 5),
+          items: [{ qty: "0.375", unit: "kg", name: "Jamón" }],
+        }),
+      );
+      expect(text).toContain("0.375 kg x Jamón");
+    });
+
     it("prints the doneness prominently and the note as indented sub-lines beneath the dish", () => {
       const text = decodeTicket(
         formatKitchenTicket({

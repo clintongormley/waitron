@@ -992,12 +992,12 @@ describe("till-table-order-screen", () => {
         const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
           '[data-split-quantity="1"]',
         )!;
-        expect(field.error).toBe(t("table.split_quantity_weight_error"));
+        expect(field.error).toBe(t("table.split_quantity_decimal_error"));
         const summary = el.shadowRoot!.querySelector<
           HTMLElement & { heading: string; errors: string[] }
         >("wt-form-error-summary")!;
         expect(summary.heading).toBe(t("form.error_heading"));
-        expect(summary.errors).toEqual([t("table.split_quantity_weight_error")]);
+        expect(summary.errors).toEqual([t("table.split_quantity_decimal_error")]);
       },
     );
 

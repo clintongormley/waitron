@@ -30,7 +30,8 @@ const ORDER_HEADER = "PASE";
  *  kitchen item (a modifier is never its own ticket item and never routes to its own station). Absent or
  *  empty on a plain dish, so a no-modifier caller is byte-for-byte unchanged. */
 export interface KitchenTicketItem {
-  qty: number;
+  qty: number | string;
+  unit?: string;
   name: string;
   /** The meat-doneness (order-line customisation, spec §3) as its raw enum value (e.g. `medium_rare`),
    *  snapshotted at fire by the caller. Printed PROMINENTLY on its own indented sub-line directly beneath
@@ -73,7 +74,7 @@ export type KitchenTicket =
 
 /** `qty x name`, e.g. `2 x Steak`. An ASCII "x" so any single-byte printer code page renders it. */
 function itemLine(item: KitchenTicketItem): string {
-  return `${item.qty} x ${item.name}`;
+  return `${item.qty}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
 }
 
 /**

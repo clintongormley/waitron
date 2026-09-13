@@ -911,7 +911,8 @@ export class TillStationQueue extends LitElement {
    *  empty map — the till's set-at-boot `currentLocale()` is `TillInfo.locale`); the quantity is the
    *  line's numeric(_,3) trimmed of trailing zeros ({@link trimQuantity}, shared with the table screen). */
   #dish(item: StationQueueItem): string {
-    return `${trimQuantity(item.quantity)}× ${snapshotDescriptionFor(item.descriptions, "")}`;
+    const unit = item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`;
+    return `${trimQuantity(item.quantity)}${unit}× ${snapshotDescriptionFor(item.descriptions, "")}`;
   }
 
   /** The accessible name for a bump control — whole-ticket vs per-line, named with the order number. */

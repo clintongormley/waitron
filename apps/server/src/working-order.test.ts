@@ -110,6 +110,8 @@ interface SeededVenue {
   zoneId: string;
   cafeOfferId: string;
   premiumCafeOfferId: string;
+  eachUnitId: string;
+  kgUnitId: string;
 }
 
 /**
@@ -121,6 +123,13 @@ interface SeededVenue {
  */
 async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
+  const seededUnits = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
+    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, 3, 'kg')
+    returning id, seed_key`);
+  const eachUnitId = seededUnits.rows.find((unit) => unit.seed_key === "each")!.id;
+  const kgUnitId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
@@ -219,7 +228,17 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.
     orderFlow,
   };
-  return { cfg, cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId };
+  return {
+    cfg,
+    cafeId,
+    aguaId,
+    catalogueId,
+    zoneId,
+    cafeOfferId,
+    premiumCafeOfferId,
+    eachUnitId,
+    kgUnitId,
+  };
 }
 
 describe("parkOrder", () => {
@@ -761,6 +780,76 @@ describe("listHeldOrders", () => {
 });
 
 describe("getHeldOrder", () => {
+  it("keeps a fractional item's unit snapshot after the live unit is renamed", async () => {
+    const { cfg, catalogueId, zoneId } = await setupVenue();
+    const { productId, menuItemId, unitId } = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const inserted = await tx.execute<{ id: string }>(sql`
+        insert into units (tenant_id, name, precision, hardware_unit)
+        values (${cfg.tenantId}, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, 3, 'kg')
+        returning id`);
+      const unitId = inserted.rows[0]!.id;
+      const product = await createProduct(tx, cfg.tenantId, {
+        catalogueId,
+        categoryId: null,
+        descriptions: { [LOCALE]: "Jamón" },
+        unitId,
+        unitPrice: "12.00",
+        vatClass: "general",
+      });
+      const section = await createMenuSection(tx, cfg.tenantId, {
+        menuId: catalogueId,
+        name: { [LOCALE]: "Charcutería" },
+      });
+      const menuItem = await createMenuItem(tx, cfg.tenantId, {
+        menuId: catalogueId,
+        productId: product.id,
+        sectionId: section.id,
+        grossPrice: "12.00",
+      });
+      return { productId: product.id, menuItemId: menuItem.id, unitId };
+    });
+    const id = randomUUID();
+
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId, quantity: "0.375" }],
+    });
+    await db.execute(sql`
+      update units set name = ${JSON.stringify({ [LOCALE]: "kilogramo" })}::jsonb
+      where tenant_id = ${cfg.tenantId} and id = ${unitId}`);
+
+    const order = await getHeldOrder({ db }, cfg, id);
+    const stored = await db.execute<{
+      quantity: string;
+      line_total: string;
+      unit_name: Record<string, string>;
+      unit_precision: number;
+    }>(sql`
+      select quantity, line_total, unit_name, unit_precision
+      from working_order_lines
+      where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`);
+    expect(stored.rows).toEqual([
+      {
+        quantity: "0.375",
+        line_total: "4.50",
+        unit_name: { [LOCALE]: "kg" },
+        unit_precision: 3,
+      },
+    ]);
+    expect(order.lines).toEqual([
+      expect.objectContaining({
+        productId,
+        quantity: "0.375",
+        product: expect.objectContaining({
+          unit: { id: unitId, name: { [LOCALE]: "kg" }, precision: 3, hardwareUnit: "kg" },
+          unitPrice: "12.00",
+        }),
+      }),
+    ]);
+  });
+
   it("reconstructs a parked offer with its modifiers, customisation and locked display prices", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const optionId = await withTenant(db, cfg.tenantId, async (tx) => {
@@ -822,7 +911,7 @@ describe("getHeldOrder", () => {
   });
 
   it("returns the parked offer's identity and snapshots after its live product changes", async () => {
-    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const { cfg, zoneId, cafeId, premiumCafeOfferId, eachUnitId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -850,7 +939,12 @@ describe("getHeldOrder", () => {
           productId: cafeId,
           menuItemId: premiumCafeOfferId,
           descriptions: { [LOCALE]: "Café" },
-          pricingUnit: "each",
+          unit: {
+            id: eachUnitId,
+            name: { en: "each" },
+            precision: 0,
+            hardwareUnit: null,
+          },
           unitPrice: "3.25",
           vatClass: "general",
           category: "Bebidas",
@@ -1933,10 +2027,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // (numeric(12,3) read back as "2.000"/"3.000") — what the kitchen display turns into "2× Café".
       expect(group!.items[0]).toMatchObject({
         descriptions: { [LOCALE]: "Café" },
+        unitName: { en: "each" },
+        unitPrecision: 0,
         quantity: "2.000",
       });
       expect(group!.items[1]).toMatchObject({
         descriptions: { [LOCALE]: "Agua" },
+        unitName: { en: "each" },
+        unitPrecision: 0,
         quantity: "3.000",
       });
     });
@@ -4401,7 +4499,7 @@ describe("canonical modifier selections", () => {
   it.each(["menu", "product"])(
     "preserves %s selections and prices through a fractional quantity edit",
     async (source) => {
-      const { cfg, cafeId, cafeOfferId, zoneId } = await setupVenue();
+      const { cfg, cafeId, cafeOfferId, zoneId, kgUnitId } = await setupVenue();
       const choiceId = randomUUID();
       const optionId = randomUUID();
       const definitions = await withTenant(db, cfg.tenantId, async (tx) => {
@@ -4434,9 +4532,7 @@ describe("canonical modifier selections", () => {
           cafeId,
           definitions.map((d) => d.id),
         );
-        await tx.execute(
-          sql`update products set pricing_unit = 'weight' where tenant_id = ${cfg.tenantId} and id = ${cafeId}`,
-        );
+        await catalogue.assignProductUnit(tx, cfg.tenantId, cafeId, kgUnitId);
         await catalogue.setMenuItemOptionGroups(
           tx,
           cfg.tenantId,

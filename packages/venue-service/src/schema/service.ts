@@ -275,7 +275,10 @@ export const workingLineContexts = pgTable(
     departmentId: uuid("department_id").notNull(),
     departmentName: text("department_name").notNull(),
     categoryName: text("category_name").notNull(),
-    pricingUnit: text("pricing_unit").notNull(),
+    unitId: uuid("unit_id").notNull(),
+    unitName: jsonb("unit_name").$type<Record<string, string>>().notNull(),
+    unitPrecision: integer("unit_precision").notNull(),
+    hardwareUnit: text("hardware_unit"),
     vatClass: text("vat_class").notNull(),
     allergens:
       jsonb("allergens").$type<
@@ -297,7 +300,11 @@ export const workingLineContexts = pgTable(
       foreignColumns: [menuItems.tenantId, menuItems.id],
       name: "working_line_contexts_menu_item_fk",
     }),
-    check("working_line_contexts_pricing_unit_ck", sql`${t.pricingUnit} in ('each','weight')`),
+    check("working_line_contexts_unit_precision_ck", sql`${t.unitPrecision} between 0 and 3`),
+    check(
+      "working_line_contexts_hardware_unit_ck",
+      sql`${t.hardwareUnit} is null or ${t.hardwareUnit} in ('kg','g','mg')`,
+    ),
     check(
       "working_line_contexts_vat_class_ck",
       sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,

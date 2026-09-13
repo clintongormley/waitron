@@ -1269,6 +1269,8 @@ it("persists structured modifier snapshots and child links on the issued lines",
   const lines = input().lines.map((line, index) => ({
     ...line,
     modifierSnapshots: index === 0 ? modifierSnapshots : [],
+    unitName: index === 0 ? { en: "portion" } : null,
+    unitPrecision: index === 0 ? 2 : null,
     parentLineNo: index === 0 ? null : 1,
     category: "Drinks",
   }));
@@ -1279,6 +1281,8 @@ it("persists structured modifier snapshots and child links on the issued lines",
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
   expect(saved.map((line) => line.modifierSnapshots)).toEqual([modifierSnapshots, []]);
+  expect(saved.map((line) => line.unitName)).toEqual([{ en: "portion" }, null]);
+  expect(saved.map((line) => line.unitPrecision)).toEqual([2, null]);
   expect(saved[0]!.parentLineId).toBeNull();
   expect(saved[1]!.parentLineId).toBe(saved[0]!.id);
   expect(saved.map((line) => line.category)).toEqual(["Drinks", "Drinks"]);

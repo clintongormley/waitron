@@ -10,7 +10,7 @@ import type { TillProduct } from "../api/client.js";
 const cafe: TillProduct = {
   id: "cafe",
   descriptions: { es: "Café" },
-  pricingUnit: "each",
+  unit: { id: "unit-each", name: { es: "unidad" }, precision: 0, hardwareUnit: null },
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
@@ -20,7 +20,7 @@ const cafe: TillProduct = {
 const jamon: TillProduct = {
   id: "jamon",
   descriptions: { es: "Jamón" },
-  pricingUnit: "weight",
+  unit: { id: "unit-kg", name: { es: "kg" }, precision: 3, hardwareUnit: "kg" },
   unitPrice: "10.00",
   vatClass: "reduced",
   category: "charcutería",
@@ -63,7 +63,7 @@ describe("till-product-grid", () => {
     expect(tiles[0]!.textContent).toContain(formatMoney("1.50"));
   });
 
-  it("appends /kg to a weight product's price", async () => {
+  it("appends the localized unit to a product's price", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
       products: [jamon],
@@ -75,7 +75,7 @@ describe("till-product-grid", () => {
     expect(tile.textContent).toContain("/kg");
   });
 
-  it("tapping an each tile rings up one of that product", async () => {
+  it("tapping a product without a hardware mapping rings up one of that product", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
       products: [cafe],
@@ -85,7 +85,7 @@ describe("till-product-grid", () => {
     expect(store.lines).toEqual([{ product: cafe, quantity: "1" }]);
   });
 
-  it("tapping a weight tile broadcasts product-selected without touching the basket", async () => {
+  it("tapping a hardware-mapped tile broadcasts product-selected without touching the basket", async () => {
     const store = new WorkingOrderStore();
     const seen: TillProduct[] = [];
     store.on("product-selected", (p) => seen.push(p as TillProduct));
@@ -96,6 +96,42 @@ describe("till-product-grid", () => {
     el.shadowRoot!.querySelector("wt-button")!.click();
     expect(seen).toEqual([jamon]);
     expect(store.lines).toHaveLength(0);
+  });
+
+  it("opens quantity entry for a fractional custom unit", async () => {
+    const portion: TillProduct = {
+      ...cafe,
+      id: "portion",
+      unit: { id: "custom-portion", name: { en: "portion" }, precision: 2, hardwareUnit: null },
+    };
+    const store = new WorkingOrderStore();
+    const selected: TillProduct[] = [];
+    store.on("product-selected", (product) => selected.push(product as TillProduct));
+    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+      products: [portion],
+      store,
+    });
+    el.shadowRoot!.querySelector("wt-button")!.click();
+    expect(selected).toEqual([portion]);
+    expect(store.lines).toHaveLength(0);
+  });
+
+  it("does not infer scale behavior from an editable unit name", async () => {
+    const namedKg: TillProduct = {
+      ...cafe,
+      id: "named-kg",
+      unit: { id: "custom-kg", name: { es: "kg" }, precision: 0, hardwareUnit: null },
+    };
+    const store = new WorkingOrderStore();
+    const selected: TillProduct[] = [];
+    store.on("product-selected", (product) => selected.push(product as TillProduct));
+    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+      products: [namedKg],
+      store,
+    });
+    el.shadowRoot!.querySelector("wt-button")!.click();
+    expect(selected).toEqual([]);
+    expect(store.lines).toEqual([{ product: namedKg, quantity: "1" }]);
   });
 
   it("fixes the grid to N equal columns when `columns` is set (product-grid.columns config)", async () => {
