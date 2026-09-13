@@ -1,5 +1,5 @@
 // The owner-signature evidence for the outbox → native-replication swap (spec §11): real fiscal
-// records, chained by this package's OWN `appendToChain`, flow A→B over native logical replication
+// records, chained by `@waitron/fiscal-verifactu`'s own `appendToChain`, flow A→B over native logical replication
 // between two real PostgreSQL nodes, and the fiscal invariants hold at the wire. Nothing here writes
 // a registro the app would not — every row is a genuine chained `registros_facturacion` record —
 // and nothing touches `computeHuella`; the assertions are about what replication does to those rows.
@@ -36,7 +36,7 @@ import {
   provisionAndBootstrapNode,
   REPLICATION_ROLE,
   type BootstrappedNode,
-} from "./testing/replication-node.js";
+} from "@waitron/provisioning/testing/replication-node.js";
 import { appendToChain } from "@waitron/fiscal-verifactu";
 import {
   altaFor,
@@ -46,9 +46,8 @@ import {
 } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The exact per-class table lists (brief). LEDGER is what happened (append-only fiscal + sales);
-// STATE is configuration + live service. Small explicit lists of REAL tables, not the lists derived
-// from @waitron/composition. Every name exists in the migrated
-// manifest and carries a primary key (replica identity), so no per-table work is needed.
+// STATE is configuration + live service. Small explicit lists of REAL tables. Every name exists in
+// the migrated manifest and carries a primary key (replica identity), so no per-table work is needed.
 const LEDGER = [
   "sales",
   "sale_lines",

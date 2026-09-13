@@ -18,10 +18,13 @@ import {
   createSubscription,
   dropSubscription,
 } from "@waitron/sync";
-import { provisionAndBootstrapNode, type BootstrappedNode } from "./testing/replication-node.js";
+import {
+  provisionAndBootstrapNode,
+  type BootstrappedNode,
+} from "@waitron/provisioning/testing/replication-node.js";
 
-// The same small hardcoded real-table list the sibling suites use, not the lists derived from
-// @waitron/composition. `tenants`/`locations` are state (S1).
+// The same small hardcoded real-table list the sibling suites use. `tenants`/`locations` are state
+// (S1).
 const LEDGER = ["sales", "tenders"];
 const STATE = ["tenants", "locations"];
 
@@ -35,9 +38,8 @@ const insertTenant = (marker: string) =>
 const countTenant = (marker: string) =>
   sql`select count(*)::int as c from tenants where tax_id = ${marker}`;
 
-// This package's globalSetup boots a shared container and fails the whole package when Docker is
-// absent, so this suite needs no explicit Docker gate (the sibling replication suite relies on the
-// same).
+// No Docker gate: without Docker, `startTwoNodeWireguardCluster` throws before starting anything
+// (packages/db/src/testing/two-node-wireguard.ts:236), so this describe's `beforeAll` throws and the run fails.
 describe("native replication over a WireGuard tunnel", () => {
   let cluster: TwoNodeWireguardCluster;
   let nodeA: BootstrappedNode;

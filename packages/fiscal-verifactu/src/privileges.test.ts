@@ -13,7 +13,7 @@ import { PRIVILEGES } from "./privileges.expected.js";
  * and this package's shared template already migrates the whole manifest
  * (`src/testing/global-setup.ts`), so a table added by workforce or sync is in scope with no new
  * harness — the same reason `inmutabilidad.test.ts` beside it scans the whole catalog from here.
- * Other packages migrate the manifest too (`apps/server`, `@waitron/sync`, `@waitron/provisioning`);
+ * Other packages migrate the manifest too (`apps/server` among them);
  * this one is where the catalog-wide guards already live.
  *
  * Real Postgres rather than the PGlite target `inmutabilidad.test.ts` uses: CLAUDE.md §4 puts

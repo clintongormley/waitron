@@ -82,8 +82,11 @@ deadline, not a retry as proof of repair. Evidence and limits:
 
 Its shared pool reads `vitest.config.poolOptions`; per-project `singleFork` is a separate
 scheduling choice. Moving `maxForks: 4` inside fiscal-verifactu's project in #286 started 17
-workers on the local host, observed during a Sync migration stall. `scripts/fiscal-test-budget.test.ts`
-pins the corrected location; the test-load design records the live process and database probes.
+workers on the local host, observed during a Sync migration stall. fiscal-verifactu has since dropped
+its projects. `scripts/fiscal-test-budget.test.ts` pins these configs and no others: fiscal-verifactu's
+outer `maxForks: 4`, and `packages/media/vitest.config.ts`, which still has projects, keeping
+`maxForks: 2` on its outer config with none inside a project. The test-load design records the live
+process and database probes.
 
 ## Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.
 

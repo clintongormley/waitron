@@ -45,7 +45,7 @@ import {
   provisionAndBootstrapNode,
   REPLICATION_ROLE,
   type BootstrappedNode,
-} from "@waitron/replication-tests/testing/replication-node.js";
+} from "@waitron/provisioning/testing/replication-node.js";
 import {
   buildConninfo,
   createPublications,
@@ -168,8 +168,7 @@ describe("native-replication arc â€” Case 1: the every-table copy matrix (spec Â
       database: NODE_DB,
       replPassword: REPL_PASSWORD,
     });
-    // A publishes BOTH publications from the DERIVED composition-root lists (this file is under
-    // apps/server, the composition root, so importing them is not a cycle).
+    // A publishes BOTH publications from the DERIVED composition-root lists.
     await createPublications(nodeA.ownerDb, {
       environment: ENV,
       ledgerTables: LEDGER,

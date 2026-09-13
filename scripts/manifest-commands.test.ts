@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, normalize, relative } from "node:path";
 import { describe, expect, it } from "vitest";
-import { workspacePackages } from "./changed-packages.mjs";
+import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
  * Two properties of how this workspace declares the commands its bundles produce.
@@ -39,8 +39,8 @@ const REPO_ROOT = join(import.meta.dirname, "..");
 // Two bounds per child, for the reasons scripts/ci-workflow.test.mjs records above its own pair:
 // the kernel-level kill for a hung child (Vitest's timer cannot interrupt a blocked `spawnSync`)
 // and the larger per-test bound for a slow-but-completing cold CI runner. The per-test bound covers
-// whichever child the test spawns, `pnpm ls` or `git`.
-const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
+// whichever child the test spawns, `pnpm ls` or `git`; the `pnpm ls` kill is
+// scripts/workspace-members.mjs's own.
 const GIT_SPAWN_TIMEOUT_MS = 30_000;
 const SPAWN_TEST_TIMEOUT_MS = 60_000;
 
@@ -183,34 +183,9 @@ function ignoredByGit(path: string): boolean {
   return result.status === 0;
 }
 
-/**
- * Every workspace member, as `pnpm ls` lists them — the same source the pre-push hook and CI scope
- * from, so a new workspace root in pnpm-workspace.yaml is covered without editing this file.
- * `spawn` is injected only so a test can assert the kill timeout is passed.
- */
-function members(spawn: Spawn = spawnSync): { name: string; dir: string }[] {
-  const args = ["ls", "-r", "--depth", "-1", "--json"];
-  const result = spawn("pnpm", args, {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    timeout: PNPM_LS_SPAWN_TIMEOUT_MS,
-  });
-  if (result.error !== undefined) {
-    throw new Error(
-      `\`pnpm ${args.join(" ")}\` failed to run (killed after ${PNPM_LS_SPAWN_TIMEOUT_MS}ms?): ${result.error.message}`,
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(`\`pnpm ${args.join(" ")}\` exited ${result.status}: ${result.stderr}`);
-  }
-  const listed = workspacePackages(result.stdout, REPO_ROOT);
-  if (listed === null) throw new Error("`pnpm ls` returned no parsable workspace listing");
-  return listed;
-}
-
 /** Every member's manifest, for the tests that sweep the workspace. */
 function manifests(): { name: string; dir: string; manifest: Manifest }[] {
-  const listed = members();
+  const listed = workspaceMembers();
   // A listing that came back empty would pass every assertion downstream (CLAUDE.md §2).
   expect(listed.length).toBeGreaterThan(0);
   return listed.map(({ name, dir }) => ({
@@ -242,26 +217,6 @@ describe("every command a workspace manifest declares under bin", () => {
       );
 
       expect(phantoms).toEqual([]);
-    },
-    SPAWN_TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "bounds the pnpm listing it reads so a hung child cannot outlive the suite",
-    () => {
-      const seen: SpawnOptions[] = [];
-      const fake: Spawn = (_command, _args, options) => {
-        seen.push(options);
-        return {
-          status: 0,
-          stdout: JSON.stringify([{ name: "@waitron/x", path: join(REPO_ROOT, "packages/x") }]),
-          stderr: "",
-        };
-      };
-      // The parsed result as well as the timeout, so a broken parse cannot hide behind a passing
-      // timeout check (scripts/coverage-thresholds.test.ts does the same).
-      expect(members(fake)).toEqual([{ name: "@waitron/x", dir: "packages/x" }]);
-      expect(seen).toEqual([expect.objectContaining({ timeout: PNPM_LS_SPAWN_TIMEOUT_MS })]);
     },
     SPAWN_TEST_TIMEOUT_MS,
   );

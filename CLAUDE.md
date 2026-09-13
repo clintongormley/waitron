@@ -224,7 +224,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   reserved for facts about the process itself. Every file that throws a code imports its registry.
 - **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per word;
   a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`. `apps/*` is out of
-  scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review.
+  scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review;
+  `packages/replication-tests` is unscanned too.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`
@@ -365,7 +366,8 @@ container or browser test** — most of these rules exist because a test passed 
 - **A recurrent real-PG stall needs a retained log and a live database snapshot.** Locate the stalled
   operation before assigning its cause to resource contention.
 - **Vitest 3's fork limit belongs on the outer config, even with projects.** Moving `maxForks` inside
-  a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`.
+  a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`, which
+  pins only fiscal-verifactu's and media's configs.
 - **A probe that needs a Unix SOCKET runs inside the container.** Bind-mounting a socket dir out of
   Docker Desktop's VM gives `ECONNREFUSED` on macOS.
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to

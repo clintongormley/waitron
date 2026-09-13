@@ -40,6 +40,7 @@ export default defineConfig({
     ],
     testTimeout: 30_000,
     hookTimeout: 60_000,
+    // Outer, not per-project: scripts/fiscal-test-budget.test.ts pins it.
     poolOptions: { forks: { maxForks: 2 } },
     coverage: {
       provider: "v8",

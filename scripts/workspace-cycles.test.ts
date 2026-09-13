@@ -1,18 +1,18 @@
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { workspacePackages } from "./changed-packages.mjs";
+import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
  * No workspace package may reach itself through other workspace packages. pnpm counts every
  * dependency kind when it looks for a loop, so a test-only (`devDependencies`) link closes one as
  * surely as a runtime link, and `pnpm install` prints "There are cyclic workspace dependencies".
  * A test that needs packages from both ends of such a loop belongs in a package nothing else
- * depends on — `packages/replication-tests` for the replication suites.
+ * depends on — `packages/replication-tests` for the replication suites, whose node fixture lives in
+ * `packages/provisioning/src/testing/replication-node.ts`.
  *
- * Reads each member's `package.json` rather than pnpm's own graph: a `workspace:` range is a
- * workspace link, and anything else is treated as an outside package.
+ * Reads each member's `package.json` rather than pnpm's own graph, and counts a dependency as a link
+ * when its name is another workspace member, whatever its version range.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -26,7 +26,7 @@ const DEPENDENCY_FIELDS = [
 type Graph = Map<string, string[]>;
 
 /** Every group of two or more packages that reach one another, each group sorted by name. */
-export function dependencyLoops(graph: Graph): string[][] {
+function dependencyLoops(graph: Graph): string[][] {
   let counter = 0;
   const order = new Map<string, number>();
   const lowest = new Map<string, number>();
@@ -64,29 +64,25 @@ export function dependencyLoops(graph: Graph): string[][] {
   return loops;
 }
 
-function workspaceGraph(): Graph {
-  const args = ["ls", "-r", "--depth", "-1", "--json"];
-  const result = spawnSync("pnpm", args, { cwd: REPO_ROOT, encoding: "utf8", timeout: 30_000 });
-  if (result.error !== undefined) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`\`pnpm ${args.join(" ")}\` exited ${result.status}: ${result.stderr}`);
-  }
-  const members = workspacePackages(result.stdout, REPO_ROOT);
-  if (members === null) throw new Error("`pnpm ls` returned no parsable workspace listing");
+type Manifest = Partial<Record<(typeof DEPENDENCY_FIELDS)[number], Record<string, string>>>;
 
-  const graph: Graph = new Map();
-  for (const { name, dir } of members) {
-    const manifest = JSON.parse(
-      readFileSync(join(REPO_ROOT, dir, "package.json"), "utf8"),
-    ) as Record<string, Record<string, string> | undefined>;
-    const links = DEPENDENCY_FIELDS.flatMap((field) =>
-      Object.entries(manifest[field] ?? {})
-        .filter(([, range]) => range.startsWith("workspace:"))
-        .map(([dependency]) => dependency),
-    );
-    graph.set(name, links);
-  }
-  return graph;
+/** Each member's dependency names, every field; `dependencyLoops` ignores names outside the graph. */
+function graphFromManifests(members: { name: string; manifest: Manifest }[]): Graph {
+  return new Map(
+    members.map(({ name, manifest }) => [
+      name,
+      DEPENDENCY_FIELDS.flatMap((field) => Object.keys(manifest[field] ?? {})),
+    ]),
+  );
+}
+
+function workspaceGraph(): Graph {
+  return graphFromManifests(
+    workspaceMembers().map(({ name, dir }) => ({
+      name,
+      manifest: JSON.parse(readFileSync(join(REPO_ROOT, dir, "package.json"), "utf8")) as Manifest,
+    })),
+  );
 }
 
 describe("the workspace dependency graph", () => {
@@ -95,6 +91,16 @@ describe("the workspace dependency graph", () => {
     expect(graph.size, "guards against a vacuous pass over an empty listing").toBeGreaterThan(10);
     expect(dependencyLoops(graph)).toEqual([]);
   }, 60_000);
+
+  describe("the graph built from manifests", () => {
+    it("links members through any version range, not only `workspace:`", () => {
+      const graph = graphFromManifests([
+        { name: "a", manifest: { dependencies: { b: "*" } } },
+        { name: "b", manifest: { devDependencies: { a: "link:../a" } } },
+      ]);
+      expect(dependencyLoops(graph)).toEqual([["a", "b"]]);
+    });
+  });
 
   describe("the loop detector itself", () => {
     const graphOf = (edges: Record<string, string[]>): Graph => new Map(Object.entries(edges));

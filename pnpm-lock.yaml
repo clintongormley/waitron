@@ -305,9 +305,6 @@ importers:
       '@waitron/print-agent':
         specifier: workspace:*
         version: link:../../packages/print-agent
-      '@waitron/replication-tests':
-        specifier: workspace:*
-        version: link:../../packages/replication-tests
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
@@ -1472,6 +1469,9 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
     devDependencies:
+      '@testcontainers/postgresql':
+        specifier: ^12.0.4
+        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -1570,9 +1570,6 @@ importers:
 
   packages/replication-tests:
     devDependencies:
-      '@testcontainers/postgresql':
-        specifier: ^12.0.4
-        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -1585,9 +1582,6 @@ importers:
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu
-      '@waitron/migrations':
-        specifier: workspace:*
-        version: link:../migrations
       '@waitron/provisioning':
         specifier: workspace:*
         version: link:../provisioning
