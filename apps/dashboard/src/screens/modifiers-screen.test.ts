@@ -203,7 +203,7 @@ it("shows a field-less server rejection's own message in the form", async () => 
   );
   expect(form.open).toBe(true);
 });
-it("shows a server rejection that names a field once, beside that field", async () => {
+it("lists a field's server error once in the summary and shows it beside that field", async () => {
   const client = api({
     createModifier: vi
       .fn()

@@ -18,7 +18,7 @@ import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
 import { isModifierPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
 import {
-  isPositiveInteger,
+  isModifierQuantity,
   nameFields,
   nonBlankNames,
   switchField,
@@ -128,7 +128,7 @@ export class ChoiceForm extends LitElement {
     // caught here, on its own field, rather than as a problem with the whole modifier.
     if (this.kind === "extras") {
       if (!isModifierPrice(this.priceDelta)) errors.priceDelta = t("modifiers.price_invalid");
-      if (!isPositiveInteger(this.maxQuantity))
+      if (!isModifierQuantity(this.maxQuantity))
         errors.maxQuantity = t("modifiers.quantity_invalid");
     }
     this.errors = errors;

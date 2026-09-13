@@ -166,6 +166,17 @@ it("projects only published available choices, clears excluded defaults, and kee
         { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "1.00" }] },
       ]),
     ).rejects.toMatchObject({ code: "modifier.invalid" });
+    // The per-item price obeys the same ten-whole-digit limit as a modifier's own price.
+    await expect(
+      setMenuItemOptionGroups(tx, tenantId, item.id, [
+        { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
+        { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "10000000000.00" }] },
+      ]),
+    ).rejects.toMatchObject({ code: "modifier.invalid", params: { field: "priceDelta" } });
+    await setMenuItemOptionGroups(tx, tenantId, item.id, [
+      { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
+      { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "9999999999.99" }] },
+    ]);
     await setMenuItemOptionGroups(tx, tenantId, item.id, [
       { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
       { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "0.75" }] },

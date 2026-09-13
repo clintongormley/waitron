@@ -23,7 +23,7 @@ import { type Modifier, type ModifierInput, type ModifierExtraChoice } from "../
 import { isModifierPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
 import {
-  isPositiveInteger,
+  isModifierQuantity,
   nameFields,
   nonBlankNames,
   switchField,
@@ -345,13 +345,13 @@ export class ModifierForm extends LitElement {
         // server will actually receive.
         return (
           !isModifierPrice(choice.priceDelta ?? "0.00") ||
-          !isPositiveInteger(String(choice.maxQuantity ?? 1))
+          !isModifierQuantity(String(choice.maxQuantity ?? 1))
         );
       });
       if (broken !== undefined) errors.choices = this.#choiceProblem(broken);
     }
     if (this.type === "extras" && this.cap !== "") {
-      if (!isPositiveInteger(this.cap)) errors.maxTotalQuantity = t("modifiers.quantity_invalid");
+      if (!isModifierQuantity(this.cap)) errors.maxTotalQuantity = t("modifiers.quantity_invalid");
       // A well-formed cap that the preselections exceed is not a bad cap: say which side to change,
       // beside the choices that are the problem.
       else if (

@@ -14,7 +14,7 @@ export interface FieldContext {
 }
 
 /** A whole number from 1 to the largest quantity a modifier may store, written in plain digits. */
-export const isPositiveInteger = (text: string) =>
+export const isModifierQuantity = (text: string) =>
   /^\d+$/.test(text) && Number(text) >= 1 && Number(text) <= MAX_MODIFIER_INTEGER;
 
 /** A translated name without its blank entries, so a language left blank is not submitted. */
