@@ -1013,12 +1013,24 @@ image constraints under *Detail → Box image*.
   Playwright's "Frame was detached" during a whole-workspace run, and then passed both on its own
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
-  rather than re-running to green. A fifth, seen twice the same day (2026-09-13) in `test-dashboard`'s
-  browser a11y suite, on two unrelated PRs and two unrelated tests: `products-editor`'s CI run failed
-  `dashboard-app.a11y.test.ts`'s recipe-screen heading-order case (job 103718734296); `units`'s
-  (#350) failed `floor-screen.a11y.test.ts`'s "renders accessibly with empty lists" on a
-  color-contrast check (job 103778327703), in code neither branch touched — it passed 8/8 locally
-  against the identical commit. Worth a dedicated look if it recurs a third time; not chased here.
+  rather than re-running to green.
+- **A fifth, with a real hypothesis this time: `test-dashboard`'s browser a11y suite fails on a stray
+  `:hover` state left over from a prior test in the same shared browser page.** Seen three times the
+  same day (2026-09-13), on two unrelated PRs, in code neither branch touched: `products-editor`'s CI
+  run failed `dashboard-app.a11y.test.ts`'s recipe-screen heading-order case (job 103718734296); this
+  branch's PR #350 failed `floor-screen.a11y.test.ts`'s "renders accessibly with empty lists" on a
+  color-contrast check TWICE in a row across two separate pushes (jobs 103778327703 and
+  103778897882), always the same element (`wt-button[data-add-zone=""]`), always the same colors
+  (foreground `#fefefe`, background `#3f83ed`, ratio 3.66 against a 4.5 minimum) — and passed cleanly,
+  8/8, run locally against the identical commit both times. `#3f83ed` is not a real design token
+  (`--wt-color-primary` is `#1f6feb`); blending `#1f6feb` toward white at `--wt-opacity-hover: 0.85`
+  (`packages/ui/src/components/wt-button.ts`'s `:hover` rule) lands almost exactly on `#3f83ed`. That
+  matches axe capturing the button mid-hover rather than at rest — most likely a leftover pointer
+  position from an earlier test in the same file, in a browser-mode suite that reuses one page across
+  tests in a file. Not chased further here: the fix, if this hypothesis holds, is moving the mouse (or
+  otherwise clearing hover state) between tests in the shared-page harness, which is infrastructure
+  work outside any one screen and deserves its own look rather than a fix folded into an unrelated
+  branch.
 - **Comments across the tree still say PGlite cannot check a database permission** — the belief
   CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
   session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
