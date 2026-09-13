@@ -18,7 +18,7 @@
 - **A new `wt-*` primitive state needs two tests:** a token-painting test in `*.test.ts` and an axe test in `*.a11y.test.ts` covering the state in both themes. (`waitron/CLAUDE.md` §3)
 - **Error codes name the domain concept and are never renamed once shipped.** The modifier codes here are `modifier.invalid` (with a `field` param) and `modifier.in_use`; reuse them, do not add new ones. A rejected write asserts the domain error code, not merely `toBeInstanceOf(Error)`. (`waitron/CLAUDE.md` §3, §4)
 - **A real-PG test calls `asAppUser(tx)` before the query under test**, or it runs as owner and asserts nothing. Local real-PG runs need `TESTCONTAINERS_RYUK_DISABLED=true`. (`testing-guide.md`)
-- **Coverage bars:** `packages/catalogue` and `packages/db` sit at `98/98/98/95`; `apps/*` and `packages/ui` at `90/90/85/85`. CI shards run `test:coverage`, not `test`.
+- **Coverage bars:** `packages/db` sits at the high bar `98/98/98/95`; `packages/catalogue`, `apps/*` and `packages/ui` are at the `90/90/85/85` floor (the high bar is only verifactu, fiscal-verifactu, core, db, sync, payments). CI shards run `test:coverage`, not `test`.
 - **Commits are signed and in plain English, no attribution lines:** `git commit -s`. Run focused tests while implementing; CI owns the mandatory package suites.
 - **A browser-mode test run competes for RAM.** Before a heavy local run check free memory and the heaviest processes; do not start a browser run beside another session's. (`ci-and-gates.md`)
 
@@ -38,7 +38,6 @@
 **Till (Task 2)**
 - `apps/till/src/api/client.ts` — local `Modifier`/`ModifierSnapshot` types.
 - `apps/till/src/widgets/modifier-picker.ts` — preselected pre-fill; yes/no as a `wt-switch` toggle.
-- `apps/till/src/widgets/basket.ts` — print "Yes"/"No" from local strings.
 - `apps/till/src/widgets/basket.ts` — an affirmative yes/no shows the modifier name, a negative one shows nothing (Ruling C; no new strings).
 
 **Primitive (Task 3)**
