@@ -549,6 +549,22 @@ Each was judged and deliberately left; none blocks the merge.
 Landed in #334 (2026-09-12). [Design](superpowers/specs/2026-09-12-setup-wizard-a2-design.md) ·
 [Plan](superpowers/plans/2026-09-12-setup-wizard-a2.md).
 
+**Corrections from walking it on a real machine landed in #347 (2026-09-13)**, with a passkey offer
+on first sign-in. [Design](superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md) ·
+[Plan](superpowers/plans/2026-09-13-onboarding-flow-corrections.md). The wizard now sits in the
+dashboard's centred modal, help tooltips stay inside the window, the province question precedes the
+fiscal territory it decides, "First operator" became "Your account" with first and last name fields,
+and the account created gets the browser's language. Two calls the PR left with the owner, still
+open:
+
+- *Setup always stores a language on the account.* If the browser sends no language, or one Waitron
+  does not ship, the account gets the venue's language saved as though chosen — so the stored value
+  cannot tell "chose Spanish" from "said nothing", and it does not follow a later change to the venue
+  default. Keep this, or store a language only when the browser asked for one?
+- *The modal is always full height.* A short screen, such as the join-or-recover choice, sits in a
+  tall box with space below. That follows from choosing a real modal; the PR did not check how it
+  looks on a phone. Worth a look in the running wizard before deciding.
+
 **Still open after #334**, each one something the branch consciously did not take:
 
 - *The wizard has no translated text and no language chooser.* It is English only, on a box whose
@@ -1296,7 +1312,7 @@ partial scope; the detail for a live thread is in its track.
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
-| 5 | Identity | persons/sessions, PIN (+ per-device throttle), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
+| 5 | Identity | persons/sessions, PIN (+ per-device throttle), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
