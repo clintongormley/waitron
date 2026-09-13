@@ -91,21 +91,38 @@ target and copy its new `.env` to every checkout. Cost: a
 round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
 `docs/ui-review.md` → _Running the stack from a worktree_.
 
-That shared volume is also SEEDED and is NOT wiped by an ordinary `wa-wt demo <name>` switch, so it
-keeps demo rows written weeks and branches ago — and a branch's migrations can be unable to run over
-them. Migrations here are written for an empty database on purpose (`CLAUDE.md` §3: schema changes
-drop and recreate until Waitron is in production), so one that adds a column no existing row can fill
-stops the boot dead inside `applyMigrations`; the browser then shows only a failure to reach a server
-that never started. `packages/db/drizzle/0020_category_names.sql` did exactly this on 2026-09-13 —
-`ADD COLUMN "name" jsonb NOT NULL` over the ten seeded demo categories, SQLSTATE `23502`. The remedy
-is `wa-wt reset demo <name>`, and the boot now says so rather than leaving a driver stack trace to
-read: `apps/server/src/dev-data-conflict.ts` logs `migrations.dev_data_conflict` with the SQLSTATE
-and that command, then re-throws untouched. It fires in DEV MODE ONLY, on a pinned list of SQLSTATEs
-that mean "rows already here break a rule this migration adds" — on a real box the same code means
-something else and wiping would be wrong advice, which is why it shares no table with
-`classifyBootFailure` (`apps/server/src/boot-failure.ts`). Reproduced end to end before the line was
-written: the pre-#340 migration root migrated into a scratch database, one category row seeded, then
-this branch's root applied over it — the hint printed and the original error still arrived intact.
+Only a target change wipes it, though — the sentence above is the whole of it. An ordinary
+`wa-wt demo <name>` switch leaves the volume alone, and the volume is SEEDED, so it keeps demo rows
+written weeks and branches ago. A branch's migrations can then be unable to run over them: migrations
+here carry no data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and recreate
+until Waitron is in production), so one that adds a column no existing row can fill stops the boot
+dead inside `applyMigrations`, and the browser shows only "Something went wrong, try again" because
+there is no server to reach. `packages/db/drizzle/0020_category_names.sql` did exactly this on
+2026-09-13: it drops the old text `categories.name` and recreates it as `jsonb NOT NULL` (and adds a
+unique constraint, a second way the same file could raise a pinned state), which the seeded demo
+categories cannot satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.
+
+Boot now says so rather than leaving a driver stack trace to read: `apps/server/src/dev-migration-hint.ts`
+logs `migrations.dev_constraint_violation` with the SQLSTATE and that command, then re-throws the
+original error untouched — including when the log sink itself throws. It fires only when
+`WAITRON_ENV=dev` (`isDevMode`, `apps/server/src/config.ts`; `dev-setup` writes it, but a `.env`
+copied from `.env.example` does not), and only for a pinned list of SQLSTATEs where a constraint met
+row data.
+
+**What that line may and may not claim.** A SQLSTATE cannot tell "rows that were already here break a
+new rule" from "this migration inserted rows that break its own rule" — measured 2026-09-13 against
+real migrations on PostgreSQL 18: for every state in the list, a migration inserting bad rows into an
+EMPTY database raises the same code, and raises it again after a wipe. So the line reports the
+constraint failure as fact and offers the reset as a CONDITIONAL remedy; naming the reset outright
+would send a developer to wipe a healthy database over a broken migration. That is the same trade
+`classifyBootFailure` (`apps/server/src/boot-failure.ts`) made when it dropped `22P02` — and it is
+why these two share no SQLSTATE table, which a test pins rather than a comment asserting it. Note
+the hint does NOT fire for the other "database too old" failure: an ahead-of-image database throws
+`provisioning.database_ahead`, an `AppError` with no SQLSTATE, whose remedy is also a reset.
+
+Reproduced end to end before the line was written: the pre-#340 migration root migrated into a
+scratch database, one category row seeded, then this branch's root applied over it — the hint printed
+and the original error still arrived intact.
 
 Since swap step 4 the compose `db` service passes `wal_level=logical` + `track_commit_timestamp=on`
 (restart-required cluster settings) plus `max_slot_wal_keep_size=4GB` on its `command:`, so a dev box

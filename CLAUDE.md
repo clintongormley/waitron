@@ -476,10 +476,12 @@ before treating an implementation as a rule violation.
   `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*` — compose names its project after the
   directory, so an unqualified `docker compose up` starts a SECOND `db` on the same port.
 - **That dev database is shared and seeded, and an ordinary switch never wipes it — so a branch's
-  migrations can fail on the rows already in it.** Migrations assume an empty database (§3), so a new
-  NOT NULL column over seeded rows kills the boot and the browser shows only "something went wrong".
-  `wa-wt reset demo <name>` is the fix; boot names it (`migrations.dev_data_conflict`, dev mode only,
-  `apps/server/src/dev-data-conflict.ts`). Cost: repeated dead boots with only a driver stack trace.
+  migrations can fail on the rows already in it.** Migrations carry no data-preservation code (§3),
+  so a new NOT NULL column over seeded rows kills the boot. `wa-wt reset demo <name>` rebuilds it,
+  and boot now offers that CONDITIONALLY (`migrations.dev_constraint_violation`, `WAITRON_ENV=dev`
+  only) — a SQLSTATE cannot tell stale rows from a migration that breaks its own rule, so the line
+  never simply tells you to wipe. Detail: [workflow-guide.md](docs/developers/workflow-guide.md).
+  Cost: repeated dead boots with only a driver stack trace to read.
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
 unprompted, and **update it in the same change that makes it stale** (the moment it goes stale most

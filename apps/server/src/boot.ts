@@ -69,7 +69,7 @@ import type {
 } from "./promote.js";
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
-import { withDevDataConflictHint } from "./dev-data-conflict.js";
+import { withDevMigrationHint } from "./dev-migration-hint.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
@@ -844,8 +844,8 @@ export async function startServer(
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
   // The wrapper only adds a log line on the way past a dev-mode failure, and re-throws untouched;
-  // `dev-data-conflict.ts` states why that line is worth a seam here.
-  await withDevDataConflictHint(log, config.devMode, () =>
+  // `dev-migration-hint.ts` states why that line is worth a seam here.
+  await withDevMigrationHint(log, config.devMode, () =>
     applyMigrations(
       config.migrationsDatabaseUrl,
       migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
