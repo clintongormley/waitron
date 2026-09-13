@@ -19,7 +19,7 @@ Spanish text without copying it into the English field, so later Spanish edits r
 where the translation is still missing.
 
 Required fields need text in the default language. Other translations can wait. To change the
-default to English, first complete the required English descriptions and image names and alt text.
+default to English, first complete the required English descriptions and image names.
 If the change is refused, check your products, modifiers, menu sections and image metadata for
 missing translations. You can edit sections with no products through **Venue operations**,
 **Menus**, **Sections**.
@@ -39,8 +39,9 @@ site.
 ## Add a photograph once
 
 Open **Image library**, choose **Upload photo**, and select a JPEG, PNG or WebP file. Give it a short
-name that helps you find it and alt text that describes the photograph for someone who cannot see
-it. Both fields are required in your default content language.
+name that helps you find it and, if you can, alt text that describes the photograph for someone who
+cannot see it. Only the name is required, in your default content language; alt text is optional but
+recommended for accessibility.
 
 For the bread photograph, you might enter **Pan de verano** as the name and **Rebanadas de pan con
 tomate sobre un plato blanco** as the Spanish alt text. Leave the English fields blank until you

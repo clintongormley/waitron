@@ -7,6 +7,7 @@ const en = {
   "image.edit": "Edit image",
   "image.name": "Name",
   "image.alt": "Alt text",
+  "image.preview": "Selected photo preview",
   "image.labels": "Labels",
   "image.labels_help": "Separate labels with commas. New labels are added when you save.",
   "image.file": "Photo",
@@ -52,6 +53,7 @@ const es: Record<keyof typeof en, string> = {
   "image.edit": "Editar imagen",
   "image.name": "Nombre",
   "image.alt": "Texto alternativo",
+  "image.preview": "Vista previa de la foto seleccionada",
   "image.labels": "Etiquetas",
   "image.labels_help": "Separa las etiquetas con comas. Las nuevas etiquetas se añaden al guardar.",
   "image.file": "Foto",
@@ -97,8 +99,8 @@ registerCodeMessages({
     es: "Revisa los nombres, el texto alternativo y las etiquetas.",
   },
   "image.translation_required": {
-    en: "Enter a name and alt text in the default language.",
-    es: "Introduce un nombre y texto alternativo en el idioma predeterminado.",
+    en: "Enter a name in the default language.",
+    es: "Introduce un nombre en el idioma predeterminado.",
   },
   "image.in_use": { en: en["image.in_use"], es: es["image.in_use"] },
 });

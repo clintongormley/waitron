@@ -26,6 +26,9 @@ that runtime configuration; the shipped interface language list is not its langu
 - Give each photograph a name and alt text in the supported languages. Require both in
   the configured default content language; allow the other translations to follow later. Derive
   language choices from the tenant's enabled content languages, rather than the interface list.
+  - 2026-09-13: alt text was made OPTIONAL after real use. Only a default-language name is now
+    required; alt text is still validated for length and language when given, and a missing alt text
+    no longer blocks a default-language change.
 - Apply several labels. Choose an existing label or type a new one. Labels are shared across
   languages and come from current assignments, so removing their last assignment removes them
   from suggestions and filters. Trim whitespace and treat case variants as the same label.

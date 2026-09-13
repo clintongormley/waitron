@@ -88,6 +88,16 @@ export class ImageLibrary extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .preview {
+        justify-self: start;
+        width: 100%;
+        max-width: 320px;
+        aspect-ratio: 4/3;
+        object-fit: contain;
+        background: var(--wt-color-surface);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
       nav {
         justify-content: end;
         margin-block: var(--wt-space-4);
@@ -121,6 +131,7 @@ export class ImageLibrary extends LitElement {
     file: File | null;
   } | null = null;
   @state() private invalid = false;
+  @state() private previewUrl: string | null = null;
   @state() private saveError: string | null = null;
   @state() private duplicateImage: LibraryImage | null = null;
   @state() private deletion: { image: LibraryImage; uses: ImageUsage[] } | null = null;
@@ -151,7 +162,13 @@ export class ImageLibrary extends LitElement {
   override disconnectedCallback(): void {
     this.#deleteGeneration++;
     this.#unsubscribeLocale?.();
+    this.#setPreview(null);
     super.disconnectedCallback();
+  }
+  /** Holds the object URL for a newly chosen file, revoking the previous one so it cannot leak. */
+  #setPreview(file: File | null): void {
+    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+    this.previewUrl = file ? URL.createObjectURL(file) : null;
   }
   #text(value: Record<string, string>): string {
     return resolveEnabledContentText(value, currentLocale(), currentContentLanguages());
@@ -208,6 +225,7 @@ export class ImageLibrary extends LitElement {
     void this.#load();
   }
   #edit(image: LibraryImage | null): void {
+    this.#setPreview(null);
     this.editor = {
       image,
       names: { ...image?.names },
@@ -220,7 +238,9 @@ export class ImageLibrary extends LitElement {
     this.duplicateImage = null;
   }
   #closeEditor(): void {
-    if (!this.busy) this.editor = null;
+    if (this.busy) return;
+    this.#setPreview(null);
+    this.editor = null;
   }
   #field(field: "names" | "altText", language: string, value: string): void {
     if (this.editor !== null)
@@ -231,12 +251,8 @@ export class ImageLibrary extends LitElement {
     if (editor === null || this.busy) return;
     const language = currentContentLanguages().defaultLanguage;
     this.invalid = true;
-    if (
-      (editor.image === null && editor.file === null) ||
-      !editor.names[language]?.trim() ||
-      !editor.altText[language]?.trim()
-    )
-      return;
+    // Alt text is optional; only a file (for a new image) and a default-language name are required.
+    if ((editor.image === null && editor.file === null) || !editor.names[language]?.trim()) return;
     this.busy = true;
     this.saveError = null;
     const metadata: ImageMetadata = {
@@ -256,6 +272,7 @@ export class ImageLibrary extends LitElement {
         const result = await this.api.uploadImage(editor.file!, metadata);
         this.duplicateImage = result.created ? null : result.image;
       } else await this.api.updateImage(editor.image.id, metadata);
+      this.#setPreview(null);
       this.editor = null;
     } catch (error) {
       this.saveError = codeOf(error);
@@ -310,8 +327,12 @@ export class ImageLibrary extends LitElement {
       this.invalid && editor.image === null && editor.file === null ? t("image.file_required") : "";
     const nameError =
       this.invalid && !editor.names[config.defaultLanguage]?.trim() ? t("image.required") : "";
-    const altError =
-      this.invalid && !editor.altText[config.defaultLanguage]?.trim() ? t("image.required") : "";
+    const preview =
+      editor.file !== null
+        ? this.previewUrl
+        : editor.image !== null
+          ? `/media/${encodeURIComponent(editor.image.filename)}`
+          : null;
     return html`<wt-modal
       open
       heading=${t(editor.image ? "image.edit" : "image.upload")}
@@ -326,7 +347,7 @@ export class ImageLibrary extends LitElement {
     >
       <wt-form-error-summary
         heading=${t("image.problem")}
-        .errors=${[fileError, nameError, altError].filter(Boolean)}
+        .errors=${[fileError, nameError].filter(Boolean)}
       ></wt-form-error-summary>
       ${this.saveError ? html`<p role="alert" class="error">${t("image.save_error")} ${codeMessage(this.saveError)}</p>` : nothing}
       <div class="fields">
@@ -342,12 +363,21 @@ export class ImageLibrary extends LitElement {
                     aria-invalid=${Boolean(fileError)}
                     aria-describedby=${fileError ? "file-error" : nothing}
                     @change=${(event: Event) => {
-                      this.editor = {
-                        ...editor,
-                        file: (event.target as HTMLInputElement).files?.[0] ?? null,
-                      };
+                      const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+                      this.#setPreview(file);
+                      this.editor = { ...editor, file };
                     }} /></label
                 >${fileError ? html`<p id="file-error" class="error">${fileError}</p>` : nothing}`
+            : nothing
+        }
+        ${
+          preview
+            ? html`<img
+                class="preview"
+                data-test="preview"
+                src=${preview}
+                alt=${t("image.preview")}
+              />`
             : nothing
         }
         ${languages.map(
@@ -369,9 +399,7 @@ export class ImageLibrary extends LitElement {
                 name=${`alt-${language}`}
                 label=${t("image.alt")}
                 .value=${editor.altText[language] ?? ""}
-                ?required=${language === config.defaultLanguage}
                 ?disabled=${this.busy}
-                error=${language === config.defaultLanguage ? altError : ""}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => this.#field("altText", language, event.detail.value)}
               ></wt-input>
             </fieldset>`,
