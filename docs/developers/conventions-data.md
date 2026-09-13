@@ -45,6 +45,31 @@ establishment, and the till's backend construction imported the Spanish regime d
 UI-bearing module (guarded by `module-seams` + `dashboard-browser-purity`), so `apps/dashboard`
 mounts modules without naming one, exactly as generic provisioning does not.
 
+## A test-only dependency closes a workspace dependency loop as surely as a runtime one
+
+pnpm counts `devDependencies` when it looks for a loop, and prints "There are cyclic workspace
+dependencies" on every install. Two test-only links made one: `@waitron/migrations` listed twelve
+modules to compare their journal table names with the manifest, while those modules used
+`@waitron/migrations` in their own tests; and `@waitron/sync`'s replication suites used
+`@waitron/provisioning`, which reaches `@waitron/sync` again through `@waitron/composition`. The
+journal-table test moved to `packages/composition/src/composition.test.ts`, and the real-database
+replication suites — `sync`'s three and `fiscal-verifactu`'s fidelity suite — moved to
+`packages/replication-tests`, which no package depends on. Their node fixture, which `apps/server`'s
+replication test also uses and which imports nothing from `@waitron/sync`, moved to
+`packages/provisioning/src/testing/replication-node.ts`. Receipt, 2026-09-13:
+`scripts/workspace-cycles.test.ts` listed the ten-package loop before the move; on the finished tree
+it passes, fails again when `@waitron/provisioning` is added back to `sync`'s `devDependencies`, and
+`pnpm install` prints no loop warning.
+
+The guard reads each member's `package.json` rather than asking pnpm for its graph, and counts every
+dependency whose name is another workspace member.
+
+The English-only vocabulary guard (`scripts/english-only.test.ts`) does not scan
+`packages/replication-tests`, although it scanned the three suites while they lived in `sync`. The
+fidelity suite chains real Spanish fiscal records, and the guard's only exemption skips a package's
+test files — which in this package is every file, so exempting it scans nothing and fails the guard's
+own "discovers source files" check.
+
 ## A command name is declared under `waitron.commands`, never `bin`
 
 pnpm links a `bin` while it INSTALLS and skips one whose target is missing, and nothing here builds

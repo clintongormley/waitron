@@ -8,16 +8,10 @@ import {
 } from "@waitron/db/testing/postgres.js";
 import type { StartedNetwork } from "@waitron/db/testing/two-node.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  REPLICATION_ROLE,
-  replicationBootstrapStatements,
-  withDatabase,
-} from "@waitron/provisioning";
+import { withDatabase } from "../instance-apply.js";
+import { REPLICATION_ROLE, replicationBootstrapStatements } from "../replication-bootstrap.js";
 
-// Re-exported here so Task 3's fiscal fidelity suite imports `REPLICATION_ROLE` and
-// `provisionAndBootstrapNode` from `@waitron/sync/testing/replication-node.js` without a
-// fiscal→provisioning package edge (I8): this testing barrel already depends on `@waitron/provisioning`,
-// the fiscal package does not.
+// Re-exported so a suite takes the replication role and the node it provisions from one import.
 export { REPLICATION_ROLE };
 
 /**

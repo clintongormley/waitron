@@ -2,47 +2,11 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { captureError, CORE_MIGRATIONS } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { MEDIA_MIGRATIONS } from "@waitron/media";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
-import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
-import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
-import { FISCAL_NONE_MIGRATIONS } from "@waitron/fiscal-none";
-import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
-import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
-import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
-import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
+import { captureError } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
 describe("the migration manifest", () => {
-  it("names the same journal tables the packages themselves declare", () => {
-    // The manifest exists because every *_MIGRATIONS descriptor computes migrationsFolder from its
-    // OWN import.meta.url, which collapses onto the bundle's directory under esbuild. Taking the
-    // FOLDER from the manifest means the TABLE could silently drift from the package's; this is the
-    // assertion that stops it, and a rename fails here rather than by re-running old migrations
-    // against a journal nobody reads.
-    const byName = Object.fromEntries(manifestSets().map((set) => [set.name, set.table]));
-    expect(byName).toEqual({
-      core: CORE_MIGRATIONS.migrationsTable,
-      catalogue: CATALOGUE_MIGRATIONS.migrationsTable,
-      media: MEDIA_MIGRATIONS.migrationsTable,
-      "venue-service": VENUE_SERVICE_MIGRATIONS.migrationsTable,
-      identity: IDENTITY_MIGRATIONS.migrationsTable,
-      workforce: WORKFORCE_MIGRATIONS.migrationsTable,
-      "workforce-es": WORKFORCE_ES_MIGRATIONS.migrationsTable,
-      "fiscal-verifactu": FISCAL_MIGRATIONS.migrationsTable,
-      "fiscal-none": FISCAL_NONE_MIGRATIONS.migrationsTable,
-      payments: PAYMENTS_MIGRATIONS.migrationsTable,
-      scheduler: SCHEDULER_MIGRATIONS.migrationsTable,
-      credentials: CREDENTIALS_MIGRATIONS.migrationsTable,
-      bookings: BOOKINGS_MIGRATIONS.migrationsTable,
-    });
-  });
-
   it("puts core first, because every other set has a tenants foreign key", () => {
     expect(manifestSets()[0]?.name).toBe("core");
   });

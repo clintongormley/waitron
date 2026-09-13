@@ -16,12 +16,14 @@ import {
   REPLICATION_ROLE,
   replicationBootstrapStatements,
 } from "@waitron/provisioning";
-import { createPublications, publicationName } from "./publications.js";
-import { startReplicationNode, type ReplicationNode } from "./testing/replication-node.js";
+import { createPublications, publicationName } from "@waitron/sync";
+import {
+  startReplicationNode,
+  type ReplicationNode,
+} from "@waitron/provisioning/testing/replication-node.js";
 
-// A SMALL hardcoded real-table list — NOT @waitron/composition, which depends on @waitron/sync and
-// would be a package cycle. Every one is created by the core baseline and classified in S1: `sales`
-// and `tenders` are ledger, `tenants` and `locations` are state.
+// A SMALL hardcoded real-table list. Every one is created by the core baseline and classified in S1:
+// `sales` and `tenders` are ledger, `tenants` and `locations` are state.
 const LEDGER = ["sales", "tenders"];
 const STATE = ["tenants", "locations"];
 const PUBLISHED = [...LEDGER, ...STATE];

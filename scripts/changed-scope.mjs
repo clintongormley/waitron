@@ -279,7 +279,7 @@ export const OWN_SHARD_PACKAGES = [
   FISCAL_VERIFACTU_PACKAGE,
   "@waitron/bookings",
   "@waitron/media",
-  "@waitron/sync",
+  "@waitron/replication-tests",
   PAYMENTS_STRIPE_PACKAGE,
   PAYMENTS_SUMUP_PACKAGE,
 ];
@@ -308,6 +308,7 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/shared",
   "@waitron/server-kit",
   "@waitron/dashboard-modules",
+  "@waitron/sync",
 ];
 
 export const LIGHT_B_PACKAGES = [
@@ -412,7 +413,7 @@ export const SCOPE_GATES = [
   { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },
   { output: "bookings", covers: membership("@waitron/bookings") },
   { output: "media", covers: membership("@waitron/media") },
-  { output: "sync", covers: membership("@waitron/sync") },
+  { output: "replication", covers: membership("@waitron/replication-tests") },
   { output: "payments_stripe", covers: membership(PAYMENTS_STRIPE_PACKAGE) },
   { output: "payments_sumup", covers: membership(PAYMENTS_SUMUP_PACKAGE) },
   { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },

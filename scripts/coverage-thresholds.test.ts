@@ -1,9 +1,8 @@
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { workspacePackages } from "./changed-packages.mjs";
 import { PACKAGES_WITHOUT_TESTS } from "./changed-scope.mjs";
+import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
  * The coverage bar is split in two (owner decision 2026-09-05, Track A item 1): six packages — the
@@ -21,7 +20,7 @@ import { PACKAGES_WITHOUT_TESTS } from "./changed-scope.mjs";
  * hardcoded, which CLAUDE.md §2 warns goes stale under scoped CI; it is safe here because the root
  * project is the one gate never narrowed away.
  *
- * Members come from `pnpm ls` through `workspacePackages` (scripts/changed-packages.mjs), the same
+ * Members come from `pnpm ls` through `workspaceMembers` (scripts/workspace-members.mjs), the same
  * source the hook and CI scope from, minus `PACKAGES_WITHOUT_TESTS`. Like the other guards here it
  * reads the configs as TEXT and never imports them. What the text parse can and cannot see is pinned
  * by `describe("the detector itself")` below: a `//` comment line never matches; a block-comment
@@ -32,10 +31,8 @@ import { PACKAGES_WITHOUT_TESTS } from "./changed-scope.mjs";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 
-// Two bounds for the one `pnpm ls` spawn, for the reasons scripts/ci-workflow.test.mjs records above
-// its own pair: the kernel-level kill for a hung child (Vitest's timer cannot interrupt a blocked
-// `spawnSync`) and the larger per-test bound for a slow-but-completing cold CI runner.
-const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
+// The per-test bound for the one `pnpm ls` spawn, larger than workspace-members.mjs's kill for a
+// slow-but-completing cold CI runner (scripts/ci-workflow.test.mjs records the pair).
 const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
 
 const HIGH_BAR = { statements: 98, lines: 98, functions: 98, branches: 95 };
@@ -73,35 +70,9 @@ function parseThresholds(source: string, label: string): Thresholds {
   return thresholds;
 }
 
-type Spawn = (
-  command: string,
-  args: string[],
-  options: { cwd: string; encoding: "utf8"; timeout: number },
-) => { error?: Error; status: number | null; stdout: string; stderr: string };
-
-/**
- * Every workspace member that declares tests, as `pnpm ls` lists them. `spawn` is injected only so
- * a test can assert the kill timeout is passed — deleting it here would otherwise leave the suite
- * green (CLAUDE.md §4).
- */
-function testedMembers(spawn: Spawn = spawnSync): { name: string; dir: string }[] {
-  const args = ["ls", "-r", "--depth", "-1", "--json"];
-  const result = spawn("pnpm", args, {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    timeout: PNPM_LS_SPAWN_TIMEOUT_MS,
-  });
-  if (result.error !== undefined) {
-    throw new Error(
-      `\`pnpm ${args.join(" ")}\` failed to run (killed after ${PNPM_LS_SPAWN_TIMEOUT_MS}ms?): ${result.error.message}`,
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(`\`pnpm ${args.join(" ")}\` exited ${result.status}: ${result.stderr}`);
-  }
-  const members = workspacePackages(result.stdout, REPO_ROOT);
-  if (members === null) throw new Error("`pnpm ls` returned no parsable workspace listing");
-  return members.filter(({ name }) => !PACKAGES_WITHOUT_TESTS.includes(name));
+/** Every workspace member that declares tests, as `pnpm ls` lists them. */
+function testedMembers(): { name: string; dir: string }[] {
+  return workspaceMembers().filter(({ name }) => !PACKAGES_WITHOUT_TESTS.includes(name));
 }
 
 describe("every vitest config holds the coverage bar its package was assigned", () => {
@@ -164,20 +135,6 @@ describe("every vitest config holds the coverage bar its package was assigned", 
           "x",
         ),
       ).toEqual({ ...FLOOR, unparsed: "perFile:true" });
-    });
-
-    it("passes the spawn kill timeout, so a hung `pnpm ls` cannot stall the gate", () => {
-      const options: unknown[] = [];
-      const fake: Spawn = (_command, _args, opts) => {
-        options.push(opts);
-        return {
-          status: 0,
-          stdout: JSON.stringify([{ name: "@waitron/x", path: join(REPO_ROOT, "packages/x") }]),
-          stderr: "",
-        };
-      };
-      expect(testedMembers(fake)).toEqual([{ name: "@waitron/x", dir: "packages/x" }]);
-      expect(options).toEqual([expect.objectContaining({ timeout: PNPM_LS_SPAWN_TIMEOUT_MS })]);
     });
   });
 });

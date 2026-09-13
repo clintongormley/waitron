@@ -111,7 +111,7 @@ jobs:
       fiscal_verifactu: ${{ steps.gates.outputs.fiscal_verifactu }}
       bookings: ${{ steps.gates.outputs.bookings }}
       media: ${{ steps.gates.outputs.media }}
-      sync: ${{ steps.gates.outputs.sync }}
+      replication: ${{ steps.gates.outputs.replication }}
       payments_stripe: ${{ steps.gates.outputs.payments_stripe }}
       payments_sumup: ${{ steps.gates.outputs.payments_sumup }}
       light_a: ${{ steps.gates.outputs.light_a }}
@@ -1286,11 +1286,12 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/payments-sumup" test:coverage
 
-  # Sync boots real replication peers and a WireGuard tunnel; give that setup its own runner.
-  test-sync:
+  # The replication suites boot real PostgreSQL peers and a WireGuard tunnel; give that setup its own
+  # runner.
+  test-replication:
     timeout-minutes: 15
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.sync == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.replication == 'true'
     runs-on: ubuntu-latest
     env:
       REQUIRE_DOCKER: "1"
@@ -1310,14 +1311,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Run the sync shard
+      - name: Run the replication shard
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/sync" ls --depth -1 --json \
+          pnpm --filter "@waitron/replication-tests" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/sync" test:coverage
+          pnpm --filter "@waitron/replication-tests" test:coverage
 
   # The remaining packages partition into two bins, with at most two package runners per bin.
   # Each subtracts OWN_SHARD_PACKAGES and the opposite bin from the changed scope;
@@ -1372,7 +1373,7 @@ jobs:
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           set -- "$@" --filter "!@waitron/bookings"
           set -- "$@" --filter "!@waitron/media"
-          set -- "$@" --filter "!@waitron/sync"
+          set -- "$@" --filter "!@waitron/replication-tests"
           set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/payments-sumup"
           # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
@@ -1448,7 +1449,7 @@ jobs:
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           set -- "$@" --filter "!@waitron/bookings"
           set -- "$@" --filter "!@waitron/media"
-          set -- "$@" --filter "!@waitron/sync"
+          set -- "$@" --filter "!@waitron/replication-tests"
           set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/payments-sumup"
           # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
@@ -1468,6 +1469,7 @@ jobs:
           set -- "$@" --filter "!@waitron/shared"
           set -- "$@" --filter "!@waitron/server-kit"
           set -- "$@" --filter "!@waitron/dashboard-modules"
+          set -- "$@" --filter "!@waitron/sync"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -1584,7 +1586,7 @@ jobs:
       - test-venue-service
       - test-bookings
       - test-media
-      - test-sync
+      - test-replication
       - test-payments-stripe
       - test-payments-sumup
       - test-light-a

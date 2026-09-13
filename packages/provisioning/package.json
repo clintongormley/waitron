@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing/replication-node.js": "./src/testing/replication-node.ts"
+  },
   "waitron": {
     "commands": {
       "waitron-provision": "./dist/bin.js"
@@ -30,6 +34,7 @@
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^12.0.4",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.20.0",
     "@vitest/coverage-v8": "^3.0.0",

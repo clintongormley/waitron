@@ -987,9 +987,6 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
-      '@waitron/sync':
-        specifier: workspace:*
-        version: link:../sync
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
@@ -1190,42 +1187,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
-      '@waitron/bookings':
-        specifier: workspace:*
-        version: link:../bookings
-      '@waitron/catalogue':
-        specifier: workspace:*
-        version: link:../catalogue
-      '@waitron/credentials':
-        specifier: workspace:*
-        version: link:../credentials
-      '@waitron/fiscal-none':
-        specifier: workspace:*
-        version: link:../fiscal-none
-      '@waitron/fiscal-verifactu':
-        specifier: workspace:*
-        version: link:../fiscal-verifactu
-      '@waitron/identity':
-        specifier: workspace:*
-        version: link:../identity
-      '@waitron/media':
-        specifier: workspace:*
-        version: link:../media
-      '@waitron/payments':
-        specifier: workspace:*
-        version: link:../payments
-      '@waitron/scheduler':
-        specifier: workspace:*
-        version: link:../scheduler
-      '@waitron/venue-service':
-        specifier: workspace:*
-        version: link:../venue-service
-      '@waitron/workforce':
-        specifier: workspace:*
-        version: link:../workforce
-      '@waitron/workforce-es':
-        specifier: workspace:*
-        version: link:../workforce-es
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -1508,6 +1469,9 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
     devDependencies:
+      '@testcontainers/postgresql':
+        specifier: ^12.0.4
+        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -1597,6 +1561,39 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
+  packages/replication-tests:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/fiscal-verifactu':
+        specifier: workspace:*
+        version: link:../fiscal-verifactu
+      '@waitron/provisioning':
+        specifier: workspace:*
+        version: link:../provisioning
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@waitron/sync':
+        specifier: workspace:*
+        version: link:../sync
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -1727,9 +1724,6 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
     devDependencies:
-      '@testcontainers/postgresql':
-        specifier: ^12.0.4
-        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -1739,12 +1733,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
-      '@waitron/migrations':
-        specifier: workspace:*
-        version: link:../migrations
-      '@waitron/provisioning':
-        specifier: workspace:*
-        version: link:../provisioning
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
