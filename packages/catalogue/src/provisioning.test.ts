@@ -44,8 +44,11 @@ async function storedUnits(tenantId: string) {
 describe("catalogue provisioning", () => {
   it.each([
     // Spain is hard-coded to the same three languages whatever the province. The four Spanish rows
-    // differ only in province and all four expect one identical set: that sameness is the
-    // hard-code, written where it can be read. See the comment in provisioning.ts.
+    // vary both inputs the seed could plausibly read — province AND receipt locale — and all four
+    // expect one identical set: that sameness is the hard-code, written where it can be read. The
+    // varied receipt column is what keeps it checkable, so do not level it: with the three en-GB
+    // rows changed to es-ES, a seed deriving the Spanish default from the receipt locale passed all
+    // eight tests instead of failing three. See the comment in provisioning.ts.
     ["ES", "Madrid", "en-GB", "es", ["es", "ca", "en"]],
     ["ES", "Barcelona", "es-ES", "es", ["es", "ca", "en"]],
     ["ES", "A Coruña", "en-GB", "es", ["es", "ca", "en"]],

@@ -40,7 +40,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: the deli writes its
       // menu in Spanish, Catalan and English, and nothing in setup asks which languages a venue
       // wants. Driving the list from the venue's region and its own choices is the proper fix —
-      // docs/backlog.md -> A9, "Product languages are hard-coded at setup". Every other country
+      // docs/backlog.md → A9, "Product languages are hard-coded at setup". Every other country
       // keeps taking its one language from geography, so the hard-code does not spread. All of it
       // is editable from the dashboard afterwards.
       const languages =
@@ -59,7 +59,9 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       const defaultLanguage = languages[0]!;
       // Each element is its own bound parameter. A JavaScript array interpolated as one value is
       // expanded by Drizzle into a value list — `($3, $4, $5)` — which Postgres rejects instead of
-      // reading as an array.
+      // reading as an array. The `::text[]` cast is not needed for this insert, whose target column
+      // supplies the type — the suite is green without it — and is kept only so this reads the same
+      // as its sibling in `packages/provisioning/src/venue-apply.ts`.
       const languageArray = sql`array[${sql.join(
         languages.map((language) => sql`${language}`),
         sql`, `,
