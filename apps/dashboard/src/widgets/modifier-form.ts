@@ -135,6 +135,9 @@ export class ModifierForm extends LitElement {
   @state() private editingChoice: FormChoice | null = null;
   /** The live pointer drag: the choice being dragged and the pointer that owns the gesture. */
   #drag: { id: string; pointerId: number } | null = null;
+  /** Each row's choice id and vertical bounds, measured from the top of the table body so scrolling
+   * the modal does not move them. Valid until the next render; null means measure again. */
+  #rowBounds: { id: string; top: number; bottom: number }[] | null = null;
   /** Set by a keyboard move so the next update can return focus to the handle that moved. */
   #refocus: string | null = null;
   override willUpdate(changed: PropertyValues<this>): void {
@@ -276,23 +279,34 @@ export class ModifierForm extends LitElement {
   };
   #endDrag(): void {
     this.#drag = null;
+    this.#rowBounds = null;
     document.removeEventListener("pointermove", this.#onPointerMove);
     document.removeEventListener("pointerup", this.#onPointerEnd);
     document.removeEventListener("pointercancel", this.#onPointerEnd);
   }
   /** The choice whose row box contains `clientY`, or null when `clientY` is outside every row. */
   #choiceAt(clientY: number): string | null {
-    for (const row of this.shadowRoot!.querySelectorAll("tbody tr")) {
+    const body = this.shadowRoot!.querySelector("tbody");
+    if (body === null) return null;
+    const origin = body.getBoundingClientRect().top;
+    this.#rowBounds ??= [...body.querySelectorAll("tr")].map((row) => {
       const box = row.getBoundingClientRect();
-      if (clientY >= box.top && clientY <= box.bottom) return row.getAttribute("data-choice");
-    }
-    return null;
+      return {
+        id: row.getAttribute("data-choice")!,
+        top: box.top - origin,
+        bottom: box.bottom - origin,
+      };
+    });
+    const y = clientY - origin;
+    return this.#rowBounds.find((row) => y >= row.top && y <= row.bottom)?.id ?? null;
   }
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#endDrag();
   }
   override updated(): void {
+    // A render can move rows (a committed drag step re-inserts them), so the next move re-measures.
+    this.#rowBounds = null;
     const id = this.#refocus;
     if (id === null) return;
     this.#refocus = null;

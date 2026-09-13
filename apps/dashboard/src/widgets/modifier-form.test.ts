@@ -399,6 +399,78 @@ it("reorders choices by pointer drag", async () => {
   await el.updateComplete;
   expect(choiceOrder(el)).toEqual(["b", "a"]);
 });
+it("follows the reordered rows across a drag that doubles back", async () => {
+  const el = await mount({
+    ...extra,
+    choices: [
+      ...extra.choices,
+      {
+        id: "c",
+        name: { es: "Cebolla" },
+        available: true,
+        priceDelta: "0.50",
+        maxQuantity: 1,
+        preselected: false,
+      },
+    ],
+  });
+  // Row slots are fixed on screen while the choices move through them.
+  const centres = [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) => {
+    const box = row.getBoundingClientRect();
+    return box.top + box.height / 2;
+  });
+  const moveTo = async (slot: number) => {
+    document.dispatchEvent(
+      new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientY: centres[slot] }),
+    );
+    await el.updateComplete;
+  };
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-a"]')!.dispatchEvent(
+    new PointerEvent("pointerdown", { bubbles: true, pointerId: 1 }),
+  );
+  await moveTo(1);
+  expect(choiceOrder(el)).toEqual(["b", "a", "c"]);
+  await moveTo(2);
+  expect(choiceOrder(el)).toEqual(["b", "c", "a"]);
+  // The first slot now holds b, not a: a layout read before the moves would still see a there and
+  // leave the order alone.
+  await moveTo(0);
+  expect(choiceOrder(el)).toEqual(["a", "b", "c"]);
+  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+});
+it("finds the row under the pointer after the modal scrolls mid-drag", async () => {
+  const choices = Array.from({ length: 30 }, (_, index) => ({
+    id: `c${index}`,
+    name: { es: `Opción ${index}` },
+    available: true,
+    priceDelta: "0.00",
+    maxQuantity: 1,
+    preselected: false,
+  }));
+  const el = await mount({ ...extra, choices });
+  const row = (id: string) => el.shadowRoot!.querySelector(`tr[data-choice="${id}"]`)!;
+  const centre = (id: string) => {
+    const box = row(id).getBoundingClientRect();
+    return box.top + box.height / 2;
+  };
+  const move = async (clientY: number) => {
+    document.dispatchEvent(
+      new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientY }),
+    );
+    await el.updateComplete;
+  };
+  row("c0")
+    .querySelector<HTMLElement>('[data-test="drag-c0"]')!
+    .dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1 }));
+  await move(centre("c0")); // over its own row: measures, moves nothing
+  const body = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!;
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight + 300);
+  body.scrollTop = 300;
+  expect(body.scrollTop).toBe(300);
+  await move(centre("c12"));
+  expect(choiceOrder(el).indexOf("c0")).toBe(12);
+  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+});
 it("ignores a second finger while a drag is live", async () => {
   const el = await mount(extra);
   const down = (id: string, pointerId: number) =>
