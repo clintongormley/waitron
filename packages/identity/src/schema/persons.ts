@@ -53,6 +53,11 @@ export const persons = pgTable(
      * locale is a catalogue + constant change with no migration. Nothing stops a
      * writer that skips both: the only constraint here is non-empty. */
     locale: text("locale"),
+    /** When this person was offered a passkey at sign-in. Null = never offered, which is what
+     * makes the offer appear exactly once: it is stamped when they resolve it, by adding one or by
+     * skipping, so a browser that dies mid-offer asks again. Nullable and unstamped for everyone who
+     * existed before the offer did, so each of them is offered once too. */
+    passkeyOfferedAt: timestamp("passkey_offered_at", { withTimezone: true, mode: "string" }),
     /** The person's login email — required at every human-account boundary and used for dashboard
      * sign-in, activation, and recovery. The column stays nullable for internal principals and
      * low-level fixtures. Unique per tenant, case-insensitively, through the custom migration's
