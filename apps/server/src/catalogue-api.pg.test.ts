@@ -148,6 +148,128 @@ async function createCatalogue(app: Hono, cookie: string, name: string): Promise
   return ((await res.json()) as { id: string }).id;
 }
 
+async function createCategory(
+  app: Hono,
+  cookie: string,
+  name: Record<string, string>,
+): Promise<string> {
+  const res = await send(app, "POST", "/management-api/categories", cookie, { name });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
+async function createProduct(
+  app: Hono,
+  cookie: string,
+  catalogueId: string,
+  name: string,
+): Promise<string> {
+  const res = await send(app, "POST", "/management-api/products", cookie, {
+    catalogueId,
+    categoryId: null,
+    descriptions: { [LOCALE]: name },
+    pricingUnit: "each",
+    unitPrice: "1.00",
+    vatClass: "general",
+  });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
+describe("category dependants and bulk add over real Postgres", () => {
+  it("reads a category's preparation routes and cascades them away on delete", async () => {
+    // This template migrates the FULL manifest, so venue-service's `preparation_routes` IS present
+    // and `categoryDependants` takes its optional-table branch — the arm PGlite cannot reach, since
+    // `catalogue-api.test.ts` migrates core + catalogue + identity only (that suite covers the
+    // absent-table arm, asserting `routes: []`). What real Postgres adds here is the ROLE: `gated`
+    // switches to the non-superuser `app_user` before the read, so this exercises its SELECT grants
+    // on `preparation_routes`, `kitchen_stations` and `floor_zones` — grants PGlite's superuser
+    // holds unconditionally — and its DELETE grant on the module's table when the category goes.
+    const v = await setupVenue();
+    const app = mountApp(v.tenantId);
+    const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Frituras" });
+    // Seeded as the OWNER, the way `setupVenue` seeds persons: these are fixture rows, not the
+    // behaviour under test. The route reads them back as `app_user`.
+    const zone = await suite.admin.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${v.tenantId}, ${v.locationId}, 'Terraza') returning id`);
+    const station = await suite.admin.execute<{ id: string }>(sql`
+      insert into kitchen_stations (tenant_id, location_id, name)
+      values (${v.tenantId}, ${v.locationId}, 'Plancha') returning id`);
+    const routed = await suite.admin.execute<{ id: string }>(sql`
+      insert into preparation_routes (tenant_id, location_id, zone_id, category_id, station_id)
+      values (${v.tenantId}, ${v.locationId}, ${zone.rows[0]!.id}, ${categoryId}, ${station.rows[0]!.id})
+      returning id`);
+    // `no_preparation` routes report a null station — the read's `case` arm.
+    const direct = await suite.admin.execute<{ id: string }>(sql`
+      insert into preparation_routes (tenant_id, location_id, category_id, no_preparation)
+      values (${v.tenantId}, ${v.locationId}, ${categoryId}, true) returning id`);
+
+    const res = await send(
+      app,
+      "GET",
+      `/management-api/categories/${categoryId}/dependants`,
+      v.managerCookie,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      routes: { id: string; station: string | null; zone: string | null }[];
+      products: unknown[];
+      children: unknown[];
+      parentId: string | null;
+    };
+    const byId = <T extends { id: string }>(rows: T[]): T[] =>
+      [...rows].sort((a, b) => a.id.localeCompare(b.id));
+    expect(byId(body.routes)).toEqual(
+      byId([
+        { id: routed.rows[0]!.id, station: "Plancha", zone: "Terraza" },
+        { id: direct.rows[0]!.id, station: null, zone: null },
+      ]),
+    );
+    expect(body).toMatchObject({ products: [], children: [], parentId: null });
+
+    expect(
+      (await send(app, "DELETE", `/management-api/categories/${categoryId}`, v.managerCookie))
+        .status,
+    ).toBe(204);
+    const left = await suite.admin.execute(
+      sql`select 1 from preparation_routes where tenant_id = ${v.tenantId} and category_id = ${categoryId}`,
+    );
+    expect(left.rows).toHaveLength(0);
+  });
+
+  it("bulk-adds products to a category as the deployment role", async () => {
+    // The bulk add's INSERT on `product_categories` and UPDATE on `products` run as `app_user`,
+    // whose grants only a real cluster enforces.
+    const v = await setupVenue();
+    const app = mountApp(v.tenantId);
+    const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
+    const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Tapas" });
+    const first = await createProduct(app, v.managerCookie, catalogueId, "Croquetas");
+    const second = await createProduct(app, v.managerCookie, catalogueId, "Boquerones");
+    const path = `/management-api/categories/${categoryId}/products`;
+
+    expect(
+      (await send(app, "POST", path, v.managerCookie, { productIds: [first, second] })).status,
+    ).toBe(204);
+    const members = await suite.admin.execute<{ product_id: string }>(
+      sql`select product_id from product_categories
+          where tenant_id = ${v.tenantId} and category_id = ${categoryId} order by product_id`,
+    );
+    expect(members.rows.map((r) => r.product_id)).toEqual([first, second].sort());
+    // Neither product had a reporting category, so each took this one.
+    const reporting = await suite.admin.execute<{ category_id: string | null }>(
+      sql`select category_id from products
+          where tenant_id = ${v.tenantId} and id in (${first}, ${second})`,
+    );
+    expect(reporting.rows.map((r) => r.category_id)).toEqual([categoryId, categoryId]);
+    // A staff session holds no `person.manage`, so the gate refuses the write.
+    expect((await send(app, "POST", path, v.staffCookie, { productIds: [first] })).status).toBe(
+      403,
+    );
+  });
+});
+
 describe("Catalogue API over real Postgres (option groups, gates, tenant-consistent FKs)", () => {
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Every write shares the permission gate; invalid resource ids must not reveal lookup results

@@ -19,6 +19,8 @@ import {
   writeContentLanguages,
   validateContentTranslations,
   createCatalogue,
+  addProductsToCategory,
+  categoryDependants,
   createCategory,
   readCategory,
   updateCategory,
@@ -122,6 +124,13 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
       throw new AppError("management.request_invalid", { field: "image" });
     result.image = body.image as string | null;
   }
+  // Shape screen only — `createCategory`/`updateCategory` own the `#rrggbb` format check and its
+  // `category.color_invalid`, the same split `image` takes with `validateImage`.
+  if (body.color !== undefined) {
+    if (body.color !== null && typeof body.color !== "string")
+      throw new AppError("management.request_invalid", { field: "color" });
+    result.color = body.color as string | null;
+  }
   return result;
 }
 
@@ -136,6 +145,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "catalogue.not_found": 404,
   "category.not_found": 404,
   "category.in_use": 409,
+  // A colour that is not `#rrggbb`, refused by `createCategory`/`updateCategory` before the write.
+  "category.color_invalid": 400,
   "menu_item.not_found": 404,
   "product.not_found": 404,
   "menu_section.not_found": 404,
@@ -733,11 +744,36 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.body(null, 204);
     }),
   );
+  // What deleting this category would touch — the preview the dashboard's delete confirmation reads.
+  app.get("/management-api/categories/:id/dependants", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CategoryId");
+      return c.json(await gated(session, (tx) => categoryDependants(tx, tenantId, id)));
+    }),
+  );
   app.get("/management-api/categories/:id/products", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
       return c.json(await gated(session, (tx) => listCategoryProducts(tx, tenantId, id)));
+    }),
+  );
+  // Add a whole selection of products to one category in a single transaction. The body screen
+  // checks SHAPE only (an array of uuid-shaped strings, so a malformed id never reaches a `uuid`
+  // column as a 22P02); whether each id names a product of this tenant, and whether the selection
+  // repeats one, is `addProductsToCategory`'s `category.membership_invalid`. An empty selection is
+  // a legitimate no-op.
+  app.post("/management-api/categories/:id/products", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CategoryId");
+      const body = await readJsonBody<{ productIds?: unknown }>(c);
+      if (!Array.isArray(body.productIds) || body.productIds.some((v) => typeof v !== "string"))
+        throw new AppError("management.request_invalid", { field: "productIds" });
+      const productIds = body.productIds.map((pid) => requireUuidParam(pid as string, "ProductId"));
+      await gated(session, (tx) => addProductsToCategory(tx, tenantId, id, productIds));
+      return c.body(null, 204);
     }),
   );
   app.get("/management-api/products", (c) =>
