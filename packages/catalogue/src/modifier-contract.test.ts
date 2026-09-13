@@ -10,7 +10,7 @@ const extra = {
   available: true,
   priceDelta: "1.00",
   maxQuantity: 2,
-  defaultQuantity: 0,
+  preselected: false,
 };
 const extras = {
   id: modifierId,
@@ -61,7 +61,7 @@ describe("modifier definition contract", () => {
             available: true,
             priceDelta: "0.00",
             maxQuantity: 1,
-            defaultQuantity: 0,
+            preselected: false,
           },
         ],
       },
@@ -75,14 +75,10 @@ describe("modifier definition contract", () => {
       choices: [{ id: choiceId, name, available: true }],
       defaultChoiceId: null,
     });
-    expect(
-      parseModifierInput({ type: "yes-no", name, yesLabel: { en: "Yes" }, noLabel: { en: "No" } }),
-    ).toEqual({
+    expect(parseModifierInput({ type: "yes-no", name })).toEqual({
       type: "yes-no",
       name,
       available: true,
-      yesLabel: { en: "Yes" },
-      noLabel: { en: "No" },
       defaultValue: false,
     });
   });
@@ -92,9 +88,6 @@ describe("modifier definition contract", () => {
     { type: "yes-no", name, choices: [] },
     { ...extras, maxTotalQuantity: 0 },
     { ...extras, choices: [{ ...extra, priceDelta: "-0.01" }] },
-    { ...extras, choices: [{ ...extra, defaultQuantity: 3 }] },
-    { ...extras, choices: [{ ...extra, defaultQuantity: 1.5 }] },
-    { ...extras, maxTotalQuantity: 1, choices: [{ ...extra, defaultQuantity: 2 }] },
     { type: "options", name, choices: [{ id: choiceId, name }], defaultChoiceId: modifierId },
     { ...extras, choices: [extra, extra] },
   ])("rejects contradictory fields and invalid defaults %#", (input) => {
@@ -106,9 +99,9 @@ describe("modifier definition contract", () => {
       parseModifierInput({
         type: "extras",
         name,
-        choices: [{ ...extra, available: false, defaultQuantity: 2 }],
+        choices: [{ ...extra, available: false, preselected: true }],
       }),
-    ).toMatchObject({ choices: [{ defaultQuantity: 0 }] });
+    ).toMatchObject({ choices: [{ preselected: false }] });
     expect(
       parseModifierInput({
         type: "options",
@@ -153,8 +146,6 @@ describe("explicit order selections", () => {
         type: "yes-no" as const,
         name,
         available: true,
-        yesLabel: { en: "Yes" },
-        noLabel: { en: "No" },
         defaultValue: false,
       },
     ];
@@ -213,7 +204,7 @@ describe("explicit order selections", () => {
     ).toThrow();
     expect(() =>
       validateModifierSelections(
-        [{ ...extras, required: true, choices: [{ ...extra, defaultQuantity: 1 }] }],
+        [{ ...extras, required: true, choices: [{ ...extra, preselected: true }] }],
         [],
       ),
     ).toThrow();
@@ -247,7 +238,7 @@ function expectInvalid(run: () => unknown, field: string) {
 
 const extraInput = { type: "extras", name, choices: [extra] };
 const optionInput = { type: "options", name, choices: [{ id: choiceId, name }] };
-const booleanInput = { type: "yes-no", name, yesLabel: { en: "Yes" }, noLabel: { en: "No" } };
+const booleanInput = { type: "yes-no", name };
 
 describe("strict definition input boundaries", () => {
   it.each([
@@ -258,8 +249,8 @@ describe("strict definition input boundaries", () => {
     [{ ...extraInput, choices: [{ ...extra, priceDelta: null }] }, "choices.0.priceDelta"],
     [{ ...extraInput, choices: [{ ...extra, maxQuantity: null }] }, "choices.0.maxQuantity"],
     [
-      { ...extraInput, choices: [{ ...extra, defaultQuantity: null }] },
-      "choices.0.defaultQuantity",
+      { ...extraInput, choices: [{ ...extra, preselected: null }] },
+      "choices.0.preselected",
     ],
   ])("rejects explicit null instead of silently applying a default: %#", (input, field) => {
     expectInvalid(() => parseModifierInput(input), field as string);
@@ -287,8 +278,6 @@ describe("strict definition input boundaries", () => {
         () => parseModifierInput({ ...extraInput, choices: [{ ...extra, name: value }] }),
         "choices.0.name",
       );
-      expectInvalid(() => parseModifierInput({ ...booleanInput, yesLabel: value }), "yesLabel");
-      expectInvalid(() => parseModifierInput({ ...booleanInput, noLabel: value }), "noLabel");
     },
   );
 
@@ -306,8 +295,8 @@ describe("strict definition input boundaries", () => {
       "choices.0.maxQuantity",
     ],
     [
-      { ...optionInput, choices: [{ id: choiceId, name, defaultQuantity: 0 }] },
-      "choices.0.defaultQuantity",
+      { ...optionInput, choices: [{ id: choiceId, name, preselected: false }] },
+      "choices.0.preselected",
     ],
     [{ ...optionInput, choices: [{ id: choiceId, name, vatClass: null }] }, "choices.0.vatClass"],
     [{ ...extraInput, choices: [{ ...extra, defaultValue: false }] }, "choices.0.defaultValue"],
@@ -369,12 +358,12 @@ describe("strict definition input boundaries", () => {
         ...extraInput,
         required: false,
         maxTotalQuantity: 1,
-        choices: [{ ...extra, available: false, defaultQuantity: 2, vatClass: null }],
+        choices: [{ ...extra, available: false, preselected: true, vatClass: null }],
       }),
     ).toMatchObject({
       required: false,
       maxTotalQuantity: 1,
-      choices: [{ available: false, defaultQuantity: 0, vatClass: null }],
+      choices: [{ available: false, preselected: false, vatClass: null }],
     });
     expect(parseModifierInput({ ...extraInput, maxTotalQuantity: null })).toMatchObject({
       maxTotalQuantity: null,
@@ -502,5 +491,50 @@ describe("adversarial explicit selections", () => {
       () => validateModifierSelections([{ ...definition, maxTotalQuantity: max }], selections),
       "choices",
     );
+  });
+});
+
+describe("preselected extras and label-free yes/no", () => {
+  it("accepts a preselected extras choice and rejects defaultQuantity", () => {
+    const parsed = parseModifierInput({
+      type: "extras", name: { en: "Extras" }, required: false, maxTotalQuantity: null,
+      choices: [{ id: crypto.randomUUID(), name: { en: "Cheese" }, available: true,
+        priceDelta: "1.00", maxQuantity: 2, preselected: true }],
+    });
+    if (parsed.type !== "extras") throw new Error("type");
+    expect(parsed.choices[0]!.preselected).toBe(true);
+    expect("defaultQuantity" in parsed.choices[0]!).toBe(false);
+    expect(() => parseModifierInput({
+      type: "extras", name: { en: "Extras" }, required: false, maxTotalQuantity: null,
+      choices: [{ id: crypto.randomUUID(), name: { en: "Cheese" }, available: true,
+        priceDelta: "1.00", maxQuantity: 2, defaultQuantity: 1 }],
+    })).toThrow(expect.objectContaining({ code: "modifier.invalid" }));
+  });
+
+  it("forces preselected false on an unavailable extras choice", () => {
+    const parsed = parseModifierInput({
+      type: "extras", name: { en: "Extras" }, required: false, maxTotalQuantity: null,
+      choices: [{ id: crypto.randomUUID(), name: { en: "Cheese" }, available: false,
+        priceDelta: "1.00", maxQuantity: 2, preselected: true }],
+    });
+    if (parsed.type !== "extras") throw new Error("type");
+    expect(parsed.choices[0]!.preselected).toBe(false);
+  });
+
+  it("rejects more preselected choices than the total cap", () => {
+    const choice = (name: string) => ({ id: crypto.randomUUID(), name: { en: name },
+      available: true, priceDelta: "1.00", maxQuantity: 1, preselected: true });
+    expect(() => parseModifierInput({
+      type: "extras", name: { en: "Extras" }, required: false, maxTotalQuantity: 1,
+      choices: [choice("A"), choice("B")],
+    })).toThrow(expect.objectContaining({ code: "modifier.invalid", params: { field: "maxTotalQuantity" } }));
+  });
+
+  it("parses a yes-no modifier with no custom labels and rejects them", () => {
+    const parsed = parseModifierInput({ type: "yes-no", name: { en: "Decaf" }, defaultValue: true });
+    expect(parsed).toEqual({ type: "yes-no", name: { en: "Decaf" }, available: true, defaultValue: true });
+    expect(() => parseModifierInput({ type: "yes-no", name: { en: "Decaf" },
+      yesLabel: { en: "Y" }, noLabel: { en: "N" }, defaultValue: true }))
+      .toThrow(expect.objectContaining({ code: "modifier.invalid" }));
   });
 });

@@ -561,7 +561,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
               name: { es: "Café extra" },
               priceDelta: "1.50",
               maxQuantity: 3,
-              defaultQuantity: 2,
+              preselected: true,
               vatClass: "general",
             },
           ],
@@ -574,8 +574,6 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
         {
           type: "yes-no",
           name: { es: "Hielo" },
-          yesLabel: { es: "Con hielo" },
-          noLabel: { es: "Sin hielo" },
           defaultValue: false,
         },
         "es",
@@ -621,8 +619,6 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
       ),
     ).toBe(true);
     expect(definitions.find((definition) => definition.type === "yes-no")).toMatchObject({
-      yesLabel: { es: "Con hielo" },
-      noLabel: { es: "Sin hielo" },
       defaultValue: false,
     });
     const options = definitions.find((definition) => definition.type === "options")!;
@@ -632,7 +628,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     const extras = definitions.find((definition) => definition.type === "extras")!;
     expect(extras).toMatchObject({
       maxTotalQuantity: null,
-      choices: [{ priceDelta: "1.50", maxQuantity: 3, defaultQuantity: 2, vatClass: "general" }],
+      choices: [{ priceDelta: "1.50", maxQuantity: 3, preselected: true, vatClass: "general" }],
     });
     const menus = await tx.execute<{ id: string }>(
       sql`select id from catalogues where tenant_id = ${target.tenantId} and name = 'Modifier menu'`,
@@ -646,7 +642,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
       "yes-no",
     ]);
     expect(offers[0]!.modifiers[2]).toMatchObject({
-      choices: [{ priceDelta: "1.50", defaultQuantity: 2, vatClass: "general" }],
+      choices: [{ priceDelta: "1.50", preselected: true, vatClass: "general" }],
     });
   });
 });

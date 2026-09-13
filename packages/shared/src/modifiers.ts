@@ -14,7 +14,7 @@ export interface ModifierChoice extends ModifierEffects {
 export interface ExtraChoice extends ModifierChoice {
   priceDelta: string;
   maxQuantity: number;
-  defaultQuantity: number;
+  preselected: boolean;
   vatClass?: "general" | "reduced" | "super_reduced" | "zero" | null;
 }
 type Common = { name: LocalizedText; available: boolean };
@@ -23,7 +23,7 @@ export type ModifierInput = Common &
     | { type: "text" }
     | { type: "extras"; required: boolean; maxTotalQuantity: number | null; choices: ExtraChoice[] }
     | { type: "options"; choices: ModifierChoice[]; defaultChoiceId: string | null }
-    | { type: "yes-no"; yesLabel: LocalizedText; noLabel: LocalizedText; defaultValue: boolean }
+    | { type: "yes-no"; defaultValue: boolean }
   );
 export type Modifier = ModifierInput & { id: string };
 export type ModifierSelection =

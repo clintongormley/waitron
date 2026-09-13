@@ -56,8 +56,6 @@ it("publishes attached text and yes-no modifiers without requiring choice rows",
         type: "yes-no",
         name: { en: "Ice" },
         available: true,
-        yesLabel: { en: "With ice" },
-        noLabel: { en: "Without ice" },
         defaultValue: false,
       },
       "en",
@@ -136,7 +134,7 @@ it("projects only published available choices, clears excluded defaults, and kee
             available: true,
             priceDelta: "1.00",
             maxQuantity: 3,
-            defaultQuantity: 2,
+            preselected: true,
             vatClass: "general",
           },
         ],
@@ -181,7 +179,7 @@ it("projects only published available choices, clears excluded defaults, and kee
     expect(projected[1]).toMatchObject({
       type: "extras",
       maxTotalQuantity: null,
-      choices: [{ id: extraId, priceDelta: "0.75", vatClass: "general", defaultQuantity: 2 }],
+      choices: [{ id: extraId, priceDelta: "0.75", vatClass: "general", preselected: true }],
     });
     await tx
       .update(optionGroupItems)

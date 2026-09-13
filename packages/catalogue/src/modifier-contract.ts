@@ -91,12 +91,10 @@ export function parseModifierInput(value: unknown): ModifierInput {
     return { ...common, type: "text" };
   }
   if (row.type === "yes-no") {
-    keys(row, [...baseKeys, "yesLabel", "noLabel", "defaultValue"], "modifier");
+    keys(row, [...baseKeys, "defaultValue"], "modifier");
     return {
       ...common,
       type: "yes-no",
-      yesLabel: label(row.yesLabel, "yesLabel"),
-      noLabel: label(row.noLabel, "noLabel"),
       defaultValue: bool(row.defaultValue === undefined ? false : row.defaultValue, "defaultValue"),
     };
   }
@@ -119,7 +117,7 @@ export function parseModifierInput(value: unknown): ModifierInput {
         "name",
         "available",
         ...effectKeys,
-        ...(extras ? ["priceDelta", "maxQuantity", "defaultQuantity", "vatClass"] : []),
+        ...(extras ? ["priceDelta", "maxQuantity", "preselected", "vatClass"] : []),
       ],
       field,
     );
@@ -146,12 +144,10 @@ export function parseModifierInput(value: unknown): ModifierInput {
       `${field}.maxQuantity`,
       1,
     );
-    const requestedDefault = integer(
-      choice.defaultQuantity === undefined ? 0 : choice.defaultQuantity,
-      `${field}.defaultQuantity`,
-      0,
+    const preselected = bool(
+      choice.preselected === undefined ? false : choice.preselected,
+      `${field}.preselected`,
     );
-    if (requestedDefault > maxQuantity) invalid(`${field}.defaultQuantity`);
     if (
       choice.vatClass !== undefined &&
       choice.vatClass !== null &&
@@ -163,7 +159,7 @@ export function parseModifierInput(value: unknown): ModifierInput {
       ...base,
       priceDelta: `${BigInt(whole!)}.${fraction.padEnd(2, "0")}`,
       maxQuantity,
-      defaultQuantity: available ? requestedDefault : 0,
+      preselected: available ? preselected : false,
       ...(choice.vatClass === undefined ? {} : { vatClass: choice.vatClass as VatClass | null }),
     };
   });
@@ -190,7 +186,7 @@ export function parseModifierInput(value: unknown): ModifierInput {
   const extraChoices = choices as ExtraChoice[];
   if (
     maxTotalQuantity !== null &&
-    extraChoices.reduce((sum, choice) => sum + choice.defaultQuantity, 0) > maxTotalQuantity
+    extraChoices.reduce((sum, choice) => sum + (choice.preselected ? 1 : 0), 0) > maxTotalQuantity
   )
     invalid("maxTotalQuantity");
   return { ...common, type: "extras", required, maxTotalQuantity, choices: extraChoices };

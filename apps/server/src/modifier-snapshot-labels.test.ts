@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
 
 describe("modifierSnapshotLabels", () => {
-  it("uses saved labels, keeps an explicit no, and leaves priced extras to their child lines", () => {
+  it("prints an affirmative yes/no as the modifier name and leaves priced extras to their child lines", () => {
     expect(
       modifierSnapshotLabels(
         [
@@ -13,14 +13,12 @@ describe("modifierSnapshotLabels", () => {
             name: { en: "Ice" },
             type: "yes-no",
             value: true,
-            label: { en: "With ice" },
           },
           {
             modifierId: "no",
             name: { en: "Ice" },
             type: "yes-no",
             value: false,
-            label: { en: "Without ice" },
           },
           {
             modifierId: "extras",
@@ -31,6 +29,6 @@ describe("modifierSnapshotLabels", () => {
         ],
         "en",
       ),
-    ).toEqual(["Message: Happy birthday", ": ", "Ice: With ice", "Ice: Without ice"]);
+    ).toEqual(["Message: Happy birthday", ": ", "Ice"]);
   });
 });

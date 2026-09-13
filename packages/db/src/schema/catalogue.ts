@@ -177,8 +177,6 @@ export const optionGroups = pgTable(
       .default("extras"),
     maxTotalQuantity: integer("max_total_quantity"),
     defaultChoiceId: uuid("default_choice_id"),
-    yesLabel: jsonb("yes_label").$type<Record<string, string>>(),
-    noLabel: jsonb("no_label").$type<Record<string, string>>(),
     defaultValue: boolean("default_value").notNull().default(false),
     minSelect: integer("min_select").notNull().default(0),
     maxSelect: integer("max_select").notNull().default(1),
@@ -225,7 +223,7 @@ export const optionGroupItems = pgTable(
     // column existed, its child line counted at the dish quantity alone. A value of N lets a diner
     // take the option up to ×N per dish; the pricer multiplies the dish quantity by the chosen count.
     maxQuantity: integer("max_quantity").notNull().default(1),
-    defaultQuantity: integer("default_quantity").notNull().default(0),
+    preselected: boolean("preselected").notNull().default(false),
     addAllergens: jsonb("add_allergens").$type<AllergenMap>(),
     // `remove_allergens`: codes this option REMOVES ("gluten-free bun" → gluten). NULL = removes
     // nothing. A remove only takes effect against a REVIEWED base (Cautious policy, design §4).
@@ -242,10 +240,6 @@ export const optionGroupItems = pgTable(
     // A per-option cap is meaningless below 1: an option a diner can take zero times is just an
     // inactive option. Enforced in the DB so no authoring path can persist a nonsensical cap.
     check("option_group_items_qty_ck", sql`${t.maxQuantity} >= 1`),
-    check(
-      "option_group_items_default_qty_ck",
-      sql`${t.defaultQuantity} >= 0 and ${t.defaultQuantity} <= ${t.maxQuantity}`,
-    ),
     // Tenant-consistent FK: an item cannot reference a group belonging to another tenant. Cascades so
     // deleting a group removes its items. NULL vat_class = inherit; a non-null must match products'.
     foreignKey({

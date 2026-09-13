@@ -223,13 +223,13 @@ describe("/management-api/service-statuses", () => {
       error: { code: "management.request_invalid", params: { field: "body" } },
     });
 
-    const noLabel = await request(
+    const missingLabel = await request(
       "",
       { method: "POST", body: JSON.stringify({ color: "#000" }) },
       managerCookie,
     );
-    expect(noLabel.status).toBe(400);
-    expect(await noLabel.json()).toMatchObject({
+    expect(missingLabel.status).toBe(400);
+    expect(await missingLabel.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "label" } },
     });
 

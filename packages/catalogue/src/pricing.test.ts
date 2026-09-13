@@ -443,7 +443,6 @@ describe("structured modifier snapshots", () => {
         name: { en: "Ice" },
         type: "yes-no" as const,
         value: false,
-        label: { en: "Without ice" },
       },
     ];
     const live = priceBasketWithOptions([

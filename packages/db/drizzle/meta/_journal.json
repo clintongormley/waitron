@@ -169,6 +169,13 @@
       "when": 1789294411680,
       "tag": "0023_product_editor",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789319913871,
+      "tag": "0024_modifiers_editing_rework",
+      "breakpoints": true
     }
   ]
 }

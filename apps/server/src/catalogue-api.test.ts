@@ -688,7 +688,7 @@ describe("mountCatalogueApi — products", () => {
           available: true,
           priceDelta: "1.00",
           maxQuantity: 2,
-          defaultQuantity: 0,
+          preselected: false,
           dietaryEffect: { invalidates: ["vegan", "halal"] },
         },
       ],

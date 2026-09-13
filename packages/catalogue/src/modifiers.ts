@@ -40,8 +40,6 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
       return {
         ...common,
         type: "yes-no",
-        yesLabel: group.yesLabel ?? {},
-        noLabel: group.noLabel ?? {},
         defaultValue: group.defaultValue,
       };
     const choices = items
@@ -59,7 +57,7 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
           ? {
               priceDelta: item.priceDelta,
               maxQuantity: item.maxQuantity,
-              defaultQuantity: item.defaultQuantity,
+              preselected: item.preselected,
               ...(item.vatClass === null
                 ? {}
                 : { vatClass: item.vatClass as ExtraChoice["vatClass"] }),
@@ -117,10 +115,6 @@ async function validateLabels(
   fallback: string,
 ) {
   await validateContentTranslations(tx, tenantId, input.name, fallback);
-  if (input.type === "yes-no") {
-    await validateContentTranslations(tx, tenantId, input.yesLabel, fallback);
-    await validateContentTranslations(tx, tenantId, input.noLabel, fallback);
-  }
   if (input.type === "extras" || input.type === "options") {
     for (const choice of input.choices)
       await validateContentTranslations(tx, tenantId, choice.name, fallback);
@@ -137,8 +131,6 @@ function groupValues(input: ModifierInput) {
     maxSelect: input.type === "extras" ? (input.maxTotalQuantity ?? 2147483647) : 1,
     maxTotalQuantity: input.type === "extras" ? input.maxTotalQuantity : null,
     defaultChoiceId: input.type === "options" ? input.defaultChoiceId : null,
-    yesLabel: input.type === "yes-no" ? input.yesLabel : null,
-    noLabel: input.type === "yes-no" ? input.noLabel : null,
     defaultValue: input.type === "yes-no" ? input.defaultValue : false,
   };
 }
@@ -172,7 +164,7 @@ async function writeChoices(
       sort,
       priceDelta: input.type === "extras" ? (choice as ExtraChoice).priceDelta : "0.00",
       maxQuantity: input.type === "extras" ? (choice as ExtraChoice).maxQuantity : 1,
-      defaultQuantity: input.type === "extras" ? (choice as ExtraChoice).defaultQuantity : 0,
+      preselected: input.type === "extras" ? (choice as ExtraChoice).preselected : false,
       vatClass: input.type === "extras" ? ((choice as ExtraChoice).vatClass ?? null) : null,
       addAllergens: choice.addAllergens ?? null,
       removeAllergens: choice.removeAllergens ?? null,

@@ -13,7 +13,9 @@ export function modifierSnapshotLabels(
       case "options":
         return [`${name(snapshot.name)}: ${name(snapshot.choiceName)}`];
       case "yes-no":
-        return [`${name(snapshot.name)}: ${name(snapshot.label)}`];
+        // A yes/no carries no custom label any more; an affirmative answer prints the modifier
+        // name (checkbox semantics), a negative answer prints nothing. See the note in the commit.
+        return snapshot.value ? [name(snapshot.name)] : [];
       case "extras":
         return [];
     }

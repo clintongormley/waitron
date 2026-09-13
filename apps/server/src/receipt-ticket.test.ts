@@ -585,8 +585,7 @@ it("prints saved nonprice modifier labels including explicit false on original a
             modifierId: "ice",
             name: { "es-ES": "Hielo" },
             type: "yes-no",
-            value: false,
-            label: { "es-ES": "Sin hielo" },
+            value: true,
           },
         ],
       },
@@ -598,6 +597,6 @@ it("prints saved nonprice modifier labels including explicit false on original a
     );
     expect(paper).toContain("Mensaje: Happy birthday");
     expect(paper).toContain("Milk: Oat");
-    expect(paper).toContain("Hielo: Sin hielo");
+    expect(paper).toContain("Hielo");
   }
 });
