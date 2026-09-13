@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { SCHEMA_MISMATCH_SQL_STATES, UNREACHABLE_SQL_STATES } from "./boot-failure.js";
+import {
+  SCHEMA_MISMATCH_SQL_STATES,
+  UNREACHABLE_SOCKET_CODES,
+  UNREACHABLE_SQL_STATES,
+} from "./boot-failure.js";
 import type { LogLevel, Logger } from "./logger.js";
 import { MIGRATION_CONSTRAINT_SQL_STATES, withDevMigrationHint } from "./dev-migration-hint.js";
 
@@ -45,8 +49,12 @@ describe("MIGRATION_CONSTRAINT_SQL_STATES", () => {
   // this repo asks to be pinned rather than asserted: nothing else would fail if a later edit put a
   // state in both, and the two tables carry OPPOSITE remedies — wipe this database, versus restore
   // it from a backup.
-  it("never names a state `boot-failure.ts` classifies", () => {
-    const theirs = new Set([...UNREACHABLE_SQL_STATES, ...SCHEMA_MISMATCH_SQL_STATES]);
+  it("never names a code `boot-failure.ts` classifies, in any of its three tables", () => {
+    const theirs = new Set([
+      ...UNREACHABLE_SOCKET_CODES,
+      ...UNREACHABLE_SQL_STATES,
+      ...SCHEMA_MISMATCH_SQL_STATES,
+    ]);
     expect(MIGRATION_CONSTRAINT_SQL_STATES.filter((state) => theirs.has(state))).toEqual([]);
   });
 });
@@ -62,6 +70,17 @@ describe("withDevMigrationHint", () => {
     }
   });
 
+  // `sqlStateOf` starts at the OUTERMOST error, so a driver error that was never wrapped is a live
+  // shape here too — the sibling (`boot-failure.test.ts`) asserts both for exactly that reason.
+  it("names the remedy when the code is on the error itself, not under `cause`", async () => {
+    const { lines, log } = recorder();
+    const bare = Object.assign(new Error("pg"), { code: "23502" });
+
+    await expect(withDevMigrationHint(log, true, rejects(bare))).rejects.toBe(bare);
+
+    expect(lines).toEqual([hint("23502")]);
+  });
+
   it("re-throws the original failure, identity intact", async () => {
     const { lines, log } = recorder();
     const failure = failedMigration("23502");
@@ -72,13 +91,13 @@ describe("withDevMigrationHint", () => {
   });
 
   it("still re-throws the original failure when the log sink itself throws", async () => {
-    // The boot logger tees to a rotating FILE as well as stdout, and that sink can fail on a state
-    // directory that has become unwritable (`boot.ts` builds a stdout-only logger for exactly that
-    // notice). Losing the migration failure and reporting the sink's failure in its place would
-    // send the reader after the wrong problem entirely.
+    // NOT the rotating file sink: `createRotatingFileSink` catches its own IO failures and degrades
+    // to a no-op (`log-file.ts`), so it never throws at a caller. `tee` does not catch, so what can
+    // propagate is the stdout write itself — a closed or full pipe. Losing the migration failure and
+    // reporting the sink's failure in its place would send the reader after the wrong problem.
     const failure = failedMigration("23502");
     const throwing: Logger = () => {
-      throw new Error("state directory is unwritable");
+      throw new Error("EPIPE: broken pipe");
     };
 
     await expect(withDevMigrationHint(throwing, true, rejects(failure))).rejects.toBe(failure);
@@ -87,6 +106,17 @@ describe("withDevMigrationHint", () => {
   it("says nothing about a stale database when the migration itself is broken", async () => {
     const { lines, log } = recorder();
     const failure = failedMigration("42601"); // syntax_error — wiping the database fixes nothing
+
+    await expect(withDevMigrationHint(log, true, rejects(failure))).rejects.toBe(failure);
+
+    expect(lines).toEqual([]);
+  });
+
+  // The direct control for "a pinned list, never a class-`23` prefix match": `23000` is an
+  // integrity violation by class and is NOT a member, so a prefix test would fire on it.
+  it("says nothing for a class-23 state that is not on the list", async () => {
+    const { lines, log } = recorder();
+    const failure = failedMigration("23000");
 
     await expect(withDevMigrationHint(log, true, rejects(failure))).rejects.toBe(failure);
 

@@ -32,12 +32,12 @@ const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_SQL_STATES);
  * reach a server that never started. `docs/developers/workflow-guide.md` works the case through.
  *
  * WHAT THE LINE MAY AND MAY NOT CLAIM. A SQLSTATE cannot tell "rows that were already here break a
- * new rule" from "this migration inserted rows that break its own rule" — measured 2026-09-13
- * against real migrations on PostgreSQL 18: for all five states above, a migration inserting bad
- * rows into an EMPTY database raises the same code, and raises it again after a wipe. So the line
- * reports the constraint failure as fact and offers the reset as a CONDITIONAL remedy. Naming the
- * reset outright would send a developer to wipe a healthy database over a broken migration, and
- * then to wipe it again — the same trade `boot-failure.ts` refused when it dropped `22P02`.
+ * new rule" from "this migration inserted rows that break its own rule": every state above is
+ * equally reachable either way, so the line reports the constraint failure as fact and offers the
+ * reset as a CONDITIONAL remedy. Naming the reset outright would send a developer to wipe a healthy
+ * database over a broken migration, and then to wipe it again. The measurement behind that, and why
+ * `boot-failure.ts` answered the same ambiguity by dropping `22P02` from its table instead, are in
+ * `docs/developers/workflow-guide.md`.
  *
  * DEV ONLY, because the remedy named is `wa-wt reset`, which exists nowhere else; on a real box the
  * same SQLSTATE means something else and wiping would be wrong advice. It is a separate seam from

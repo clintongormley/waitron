@@ -91,34 +91,38 @@ target and copy its new `.env` to every checkout. Cost: a
 round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
 `docs/ui-review.md` → _Running the stack from a worktree_.
 
-Only a target change wipes it, though — the sentence above is the whole of it. An ordinary
-`wa-wt demo <name>` switch leaves the volume alone, and the volume is SEEDED, so it keeps demo rows
-written weeks and branches ago. A branch's migrations can then be unable to run over them: migrations
-here carry no data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and recreate
-until Waitron is in production), so one that adds a column no existing row can fill stops the boot
-dead inside `applyMigrations`, and the browser shows only "Something went wrong, try again" because
-there is no server to reach. `packages/db/drizzle/0020_category_names.sql` did exactly this on
-2026-09-13: it drops the old text `categories.name` and recreates it as `jsonb NOT NULL` (and adds a
-unique constraint, a second way the same file could raise a pinned state), which the seeded demo
-categories cannot satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.
+TWO things wipe that volume, then: a target change, and a `wa-wt reset`. Switching between worktrees
+on the SAME target does neither, and the volume is seeded, so it keeps demo rows written weeks and
+branches ago. A branch's migrations can then be unable to run over them: migrations here carry no
+data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and recreate until Waitron is
+in production), so one that adds a column no existing row can fill stops the boot dead inside
+`applyMigrations`, and the browser shows only a failure to reach a server that never started.
+`packages/db/drizzle/0020_category_names.sql` did exactly this on 2026-09-13: it drops the old text
+`categories.name` and recreates it as `jsonb NOT NULL`, which the seeded demo categories cannot
+satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.
 
 Boot now says so rather than leaving a driver stack trace to read: `apps/server/src/dev-migration-hint.ts`
 logs `migrations.dev_constraint_violation` with the SQLSTATE and that command, then re-throws the
 original error untouched — including when the log sink itself throws. It fires only when
-`WAITRON_ENV=dev` (`isDevMode`, `apps/server/src/config.ts`; `dev-setup` writes it, but a `.env`
-copied from `.env.example` does not), and only for a pinned list of SQLSTATEs where a constraint met
-row data.
+`WAITRON_ENV=dev` (`isDevMode`, `apps/server/src/config.ts`), which both `dev-setup` and
+`dev-onboard` write, though a `.env` copied from `.env.example` does not; and only for a pinned list
+of SQLSTATEs where a constraint met row data.
 
 **What that line may and may not claim.** A SQLSTATE cannot tell "rows that were already here break a
 new rule" from "this migration inserted rows that break its own rule" — measured 2026-09-13 against
 real migrations on PostgreSQL 18: for every state in the list, a migration inserting bad rows into an
 EMPTY database raises the same code, and raises it again after a wipe. So the line reports the
 constraint failure as fact and offers the reset as a CONDITIONAL remedy; naming the reset outright
-would send a developer to wipe a healthy database over a broken migration. That is the same trade
-`classifyBootFailure` (`apps/server/src/boot-failure.ts`) made when it dropped `22P02` — and it is
-why these two share no SQLSTATE table, which a test pins rather than a comment asserting it. Note
-the hint does NOT fire for the other "database too old" failure: an ahead-of-image database throws
-`provisioning.database_ahead`, an `AppError` with no SQLSTATE, whose remedy is also a reset.
+would send a developer to wipe a healthy database over a broken migration, twice.
+`classifyBootFailure` (`apps/server/src/boot-failure.ts`) answered the same problem the other way,
+by DROPPING the ambiguous `22P02` from its table so the ambiguous case gets no advice at all — same
+principle, opposite move, because a dev database is cheap to rebuild and a box's is not. That is also
+why the two share no SQLSTATE table, which a test pins rather than a comment asserting it: their
+remedies are opposites. The other "database too old" failure is not this one and does not reach this
+line — an ahead-of-image database throws `provisioning.database_ahead`, an `AppError` with no
+SQLSTATE, and its operator text deliberately never suggests wiping anything ("Restore it from a
+backup, or reinstall", `apps/server/src/recovery-surface.ts` — owner decision 2026-09-10, because a
+real venue's fiscal records cannot be re-created).
 
 Reproduced end to end before the line was written: the pre-#340 migration root migrated into a
 scratch database, one category row seeded, then this branch's root applied over it — the hint printed

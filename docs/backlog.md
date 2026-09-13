@@ -233,8 +233,8 @@ What it left open:
   a text name and it failed with `23502` (a required column left empty), which is the expected and
   documented outcome. So any preproduction or development database with categories in it goes through
   the normal reset workflow (`wa-wt reset demo` or `wa-wt reset onboarding`), not a plain migrate.
-  **This happened, on 2026-09-13** — the next person to start the dev stack got a dead server and a
-  raw driver stack trace, with the browser showing only "Something went wrong, try again". Boot now
+  **This happened, on 2026-09-13** — the next person to start the dev stack got a dead server, a raw
+  driver stack trace, and a browser that could only say the page had failed. Boot now
   names the reset as a conditional remedy instead of leaving the stack trace to decode
   (`apps/server/src/dev-migration-hint.ts`, `WAITRON_ENV=dev` only); the mechanism and the limits of
   what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
