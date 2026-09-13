@@ -1027,10 +1027,20 @@ image constraints under *Detail → Box image*.
   (`packages/ui/src/components/wt-button.ts`'s `:hover` rule) lands almost exactly on `#3f83ed`. That
   matches axe capturing the button mid-hover rather than at rest — most likely a leftover pointer
   position from an earlier test in the same file, in a browser-mode suite that reuses one page across
-  tests in a file. Not chased further here: the fix, if this hypothesis holds, is moving the mouse (or
-  otherwise clearing hover state) between tests in the shared-page harness, which is infrastructure
-  work outside any one screen and deserves its own look rather than a fix folded into an unrelated
-  branch.
+  tests in a file. **Confirmed and fixed the same day, on this branch.** The colour is exact, not
+  approximate: `#1f6feb` at opacity `0.85` over the light `--wt-color-bg` `#f7f7f8` is `#3f83ed` on
+  every channel, and `#ffffff` composited the same way is `#fefefe`. The failure was reproduced
+  locally by running a file that hovers a `wt-button` immediately before the untouched
+  `floor-screen.a11y.test.ts` in one worker — the same one test of the eight failed, with the same
+  element and the same two colours. The cursor turned out to belong to the shared PAGE, so it outlives
+  the file that moved it, not just the test. `apps/dashboard/src/widgets/test-helpers.ts` now parks the
+  cursor off-page before every test, via a `parkPointer` browser command in
+  `apps/dashboard/vitest.config.ts`; guard `apps/dashboard/src/widgets/pointer-reset.test.ts`, receipt
+  in [testing-guide.md](developers/testing-guide.md). **Two pieces are still open.** The
+  `dashboard-app.a11y.test.ts` heading-order sighting is a different rule with no colour evidence, so
+  nothing here explains it — treat it as still unexplained. And `packages/ui` and `apps/till` have the
+  same harness with no reset, with `packages/ui/src/components/wt-button.test.ts` ending a test
+  hovering a button, so the same flake is waiting there.
 - **Comments across the tree still say PGlite cannot check a database permission** — the belief
   CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
   session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
