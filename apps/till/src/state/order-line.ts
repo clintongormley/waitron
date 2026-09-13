@@ -141,3 +141,11 @@ export function toWireProductIdentity(product: {
     ? { productId: product.id }
     : { menuItemId: product.menuItemId };
 }
+
+/** Canonical selections carry identities and values; local price previews never enter the request. */
+export function toWireModifiers(
+  line: Pick<OrderLine, "modifierSelections" | "options">,
+): Pick<SaleLine, "modifierSelections" | "options"> {
+  if (line.modifierSelections !== undefined) return { modifierSelections: line.modifierSelections };
+  return line.options?.length ? { options: line.options.map(toWireOption) } : {};
+}

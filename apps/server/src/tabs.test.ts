@@ -639,7 +639,7 @@ describe("readTabLines", () => {
 
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     expect(lines).toHaveLength(2);
-    // numeric(_,3) quantity, numeric(_,2) gross unit, product id (no name — the screen resolves it).
+    // Quantities and gross prices retain their database scales.
     expect(lines[0]).toMatchObject({
       lineNo: 1,
       productId: cafeId,
@@ -998,5 +998,32 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     const o = await asApp(cfg, (tx) => addTabRoundWith(tx, cfg, tabId, [line(prod)]));
     expect(lineCourse(o, prod)).toBeNull();
+  });
+});
+
+it("returns a tab line's stored names and modifier answers", async () => {
+  const { cfg, cafeId, tableId } = await setupVenue();
+  await asApp(cfg, async (tx) => {
+    const { tabId } = await openTab(tx, cfg, {
+      tableId,
+      lines: [{ productId: cafeId, quantity: "1" }],
+    });
+    const descriptions = { [LOCALE]: "Recorded coffee" };
+    const modifierSnapshots = [
+      {
+        modifierId: randomUUID(),
+        name: { [LOCALE]: "Message" },
+        type: "text" as const,
+        text: "Happy birthday",
+      },
+    ];
+    await tx
+      .update(workingOrderLines)
+      .set({ descriptions, modifierSnapshots })
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    expect((await readTabLines(tx, cfg, tabId))[0]).toMatchObject({
+      descriptions,
+      modifierSnapshots,
+    });
   });
 });

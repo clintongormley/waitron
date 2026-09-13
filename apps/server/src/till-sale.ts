@@ -1,3 +1,5 @@
+import type { ModifierSelection } from "@waitron/shared";
+import type { ModifierSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
 // them — the reachability convention `till-config.ts`/`config.ts` follow (a bare import, no value
@@ -97,6 +99,7 @@ export interface TillSaleRequest {
     menuItemId?: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    modifierSelections?: ModifierSelection[];
   } & LineExtras)[];
   /**
    * How the customer paid. `cash` (7a) and `card` (this slice) are the two supported methods:
@@ -150,6 +153,7 @@ export interface TillSaleLine {
    *  receipt can GROUP each option under its dish (Task 8). PRESENTATION metadata only — it groups the
    *  already-filed lines, never a fiscal figure, and the totals/desglose are read back unchanged. */
   parentLineNo?: number | null;
+  modifierSnapshots?: ModifierSnapshot[];
 }
 
 /** Persisted tender amounts and optional manual terminal reference. Card identity belongs on the slip. */
@@ -261,6 +265,7 @@ export interface PayWorkingOrderRequest {
     menuItemId?: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    modifierSelections?: ModifierSelection[];
   } & LineExtras)[];
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */

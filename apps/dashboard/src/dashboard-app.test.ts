@@ -3020,3 +3020,13 @@ it("starts live updates after authentication and stops them on logout and discon
   el.remove();
   expect(liveUpdates.stop).toHaveBeenCalledTimes(2);
 });
+it("opens the reusable modifiers library from its own management destination", async () => {
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+    api: stubApi({ listModifiers: vi.fn().mockResolvedValue([]) }),
+  });
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-modifiers"]')!.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/modifiers");
+  expect(el.shadowRoot!.querySelector("dashboard-modifiers-screen")).not.toBeNull();
+});

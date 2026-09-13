@@ -530,3 +530,53 @@ describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => 
     expect(await countRows("incidents")).toBe(0);
   });
 });
+
+it("persists structured modifier snapshots and child links on the issued lines", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+  const original = await sellTicket(backend);
+  const modifierSnapshots = [
+    {
+      modifierId: "milk",
+      name: { en: "Milk" },
+      type: "options" as const,
+      choiceId: "oat",
+      choiceName: { en: "Oat" },
+    },
+    {
+      modifierId: "ice",
+      name: { en: "Ice" },
+      type: "yes-no" as const,
+      value: false,
+      label: { en: "No ice" },
+    },
+  ];
+  const lines = substitutionInput([original.saleId]).lines.map((line, index) => ({
+    ...line,
+    modifierSnapshots: index === 0 ? modifierSnapshots : [],
+    parentLineNo: index === 0 ? null : 1,
+    category: "Drinks",
+  }));
+  const { saleId } = await substitute(backend, [original.saleId], { lines });
+  const saved = await suite.db
+    .select()
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId))
+    .orderBy(saleLines.lineNo);
+  expect(saved.map((line) => line.modifierSnapshots)).toEqual([modifierSnapshots, []]);
+  expect(saved[0]!.parentLineId).toBeNull();
+  expect(saved[1]!.parentLineId).toBe(saved[0]!.id);
+  expect(saved.map((line) => line.category)).toEqual(["Drinks", "Drinks"]);
+});
+
+it("rejects repeated line numbers in a multi-ticket substitution without recording a sale", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+  const first = await sellTicket(backend);
+  const second = await sellTicket(backend);
+  const ids = [first.saleId, second.saleId];
+  const lines = substitutionInput(ids).lines.map((line) => ({ ...line, lineNo: 1 }));
+  const before = await countRows("sales");
+  const error = await captureError(() => substitute(backend, ids, { lines }));
+  expect(pgErrorCode(error)).toBe("23505");
+  expect(await countRows("sales")).toBe(before);
+  expect(await countRows("sale_substitutions")).toBe(0);
+});

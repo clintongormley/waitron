@@ -551,3 +551,40 @@ describe("recordCorrection — no fiscal condition blocks a correction (§5)", (
     expect(await countRows("incidents")).toBe(0);
   });
 });
+
+it("persists structured modifier snapshots and child links on the issued lines", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+  const original = await sell(backend);
+  const modifierSnapshots = [
+    {
+      modifierId: "milk",
+      name: { en: "Milk" },
+      type: "options" as const,
+      choiceId: "oat",
+      choiceName: { en: "Oat" },
+    },
+    {
+      modifierId: "ice",
+      name: { en: "Ice" },
+      type: "yes-no" as const,
+      value: false,
+      label: { en: "No ice" },
+    },
+  ];
+  const lines = correctionInput(original.saleId).lines.map((line, index) => ({
+    ...line,
+    modifierSnapshots: index === 0 ? modifierSnapshots : [],
+    parentLineNo: index === 0 ? null : 1,
+    category: "Drinks",
+  }));
+  const { saleId } = await correct(backend, original.saleId, { lines });
+  const saved = await suite.db
+    .select()
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId))
+    .orderBy(saleLines.lineNo);
+  expect(saved.map((line) => line.modifierSnapshots)).toEqual([modifierSnapshots, []]);
+  expect(saved[0]!.parentLineId).toBeNull();
+  expect(saved[1]!.parentLineId).toBe(saved[0]!.id);
+  expect(saved.map((line) => line.category)).toEqual(["Drinks", "Drinks"]);
+});

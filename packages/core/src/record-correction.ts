@@ -1,3 +1,4 @@
+import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's `sale.*` codes on the shared `ErrorParams` registry
 // by declaration merging. See ./errors.ts for why, and ./errors.reachability.test.ts for the
 // mechanical check that keeps errors.ts reachable from this package's own public barrel
@@ -285,18 +286,7 @@ export async function recordCorrection(
     });
   }
 
-  await tx.insert(saleLines).values(
-    input.lines.map((line) => ({
-      tenantId: input.tenantId,
-      saleId,
-      lineNo: line.lineNo,
-      descriptions: line.descriptions,
-      quantity: line.quantity,
-      unitPrice: line.unitPrice,
-      vatRate: line.vatRate,
-      lineTotal: line.lineTotal,
-    })),
-  );
+  await tx.insert(saleLines).values(saleLineRows(input.tenantId, saleId, input.lines));
 
   const [location] = await tx
     .select({ operationDescription: locations.operationDescription })

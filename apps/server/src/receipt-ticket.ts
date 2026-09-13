@@ -1,3 +1,4 @@
+import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
 /**
  * Formats a filed sale into the customer's ESC/POS receipt (design §3b) — the pure byte-producing
  * half of the counter-printing slice. Like {@link formatKitchenTicket} it owns no state and touches no
@@ -265,6 +266,9 @@ export function formatReceipt({
         formatMoney(dish.gross, locale),
       ),
     );
+    for (const label of modifierSnapshotLabels(dish.modifierSnapshots ?? [], locale)) {
+      b.line(`  ${label}`);
+    }
     for (const option of options) {
       // Indented, and WITHOUT a leading quantity prefix — an option is priced per dish, so repeating the
       // dish's own count as a prefix reads as noise. The gross is the delta this option added.

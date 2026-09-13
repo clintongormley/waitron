@@ -25,6 +25,7 @@ import {
   joinTable,
   openTab,
   splitOffCheck,
+  priceStoredOrder,
   unjoinTable,
 } from "./working-order.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -483,5 +484,37 @@ describe("unjoinTable", () => {
     await expect(asApp(cfg, (tx) => unjoinTable(tx, cfg, tabId, tableId2))).rejects.toMatchObject({
       code: "tab.not_open",
     });
+  });
+});
+
+it("retains structured modifier snapshots when a dish quantity is split onto a check", async () => {
+  const { cfg, aguaId, tableId } = await setupVenue();
+  await asApp(cfg, async (tx) => {
+    const { tabId } = await openTab(tx, cfg, {
+      tableId,
+      lines: [{ productId: aguaId, quantity: "3" }],
+    });
+    const modifierSnapshots = [
+      {
+        modifierId: randomUUID(),
+        name: { [LOCALE]: "Ice" },
+        type: "yes-no" as const,
+        value: false,
+        label: { [LOCALE]: "Without ice" },
+      },
+    ];
+    await tx
+      .update(workingOrderLines)
+      .set({ modifierSnapshots })
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    const { checkId } = await splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
+    const source = await priceStoredOrder(tx, tabId);
+    const check = await priceStoredOrder(tx, checkId);
+    expect(source.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
+    expect(check.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
+    expect(source.lines[0]!.quantity).toBe("2.000");
+    expect(check.lines[0]!.quantity).toBe("1.000");
+    expect(source.total).toBe("3.00");
+    expect(check.total).toBe("1.50");
   });
 });

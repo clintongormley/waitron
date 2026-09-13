@@ -8,7 +8,7 @@ import {
   toScale,
   MONEY_SCALE,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, ModifierSnapshot } from "@waitron/shared";
 import type { RecordSaleLine } from "@waitron/core";
 import type { VatBreakdownLine } from "@waitron/fiscal";
 
@@ -55,6 +55,7 @@ export interface LockedLine {
    * locked-line file preserves parent→child linkage exactly as a live walk-up does. Copied onto the
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
+  modifierSnapshots?: ModifierSnapshot[];
 }
 
 // The standing Spanish VAT set. RECEIPT (Step 6): the four rates below were confirmed on 2026-08-05
@@ -118,6 +119,7 @@ interface PricingRow {
   /** The `lineNo` of this row's parent dish; `null`/absent for a top-level line. Copied onto the
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
+  modifierSnapshots?: ModifierSnapshot[];
 }
 
 // THE ONE arithmetic core. `priceBasket` (live catalogue) and `priceLockedLines` (stored lock) both
@@ -142,6 +144,7 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
     lines.push({
       lineNo: i + 1,
       descriptions: row.descriptions,
+      modifierSnapshots: row.modifierSnapshots ?? [],
       quantity: row.quantity,
       unitPrice: netUnit, // net, informational (record-sale.ts stores it verbatim)
       vatRate: row.rate,
@@ -203,6 +206,7 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
       quantity: line.quantity,
       rate: decimal(line.vatRate),
       descriptions: line.descriptions,
+      modifierSnapshots: line.modifierSnapshots ?? [],
       category: line.category,
       // Carry the child→parent link through the lock round-trip so a persisted-order file (a retrieved
       // counter order, a settled tab) emits child sale_lines with the same `parent_line_id` a live
@@ -236,6 +240,7 @@ export interface BasketItemWithOptions {
    * option line follows (a modifier is priced per dish, never counted independently). */
   quantity: string;
   options: SelectedOption[];
+  modifierSnapshots?: ModifierSnapshot[];
 }
 
 /**
@@ -264,6 +269,7 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       descriptions: item.product.descriptions,
       category: item.product.category,
       parentLineNo: null,
+      modifierSnapshots: item.modifierSnapshots ?? [],
     });
     for (const opt of item.options) {
       rows.push({

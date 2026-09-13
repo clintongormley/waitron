@@ -20,59 +20,43 @@ import type {
 } from "@waitron/catalogue/src/dietary.js";
 import type { OrderLine } from "./working-order.js";
 
-/**
- * The AS-SERVED allergen profile of one basket line, computed CLIENT-side — the dish's declared
- * allergens (`line.product.allergens`) folded with its selected modifiers' overlays — the same way
- * the basket prices lines client-side, with no server round trip. Each selected option is matched by
- * its `optionGroupItemId` against the product's `optionGroups` to recover its `addAllergens`/
- * `removeAllergens` overlay; an option whose item can't be found (a stale selection) contributes an
- * empty overlay rather than throwing. The fold itself — Cautious policy, adds always applied, removes
- * only against a REVIEWED base, `pending` when the base is unreviewed — lives in the shared
- * `deriveAsServedAllergens`, so the till, the KDS and the ticket all derive it identically.
- */
-export function asServedAllergens(line: OrderLine): AsServedAllergens {
-  // Flatten the product's option items into a by-id lookup ONCE, not per selected option — otherwise a
-  // line with S options over G groups of I items rebuilt the flattened array S times (O(S·G·I)).
+/** Both priced extras and nonprice choices contribute effects; saved selections retain their ids. */
+function selectedItems(line: OrderLine) {
   const itemById = new Map(
-    (line.product.optionGroups ?? [])
-      .flatMap((group) => group.items)
-      .map((item) => [item.id, item]),
+    (line.product.modifiers === undefined
+      ? (line.product.optionGroups ?? []).flatMap((group) => group.items)
+      : line.product.modifiers.flatMap((modifier) =>
+          modifier.type === "extras" || modifier.type === "options" ? modifier.choices : [],
+        )
+    ).map((item) => [item.id, item]),
   );
-  const overlays: OptionAllergenOverlay[] = (line.options ?? []).map((sel) => {
-    const item = itemById.get(sel.optionGroupItemId);
-    return { add: item?.addAllergens ?? null, remove: item?.removeAllergens ?? null };
-  });
+  const selectedIds = new Set((line.options ?? []).map((option) => option.optionGroupItemId));
+  for (const selection of line.modifierSelections ?? line.modifierSnapshots ?? []) {
+    if (selection.type === "options") selectedIds.add(selection.choiceId);
+    if (selection.type === "extras") {
+      for (const choice of selection.choices) {
+        if (choice.quantity > 0) selectedIds.add(choice.choiceId);
+      }
+    }
+  }
+  return Array.from(selectedIds, (id) => itemById.get(id));
+}
+
+/** Fold selected effects over the reviewed allergen base; missing choices contribute no overlay. */
+export function asServedAllergens(line: OrderLine): AsServedAllergens {
+  const overlays: OptionAllergenOverlay[] = selectedItems(line).map((item) => ({
+    add: item?.addAllergens ?? null,
+    remove: item?.removeAllergens ?? null,
+  }));
   return deriveAsServedAllergens(line.product.allergens ?? null, overlays);
 }
 
-/**
- * The AS-SERVED diet profile of one basket line, computed CLIENT-side — EXACTLY mirrors
- * {@link asServedAllergens}. The product's recipe-derived diet basis (`line.product.dietDerivation`)
- * is folded with its selected options' ORIGIN overlays (`addOrigins`/`removeOrigins`), then the staff
- * override (`line.product.dietOverride`) is re-applied — all inside the shared, drizzle-free
- * `deriveAsServedDiet`, so the till, the KDS and the expo screen derive it identically.
- *
- * Same by-id lookup and stale-selection handling as the allergen twin: each selected option is matched
- * by its `optionGroupItemId` against the product's `optionGroups`; an option whose item can't be found
- * contributes an empty overlay rather than throwing. A null/absent derivation folds as `pending`
- * (`{ origins: [], pending: true }`) — the CAUTIOUS default the server publishes for an unreviewed
- * dish, so vegan/vegetarian read "unknown" rather than a false positive. The wire carries the origin
- * overlays as `string[]`; they are narrowed to the origin union at this fold boundary, the same cast
- * the server's `deriveAsServedDiet` call makes.
- */
+/** Unknown derivations remain pending; staff overrides are applied after selected origin effects. */
 export function asServedDiet(line: OrderLine): DietProfile {
-  const itemById = new Map(
-    (line.product.optionGroups ?? [])
-      .flatMap((group) => group.items)
-      .map((item) => [item.id, item]),
-  );
-  const overlays: OptionOriginOverlay[] = (line.options ?? []).map((sel) => {
-    const item = itemById.get(sel.optionGroupItemId);
-    return {
-      add: (item?.addOrigins ?? null) as DietaryOrigin[] | null,
-      remove: (item?.removeOrigins ?? null) as DietaryOrigin[] | null,
-    };
-  });
+  const overlays: OptionOriginOverlay[] = selectedItems(line).map((item) => ({
+    add: (item?.addOrigins ?? null) as DietaryOrigin[] | null,
+    remove: (item?.removeOrigins ?? null) as DietaryOrigin[] | null,
+  }));
   const derivation: DietDerivation = line.product.dietDerivation ?? { origins: [], pending: true };
   const override: DietOverride | null = line.product.dietOverride ?? null;
   return deriveAsServedDiet(derivation, override, overlays);

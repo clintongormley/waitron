@@ -1,3 +1,5 @@
+import "./modifier-picker.js";
+import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -188,6 +190,8 @@ export class TillBasket extends LitElement {
    * mints a fresh id and `loadFrom` adopts a retrieved order's id, so a change of id means the lines an
    * open editor pointed at are gone; a plain add / remove / edit keeps the id. `undefined` until the
    * first change fires (the initial render already starts with no editor open). */
+  @state() private modifierLine: OrderLine | null = null;
+
   #lastStoreId?: string;
 
   constructor() {
@@ -223,7 +227,10 @@ export class TillBasket extends LitElement {
     if (this.store.id !== this.#lastStoreId) {
       this.#lastStoreId = this.store.id;
       this.editingIndex = null;
+      this.modifierLine = null;
     }
+    if (this.modifierLine !== null && !this.store.lines.includes(this.modifierLine))
+      this.modifierLine = null;
     this.requestUpdate();
   }
 
@@ -290,6 +297,19 @@ export class TillBasket extends LitElement {
               <span aria-hidden="true">×</span>
             </wt-button>
           </div>
+          ${
+            line.product.modifiers?.length
+              ? html`<wt-button
+                  class="edit-modifiers"
+                  size="sm"
+                  variant="ghost"
+                  @click=${() => {
+                    this.modifierLine = line;
+                  }}
+                  >${t("modifier.edit")}</wt-button
+                >`
+              : nothing
+          }
           ${this.#extrasRow(line, index)} ${this.#extrasEditor(line, index)}
           ${(line.options ?? []).map(
             // Each selected modifier on its own indented row — the option's name and its delta (0,00 for
@@ -306,9 +326,30 @@ export class TillBasket extends LitElement {
               </div>
             `,
           )}
+          ${(line.modifierSnapshots ?? []).filter((snapshot) => snapshot.type !== "extras").map((snapshot) => html`<div class="option modifier-answer"><span class="name">${this.#lineText(line, snapshot.name, "")}: ${snapshot.type === "text" ? snapshot.text : snapshot.type === "options" ? this.#lineText(line, snapshot.choiceName, "") : snapshot.type === "yes-no" ? this.#lineText(line, snapshot.label, "") : nothing}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
         `,
       )}
+      ${
+        this.modifierLine
+          ? html`<till-modifier-picker
+              .product=${this.modifierLine.product}
+              .quantity=${this.modifierLine.quantity}
+              .initialSelections=${this.modifierLine.modifierSelections ?? []}
+              @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
+                event.stopPropagation();
+                if (!this.modifierLine) return;
+                const index = this.store.lines.indexOf(this.modifierLine);
+                this.modifierLine = null;
+                this.store.setLineModifiers(index, event.detail);
+              }}
+              @wt-modifier-cancel=${(event: Event) => {
+                event.stopPropagation();
+                this.modifierLine = null;
+              }}
+            ></till-modifier-picker>`
+          : nothing
+      }
     `;
   }
 

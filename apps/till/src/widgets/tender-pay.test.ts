@@ -1089,3 +1089,51 @@ describe("till-tender-pay", () => {
     });
   });
 });
+
+it("collects fractional quantity before required modifiers and prices extras per fractional unit", async () => {
+  const store = new WorkingOrderStore();
+  const product: TillProduct = {
+    ...jamon,
+    modifiers: [
+      {
+        id: "extras",
+        name: { es: "Extras" },
+        type: "extras",
+        available: true,
+        required: true,
+        maxTotalQuantity: null,
+        choices: [
+          {
+            id: "cheese",
+            name: { es: "Queso" },
+            priceDelta: "1.00",
+            available: true,
+            maxQuantity: 3,
+            defaultQuantity: 2,
+          },
+        ],
+      },
+    ],
+  };
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+  store.emit("product-selected", product);
+  await el.updateComplete;
+  await type(el, "0.125");
+  click(el, ".add");
+  await el.updateComplete;
+  const picker =
+    el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
+      "till-modifier-picker",
+    )!;
+  await picker.updateComplete;
+  expect(store.lines).toHaveLength(0);
+  expect(picker.shadowRoot!.querySelector(".running-amount")!.textContent).toBe(
+    formatMoney("1.50"),
+  );
+  picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+  expect(store.lines[0]?.quantity).toBe("0.125");
+  expect(store.lines[0]?.modifierSelections).toEqual([
+    { modifierId: "extras", type: "extras", choices: [{ choiceId: "cheese", quantity: 2 }] },
+  ]);
+  expect(store.total).toBe("1.50");
+});

@@ -1133,7 +1133,7 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(quesoChild!.parentLineId).not.toBe(dish1!.id);
   });
 
-  it("fails loud server-side: bad option, an invalid selection, options on a weight product", async () => {
+  it("rejects unknown options and invalid selections on each and weight products", async () => {
     const v = await setupModifierVenue();
     const burger = burgerOf(v);
     const menu = menuOf(v);
@@ -1178,7 +1178,7 @@ describe("ordering modifiers — parent + child lines", () => {
       }),
     ).rejects.toMatchObject({ code: "options.selection_invalid", params: { productId: menu.id } });
 
-    // (c) options on a `weight` product → options.unsupported_product (modifiers attach to `each` only).
+    // The same unknown-choice guard applies to fractional products.
     await expect(
       recordTillSale(deps, v.cfg, {
         lines: [
@@ -1187,8 +1187,8 @@ describe("ordering modifiers — parent + child lines", () => {
         tender: { method: "cash", amount: "20.00" },
       }),
     ).rejects.toMatchObject({
-      code: "options.unsupported_product",
-      params: { productId: jamon.id, pricingUnit: "weight" },
+      code: "option.not_found",
+      params: { productId: jamon.id, optionGroupItemId: bogus },
     });
 
     // (d) fewer than a non-required group's `min_select` (Guarnición demands 2, one picked) →
@@ -1209,10 +1209,7 @@ describe("ordering modifiers — parent + child lines", () => {
     ).rejects.toMatchObject({ code: "options.selection_invalid", params: { productId: plato.id } });
   });
 
-  it("does NOT deadlock on a required-but-EMPTY group — an authoring bug never blocks a sale", async () => {
-    // Combo carries a REQUIRED "Salsa" group whose only item is inactive, so it resolves to `items: []`.
-    // A required group that can never be satisfied would deadlock the till; §5 forbids blocking a sale,
-    // so an empty group is treated as no constraint and the sale files (with no children).
+  it("refuses an available required group with no usable choices", async () => {
     const v = await setupModifierVenue();
     const combo = comboOf(v);
     // The group is present on the product but carries no selectable items.
@@ -1220,11 +1217,14 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(combo.optionGroups[0]!.required).toBe(true);
     expect(combo.optionGroups[0]!.items).toEqual([]);
 
-    const result = await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
-      lines: [{ productId: combo.id, quantity: "1", options: [] }],
-      tender: { method: "cash", amount: "10.00" },
+    await expect(
+      recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+        lines: [{ productId: combo.id, quantity: "1", options: [] }],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    ).rejects.toMatchObject({
+      code: "options.selection_invalid",
+      params: { groupId: combo.optionGroups[0]!.id, reason: "required" },
     });
-    expect(result.total).toBe("8.00");
-    expect(result.lines).toHaveLength(1);
   });
 });

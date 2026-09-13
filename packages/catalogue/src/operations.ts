@@ -1,3 +1,6 @@
+import { readMenuModifiers, readProductModifiers } from "./modifier-projection.js";
+import type { Modifier } from "@waitron/shared";
+import { lockModifierDefinitions } from "./modifier-lock.js";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { AppError, resolveContentText, FALLBACK_LOCALE, type TenantId } from "@waitron/shared";
 import {
@@ -94,6 +97,7 @@ export interface MenuOffer extends MenuItem {
   dietOverride: DietOverride | null;
   courseId: string | null;
   optionGroups: MenuOfferOptionGroup[];
+  modifiers: Modifier[];
 }
 
 export interface MenuOfferOptionGroup {
@@ -119,6 +123,7 @@ export interface MenuOfferOption {
 
 export interface Product {
   id: string;
+  modifierIds: string[];
   catalogueId: string;
   categoryId: string | null;
   categoryIds: string[];
@@ -270,6 +275,7 @@ export interface AvailableProduct {
    * order — `[]` when the product has none. Beyond `PriceableProduct` and ignored by priceBasket;
    * later tasks price + validate a diner's selection against these. */
   optionGroups: ResolvedOptionGroup[];
+  modifiers: Modifier[];
 }
 
 const CATALOGUE_COLUMNS = {
@@ -330,6 +336,7 @@ function toProduct(row: RawProduct, categoryIds: string[]): Product {
     ...row,
     categoryIds,
     primaryCategoryId: row.categoryId,
+    modifierIds: [],
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
     dietOverride: row.dietOverride as DietOverride | null,
@@ -422,6 +429,7 @@ export async function createMenuItem(
     displayOrder?: number;
   },
 ): Promise<MenuItem> {
+  await lockModifierDefinitions(tx, tenantId);
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
@@ -491,7 +499,7 @@ export async function createMenuItem(
           eq(optionGroups.active, true),
         ),
       )
-      .innerJoin(
+      .leftJoin(
         optionGroupItems,
         and(
           eq(optionGroupItems.tenantId, productOptionGroups.tenantId),
@@ -512,7 +520,8 @@ export async function createMenuItem(
     >();
     for (const option of defaults) {
       const group = byGroup.get(option.groupId) ?? { groupId: option.groupId, options: [] };
-      group.options.push({ optionId: option.optionId, priceDelta: option.priceDelta });
+      if (option.optionId !== null)
+        group.options.push({ optionId: option.optionId, priceDelta: option.priceDelta! });
       byGroup.set(option.groupId, group);
     }
     if (byGroup.size > 0) {
@@ -575,6 +584,7 @@ export async function setMenuItemOptionGroups(
     options: { optionId: string; priceDelta: string }[];
   }[],
 ): Promise<void> {
+  await lockModifierDefinitions(tx, tenantId);
   const [menuItem] = await tx
     .select({ productId: menuItems.productId })
     .from(menuItems)
@@ -622,7 +632,7 @@ export async function setMenuItemOptionGroups(
     }
 
     const definitions = await tx
-      .select({ id: optionGroups.id, minSelect: optionGroups.minSelect })
+      .select({ id: optionGroups.id, minSelect: optionGroups.minSelect, type: optionGroups.type })
       .from(optionGroups)
       .where(and(eq(optionGroups.tenantId, tenantId), inArray(optionGroups.id, groupIds)));
     const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
@@ -631,11 +641,23 @@ export async function setMenuItemOptionGroups(
       if (definition === undefined) {
         throw new AppError("options.group_invalid", { reason: "not_attached" });
       }
+      for (const option of group.options) {
+        if (
+          typeof option.priceDelta !== "string" ||
+          !/^\d{1,10}(?:\.\d{1,2})?$/.test(option.priceDelta) ||
+          (definition.type !== "extras" && Number(option.priceDelta) !== 0)
+        ) {
+          throw new AppError("modifier.invalid", { field: "priceDelta" });
+        }
+      }
       const optionIds = group.options.map((option) => option.optionId);
       if (new Set(optionIds).size !== optionIds.length) {
         throw new AppError("options.item_invalid", { reason: "duplicate" });
       }
-      if (optionIds.length < definition.minSelect) {
+      if (
+        (definition.type === "extras" || definition.type === "options") &&
+        optionIds.length < definition.minSelect
+      ) {
         throw new AppError("options.group_invalid", { reason: "insufficient_options" });
       }
       if (optionIds.length > 0) {
@@ -833,6 +855,11 @@ export async function listMenuOffers(
     });
   }
   const content = await readContentLanguages(tx, tenantId, FALLBACK_LOCALE);
+  const modifiersByItem = await readMenuModifiers(
+    tx,
+    tenantId,
+    rows.map((row) => row.id),
+  );
   return rows.map((row) => ({
     ...row,
     category:
@@ -845,6 +872,7 @@ export async function listMenuOffers(
     dietDerivation: row.dietDerivation as DietDerivation | null,
     dietOverride: row.dietOverride as DietOverride | null,
     optionGroups: groupsByItem.get(row.id) ?? [],
+    modifiers: modifiersByItem.get(row.id) ?? [],
   }));
 }
 
@@ -1069,7 +1097,26 @@ export async function listProducts(
     )
     .groupBy(products.id)
     .orderBy(products.createdAt, products.id);
-  return rows.map((row) => toProduct(row, row.categoryIds));
+  if (rows.length === 0) return [];
+  const attachments = await tx
+    .select({ productId: productOptionGroups.productId, groupId: productOptionGroups.groupId })
+    .from(productOptionGroups)
+    .where(
+      and(
+        eq(productOptionGroups.tenantId, tenantId),
+        inArray(
+          productOptionGroups.productId,
+          rows.map((row) => row.id),
+        ),
+      ),
+    )
+    .orderBy(productOptionGroups.sort, productOptionGroups.groupId);
+  return rows.map((row) => ({
+    ...toProduct(row, row.categoryIds),
+    modifierIds: attachments
+      .filter((attachment) => attachment.productId === row.id)
+      .map((attachment) => attachment.groupId),
+  }));
 }
 
 export async function updateProduct(
@@ -1319,6 +1366,7 @@ export async function listAvailableProducts(
   const rows = await tx
     .select({
       id: products.id,
+      tenantId: products.tenantId,
       descriptions: products.descriptions,
       pricingUnit: products.pricingUnit,
       unitPrice: products.unitPrice,
@@ -1431,6 +1479,11 @@ export async function listAvailableProducts(
     }
   }
 
+  const modifiersByProduct =
+    rows.length === 0
+      ? new Map<string, Modifier[]>()
+      : await readProductModifiers(tx, rows[0]!.tenantId, productIds);
+
   // `products` is the imported table, so the mapped rows take a local name of their own.
   const available = rows.map((row) => ({
     id: row.id,
@@ -1454,6 +1507,7 @@ export async function listAvailableProducts(
     catalogueId: row.catalogueId,
     catalogueName: row.catalogueName,
     optionGroups: groupsByProduct.get(row.id) ?? [],
+    modifiers: modifiersByProduct.get(row.id) ?? [],
   }));
   return { products: available, invoiceLocales };
 }
@@ -1580,15 +1634,9 @@ const OPTION_GROUP_ITEM_COLUMNS = {
   removeOrigins: optionGroupItems.removeOrigins,
 };
 
-/**
- * Enforce the `option_groups` invariants BEFORE the write, so an invalid config is a clean
- * `options.group_invalid` (400) rather than the opaque 500 the DB CHECK constraints
- * (`option_groups_select_ck` / `option_groups_required_ck`) would raise as a backstop. These are the
- * SAME two rules the CHECKs encode: `max_select >= min_select >= 0`, and `required ⇒ min_select >= 1`.
- * `reason` is the stable code the sale-time `options.selection_invalid` also uses.
- */
+// Legacy caps also populate max_total_quantity, whose finite values must be positive.
 function validateOptionGroupBounds(minSelect: number, maxSelect: number, required: boolean): void {
-  if (minSelect < 0 || maxSelect < minSelect) {
+  if (minSelect < 0 || maxSelect < 1 || maxSelect < minSelect) {
     throw new AppError("options.group_invalid", { reason: "select_bounds" });
   }
   if (required && minSelect < 1) {
@@ -1680,6 +1728,7 @@ export async function createOptionGroup(
   tenantId: TenantId,
   input: CreateOptionGroupInput,
 ): Promise<OptionGroup> {
+  await lockModifierDefinitions(tx, tenantId);
   // Resolve the column defaults HERE so the invariant is validated against the values that will land
   // (the DB defaults are min 0, max 1, required false).
   const minSelect = input.minSelect ?? 0;
@@ -1693,6 +1742,7 @@ export async function createOptionGroup(
       name: input.name,
       minSelect,
       maxSelect,
+      maxTotalQuantity: maxSelect,
       required,
       ...(input.sort === undefined ? {} : { sort: input.sort }),
       ...(input.active === undefined ? {} : { active: input.active }),
@@ -1712,9 +1762,11 @@ export async function listOptionGroups(tx: Transaction): Promise<OptionGroup[]> 
 
 export async function updateOptionGroup(
   tx: Transaction,
+  tenantId: TenantId,
   id: string,
   patch: UpdateOptionGroupInput,
 ): Promise<void> {
+  await lockModifierDefinitions(tx, tenantId);
   // Read the stored bounds and MERGE the patch onto them before validating: a partial patch that only
   // touches one of the three invariant fields (e.g. `required: true` with the stored `min_select`, or a
   // lowered `max_select` against the stored `min_select`) must be checked against the row it lands on,
@@ -1727,14 +1779,20 @@ export async function updateOptionGroup(
       required: optionGroups.required,
     })
     .from(optionGroups)
-    .where(eq(optionGroups.id, id));
+    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, id)));
   if (current === undefined) return;
   validateOptionGroupBounds(
     patch.minSelect ?? current.minSelect,
     patch.maxSelect ?? current.maxSelect,
     patch.required ?? current.required,
   );
-  await tx.update(optionGroups).set(patch).where(eq(optionGroups.id, id));
+  await tx
+    .update(optionGroups)
+    .set({
+      ...patch,
+      ...(patch.maxSelect === undefined ? {} : { maxTotalQuantity: patch.maxSelect }),
+    })
+    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, id)));
 }
 
 export async function createOptionGroupItem(
@@ -1743,6 +1801,7 @@ export async function createOptionGroupItem(
   groupId: string,
   input: CreateOptionGroupItemInput,
 ): Promise<OptionGroupItem> {
+  await lockModifierDefinitions(tx, tenantId);
   // Resolve the default HERE so the invariant is validated against the value that will land (the DB
   // default is 1), the same posture createOptionGroup takes for its bounds.
   const maxQuantity = input.maxQuantity ?? 1;
@@ -1796,9 +1855,11 @@ export async function listOptionGroupItems(
 
 export async function updateOptionGroupItem(
   tx: Transaction,
+  tenantId: TenantId,
   itemId: string,
   patch: UpdateOptionGroupItemInput,
 ): Promise<void> {
+  await lockModifierDefinitions(tx, tenantId);
   // maxQuantity's invariant is single-field: a patch that omits it leaves the stored value untouched
   // (Drizzle `.set()` only writes provided keys); a patch that sets it is re-validated here before the
   // write, the same clean-error-before-the-CHECK posture create takes.
@@ -1817,7 +1878,7 @@ export async function updateOptionGroupItem(
         removeAllergens: optionGroupItems.removeAllergens,
       })
       .from(optionGroupItems)
-      .where(eq(optionGroupItems.id, itemId));
+      .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.id, itemId)));
     Object.assign(
       write,
       normalizeOverlay(patch, {
@@ -1829,7 +1890,10 @@ export async function updateOptionGroupItem(
   // The origin overlay is independent (no disjointness → no current-row read): validate + normalise
   // each patched side and write exactly those columns.
   Object.assign(write, normalizeOriginOverlay(patch));
-  await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
+  await tx
+    .update(optionGroupItems)
+    .set(write)
+    .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.id, itemId)));
 }
 
 /**
@@ -1844,7 +1908,40 @@ export async function setProductOptionGroups(
   productId: string,
   groupIds: string[],
 ): Promise<void> {
-  await tx.delete(productOptionGroups).where(eq(productOptionGroups.productId, productId));
+  await lockModifierDefinitions(tx, tenantId);
+  const [product] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+  if (!product) throw new AppError("product.not_found", { productId });
+  if (groupIds.length) {
+    const retained = await tx
+      .select({ id: productOptionGroups.groupId })
+      .from(productOptionGroups)
+      .where(
+        and(
+          eq(productOptionGroups.tenantId, tenantId),
+          eq(productOptionGroups.productId, productId),
+        ),
+      );
+    const available = await tx
+      .select({ id: optionGroups.id, active: optionGroups.active })
+      .from(optionGroups)
+      .where(and(eq(optionGroups.tenantId, tenantId), inArray(optionGroups.id, groupIds)));
+    if (
+      available.some(
+        (group) => !group.active && !retained.some((entry) => entry.id === group.id),
+      ) ||
+      available.length !== groupIds.length ||
+      new Set(groupIds).size !== groupIds.length
+    )
+      throw new AppError("modifier.invalid", { field: "modifierIds" });
+  }
+  await tx
+    .delete(productOptionGroups)
+    .where(
+      and(eq(productOptionGroups.tenantId, tenantId), eq(productOptionGroups.productId, productId)),
+    );
   if (groupIds.length === 0) return;
   await tx.insert(productOptionGroups).values(
     groupIds.map((groupId, index) => ({

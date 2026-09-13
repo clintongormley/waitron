@@ -3,6 +3,8 @@ import type { DashboardApi } from "./client.js";
 
 /** Dependencies describe the read model, independently of which operation changes it. */
 export const QUERY_DEPENDENCIES = {
+  listModifiers: ["option_groups", "option_group_items"],
+  getModifier: ["option_groups", "option_group_items"],
   getContentLanguages: ["content_languages"],
   listPrinters: ["printers", "print_jobs"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],

@@ -148,6 +148,13 @@
       "when": 1789247492874,
       "tag": "0020_category_names",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789287339361,
+      "tag": "0021_product_modifiers",
+      "breakpoints": true
     }
   ]
 }

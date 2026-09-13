@@ -10,6 +10,9 @@ declare module "@waitron/shared" {
     "category.membership_invalid": Record<string, never>;
     "category.primary_required": Record<string, never>;
     "category.in_use": { children: number; products: number; routes: number };
+    "modifier.invalid": { field: string };
+    "modifier.not_found": { modifierId: string };
+    "modifier.in_use": { modifierId: string; dependency: string };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
     /** A translation map contains a non-text value. */

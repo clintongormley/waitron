@@ -1,3 +1,4 @@
+import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
 // KDS-4 print-on-fire (design §3c) — the DB-facing half that turns a freshly-fired set of ticket items
 // into kitchen print jobs. It lives OUTSIDE working-order.ts so that (already large) module gains only a
 // call, not the whole routing/formatting body. Called from inside `fireLines`/`fireCourse` on the
@@ -142,6 +143,7 @@ async function buildTicketItems(
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
       descriptions: workingOrderLines.descriptions,
+      modifierSnapshots: workingOrderLines.modifierSnapshots,
       // Per-line customisation (order-line customisation, spec §2/§3): the note/doneness printed as a
       // prominent doneness line + a note sub-line (`emitItem`). Read here so BOTH the fire path and the
       // recall/void correction slip carry them — a correction slip shows the same detail the cook has.
@@ -198,7 +200,10 @@ async function buildTicketItems(
         // before; `emitItem` prints doneness prominently and the note as a sub-line.
         doneness: row.doneness ?? undefined,
         note: row.note ?? undefined,
-        modifiers: modifiersByParent.get(row.id) ?? [],
+        modifiers: [
+          ...modifierSnapshotLabels(row.modifierSnapshots, cfg.locale),
+          ...(modifiersByParent.get(row.id) ?? []),
+        ],
       },
     });
   }

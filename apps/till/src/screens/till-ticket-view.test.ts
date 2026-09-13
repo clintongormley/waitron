@@ -524,3 +524,44 @@ describe("till-ticket-view", () => {
     });
   });
 });
+
+it("shows saved nonprice modifier answers literally without inventing charge rows", async () => {
+  const { el } = await mount({
+    lines: [
+      {
+        ...result.lines[0]!,
+        modifierSnapshots: [
+          {
+            modifierId: "note",
+            type: "text",
+            name: { "es-ES": "Dedicatoria" },
+            text: "<b>Happy day</b>",
+          },
+          {
+            modifierId: "side",
+            type: "options",
+            name: { "es-ES": "Guarnición" },
+            choiceId: "salad",
+            choiceName: { "es-ES": "Ensalada" },
+          },
+          {
+            modifierId: "cut",
+            type: "yes-no",
+            name: { "es-ES": "Cortar" },
+            value: false,
+            label: { "es-ES": "No" },
+          },
+        ],
+      },
+    ],
+  });
+  const answers = [...el.shadowRoot!.querySelectorAll(".modifier-answer")];
+  expect(answers.map((answer) => answer.textContent?.trim())).toEqual([
+    "Dedicatoria: <b>Happy day</b>",
+    "Guarnición: Ensalada",
+    "Cortar: No",
+  ]);
+  expect(
+    el.shadowRoot!.querySelectorAll(".modifier-answer b, .modifier-answer .line-gross"),
+  ).toHaveLength(0);
+});

@@ -6926,3 +6926,21 @@ describe("till-app follows a server move (till-reroute §4.3)", () => {
     expect(banner()!.textContent).toContain(t("server.waiting_promotion"));
   });
 });
+
+it("sends explicit modifier answers at walk-up payment without local price previews", async () => {
+  const { el } = await mountApp();
+  const c = await toCounter(el);
+  const modifierSelections = [
+    { modifierId: "cut", type: "yes-no" as const, value: false },
+    { modifierId: "note", type: "text" as const, text: "<b>Happy day</b>" },
+  ];
+  c.store.addProduct(cafe, "1", undefined, { modifierSelections });
+  await el.updateComplete;
+  emit(c, "confirm-payment", { method: "cash", amount: "5" });
+  await flush(el);
+  expect(currentApi.recordSale).toHaveBeenCalledWith(
+    [{ productId: "cafe", quantity: "1", modifierSelections }],
+    { method: "cash", amount: "5" },
+    c.store.id,
+  );
+});

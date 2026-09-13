@@ -1,3 +1,4 @@
+import type { ModifierSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -168,6 +169,10 @@ export const workingOrderLines = pgTable(
     // rows are unaffected), so this column carries no plain single-column `.references()` of its own.
     productId: uuid("product_id"),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
+    modifierSnapshots: jsonb("modifier_snapshots")
+      .$type<ModifierSnapshot[]>()
+      .notNull()
+      .default([]),
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     // The GROSS (VAT-inclusive) unit price LOCKED at add time (line-add snapshot, 7c). `unit_price`

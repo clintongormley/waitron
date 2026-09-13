@@ -374,3 +374,122 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     );
   });
 });
+
+describe("canonical modifier routes", () => {
+  it("saves and reads each type canonically, and keeps a failed multi-choice save atomic", async () => {
+    const venue = await setupVenue();
+    const app = mountApp(venue.tenantId);
+    const name = { es: "Personalización" };
+    const choiceId = crypto.randomUUID();
+    const bodies = [
+      { type: "text", name },
+      {
+        type: "extras",
+        name,
+        choices: [{ id: choiceId, name, priceDelta: "1.20", maxQuantity: 2, defaultQuantity: 1 }],
+      },
+      { type: "options", name, choices: [{ id: crypto.randomUUID(), name }] },
+      { type: "yes-no", name, yesLabel: { es: "Sí" }, noLabel: { es: "No" }, defaultValue: false },
+    ];
+    const saved: unknown[] = [];
+    for (const body of bodies) {
+      const response = await send(
+        app,
+        "POST",
+        "/management-api/modifiers",
+        venue.managerCookie,
+        body,
+      );
+      expect(response.status).toBe(201);
+      const { modifier } = (await response.json()) as {
+        modifier: { id: string; type: string; defaultValue?: boolean };
+      };
+      expect(modifier).toMatchObject({ ...body, available: true });
+      if (body.type === "yes-no") expect(modifier.defaultValue).toBe(false);
+      const read = await send(
+        app,
+        "GET",
+        `/management-api/modifiers/${modifier.id}`,
+        venue.managerCookie,
+      );
+      expect(await read.json()).toEqual({ modifier });
+      saved.push(modifier);
+    }
+    const failed = await send(app, "POST", "/management-api/modifiers", venue.managerCookie, {
+      type: "extras",
+      name,
+      choices: [
+        { id: crypto.randomUUID(), name },
+        { id: choiceId, name },
+      ],
+    });
+    expect(failed.status).toBe(400);
+    const list = await send(app, "GET", "/management-api/modifiers", venue.managerCookie);
+    expect(((await list.json()) as { modifiers: unknown[] }).modifiers).toEqual(
+      expect.arrayContaining(saved),
+    );
+    expect(
+      (
+        (await send(app, "GET", "/management-api/modifiers", venue.managerCookie).then((r) =>
+          r.json(),
+        )) as { modifiers: unknown[] }
+      ).modifiers,
+    ).toHaveLength(4);
+  });
+  it("refuses another tenant's manager and staff", async () => {
+    const venue = await setupVenue();
+    const other = await setupVenue();
+    const app = mountApp(venue.tenantId);
+    for (const cookie of [other.managerCookie, venue.staffCookie]) {
+      expect((await send(app, "GET", "/management-api/modifiers", cookie)).status).toBe(403);
+      expect(
+        (
+          await send(app, "POST", "/management-api/modifiers", cookie, {
+            type: "text",
+            name: { es: "Nota" },
+          })
+        ).status,
+      ).toBe(403);
+    }
+  });
+});
+
+it("accepts ordered modifierIds in the product contract and reads them back", async () => {
+  const venue = await setupVenue();
+  const app = mountApp(venue.tenantId);
+  const cookie = venue.managerCookie;
+  const modifierIds: string[] = [];
+  for (const label of ["First", "Second"]) {
+    const response = await send(app, "POST", "/management-api/modifiers", cookie, {
+      type: "text",
+      name: { es: label },
+    });
+    modifierIds.push(((await response.json()) as { modifier: { id: string } }).modifier.id);
+  }
+  const menuResponse = await send(app, "POST", "/management-api/catalogues", cookie, {
+    name: "Menu",
+  });
+  const menu = (await menuResponse.json()) as { id: string };
+  const create = await send(app, "POST", "/management-api/products", cookie, {
+    catalogueId: menu.id,
+    categoryId: null,
+    descriptions: { es: "Dish" },
+    pricingUnit: "each",
+    unitPrice: "5.00",
+    vatClass: "reduced",
+    modifierIds,
+  });
+  expect(create.status).toBe(201);
+  const product = (await create.json()) as { id: string; modifierIds: string[] };
+  expect(product.modifierIds).toEqual(modifierIds);
+  const ordered = [...modifierIds].reverse();
+  expect(
+    (
+      await send(app, "PATCH", `/management-api/products/${product.id}`, cookie, {
+        modifierIds: ordered,
+      })
+    ).status,
+  ).toBe(204);
+  const list = await send(app, "GET", `/management-api/catalogues/${menu.id}/products`, cookie);
+  expect(await list.json()).toMatchObject([{ id: product.id, modifierIds: ordered }]);
+});

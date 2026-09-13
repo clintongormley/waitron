@@ -149,9 +149,10 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
 2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The owner-requested
    Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products.
-   Categories has landed (#340, see below); Units, Modifiers and Products have specs and plans written
-   but no code yet ([units](superpowers/specs/2026-09-12-product-units-design.md),
-   [modifiers](superpowers/specs/2026-09-12-product-modifiers-design.md),
+   Categories has landed (#340, see below), with [integration notes](developers/product-categories.md).
+   Modifiers is implemented on `products-modifiers` and awaits landing; see its
+   [integration contract](developers/modifiers.md). Units and Products have specs and plans written
+   ([units](superpowers/specs/2026-09-12-product-units-design.md),
    [products](superpowers/specs/2026-09-12-product-editor-design.md)). The
    [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) defines the branch contracts.
    Products integrates the other three; recipes are deferred for

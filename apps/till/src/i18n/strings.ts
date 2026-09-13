@@ -65,6 +65,12 @@ export const en = {
   // step controls. Combined with the option's own name at render, e.g. "Increase Extra shot".
   "modifier.increase": "Increase",
   "modifier.decrease": "Decrease",
+  "modifier.edit": "Modifiers",
+  "modifier.save": "Save",
+  "modifier.selection_changed":
+    "A selected extra is no longer available. Cancel and reopen the product to choose again.",
+  "modifier.selected_total": "Selected",
+  "modifier.unavailable_choices": "No available choices. This product cannot be added.",
   // Login / operator selection
   "login.enter_pin": "Enter PIN",
   "login.pick_operator": "Choose your name",
@@ -520,6 +526,12 @@ export const es: Record<StringKey, string> = {
   "basket.decrease": "Disminuir",
   "modifier.increase": "Aumentar",
   "modifier.decrease": "Disminuir",
+  "modifier.edit": "Modificadores",
+  "modifier.save": "Guardar",
+  "modifier.selection_changed":
+    "Un extra seleccionado ya no está disponible. Cancela y vuelve a abrir el producto para elegir de nuevo.",
+  "modifier.selected_total": "Seleccionados",
+  "modifier.unavailable_choices": "No hay opciones disponibles. No se puede añadir este producto.",
   "login.enter_pin": "Introduce el PIN",
   "login.pick_operator": "Elige tu nombre",
   "login.loading": "Cargando…",

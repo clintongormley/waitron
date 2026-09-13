@@ -519,7 +519,13 @@ describe("payWorkingOrder", () => {
     // The FILED line list the receipt renders (Finding 2): the priced walk-up composition — name, the
     // display quantity, and the GROSS the line was filed at. Σ(gross) == total.
     expect(res.lines).toEqual([
-      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50", parentLineNo: null },
+      {
+        descriptions: { [LOCALE]: "Café" },
+        quantity: "1",
+        gross: "1.50",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
     ]);
 
     // The working order was created AND settled in the one transaction; exactly one sale + one
@@ -564,8 +570,20 @@ describe("payWorkingOrder", () => {
     // The receipt line list is the STORED lock (Finding 2), not any client basket the till sent (it
     // sent none). The stored numeric(_,3) quantities ("1.000") print trailing-zero-trimmed ("1").
     expect(res.lines).toEqual([
-      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50", parentLineNo: null },
-      { descriptions: { [LOCALE]: "Agua" }, quantity: "1", gross: "2.00", parentLineNo: null },
+      {
+        descriptions: { [LOCALE]: "Café" },
+        quantity: "1",
+        gross: "1.50",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
+      {
+        descriptions: { [LOCALE]: "Agua" },
+        quantity: "1",
+        gross: "2.00",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
     ]);
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -606,7 +624,13 @@ describe("payWorkingOrder", () => {
     expect(res.total).toBe("3.00");
     expect(res.tender).toEqual({ method: "cash", change: "2.00" });
     expect(res.lines).toEqual([
-      { descriptions: { [LOCALE]: "Café" }, quantity: "2", gross: "3.00", parentLineNo: null },
+      {
+        descriptions: { [LOCALE]: "Café" },
+        quantity: "2",
+        gross: "3.00",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
     ]);
     expect(await filedSaleTotal(id)).toBe("3.00");
     expect(await saleCount(id)).toBe(1);
@@ -672,8 +696,20 @@ describe("payWorkingOrder", () => {
     expect(first.qr.length).toBeGreaterThan(0); // a genuine first filing carries the AEAT QR
     // The FILED line list (Finding 2): café×1 (gross 1.50) + agua×2 (gross 4.00). Σ(gross) == 5.50.
     expect(first.lines).toEqual([
-      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50", parentLineNo: null },
-      { descriptions: { [LOCALE]: "Agua" }, quantity: "2", gross: "4.00", parentLineNo: null },
+      {
+        descriptions: { [LOCALE]: "Café" },
+        quantity: "1",
+        gross: "1.50",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
+      {
+        descriptions: { [LOCALE]: "Agua" },
+        quantity: "2",
+        gross: "4.00",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
     ]);
 
     // The retry — same id, same body. Files NOTHING; returns the first ticket.
@@ -1519,8 +1555,20 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // The receipt line list is read back from the order's stored lock (Finding 2 — Mode-I collect
     // returns the already-filed ticket), so it matches the deferred invoice's composition.
     expect(collected.lines).toEqual([
-      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50", parentLineNo: null },
-      { descriptions: { [LOCALE]: "Agua" }, quantity: "1", gross: "2.00", parentLineNo: null },
+      {
+        descriptions: { [LOCALE]: "Café" },
+        quantity: "1",
+        gross: "1.50",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
+      {
+        descriptions: { [LOCALE]: "Agua" },
+        quantity: "1",
+        gross: "2.00",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
     ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1); // STILL one sale — no second file at collect
@@ -1698,7 +1746,13 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // The receipt line list is the just-filed composition (Finding 2 — Mode-T files immediate at
     // collect from the stored lock).
     expect(collected.lines).toEqual([
-      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50", parentLineNo: null },
+      {
+        descriptions: { [LOCALE]: "Café" },
+        quantity: "1",
+        gross: "1.50",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
     ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1); // filed at collect

@@ -1,0 +1,488 @@
+import { describe, expect, it } from "vitest";
+import { parseModifierInput, validateModifierSelections } from "./modifier-contract.js";
+
+const modifierId = "11111111-1111-4111-8111-111111111111";
+const choiceId = "22222222-2222-4222-8222-222222222222";
+const name = { en: "Extras" };
+const extra = {
+  id: choiceId,
+  name: { en: "Bacon" },
+  available: true,
+  priceDelta: "1.00",
+  maxQuantity: 2,
+  defaultQuantity: 0,
+};
+const extras = {
+  id: modifierId,
+  type: "extras" as const,
+  name,
+  available: true,
+  required: false,
+  maxTotalQuantity: null,
+  choices: [extra],
+};
+
+describe("modifier definition contract", () => {
+  it("accepts all four types with canonical defaults", () => {
+    expect(parseModifierInput({ type: "text", name })).toEqual({
+      type: "text",
+      name,
+      available: true,
+    });
+    expect(parseModifierInput({ type: "extras", name, choices: [{ id: choiceId, name }] })).toEqual(
+      {
+        type: "extras",
+        name,
+        available: true,
+        required: false,
+        maxTotalQuantity: null,
+        choices: [
+          {
+            id: choiceId,
+            name,
+            available: true,
+            priceDelta: "0.00",
+            maxQuantity: 1,
+            defaultQuantity: 0,
+          },
+        ],
+      },
+    );
+    expect(
+      parseModifierInput({ type: "options", name, choices: [{ id: choiceId, name }] }),
+    ).toEqual({
+      type: "options",
+      name,
+      available: true,
+      choices: [{ id: choiceId, name, available: true }],
+      defaultChoiceId: null,
+    });
+    expect(
+      parseModifierInput({ type: "yes-no", name, yesLabel: { en: "Yes" }, noLabel: { en: "No" } }),
+    ).toEqual({
+      type: "yes-no",
+      name,
+      available: true,
+      yesLabel: { en: "Yes" },
+      noLabel: { en: "No" },
+      defaultValue: false,
+    });
+  });
+  it.each([
+    { type: "text", name, choices: [] },
+    { type: "options", name, choices: [{ id: choiceId, name, priceDelta: "1.00" }] },
+    { type: "yes-no", name, choices: [] },
+    { ...extras, maxTotalQuantity: 0 },
+    { ...extras, choices: [{ ...extra, priceDelta: "-0.01" }] },
+    { ...extras, choices: [{ ...extra, defaultQuantity: 3 }] },
+    { ...extras, choices: [{ ...extra, defaultQuantity: 1.5 }] },
+    { ...extras, maxTotalQuantity: 1, choices: [{ ...extra, defaultQuantity: 2 }] },
+    { type: "options", name, choices: [{ id: choiceId, name }], defaultChoiceId: modifierId },
+    { ...extras, choices: [extra, extra] },
+  ])("rejects contradictory fields and invalid defaults %#", (input) => {
+    const body = Object.fromEntries(Object.entries(input).filter(([key]) => key !== "id"));
+    expect(() => parseModifierInput(body)).toThrow();
+  });
+  it("clears unavailable defaults in the same canonical value", () => {
+    expect(
+      parseModifierInput({
+        type: "extras",
+        name,
+        choices: [{ ...extra, available: false, defaultQuantity: 2 }],
+      }),
+    ).toMatchObject({ choices: [{ defaultQuantity: 0 }] });
+    expect(
+      parseModifierInput({
+        type: "options",
+        name,
+        choices: [{ id: choiceId, name, available: false }],
+        available: false,
+        defaultChoiceId: choiceId,
+      }),
+    ).toMatchObject({ defaultChoiceId: null });
+  });
+  it("refuses an available required definition with no usable choices", () => {
+    expect(() => parseModifierInput({ type: "options", name, choices: [] })).toThrow();
+    expect(() =>
+      parseModifierInput({
+        type: "extras",
+        name,
+        required: true,
+        choices: [{ ...extra, available: false }],
+      }),
+    ).toThrow();
+    expect(
+      parseModifierInput({ type: "options", name, available: false, choices: [] }),
+    ).toMatchObject({ available: false });
+  });
+});
+
+describe("explicit order selections", () => {
+  it("validates all four values, preserving false and literal text", () => {
+    const definitions = [
+      extras,
+      { id: "text", type: "text" as const, name, available: true },
+      {
+        id: "option",
+        type: "options" as const,
+        name,
+        available: true,
+        choices: [{ id: choiceId, name, available: true }],
+        defaultChoiceId: null,
+      },
+      {
+        id: "boolean",
+        type: "yes-no" as const,
+        name,
+        available: true,
+        yesLabel: { en: "Yes" },
+        noLabel: { en: "No" },
+        defaultValue: false,
+      },
+    ];
+    const selections = [
+      { modifierId, type: "extras", choices: [{ choiceId, quantity: 2 }] },
+      { modifierId: "text", type: "text", text: " <b>literal</b> " },
+      { modifierId: "option", type: "options", choiceId },
+      { modifierId: "boolean", type: "yes-no", value: false },
+    ];
+    expect(validateModifierSelections(definitions, selections)).toEqual(selections);
+  });
+  it("allows an unlimited total, but enforces a finite sum", () => {
+    const selection = [{ modifierId, type: "extras", choices: [{ choiceId, quantity: 2 }] }];
+    expect(validateModifierSelections([extras], selection)).toEqual(selection);
+    expect(() =>
+      validateModifierSelections([{ ...extras, maxTotalQuantity: 1 }], selection),
+    ).toThrow();
+  });
+  it.each([
+    [
+      { choiceId, quantity: 2 },
+      { choiceId, quantity: -1 },
+    ],
+    [
+      { choiceId, quantity: 1 },
+      { choiceId, quantity: 1 },
+    ],
+    [{ choiceId, quantity: 0 }],
+    [{ choiceId, quantity: 1.5 }],
+    [{ choiceId, quantity: 3 }],
+    [{ choiceId: "unknown", quantity: 1 }],
+  ])("rejects invalid entries before summing %#", (...choices) => {
+    expect(() =>
+      validateModifierSelections([extras], [{ modifierId, type: "extras", choices }]),
+    ).toThrow();
+  });
+  it("rejects duplicate modifiers, wrong types and unavailable choices", () => {
+    const selection = { modifierId, type: "extras", choices: [{ choiceId, quantity: 1 }] };
+    expect(() => validateModifierSelections([extras], [selection, selection])).toThrow();
+    expect(() =>
+      validateModifierSelections([extras], [{ modifierId, type: "text", text: "test" }]),
+    ).toThrow();
+    expect(() =>
+      validateModifierSelections(
+        [{ ...extras, choices: [{ ...extra, available: false }] }],
+        [selection],
+      ),
+    ).toThrow();
+    expect(() =>
+      validateModifierSelections([{ ...extras, available: false }], [selection]),
+    ).toThrow();
+  });
+  it("does not waive required groups with no offered choices or apply server defaults", () => {
+    expect(() =>
+      validateModifierSelections([{ ...extras, required: true, choices: [] }], []),
+    ).toThrow();
+    expect(() =>
+      validateModifierSelections(
+        [{ ...extras, required: true, choices: [{ ...extra, defaultQuantity: 1 }] }],
+        [],
+      ),
+    ).toThrow();
+    expect(
+      validateModifierSelections(
+        [{ ...extras, available: false, required: true, choices: [] }],
+        [],
+      ),
+    ).toEqual([]);
+  });
+  it("omits blank text and bounds literal text at 500 characters", () => {
+    const text = { id: modifierId, type: "text" as const, name, available: true };
+    expect(validateModifierSelections([text], [{ modifierId, type: "text", text: "   " }])).toEqual(
+      [],
+    );
+    expect(() =>
+      validateModifierSelections([text], [{ modifierId, type: "text", text: "a".repeat(501) }]),
+    ).toThrow();
+  });
+});
+
+function expectInvalid(run: () => unknown, field: string) {
+  let failure: unknown;
+  try {
+    run();
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toMatchObject({ code: "modifier.invalid", params: { field } });
+}
+
+const extraInput = { type: "extras", name, choices: [extra] };
+const optionInput = { type: "options", name, choices: [{ id: choiceId, name }] };
+const booleanInput = { type: "yes-no", name, yesLabel: { en: "Yes" }, noLabel: { en: "No" } };
+
+describe("strict definition input boundaries", () => {
+  it.each([
+    [{ type: "text", name, available: null }, "available"],
+    [{ ...booleanInput, defaultValue: null }, "defaultValue"],
+    [{ ...extraInput, required: null }, "required"],
+    [{ ...extraInput, choices: [{ ...extra, available: null }] }, "choices.0.available"],
+    [{ ...extraInput, choices: [{ ...extra, priceDelta: null }] }, "choices.0.priceDelta"],
+    [{ ...extraInput, choices: [{ ...extra, maxQuantity: null }] }, "choices.0.maxQuantity"],
+    [
+      { ...extraInput, choices: [{ ...extra, defaultQuantity: null }] },
+      "choices.0.defaultQuantity",
+    ],
+  ])("rejects explicit null instead of silently applying a default: %#", (input, field) => {
+    expectInvalid(() => parseModifierInput(input), field as string);
+  });
+
+  it.each(["false", 0, [], {}])("rejects non-Boolean values %#", (value) => {
+    expectInvalid(() => parseModifierInput({ type: "text", name, available: value }), "available");
+    expectInvalid(
+      () => parseModifierInput({ ...booleanInput, defaultValue: value }),
+      "defaultValue",
+    );
+    expectInvalid(() => parseModifierInput({ ...extraInput, required: value }), "required");
+    expectInvalid(
+      () =>
+        parseModifierInput({ ...optionInput, choices: [{ id: choiceId, name, available: value }] }),
+      "choices.0.available",
+    );
+  });
+
+  it.each([null, [], "Bacon", 1, { en: null }, { en: 1 }, { en: { label: "Bacon" } }])(
+    "rejects invalid translated-label shapes %#",
+    (value) => {
+      expectInvalid(() => parseModifierInput({ type: "text", name: value }), "name");
+      expectInvalid(
+        () => parseModifierInput({ ...extraInput, choices: [{ ...extra, name: value }] }),
+        "choices.0.name",
+      );
+      expectInvalid(() => parseModifierInput({ ...booleanInput, yesLabel: value }), "yesLabel");
+      expectInvalid(() => parseModifierInput({ ...booleanInput, noLabel: value }), "noLabel");
+    },
+  );
+
+  it.each([null, [], "choice", 1])("rejects nonobject choices %#", (choice) => {
+    expectInvalid(() => parseModifierInput({ ...extraInput, choices: [choice] }), "choices.0");
+  });
+
+  it.each([
+    [{ type: "text", name, defaultValue: false }, "modifier.defaultValue"],
+    [{ ...booleanInput, maxTotalQuantity: null }, "modifier.maxTotalQuantity"],
+    [{ ...extraInput, defaultChoiceId: null }, "modifier.defaultChoiceId"],
+    [{ ...optionInput, required: null }, "modifier.required"],
+    [
+      { ...optionInput, choices: [{ id: choiceId, name, maxQuantity: null }] },
+      "choices.0.maxQuantity",
+    ],
+    [
+      { ...optionInput, choices: [{ id: choiceId, name, defaultQuantity: 0 }] },
+      "choices.0.defaultQuantity",
+    ],
+    [{ ...optionInput, choices: [{ id: choiceId, name, vatClass: null }] }, "choices.0.vatClass"],
+    [{ ...extraInput, choices: [{ ...extra, defaultValue: false }] }, "choices.0.defaultValue"],
+  ])("rejects keys from other types even when their value is null: %#", (input, field) => {
+    expectInvalid(() => parseModifierInput(input), field as string);
+  });
+
+  it.each(["-0.01", "1.001", "1e2", "NaN", "Infinity", "10000000000.00", " 1.00", 1])(
+    "rejects negative, excessive-scale or nonliteral prices %#",
+    (priceDelta) => {
+      expectInvalid(
+        () => parseModifierInput({ ...extraInput, choices: [{ ...extra, priceDelta }] }),
+        "choices.0.priceDelta",
+      );
+    },
+  );
+
+  it("normalizes decimal prices without losing the database's maximum money value", () => {
+    for (const [priceDelta, expected] of [
+      ["0001.2", "1.20"],
+      ["0", "0.00"],
+      ["9999999999.99", "9999999999.99"],
+    ]) {
+      expect(
+        parseModifierInput({ ...extraInput, choices: [{ ...extra, priceDelta }] }),
+      ).toMatchObject({ choices: [{ priceDelta: expected }] });
+    }
+  });
+
+  it.each([0, -1, 1.25, NaN, Infinity, Number.MAX_SAFE_INTEGER, 2147483648, "2"])(
+    "rejects quantities that cannot be positive database integers %#",
+    (maxQuantity) => {
+      expectInvalid(
+        () => parseModifierInput({ ...extraInput, choices: [{ ...extra, maxQuantity }] }),
+        "choices.0.maxQuantity",
+      );
+      expectInvalid(
+        () => parseModifierInput({ ...extraInput, maxTotalQuantity: maxQuantity }),
+        "maxTotalQuantity",
+      );
+    },
+  );
+
+  it.each(
+    [["general"], { toString: () => "general" }, 0, "unknown"].map((vatClass) => ({ vatClass })),
+  )("rejects non-enum VAT values without coercion %#", ({ vatClass }) => {
+    expectInvalid(
+      () => parseModifierInput({ ...extraInput, choices: [{ ...extra, vatClass }] }),
+      "choices.0.vatClass",
+    );
+  });
+
+  it("retains explicit false and nullable fields while clearing unavailable defaults before checking the cap", () => {
+    expect(
+      parseModifierInput({ ...booleanInput, available: false, defaultValue: false }),
+    ).toMatchObject({ available: false, defaultValue: false });
+    expect(
+      parseModifierInput({
+        ...extraInput,
+        required: false,
+        maxTotalQuantity: 1,
+        choices: [{ ...extra, available: false, defaultQuantity: 2, vatClass: null }],
+      }),
+    ).toMatchObject({
+      required: false,
+      maxTotalQuantity: 1,
+      choices: [{ available: false, defaultQuantity: 0, vatClass: null }],
+    });
+    expect(parseModifierInput({ ...extraInput, maxTotalQuantity: null })).toMatchObject({
+      maxTotalQuantity: null,
+    });
+    expect(parseModifierInput({ ...optionInput, defaultChoiceId: null })).toMatchObject({
+      defaultChoiceId: null,
+    });
+  });
+});
+
+describe("adversarial explicit selections", () => {
+  const boolean = {
+    ...booleanInput,
+    id: modifierId,
+    type: "yes-no" as const,
+    available: true,
+    defaultValue: false,
+  };
+  const option = {
+    id: modifierId,
+    name,
+    available: true,
+    type: "options" as const,
+    defaultChoiceId: choiceId,
+    choices: [{ id: choiceId, name, available: true }],
+  };
+  const text = { id: modifierId, name, available: true, type: "text" as const };
+
+  it.each([undefined, null, 0, 1, "false", [], {}])(
+    "requires an actual Boolean selection %#",
+    (value) => {
+      expectInvalid(
+        () => validateModifierSelections([boolean], [{ modifierId, type: "yes-no", value }]),
+        "value",
+      );
+    },
+  );
+  it("does not manufacture a missing Boolean or default option selection", () => {
+    expectInvalid(() => validateModifierSelections([boolean], []), "required");
+    expectInvalid(() => validateModifierSelections([option], []), "required");
+    expect(
+      validateModifierSelections([boolean], [{ modifierId, type: "yes-no", value: false }]),
+    ).toEqual([{ modifierId, type: "yes-no", value: false }]);
+  });
+  it("rejects cross-type selection fields, client prices and labels", () => {
+    expectInvalid(
+      () =>
+        validateModifierSelections(
+          [boolean],
+          [{ modifierId, type: "yes-no", value: false, choiceId }],
+        ),
+      "selection.choiceId",
+    );
+    expectInvalid(
+      () =>
+        validateModifierSelections(
+          [option],
+          [{ modifierId, type: "options", choiceId, quantity: 2 }],
+        ),
+      "selection.quantity",
+    );
+    expectInvalid(
+      () =>
+        validateModifierSelections(
+          [text],
+          [{ modifierId, type: "text", text: "Note", value: false }],
+        ),
+      "selection.value",
+    );
+    expectInvalid(
+      () =>
+        validateModifierSelections(
+          [extras],
+          [
+            {
+              modifierId,
+              type: "extras",
+              choices: [{ choiceId, quantity: 1, priceDelta: "0.00" }],
+            },
+          ],
+        ),
+      "choice.priceDelta",
+    );
+    expectInvalid(
+      () =>
+        validateModifierSelections([extras], [{ modifierId, type: "extras", name, choices: [] }]),
+      "selection.name",
+    );
+  });
+  it.each([null, 0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER, 2147483648, "1"])(
+    "refuses invalid repeated-extra quantities %#",
+    (quantity) => {
+      expectInvalid(
+        () =>
+          validateModifierSelections(
+            [extras],
+            [{ modifierId, type: "extras", choices: [{ choiceId, quantity }] }],
+          ),
+        "quantity",
+      );
+    },
+  );
+  it("sums large distinct extras without a signed integer overflow", () => {
+    const max = 2147483647;
+    const secondId = "33333333-3333-4333-8333-333333333333";
+    const definition = {
+      ...extras,
+      choices: [
+        { ...extra, maxQuantity: max },
+        { ...extra, id: secondId, maxQuantity: max },
+      ],
+    };
+    const selections = [
+      {
+        modifierId,
+        type: "extras",
+        choices: [
+          { choiceId, quantity: max },
+          { choiceId: secondId, quantity: max },
+        ],
+      },
+    ];
+    expect(validateModifierSelections([definition], selections)).toEqual(selections);
+    expectInvalid(
+      () => validateModifierSelections([{ ...definition, maxTotalQuantity: max }], selections),
+      "choices",
+    );
+  });
+});

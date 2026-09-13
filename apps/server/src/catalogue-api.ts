@@ -1,3 +1,10 @@
+import {
+  createModifier,
+  updateModifier,
+  deleteModifier,
+  getModifier,
+  listModifiers,
+} from "@waitron/catalogue";
 import { tenantId as brandTenantId } from "@waitron/shared";
 import "./errors.js";
 import type { Context, Hono } from "hono";
@@ -142,6 +149,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // DB CHECKs enforce, surfaced by `createOptionGroup`/`updateOptionGroup` as a clean 400 before the
   // write rather than the opaque 500 the CHECK would raise. The `?? 400` default already covers it; it
   // is listed explicitly as the house style requires.
+  "modifier.invalid": 400,
+  "modifier.not_found": 404,
+  "modifier.in_use": 409,
   "options.group_invalid": 400,
   // An invalid option-ITEM per-option-quantity config (max_quantity < 1 / non-integer), surfaced by
   // `createOptionGroupItem`/`updateOptionGroupItem` as a clean 400 before the write rather than the
@@ -314,6 +324,50 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       throw new AppError("authorization.not_permitted", { permission: CATALOGUE_WRITE_PERMISSION });
     }
   };
+
+  app.get("/management-api/modifiers", (c) =>
+    run(c, log, async () => {
+      const modifiers = await gated(requireManagementSession(c), (tx) =>
+        listModifiers(tx, tenantId),
+      );
+      return c.json({ modifiers });
+    }),
+  );
+  app.get("/management-api/modifiers/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "ModifierId");
+      const modifier = await gated(requireManagementSession(c), (tx) =>
+        getModifier(tx, tenantId, id),
+      );
+      return c.json({ modifier });
+    }),
+  );
+  app.post("/management-api/modifiers", (c) =>
+    run(c, log, async () => {
+      const body = await readJsonBody(c);
+      const modifier = await gated(requireManagementSession(c), (tx) =>
+        createModifier(tx, tenantId, body, deps.venueLocale ?? FALLBACK_LOCALE),
+      );
+      return c.json({ modifier }, 201);
+    }),
+  );
+  app.patch("/management-api/modifiers/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "ModifierId");
+      const body = await readJsonBody(c);
+      const modifier = await gated(requireManagementSession(c), (tx) =>
+        updateModifier(tx, tenantId, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
+      );
+      return c.json({ modifier });
+    }),
+  );
+  app.delete("/management-api/modifiers/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "ModifierId");
+      await gated(requireManagementSession(c), (tx) => deleteModifier(tx, tenantId, id));
+      return c.json({ ok: true });
+    }),
+  );
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {
@@ -710,6 +764,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         optionGroupIds?: unknown;
+        modifierIds?: unknown;
       }>(c);
       if (typeof body.catalogueId !== "string") {
         throw new AppError("management.request_invalid", { field: "catalogueId" });
@@ -742,7 +797,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       screenDietOverride(body.dietOverride);
       // The optional ordered attach set (Task 11): screened here (array of uuid-shaped strings) and
       // applied in the SAME transaction as the create, so a product and its option groups land atomically.
-      const optionGroupIds = parseOptionGroupIds(body.optionGroupIds);
+      if (body.modifierIds !== undefined && body.optionGroupIds !== undefined)
+        throw new AppError("modifier.invalid", { field: "modifierIds" });
+      const optionGroupIds = parseOptionGroupIds(
+        body.modifierIds === undefined ? body.optionGroupIds : body.modifierIds,
+      );
       const input = {
         catalogueId: body.catalogueId,
         categoryId: body.categoryId,
@@ -768,7 +827,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         if (optionGroupIds !== undefined) {
           await setProductOptionGroups(tx, tenantId, product.id, optionGroupIds);
         }
-        return product;
+        return { ...product, modifierIds: optionGroupIds ?? [] };
       });
       return c.json(created, 201);
     }),
@@ -794,6 +853,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         optionGroupIds?: unknown;
+        modifierIds?: unknown;
       }>(c);
       const patch: UpdateProductInput = {};
       if (body.descriptions !== undefined) {
@@ -852,7 +912,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // transaction as the field update. Absent leaves the product's attached groups untouched; `[]`
       // detaches them all. An empty `patch` alongside a present `optionGroupIds` is fine — `updateProduct`
       // always bumps `updatedAt`, so its `.set()` is never empty.
-      const optionGroupIds = parseOptionGroupIds(body.optionGroupIds);
+      if (body.modifierIds !== undefined && body.optionGroupIds !== undefined)
+        throw new AppError("modifier.invalid", { field: "modifierIds" });
+      const optionGroupIds = parseOptionGroupIds(
+        body.modifierIds === undefined ? body.optionGroupIds : body.modifierIds,
+      );
       await gated(sessionId, async (tx) => {
         await assertOwned(tx, "products", productId);
         if (patch.descriptions !== undefined)
@@ -989,7 +1053,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             patch.name,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
-        await updateOptionGroup(tx, groupId, patch);
+        await updateOptionGroup(tx, tenantId, groupId, patch);
       });
       return c.body(null, 204);
     }),
@@ -1138,7 +1202,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             patch.name,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
-        await updateOptionGroupItem(tx, itemId, patch);
+        await updateOptionGroupItem(tx, tenantId, itemId, patch);
       });
       return c.body(null, 204);
     }),

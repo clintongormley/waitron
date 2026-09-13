@@ -325,6 +325,52 @@ export interface TillOptionGroup {
   items: TillOptionItem[];
 }
 
+export type Modifier = { id: string; name: Record<string, string>; available: boolean } & (
+  | { type: "text" }
+  | {
+      type: "extras";
+      required: boolean;
+      maxTotalQuantity: number | null;
+      choices: (Pick<TillOptionItem, "id" | "name" | "priceDelta" | "maxQuantity"> &
+        Partial<Omit<TillOptionItem, "id" | "name" | "priceDelta" | "maxQuantity">> & {
+          available: boolean;
+          defaultQuantity: number;
+        })[];
+    }
+  | {
+      type: "options";
+      defaultChoiceId: string | null;
+      choices: (Pick<TillOptionItem, "id" | "name"> &
+        Partial<
+          Pick<TillOptionItem, "addAllergens" | "removeAllergens" | "addOrigins" | "removeOrigins">
+        > & {
+          available: boolean;
+        })[];
+    }
+  | {
+      type: "yes-no";
+      yesLabel: Record<string, string>;
+      noLabel: Record<string, string>;
+      defaultValue: boolean;
+    }
+);
+
+export type ModifierSelection =
+  | { modifierId: string; type: "text"; text: string }
+  | { modifierId: string; type: "extras"; choices: { choiceId: string; quantity: number }[] }
+  | { modifierId: string; type: "options"; choiceId: string }
+  | { modifierId: string; type: "yes-no"; value: boolean };
+
+export type ModifierSnapshot = { modifierId: string; name: Record<string, string> } & (
+  | { type: "text"; text: string }
+  | {
+      type: "extras";
+      choices: { choiceId: string; name: Record<string, string>; quantity: number }[];
+    }
+  | { type: "options"; choiceId: string; choiceName: Record<string, string> }
+  | { type: "yes-no"; value: boolean; label: Record<string, string> }
+);
+
 /** One sellable product from `GET /api/products` (mirrors catalogue's `AvailableProduct`). */
 export interface TillProduct {
   id: string;
@@ -366,16 +412,10 @@ export interface TillProduct {
    * carried for completeness — the switcher renders `TillMenu.name`, not this. OPTIONAL for the same
    * fixture reason as {@link catalogueId}. */
   catalogueName?: string;
-  /**
-   * The product's attached ACTIVE option groups (ordering modifiers, Task 3), each with its active items
-   * in sort order — `[]`/absent when the product has none. Mirrors catalogue's
-   * `AvailableProduct.optionGroups`, which `GET /api/products` always sends. OPTIONAL here (like
-   * {@link courseId}/{@link catalogueId}) purely so the many pre-modifier `TillProduct` fixtures need no
-   * update — an absent value reads as "no groups", the same as `[]`. Tapping a product that HAS a
-   * non-empty group opens the modifier picker (Task 10); one with none rings up straight away. NOT
-   * imported (the bundle rule).
-   */
+  /** Legacy group projection while the combined product manager is still in use. */
   optionGroups?: TillOptionGroup[];
+  /** Published modifier definitions; an absent field identifies the older group payload. */
+  modifiers?: Modifier[];
   /**
    * The product's PUBLISHED diet profile (dietary-classification, Task 6) — catalogue's `products.diet`,
    * the derivation folded with any staff override. The menu diet filter (`filterProductsByDiet`) reads
@@ -415,6 +455,7 @@ export interface ProductCatalogue {
 
 /** A product's distinct selling identity on one menu. Its id selects this price and option set. */
 export interface TillMenuOffer {
+  modifiers?: Modifier[];
   id: string;
   menuId: string;
   productId: string;
@@ -491,6 +532,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     courseId: offer.courseId,
     catalogueId: offer.menuId,
     catalogueName: offer.menuName,
+    ...(offer.modifiers === undefined ? {} : { modifiers: offer.modifiers }),
     optionGroups: offer.optionGroups.map((group) => ({
       id: group.id,
       name: group.name,
@@ -530,7 +572,7 @@ export type Doneness = (typeof DONENESS)[number];
  * byte-identical to before; when present it is a small positive integer the server re-prices and
  * re-validates against the option's authored `max_quantity`. `options` itself is ABSENT for a plain
  * line — never `[]` — so a no-modifier sale is byte-identical to before. The server (`POST /api/sales`,
- * `addTabRound`) reads `options ?? []`; a `weight` line carrying options is refused server-side. The
+ * `addTabRound`) validates the modifier quantities separately from the product quantity. The
  * client sends only the id (and the count when > 1): the running line price is DISPLAY-ONLY.
  *
  * `note` (a free-text kitchen instruction, capped at 200 chars server-side) and `doneness` (the meat
@@ -546,6 +588,7 @@ export interface SaleLine {
   menuItemId?: string;
   quantity: string;
   options?: { optionGroupItemId: string; quantity?: number }[];
+  modifierSelections?: ModifierSelection[];
   note?: string;
   doneness?: Doneness;
 }
@@ -594,6 +637,7 @@ export type Tender = CashTender | CardTender;
  * the mutable client basket, so the printed line list can never diverge from the invoice.
  */
 export interface TillSaleLine {
+  modifierSnapshots?: ModifierSnapshot[];
   descriptions: Record<string, string>;
   quantity: string;
   gross: string;
@@ -676,6 +720,7 @@ export interface HeldOrder {
       quantity?: number;
     }[];
     product?: TillProduct;
+    modifierSnapshots?: ModifierSnapshot[];
   })[];
 }
 
@@ -771,6 +816,7 @@ export interface AsServedAllergens {
  * imported — same bundle-decoupling rationale as every other type in this file.
  */
 export interface StationQueueItem {
+  modifierSnapshots?: ModifierSnapshot[];
   id: string;
   workingOrderLineId: string;
   state: TicketState;
@@ -961,6 +1007,7 @@ export interface DevDeviceList {
  * (localised client-side, per the never-store-formatted rule), like {@link StationQueueItem.descriptions}.
  */
 export interface ExpoItem {
+  modifierSnapshots?: ModifierSnapshot[];
   id: string;
   name: Record<string, string>;
   qty: string;
@@ -1267,6 +1314,8 @@ export interface TabResult {
  * `unitPriceGross` are decimal strings as the server sends them.
  */
 export interface TabLine {
+  descriptions?: Record<string, string>;
+  modifierSnapshots?: ModifierSnapshot[];
   lineNo: number;
   /** The line's product, or `null` for a CHILD MODIFIER line (ordering modifiers, Task 2) — a child has
    * no product of its own (it rides under its parent dish). Mirrors the server's nullable

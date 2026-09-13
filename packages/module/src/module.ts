@@ -102,6 +102,7 @@ export interface ServiceZoneSummary {
 }
 
 export interface ZoneMenuOffer {
+  readonly modifiers?: readonly import("@waitron/shared").Modifier[];
   readonly id: string;
   readonly menuId: string;
   readonly productId: string;

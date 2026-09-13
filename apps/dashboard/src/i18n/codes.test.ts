@@ -193,3 +193,10 @@ it("has a sentence for the option-group per-option allergen codes (modifier↔al
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
   }
 });
+it.each(["modifier.invalid", "modifier.not_found", "modifier.in_use"])(
+  "explains %s in both languages",
+  (code) => {
+    for (const locale of ["en", "es"])
+      expect(codeMessage(code, locale)).not.toBe(codeMessage("test.unmapped_code", locale));
+  },
+);

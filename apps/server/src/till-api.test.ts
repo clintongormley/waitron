@@ -18,6 +18,10 @@ import {
   createMenuItem,
   createMenuSection,
   createProduct,
+  createModifier,
+  updateModifier,
+  setProductOptionGroups,
+  setMenuItemOptionGroups,
 } from "@waitron/catalogue";
 import {
   AppError,
@@ -29,7 +33,7 @@ import {
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
-import type { TenantId } from "@waitron/shared";
+import type { Modifier, ModifierSelection, ModifierSnapshot, TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -1538,6 +1542,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           // Ordering modifiers (Task 3): the `AvailableProduct` shape carries attached option groups;
           // these seeded products have none, so an empty array.
           optionGroups: [],
+          modifiers: [],
         },
         {
           id: cervezaProduct.id,
@@ -1555,6 +1560,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           catalogueId: cervezaProduct.catalogueId,
           catalogueName: "Happy Hour",
           optionGroups: [],
+          modifiers: [],
         },
       ],
     });
@@ -3005,4 +3011,381 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
       error: { code: "placement.invalid", params: { field: "posX" } },
     });
   });
+});
+
+// HTTP serialization and deterministic pricing need no concurrency or privilege assertion here.
+// Each fixture owns a fresh product and offer so other catalogue expectations remain independent.
+async function modifierOfferFixture() {
+  const choiceId = randomUUID(),
+    otherChoiceId = randomUUID(),
+    extraId = randomUUID();
+  const data = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const product = await createProduct(tx, cfg.tenantId, {
+      catalogueId: aguaProduct.catalogueId,
+      categoryId: null,
+      descriptions: { es: "Prueba de modificadores" },
+      pricingUnit: "each",
+      unitPrice: "8.00",
+      vatClass: "general",
+    });
+    await tx.execute(
+      sql`insert into preparation_routes (tenant_id,location_id,product_id,station_id) select tenant_id,location_id,${product.id},station_id from preparation_routes where tenant_id=${cfg.tenantId} and product_id=${aguaProduct.id}`,
+    );
+    const note = await createModifier(
+      tx,
+      cfg.tenantId,
+      { type: "text", name: { es: "Nota" }, available: true },
+      "es",
+    );
+    const answer = await createModifier(
+      tx,
+      cfg.tenantId,
+      {
+        type: "yes-no",
+        name: { es: "Cubiertos" },
+        available: true,
+        yesLabel: { es: "Con cubiertos" },
+        noLabel: { es: "Sin cubiertos" },
+        defaultValue: true,
+      },
+      "es",
+    );
+    const option = await createModifier(
+      tx,
+      cfg.tenantId,
+      {
+        type: "options",
+        name: { es: "Preparación" },
+        available: true,
+        defaultChoiceId: otherChoiceId,
+        choices: [
+          { id: choiceId, name: { es: "Frío" }, available: true },
+          { id: otherChoiceId, name: { es: "Caliente" }, available: true },
+        ],
+      },
+      "es",
+    );
+    const extra = await createModifier(
+      tx,
+      cfg.tenantId,
+      {
+        type: "extras",
+        name: { es: "Extras" },
+        available: true,
+        required: false,
+        maxTotalQuantity: 2,
+        choices: [
+          {
+            id: extraId,
+            name: { es: "Queso" },
+            available: true,
+            priceDelta: "9.00",
+            maxQuantity: 2,
+            defaultQuantity: 0,
+          },
+        ],
+      },
+      "es",
+    );
+    await setProductOptionGroups(tx, cfg.tenantId, product.id, [
+      note.id,
+      answer.id,
+      option.id,
+      extra.id,
+    ]);
+    const section = await createMenuSection(tx, cfg.tenantId, {
+      menuId: aguaProduct.catalogueId,
+      name: { es: "Pruebas" },
+    });
+    const offer = await createMenuItem(tx, cfg.tenantId, {
+      menuId: aguaProduct.catalogueId,
+      sectionId: section.id,
+      productId: product.id,
+      grossPrice: "1.75",
+    });
+    await setMenuItemOptionGroups(tx, cfg.tenantId, offer.id, [
+      { groupId: note.id, options: [] },
+      { groupId: answer.id, options: [] },
+      { groupId: option.id, options: [{ optionId: choiceId, priceDelta: "0.00" }] },
+      { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
+    ]);
+    return { product, offer, note, answer, option, extra };
+  });
+  const selections: ModifierSelection[] = [
+    { modifierId: data.note.id, type: "text", text: "<b>sin sal</b>" },
+    { modifierId: data.answer.id, type: "yes-no", value: false },
+    { modifierId: data.option.id, type: "options", choiceId },
+    { modifierId: data.extra.id, type: "extras", choices: [{ choiceId: extraId, quantity: 2 }] },
+  ];
+  const snapshots: ModifierSnapshot[] = [
+    { modifierId: data.note.id, type: "text", name: { es: "Nota" }, text: "<b>sin sal</b>" },
+    {
+      modifierId: data.answer.id,
+      type: "yes-no",
+      name: { es: "Cubiertos" },
+      value: false,
+      label: { es: "Sin cubiertos" },
+    },
+    {
+      modifierId: data.option.id,
+      type: "options",
+      name: { es: "Preparación" },
+      choiceId,
+      choiceName: { es: "Frío" },
+    },
+    {
+      modifierId: data.extra.id,
+      type: "extras",
+      name: { es: "Extras" },
+      choices: [{ choiceId: extraId, name: { es: "Queso" }, quantity: 2 }],
+    },
+  ];
+  const app = new Hono();
+  mountTillApi(app, deps(suite.db), collect([]));
+  const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${tillDeviceCookie}`;
+  const headers = { "content-type": "application/json", cookie };
+  return { ...data, choiceId, otherChoiceId, extraId, selections, snapshots, app, headers };
+}
+
+describe("canonical modifier HTTP serialization", () => {
+  it("publishes all four modes, parks explicit answers and prices published extras exactly", async () => {
+    const f = await modifierOfferFixture();
+    const products = await f.app.request("/api/products", { headers: f.headers });
+    expect(products.status).toBe(200);
+    const productBody = (await products.json()) as {
+      products: { id: string; modifiers: Modifier[] }[];
+    };
+    expect(
+      productBody.products
+        .find((product) => product.id === f.product.id)!
+        .modifiers.map((modifier) => modifier.type),
+    ).toEqual(["text", "yes-no", "options", "extras"]);
+    const offers = await f.app.request("/api/default-service-zone/offers", { headers: f.headers });
+    expect(offers.status).toBe(200);
+    const offerBody = (await offers.json()) as { offers: { id: string; modifiers: Modifier[] }[] };
+    const published = offerBody.offers.find((offer) => offer.id === f.offer.id)!;
+    expect(published.modifiers).toContainEqual(
+      expect.objectContaining({
+        id: f.option.id,
+        type: "options",
+        defaultChoiceId: null,
+        choices: [expect.objectContaining({ id: f.choiceId })],
+      }),
+    );
+    expect(published.modifiers).toContainEqual(
+      expect.objectContaining({
+        id: f.extra.id,
+        type: "extras",
+        choices: [expect.objectContaining({ id: f.extraId, priceDelta: "0.35" })],
+      }),
+    );
+    const id = randomUUID();
+    const parked = await f.app.request("/api/working-orders", {
+      method: "POST",
+      headers: f.headers,
+      body: JSON.stringify({
+        id,
+        lines: [{ menuItemId: f.offer.id, quantity: "2", modifierSelections: f.selections }],
+      }),
+    });
+    expect(parked.status, await parked.clone().text()).toBe(200);
+    const got = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
+    expect(got.status).toBe(200);
+    const body = (await got.json()) as {
+      lines: {
+        workingOrderLineId: string;
+        modifierSelections?: ModifierSelection[];
+        modifierSnapshots?: ModifierSnapshot[];
+        quantity: string;
+      }[];
+    };
+    expect(body.lines[0]!.modifierSelections).toEqual(f.selections);
+    expect(body.lines[0]!.modifierSnapshots).toEqual(f.snapshots);
+    const listed = await f.app.request("/api/working-orders", { headers: f.headers });
+    expect(await listed.json()).toContainEqual(expect.objectContaining({ id, total: "4.90" }));
+    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await updateModifier(
+        tx,
+        cfg.tenantId,
+        f.answer.id,
+        {
+          type: "yes-no",
+          name: { es: "Nombre nuevo" },
+          yesLabel: { es: "Sí nuevo" },
+          noLabel: { es: "No nuevo" },
+          defaultValue: true,
+          available: true,
+        },
+        "es",
+      );
+    });
+    const resumed = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
+    expect(
+      ((await resumed.json()) as { lines: { modifierSnapshots: ModifierSnapshot[] }[] }).lines[0]!
+        .modifierSnapshots,
+    ).toEqual(f.snapshots);
+    const edited = await f.app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: f.headers,
+      body: JSON.stringify({
+        lines: [
+          {
+            workingOrderLineId: body.lines[0]!.workingOrderLineId,
+            menuItemId: f.offer.id,
+            quantity: "4",
+            modifierSelections: f.selections,
+          },
+        ],
+      }),
+    });
+    expect(edited.status, await edited.clone().text()).toBe(200);
+    const afterEdit = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
+    expect(
+      ((await afterEdit.json()) as { lines: { modifierSnapshots: ModifierSnapshot[] }[] }).lines[0]!
+        .modifierSnapshots,
+    ).toEqual(f.snapshots);
+    const editedList = await f.app.request("/api/working-orders", { headers: f.headers });
+    expect(await editedList.json()).toContainEqual(expect.objectContaining({ id, total: "9.80" }));
+  });
+
+  it.each(["unpublished", "foreign", "unavailable"] as const)(
+    "refuses a %s option through the working-order request",
+    async (kind) => {
+      const f = await modifierOfferFixture();
+      let choiceId = kind === "unpublished" ? f.otherChoiceId : randomUUID();
+      if (kind === "foreign") {
+        const foreignTenant = await seedTenant(suite.db);
+        await withTenant(suite.db, foreignTenant, async (tx) => {
+          await asAppUser(tx);
+          await createModifier(
+            tx,
+            foreignTenant,
+            {
+              type: "options",
+              name: { es: "Otro local" },
+              available: true,
+              defaultChoiceId: null,
+              choices: [{ id: choiceId, name: { es: "Otra opción" }, available: true }],
+            },
+            "es",
+          );
+        });
+      }
+      if (kind === "unavailable") {
+        choiceId = f.choiceId;
+        await withTenant(suite.db, cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          if (f.option.type !== "options") throw new Error("options fixture");
+          const { id, ...input } = f.option;
+          await updateModifier(
+            tx,
+            cfg.tenantId,
+            id,
+            {
+              ...input,
+              choices: input.choices.map((choice) => ({
+                ...choice,
+                available: choice.id !== f.choiceId,
+              })),
+            },
+            "es",
+          );
+        });
+      }
+      const selections = f.selections.map((selection) =>
+        selection.type === "options" ? { ...selection, choiceId } : selection,
+      );
+      const response = await f.app.request("/api/working-orders", {
+        method: "POST",
+        headers: f.headers,
+        body: JSON.stringify({
+          id: randomUUID(),
+          lines: [{ menuItemId: f.offer.id, quantity: "1", modifierSelections: selections }],
+        }),
+      });
+      expect(response.status, await response.clone().text()).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code: "modifier.invalid" } });
+    },
+  );
+
+  it("carries all modes through table opening and a later round", async () => {
+    const f = await modifierOfferFixture();
+    const zone = await suite.db.execute<{ id: string }>(
+      sql`insert into floor_zones (tenant_id,location_id,name) values (${cfg.tenantId},${cfg.locationId},'Modifier tables') returning id`,
+    );
+    const zoneId = zone.rows[0]!.id;
+    await suite.db.execute(
+      sql`with department as (insert into departments (tenant_id,location_id,name,trading_name,default_service_mode) values (${cfg.tenantId},${cfg.locationId},'Modifier tables','Restaurant','table_tab') returning id) insert into zone_service_policies (tenant_id,location_id,zone_id,department_id) select ${cfg.tenantId},${cfg.locationId},${zoneId},department.id from department`,
+    );
+    await suite.db.execute(
+      sql`insert into zone_menus (tenant_id,zone_id,menu_id) values (${cfg.tenantId},${zoneId},${aguaProduct.catalogueId})`,
+    );
+    await suite.db.execute(
+      sql`update zone_service_policies set default_menu_id=${aguaProduct.catalogueId} where tenant_id=${cfg.tenantId} and zone_id=${zoneId}`,
+    );
+    const table = await f.app.request("/api/tables", {
+      method: "POST",
+      headers: f.headers,
+      body: JSON.stringify({ label: "Modifiers", zoneId }),
+    });
+    expect(table.status).toBe(200);
+    const { id: tableId } = (await table.json()) as { id: string };
+    const line = { menuItemId: f.offer.id, quantity: "1", modifierSelections: f.selections };
+    const opened = await f.app.request(`/api/tables/${tableId}/tab`, {
+      method: "POST",
+      headers: f.headers,
+      body: JSON.stringify({ lines: [line] }),
+    });
+    expect(opened.status, await opened.clone().text()).toBe(200);
+    const { tabId } = (await opened.json()) as { tabId: string };
+    const round = await f.app.request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      headers: f.headers,
+      body: JSON.stringify({ lines: [line] }),
+    });
+    expect(round.status, await round.clone().text()).toBe(200);
+    const got = await f.app.request(`/api/working-orders/${tabId}`, { headers: f.headers });
+    expect(got.status).toBe(200);
+    const body = (await got.json()) as { lines: { modifierSnapshots: ModifierSnapshot[] }[] };
+    expect(body.lines.map((line) => line.modifierSnapshots)).toEqual([f.snapshots, f.snapshots]);
+  });
+});
+
+describe("canonical modifier checkout refusal", () => {
+  it.each(["/api/working-orders", "/api/sales"])(
+    "rejects a negative repeated extra at %s before any write",
+    async (path) => {
+      const f = await modifierOfferFixture();
+      const id = randomUUID();
+      const selections = f.selections.map((selection) =>
+        selection.type === "extras"
+          ? {
+              ...selection,
+              choices: [
+                { choiceId: f.extraId, quantity: 2 },
+                { choiceId: f.extraId, quantity: -1 },
+              ],
+            }
+          : selection,
+      );
+      const response = await f.app.request(path, {
+        method: "POST",
+        headers: f.headers,
+        body: JSON.stringify({
+          id,
+          workingOrderId: id,
+          lines: [{ menuItemId: f.offer.id, quantity: "1", modifierSelections: selections }],
+          tender: { method: "cash", amount: "20.00" },
+        }),
+      });
+      expect(response.status, await response.clone().text()).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code: "modifier.invalid" } });
+      const stored = await suite.db.execute(
+        sql`select id from working_orders where tenant_id=${cfg.tenantId} and id=${id}`,
+      );
+      expect(stored.rows).toEqual([]);
+    },
+  );
 });

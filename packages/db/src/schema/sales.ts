@@ -1,3 +1,4 @@
+import type { ModifierSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -217,6 +218,10 @@ export const saleLines = pgTable(
     saleId: uuid("sale_id").notNull(),
     lineNo: integer("line_no").notNull(),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
+    modifierSnapshots: jsonb("modifier_snapshots")
+      .$type<ModifierSnapshot[]>()
+      .notNull()
+      .default([]),
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),

@@ -33,6 +33,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Elige una imagen de tu biblioteca.",
   },
 
+  "modifier.invalid": {
+    en: "Check the modifier's names, choices, defaults and quantity limits.",
+    es: "Revisa los nombres, las opciones, los valores predeterminados y los límites de cantidad del modificador.",
+  },
+  "modifier.not_found": {
+    en: "This modifier could not be found. Refresh the list and try again.",
+    es: "No se encontró este modificador. Actualiza la lista e inténtalo de nuevo.",
+  },
+  "modifier.in_use": {
+    en: "This modifier is used by a product, menu or saved order. Make it unavailable, or detach it before changing its type.",
+    es: "Este modificador se usa en un producto, menú o pedido guardado. Márcalo como no disponible o desvincúlalo antes de cambiar su tipo.",
+  },
   "printer.probe_busy": {
     en: "Several addresses are being checked. Wait a moment and try again.",
     es: "Se están comprobando varias direcciones. Espera un momento e inténtalo de nuevo.",

@@ -83,3 +83,7 @@ export { firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
 export { sqlStateOf } from "./sql-state.js";
 export { quoteLiteral } from "./sql-literal.js";
 export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-updates.js";
+
+export type { ModifierSnapshot } from "./modifier-snapshots.js";
+
+export * from "./modifiers.js";
