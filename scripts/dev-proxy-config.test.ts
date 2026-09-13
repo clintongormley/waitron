@@ -19,7 +19,7 @@ const originalStateDir = process.env.WAITRON_STATE_DIR;
 const stateDir = mkdtempSync(join(import.meta.dirname, "dev-proxy-state-"));
 
 const EXPECTED_ROUTES: Record<string, string[]> = {
-  dashboard: ["/management-api", "/media"],
+  dashboard: ["/api", "/management-api", "/media"],
   setup: ["/setup-api"],
   till: ["/api", "/media"],
 };

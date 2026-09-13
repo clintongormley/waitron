@@ -14,6 +14,9 @@ export default defineConfig({
     // duplicate `pnpm dev`, which also collides 8080).
     strictPort: true,
     proxy: {
+      // Public API the shell reads before a session exists (content languages on the login screen)
+      // and the backup/recovery routes; same-origin in production, so proxy it to the API in dev.
+      "/api": devServerProxy(),
       "/management-api": devServerProxy(),
       // Product images the catalogue screens render (`<img src="/media/<sha256>.<ext>">`) are served
       // same-origin in production; in dev the app runs on its own port, so proxy `/media` to the API.
