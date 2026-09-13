@@ -330,3 +330,85 @@ test("wt-change bubbles and crosses shadow boundaries", async () => {
   el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')[0].click();
   expect(received?.detail.value).toBe("gluten-free");
 });
+
+test("the add row is hidden unless allowAdd is set", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "kosher");
+  expect(el.shadowRoot!.querySelector(".add")).toBeNull();
+});
+
+test("the add row appears for unmatched text once allowAdd is set, and not for an exact match", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.allowAdd = true;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "kosher");
+  expect(el.shadowRoot!.querySelector(".add")?.textContent?.trim()).toBe("Add 'kosher'");
+  await userEvent.clear(search);
+  await userEvent.type(search, "Vegan");
+  expect(el.shadowRoot!.querySelector(".add")).toBeNull();
+});
+
+test("the add row replaces noResultsLabel, never shows both", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.allowAdd = true;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "kosher");
+  expect(el.shadowRoot!.querySelector(".empty")).toBeNull();
+});
+
+test("activating the add row emits wt-combobox-add with the typed text and never creates the option itself", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.allowAdd = true;
+  await el.updateComplete;
+  let received: string | undefined;
+  el.addEventListener("wt-combobox-add", (e) => {
+    received = (e as CustomEvent<{ text: string }>).detail.text;
+  });
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "kosher");
+  await userEvent.click(el.shadowRoot!.querySelector(".add")!);
+  expect(received).toBe("kosher");
+  expect(el.options).toEqual(TAGS);
+  expect(el.value).toBe("");
+});
+
+test("activating add closes a single-select panel but leaves a multi-select panel open", async () => {
+  const single = await mountWithOptions();
+  single.el.allowAdd = true;
+  await single.el.updateComplete;
+  await userEvent.click(single.trigger);
+  await userEvent.type(single.el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "kosher");
+  await userEvent.click(single.el.shadowRoot!.querySelector(".add")!);
+  expect(single.popup.matches(":popover-open")).toBe(false);
+
+  const multi = await mountCombobox('<wt-combobox label="Dietary tags" multiple></wt-combobox>');
+  multi.el.options = TAGS;
+  multi.el.allowAdd = true;
+  await multi.el.updateComplete;
+  await userEvent.click(multi.trigger);
+  await userEvent.type(multi.el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "kosher");
+  await userEvent.click(multi.el.shadowRoot!.querySelector(".add")!);
+  expect(multi.popup.matches(":popover-open")).toBe(true);
+});
+
+test("Enter on the active add row also activates it", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.allowAdd = true;
+  await el.updateComplete;
+  let received: string | undefined;
+  el.addEventListener("wt-combobox-add", (e) => {
+    received = (e as CustomEvent<{ text: string }>).detail.text;
+  });
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "kosher");
+  await userEvent.keyboard("{End}{Enter}");
+  expect(received).toBe("kosher");
+});

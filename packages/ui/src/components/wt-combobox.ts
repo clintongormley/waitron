@@ -126,6 +126,11 @@ export class WtCombobox extends LitElement {
         padding: var(--wt-space-2) var(--wt-space-3);
         color: var(--wt-color-text-muted);
       }
+
+      .add {
+        padding: var(--wt-space-2) var(--wt-space-3);
+        font-weight: var(--wt-font-weight-bold);
+      }
     `,
   ];
 
@@ -140,6 +145,8 @@ export class WtCombobox extends LitElement {
   @property() placeholder = "";
   @property({ attribute: false }) countLabel: (count: number) => string = (count) =>
     `${count} selected`;
+  @property({ type: Boolean, reflect: true, attribute: "allow-add" }) allowAdd = false;
+  @property({ attribute: false }) addLabel: (text: string) => string = (text) => `Add '${text}'`;
 
   @state() private expanded = false;
   @state() private search = "";
@@ -158,8 +165,20 @@ export class WtCombobox extends LitElement {
     return this.options.filter((option) => option.label.toLowerCase().includes(query));
   }
 
+  private get trimmedSearch(): string {
+    return this.search.trim();
+  }
+
+  /** The add row offers only what no existing option already is, matched on the whole label. */
+  private get showAddRow(): boolean {
+    if (!this.allowAdd || !this.trimmedSearch) return false;
+    const query = this.trimmedSearch.toLowerCase();
+    return !this.options.some((option) => option.label.toLowerCase() === query);
+  }
+
+  /** Keyboard navigation counts the add row as the last row, after the filtered options. */
   private get rowCount(): number {
-    return this.filteredOptions.length;
+    return this.filteredOptions.length + (this.showAddRow ? 1 : 0);
   }
 
   private isSelected(optionValue: string): boolean {
@@ -191,6 +210,19 @@ export class WtCombobox extends LitElement {
     }
   }
 
+  /** Announces the typed text; creating the option is the consumer's, never this component's. */
+  private addNew(sourceEvent: Event): void {
+    sourceEvent.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("wt-combobox-add", {
+        detail: { text: this.trimmedSearch },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    if (!this.multiple) this.closeAndReturnFocus();
+  }
+
   private closeAndReturnFocus(): void {
     if (this.popup.matches(":popover-open")) this.popup.hidePopover();
     this.trigger.focus();
@@ -219,12 +251,16 @@ export class WtCombobox extends LitElement {
         event.preventDefault();
         this.activeIndex = this.rowCount - 1;
         return;
-      case "Enter":
+      case "Enter": {
         event.preventDefault();
-        if (this.activeIndex >= 0 && this.activeIndex < this.filteredOptions.length) {
-          this.commitSelection(this.filteredOptions[this.activeIndex].value, event);
+        const options = this.filteredOptions;
+        if (this.activeIndex >= 0 && this.activeIndex < options.length) {
+          this.commitSelection(options[this.activeIndex].value, event);
+        } else if (this.activeIndex === options.length && this.showAddRow) {
+          this.addNew(event);
         }
         return;
+      }
       default:
         return;
     }
@@ -339,7 +375,29 @@ export class WtCombobox extends LitElement {
             `,
           )}
           ${
-            this.filteredOptions.length === 0
+            this.showAddRow
+              ? html`
+                  <li
+                    id=${`${this.listboxId}-${this.filteredOptions.length}`}
+                    class=${
+                      this.filteredOptions.length === this.activeIndex
+                        ? "option add active"
+                        : "option add"
+                    }
+                    role="option"
+                    aria-selected="false"
+                    @click=${(event: MouseEvent) => {
+                      this.activeIndex = this.filteredOptions.length;
+                      this.addNew(event);
+                    }}
+                  >
+                    ${this.addLabel(this.trimmedSearch)}
+                  </li>
+                `
+              : nothing
+          }
+          ${
+            this.filteredOptions.length === 0 && !this.showAddRow
               ? html`<li class="empty" role="presentation">${this.noResultsLabel}</li>`
               : nothing
           }
