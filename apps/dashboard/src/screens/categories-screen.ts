@@ -18,6 +18,10 @@ import "../widgets/category-membership-picker.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
+import "@waitron/ui/src/components/wt-icon.js";
+
+const MODE_KEY = "waitron.categories.mode";
+type ViewMode = "tree" | "flat";
 
 @customElement("dashboard-categories-screen")
 export class CategoriesScreen extends LitElement {
@@ -44,20 +48,53 @@ export class CategoriesScreen extends LitElement {
         margin: var(--wt-space-4) 0;
       }
       .filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: var(--wt-space-3);
         margin-block: var(--wt-space-3);
+      }
+      .mode-toggle {
+        display: flex;
+        gap: var(--wt-space-2);
       }
       .error {
         color: var(--wt-color-danger);
       }
-      .thumbnail {
+      .thumbnail,
+      .thumbnail-placeholder {
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
+        flex: none;
+      }
+      .thumbnail {
         object-fit: cover;
         border-radius: var(--wt-radius-sm);
+      }
+      .name-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .swatch {
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
+        flex: none;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+      }
+      .swatch.none {
+        background: transparent;
       }
       .name {
         overflow-wrap: anywhere;
         text-align: start;
+      }
+      /* Marks a tree-mode ancestor kept only to show a matching descendant's path — see the
+         filtering block in render(). wt-button's part="button" is what a consumer can style from
+         outside its shadow root (see "Page composition" in design-system.md). */
+      wt-button.name[data-muted]::part(button) {
+        color: var(--wt-color-text-muted);
       }
       label {
         display: grid;
@@ -76,6 +113,7 @@ export class CategoriesScreen extends LitElement {
   @state() private fieldErrors: Record<string, string> = {};
   @state() private search = "";
   @state() private productSearch = "";
+  @state() private mode: ViewMode = this.#readMode();
   @state() private selected: string | null = null;
   @state() private editorOpen = false;
   @state() private edited: CategorySummary | null = null;
@@ -94,6 +132,21 @@ export class CategoriesScreen extends LitElement {
   protected override updated(changes: PropertyValues<this>) {
     if (changes.has("api") && this.api) void this.#load();
   }
+  #readMode(): ViewMode {
+    try {
+      return localStorage.getItem(MODE_KEY) === "flat" ? "flat" : "tree";
+    } catch {
+      return "tree";
+    }
+  }
+  #setMode(mode: ViewMode): void {
+    this.mode = mode;
+    try {
+      localStorage.setItem(MODE_KEY, mode);
+    } catch {
+      // The remembered view is a convenience; browsing without storage still works.
+    }
+  }
   async #load(): Promise<void> {
     this.loadError = false;
     try {
@@ -109,13 +162,17 @@ export class CategoriesScreen extends LitElement {
           this.products = value;
         }),
       ]);
+      // A `?category=<id>` deep link opens the editor rather than selecting the category (which
+      // used to show its products below). An unknown id is ignored. Clearing the param stops a
+      // refresh reopening the editor.
       const linked = new URL(location.href).searchParams.get("category");
-      if (
-        this.selected === null &&
-        linked &&
-        this.categories.some((category) => category.id === linked)
-      )
-        this.selected = linked;
+      const category = linked ? this.categories.find((item) => item.id === linked) : undefined;
+      if (category) {
+        this.#edit(category);
+        const url = new URL(location.href);
+        url.searchParams.delete("category");
+        history.replaceState(null, "", url);
+      }
     } catch {
       this.loadError = true;
     } finally {
@@ -214,38 +271,56 @@ export class CategoriesScreen extends LitElement {
     }
     await this.#load();
   }
-  #columns(): DataTableColumn<CategorySummary>[] {
+  #rowParent = (category: CategorySummary): string | null => category.parentId;
+  #swatch(color: string | null) {
+    return color
+      ? html`<span class="swatch" style=${`background:${color}`} aria-hidden="true"></span>`
+      : html`<span class="swatch none" aria-hidden="true"></span>`;
+  }
+  #nameCell(category: CategorySummary, matchIds: ReadonlySet<string>) {
+    // In tree mode a row can be present only to keep a matching descendant's ancestor chain
+    // visible (see the filtering block in render()); mute those so the match itself stands out.
+    const muted = this.mode === "tree" && !matchIds.has(category.id);
+    return html`<span class="name-cell">
+      ${
+        category.image
+          ? html`<img
+              class="thumbnail"
+              src=${`/media/${encodeURIComponent(category.image)}`}
+              alt=""
+            />`
+          : html`<span class="thumbnail-placeholder" aria-hidden="true"></span>`
+      }
+      ${this.#swatch(category.color)}
+      <wt-button
+        class="name"
+        variant="ghost"
+        data-category=${category.id}
+        ?data-muted=${muted}
+        @click=${() => {
+          this.selected = category.id;
+          this.productSearch = "";
+        }}
+        >${this.#text(category.name)}</wt-button
+      >
+    </span>`;
+  }
+  #columns(matchIds: ReadonlySet<string>): DataTableColumn<CategorySummary>[] {
     return [
-      {
-        key: "image",
-        label: t("image.label"),
-        cell: (category) =>
-          category.image
-            ? html`<img
-                class="thumbnail"
-                src=${`/media/${encodeURIComponent(category.image)}`}
-                alt=${this.#text(category.name)}
-              />`
-            : nothing,
-      },
       {
         key: "name",
         label: t("categories.name"),
-        cell: (category) =>
-          html`<wt-button
-            class="name"
-            variant="ghost"
-            data-category=${category.id}
-            @click=${() => {
-              this.selected = category.id;
-              this.productSearch = "";
-            }}
-            >${this.#text(category.name)}</wt-button
-          >`,
+        cell: (category) => this.#nameCell(category, matchIds),
       },
       {
         key: "parent",
         label: t("categories.parent"),
+        sortValue: (category) => {
+          const parent = this.categories.find((item) => item.id === category.parentId);
+          return parent
+            ? categoryPath(parent, this.categories, currentLocale(), this.languages)
+            : "";
+        },
         cell: (category) => {
           const parent = this.categories.find((item) => item.id === category.parentId);
           return parent
@@ -278,6 +353,11 @@ export class CategoriesScreen extends LitElement {
           >`,
       },
     ];
+  }
+  /** Tree mode nests by `parentId` and shows the hierarchy itself, so a separate Parent column
+   * would repeat what the indentation already shows. */
+  #treeColumns(matchIds: ReadonlySet<string>): DataTableColumn<CategorySummary>[] {
+    return this.#columns(matchIds).filter((column) => column.key !== "parent");
   }
   #productColumns(): DataTableColumn<Product>[] {
     return [
@@ -315,13 +395,36 @@ export class CategoriesScreen extends LitElement {
       },
     ];
   }
+  /** Categories whose own (translated) name matches the filter — the tree-mode ancestor walk
+   * below extends this into the full set of rows the table receives. */
+  #matches(): CategorySummary[] {
+    const term = this.search.toLocaleLowerCase();
+    return this.categories.filter((category) =>
+      this.#text(category.name).toLocaleLowerCase().includes(term),
+    );
+  }
   override render() {
     const selected = this.categories.find((category) => category.id === this.selected);
-    const filtered = this.categories.filter((category) =>
-      categoryPath(category, this.categories, currentLocale(), this.languages)
-        .toLocaleLowerCase()
-        .includes(this.search.toLocaleLowerCase()),
-    );
+    const matches = this.#matches();
+    const matchIds = new Set(matches.map((category) => category.id));
+    let rows: CategorySummary[];
+    if (this.mode === "flat") {
+      rows = matches;
+    } else {
+      // Tree mode must keep every matching row's ancestor chain too, or wt-data-table (which only
+      // nests within the rows it is given) would render a match as a false top-level row.
+      const included = new Set(matchIds);
+      for (const category of matches) {
+        const visited = new Set<string>();
+        let current: CategorySummary | undefined = category;
+        while (current?.parentId && !visited.has(current.parentId)) {
+          visited.add(current.parentId);
+          included.add(current.parentId);
+          current = this.categories.find((item) => item.id === current!.parentId);
+        }
+      }
+      rows = this.categories.filter((category) => included.has(category.id));
+    }
     const members = this.products.filter(
       (product) =>
         product.categoryIds.includes(this.selected ?? "") &&
@@ -331,15 +434,14 @@ export class CategoriesScreen extends LitElement {
     );
     return html`<div class="heading">
         <h1>${t("nav.categories")}</h1>
-        <wt-row-actions label=${t("categories.actions")}
-          ><wt-button
-            align="start"
-            data-test="create-category"
-            variant="ghost"
-            @click=${() => this.#edit(null)}
-            >${t("categories.create")}</wt-button
-          ></wt-row-actions
-        >
+        <wt-button
+          round
+          variant="primary"
+          data-test="create-category"
+          aria-label=${t("categories.create")}
+          @click=${() => this.#edit(null)}
+          ><wt-icon name="plus"></wt-icon
+        ></wt-button>
       </div>
       ${this.loading ? html`<wt-spinner></wt-spinner>` : nothing}
       ${
@@ -352,20 +454,40 @@ export class CategoriesScreen extends LitElement {
               >`
           : nothing
       }
-      <wt-input
-        class="filters"
-        name="category-search"
-        label=${t("categories.search")}
-        .value=${this.search}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.search = event.detail.value;
-        }}
-      ></wt-input>
+      <div class="filters">
+        <wt-input
+          name="category-search"
+          label=${t("categories.search")}
+          .value=${this.search}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.search = event.detail.value;
+          }}
+        ></wt-input>
+        <div class="mode-toggle">
+          <wt-button
+            data-test="mode-tree"
+            variant=${this.mode === "tree" ? "primary" : "secondary"}
+            aria-pressed=${this.mode === "tree" ? "true" : "false"}
+            @click=${() => this.#setMode("tree")}
+            >${t("categories.mode_tree")}</wt-button
+          >
+          <wt-button
+            data-test="mode-flat"
+            variant=${this.mode === "flat" ? "primary" : "secondary"}
+            aria-pressed=${this.mode === "flat" ? "true" : "false"}
+            @click=${() => this.#setMode("flat")}
+            >${t("categories.mode_flat")}</wt-button
+          >
+        </div>
+      </div>
       <wt-data-table
-        .rows=${filtered}
-        .columns=${this.#columns()}
+        .rows=${rows}
+        .columns=${this.mode === "tree" ? this.#treeColumns(matchIds) : this.#columns(matchIds)}
         .rowKey=${(category: CategorySummary) => category.id}
+        .rowParent=${this.mode === "tree" ? this.#rowParent : undefined}
+        collapseLabel=${t("categories.collapse")}
+        expandLabel=${t("categories.expand")}
         .emptyMessage=${t("categories.empty")}
       ></wt-data-table>
       ${

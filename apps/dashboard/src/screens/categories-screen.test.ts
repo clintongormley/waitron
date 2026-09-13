@@ -1,8 +1,14 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { DashboardApi, CategorySummary, Product } from "../api/client.js";
+import { t } from "../i18n/t.js";
 afterEach(cleanupWidgets);
+// The tree/flat toggle persists to localStorage; a leftover value from an earlier test would make
+// the "defaults to tree mode" assumption order-dependent.
+beforeEach(() => {
+  localStorage.clear();
+});
 const food: CategorySummary = {
   id: "food",
   name: { en: "Food" },
@@ -271,7 +277,92 @@ it.each([
   },
 );
 
-it("opens the directly assigned products from an image-usage category link", async () => {
+it("shows a round create button by the heading", async () => {
+  const { el } = await mount();
+  const add = el.shadowRoot!.querySelector('wt-button[round][data-test="create-category"]');
+  expect(add).not.toBeNull();
+  expect(add!.getAttribute("aria-label")).toBeTruthy();
+});
+
+it("defaults to tree mode and nests children", async () => {
+  const fx = apiFixture();
+  const breakfast: CategorySummary = {
+    id: "breakfast",
+    name: { en: "Breakfast" },
+    image: null,
+    color: null,
+    parentId: "food",
+  };
+  fx.api.listCategories.mockResolvedValue([food, breakfast]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(table.rows.length).toBe(2));
+  expect(table.rowParent).toBeDefined();
+  await table.updateComplete;
+  const rows = [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")];
+  const keys = rows.map((row) => row.getAttribute("data-row-key"));
+  expect(keys.indexOf("food")).toBeLessThan(keys.indexOf("breakfast"));
+  const breakfastRow = table.shadowRoot!.querySelector('tr[data-row-key="breakfast"]')!;
+  expect(breakfastRow.getAttribute("aria-level")).toBe("2");
+});
+
+it("switches to flat mode and shows a Parent column", async () => {
+  const { el } = await mount();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="mode-flat"]')!.click();
+  await el.updateComplete;
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  expect(table.rowParent).toBeUndefined();
+  const headers = [...table.shadowRoot!.querySelectorAll("th")].map((th) => th.textContent?.trim());
+  expect(headers.some((header) => header?.includes(t("categories.parent")))).toBe(true);
+});
+
+it("filters by name keeping ancestors in tree mode", async () => {
+  const fx = apiFixture();
+  const breakfast: CategorySummary = {
+    id: "breakfast",
+    name: { en: "Breakfast" },
+    image: null,
+    color: null,
+    parentId: "food",
+  };
+  const eggs: CategorySummary = {
+    id: "eggs",
+    name: { en: "Eggs" },
+    image: null,
+    color: null,
+    parentId: "breakfast",
+  };
+  fx.api.listCategories.mockResolvedValue([food, breakfast, eggs, drink]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(table.rows.length).toBe(4));
+  el.shadowRoot!.querySelector('[name="category-search"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "egg" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const ids = table.rows.map((row) => (row as CategorySummary).id).sort();
+  expect(ids).toEqual(["breakfast", "eggs", "food"]);
+});
+
+it("renders each name with its colour square", async () => {
+  const fx = apiFixture();
+  fx.api.listCategories.mockResolvedValue([{ ...food, color: "#b12525" }]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(table.rows.length).toBe(1));
+  await table.updateComplete;
+  const swatch = table.shadowRoot!.querySelector<HTMLElement>(".swatch")!;
+  expect(swatch.getAttribute("style")).toContain("#b12525");
+});
+
+it("opens the category editor from a ?category= deep link", async () => {
   const previous = location.href;
   const linked = new URL(previous);
   linked.searchParams.set("category", "food");
@@ -279,12 +370,23 @@ it("opens the directly assigned products from an image-usage category link", asy
   try {
     const { el } = await mount();
     await vi.waitFor(() =>
-      expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-          '[data-test="category-products"]',
-        )?.rows,
-      ).toEqual([product]),
+      expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(true),
     );
+    expect((el as unknown as { edited: CategorySummary | null }).edited?.id).toBe("food");
+    expect(new URL(location.href).searchParams.get("category")).toBeNull();
+  } finally {
+    history.replaceState(null, "", previous);
+  }
+});
+
+it("ignores a ?category= deep link for an unknown id", async () => {
+  const previous = location.href;
+  const linked = new URL(previous);
+  linked.searchParams.set("category", "nope");
+  history.replaceState(null, "", linked);
+  try {
+    const { el } = await mount();
+    expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
   } finally {
     history.replaceState(null, "", previous);
   }
