@@ -357,8 +357,8 @@ container or browser test** — most of these rules exist because a test passed 
   every hook, so a hand-isolated fixture writes into the real repo. Run such a suite once under
   `GIT_DIR` before trusting it.
 - **Browser-mode packages run vitest in real headless Chromium** — see §2 for the concurrency rule.
-  Which packages those are is a property to check (`grep -l 'browser' */vitest.config.ts`), not a
-  number to remember: the count has already gone stale once.
+  Which packages those are is a property to check (`grep -l browser */*/vitest.config.ts` — two
+  levels, not one), never a number to remember: the count has already gone stale once.
 - **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.** A module
   mock cannot replace an already-loaded browser ES module.
 - **Browser recovery tests read the native control inside a shared component.** A host's `checked`

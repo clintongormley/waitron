@@ -229,8 +229,8 @@ What that leaves open:
   went through `finish-branch`, an independent review, and green CI, and the first person to open the
   screen got a 500. Every layer read code or ran tests; none opened the page. The test-shape lesson —
   a matrix that varies two things separately and never crosses them proves less than it looks — is the
-  reusable half. **Half of it is written, not yet merged** — on the certificate-pages branch, which hit
-  the same wall from the other side — a corrupted colour value that every string assertion accepted — and
+  reusable half. **Half of it is now a rule**, in `CLAUDE.md` §4 — written on the
+  certificate-pages branch, which hit the same wall from the other side — a corrupted colour value that every string assertion accepted — and
   added the §4 rule covering it: a page asserted as a string, or reached only through its API, has
   nothing checking that it renders, so open it in the browser packages' real Chromium. **Next action:**
   the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
