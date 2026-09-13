@@ -10,11 +10,13 @@ export interface Category {
   id: string;
   name: Record<string, string>;
   image: string | null;
+  color: string | null;
   parentId: string | null;
 }
 export interface CategoryInput {
   name: Record<string, string>;
   image?: string | null;
+  color?: string | null;
   parentId?: string | null;
 }
 export interface ProductCategoryMembership {
@@ -29,6 +31,7 @@ const columns = {
   id: categories.id,
   name: categories.name,
   image: categoryDetails.image,
+  color: categoryDetails.color,
   parentId: categoryDetails.parentId,
 };
 
@@ -100,6 +103,10 @@ async function validateImage(
   );
   if (!image.rows.length) throw new AppError("category.image_not_found", {});
 }
+function validateColor(color: string | null | undefined): void {
+  if (color === undefined || color === null) return;
+  if (!/^#[0-9a-f]{6}$/.test(color)) throw new AppError("category.color_invalid", {});
+}
 export async function createCategory(
   tx: Transaction,
   tenantId: string,
@@ -107,6 +114,7 @@ export async function createCategory(
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
   await validateContentTranslations(tx, tenantId, input.name, fallbackLanguage);
+  validateColor(input.color);
   await lockCategories(tx, tenantId);
   const id = crypto.randomUUID();
   await validateParent(tx, tenantId, id, input.parentId ?? null);
@@ -117,6 +125,7 @@ export async function createCategory(
     categoryId: id,
     parentId: input.parentId ?? null,
     image: input.image ?? null,
+    color: input.color ?? null,
   });
   return readCategory(tx, tenantId, id);
 }
@@ -134,18 +143,20 @@ export async function updateCategory(
   const current = await readCategory(tx, tenantId, id);
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;
   const image = patch.image === undefined ? current.image : patch.image;
+  const color = patch.color === undefined ? current.color : patch.color;
   await validateParent(tx, tenantId, id, parentId);
   await validateImage(tx, tenantId, image);
+  validateColor(color);
   await tx
     .update(categories)
     .set({ name: patch.name ?? current.name, updatedAt: sql`now()` })
     .where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
   await tx
     .insert(categoryDetails)
-    .values({ tenantId, categoryId: id, parentId, image })
+    .values({ tenantId, categoryId: id, parentId, image, color })
     .onConflictDoUpdate({
       target: [categoryDetails.tenantId, categoryDetails.categoryId],
-      set: { parentId, image },
+      set: { parentId, image, color },
     });
   return readCategory(tx, tenantId, id);
 }

@@ -199,3 +199,20 @@ it.each(["category", "language"] as const)(
     });
   },
 );
+it("stores and validates a category colour", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
+  const made = await app(suite.admin, tenantId, (tx) =>
+    createCategory(tx, tenantId, { name: { en: "Hot" }, color: "#b12525" }),
+  );
+  expect(made.color).toBe("#b12525");
+  const cleared = await app(suite.admin, tenantId, (tx) =>
+    updateCategory(tx, tenantId, made.id, { color: null }),
+  );
+  expect(cleared.color).toBeNull();
+  await expect(
+    app(suite.admin, tenantId, (tx) =>
+      createCategory(tx, tenantId, { name: { en: "Bad" }, color: "#FFF" }),
+    ),
+  ).rejects.toMatchObject({ code: "category.color_invalid" });
+});

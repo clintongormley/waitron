@@ -1,0 +1,1 @@
+ALTER TABLE "category_details" ADD COLUMN "color" text;
