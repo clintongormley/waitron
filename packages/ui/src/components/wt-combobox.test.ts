@@ -412,3 +412,42 @@ test("Enter on the active add row also activates it", async () => {
   await userEvent.keyboard("{End}{Enter}");
   expect(received).toBe("kosher");
 });
+
+test("marks a required field with a visible asterisk and the search box's aria-required", async () => {
+  const { el, trigger } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" required></wt-combobox>',
+  );
+  expect(el.shadowRoot!.querySelector("[data-required]")?.textContent).toBe("*");
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  expect(search.getAttribute("aria-required")).toBe("true");
+});
+
+test("links explanatory error text to the trigger and sets aria-invalid", async () => {
+  const { el } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" error="Choose at least one tag"></wt-combobox>',
+  );
+  const trigger = el.shadowRoot!.querySelector(".trigger")!;
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(trigger.getAttribute("aria-invalid")).toBe("true");
+  expect(trigger.getAttribute("aria-describedby")).toBe(error.id);
+  expect(error.textContent).toBe("Choose at least one tag");
+});
+
+test("wires the invalid property to aria-invalid independently of error text", async () => {
+  const el = await mount("<wt-combobox invalid></wt-combobox>");
+  expect(el.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-invalid")).toBe("true");
+});
+
+test("invalid state paints the trigger border from the danger token", async () => {
+  const el = await mount("<wt-combobox invalid></wt-combobox>");
+  host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
+  const trigger = el.shadowRoot!.querySelector(".trigger")!;
+  expect(getComputedStyle(trigger).borderColor).toBe("rgb(13, 14, 15)");
+});
+
+test("disabled trigger dims via the disabled-opacity token", async () => {
+  const el = await mount("<wt-combobox disabled></wt-combobox>");
+  host.style.setProperty("--wt-opacity-disabled", "0.3");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".trigger")!).opacity).toBe("0.3");
+});

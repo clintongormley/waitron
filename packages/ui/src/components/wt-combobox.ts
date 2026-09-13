@@ -131,10 +131,34 @@ export class WtCombobox extends LitElement {
         padding: var(--wt-space-2) var(--wt-space-3);
         font-weight: var(--wt-font-weight-bold);
       }
+
+      .trigger[aria-invalid="true"] {
+        border-color: var(--wt-color-danger);
+      }
+
+      .required,
+      .error {
+        color: var(--wt-color-danger);
+      }
+
+      .required {
+        margin-inline-start: var(--wt-space-1);
+      }
+
+      .error {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
 
   @property() label = "";
+  /** Read by a consumer's validation summary. Nothing here attaches it to the DOM: like every other
+      `packages/ui` primitive this component has no native form association. */
+  @property() name = "";
+  @property() error = "";
+  @property({ type: Boolean, reflect: true }) required = false;
+  @property({ type: Boolean, reflect: true }) invalid = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ attribute: false }) options: ComboboxOption[] = [];
   @property() noResultsLabel = "No results";
@@ -158,6 +182,7 @@ export class WtCombobox extends LitElement {
 
   private readonly labelId = uniqueId("wt-combobox-label");
   private readonly listboxId = uniqueId("wt-combobox-listbox");
+  private readonly errorId = uniqueId("wt-combobox-error");
 
   private get filteredOptions(): ComboboxOption[] {
     const query = this.search.trim().toLowerCase();
@@ -312,7 +337,15 @@ export class WtCombobox extends LitElement {
     return html`
       ${
         this.label
-          ? html`<div class="label-row"><label id=${this.labelId}>${this.label}</label></div>`
+          ? html`<div class="label-row">
+              <label id=${this.labelId}
+                >${this.label}${
+                  this.required
+                    ? html`<span class="required" data-required aria-hidden="true">*</span>`
+                    : nothing
+                }</label
+              >
+            </div>`
           : nothing
       }
       <button
@@ -321,6 +354,8 @@ export class WtCombobox extends LitElement {
         aria-haspopup="listbox"
         aria-expanded=${this.expanded}
         aria-labelledby=${this.label ? this.labelId : nothing}
+        aria-invalid=${this.invalid || this.error !== ""}
+        aria-describedby=${this.error !== "" ? this.errorId : nothing}
         popovertarget="panel"
         ?disabled=${this.disabled}
         @click=${this.onTriggerClick}
@@ -337,6 +372,7 @@ export class WtCombobox extends LitElement {
           type="text"
           role="combobox"
           aria-expanded="true"
+          aria-required=${this.required}
           placeholder=${this.searchPlaceholder}
           aria-label=${this.label || this.searchPlaceholder}
           aria-controls=${this.listboxId}
@@ -403,6 +439,11 @@ export class WtCombobox extends LitElement {
           }
         </ul>
       </div>
+      ${
+        this.error !== ""
+          ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>`
+          : nothing
+      }
     `;
   }
 }
