@@ -1024,6 +1024,25 @@ image constraints under *Detail → Box image*.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; `mutation-verifactu` is the next critical-path
   candidate; rebalance `LIGHT_A/B_PACKAGES` when one light shard dominates.
+- **Dependency loop removed — LANDED #348 (2026-09-13).** `pnpm install` no longer warns about
+  cyclic workspace dependencies; `scripts/workspace-cycles.test.ts` fails if a loop returns. Four
+  things the review raised and the PR did not take:
+  - The English-only vocabulary guard does not scan `packages/replication-tests`, so the three suites
+    it used to scan in `sync` are unscanned. Its only exemption skips a package's test files, which
+    here is every file. Next action: a per-file exemption for `replication-fidelity.pg.test.ts` (the
+    only file that trips it, on Spanish fiscal table names), then add the package to
+    `GENERIC_PACKAGES` in `packages/db/src/english-only.ts`, and delete the stated gap from
+    `CLAUDE.md` §3 and `docs/developers/conventions-data.md`.
+  - `packages/replication-tests` carries a coverage bar that cannot fail: it holds only test files, so
+    coverage measures nothing and reads 0% while exiting 0. The literal exists because
+    `scripts/coverage-thresholds.test.ts` requires one of every tested package. Fix if a second
+    test-only package appears: teach that guard (and CI's `runnable` check) about test-only packages.
+  - The root `vitest.config.ts` comment on coverage `include` names "the two classifiers" plus
+    `english-only.ts`; the `scripts/**/*.mjs` glob also measures `run-with-deadline.mjs`,
+    `reap-testcontainers.mjs`, `mutation-shard.mjs` (all predate #348) and `workspace-members.mjs`.
+    Describe the rule rather than list files.
+  - The loop guard reports the whole group of packages in a loop, not a path through it, so a failure
+    does not say which link to cut. Optional: print one cycle path alongside the group.
 - **A hung real-PG suite leaks its cluster containers** and `pnpm reap` only removes labelled ones
   older than two hours — inspect creation times and ownership, remove only your own.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
