@@ -1,3 +1,5 @@
+import { snapshotDescriptionFor } from "../widgets/dish-format.js";
+import { modifierSnapshotLabels } from "../widgets/modifier-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -20,7 +22,7 @@ import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter
 import { productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
-import { toWireLineExtras, toWireOption, toWireProductIdentity } from "../state/order-line.js";
+import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
 // Side-effect imports register the reused widgets this screen composes — the round-scoped product
 // picker + basket, and the tab-pay tender — exactly as `till-counter-screen` registers its widgets.
@@ -113,6 +115,13 @@ class TabPayStore extends WorkingOrderStore {
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
   static override styles = [
+    css`
+      .modifier-answer {
+        display: block;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+    `,
     baseStyles,
     selectStyles,
     css`
@@ -536,6 +545,12 @@ export class TillTableOrderScreen extends LitElement {
    * since it was added (mirrors the retrieve path's productId-only philosophy). `null` — a child modifier
    * line, which has no product — resolves to `""`; the screen never renders a name for such a row (the
    * per-line action + course picker are guarded off it), so this is only a total-safety fallback. */
+  #nameForLine(line: TabLine): string {
+    return line.descriptions === undefined
+      ? this.#nameFor(line.productId)
+      : snapshotDescriptionFor(line.descriptions, "");
+  }
+
   #nameFor(productId: string | null): string {
     if (productId === null) return "";
     const product = this.products.find((candidate) => candidate.id === productId);
@@ -562,13 +577,11 @@ export class TillTableOrderScreen extends LitElement {
         ...toWireProductIdentity(line.product),
         quantity: line.quantity,
         ...toWireLineExtras(line),
+        ...toWireModifiers(line),
       };
       const courseId = this.#roundCourses.get(line);
       if (courseId !== undefined) {
         roundLine.courseId = courseId;
-      }
-      if (line.options !== undefined && line.options.length > 0) {
-        roundLine.options = line.options.map(toWireOption);
       }
       if (this.#roundHolds.get(line) === true) {
         roundLine.hold = true;
@@ -703,7 +716,7 @@ export class TillTableOrderScreen extends LitElement {
    * falls through to the trailing `nothing` instead. */
   #lineAction(line: TabLine): TemplateResult | typeof nothing {
     if (line.productId === null) return nothing;
-    const name = this.#nameFor(line.productId);
+    const name = this.#nameForLine(line);
     if (this.#isSendable(line)) {
       return html`<wt-button
         class="line-send"
@@ -825,7 +838,7 @@ export class TillTableOrderScreen extends LitElement {
         ${
           line !== null
             ? html`<span class="cancel-dish"
-                >${this.#nameFor(line.productId)} ×${this.#displayQty(line.quantity)}</span
+                >${this.#nameForLine(line)} ×${this.#displayQty(line.quantity)}</span
               >`
             : nothing
         }
@@ -880,7 +893,7 @@ export class TillTableOrderScreen extends LitElement {
         >${this.#courseName(line.courseId)}</span
       >`;
     }
-    const name = this.#nameFor(line.productId);
+    const name = this.#nameForLine(line);
     return html`<select
       class="line-course"
       data-line-course=${line.lineNo}
@@ -1127,9 +1140,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #pendingLine(line: TabLine): TemplateResult {
-    const name = this.#nameFor(line.productId);
+    const name = this.#nameForLine(line);
     return html`<li class="line pending-line">
-      <span class="name">${name}</span>
+      <span class="name"
+        >${name}${modifierSnapshotLabels(line.modifierSnapshots).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
+      >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       <span class="line-total">${formatMoney(this.#lineGross(line))}</span>
       ${this.#lineCourse(line)}${this.#lineAction(line)}
@@ -1157,7 +1172,9 @@ export class TillTableOrderScreen extends LitElement {
               ${served.map(
                 (line) =>
                   html`<li class="line served-line">
-                    <span class="name">${this.#nameFor(line.productId)}</span>
+                    <span class="name"
+                      >${this.#nameForLine(line)}${modifierSnapshotLabels(line.modifierSnapshots).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
+                    >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
                     <span class="line-total">${formatMoney(this.#lineGross(line))}</span>
                     ${this.#lineCourse(line)}
@@ -1535,7 +1552,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #transferLineRow(line: TabLine): TemplateResult {
-    const name = this.#nameFor(line.productId);
+    const name = this.#nameForLine(line);
     const selected = this.transferLineNos.has(line.lineNo);
     return html`<wt-button
       class="transfer-line ${selected ? "selected" : ""}"
@@ -1581,7 +1598,7 @@ export class TillTableOrderScreen extends LitElement {
     const selected = this.splitQuantities.has(line.lineNo);
     const quantity = this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity);
     const product = this.#splitProduct(line);
-    const name = this.#nameFor(line.productId);
+    const name = this.#nameForLine(line);
     const error = this.splitAttempted && selected ? this.#splitQuantityError(line) : "";
     return html`<div class="split-line-row">
       <wt-button

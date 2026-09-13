@@ -1,3 +1,6 @@
+import { lockModifierDefinitions } from "@waitron/catalogue";
+import { snapshotSelections, selectionsFromSnapshots } from "./modifier-selection.js";
+import type { ModifierSelection, ModifierSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
 // them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
@@ -150,6 +153,7 @@ async function priceOrderLines(
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    modifierSelections?: ModifierSelection[];
   } & LineExtras)[],
   zoneId?: string,
 ): Promise<{
@@ -164,6 +168,7 @@ async function priceOrderLines(
     // for. Callers passing [] ignore `priced` (they persist no lines); it is returned only for type-consistency.
     return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
   }
+  await lockModifierDefinitions(tx, cfg.tenantId);
   const catalogue = await listAvailableProducts(tx, cfg.locationId);
   const usesOffers = zoneId !== undefined;
   const offerBySelectionId = new Map<
@@ -194,6 +199,7 @@ async function priceOrderLines(
         courseId: offer.courseId,
         catalogueId: offer.menuId,
         catalogueName: offer.menuName,
+        modifiers: offer.modifiers ?? [],
         optionGroups: offer.optionGroups.map((group) => ({
           id: group.id,
           name: group.name,
@@ -237,6 +243,7 @@ async function priceOrderLines(
         courseId: string | null;
         note: string | null;
         doneness: Doneness | null;
+        modifierSnapshots: ModifierSnapshot[];
       }
     | { kind: "child"; optionGroupItemId: string; menuItemId: string | null };
   const items: BasketItemWithOptions[] = [];
@@ -282,27 +289,25 @@ async function priceOrderLines(
     const doneness = line.doneness ?? null;
 
     const selected = line.options ?? [];
-    // Modifiers attach to `each` products only this slice (design): a `weight` product (loose deli by
-    // the kilo) carrying options is a crafted request the till never produces — refuse it loud, the
-    // client is never the gate. A `weight` line with NO options is untouched.
-    if (selected.length > 0 && product.pricingUnit !== "each") {
-      throw new AppError("options.unsupported_product", {
-        productId: underlyingProductId,
-        pricingUnit: product.pricingUnit,
-      });
-    }
+    const canonical =
+      line.modifierSelections !== undefined ||
+      (product.modifiers ?? []).some((modifier) => modifier.type !== "extras");
+    if (canonical && selected.length > 0)
+      throw new AppError("modifier.invalid", { field: "modifierSelections" });
+    const resolved = canonical
+      ? snapshotSelections(product.modifiers ?? [], line.modifierSelections ?? [])
+      : null;
+    const modifierSnapshots = resolved?.snapshots ?? [];
 
-    // Resolve every selected option against THIS product's active groups/items (already in hand), and
-    // tally per group for the required/min/max checks. Skip the whole block for a non-`each` product
-    // (it has no options — either none were sent, or the guard above already threw).
+    // Resolve choices against this product's published definitions before pricing them.
     const selectedOptions: {
       id: string;
       name: Record<string, string>;
       priceDelta: string;
       vatClass: (typeof product.optionGroups)[number]["items"][number]["vatClass"];
       quantity: number;
-    }[] = [];
-    if (product.pricingUnit === "each") {
+    }[] = resolved?.extras ?? [];
+    if (!canonical) {
       let itemById = itemByIdByProduct.get(product.id);
       if (itemById === undefined) {
         itemById = new Map(
@@ -370,15 +375,8 @@ async function priceOrderLines(
           quantity: qty,
         });
       }
-      // Validate the selection per group over the SUMMED tally. An EMPTY group (`items: []`, an
-      // authoring bug) carries no satisfiable constraint, so it is SKIPPED rather than deadlocking a
-      // legitimate sale — nothing may block a sale on a mis-authored group (CLAUDE.md §5). `required`
-      // (⟹ `min_select ≥ 1` by the DB `option_groups_required_ck`) is reported distinctly from a bare
-      // `min_select`.
+      // An available required group without usable choices is a configuration failure.
       for (const group of product.optionGroups) {
-        if (group.items.length === 0) {
-          continue;
-        }
         const count = tallyByGroup.get(group.id) ?? 0;
         if (group.required && count === 0) {
           throw new AppError("options.selection_invalid", {
@@ -402,11 +400,28 @@ async function priceOrderLines(
           });
         }
       }
+      // The legacy menu projection omits groups with no usable choices; the definition still
+      // requires a selection, so an omitted canonical payload cannot waive that requirement.
+      for (const modifier of product.modifiers ?? []) {
+        if (
+          modifier.type === "extras" &&
+          modifier.available &&
+          modifier.required &&
+          (tallyByGroup.get(modifier.id) ?? 0) === 0
+        ) {
+          throw new AppError("options.selection_invalid", {
+            productId: underlyingProductId,
+            groupId: modifier.id,
+            reason: "required",
+          });
+        }
+      }
     }
 
     items.push({
       product,
       quantity: line.quantity,
+      modifierSnapshots,
       options: selectedOptions.map((option) => ({
         name: option.name,
         priceDelta: option.priceDelta,
@@ -425,6 +440,7 @@ async function priceOrderLines(
       courseId: line.courseId ?? product.courseId ?? null,
       note,
       doneness,
+      modifierSnapshots,
     });
     for (const option of selectedOptions) {
       lineMeta.push({
@@ -501,6 +517,7 @@ async function priceOrderLines(
       // product (its price/name are snapshotted onto the line by value), so NULL.
       productId: meta.kind === "parent" ? meta.productId : null,
       descriptions: line.descriptions,
+      modifierSnapshots: line.modifierSnapshots ?? [],
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
@@ -578,6 +595,7 @@ export async function readLockedLines(
       quantity: workingOrderLines.quantity,
       vatRate: workingOrderLines.vatRate,
       descriptions: workingOrderLines.descriptions,
+      modifierSnapshots: workingOrderLines.modifierSnapshots,
       category: workingOrderLines.category,
     })
     .from(workingOrderLines)
@@ -608,6 +626,7 @@ export async function readLockedLines(
     quantity: line.quantity,
     vatRate: line.vatRate,
     descriptions: line.descriptions,
+    modifierSnapshots: line.modifierSnapshots ?? [],
     category: line.category,
     parentLineNo: line.parentLineId == null ? null : (positionById.get(line.parentLineId) ?? null),
   }));
@@ -686,6 +705,7 @@ export interface ParkOrderRequest {
     menuItemId?: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    modifierSelections?: ModifierSelection[];
   } & LineExtras)[];
   zoneId?: string;
   label?: string;
@@ -727,6 +747,7 @@ export async function createOpenOrder(
     menuItemId?: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    modifierSelections?: ModifierSelection[];
   } & LineExtras)[],
   label: string | null,
   // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
@@ -1482,6 +1503,7 @@ export async function addTabRound(
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    modifierSelections?: ModifierSelection[];
     hold?: boolean;
   } & LineExtras)[],
 ): Promise<void> {
@@ -1897,6 +1919,8 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
  *  `productId` only — no product name, mirroring `HeldOrder`: the screen resolves names from its own
  *  catalogue prop. `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
 export interface TabLine {
+  descriptions?: Record<string, string>;
+  modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
   lineNo: number;
   // Nullable since ordering modifiers (Task 2): a child modifier line has no product. Child-line
   // rendering on the tab lands in Task 6; today every tab line still carries a product.
@@ -1953,6 +1977,8 @@ export async function readTabLines(
   return tx
     .select({
       lineNo: workingOrderLines.lineNo,
+      descriptions: workingOrderLines.descriptions,
+      modifierSnapshots: workingOrderLines.modifierSnapshots,
       productId: workingOrderLines.productId,
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
@@ -2334,6 +2360,7 @@ async function carveOffLines(
       optionGroupItemId: workingOrderLines.optionGroupItemId,
       productId: workingOrderLines.productId,
       descriptions: workingOrderLines.descriptions,
+      modifierSnapshots: workingOrderLines.modifierSnapshots,
       quantity: workingOrderLines.quantity,
       unitPrice: workingOrderLines.unitPrice,
       unitPriceGross: workingOrderLines.unitPriceGross,
@@ -2466,6 +2493,7 @@ async function carveOffLines(
         // carrying the source's raw id would (were the refusal relaxed) point at a line on the SOURCE.
         optionGroupItemId: line.optionGroupItemId,
         descriptions: line.descriptions,
+        modifierSnapshots: line.modifierSnapshots ?? [],
         quantity,
         unitPrice: line.unitPrice,
         unitPriceGross: line.unitPriceGross,
@@ -2677,6 +2705,8 @@ export interface HeldOrder {
    * remain readable while older order paths are migrated to menu-item identity.
    */
   lines: {
+    modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
+    modifierSelections?: ModifierSelection[];
     workingOrderLineId?: string;
     menuItemId?: string;
     productId: string | null;
@@ -2799,6 +2829,7 @@ export async function getHeldOrder(
         productId: workingOrderLines.productId,
         quantity: workingOrderLines.quantity,
         descriptions: workingOrderLines.descriptions,
+        modifierSnapshots: workingOrderLines.modifierSnapshots,
         unitPriceGross: workingOrderLines.unitPriceGross,
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
@@ -2830,7 +2861,17 @@ export async function getHeldOrder(
       .map((line) => {
         const context = contextByLine.get(line.id);
         if (context === undefined || line.productId === null) {
-          return { productId: line.productId, quantity: line.quantity };
+          return {
+            productId: line.productId,
+            quantity: line.quantity,
+            modifierSnapshots: line.modifierSnapshots,
+            ...(line.modifierSnapshots.length
+              ? {
+                  workingOrderLineId: line.id,
+                  modifierSelections: selectionsFromSnapshots(line.modifierSnapshots),
+                }
+              : {}),
+          };
         }
         const options = (childrenByParent.get(line.id) ?? []).flatMap((child) => {
           if (child.optionGroupItemId === null) return [];
@@ -2846,6 +2887,10 @@ export async function getHeldOrder(
         });
         return {
           workingOrderLineId: line.id,
+          modifierSnapshots: line.modifierSnapshots,
+          ...(line.modifierSnapshots.length
+            ? { modifierSelections: selectionsFromSnapshots(line.modifierSnapshots) }
+            : {}),
           menuItemId: context.menuItemId,
           productId: line.productId,
           quantity: line.quantity,
@@ -2878,11 +2923,8 @@ export async function getHeldOrder(
 }
 
 /**
- * An edit to a parked order: the whole new basket (`lines`) plus an optional new `label`. Like
- * `ParkOrderRequest` it carries NO price — the server re-reads the catalogue and re-prices with
- * `priceBasket`, so a browser cannot influence the snapshot. It carries no `id` (that addresses the
- * order, a separate argument) and no `order_number`/`node_id` (those are fixed at park and never move).
- * The basket is a full REPLACEMENT, not a delta: whatever the till sends becomes the order's lines.
+ * The complete edited basket and an optional label. Prices come from stored lines for quantity-only
+ * edits and from current definitions when selections change; the request never supplies a price.
  */
 export interface UpdateHeldOrderRequest {
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines`.
@@ -2892,13 +2934,14 @@ export interface UpdateHeldOrderRequest {
     menuItemId?: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    modifierSelections?: ModifierSelection[];
   } & LineExtras)[];
   label?: string;
 }
 
 /**
- * Update an open held order anywhere in the venue (venue-wide, till-reroute §3.6) using the current
- * catalogue prices. The caller's transaction keeps the order and replacement lines together.
+ * Update an open held order anywhere in the venue, preserving stored prices for quantity-only edits.
+ * One transaction keeps the order and replacement lines together.
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
@@ -2935,11 +2978,12 @@ export async function updateHeldOrder(
 
     // A quantity-only edit keeps the line's commercial lock and stable id. The client identifies the
     // stored parent line explicitly; every line must still name the same product/offer, remain in the
-    // same order, and have no modifier children or customisation change. Anything else takes the
+    // same order, and have identical modifier selections and customisations. Anything else takes the
     // replacement path below and is priced from the current offer.
     const storedRows = await tx
       .select({
         id: workingOrderLines.id,
+        modifierSnapshots: workingOrderLines.modifierSnapshots,
         parentLineId: workingOrderLines.parentLineId,
         productId: workingOrderLines.productId,
         unitPriceGross: workingOrderLines.unitPriceGross,
@@ -2985,8 +3029,24 @@ export async function updateHeldOrder(
               line.productId === undefined
             : line.productId === stored.productId && line.menuItemId === undefined;
         if (!sameIdentity) return false;
+        if (line.modifierSelections !== undefined || stored.modifierSnapshots.length > 0) {
+          if (
+            JSON.stringify(line.modifierSelections ?? []) !==
+            JSON.stringify(selectionsFromSnapshots(stored.modifierSnapshots))
+          )
+            return false;
+        }
         const requestedOptions = new Map<string, number>();
-        for (const option of line.options ?? []) {
+        for (const option of line.modifierSelections === undefined
+          ? (line.options ?? [])
+          : line.modifierSelections.flatMap((selection) =>
+              selection.type === "extras"
+                ? selection.choices.map((choice) => ({
+                    optionGroupItemId: choice.choiceId,
+                    quantity: choice.quantity,
+                  }))
+                : [],
+            )) {
           const quantity = option.quantity ?? 1;
           if (!Number.isInteger(quantity) || quantity < 1) return false;
           requestedOptions.set(
@@ -3026,7 +3086,16 @@ export async function updateHeldOrder(
             ),
           );
         const optionQuantityById = new Map<string, number>();
-        for (const option of requested.options ?? []) {
+        for (const option of requested.modifierSelections === undefined
+          ? (requested.options ?? [])
+          : requested.modifierSelections.flatMap((selection) =>
+              selection.type === "extras"
+                ? selection.choices.map((choice) => ({
+                    optionGroupItemId: choice.choiceId,
+                    quantity: choice.quantity,
+                  }))
+                : [],
+            )) {
           optionQuantityById.set(
             option.optionGroupItemId,
             (optionQuantityById.get(option.optionGroupItemId) ?? 0) + (option.quantity ?? 1),
@@ -3554,6 +3623,7 @@ export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
   state: TicketState;
+  modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
   descriptions: Record<string, string>;
   quantity: string;
   /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the KDS UI
@@ -3732,6 +3802,7 @@ async function readQueueSubItems(
   const parents = await tx
     .select({
       lineId: workingOrderLines.id,
+      modifierSnapshots: workingOrderLines.modifierSnapshots,
       allergens: products.allergens,
       dietDerivation: products.dietDerivation,
       dietOverride: products.dietOverride,
@@ -3744,6 +3815,45 @@ async function readQueueSubItems(
     .where(
       and(eq(workingOrderLines.tenantId, tenantId), inArray(workingOrderLines.id, parentLineIds)),
     );
+  // Nonprice options have no child price row. Their saved choice ids join the same tenant-scoped
+  // effect definitions as extras, so the as-served fold sees both selection modes.
+  const choiceIds = parents.flatMap((parent) =>
+    parent.modifierSnapshots.flatMap((snapshot) =>
+      snapshot.type === "options" ? [snapshot.choiceId] : [],
+    ),
+  );
+  const choices =
+    choiceIds.length === 0
+      ? []
+      : await tx
+          .select({
+            id: optionGroupItems.id,
+            addAllergens: optionGroupItems.addAllergens,
+            removeAllergens: optionGroupItems.removeAllergens,
+            addOrigins: optionGroupItems.addOrigins,
+            removeOrigins: optionGroupItems.removeOrigins,
+          })
+          .from(optionGroupItems)
+          .where(
+            and(eq(optionGroupItems.tenantId, tenantId), inArray(optionGroupItems.id, choiceIds)),
+          );
+  const choiceById = new Map(choices.map((choice) => [choice.id, choice]));
+  for (const parent of parents) {
+    for (const snapshot of parent.modifierSnapshots) {
+      if (snapshot.type !== "options") continue;
+      const choice = choiceById.get(snapshot.choiceId);
+      if (choice === undefined) continue;
+      const overlays = overlaysByParent.get(parent.lineId) ?? [];
+      overlays.push({ add: choice.addAllergens, remove: choice.removeAllergens });
+      overlaysByParent.set(parent.lineId, overlays);
+      const origins = originOverlaysByParent.get(parent.lineId) ?? [];
+      origins.push({
+        add: choice.addOrigins as DietaryOrigin[] | null,
+        remove: choice.removeOrigins as DietaryOrigin[] | null,
+      });
+      originOverlaysByParent.set(parent.lineId, origins);
+    }
+  }
   for (const p of parents) {
     const base = (p.allergens ?? null) as ProductAllergens | null;
     const asServed = deriveAsServedAllergens(base, overlaysByParent.get(p.lineId) ?? []);
@@ -3782,6 +3892,7 @@ export async function listStationQueue(
       // The DISPLAY fields the kitchen renders — the line's snapshotted dish description + quantity,
       // carried from the joined working_order_lines row (the snapshot, never a live catalogue lookup).
       descriptions: workingOrderLines.descriptions,
+      modifierSnapshots: workingOrderLines.modifierSnapshots,
       quantity: workingOrderLines.quantity,
       lineNo: workingOrderLines.lineNo,
       // KDS-2: the item's snapshotted course (or null) + its held/fired marker. `course_id` is the
@@ -3904,6 +4015,7 @@ export async function listStationQueue(
       workingOrderLineId: row.workingOrderLineId,
       state: row.state,
       descriptions: row.descriptions,
+      modifierSnapshots: row.modifierSnapshots,
       quantity: row.quantity,
       modifiers: modifiersByParent.get(row.workingOrderLineId) ?? [],
       // The as-served allergen profile (Task 8) — a safe default `{ allergens: {}, pending: true }`
@@ -3951,6 +4063,7 @@ export async function listStationQueue(
  *  locale→description map (localised client-side, per the repo's never-store-formatted rule), mirroring
  *  `StationQueueItem.descriptions` rather than a pre-flattened string. */
 export interface ExpoItem {
+  modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
   id: string;
   name: Record<string, string>;
   qty: string;
@@ -4081,6 +4194,7 @@ export async function listExpoQueue(
       // The DISPLAY snapshot the pass renders — the line's frozen description map + quantity, carried
       // from working_order_lines (never a live catalogue lookup), exactly as `listStationQueue` serialises.
       descriptions: workingOrderLines.descriptions,
+      modifierSnapshots: workingOrderLines.modifierSnapshots,
       quantity: workingOrderLines.quantity,
       lineNo: workingOrderLines.lineNo,
       // The line's own delivery marker (design §3 — a line ages until it reaches the guest). NOT
@@ -4249,6 +4363,7 @@ export async function listExpoQueue(
     course.items.push({
       id: row.itemId,
       name: row.descriptions,
+      modifierSnapshots: row.modifierSnapshots,
       qty: row.quantity,
       stationName: row.stationName,
       state: row.state,

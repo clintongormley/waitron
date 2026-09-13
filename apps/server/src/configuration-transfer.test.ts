@@ -1,9 +1,20 @@
+import { randomUUID } from "node:crypto";
+import {
+  createCatalogue,
+  createMenuItem,
+  createMenuSection,
+  createModifier,
+  createProduct,
+  listMenuOffers,
+  listModifiers,
+  setProductOptionGroups,
+} from "@waitron/catalogue";
 import { sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -499,5 +510,143 @@ describe("configuration transfer database path", () => {
     expect(firstLive.rows).toEqual([
       { invoice_number: 1, first_record: true, previous_hash: null },
     ]);
+  });
+});
+
+it("transfers every modifier type, remaps default choice ids and preserves menu prices", async () => {
+  const source = await applyVenue(planVenue(venue("B11223344"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTenant(suite.db, source.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const menu = await createCatalogue(tx, tenantId(source.tenantId), { name: "Modifier menu" });
+    const section = await createMenuSection(tx, tenantId(source.tenantId), {
+      menuId: menu.id,
+      name: { es: "Bebidas" },
+    });
+    const product = await createProduct(tx, tenantId(source.tenantId), {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { es: "Café" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "reduced",
+    });
+    const choiceId = randomUUID();
+    const extraId = randomUUID();
+    const definitions = [
+      await createModifier(tx, source.tenantId, { type: "text", name: { es: "Mensaje" } }, "es"),
+      await createModifier(
+        tx,
+        source.tenantId,
+        {
+          type: "options",
+          name: { es: "Leche" },
+          choices: [{ id: choiceId, name: { es: "Avena" } }],
+          defaultChoiceId: choiceId,
+        },
+        "es",
+      ),
+      await createModifier(
+        tx,
+        source.tenantId,
+        {
+          type: "extras",
+          name: { es: "Extras" },
+          maxTotalQuantity: null,
+          choices: [
+            {
+              id: extraId,
+              name: { es: "Café extra" },
+              priceDelta: "1.50",
+              maxQuantity: 3,
+              defaultQuantity: 2,
+              vatClass: "general",
+            },
+          ],
+        },
+        "es",
+      ),
+      await createModifier(
+        tx,
+        source.tenantId,
+        {
+          type: "yes-no",
+          name: { es: "Hielo" },
+          yesLabel: { es: "Con hielo" },
+          noLabel: { es: "Sin hielo" },
+          defaultValue: false,
+        },
+        "es",
+      ),
+    ];
+    await setProductOptionGroups(
+      tx,
+      tenantId(source.tenantId),
+      product.id,
+      definitions.map((definition) => definition.id),
+    );
+    await createMenuItem(tx, tenantId(source.tenantId), {
+      menuId: menu.id,
+      sectionId: section.id,
+      productId: product.id,
+      grossPrice: "2.75",
+    });
+    return { choiceId, extraId, definitions };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-12T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.option_groups).toHaveLength(4);
+  expect(transferred.tables.option_group_items).toHaveLength(2);
+  const target = await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  await withTenant(suite.db, target.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const definitions = await listModifiers(tx, target.tenantId);
+    expect(definitions).toHaveLength(4);
+    expect(
+      definitions.every((definition) =>
+        original.definitions.every((source) => source.id !== definition.id),
+      ),
+    ).toBe(true);
+    expect(definitions.find((definition) => definition.type === "yes-no")).toMatchObject({
+      yesLabel: { es: "Con hielo" },
+      noLabel: { es: "Sin hielo" },
+      defaultValue: false,
+    });
+    const options = definitions.find((definition) => definition.type === "options")!;
+    if (options.type !== "options") throw new Error("missing options modifier");
+    expect(options.defaultChoiceId).toBe(options.choices[0]!.id);
+    expect(options.defaultChoiceId).not.toBe(original.choiceId);
+    const extras = definitions.find((definition) => definition.type === "extras")!;
+    expect(extras).toMatchObject({
+      maxTotalQuantity: null,
+      choices: [{ priceDelta: "1.50", maxQuantity: 3, defaultQuantity: 2, vatClass: "general" }],
+    });
+    const menus = await tx.execute<{ id: string }>(
+      sql`select id from catalogues where tenant_id = ${target.tenantId} and name = 'Modifier menu'`,
+    );
+    const offers = await listMenuOffers(tx, tenantId(target.tenantId), [menus.rows[0]!.id]);
+    expect(offers[0]!.grossPrice).toBe("2.75");
+    expect(offers[0]!.modifiers.map((modifier) => modifier.type)).toEqual([
+      "text",
+      "options",
+      "extras",
+      "yes-no",
+    ]);
+    expect(offers[0]!.modifiers[2]).toMatchObject({
+      choices: [{ priceDelta: "1.50", defaultQuantity: 2, vatClass: "general" }],
+    });
   });
 });

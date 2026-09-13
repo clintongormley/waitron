@@ -1,7 +1,11 @@
 # Build Modifiers
 
 Branch: `products-modifiers`. Read the [spec](../specs/2026-09-12-product-modifiers-design.md) and
-[shared contract](../specs/2026-09-12-products-overhaul-design.md). Implementation is not started.
+[shared contract](../specs/2026-09-12-products-overhaul-design.md). Implemented with focused local
+validation. Branch finishing, its review, push hook and current-head CI remain separate steps.
+
+Products integration: [types, form, API examples and migration](../../developers/modifiers.md).
+Operator guide: [reusable modifiers](../../modifiers.md).
 
 ## 1. Preserve the current behavioral contract
 
@@ -67,3 +71,45 @@ package-wide coverage after the normal push hook.
 Supply canonical types, form properties, API examples and migration changes to Products. Update
 operator docs and add dated pointers to superseded behavior in historical modifier designs. Record
 test commands/results and announce readiness for `finish-branch`. Do not merge autonomously.
+
+## Implementation and validation receipts — 2026-09-12
+
+All four definitions use the existing group/item tables, with generated core migration
+`0020_product_modifiers.sql`. The standalone screen, reusable form and till use the canonical
+contract. The combined product manager retains its mapped group/item APIs until Products removes
+that screen. Selected-item allergen and dietary controls expose no source/origin authoring fields.
+
+Structured snapshots travel through held orders, table rounds, splits, settlement, correction,
+substitution, kitchen and receipts/reprints. The correction/substitution regression tests exposed
+lost parent/category metadata; those issuance paths now share the sale-line row mapper. Explicit
+menu publication and price/VAT overrides remain separate from product attachments.
+
+Tests were added and observed failing before implementation. Later negative cases reproduced
+explicit nulls becoming defaults, coerced VAT values, negative menu prices, an omitted canonical
+payload bypassing an empty required menu group, and missing selections on a context-less held
+response. Each now has a passing regression assertion. A temporary no-op lock experiment made
+the real-PostgreSQL blocking assertion fail with both `blocked` and `advisory` false; the experiment
+was removed. No grants were widened.
+
+Database commands below ran with `TESTCONTAINERS_RYUK_DISABLED=true` and host Docker access:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @waitron/catalogue test operations.test.ts modifier-contract.test.ts modifier-projection.test.ts modifiers.pg.test.ts modifier-dependencies.pg.test.ts` | 185 passed; definitions, defaults, legacy mapping, publication, tenant isolation, application-role writes and competing attachment/publication/deletion transactions |
+| `pnpm --filter @waitron/server test working-order.test.ts till-sale.test.ts` | 131 passed; all four selections, fractional pricing, retained answers/prices and required empty groups |
+| `pnpm --filter @waitron/server test till-api.test.ts` | 100 passed, including actual HTTP menu/product selection, park/resume and table rounds; the extended saved-quantity case also passed after its added assertions |
+| `pnpm --filter @waitron/server test till-api.pg.test.ts` | 36 passed, including fiscal issuance, explicit false, menu price/VAT overrides, saved-label reprint and idempotent replay |
+| `pnpm --filter @waitron/server test configuration-transfer.test.ts` | 7 passed; exported/imported types, defaults, order, remapped choice IDs and menu prices |
+| `pnpm --filter @waitron/core test record-sale.test.ts record-correction.test.ts record-substitution.test.ts` | 89 passed; snapshots and parent/child metadata survive all three issuance paths |
+| `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad privileges` | 11 passed against real PostgreSQL |
+
+Additional focused passes covered catalogue pricing/language gaps, management HTTP authorization,
+receipt/kitchen rendering, tabs/splits and snapshot label fallback. Dashboard browser checks covered
+form/screen behavior, API serialization, navigation, passive reads, localized errors and axe in both
+themes. Till browser checks covered all four modes, defaults/reopening, stale choices, serialization,
+separate basket lines, dietary effects and saved presentation. Browser runs were serialized.
+
+Changed-package typechecks and changed-file lint/format checks passed. Root checks covered live
+subscriptions, classifications, append-only triggers, module graph/seams, migration journals,
+error reachability, vocabulary and documentation pointers. Package-wide coverage belongs to CI
+after `finish-branch`; it has not run for this unpushed tree.

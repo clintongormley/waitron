@@ -1276,3 +1276,54 @@ describe("till-table-order-screen", () => {
     });
   });
 });
+
+it("sends explicit modifier answers in table rounds without sending local charge previews", async () => {
+  const { el } = await mount();
+  const modifierSelections = [
+    { modifierId: "cut", type: "yes-no" as const, value: false },
+    {
+      modifierId: "extras",
+      type: "extras" as const,
+      choices: [{ choiceId: "cheese", quantity: 2 }],
+    },
+  ];
+  grid(el).store.addProduct(
+    cafe,
+    "1",
+    [{ optionGroupItemId: "cheese", name: { es: "Queso" }, priceDelta: "1.00", quantity: 2 }],
+    { modifierSelections },
+  );
+  await el.updateComplete;
+  let captured: CustomEvent | undefined;
+  el.addEventListener("send-round", (event) => (captured = event as CustomEvent));
+  el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+  expect(captured!.detail.lines).toEqual([
+    { productId: "cafe", quantity: "1", modifierSelections },
+  ]);
+});
+
+it("shows a retained table line's recorded name and modifier answer after live names change", async () => {
+  const { el } = await mount({
+    products: [{ ...cafe, descriptions: { es: "Nuevo nombre" } }],
+    lines: [
+      {
+        ...pendingLine,
+        descriptions: { "es-ES": "Nombre guardado" },
+        modifierSnapshots: [
+          {
+            modifierId: "cut",
+            name: { "es-ES": "Cortar" },
+            type: "yes-no",
+            value: false,
+            label: { "es-ES": "No" },
+          },
+        ],
+      },
+    ],
+  });
+  await openDrawer(el);
+  const row = el.shadowRoot!.querySelector(".pending-line")!;
+  expect(row.textContent).toContain("Nombre guardado");
+  expect(row.textContent).toContain("Cortar: No");
+  expect(row.textContent).not.toContain("Nuevo nombre");
+});

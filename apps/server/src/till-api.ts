@@ -1,3 +1,4 @@
+import type { ModifierSelection } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
@@ -351,6 +352,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
   "sale.unknown_product": 400,
+  "modifier.invalid": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
   // A malformed working-order id in a `POST /api/sales` / `POST /api/pay` / `POST /api/working-orders`
@@ -1970,6 +1972,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           quantity: string;
           courseId?: string | null;
           options?: { optionGroupItemId: string; quantity?: number }[];
+          modifierSelections?: ModifierSelection[];
           hold?: boolean;
         } & LineExtras)[];
       }>();

@@ -12,6 +12,10 @@ import {
   createMenuItem,
   createMenuSection,
   createProduct,
+  createModifier,
+  updateModifier,
+  setProductOptionGroups,
+  setMenuItemOptionGroups,
   listAvailableProducts,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
@@ -41,6 +45,9 @@ import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import type { ModifierSelection, ModifierSnapshot } from "@waitron/shared";
+import type { TillSaleResult } from "./till-sale.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createStation } from "./kitchen.js";
 
@@ -1432,6 +1439,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             doneness: null,
             // No options selected on this line → an empty modifier sub-item list (ordering modifiers).
             modifiers: [],
+            modifierSnapshots: [],
             // Just fired — nowhere near the default station's 5-minute warm threshold.
             queuedAt: expect.any(String),
             band: "fresh",
@@ -2223,4 +2231,258 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(abandoned).toEqual([{ status: "abandoned" }]);
   });
+});
+
+it("files all four modifier modes through cash checkout and reprints their saved facts", async () => {
+  const { cfg, available, operatorId } = await setupVenue();
+  const product = available.find((item) => item.pricingUnit === "each")!;
+  const optionId = randomUUID(),
+    extraId = randomUUID();
+  const { note, answer, option, extra } = await withTenant(
+    suite.admin,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
+      const note = await createModifier(
+        tx,
+        cfg.tenantId,
+        { type: "text", name: { es: "Nota" }, available: true },
+        "es",
+      );
+      const answer = await createModifier(
+        tx,
+        cfg.tenantId,
+        {
+          type: "yes-no",
+          name: { es: "Cubiertos" },
+          yesLabel: { es: "Con cubiertos" },
+          noLabel: { es: "Sin cubiertos" },
+          defaultValue: true,
+          available: true,
+        },
+        "es",
+      );
+      const option = await createModifier(
+        tx,
+        cfg.tenantId,
+        {
+          type: "options",
+          name: { es: "Preparación" },
+          available: true,
+          choices: [{ id: optionId, name: { es: "Frío" }, available: true }],
+          defaultChoiceId: optionId,
+        },
+        "es",
+      );
+      const extra = await createModifier(
+        tx,
+        cfg.tenantId,
+        {
+          type: "extras",
+          name: { es: "Extras" },
+          available: true,
+          required: false,
+          maxTotalQuantity: 2,
+          choices: [
+            {
+              id: extraId,
+              name: { es: "Queso" },
+              available: true,
+              priceDelta: "9.00",
+              vatClass: "reduced",
+              maxQuantity: 2,
+              defaultQuantity: 0,
+            },
+          ],
+        },
+        "es",
+      );
+      await setProductOptionGroups(tx, cfg.tenantId, product.id, [
+        note.id,
+        answer.id,
+        option.id,
+        extra.id,
+      ]);
+      await setMenuItemOptionGroups(tx, cfg.tenantId, product.menuItemId, [
+        { groupId: note.id, options: [] },
+        { groupId: answer.id, options: [] },
+        { groupId: option.id, options: [{ optionId, priceDelta: "0.00" }] },
+        { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
+      ]);
+      return { note, answer, option, extra };
+    },
+  );
+  const selections: ModifierSelection[] = [
+    { modifierId: note.id, type: "text", text: "sin sal" },
+    { modifierId: answer.id, type: "yes-no", value: false },
+    { modifierId: option.id, type: "options", choiceId: optionId },
+    { modifierId: extra.id, type: "extras", choices: [{ choiceId: extraId, quantity: 2 }] },
+  ];
+  const snapshots: ModifierSnapshot[] = [
+    { modifierId: note.id, name: { es: "Nota" }, type: "text", text: "sin sal" },
+    {
+      modifierId: answer.id,
+      name: { es: "Cubiertos" },
+      type: "yes-no",
+      value: false,
+      label: { es: "Sin cubiertos" },
+    },
+    {
+      modifierId: option.id,
+      name: { es: "Preparación" },
+      type: "options",
+      choiceId: optionId,
+      choiceName: { es: "Frío" },
+    },
+    {
+      modifierId: extra.id,
+      name: { es: "Extras" },
+      type: "extras",
+      choices: [{ choiceId: extraId, name: { es: "Queso" }, quantity: 2 }],
+    },
+  ];
+  const app = new Hono();
+  mountTillApi(app, apiDeps(cfg), noopLog);
+  const cookie = await loginSession(app, cfg, operatorId);
+  const profileId = await seedProfileFF(cfg, "till", ["print-receipt"]);
+  const deviceCookie = await enrolTillCookie(cfg, profileId);
+  const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
+  const printerId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const printer = await createPrinter(tx, cfg, {
+      name: "Modifier receipts",
+      transport: "cloud_poll",
+      pollId: `modifiers-${randomUUID()}`,
+    });
+    await tx.execute(
+      sql`update tills set receipt_printer_id=${printer.id} where tenant_id=${cfg.tenantId}`,
+    );
+    await tx.execute(
+      sql`update locations set receipt_print_mode='never' where tenant_id=${cfg.tenantId} and id=${cfg.locationId}`,
+    );
+    return printer.id;
+  });
+  const workingOrderId = randomUUID();
+  const request = {
+    workingOrderId,
+    lines: [{ menuItemId: product.menuItemId, quantity: "2", modifierSelections: selections }],
+    tender: { method: "cash", amount: "10.00" },
+  };
+  const response = await app.request("/api/sales", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  expect(response.status, await response.clone().text()).toBe(200);
+  const ticket = (await response.json()) as TillSaleResult;
+  expect(ticket.total).toBe("4.40");
+  expect(ticket.tender).toEqual({ method: "cash", change: "5.60" });
+  expect(ticket.lines).toEqual([
+    {
+      descriptions: { [LOCALE]: "Agua mineral" },
+      quantity: "2",
+      gross: "3.00",
+      parentLineNo: null,
+      modifierSnapshots: snapshots,
+    },
+    {
+      descriptions: { [LOCALE]: "Queso" },
+      quantity: "4",
+      gross: "1.40",
+      parentLineNo: 1,
+      modifierSnapshots: [],
+    },
+  ]);
+  expect(ticket.vatBreakdown).toEqual([
+    { rate: "21.00", base: "2.48", tax: "0.52" },
+    { rate: "10.00", base: "1.27", tax: "0.13" },
+  ]);
+  const stored = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx.execute<{
+      quantity: string;
+      vat_rate: string;
+      modifier_snapshots: ModifierSnapshot[];
+    }>(
+      sql`select quantity,vat_rate,modifier_snapshots from sale_lines where tenant_id=${cfg.tenantId} order by line_no`,
+    );
+    const records = await tx
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+    return { rows: rows.rows, records };
+  });
+  expect(stored.rows).toEqual([
+    { quantity: "2.000", vat_rate: "21.00", modifier_snapshots: snapshots },
+    { quantity: "4.000", vat_rate: "10.00", modifier_snapshots: [] },
+  ]);
+  expect(stored.records).toHaveLength(1);
+  expect(stored.records[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
+  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    await updateModifier(
+      tx,
+      cfg.tenantId,
+      answer.id,
+      {
+        type: "yes-no",
+        name: { es: "Nuevo nombre" },
+        yesLabel: { es: "Sí nuevo" },
+        noLabel: { es: "No nuevo" },
+        defaultValue: true,
+        available: true,
+      },
+      "es",
+    );
+    await updateModifier(
+      tx,
+      cfg.tenantId,
+      option.id,
+      {
+        type: "options",
+        name: { es: "Nueva preparación" },
+        available: true,
+        choices: [{ id: optionId, name: { es: "Nuevo frío" }, available: true }],
+        defaultChoiceId: null,
+      },
+      "es",
+    );
+  });
+  const replay = await app.request("/api/sales", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  expect(replay.status).toBe(200);
+  const replayTicket = (await replay.json()) as TillSaleResult;
+  expect(replayTicket.lines).toEqual(ticket.lines);
+  expect(replayTicket.total).toBe("4.40");
+  expect(replayTicket.invoiceNumber).toBe(ticket.invoiceNumber);
+  const reprint = await app.request(`/api/sales/${workingOrderId}/reprint`, {
+    method: "POST",
+    headers,
+  });
+  expect(reprint.status, await reprint.clone().text()).toBe(200);
+  const printed = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return tx.execute<{ payload: Buffer }>(
+      sql`select payload from print_jobs where tenant_id=${cfg.tenantId} and printer_id=${printerId} and kind='document'`,
+    );
+  });
+  expect(printed.rows).toHaveLength(1);
+  const text = decodeTicket(new Uint8Array(printed.rows[0]!.payload));
+  expect(text).toContain("sin sal");
+  expect(text).toContain("Sin cubiertos");
+  expect(text).toContain("Frío");
+  expect(text).not.toContain("No nuevo");
+  expect(text).not.toContain("Nuevo frío");
+  expect(text).toContain("DUPLICADO");
+  const recordCount = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return tx
+      .select({ id: registrosFacturacion.id })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+  });
+  expect(recordCount).toHaveLength(1);
 });

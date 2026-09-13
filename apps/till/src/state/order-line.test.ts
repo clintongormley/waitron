@@ -6,6 +6,7 @@ import {
   quantityLabel,
   toWireLineExtras,
   toWireOption,
+  toWireModifiers,
 } from "./order-line.js";
 import type { OrderLine, SelectedLineOption } from "./working-order.js";
 import type { TillProduct } from "../api/client.js";
@@ -145,4 +146,23 @@ describe("order-line pricing", () => {
       expect(toWireLineExtras(plain)).toEqual({});
     });
   });
+});
+
+it("prices repeated extras per fractional product unit and sends only canonical identities", () => {
+  const modifierSelections = [
+    {
+      modifierId: "extras",
+      type: "extras" as const,
+      choices: [{ choiceId: "opt-shot", quantity: 2 }],
+    },
+    { modifierId: "cut", type: "yes-no" as const, value: false },
+  ];
+  const line: OrderLine = {
+    product: jamon,
+    quantity: "0.125",
+    options: [{ ...shot, quantity: 2 }],
+    modifierSelections,
+  };
+  expect(lineGross(line)).toBe("1.38");
+  expect(toWireModifiers(line)).toEqual({ modifierSelections });
 });

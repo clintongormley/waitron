@@ -22,6 +22,7 @@ function trimQuantityForDisplay(quantity: string): string {
 export function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
   return priced.lines.map((line, i) => ({
     descriptions: line.descriptions,
+    modifierSnapshots: line.modifierSnapshots ?? [],
     quantity: trimQuantityForDisplay(line.quantity),
     gross: priced.grossLineTotals[i]!,
     // Carry the child→parent link so the receipt can render each option grouped under its dish

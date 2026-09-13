@@ -11,7 +11,7 @@ import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
-import { toWireLineExtras, toWireOption, toWireProductIdentity } from "./state/order-line.js";
+import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "./state/order-line.js";
 // Side-effect imports register the three screen elements this app swaps between; it names them only
 // as tags below, so the wiring — not the screens — is what lives here.
 import "./screens/till-lock-screen.js";
@@ -1346,12 +1346,10 @@ export class TillApp extends LitElement {
         ...toWireProductIdentity(line.product),
         quantity: line.quantity,
         ...toWireLineExtras(line),
+        ...toWireModifiers(line),
       };
       if (line.workingOrderLineId !== undefined) {
         saleLine.workingOrderLineId = line.workingOrderLineId;
-      }
-      if (line.options !== undefined && line.options.length > 0) {
-        saleLine.options = line.options.map(toWireOption);
       }
       return saleLine;
     });
@@ -1705,6 +1703,12 @@ export class TillApp extends LitElement {
             ? {}
             : { workingOrderLineId: line.workingOrderLineId }),
           ...(line.options === undefined ? {} : { options: line.options }),
+          ...(line.modifierSelections === undefined
+            ? {}
+            : { modifierSelections: line.modifierSelections }),
+          ...(line.modifierSnapshots === undefined
+            ? {}
+            : { modifierSnapshots: line.modifierSnapshots }),
           ...(line.note === undefined ? {} : { note: line.note }),
           ...(line.doneness === undefined ? {} : { doneness: line.doneness }),
         });

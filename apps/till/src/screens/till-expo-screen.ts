@@ -1,3 +1,4 @@
+import { modifierSnapshotLabels } from "../widgets/modifier-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -704,8 +705,10 @@ export class TillExpoScreen extends LitElement {
    *  `modifiers`, or an empty array), so a modifier-free item renders identically to before this task. */
   #modifiers(item: ExpoItem): TemplateResult | typeof nothing {
     const modifiers = item.modifiers ?? [];
-    if (modifiers.length === 0) return nothing;
+    const answers = modifierSnapshotLabels(item.modifierSnapshots);
+    if (modifiers.length === 0 && answers.length === 0) return nothing;
     return html`<span class="item-modifiers">
+      ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}
       ${modifiers.map(
         (modifier) =>
           html`<span class="modifier"

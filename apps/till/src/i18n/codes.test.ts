@@ -60,3 +60,11 @@ it("degrades the other join refusals to the generic sentence, naming nothing abo
   expect(codeMessage("device.join_rate_limited", "en")).toBe("Something went wrong, try again");
   expect(codeMessage("device.join_full", "en")).toBe("Something went wrong, try again");
 });
+
+it("localizes modifier failures in both languages without exposing identifiers", () => {
+  for (const code of ["modifier.invalid", "modifier.not_found", "modifier.in_use"]) {
+    expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
+    expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
+    expect(codeMessage(code, "en")).not.toBe(codeMessage(code, "es"));
+  }
+});

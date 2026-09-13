@@ -206,6 +206,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md)
 
+- **Default optional request fields only when absent, and check enum types before comparing values.**
+  Explicit null and coerced arrays passed modifier validation. Regression:
+  `packages/catalogue/src/modifier-contract.test.ts`.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
   `db.series_not_found`. **Never renamed once shipped**; deprecate and add a sibling. `server.*` is
   reserved for facts about the process itself. Every file that throws a code imports its registry.

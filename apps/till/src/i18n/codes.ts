@@ -2,7 +2,7 @@ import { currentLocale, pickLocale } from "./t.js";
 
 // Localised copy for the raw error CODES the schedule routes reject with. The till's API client rejects
 // with a bare `{ code }` (see api/client.ts), and this module is the ONE place a schedule code becomes
-// human copy for an error banner. It carries a load-bearing guarantee: an operator must NEVER see the
+// human copy for an error banner. An operator must never see the
 // raw wire code. A code that isn't in the table below degrades to the GENERIC sentence rather than being
 // rendered verbatim — an unmapped code is a copy gap, not a string to show a user — so `codeMessage`
 // can only ever return a sentence, never a code (the #82 dashboard-i18n pattern, dashboard/src/i18n/codes.ts).
@@ -10,6 +10,18 @@ import { currentLocale, pickLocale } from "./t.js";
 // English is the source of truth here too, and `apps/*` is exempt from the english-only guard, so the
 // Spanish is user-facing translation, not schema vocabulary. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "modifier.invalid": {
+    en: "Check the modifier choices and try again",
+    es: "Revisa las opciones del modificador e inténtalo de nuevo",
+  },
+  "modifier.not_found": {
+    en: "That modifier is no longer available",
+    es: "Ese modificador ya no está disponible",
+  },
+  "modifier.in_use": {
+    en: "This modifier is in use. Deactivate it instead",
+    es: "Este modificador está en uso. Desactívalo",
+  },
   "swap.not_permitted": {
     en: "You can only offer your own shifts and accept swaps offered to you",
     es: "Solo puedes ofrecer tus propios turnos y aceptar los cambios que te ofrezcan",

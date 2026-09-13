@@ -363,3 +363,49 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
     expect(priceLockedLines(locked)).toEqual(priceBasket(basket));
   });
 });
+
+describe("structured modifier snapshots", () => {
+  it("carries nonprice selections through live and locked pricing without changing totals", () => {
+    const modifierSnapshots = [
+      {
+        modifierId: "note",
+        name: { en: "Message" },
+        type: "text" as const,
+        text: "Happy birthday",
+      },
+      {
+        modifierId: "milk",
+        name: { en: "Milk" },
+        type: "options" as const,
+        choiceId: "oat",
+        choiceName: { en: "Oat" },
+      },
+      {
+        modifierId: "ice",
+        name: { en: "Ice" },
+        type: "yes-no" as const,
+        value: false,
+        label: { en: "Without ice" },
+      },
+    ];
+    const live = priceBasketWithOptions([
+      { product: each("2.20", "reduced"), quantity: "2", options: [], modifierSnapshots },
+    ]);
+    expect(live.lines[0]).toHaveProperty("modifierSnapshots", modifierSnapshots);
+    expect(live.total).toBe("4.40");
+    const locked = priceLockedLines([
+      {
+        grossUnitPrice: "2.20",
+        quantity: "2",
+        vatRate: "10.00",
+        descriptions: { en: "item" },
+        category: null,
+        modifierSnapshots,
+      },
+    ]);
+    expect(locked).toEqual(live);
+    expect(live.vatBreakdown).toEqual(
+      priceBasket([{ product: each("2.20", "reduced"), quantity: "2" }]).vatBreakdown,
+    );
+  });
+});

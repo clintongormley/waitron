@@ -874,15 +874,14 @@ describe("getHeldOrder", () => {
     });
 
     const order = await getHeldOrder({ db }, cfg, id);
-    // Only product_id + quantity per line (the basket-rebuild inputs), in lineNo order. numeric(12,3)
-    // reads the quantities back as "1.000"/"3.000".
+    // Saved selections and quantities return in lineNo order; numeric(12,3) retains three decimals.
     expect(order).toEqual({
       id,
       orderNumber: 1,
       label: "Mesa 7",
       lines: [
-        { productId: cafeId, quantity: "1.000" },
-        { productId: aguaId, quantity: "3.000" },
+        { productId: cafeId, quantity: "1.000", modifierSnapshots: [] },
+        { productId: aguaId, quantity: "3.000", modifierSnapshots: [] },
       ],
     });
   });
@@ -4341,5 +4340,244 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       expect(items).toHaveLength(1);
       expect(items[0]!.courseId).toBe(override.id);
     });
+  });
+});
+
+it("applies nonprice option dietary effects to station and expo snapshots", async () => {
+  const { cfg, catalogueId } = await setupVenue();
+  await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+    const product = await createProduct(tx, cfg.tenantId, {
+      catalogueId,
+      categoryId: null,
+      descriptions: { [LOCALE]: "Coffee" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "general",
+      allergens: { milk: { presence: "contains" } },
+    });
+    await applyDietDerivation(tx, product.id, { origins: ["dairy"], pending: false });
+    const choiceId = await addOption(tx, cfg.tenantId, product.id, "Oat", {
+      remove: ["milk"],
+      removeOrigins: ["dairy"],
+    });
+    const { id: orderId } = await placeOrderWith(tx, cfg, [
+      { productId: product.id, quantity: "1" },
+    ]);
+    const modifierSnapshots = [
+      {
+        modifierId: randomUUID(),
+        name: { [LOCALE]: "Milk" },
+        type: "options" as const,
+        choiceId,
+        choiceName: { [LOCALE]: "Oat" },
+      },
+    ];
+    await tx
+      .update(workingOrderLines)
+      .set({ modifierSnapshots })
+      .where(eq(workingOrderLines.workingOrderId, orderId));
+    const queue = await listStationQueue(tx, cfg, station.id);
+    expect(queue[0]!.items[0]!.asServed).toEqual({ allergens: {}, pending: false });
+    expect(queue[0]!.items[0]!.modifierSnapshots).toEqual(modifierSnapshots);
+    expect(queue[0]!.items[0]!.asServedDiet).toEqual({
+      vegan: "yes",
+      vegetarian: "yes",
+      contains: [],
+    });
+    const expo = await listExpoQueue(tx, cfg);
+    expect(expo[0]!.courses[0]!.items[0]!.asServed).toEqual({ allergens: {}, pending: false });
+    expect(expo[0]!.courses[0]!.items[0]!.modifierSnapshots).toEqual(modifierSnapshots);
+    expect(expo[0]!.courses[0]!.items[0]!.asServedDiet).toEqual({
+      vegan: "yes",
+      vegetarian: "yes",
+      contains: [],
+    });
+  });
+});
+
+describe("canonical modifier selections", () => {
+  it.each(["menu", "product"])(
+    "preserves %s selections and prices through a fractional quantity edit",
+    async (source) => {
+      const { cfg, cafeId, cafeOfferId, zoneId } = await setupVenue();
+      const choiceId = randomUUID();
+      const optionId = randomUUID();
+      const definitions = await withTenant(db, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const definitions = [];
+        for (const input of [
+          { type: "text", name: { es: "Mensaje" } },
+          {
+            type: "yes-no",
+            name: { es: "Caliente" },
+            yesLabel: { es: "Sí" },
+            noLabel: { es: "No" },
+          },
+          {
+            type: "options",
+            name: { es: "Taza" },
+            choices: [{ id: optionId, name: { es: "Grande" } }],
+          },
+          {
+            type: "extras",
+            name: { es: "Extras" },
+            maxTotalQuantity: null,
+            choices: [{ id: choiceId, name: { es: "Bacon" }, priceDelta: "1.00", maxQuantity: 2 }],
+          },
+        ])
+          definitions.push(await catalogue.createModifier(tx, cfg.tenantId, input, "es"));
+        await catalogue.setProductOptionGroups(
+          tx,
+          cfg.tenantId,
+          cafeId,
+          definitions.map((d) => d.id),
+        );
+        await tx.execute(
+          sql`update products set pricing_unit = 'weight' where tenant_id = ${cfg.tenantId} and id = ${cafeId}`,
+        );
+        await catalogue.setMenuItemOptionGroups(
+          tx,
+          cfg.tenantId,
+          cafeOfferId,
+          definitions.map((d) => ({
+            groupId: d.id,
+            options:
+              d.type === "options" || d.type === "extras"
+                ? d.choices.map((choice) => ({
+                    optionId: choice.id,
+                    priceDelta: d.type === "extras" ? "1.00" : "0.00",
+                  }))
+                : [],
+          })),
+        );
+        return definitions;
+      });
+      const modifierSelections = [
+        { modifierId: definitions[0]!.id, type: "text" as const, text: " <b>hello</b> " },
+        { modifierId: definitions[1]!.id, type: "yes-no" as const, value: false },
+        { modifierId: definitions[2]!.id, type: "options" as const, choiceId: optionId },
+        {
+          modifierId: definitions[3]!.id,
+          type: "extras" as const,
+          choices: [{ choiceId, quantity: 2 }],
+        },
+      ];
+      const result = await parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        ...(source === "menu" ? { zoneId } : {}),
+        lines: [
+          {
+            ...(source === "menu" ? { menuItemId: cafeOfferId } : { productId: cafeId }),
+            quantity: "0.500",
+            modifierSelections,
+          },
+        ],
+      });
+      const held = await getHeldOrder({ db }, cfg, result.id);
+      expect(held.lines).toHaveLength(1);
+      expect(held.lines[0]).toMatchObject({
+        modifierSelections,
+        modifierSnapshots: [
+          { type: "text", text: " <b>hello</b> " },
+          { type: "yes-no", value: false, label: { es: "No" } },
+          { type: "options", choiceId: optionId, choiceName: { es: "Grande" } },
+          { type: "extras", choices: [{ choiceId, quantity: 2 }] },
+        ],
+      });
+      const stored = await db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, result.id))
+        .orderBy(workingOrderLines.lineNo);
+      expect(stored).toHaveLength(2);
+      expect(stored[1]).toMatchObject({
+        quantity: "1.000",
+        unitPriceGross: "1.00",
+        lineTotal: "1.00",
+      });
+      await withTenant(db, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await catalogue.updateModifier(
+          tx,
+          cfg.tenantId,
+          definitions[3]!.id,
+          {
+            type: "extras",
+            name: { es: "Changed" },
+            choices: [
+              {
+                id: choiceId,
+                name: { es: "Changed" },
+                priceDelta: "9.00",
+                maxQuantity: 2,
+                defaultQuantity: 0,
+              },
+            ],
+          },
+          "es",
+        );
+      });
+      await updateHeldOrder({ db }, cfg, result.id, {
+        lines: [
+          {
+            workingOrderLineId: held.lines[0]!.workingOrderLineId,
+            ...(source === "menu" ? { menuItemId: cafeOfferId } : { productId: cafeId }),
+            quantity: "1.000",
+            modifierSelections,
+          },
+        ],
+      });
+      const updated = await db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, result.id))
+        .orderBy(workingOrderLines.lineNo);
+      expect(updated[1]).toMatchObject({
+        quantity: "2.000",
+        unitPriceGross: "1.00",
+        lineTotal: "2.00",
+      });
+      expect(updated[0]!.modifierSnapshots).toEqual(stored[0]!.modifierSnapshots);
+    },
+  );
+});
+
+it("does not let an omitted canonical payload waive an empty required menu extras group", async () => {
+  const { cfg, cafeId, cafeOfferId, zoneId } = await setupVenue();
+  const choiceId = randomUUID();
+  const modifier = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const modifier = await catalogue.createModifier(
+      tx,
+      cfg.tenantId,
+      {
+        type: "extras",
+        name: { es: "Extras" },
+        required: true,
+        choices: [{ id: choiceId, name: { es: "Shot" } }],
+      },
+      "es",
+    );
+    await catalogue.setProductOptionGroups(tx, cfg.tenantId, cafeId, [modifier.id]);
+    await catalogue.setMenuItemOptionGroups(tx, cfg.tenantId, cafeOfferId, [
+      { groupId: modifier.id, options: [{ optionId: choiceId, priceDelta: "0.50" }] },
+    ]);
+    await tx
+      .update(optionGroupItems)
+      .set({ active: false })
+      .where(eq(optionGroupItems.id, choiceId));
+    return modifier;
+  });
+  await expect(
+    parkOrder({ db }, cfg, {
+      id: randomUUID(),
+      zoneId,
+      lines: [{ menuItemId: cafeOfferId, quantity: "1" }],
+    }),
+  ).rejects.toMatchObject({
+    code: "options.selection_invalid",
+    params: { groupId: modifier.id, reason: "required" },
   });
 });

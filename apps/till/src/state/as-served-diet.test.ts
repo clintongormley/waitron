@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asServedDiet } from "./as-served.js";
+import { asServedDiet, asServedAllergens } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
 import type { DietDerivation, DietOverride, TillOptionItem, TillProduct } from "../api/client.js";
 
@@ -145,3 +145,83 @@ describe("asServedDiet", () => {
     expect(asServedDiet({ product: prod, quantity: "1" }).vegan).toBe("yes");
   });
 });
+
+it("canonical extras preserve allergen and dietary effects without the legacy group projection", () => {
+  const prod = product({ origins: ["plant"], pending: false }, []);
+  prod.allergens = {};
+  prod.modifiers = [
+    {
+      id: "extras",
+      name: { en: "Extras" },
+      type: "extras",
+      available: true,
+      required: false,
+      maxTotalQuantity: null,
+      choices: [
+        {
+          ...item("bacon", { addOrigins: ["meat"] }),
+          addAllergens: { milk: { presence: "contains" } },
+          available: true,
+          defaultQuantity: 0,
+        },
+      ],
+    },
+  ];
+  delete prod.optionGroups;
+  const selected = line(prod, "bacon");
+  expect(asServedDiet(selected).vegan).toBe("no");
+  expect(asServedDiet(selected).contains).toEqual(["meat"]);
+  expect(asServedAllergens(selected).allergens).toEqual({ milk: { presence: "contains" } });
+});
+
+it.each(["submitted", "saved"] as const)(
+  "canonical nonprice option %s selections apply their allergen and dietary effects",
+  (source) => {
+    const prod = product({ origins: ["plant", "dairy"], pending: false }, []);
+    prod.allergens = { milk: { presence: "contains" } };
+    prod.modifiers = [
+      {
+        id: "milk",
+        name: { en: "Milk" },
+        type: "options",
+        available: true,
+        defaultChoiceId: null,
+        choices: [
+          {
+            id: "oat",
+            name: { en: "Oat" },
+            available: true,
+            removeAllergens: ["milk"],
+            removeOrigins: ["dairy"],
+          },
+        ],
+      },
+    ];
+    delete prod.optionGroups;
+    const selected: OrderLine = {
+      product: prod,
+      quantity: "1",
+      ...(source === "submitted"
+        ? {
+            modifierSelections: [{ modifierId: "milk", type: "options" as const, choiceId: "oat" }],
+          }
+        : {
+            modifierSnapshots: [
+              {
+                modifierId: "milk",
+                name: { en: "Milk" },
+                type: "options" as const,
+                choiceId: "oat",
+                choiceName: { en: "Oat" },
+              },
+            ],
+          }),
+    };
+    expect(asServedAllergens(selected)).toEqual({
+      allergens: {},
+      pending: false,
+      removed: ["milk"],
+    });
+    expect(asServedDiet(selected)).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
+  },
+);

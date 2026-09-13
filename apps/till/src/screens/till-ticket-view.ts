@@ -1,3 +1,4 @@
+import { modifierSnapshotLabels } from "../widgets/modifier-snapshot.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -447,6 +448,7 @@ export class TillTicketView extends LitElement {
                 <span class="line-qty">${group.dish.quantity}</span>
                 <span class="line-gross">${formatMoney(group.dish.gross, locale)}</span>
               </li>
+              ${modifierSnapshotLabels(group.dish.modifierSnapshots, (text) => lineName(text, locale)).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
               ${group.options.map(
                 // Per-option quantity: the per-dish count is recovered from the filed COMBINED child
                 // quantity (see perDishOptionQuantity). Append a "×N" badge to the name ONLY when it

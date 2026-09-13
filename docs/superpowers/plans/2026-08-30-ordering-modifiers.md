@@ -1,5 +1,10 @@
 # Ordering Modifiers / Variants Implementation Plan
 
+> **2026-09-12 update:** The [four-type modifier design](../specs/2026-09-12-product-modifiers-design.md)
+> supersedes the each-only selection gate and the skip-empty-required-group behavior. Extras retain
+> decimal child-line pricing; text, options and Yes/no now use saved presentation snapshots.
+> Allergen and dietary effects still use current declarations, with source-free authoring controls.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add reusable option groups with priced options to the catalogue, so a product can be sold with modifiers ("Latte — large, oat milk"; "Burger, no onions, extra bacon"), each selected option filed as its own fiscal sub-line linked to its parent line.

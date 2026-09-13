@@ -361,42 +361,9 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "option.not_found": { optionGroupItemId: string; productId: string };
-    /**
-     * A ring-time modifier SELECTION violated one of its product's option-group constraints (ordering
-     * modifiers, Task 6): a `required` group with nothing picked, fewer than `minSelect`, or more than
-     * `maxSelect`. The server validates the whole selection per group against the product's resolved
-     * `optionGroups` and refuses a basket the client should have caught — the client is never the gate.
-     * `reason` is a stable CODE, never prose: `"required"` (a required group, nothing selected),
-     * `"below_min"` (fewer than `minSelect`), `"above_max"` (more than `maxSelect` — the per-group
-     * tally SUMS each option's per-option quantity, so a single option taken ×N counts N toward it), or
-     * `"quantity_invalid"` (an option's per-option quantity, summed across any duplicate ids on the
-     * wire, is not an integer in `1..max_quantity` — the per-option cap `option_group_items.max_quantity`);
-     * a translator renders it. An EMPTY group (`items: []`, an authoring bug) carries no constraint and
-     * is skipped, never a source of this — nothing may block a sale on a mis-authored group (CLAUDE.md §5).
-     *
-     * `productId` and `groupId` are caller-/catalogue-supplied uuids the till already holds, not
-     * secrets; the offending count is NOT carried (the no-leak discipline this file keeps — echo names
-     * and stable codes, never raw values). `options.*` names the DOMAIN CONCEPT (a menu-option
-     * selection), never the throwing package; PLURAL because it is a fact about the whole SELECTION,
-     * beside the singular `option.not_found` (one option). Destined for `@waitron/catalogue` once a
-     * package other than this host throws it — the note `option.not_found` carries. A CLIENT
-     * request-shape fault → mapped to 400. Never renamed once shipped.
-     */
+    /** Legacy option payload validation; required groups remain required when no choices are usable. */
     "options.selection_invalid": { productId: string; groupId: string; reason: string };
-    /**
-     * A ring-time request attached modifier options to a product that cannot carry them (ordering
-     * modifiers, Task 6): modifiers attach to `each` products only this slice, so options on a
-     * `weight`-priced product (loose deli sold by the kilo) are refused before pricing. A crafted
-     * request is the only way to reach it — the till never offers option groups on a weighed product —
-     * and the server is the gate, so it fails loud here rather than pricing a nonsensical basket.
-     *
-     * `productId` is the caller-supplied uuid the till already holds, not a secret; `pricingUnit` is
-     * the product's own `each`/`weight` classification (this file's config, never a secret), echoed so
-     * the message can name why the attachment was refused. `options.*` names the DOMAIN CONCEPT (a
-     * menu-option selection), never the throwing package, beside `options.selection_invalid`; destined
-     * for `@waitron/catalogue` once a package other than this host throws it — the note
-     * `option.not_found` carries. A CLIENT request-shape fault → mapped to 400. Never renamed once shipped.
-     */
+    /** @deprecated Modifiers now apply to fractional units too; retained for stored error codes. */
     "options.unsupported_product": { productId: string; pricingUnit: string };
     /**
      * A ring-time line carried a free-text kitchen `note` longer than the 200-character limit (per-line

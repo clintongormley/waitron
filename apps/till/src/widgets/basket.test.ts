@@ -777,3 +777,77 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelectorAll(".line")).toHaveLength(0);
   });
 });
+
+it("keeps different answers on distinct lines through quantity editing and shows their saved labels", async () => {
+  const store = new WorkingOrderStore();
+  for (const value of [false, true])
+    store.addProduct(cafe, "1", undefined, {
+      modifierSelections: [{ modifierId: "cut", type: "yes-no", value }],
+      modifierSnapshots: [
+        {
+          modifierId: "cut",
+          type: "yes-no",
+          value,
+          name: { es: "Cortar" },
+          label: { es: value ? "Sí" : "No" },
+        },
+      ],
+    });
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  store.setLineQuantity(0, "2");
+  await el.updateComplete;
+  expect(store.lines.map((line) => line.modifierSelections)).toEqual([
+    [{ modifierId: "cut", type: "yes-no", value: false }],
+    [{ modifierId: "cut", type: "yes-no", value: true }],
+  ]);
+  expect(
+    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
+  ).toEqual(["Cortar: No", "Cortar: Sí"]);
+});
+
+it("reopens a draft modifier editor with its explicit answer and changes only that line", async () => {
+  const store = new WorkingOrderStore();
+  const product: TillProduct = {
+    ...cafe,
+    modifiers: [
+      {
+        id: "cut",
+        name: { es: "Cortar" },
+        type: "yes-no",
+        available: true,
+        yesLabel: { es: "Sí" },
+        noLabel: { es: "No" },
+        defaultValue: true,
+      },
+    ],
+  };
+  for (let index = 0; index < 2; index++)
+    store.addProduct(product, "1", undefined, {
+      modifierSelections: [{ modifierId: "cut", type: "yes-no", value: false }],
+    });
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers")!.click();
+  await el.updateComplete;
+  const picker =
+    el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
+      "till-modifier-picker",
+    )!;
+  await picker.updateComplete;
+  const radios = picker.shadowRoot!.querySelectorAll<HTMLInputElement>(
+    'input[name="modifier-cut"]',
+  );
+  expect(radios[0]!.checked).toBe(true);
+  expect(radios[1]!.checked).toBe(false);
+  radios[1]!.click();
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+  expect(store.lines.map((line) => line.modifierSelections)).toEqual([
+    [{ modifierId: "cut", type: "yes-no", value: true }],
+    [{ modifierId: "cut", type: "yes-no", value: false }],
+  ]);
+  expect(store.lines[0]?.modifierSnapshots).toEqual([
+    { modifierId: "cut", name: { es: "Cortar" }, type: "yes-no", value: true, label: { es: "Sí" } },
+  ]);
+});

@@ -26,13 +26,13 @@ import { priceBasket } from "@waitron/catalogue/src/pricing.js";
 import { sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
-import type { Doneness, TillProduct } from "../api/client.js";
+import type { Doneness, TillProduct, ModifierSelection, ModifierSnapshot } from "../api/client.js";
 
 /**
  * One modifier the operator selected on a basket line (ordering modifiers, Task 9) — the client half
  * of the server's `options: [{ optionGroupItemId }]` wire contract. The WIRE sends only
- * `optionGroupItemId`; the server re-resolves the option's price, VAT and name AUTHORITATIVELY (a
- * `weight` line carrying options is refused server-side). The extra `name`/`priceDelta` are carried for
+ * `optionGroupItemId`; the server re-resolves the option's price, VAT and name.
+ * The extra `name`/`priceDelta` are carried for
  * the CLIENT alone: `name` so the basket can render the modifier under its dish (Task 8) without a
  * re-lookup, `priceDelta` so {@link lineGross} can add it to the DISPLAY-ONLY running line price. They
  * are snapshotted at pick time and never reach a fiscal figure — the server prices from the id.
@@ -70,6 +70,8 @@ export interface OrderLine {
    * never counted independently), matching the server's `priceBasketWithOptions`.
    */
   options?: SelectedLineOption[];
+  modifierSelections?: ModifierSelection[];
+  modifierSnapshots?: ModifierSnapshot[];
   /**
    * A free-text kitchen instruction the operator typed on the line (order-line customisation), or
    * ABSENT when none — the common case, kept absent (never `""`) so a plain add stays byte-identical to
@@ -261,7 +263,12 @@ export class WorkingOrderStore {
     product: TillProduct,
     quantity: string,
     options?: SelectedLineOption[],
-    extras?: { note?: string; doneness?: Doneness },
+    extras?: {
+      note?: string;
+      doneness?: Doneness;
+      modifierSelections?: ModifierSelection[];
+      modifierSnapshots?: ModifierSnapshot[];
+    },
   ): void {
     const line: OrderLine = { product, quantity };
     if (options !== undefined) {
@@ -273,7 +280,28 @@ export class WorkingOrderStore {
     if (extras?.doneness !== undefined) {
       line.doneness = extras.doneness;
     }
+    if (extras?.modifierSelections !== undefined)
+      line.modifierSelections = extras.modifierSelections;
+    if (extras?.modifierSnapshots !== undefined) line.modifierSnapshots = extras.modifierSnapshots;
     this.#lines.push(line);
+    this.#invalidatePricing();
+    this.#dirty = true;
+    this.emit("changed");
+  }
+
+  setLineModifiers(
+    index: number,
+    selection: {
+      options: SelectedLineOption[];
+      modifierSelections?: ModifierSelection[];
+      modifierSnapshots?: ModifierSnapshot[];
+    },
+  ): void {
+    const line = this.#lines[index];
+    if (!line) return;
+    line.options = selection.options;
+    line.modifierSelections = selection.modifierSelections;
+    line.modifierSnapshots = selection.modifierSnapshots;
     this.#invalidatePricing();
     this.#dirty = true;
     this.emit("changed");

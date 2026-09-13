@@ -6,6 +6,8 @@ import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import "./numeric-pad.js";
 import "./reader-picker.js";
+import "./modifier-picker.js";
+import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderFlow, PayOutcome, TillActiveReader, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -585,6 +587,8 @@ export class TillTenderPay extends LitElement {
    * returns. (The click handler captures `product` from the render closure, so it would otherwise fire
    * again against a stale button.)
    */
+  @state() private modifierDraft?: { product: TillProduct; quantity: string };
+
   #addWeight(product: TillProduct): void {
     if (this.view !== "weighing") return;
     const kg = this.#enteredDecimal();
@@ -592,7 +596,9 @@ export class TillTenderPay extends LitElement {
     this.selected = undefined;
     this.entry = "";
     this.view = "idle";
-    this.store.addProduct(product, kg);
+    if (product.modifiers?.some((modifier) => modifier.available)) {
+      this.modifierDraft = { product, quantity: kg };
+    } else this.store.addProduct(product, kg);
   }
 
   /** What the keypad has entered so far, shown as `"0"` rather than blank when nothing is typed. */
@@ -601,7 +607,30 @@ export class TillTenderPay extends LitElement {
   }
 
   override render() {
-    return html`${this.#renderView()}${this.#renderReaderPicker()}`;
+    return html`${this.#renderView()}${this.#renderReaderPicker()}${
+      this.modifierDraft
+        ? html`<till-modifier-picker
+            .product=${this.modifierDraft.product}
+            .quantity=${this.modifierDraft.quantity}
+            @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
+              event.stopPropagation();
+              if (!this.modifierDraft) return;
+              const quantity = this.modifierDraft.quantity;
+              this.modifierDraft = undefined;
+              this.store.addProduct(
+                event.detail.product,
+                quantity,
+                event.detail.options.length ? event.detail.options : undefined,
+                event.detail,
+              );
+            }}
+            @wt-modifier-cancel=${(event: Event) => {
+              event.stopPropagation();
+              this.modifierDraft = undefined;
+            }}
+          ></till-modifier-picker>`
+        : nothing
+    }`;
   }
 
   #renderView() {

@@ -1246,3 +1246,40 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
     expect(byRate.get("21.00")!.base).toBe("1.00");
   });
 });
+
+it("persists structured modifier snapshots and child links on the issued lines", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+
+  const modifierSnapshots = [
+    {
+      modifierId: "milk",
+      name: { en: "Milk" },
+      type: "options" as const,
+      choiceId: "oat",
+      choiceName: { en: "Oat" },
+    },
+    {
+      modifierId: "ice",
+      name: { en: "Ice" },
+      type: "yes-no" as const,
+      value: false,
+      label: { en: "No ice" },
+    },
+  ];
+  const lines = input().lines.map((line, index) => ({
+    ...line,
+    modifierSnapshots: index === 0 ? modifierSnapshots : [],
+    parentLineNo: index === 0 ? null : 1,
+    category: "Drinks",
+  }));
+  const { saleId } = await run(backend, { lines });
+  const saved = await suite.db
+    .select()
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId))
+    .orderBy(saleLines.lineNo);
+  expect(saved.map((line) => line.modifierSnapshots)).toEqual([modifierSnapshots, []]);
+  expect(saved[0]!.parentLineId).toBeNull();
+  expect(saved[1]!.parentLineId).toBe(saved[0]!.id);
+  expect(saved.map((line) => line.category)).toEqual(["Drinks", "Drinks"]);
+});

@@ -540,3 +540,44 @@ it("prints an unpaid invoice without claiming a cash or card payment", () => {
   for (const label of ["Efectivo", "Cambio", "Tarjeta", "Propina", "Cobrado", "Ref."])
     expect(text).not.toContain(label);
 });
+
+it("prints saved nonprice modifier labels including explicit false on original and duplicate receipts", () => {
+  const result: TillSaleResult = {
+    ...FILED_SALE,
+    lines: [
+      {
+        ...FILED_SALE.lines[0]!,
+        modifierSnapshots: [
+          {
+            modifierId: "message",
+            name: { "es-ES": "Mensaje" },
+            type: "text",
+            text: "Happy birthday",
+          },
+          {
+            modifierId: "milk",
+            name: { "en-GB": "Milk" },
+            type: "options",
+            choiceId: "oat",
+            choiceName: { "en-GB": "Oat" },
+          },
+          {
+            modifierId: "ice",
+            name: { "es-ES": "Hielo" },
+            type: "yes-no",
+            value: false,
+            label: { "es-ES": "Sin hielo" },
+          },
+        ],
+      },
+    ],
+  };
+  for (const duplicate of [false, true]) {
+    const paper = decodeTicket(
+      formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", duplicate }),
+    );
+    expect(paper).toContain("Mensaje: Happy birthday");
+    expect(paper).toContain("Milk: Oat");
+    expect(paper).toContain("Hielo: Sin hielo");
+  }
+});

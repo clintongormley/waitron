@@ -10,63 +10,25 @@ import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { OrderLine, SelectedLineOption } from "../state/working-order.js";
-import type { Doneness, TillOptionGroup, TillOptionItem, TillProduct } from "../api/client.js";
+import type {
+  Doneness,
+  TillOptionGroup,
+  TillOptionItem,
+  TillProduct,
+  Modifier,
+  ModifierSelection,
+  ModifierSnapshot,
+} from "../api/client.js";
 
-/**
- * The `modifier-confirm` payload: the parent product the diner was configuring plus the modifiers they
- * chose, as the `SelectedLineOption[]` the store's `addProduct(product, "1", options)` takes. `options`
- * is `[]` when nothing was picked (every group was optional and left blank); the caller (the grid)
- * collapses that empty case to no `options` at all before adding, so a grouped-but-unmodified dish stays
- * byte-identical to a plain ring-up.
- */
 export interface ModifierConfirmDetail {
   product: TillProduct;
   options: SelectedLineOption[];
-  /** The free-text kitchen note the operator typed (order-line customisation), or ABSENT when the box
-   * was left blank/whitespace — the grid forwards it to `addProduct`'s `extras` only when present. */
+  modifierSelections?: ModifierSelection[];
+  modifierSnapshots?: ModifierSnapshot[];
   note?: string;
-  /** The chosen meat doneness (order-line customisation), or ABSENT when the meat-gated select was left
-   * on its blank default — doneness is optional even on a meat dish. */
   doneness?: Doneness;
 }
 
-/**
- * The "choose your modifiers" dialog — the visible centre of the ordering flow. Tapping a product that
- * carries a non-empty option group (Task 3) opens this over the till; the diner picks their options and
- * the picker rings the dish with them (via the grid, which calls `addProduct`).
- *
- * SELECTION UI, per group's `maxSelect` and per item's `maxQuantity` (per-option quantity):
- *  - a SINGLE-select group (`maxSelect === 1`) renders RADIOS — exclusive by nature, so picking a new
- *    one replaces the old and the max is enforced without disabling anything. A quantity > 1 is
- *    impossible in a single-select group (its sum is capped at 1), so its items never get a stepper
- *    however high their `maxQuantity`;
- *  - a MULTI-select group renders CHECKBOXES for `maxQuantity === 1` items, and a STEPPER (`− N +`) for
- *    an item whose `maxQuantity > 1` — the diner can take that option several times per dish. Once the
- *    group's SUMMED quantity reaches `maxSelect` the remaining unticked boxes and every stepper's `+`
- *    disable (a ticked box / a stepped item stays live so the diner can undo it); a stepper's `+` also
- *    disables at the item's own `maxQuantity`, and its `−` at 0 (where it deselects the option).
- *
- * SELECTION STATE is a flat `quantities` map keyed by `option_group_items.id` — absent/0 is unselected,
- * ≥ 1 is selected with that per-dish count. A checkbox tick is quantity 1; a radio sets its item to 1
- * and clears its siblings; a stepper sets the count directly.
- *
- * CLIENT ENFORCEMENT is UX ONLY — the server re-validates every selection authoritatively (Task 6), so
- * this never reimplements the server's rules, it only gates the button, the boxes and the steppers.
- * "Add" is disabled until every rendered group is SATISFIED: a `required` group (or one with
- * `minSelect > 0`) needs at least its minimum picked, counted as the group's SUMMED quantity. A running
- * price (dish gross + the selected deltas, each at its stepped quantity, on a quantity-1 dish) shows
- * what the line will cost — computed with the SAME `lineGross` the basket totals with, so the two agree.
- *
- * THE EMPTY-GROUP CARRY (Task 3, CLAUDE.md §5 — nothing may wedge a sale): a group whose active `items`
- * resolved to `[]` (all its items inactive, an authoring bug) is SKIPPED — never rendered, and a
- * `required`-but-empty group imposes NO constraint, so a misconfigured menu can never lock the picker.
- *
- * Events (both composed + bubbling, so the grid catches them on its wrapper):
- *  - `modifier-confirm` carrying {@link ModifierConfirmDetail} on Add;
- *  - `modifier-cancel` on Cancel or when the modal is dismissed (Escape / `wt-close`).
- *
- * It lives in the SHARED counter/table-order flow, so the #173 handheld inherits it unchanged.
- */
 @customElement("till-modifier-picker")
 export class TillModifierPicker extends LitElement {
   constructor() {
@@ -79,6 +41,17 @@ export class TillModifierPicker extends LitElement {
     selectStyles,
     lineExtrasEditorStyles,
     css`
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2);
+        color: var(--wt-color-text);
+        background: var(--wt-color-surface);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        font: inherit;
+      }
       .group {
         margin: 0 0 var(--wt-space-4);
       }
@@ -150,67 +123,146 @@ export class TillModifierPicker extends LitElement {
     `,
   ];
 
-  /** The product being configured — supplied by the grid when it opens the picker. Its `optionGroups`
-   * drive the whole dialog; the confirm event carries it straight back so the grid rings THIS product. */
   @property({ attribute: false }) product!: TillProduct;
 
-  /**
-   * The chosen per-dish COUNT of each option, keyed by `option_group_items.id` (per-option quantity):
-   * absent or 0 = unselected, ≥ 1 = selected with that count. A radio/checkbox pick is a count of 1; a
-   * stepper sets the count directly (up to the item's `maxQuantity` and the group's remaining `maxSelect`
-   * allowance). Held as a fresh object on each change (never mutated in place) so Lit's dirty check
-   * re-renders; a count that reaches 0 is DELETED from the map, so an unselected item leaves no key.
-   */
+  @property() quantity = "1";
+  @property({ attribute: false }) initialSelections?: ModifierSelection[];
+  @state() private answers: Record<string, string | boolean> = {};
+  #seeded = false;
+  #choiceOwners = new Map<string, string>();
+
+  override willUpdate(): void {
+    // Defaults apply once, and never over an explicit reopened selection.
+    if (this.#seeded || !this.product) return;
+    this.#seeded = true;
+    for (const modifier of this.product.modifiers ?? []) {
+      if (modifier.type === "extras")
+        for (const choice of modifier.choices) this.#choiceOwners.set(choice.id, modifier.id);
+    }
+    if (this.initialSelections !== undefined) {
+      for (const selection of this.initialSelections) {
+        if (selection.type === "extras")
+          for (const choice of selection.choices)
+            this.quantities[choice.choiceId] = choice.quantity;
+        else if (selection.type === "text") this.answers[selection.modifierId] = selection.text;
+        else if (selection.type === "options")
+          this.answers[selection.modifierId] = selection.choiceId;
+        else this.answers[selection.modifierId] = selection.value;
+      }
+      return;
+    }
+    for (const modifier of this.product.modifiers ?? []) {
+      if (!modifier.available) continue;
+      if (modifier.type === "yes-no") this.answers[modifier.id] = modifier.defaultValue;
+      if (
+        modifier.type === "options" &&
+        modifier.defaultChoiceId !== null &&
+        modifier.choices.some(
+          (choice) => choice.id === modifier.defaultChoiceId && choice.available,
+        )
+      )
+        this.answers[modifier.id] = modifier.defaultChoiceId;
+      if (modifier.type === "extras")
+        for (const choice of modifier.choices) {
+          if (choice.available && choice.defaultQuantity > 0)
+            this.quantities[choice.id] = choice.defaultQuantity;
+        }
+    }
+  }
+
+  get #modifiers(): Modifier[] {
+    return (this.product.modifiers ?? []).filter((modifier) => modifier.available);
+  }
+
   @state() private quantities: Record<string, number> = {};
 
-  /** The free-text kitchen note typed into the always-shown textarea (order-line customisation). Held
-   * raw; `#confirm` trims it and omits an empty result, so a whitespace-only note is "not chosen". */
   @state() private note = "";
 
-  /** The chosen meat doneness, or `""` for the blank "no preference" default (the select shows only on a
-   * meat product). Optional even on a meat dish, so `""` confirms with no `doneness`. */
   @state() private doneness: Doneness | "" = "";
 
-  /** The product's groups that actually have something to pick — the empty-group carry drops `items: []`
-   * groups here, so they are neither rendered nor counted as a constraint. */
+  // Available required modifiers keep their constraint even when every choice is unavailable.
   get #renderableGroups(): TillOptionGroup[] {
+    if (this.product.modifiers !== undefined)
+      return this.#modifiers.flatMap((modifier) =>
+        modifier.type === "extras"
+          ? [
+              {
+                id: modifier.id,
+                name: modifier.name,
+                required: modifier.required,
+                minSelect: modifier.required ? 1 : 0,
+                maxSelect: modifier.maxTotalQuantity ?? Infinity,
+                items: modifier.choices
+                  .filter((choice) => choice.available)
+                  .map((choice) => ({
+                    ...choice,
+                    vatClass: choice.vatClass ?? null,
+                    addAllergens: choice.addAllergens ?? null,
+                    removeAllergens: choice.removeAllergens ?? null,
+                    addOrigins: choice.addOrigins ?? null,
+                    removeOrigins: choice.removeOrigins ?? null,
+                  })),
+              },
+            ]
+          : [],
+      );
     return (this.product.optionGroups ?? []).filter((group) => group.items.length > 0);
   }
 
-  /** The minimum a group needs picked to be satisfied: its `minSelect`, floored at 1 when `required`
-   * (a required group must have at least one, whatever its declared minimum). */
   #minFor(group: TillOptionGroup): number {
     return group.required ? Math.max(group.minSelect, 1) : group.minSelect;
   }
 
-  /** The group's SUMMED quantity across its items — the count `maxSelect`/`minSelect` are measured
-   * against now that an option can be taken several times (per-option quantity). */
   #groupQuantity(group: TillOptionGroup): number {
     return group.items.reduce((sum, item) => sum + (this.quantities[item.id] ?? 0), 0);
   }
 
-  /** Whether an item shows a STEPPER rather than a checkbox/radio: only in a multi-select group
-   * (`maxSelect > 1`) AND when the option may be taken more than once (`maxQuantity > 1`). A
-   * single-select group caps its sum at 1, so a quantity > 1 is impossible there. */
   #hasStepper(group: TillOptionGroup, item: TillOptionItem): boolean {
-    return group.maxSelect > 1 && item.maxQuantity > 1;
+    return (this.product.modifiers !== undefined || group.maxSelect > 1) && item.maxQuantity > 1;
   }
 
-  /** Whether a group has its minimum picked — counted as the SUMMED quantity. An empty group never
-   * reaches here (it is not rendered). */
   #satisfied(group: TillOptionGroup): boolean {
     return this.#groupQuantity(group) >= this.#minFor(group);
   }
 
-  /** Whether every rendered group is satisfied — the gate on "Add". Vacuously true when no group needs
-   * anything (all optional, or all empty and skipped), so a modifier-free-but-grouped dish still adds. */
-  get #allSatisfied(): boolean {
-    return this.#renderableGroups.every((group) => this.#satisfied(group));
+  #staleExtra(modifier: Extract<Modifier, { type: "extras" }>): boolean {
+    return Object.entries(this.quantities).some(
+      ([id, quantity]) =>
+        quantity > 0 &&
+        this.#choiceOwners.get(id) === modifier.id &&
+        !modifier.choices.some((choice) => choice.id === id && choice.available),
+    );
   }
 
-  /** The modifiers picked so far, in group-then-item order, as the wire/display `SelectedLineOption[]`.
-   * Emits every item with a count ≥ 1, carrying `quantity` ONLY when it is > 1 — a single-count option
-   * omits the field, so a plain modifier's wire stays byte-identical to before (per-option quantity). */
+  get #allSatisfied(): boolean {
+    return (
+      this.#renderableGroups.every(
+        (group) => this.#satisfied(group) && this.#groupQuantity(group) <= group.maxSelect,
+      ) &&
+      this.#modifiers.every((modifier) => {
+        if (modifier.type === "text") return String(this.answers[modifier.id] ?? "").length <= 500;
+        if (modifier.type === "options")
+          return modifier.choices.some(
+            (choice) => choice.available && choice.id === this.answers[modifier.id],
+          );
+        if (modifier.type === "extras")
+          return (
+            !this.#staleExtra(modifier) &&
+            modifier.choices.every((choice) => {
+              const quantity = this.quantities[choice.id] ?? 0;
+              return (
+                Number.isInteger(quantity) &&
+                quantity >= 0 &&
+                quantity <= choice.maxQuantity &&
+                (quantity === 0 || choice.available)
+              );
+            })
+          );
+        return typeof this.answers[modifier.id] === "boolean";
+      })
+    );
+  }
+
   #selectedOptions(): SelectedLineOption[] {
     const options: SelectedLineOption[] = [];
     for (const group of this.#renderableGroups) {
@@ -219,7 +271,7 @@ export class TillModifierPicker extends LitElement {
         if (quantity >= 1) {
           options.push({
             optionGroupItemId: item.id,
-            name: item.name,
+            name: { ...item.name },
             priceDelta: item.priceDelta,
             ...(quantity > 1 ? { quantity } : {}),
           });
@@ -229,20 +281,15 @@ export class TillModifierPicker extends LitElement {
     return options;
   }
 
-  /** The running line price: the dish + every selected delta at quantity 1, via the SAME `lineGross` the
-   * basket sums with, so the figure here equals the basket row the add produces. */
   get #runningPrice(): string {
     const previewLine: OrderLine = {
       product: this.product,
-      quantity: "1",
+      quantity: this.quantity,
       options: this.#selectedOptions(),
     };
     return formatMoney(lineGross(previewLine));
   }
 
-  /** Set an item's count, writing a fresh `quantities` object; a count of 0 (or less) DELETES the key so
-   * an unselected item leaves nothing behind. The single mutation point for radios, checkboxes and
-   * steppers alike. */
   #setQuantity(itemId: string, quantity: number): void {
     const next = { ...this.quantities };
     if (quantity >= 1) {
@@ -253,7 +300,6 @@ export class TillModifierPicker extends LitElement {
     this.quantities = next;
   }
 
-  /** Pick a radio: it becomes the group's sole selection (count 1), clearing every sibling in the group. */
   #chooseRadio(group: TillOptionGroup, itemId: string): void {
     const next = { ...this.quantities };
     for (const item of group.items) delete next[item.id];
@@ -261,33 +307,23 @@ export class TillModifierPicker extends LitElement {
     this.quantities = next;
   }
 
-  /** Toggle a checkbox: select the item at count 1, or deselect it when unticked. The template disables
-   * an unticked box once the group's summed quantity is at `maxSelect`, so a check that would exceed the
-   * bound never fires. */
   #toggleCheckbox(itemId: string, checked: boolean): void {
     this.#setQuantity(itemId, checked ? 1 : 0);
   }
 
-  /** Step an item's count by ±1 (per-option quantity), clamped to `[0, item.maxQuantity]`. The template
-   * disables `−` at 0 and `+` at the item's `maxQuantity` or the group's summed `maxSelect`, so a step
-   * past a bound never fires; the clamp is a belt-and-braces guard. */
   #step(item: TillOptionItem, delta: number): void {
     const current = this.quantities[item.id] ?? 0;
     const clamped = Math.max(0, Math.min(item.maxQuantity, current + delta));
     this.#setQuantity(item.id, clamped);
   }
 
-  /** Emit the parent product + the chosen options, plus the per-line note/doneness (order-line
-   * customisation) when set. Guarded so a force-click past the disabled state can never confirm an
-   * unsatisfied selection. The note is trimmed and OMITTED when empty (a whitespace-only note is "not
-   * chosen"); doneness is omitted on the blank default. `stopPropagation` keeps the triggering click
-   * from bubbling out of the picker's shadow root alongside the `modifier-confirm` it raises. */
   #confirm(e?: Event): void {
     if (!this.#allSatisfied) return;
     e?.stopPropagation();
     const detail: ModifierConfirmDetail = {
       product: this.product,
       options: this.#selectedOptions(),
+      ...(this.product.modifiers === undefined ? {} : this.#selectedModifiers()),
     };
     const note = this.note.trim();
     if (note !== "") {
@@ -297,7 +333,7 @@ export class TillModifierPicker extends LitElement {
       detail.doneness = this.doneness;
     }
     this.dispatchEvent(
-      new CustomEvent<ModifierConfirmDetail>("modifier-confirm", {
+      new CustomEvent<ModifierConfirmDetail>("wt-modifier-confirm", {
         detail,
         bubbles: true,
         composed: true,
@@ -305,34 +341,45 @@ export class TillModifierPicker extends LitElement {
     );
   }
 
-  /** Emit the cancel so the grid tears the dialog down (which unmounts this element). */
-  #cancel(): void {
-    this.dispatchEvent(new CustomEvent("modifier-cancel", { bubbles: true, composed: true }));
+  #cancel(event: Event): void {
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("wt-modifier-cancel", { detail: {}, bubbles: true, composed: true }),
+    );
   }
 
   override render() {
     return html`<wt-dialog
       .open=${true}
       .heading=${productName(this.product)}
-      @wt-close=${() => this.#cancel()}
+      @wt-close=${(event: Event) => this.#cancel(event)}
     >
-      ${this.#renderableGroups.map((group) => this.#renderGroup(group))}
-      ${renderLineExtrasEditor({
-        product: this.product,
-        note: this.note,
-        doneness: this.doneness,
-        onNoteChange: (note) => {
-          this.note = note;
-        },
-        onDonenessChange: (doneness) => {
-          this.doneness = doneness;
-        },
-      })}
+      ${this.product.modifiers === undefined ? this.#renderableGroups.map((group) => this.#renderGroup(group)) : this.#modifiers.map((modifier) => this.#renderModifier(modifier))}
+      ${
+        this.initialSelections !== undefined
+          ? nothing
+          : renderLineExtrasEditor({
+              product: this.product,
+              note: this.note,
+              doneness: this.doneness,
+              onNoteChange: (note) => {
+                this.note = note;
+              },
+              onDonenessChange: (doneness) => {
+                this.doneness = doneness;
+              },
+            })
+      }
       <div class="running">
         <span class="running-label">${t("label.total")}</span>
         <span class="running-amount">${this.#runningPrice}</span>
       </div>
-      <wt-button slot="footer" class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+      <wt-button
+        slot="footer"
+        class="cancel"
+        variant="secondary"
+        @click=${(event: Event) => this.#cancel(event)}
+      >
         ${t("action.cancel")}
       </wt-button>
       <wt-button
@@ -342,18 +389,132 @@ export class TillModifierPicker extends LitElement {
         ?disabled=${!this.#allSatisfied}
         @click=${(e: Event) => this.#confirm(e)}
       >
-        ${t("action.add")}
+        ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
       </wt-button>
     </wt-dialog>`;
   }
 
+  #selectedModifiers(): {
+    modifierSelections: ModifierSelection[];
+    modifierSnapshots: ModifierSnapshot[];
+  } {
+    const modifierSelections: ModifierSelection[] = [];
+    const modifierSnapshots: ModifierSnapshot[] = [];
+    for (const modifier of this.#modifiers) {
+      const common = { modifierId: modifier.id, name: modifier.name };
+      if (modifier.type === "text") {
+        const text = String(this.answers[modifier.id] ?? "");
+        if (!text.trim()) continue;
+        modifierSelections.push({ modifierId: modifier.id, type: "text", text });
+        modifierSnapshots.push({ ...common, type: "text", text });
+      } else if (modifier.type === "options") {
+        const choice = modifier.choices.find((choice) => choice.id === this.answers[modifier.id])!;
+        modifierSelections.push({ modifierId: modifier.id, type: "options", choiceId: choice.id });
+        modifierSnapshots.push({
+          ...common,
+          type: "options",
+          choiceId: choice.id,
+          choiceName: choice.name,
+        });
+      } else if (modifier.type === "yes-no") {
+        const value = this.answers[modifier.id] === true;
+        modifierSelections.push({ modifierId: modifier.id, type: "yes-no", value });
+        modifierSnapshots.push({
+          ...common,
+          type: "yes-no",
+          value,
+          label: value ? modifier.yesLabel : modifier.noLabel,
+        });
+      } else {
+        const choices = modifier.choices
+          .filter((choice) => (this.quantities[choice.id] ?? 0) > 0)
+          .map((choice) => ({ choiceId: choice.id, quantity: this.quantities[choice.id]! }));
+        modifierSelections.push({ modifierId: modifier.id, type: "extras", choices });
+        modifierSnapshots.push({
+          ...common,
+          type: "extras",
+          choices: choices.map((choice) => ({
+            ...choice,
+            name: modifier.choices.find((item) => item.id === choice.choiceId)!.name,
+          })),
+        });
+      }
+    }
+    return { modifierSelections, modifierSnapshots: structuredClone(modifierSnapshots) };
+  }
+
+  #renderModifier(modifier: Modifier) {
+    const name = descriptionFor(modifier.name, modifier.id);
+    const required =
+      modifier.type === "options" || (modifier.type === "extras" && modifier.required);
+    const noChoices =
+      (modifier.type === "options" || modifier.type === "extras") &&
+      !modifier.choices.some((choice) => choice.available);
+    if (modifier.type === "extras")
+      return html`${this.#renderGroup(this.#renderableGroups.find((group) => group.id === modifier.id)!)}${this.#staleExtra(modifier) ? html`<p role="alert">${name}: ${t("modifier.selection_changed")}</p>` : required && noChoices ? html`<p role="alert">${name}: ${t("modifier.unavailable_choices")}</p>` : nothing}`;
+    return html`<fieldset class="group">
+      <legend class="group-name">${name}${required ? " *" : ""}</legend>
+      ${
+        modifier.type === "text"
+          ? html`<textarea
+              name=${`modifier-${modifier.id}`}
+              aria-label=${name}
+              maxlength="500"
+              .value=${String(this.answers[modifier.id] ?? "")}
+              @input=${(event: Event) => {
+                event.stopPropagation();
+                this.answers = {
+                  ...this.answers,
+                  [modifier.id]: (event.target as HTMLTextAreaElement).value,
+                };
+              }}
+            ></textarea>`
+          : modifier.type === "options"
+            ? modifier.choices
+                .filter((choice) => choice.available)
+                .map(
+                  (choice) =>
+                    html`<label class="option"
+                      ><input
+                        type="radio"
+                        name=${`modifier-${modifier.id}`}
+                        .checked=${this.answers[modifier.id] === choice.id}
+                        @change=${(event: Event) => {
+                          event.stopPropagation();
+                          this.answers = { ...this.answers, [modifier.id]: choice.id };
+                        }}
+                      />${descriptionFor(choice.name, choice.id)}</label
+                    >`,
+                )
+            : [false, true].map(
+                (value) =>
+                  html`<label class="option"
+                    ><input
+                      type="radio"
+                      name=${`modifier-${modifier.id}`}
+                      .checked=${this.answers[modifier.id] === value}
+                      @change=${(event: Event) => {
+                        event.stopPropagation();
+                        this.answers = { ...this.answers, [modifier.id]: value };
+                      }}
+                    />${descriptionFor(value ? modifier.yesLabel : modifier.noLabel, String(value))}</label
+                  >`,
+              )
+      }
+      ${required && noChoices ? html`<p role="alert">${name}: ${t("modifier.unavailable_choices")}</p>` : nothing}
+    </fieldset>`;
+  }
+
   #renderGroup(group: TillOptionGroup) {
-    const single = group.maxSelect === 1;
+    const single = this.product.modifiers === undefined && group.maxSelect === 1;
     // Measured against the group's SUMMED quantity now that an option can be taken several times.
     const atGroupMax = this.#groupQuantity(group) >= group.maxSelect;
     return html`
       <fieldset class="group">
-        <legend class="group-name">${descriptionFor(group.name, group.id)}</legend>
+        <legend class="group-name">
+          ${descriptionFor(group.name, group.id)}${group.required ? " *" : ""}
+        </legend>
+        ${this.product.modifiers !== undefined ? html`<p class="selected-total">${t("modifier.selected_total")}: ${this.#groupQuantity(group)}${Number.isFinite(group.maxSelect) ? ` / ${group.maxSelect}` : ""}</p>` : nothing}
         ${group.items.map((item) =>
           this.#hasStepper(group, item)
             ? this.#renderStepper(item, atGroupMax)
@@ -363,12 +524,10 @@ export class TillModifierPicker extends LitElement {
     `;
   }
 
-  /** The shared modifier delta chip: the formatted price change, or nothing for a free option. */
   #deltaOf(item: TillOptionItem) {
     return Number(item.priceDelta) !== 0 ? formatMoney(item.priceDelta) : nothing;
   }
 
-  /** A radio (single-select group) or checkbox (multi-select, `maxQuantity === 1`) row. */
   #renderChoice(
     group: TillOptionGroup,
     item: TillOptionItem,
@@ -398,9 +557,6 @@ export class TillModifierPicker extends LitElement {
     `;
   }
 
-  /** A `− N +` stepper row for a multi-select item takeable more than once (per-option quantity). `−`
-   * disables at 0 (where a further step would deselect); `+` disables at the item's `maxQuantity` or when
-   * the group's summed quantity has reached `maxSelect`. Both buttons carry an accessible name. */
   #renderStepper(item: TillOptionItem, atGroupMax: boolean) {
     const count = this.quantities[item.id] ?? 0;
     const name = descriptionFor(item.name, item.id);

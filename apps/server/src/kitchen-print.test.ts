@@ -743,3 +743,52 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
 afterEach(async () => {
   await suite.db.execute(sql`delete from print_jobs`);
 });
+
+it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", async () => {
+  const { cfg, catalogueId } = await setupVenue();
+  const jobs = await asApp(cfg, async (tx) => {
+    const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+    const printerId = await makePrinter(tx, cfg, "Kitchen printer", "station");
+    await attachPrinterToStation(tx, printCfg(cfg), { stationId: station.id, printerId });
+    const productId = await makeProduct(tx, cfg, catalogueId, "Coffee", { stationId: station.id });
+    const orderId = randomUUID();
+    const { lineRows } = await createOpenOrder(tx, cfg, orderId, [line(productId)], null);
+    const parent = lineRows[0]!;
+    await tx
+      .update(workingOrderLines)
+      .set({
+        modifierSnapshots: [
+          {
+            modifierId: "message",
+            name: { [LOCALE]: "Message" },
+            type: "text",
+            text: "Happy birthday",
+          },
+          {
+            modifierId: "milk",
+            name: { [LOCALE]: "Milk" },
+            type: "options",
+            choiceId: "oat",
+            choiceName: { [LOCALE]: "Oat" },
+          },
+          {
+            modifierId: "ice",
+            name: { [LOCALE]: "Ice" },
+            type: "yes-no",
+            value: false,
+            label: { [LOCALE]: "Without ice" },
+          },
+        ],
+      })
+      .where(eq(workingOrderLines.id, parent.id!));
+    await enqueueKitchenTickets(tx, cfg, orderId, [
+      { workingOrderLineId: parent.id!, stationId: station.id },
+    ]);
+    return printJobsFor(tx);
+  });
+  expect(jobs).toHaveLength(1);
+  const paper = decodeTicket(jobs[0]!.payload);
+  expect(paper).toContain("Message: Happy birthday");
+  expect(paper).toContain("Milk: Oat");
+  expect(paper).toContain("Ice: Without ice");
+});

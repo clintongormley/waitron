@@ -1,5 +1,10 @@
 # Modifier ↔ allergen association — design
 
+> **2026-09-12 update:** The [four-type modifier design](2026-09-12-product-modifiers-design.md)
+> supersedes the each-only selection gate and the skip-empty-required-group behavior. Extras retain
+> decimal child-line pricing; text, options and Yes/no now use saved presentation snapshots.
+> Allergen and dietary effects still use current declarations, with source-free authoring controls.
+
 **Status:** approved (brainstorm, 2026-08-31)
 **Owner ask:** 2026-08-30 (backlog, Tier B #7 follow-on) — a menu modifier changes a dish's
 as-served EU-14 allergen profile in **both** directions: *adds* ("extra cheese" → milk) and,

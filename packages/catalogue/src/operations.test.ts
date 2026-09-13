@@ -1525,12 +1525,32 @@ describe("catalogue operations", () => {
       catalogueId: "00000000-0000-0000-0000-000000000001",
       catalogueName: "Deli",
       optionGroups: [],
+      modifiers: [],
     };
     expect(widen(sample).unitPrice).toBe("1.50");
   });
 
   // ── Option group + item authoring (Task 11) ────────────────────────────────────────────────────
   describe("option group authoring", () => {
+    it.each(["create", "update"])(
+      "rejects a zero total cap on legacy %s with a domain error",
+      async (operation) => {
+        await expect(
+          asTenant(async (tx) => {
+            if (operation === "create") {
+              await createOptionGroup(tx, tenantId, { name: { en: "Extras" }, maxSelect: 0 });
+            } else {
+              const group = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
+              await updateOptionGroup(tx, group.id, { maxSelect: 0 });
+            }
+          }),
+        ).rejects.toMatchObject({
+          code: "options.group_invalid",
+          params: { reason: "select_bounds" },
+        });
+      },
+    );
+
     it("createOptionGroup applies column defaults and validates the select-bound invariant", async () => {
       await asTenant(async (tx) => {
         const g = await createOptionGroup(tx, tenantId, { name: { en: "Size" } });

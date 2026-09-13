@@ -346,6 +346,44 @@ export interface OptionGroup {
   active: boolean;
 }
 
+/** Browser-local canonical modifier definition; choices retain existing dietary effects. */
+export interface ModifierEffects {
+  addAllergens?: AllergenDeclaration;
+  removeAllergens?: string[] | null;
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
+}
+export interface ModifierChoice extends ModifierEffects {
+  id: string;
+  name: Record<string, string>;
+  available: boolean;
+}
+export interface ModifierExtraChoice extends ModifierChoice {
+  priceDelta: string;
+  maxQuantity: number;
+  defaultQuantity: number;
+  vatClass?: VatClass | null;
+}
+type ModifierCommon = { name: Record<string, string>; available: boolean };
+export type ModifierInput = ModifierCommon &
+  (
+    | { type: "text" }
+    | {
+        type: "extras";
+        required: boolean;
+        maxTotalQuantity: number | null;
+        choices: ModifierExtraChoice[];
+      }
+    | { type: "options"; defaultChoiceId: string | null; choices: ModifierChoice[] }
+    | {
+        type: "yes-no";
+        yesLabel: Record<string, string>;
+        noLabel: Record<string, string>;
+        defaultValue: boolean;
+      }
+  );
+export type Modifier = ModifierInput & { id: string };
+
 /** One `option_group_items` row for the authoring editor — mirrors catalogue's `OptionGroupItem`.
  * `priceDelta` is the GROSS numeric column carried as a string (like `unitPrice`); `vatClass` is null
  * when the item INHERITS the parent dish's rate. */
@@ -1870,6 +1908,27 @@ export class DashboardApi {
    * section's picked-and-ordered list on open. */
   listProductOptionGroupIds(productId: string): Promise<string[]> {
     return this.#request<string[]>(`/management-api/products/${productId}/option-groups`, "GET");
+  }
+
+  async listModifiers(): Promise<Modifier[]> {
+    return (await this.#request<{ modifiers: Modifier[] }>("/management-api/modifiers", "GET"))
+      .modifiers;
+  }
+  async getModifier(id: string): Promise<Modifier> {
+    return (await this.#request<{ modifier: Modifier }>(`/management-api/modifiers/${id}`, "GET"))
+      .modifier;
+  }
+  async createModifier(input: ModifierInput): Promise<Modifier> {
+    return (await this.#request<{ modifier: Modifier }>("/management-api/modifiers", "POST", input))
+      .modifier;
+  }
+  async updateModifier(id: string, input: ModifierInput): Promise<Modifier> {
+    return (
+      await this.#request<{ modifier: Modifier }>(`/management-api/modifiers/${id}`, "PATCH", input)
+    ).modifier;
+  }
+  deleteModifier(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/modifiers/${id}`, "DELETE");
   }
 
   // ── Option groups (reusable modifiers) + their items (Task 11/12) ────────────────────────────────

@@ -1052,3 +1052,31 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     );
   });
 });
+
+it("shows saved nonprice modifier answers in the kitchen without HTML interpretation", async () => {
+  const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+    groups: [
+      {
+        ...groupA,
+        items: [
+          {
+            ...groupA.items[0]!,
+            modifierSnapshots: [
+              {
+                modifierId: "note",
+                name: { "es-ES": "Dedicatoria" },
+                type: "text",
+                text: "<b>Happy day</b>",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    stationId: "st-1",
+  });
+  expect(el.shadowRoot!.querySelector(".modifier-answer")!.textContent).toBe(
+    "Dedicatoria: <b>Happy day</b>",
+  );
+  expect(el.shadowRoot!.querySelector(".modifier-answer b")).toBeNull();
+});
