@@ -1541,7 +1541,7 @@ describe("catalogue operations", () => {
               await createOptionGroup(tx, tenantId, { name: { en: "Extras" }, maxSelect: 0 });
             } else {
               const group = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
-              await updateOptionGroup(tx, group.id, { maxSelect: 0 });
+              await updateOptionGroup(tx, tenantId, group.id, { maxSelect: 0 });
             }
           }),
         ).rejects.toMatchObject({
@@ -1607,12 +1607,14 @@ describe("catalogue operations", () => {
           maxSelect: 3,
         });
         // Lowering only maxSelect to 1 must be caught against the STORED min (2), not a default.
-        await expect(updateOptionGroup(tx, g.id, { maxSelect: 1 })).rejects.toMatchObject({
-          code: "options.group_invalid",
-          params: { reason: "select_bounds" },
-        });
+        await expect(updateOptionGroup(tx, tenantId, g.id, { maxSelect: 1 })).rejects.toMatchObject(
+          {
+            code: "options.group_invalid",
+            params: { reason: "select_bounds" },
+          },
+        );
         // required:true against the stored min 2 is fine (2 >= 1); the write lands.
-        await updateOptionGroup(tx, g.id, {
+        await updateOptionGroup(tx, tenantId, g.id, {
           required: true,
           name: { en: "y" },
           sort: 5,
@@ -1626,7 +1628,7 @@ describe("catalogue operations", () => {
     it("updateOptionGroup on a well-formed but missing id is a silent no-op", async () => {
       await asTenant(async (tx) => {
         await expect(
-          updateOptionGroup(tx, "00000000-0000-0000-0000-000000000000", { sort: 1 }),
+          updateOptionGroup(tx, tenantId, "00000000-0000-0000-0000-000000000000", { sort: 1 }),
         ).resolves.toBeUndefined();
         expect(await listOptionGroups(tx)).toEqual([]);
       });
@@ -1689,7 +1691,7 @@ describe("catalogue operations", () => {
       await asTenant(async (tx) => {
         const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
         const item = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "before" } });
-        await updateOptionGroupItem(tx, item.id, {
+        await updateOptionGroupItem(tx, tenantId, item.id, {
           name: { en: "after" },
           priceDelta: "2.00",
           vatClass: null,
@@ -1717,10 +1719,12 @@ describe("catalogue operations", () => {
           maxQuantity: 5,
         });
         // A patch that omits maxQuantity leaves the stored 5 intact.
-        await updateOptionGroupItem(tx, item.id, { priceDelta: "1.00" });
+        await updateOptionGroupItem(tx, tenantId, item.id, { priceDelta: "1.00" });
         expect((await listOptionGroupItems(tx, g.id))[0]).toMatchObject({ maxQuantity: 5 });
         // A patch that sets an invalid maxQuantity re-validates → options.item_invalid.
-        await expect(updateOptionGroupItem(tx, item.id, { maxQuantity: 0 })).rejects.toMatchObject({
+        await expect(
+          updateOptionGroupItem(tx, tenantId, item.id, { maxQuantity: 0 }),
+        ).rejects.toMatchObject({
           code: "options.item_invalid",
           params: { reason: "max_quantity" },
         });
@@ -1775,7 +1779,7 @@ describe("catalogue operations", () => {
           removeAllergens: ["gluten"],
         });
         await expect(
-          updateOptionGroupItem(tx, item.id, {
+          updateOptionGroupItem(tx, tenantId, item.id, {
             addAllergens: { gluten: { presence: "contains" } },
           }),
         ).rejects.toThrow(/allergen.add_remove_conflict/);
@@ -1785,14 +1789,17 @@ describe("catalogue operations", () => {
         expect(after!.removeAllergens).toEqual(["gluten"]);
 
         // A non-conflicting single-side patch lands and clearing to null works.
-        await updateOptionGroupItem(tx, item.id, {
+        await updateOptionGroupItem(tx, tenantId, item.id, {
           addAllergens: { milk: { presence: "contains" } },
         });
         const [merged] = await listOptionGroupItems(tx, g.id);
         expect(merged!.addAllergens).toEqual({ milk: { presence: "contains" } });
         expect(merged!.removeAllergens).toEqual(["gluten"]);
 
-        await updateOptionGroupItem(tx, item.id, { removeAllergens: null, addAllergens: null });
+        await updateOptionGroupItem(tx, tenantId, item.id, {
+          removeAllergens: null,
+          addAllergens: null,
+        });
         const [cleared] = await listOptionGroupItems(tx, g.id);
         expect(cleared!.addAllergens).toBeNull();
         expect(cleared!.removeAllergens).toBeNull();
@@ -1804,7 +1811,7 @@ describe("catalogue operations", () => {
           addAllergens: { milk: { presence: "contains" } },
         });
         await expect(
-          updateOptionGroupItem(tx, cheese.id, { removeAllergens: ["milk"] }),
+          updateOptionGroupItem(tx, tenantId, cheese.id, { removeAllergens: ["milk"] }),
         ).rejects.toThrow(/allergen.add_remove_conflict/);
       });
     });
@@ -1818,7 +1825,10 @@ describe("catalogue operations", () => {
         });
         // A patch that touches only non-overlay fields must leave the stored overlay intact — it never
         // reads or rewrites the overlay columns.
-        await updateOptionGroupItem(tx, item.id, { name: { en: "GF bun v2" }, priceDelta: "0.20" });
+        await updateOptionGroupItem(tx, tenantId, item.id, {
+          name: { en: "GF bun v2" },
+          priceDelta: "0.20",
+        });
         const [after] = await listOptionGroupItems(tx, g.id);
         expect(after!.name).toEqual({ en: "GF bun v2" });
         expect(after!.priceDelta).toBe("0.20");
@@ -1899,21 +1909,21 @@ describe("catalogue operations", () => {
       await asTenant(async (tx) => {
         const g = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
         const item = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "Add bacon" } });
-        await updateOptionGroupItem(tx, item.id, { addOrigins: ["meat"] });
+        await updateOptionGroupItem(tx, tenantId, item.id, { addOrigins: ["meat"] });
         const [added] = await listOptionGroupItems(tx, g.id);
         expect(added!.addOrigins).toEqual(["meat"]);
         // A single-side patch leaves the other side alone; a null clears.
-        await updateOptionGroupItem(tx, item.id, { removeOrigins: ["fish"] });
+        await updateOptionGroupItem(tx, tenantId, item.id, { removeOrigins: ["fish"] });
         const [both] = await listOptionGroupItems(tx, g.id);
         expect(both!.addOrigins).toEqual(["meat"]);
         expect(both!.removeOrigins).toEqual(["fish"]);
-        await updateOptionGroupItem(tx, item.id, { addOrigins: null });
+        await updateOptionGroupItem(tx, tenantId, item.id, { addOrigins: null });
         const [cleared] = await listOptionGroupItems(tx, g.id);
         expect(cleared!.addOrigins).toBeNull();
         expect(cleared!.removeOrigins).toEqual(["fish"]);
         // A bad origin on update is rejected too.
         await expect(
-          updateOptionGroupItem(tx, item.id, { removeOrigins: ["wombat"] }),
+          updateOptionGroupItem(tx, tenantId, item.id, { removeOrigins: ["wombat"] }),
         ).rejects.toThrow(/diet.invalid_origin/);
       });
     });

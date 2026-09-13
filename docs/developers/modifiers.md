@@ -100,6 +100,13 @@ are added. The catalogue generation script reports no schema change. Existing ta
 classification and configuration-transfer ordering apply; the definition/attachment and publication
 operations share a tenant-scoped transaction lock.
 
+Selections take that lock in shared mode so definition readers can coexist. Canonical and retained
+group/item writers take it exclusively before reading or changing definitions. The retained
+`updateOptionGroup` and `updateOptionGroupItem` operations now require the tenant ID as their
+second argument; their by-ID reads and writes also use that tenant predicate.
+
 Regenerate generated migration collisions against the integration base rather than editing the
 journal or snapshots. No backfill or shared development database reset is included. Products still
 owns removal of the combined editor and final composition with Units and Categories.
+Existing pre-migration rows do not acquire canonical caps from their old `max_select` values;
+recreate disposable pre-production catalogue data under the approved schema/reset convention.

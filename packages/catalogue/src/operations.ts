@@ -1728,6 +1728,7 @@ export async function createOptionGroup(
   tenantId: TenantId,
   input: CreateOptionGroupInput,
 ): Promise<OptionGroup> {
+  await lockModifierDefinitions(tx, tenantId);
   // Resolve the column defaults HERE so the invariant is validated against the values that will land
   // (the DB defaults are min 0, max 1, required false).
   const minSelect = input.minSelect ?? 0;
@@ -1761,9 +1762,11 @@ export async function listOptionGroups(tx: Transaction): Promise<OptionGroup[]> 
 
 export async function updateOptionGroup(
   tx: Transaction,
+  tenantId: TenantId,
   id: string,
   patch: UpdateOptionGroupInput,
 ): Promise<void> {
+  await lockModifierDefinitions(tx, tenantId);
   // Read the stored bounds and MERGE the patch onto them before validating: a partial patch that only
   // touches one of the three invariant fields (e.g. `required: true` with the stored `min_select`, or a
   // lowered `max_select` against the stored `min_select`) must be checked against the row it lands on,
@@ -1776,7 +1779,7 @@ export async function updateOptionGroup(
       required: optionGroups.required,
     })
     .from(optionGroups)
-    .where(eq(optionGroups.id, id));
+    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, id)));
   if (current === undefined) return;
   validateOptionGroupBounds(
     patch.minSelect ?? current.minSelect,
@@ -1789,7 +1792,7 @@ export async function updateOptionGroup(
       ...patch,
       ...(patch.maxSelect === undefined ? {} : { maxTotalQuantity: patch.maxSelect }),
     })
-    .where(eq(optionGroups.id, id));
+    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, id)));
 }
 
 export async function createOptionGroupItem(
@@ -1798,6 +1801,7 @@ export async function createOptionGroupItem(
   groupId: string,
   input: CreateOptionGroupItemInput,
 ): Promise<OptionGroupItem> {
+  await lockModifierDefinitions(tx, tenantId);
   // Resolve the default HERE so the invariant is validated against the value that will land (the DB
   // default is 1), the same posture createOptionGroup takes for its bounds.
   const maxQuantity = input.maxQuantity ?? 1;
@@ -1851,9 +1855,11 @@ export async function listOptionGroupItems(
 
 export async function updateOptionGroupItem(
   tx: Transaction,
+  tenantId: TenantId,
   itemId: string,
   patch: UpdateOptionGroupItemInput,
 ): Promise<void> {
+  await lockModifierDefinitions(tx, tenantId);
   // maxQuantity's invariant is single-field: a patch that omits it leaves the stored value untouched
   // (Drizzle `.set()` only writes provided keys); a patch that sets it is re-validated here before the
   // write, the same clean-error-before-the-CHECK posture create takes.
@@ -1872,7 +1878,7 @@ export async function updateOptionGroupItem(
         removeAllergens: optionGroupItems.removeAllergens,
       })
       .from(optionGroupItems)
-      .where(eq(optionGroupItems.id, itemId));
+      .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.id, itemId)));
     Object.assign(
       write,
       normalizeOverlay(patch, {
@@ -1884,7 +1890,10 @@ export async function updateOptionGroupItem(
   // The origin overlay is independent (no disjointness → no current-row read): validate + normalise
   // each patched side and write exactly those columns.
   Object.assign(write, normalizeOriginOverlay(patch));
-  await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
+  await tx
+    .update(optionGroupItems)
+    .set(write)
+    .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.id, itemId)));
 }
 
 /**

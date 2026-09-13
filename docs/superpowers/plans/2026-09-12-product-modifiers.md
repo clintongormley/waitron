@@ -113,3 +113,22 @@ Changed-package typechecks and changed-file lint/format checks passed. Root chec
 subscriptions, classifications, append-only triggers, module graph/seams, migration journals,
 error reachability, vocabulary and documentation pointers. Package-wide coverage belongs to CI
 after `finish-branch`; it has not run for this unpushed tree.
+
+
+## Branch review — 2026-09-13
+
+Claude's isolated run-it review took 163 seconds at candidate `063aae50`, base
+`f1139e125485c5dec76ef45b8b33c22a3142ec46`. Accepted fixes let modifier readers coexist, bring
+retained group/item writers under the same lock, and compare saved selections by value rather than
+JSON order. The failing saved-order assertion reported 18.00 instead of 2.00 after a price change.
+
+After fixes, catalogue dependency/operation suites passed 93 tests, management/order consumers
+passed 263 tests, and saved-selection/working-order suites passed 129 tests after adding the final
+retained-order assertions. A multi-ticket substitution probe returned 23505 for repeated line
+numbers and left the sale/substitution counts unchanged. The no-backfill convention remains;
+legacy pre-migration caps are not upgraded. A detached type change was exercised through an actual
+held-order quantity edit, and retained extras choices were refused through their priced children.
+
+The review report, timing, usage, exact commands and finding-by-finding triage are retained under
+`/tmp/waitron-modifiers-review.gIUXNa/`. Browser and rendering experiments were outside the
+reviewer's bounded pass; implementation receipts above remain the focused checks for those paths.

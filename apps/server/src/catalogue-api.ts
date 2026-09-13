@@ -1053,7 +1053,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             patch.name,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
-        await updateOptionGroup(tx, groupId, patch);
+        await updateOptionGroup(tx, tenantId, groupId, patch);
       });
       return c.body(null, 204);
     }),
@@ -1202,7 +1202,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             patch.name,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
-        await updateOptionGroupItem(tx, itemId, patch);
+        await updateOptionGroupItem(tx, tenantId, itemId, patch);
       });
       return c.body(null, 204);
     }),

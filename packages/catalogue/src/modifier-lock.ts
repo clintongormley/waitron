@@ -1,9 +1,16 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 
-/** Attachments, publication and definition edits share a lock so dependency checks cannot race. */
-export async function lockModifierDefinitions(tx: Transaction, tenantId: string): Promise<void> {
+/** Selection readers coexist; definition, attachment and publication writers exclude them. */
+export async function lockModifierDefinitions(
+  tx: Transaction,
+  tenantId: string,
+  mode: "read" | "write" = "write",
+): Promise<void> {
+  const key = `modifier-definitions:${tenantId}`;
   await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`modifier-definitions:${tenantId}`}, 0))`,
+    mode === "read"
+      ? sql`select pg_advisory_xact_lock_shared(hashtextextended(${key}, 0))`
+      : sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
   );
 }

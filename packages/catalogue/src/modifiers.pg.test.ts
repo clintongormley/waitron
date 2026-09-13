@@ -262,7 +262,7 @@ it("maps an old author's total cap into the canonical extras definition", async 
       type: "extras",
       maxTotalQuantity: 2,
     });
-    await updateOptionGroup(tx, group.id, { maxSelect: 3 });
+    await updateOptionGroup(tx, brandTenantId(tenant), group.id, { maxSelect: 3 });
     expect(await getModifier(tx, tenant, group.id)).toMatchObject({
       type: "extras",
       maxTotalQuantity: 3,

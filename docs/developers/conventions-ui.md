@@ -29,6 +29,14 @@ bottom-left. Optional field explanations use `wt-help-tooltip`, whose button clo
 or Escape. Cost: the dashboard login exposed `wt-input-N` to password safes and disabled incomplete
 forms without saying what was missing (`ui-login`, owner review 2026-09-09).
 
+## Saved selections compare values
+
+The modifiers review on 2026-09-13 reproduced a quantity-only held-order edit repricing an extra
+from 1.00 to 9.00 when the request reordered JSON keys and modifier entries. The test
+`pnpm --filter @waitron/server exec vitest run working-order.test.ts -t 'preserves product selections'`
+reported 18.00 instead of 2.00. `sameModifierSelections` compares values while rejecting duplicates,
+changed quantities and additional fields; `modifier-selection.test.ts` covers those distinctions.
+
 ## A replay reports the original transaction facts; side effects are gated separately
 
 Cash change was returned as zero on a retry because the receipt reader treated displaying change as

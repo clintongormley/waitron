@@ -4518,6 +4518,35 @@ describe("canonical modifier selections", () => {
           },
           "es",
         );
+        if (source === "product") {
+          await catalogue.setProductOptionGroups(tx, cfg.tenantId, cafeId, []);
+          await catalogue.setMenuItemOptionGroups(tx, cfg.tenantId, cafeOfferId, []);
+          await catalogue.updateModifier(
+            tx,
+            cfg.tenantId,
+            definitions[0]!.id,
+            {
+              type: "yes-no",
+              name: { es: "Changed type" },
+              yesLabel: { es: "Sí" },
+              noLabel: { es: "No" },
+            },
+            "es",
+          );
+          await expect(
+            catalogue.updateModifier(
+              tx,
+              cfg.tenantId,
+              definitions[3]!.id,
+              {
+                type: "extras",
+                name: { es: "Extras" },
+                choices: [],
+              },
+              "es",
+            ),
+          ).rejects.toMatchObject({ code: "modifier.in_use", params: { dependency: "choice" } });
+        }
       });
       await updateHeldOrder({ db }, cfg, result.id, {
         lines: [
@@ -4525,7 +4554,12 @@ describe("canonical modifier selections", () => {
             workingOrderLineId: held.lines[0]!.workingOrderLineId,
             ...(source === "menu" ? { menuItemId: cafeOfferId } : { productId: cafeId }),
             quantity: "1.000",
-            modifierSelections,
+            modifierSelections: [...modifierSelections]
+              .reverse()
+              .map(
+                (selection) =>
+                  Object.fromEntries(Object.entries(selection).reverse()) as typeof selection,
+              ),
           },
         ],
       });

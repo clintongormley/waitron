@@ -1,4 +1,5 @@
 import { validateModifierSelections } from "@waitron/catalogue";
+import { isDeepStrictEqual } from "node:util";
 import type { Modifier, ModifierSelection, ModifierSnapshot } from "@waitron/shared";
 
 export function snapshotSelections(definitions: readonly Modifier[], value: unknown) {
@@ -67,5 +68,38 @@ export function selectionsFromSnapshots(
           choices: snapshot.choices.map(({ choiceId, quantity }) => ({ choiceId, quantity })),
         };
     }
+  });
+}
+
+function sameEntries(actual: unknown, expected: readonly unknown[]): boolean {
+  if (!Array.isArray(actual) || actual.length !== expected.length) return false;
+  const remaining = [...expected];
+  return actual.every((entry: unknown) => {
+    const index = remaining.findIndex((candidate) => isDeepStrictEqual(entry, candidate));
+    if (index < 0) return false;
+    remaining.splice(index, 1);
+    return true;
+  });
+}
+
+/** Wire ordering is not an answer change; duplicates and additional fields still differ. */
+export function sameModifierSelections(
+  value: unknown,
+  snapshots: readonly ModifierSnapshot[],
+): boolean {
+  const expected = selectionsFromSnapshots(snapshots);
+  if (!Array.isArray(value) || value.length !== expected.length) return false;
+  const seen = new Set<string>();
+  return value.every((entry: unknown) => {
+    if (entry === null || typeof entry !== "object" || !("modifierId" in entry)) return false;
+    const selection = expected.find((candidate) => candidate.modifierId === entry.modifierId);
+    if (!selection || seen.has(selection.modifierId)) return false;
+    seen.add(selection.modifierId);
+    if (selection.type !== "extras") return isDeepStrictEqual(entry, selection);
+    if (!("choices" in entry)) return false;
+    return (
+      isDeepStrictEqual({ ...entry, choices: null }, { ...selection, choices: null }) &&
+      sameEntries(entry.choices, selection.choices)
+    );
   });
 }

@@ -161,6 +161,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A replay reports the original transaction facts; side effects are gated separately.** Cost: cash
   change returned as zero on a retry, because displaying change was treated as dispensing it.
+- **Compare saved selections by values, not JSON key or selection order.** Guard:
+  `apps/server/src/modifier-selection.test.ts`; price-change receipt in
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A successful write followed by a failed refresh is a load failure, not a failed save.** Close the
   editor after the write succeeds, then refresh separately — a retained create form invites a
   duplicate submission.

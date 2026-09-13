@@ -567,3 +567,16 @@ it("persists structured modifier snapshots and child links on the issued lines",
   expect(saved[1]!.parentLineId).toBe(saved[0]!.id);
   expect(saved.map((line) => line.category)).toEqual(["Drinks", "Drinks"]);
 });
+
+it("rejects repeated line numbers in a multi-ticket substitution without recording a sale", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+  const first = await sellTicket(backend);
+  const second = await sellTicket(backend);
+  const ids = [first.saleId, second.saleId];
+  const lines = substitutionInput(ids).lines.map((line) => ({ ...line, lineNo: 1 }));
+  const before = await countRows("sales");
+  const error = await captureError(() => substitute(backend, ids, { lines }));
+  expect(pgErrorCode(error)).toBe("23505");
+  expect(await countRows("sales")).toBe(before);
+  expect(await countRows("sale_substitutions")).toBe(0);
+});

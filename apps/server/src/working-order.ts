@@ -1,5 +1,9 @@
 import { lockModifierDefinitions } from "@waitron/catalogue";
-import { snapshotSelections, selectionsFromSnapshots } from "./modifier-selection.js";
+import {
+  snapshotSelections,
+  selectionsFromSnapshots,
+  sameModifierSelections,
+} from "./modifier-selection.js";
 import type { ModifierSelection, ModifierSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
@@ -168,7 +172,7 @@ async function priceOrderLines(
     // for. Callers passing [] ignore `priced` (they persist no lines); it is returned only for type-consistency.
     return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
   }
-  await lockModifierDefinitions(tx, cfg.tenantId);
+  await lockModifierDefinitions(tx, cfg.tenantId, "read");
   const catalogue = await listAvailableProducts(tx, cfg.locationId);
   const usesOffers = zoneId !== undefined;
   const offerBySelectionId = new Map<
@@ -3030,10 +3034,7 @@ export async function updateHeldOrder(
             : line.productId === stored.productId && line.menuItemId === undefined;
         if (!sameIdentity) return false;
         if (line.modifierSelections !== undefined || stored.modifierSnapshots.length > 0) {
-          if (
-            JSON.stringify(line.modifierSelections ?? []) !==
-            JSON.stringify(selectionsFromSnapshots(stored.modifierSnapshots))
-          )
+          if (!sameModifierSelections(line.modifierSelections ?? [], stored.modifierSnapshots))
             return false;
         }
         const requestedOptions = new Map<string, number>();

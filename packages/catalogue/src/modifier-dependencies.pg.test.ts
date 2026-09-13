@@ -13,10 +13,15 @@ import {
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { ModifierInput, TenantId } from "@waitron/shared";
+import { lockModifierDefinitions } from "./modifier-lock.js";
 import { seedVenue } from "../test/fixtures.js";
 import { createModifier, deleteModifier, getModifier, updateModifier } from "./modifiers.js";
 import {
   createCatalogue,
+  createOptionGroup,
+  createOptionGroupItem,
+  updateOptionGroup,
+  updateOptionGroupItem,
   createMenuItem,
   createMenuSection,
   createProduct,
@@ -339,3 +344,72 @@ it("rejects another tenant's definition and choice ids without deleting either t
     ),
   ).toEqual([]);
 });
+
+it("allows simultaneous selection readers while excluding definition writes", async () => {
+  const { tenantId, modifier } = await fixture();
+  const firstDb = await suite.pg.connect();
+  let secondDb: Awaited<ReturnType<typeof suite.pg.connect>> | undefined;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let firstReady = false;
+  let secondReady = false;
+  let first: Promise<void> | undefined;
+  let second: Promise<void> | undefined;
+  try {
+    secondDb = await suite.pg.connect();
+    first = app(firstDb, tenantId, async (tx) => {
+      await lockModifierDefinitions(tx, tenantId, "read");
+      firstReady = true;
+      await gate;
+    });
+    await expect.poll(() => firstReady).toBe(true);
+    second = app(secondDb, tenantId, async (tx) => {
+      await lockModifierDefinitions(tx, tenantId, "read");
+      secondReady = true;
+      await gate;
+    });
+    await expect.poll(() => secondReady).toBe(true);
+  } finally {
+    release();
+    await Promise.allSettled([first, second]);
+    await firstDb.close();
+    await secondDb?.close();
+  }
+  const result = await orderedRace(
+    tenantId,
+    (tx) => lockModifierDefinitions(tx, tenantId, "read"),
+    (tx) => updateModifier(tx, tenantId, modifier.id, yesNoDefinition, "en"),
+  );
+  expect(result.status).toBe("fulfilled");
+});
+
+it.each(["create group", "update group", "create choice", "update choice"] as const)(
+  "legacy %s waits for an active selection reader",
+  async (operation) => {
+    const { tenantId } = await fixture();
+    const { group, item } = await app(suite.admin, tenantId, async (tx) => {
+      const group = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
+      const item = await createOptionGroupItem(tx, tenantId, group.id, { name: { en: "Egg" } });
+      return { group, item };
+    });
+    const result = await orderedRace(
+      tenantId,
+      (tx) => lockModifierDefinitions(tx, tenantId, "read"),
+      async (tx) => {
+        switch (operation) {
+          case "create group":
+            return createOptionGroup(tx, tenantId, { name: { en: "New" } });
+          case "update group":
+            return updateOptionGroup(tx, tenantId, group.id, { active: false });
+          case "create choice":
+            return createOptionGroupItem(tx, tenantId, group.id, { name: { en: "New" } });
+          case "update choice":
+            return updateOptionGroupItem(tx, tenantId, item.id, { active: false });
+        }
+      },
+    );
+    expect(result.status).toBe("fulfilled");
+  },
+);
