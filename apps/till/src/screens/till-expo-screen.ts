@@ -614,7 +614,10 @@ export class TillExpoScreen extends LitElement {
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
       <span class="item-main">
         <span class="item-name"
-          >${trimQuantity(item.qty)}× ${snapshotDescriptionFor(item.name, "")}</span
+          >${trimQuantity(item.qty)}${
+            item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`
+          }×
+          ${snapshotDescriptionFor(item.name, "")}</span
         >
         <span class="item-station">${item.stationName}</span>
         <span class="item-state">${t(`station.state.${item.state}` as const)}</span>

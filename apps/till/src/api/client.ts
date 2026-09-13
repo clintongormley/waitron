@@ -379,7 +379,13 @@ export interface TillProduct {
   /** The selling identity whose menu, price and offered modifiers were selected. */
   menuItemId?: string;
   descriptions: Record<string, string>;
-  pricingUnit: "each" | "weight";
+  unit?: {
+    id: string;
+    name: Record<string, string>;
+    precision: number;
+    hardwareUnit: "kg" | "g" | "mg" | null;
+  };
+  pricingUnit?: "each" | "weight";
   unitPrice: string;
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
@@ -466,7 +472,8 @@ export interface TillMenuOffer {
   menuName: string;
   sectionName: Record<string, string>;
   descriptions: Record<string, string>;
-  pricingUnit: "each" | "weight";
+  unit?: TillProduct["unit"];
+  pricingUnit?: "each" | "weight";
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
   allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
@@ -524,6 +531,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     productId: offer.productId,
     menuItemId: offer.id,
     descriptions: offer.descriptions,
+    unit: offer.unit,
     pricingUnit: offer.pricingUnit,
     unitPrice: offer.grossPrice,
     vatClass: offer.vatClass,
@@ -639,6 +647,9 @@ export type Tender = CashTender | CardTender;
 export interface TillSaleLine {
   modifierSnapshots?: ModifierSnapshot[];
   descriptions: Record<string, string>;
+  /** Unit values frozen with the filed line; null for a modifier child. */
+  unitName?: Record<string, string> | null;
+  unitPrecision?: number | null;
   quantity: string;
   gross: string;
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line (ordering modifiers), else
@@ -828,6 +839,9 @@ export interface StationQueueItem {
   descriptions: Record<string, string>;
   /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
   quantity: string;
+  /** Unit values frozen with the line. Absent/null only on older payloads. */
+  unitName?: Record<string, string> | null;
+  unitPrecision?: number | null;
   /** The dish's selected options (ordering modifiers), in selection order — rendered as indented `+
    *  <name>` sub-text beneath this item (KDS widgets, Task 14). Optional/absent on an older payload or a
    *  plain-dish fixture, treated identically to an empty array — a modifier-free item renders exactly
@@ -1011,6 +1025,9 @@ export interface ExpoItem {
   id: string;
   name: Record<string, string>;
   qty: string;
+  /** Unit values frozen with the line. Absent/null only on older payloads. */
+  unitName?: Record<string, string> | null;
+  unitPrecision?: number | null;
   stationName: string;
   state: TicketState;
   /** `null` while the item's course is HELD (the pass greys it); a timestamp once fired. */

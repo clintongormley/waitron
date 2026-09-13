@@ -113,7 +113,12 @@ export interface ZoneMenuOffer {
   readonly menuName: string;
   readonly sectionName: Readonly<Record<string, string>>;
   readonly descriptions: Readonly<Record<string, string>>;
-  readonly pricingUnit: "each" | "weight";
+  readonly unit: {
+    readonly id: string;
+    readonly name: Readonly<Record<string, string>>;
+    readonly precision: number;
+    readonly hardwareUnit: "kg" | "g" | "mg" | null;
+  };
   readonly vatClass: string;
   readonly category: string | null;
   readonly allergens: Readonly<
@@ -218,7 +223,10 @@ export interface VenueServiceContribution {
       menuId: string;
       menuName: string;
       categoryName: string;
-      pricingUnit: "each" | "weight";
+      unitId: string;
+      unitName: Readonly<Record<string, string>>;
+      unitPrecision: number;
+      hardwareUnit: "kg" | "g" | "mg" | null;
       vatClass: string;
       allergens: ZoneMenuOffer["allergens"];
       diet: unknown;

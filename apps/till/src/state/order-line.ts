@@ -10,6 +10,7 @@ import {
 } from "@waitron/shared";
 import type { Doneness, SaleLine } from "../api/client.js";
 import type { OrderLine, SelectedLineOption } from "./working-order.js";
+import { unitName } from "../widgets/product-name.js";
 
 /**
  * Gross line total = `unitPrice × quantity`, rounded to money scale, in `@waitron/shared` Decimals
@@ -80,9 +81,9 @@ export function optionGross(line: OrderLine, option: SelectedLineOption): Decima
   return grossOf(option.priceDelta, combinedOptionQuantity(line, option));
 }
 
-/** How much of a line: `"N kg"` for a weight product, the bare count for an `each` product. */
+/** How much of a line, followed by the selected unit's localized snapshot name. */
 export function quantityLabel(line: OrderLine): string {
-  return line.product.pricingUnit === "weight" ? `${line.quantity} kg` : line.quantity;
+  return `${line.quantity} ${unitName(line.product)}`;
 }
 
 /**

@@ -13,6 +13,14 @@ declare module "@waitron/shared" {
     "modifier.invalid": { field: string };
     "modifier.not_found": { modifierId: string };
     "modifier.in_use": { modifierId: string; dependency: string };
+    /** A unit precision must be a whole number from zero through three. */
+    "unit.precision_invalid": Record<string, never>;
+    /** A quantity is malformed, non-positive, too precise, or outside numeric(12,3). */
+    "quantity.invalid": { reason: "format" | "positive" | "precision" | "limit" };
+    /** A unit id is absent from the caller's tenant. */
+    "unit.not_found": { unitId: string };
+    /** A unit cannot be deleted while products retain real assignments to it. */
+    "unit.in_use": { products: Record<string, string>[] };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
     /** A translation map contains a non-text value. */
@@ -68,7 +76,7 @@ declare module "@waitron/shared" {
      * sale-time `options.selection_invalid` (apps/server) uses. No ids: on a create there is no group id
      * yet, and the offending numbers are request echo, not carried (the no-leak discipline). `options.*`
      * names the DOMAIN CONCEPT (a menu-option group), never the throwing package, beside the sale-time
-     * `options.selection_invalid` / `options.unsupported_product`. A CLIENT request fault → mapped to
+     * `options.selection_invalid`. A CLIENT request fault → mapped to
      * 400 by the server's catalogue STATUS map. Never renamed once shipped.
      */
     "options.group_invalid": { reason: string };

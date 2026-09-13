@@ -14,6 +14,7 @@ import {
   listAvailableProducts,
 } from "./operations.js";
 import { replaceProductCategories } from "./categories.js";
+import { createUnit } from "./units.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { priceBasket } from "./pricing.js";
 import { seedVenue } from "../test/fixtures.js";
@@ -100,11 +101,13 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       // strings only — this is a generic package under the english-only guard.
       const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
       const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
+      const kgUnitId = (await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"))
+        .id;
       const product = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: food.id,
         descriptions: { en: "sliced ham" },
-        pricingUnit: "weight",
+        unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
       });

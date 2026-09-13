@@ -158,6 +158,21 @@ describe("till-basket", () => {
     expect(row.querySelector(".step-dec")).toBeNull();
   });
 
+  it("keeps a custom fractional unit static even without a hardware mapping", async () => {
+    const portion: TillProduct = {
+      ...cafe,
+      id: "portion",
+      unit: { id: "unit-portion", name: { en: "tray" }, precision: 2, hardwareUnit: null },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(portion, "0.25");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const row = el.shadowRoot!.querySelector(".line")!;
+    expect(row.textContent).toContain("0.25 tray");
+    expect(row.querySelector(".step-inc")).toBeNull();
+    expect(row.querySelector(".step-dec")).toBeNull();
+  });
+
   it("groups a line's options under the dish — dish at its own price, options indented at their delta, no per-option remove", async () => {
     const burger: TillProduct = {
       ...cafe,

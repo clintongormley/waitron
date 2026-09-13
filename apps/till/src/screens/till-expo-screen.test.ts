@@ -290,6 +290,21 @@ describe("till-expo-screen", () => {
     expect(item.textContent).toContain(t("station.state.queued")); // the kitchen state
   });
 
+  it("renders a fractional item with its snapshotted unit", async () => {
+    const item: ExpoItem = {
+      ...threeCourseOrder.courses[0]!.items[0]!,
+      qty: "0.375",
+      unitName: { "es-ES": "kg" },
+      unitPrecision: 3,
+    };
+    const order: ExpoOrder = {
+      ...threeCourseOrder,
+      courses: [{ ...threeCourseOrder.courses[0]!, items: [item] }],
+    };
+    const el = await mount({ api: stubApi([order]) });
+    expect(el.shadowRoot!.querySelector(".item-name")!.textContent).toBe("0.375 kg× Pan");
+  });
+
   describe("ordering modifiers (Task 14): selected options as indented sub-text under the item", () => {
     // The wire shape `listExpoQueue` already returns (Task 7) — a fired dish with TWO selected options.
     const orderWithModifiers: ExpoOrder = {

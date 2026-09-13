@@ -17,6 +17,7 @@ import {
   createProduct,
 } from "../src/operations.js";
 import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
+import { createUnit } from "../src/units.js";
 
 export interface SeededVenue {
   tenantId: TenantId;
@@ -58,11 +59,17 @@ export async function seedCatalogueFixture(
   const catalogue = await createCatalogue(tx, venue.tenantId, { name: "Deli" });
   const food = await createCategory(tx, venue.tenantId, { name: { en: "Food" } });
   const drinks = await createCategory(tx, venue.tenantId, { name: { en: "Drinks" } });
+  const eachUnitId = (
+    await createUnit(tx, venue.tenantId, { name: { en: "each" }, precision: 0 }, "en")
+  ).id;
+  const kgUnitId = (
+    await createUnit(tx, venue.tenantId, { name: { en: "kg" }, precision: 3 }, "en")
+  ).id;
   const slicedHam = await createProduct(tx, venue.tenantId, {
     catalogueId: catalogue.id,
     categoryId: food.id,
     descriptions: { en: "sliced ham" },
-    pricingUnit: "weight",
+    unitId: kgUnitId,
     unitPrice: "24.90",
     vatClass: "reduced",
   });
@@ -70,7 +77,7 @@ export async function seedCatalogueFixture(
     catalogueId: catalogue.id,
     categoryId: drinks.id,
     descriptions: { en: "water" },
-    pricingUnit: "each",
+    unitId: eachUnitId,
     unitPrice: "1.50",
     vatClass: "general",
   });
@@ -94,6 +101,7 @@ export function useCatalogueDb(): { readonly db: Database } {
       await tx.execute(sql`delete from menu_items`);
       await tx.execute(sql`delete from menu_sections`);
       await tx.execute(sql`delete from product_option_groups`);
+      await tx.execute(sql`delete from product_units`);
       await tx.execute(sql`delete from option_group_items`);
       await tx.execute(sql`delete from option_groups`);
       await tx.execute(sql`delete from products`);

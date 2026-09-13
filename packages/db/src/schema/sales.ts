@@ -222,6 +222,8 @@ export const saleLines = pgTable(
       .$type<ModifierSnapshot[]>()
       .notNull()
       .default([]),
+    unitName: jsonb("unit_name").$type<Record<string, string>>(),
+    unitPrecision: integer("unit_precision"),
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),
@@ -253,6 +255,10 @@ export const saleLines = pgTable(
     // sales_tenant_id_key plays for sales' children. Neither existed before Task 2.
     unique("sale_lines_tenant_id_key").on(t.tenantId, t.id),
     unique("sale_lines_line_no_key").on(t.saleId, t.lineNo),
+    check(
+      "sale_lines_unit_precision_ck",
+      sql`${t.unitPrecision} is null or ${t.unitPrecision} between 0 and 3`,
+    ),
     index("sale_lines_sale_idx").on(t.saleId),
     check("sale_lines_quantity_ck", sql`${t.quantity} <> 0`),
     check("sale_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 100`),

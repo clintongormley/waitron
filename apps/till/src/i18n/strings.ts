@@ -90,8 +90,8 @@ export const en = {
   "override.enter_pin": "Enter the supervisor's PIN",
   "override.no_supervisors": "No supervisors available",
   "override.error": "Could not authorize, try again",
-  // Weight entry (priced-by-weight products)
-  "weigh.prompt": "Enter weight (kg)",
+  // Quantity entry for fractional and hardware-mapped units.
+  "weigh.prompt": "Enter quantity",
   // Held (parked) orders
   "held.label_prompt": "Name this order (optional)",
   "held.title": "Held orders",
@@ -406,7 +406,7 @@ export const en = {
   "table.split_quantity": "Quantity",
   "table.split_quantity_each_error": "Choose a whole quantity from 1 up to the amount ordered",
   "table.split_quantity_weight_error":
-    "Enter a weight greater than zero and no more than the amount ordered",
+    "Enter a quantity greater than zero and no more than the amount ordered",
   "table.split_options_together": "Dishes with options must be moved in full",
   "table.split_modifier_error": "Dishes with options must be moved in full",
   // Errors
@@ -544,7 +544,7 @@ export const es: Record<StringKey, string> = {
   "override.enter_pin": "Introduce el PIN del responsable",
   "override.no_supervisors": "No hay responsables disponibles",
   "override.error": "No se pudo autorizar, inténtalo de nuevo",
-  "weigh.prompt": "Introduce el peso (kg)",
+  "weigh.prompt": "Introduce la cantidad",
   "held.label_prompt": "Nombra este pedido (opcional)",
   "held.title": "Pedidos aparcados",
   "held.empty": "No hay pedidos aparcados",
@@ -739,7 +739,7 @@ export const es: Record<StringKey, string> = {
   "table.split_quantity": "Cantidad",
   "table.split_quantity_each_error": "Elige una cantidad entera entre 1 y la cantidad pedida",
   "table.split_quantity_weight_error":
-    "Introduce un peso mayor que cero y no superior a la cantidad pedida",
+    "Introduce una cantidad mayor que cero y no superior a la cantidad pedida",
   "table.split_options_together": "Los platos con opciones deben moverse completos",
   "table.split_modifier_error": "Los platos con opciones deben moverse completos",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",

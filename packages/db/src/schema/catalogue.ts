@@ -71,7 +71,7 @@ export const categories = pgTable(
   ],
 );
 
-/** A priced item. `unit_price` is GROSS (VAT-inclusive), per item (`each`) or per kg (`weight`).
+/** A priced item. Catalogue-owned `product_units` assigns its unit without a reverse migration edge.
  * Deactivate via `active`, never delete (may sit behind historical sale-line snapshots). */
 export const products = pgTable(
   "products",

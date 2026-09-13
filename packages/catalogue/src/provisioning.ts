@@ -15,6 +15,15 @@ const geographicLocales = [
   ]),
 ];
 
+const UNIT_NAMES = {
+  each: { en: "each", es: "unidad", ca: "unitat", gl: "unidade", eu: "unitatea" },
+  g: { en: "g", es: "g", ca: "g", gl: "g", eu: "g" },
+  kg: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
+  mg: { en: "mg", es: "mg", ca: "mg", gl: "mg", eu: "mg" },
+  ml: { en: "ml", es: "ml", ca: "ml", gl: "ml", eu: "ml" },
+  l: { en: "l", es: "l", ca: "l", gl: "l", eu: "l" },
+} as const;
+
 export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the venue's initial menu and content language",
@@ -38,6 +47,19 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         insert into content_languages (tenant_id, default_language, languages)
         values (${node.tenantId}, ${defaultLanguage}, array[${defaultLanguage}])
         on conflict (tenant_id) do nothing`);
+      const claimed = await tx.execute(sql`
+        insert into unit_seed_states (tenant_id) values (${node.tenantId})
+        on conflict (tenant_id) do nothing returning tenant_id`);
+      if (claimed.rows.length > 0) {
+        await tx.execute(sql`
+          insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
+            (${node.tenantId}, 'each', ${JSON.stringify(UNIT_NAMES.each)}::jsonb, 0, null),
+            (${node.tenantId}, 'g', ${JSON.stringify(UNIT_NAMES.g)}::jsonb, 0, 'g'),
+            (${node.tenantId}, 'kg', ${JSON.stringify(UNIT_NAMES.kg)}::jsonb, 3, 'kg'),
+            (${node.tenantId}, 'mg', ${JSON.stringify(UNIT_NAMES.mg)}::jsonb, 0, 'mg'),
+            (${node.tenantId}, 'ml', ${JSON.stringify(UNIT_NAMES.ml)}::jsonb, 0, null),
+            (${node.tenantId}, 'l', ${JSON.stringify(UNIT_NAMES.l)}::jsonb, 3, null)`);
+      }
       let catalogueId = location.rows[0]?.catalogue_id ?? null;
       if (catalogueId === null) {
         const created = await tx.execute<{ id: string }>(sql`

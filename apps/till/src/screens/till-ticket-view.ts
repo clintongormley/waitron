@@ -445,7 +445,11 @@ export class TillTicketView extends LitElement {
             (group) => html`
               <li class="line">
                 <span class="line-name">${lineName(group.dish.descriptions, locale)}</span>
-                <span class="line-qty">${group.dish.quantity}</span>
+                <span class="line-qty"
+                  >${group.dish.quantity}${
+                    group.dish.unitName == null ? "" : ` ${lineName(group.dish.unitName, locale)}`
+                  }</span
+                >
                 <span class="line-gross">${formatMoney(group.dish.gross, locale)}</span>
               </li>
               ${modifierSnapshotLabels(group.dish.modifierSnapshots, (text) => lineName(text, locale)).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}

@@ -144,6 +144,7 @@ async function buildTicketItems(
       quantity: workingOrderLines.quantity,
       descriptions: workingOrderLines.descriptions,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
+      unitName: workingOrderLines.unitName,
       // Per-line customisation (order-line customisation, spec §2/§3): the note/doneness printed as a
       // prominent doneness line + a note sub-line (`emitItem`). Read here so BOTH the fire path and the
       // recall/void correction slip carry them — a correction slip shows the same detail the cook has.
@@ -194,7 +195,8 @@ async function buildTicketItems(
     byLine.set(row.id, {
       lineNo: row.lineNo,
       item: {
-        qty: Number(row.quantity),
+        qty: row.quantity,
+        unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
         name: ticketName(row.descriptions, cfg.locale),
         // Nullable columns → `?? undefined` so a plain line carries neither key and prints exactly as
         // before; `emitItem` prints doneness prominently and the note as a sub-line.

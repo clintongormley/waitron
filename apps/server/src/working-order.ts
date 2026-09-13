@@ -192,7 +192,8 @@ async function priceOrderLines(
     ? [...offerBySelectionId.values()].map((offer) => ({
         id: offer.id,
         descriptions: offer.descriptions,
-        pricingUnit: offer.pricingUnit,
+        unit: offer.unit,
+        pricingUnit: offer.unit.hardwareUnit === null ? "each" : "weight",
         unitPrice: offer.grossPrice,
         vatClass: offer.vatClass as AvailableProduct["vatClass"],
         category: offer.category,
@@ -303,7 +304,16 @@ async function priceOrderLines(
       : null;
     const modifierSnapshots = resolved?.snapshots ?? [];
 
-    // Resolve choices against this product's published definitions before pricing them.
+    // The compatibility option payload retains its original each-only contract. Canonical modifiers
+    // are validated above and support every selected unit.
+    if (!canonical && selected.length > 0 && product.pricingUnit !== "each") {
+      throw new AppError("options.unsupported_product", {
+        productId: underlyingProductId,
+        pricingUnit: product.pricingUnit,
+      });
+    }
+
+    // Resolve legacy choices against this product's published definitions before pricing them.
     const selectedOptions: {
       id: string;
       name: Record<string, string>;
@@ -522,6 +532,8 @@ async function priceOrderLines(
       productId: meta.kind === "parent" ? meta.productId : null,
       descriptions: line.descriptions,
       modifierSnapshots: line.modifierSnapshots ?? [],
+      unitName: line.unitName,
+      unitPrecision: line.unitPrecision,
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
@@ -601,6 +613,8 @@ export async function readLockedLines(
       descriptions: workingOrderLines.descriptions,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       category: workingOrderLines.category,
+      unitName: workingOrderLines.unitName,
+      unitPrecision: workingOrderLines.unitPrecision,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
@@ -632,6 +646,8 @@ export async function readLockedLines(
     descriptions: line.descriptions,
     modifierSnapshots: line.modifierSnapshots ?? [],
     category: line.category,
+    unitName: line.unitName,
+    unitPrecision: line.unitPrecision,
     parentLineNo: line.parentLineId == null ? null : (positionById.get(line.parentLineId) ?? null),
   }));
 }
@@ -694,7 +710,7 @@ export function toVatBreakdown(
  * re-returns an already-settled order's ticket rather than filing a second chained record). The ONE
  * exception is a colliding id whose committed row is no longer `open` (abandoned/settled/placed) — a
  * pathological id reuse, not a held-order retry — which is re-thrown as the raw 23505 unchanged.
- * `quantity` is a count for an `each` product and a measured kg weight for a `weight` product.
+ * `quantity` is a positive decimal string validated against the selected unit's snapshotted precision.
  *
  * `operatorId` is the person who parked the order, for later attribution. It is accepted here for the
  * caller's convenience and forward-compatibility with the session wiring (Task 5) but is NOT persisted
@@ -2370,6 +2386,8 @@ async function carveOffLines(
       unitPriceGross: workingOrderLines.unitPriceGross,
       vatRate: workingOrderLines.vatRate,
       category: workingOrderLines.category,
+      unitName: workingOrderLines.unitName,
+      unitPrecision: workingOrderLines.unitPrecision,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
@@ -2728,7 +2746,12 @@ export interface HeldOrder {
       productId: string;
       menuItemId: string;
       descriptions: Record<string, string>;
-      pricingUnit: "each" | "weight";
+      unit: {
+        id: string;
+        name: Readonly<Record<string, string>>;
+        precision: number;
+        hardwareUnit: "kg" | "g" | "mg" | null;
+      };
       unitPrice: string;
       vatClass: "general" | "reduced" | "super_reduced" | "zero";
       category: string | null;
@@ -2906,7 +2929,12 @@ export async function getHeldOrder(
             productId: line.productId,
             menuItemId: context.menuItemId,
             descriptions: line.descriptions,
-            pricingUnit: context.pricingUnit,
+            unit: {
+              id: context.unitId,
+              name: context.unitName,
+              precision: context.unitPrecision,
+              hardwareUnit: context.hardwareUnit,
+            },
             unitPrice: line.unitPriceGross,
             vatClass: context.vatClass as "general" | "reduced" | "super_reduced" | "zero",
             category: context.categoryName,
@@ -3627,6 +3655,8 @@ export interface StationQueueItem {
   modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
   descriptions: Record<string, string>;
   quantity: string;
+  unitName: Record<string, string> | null;
+  unitPrecision: number | null;
   /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the KDS UI
    *  renders them as indented sub-text under this item. Empty for a plain dish. */
   modifiers: QueueModifier[];
@@ -3895,6 +3925,8 @@ export async function listStationQueue(
       descriptions: workingOrderLines.descriptions,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       quantity: workingOrderLines.quantity,
+      unitName: workingOrderLines.unitName,
+      unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
       // KDS-2: the item's snapshotted course (or null) + its held/fired marker. `course_id` is the
       // item's own snapshot; the name/order ride from the LEFT-joined live `kitchen_courses` row (a
@@ -4018,6 +4050,8 @@ export async function listStationQueue(
       descriptions: row.descriptions,
       modifierSnapshots: row.modifierSnapshots,
       quantity: row.quantity,
+      unitName: row.unitName,
+      unitPrecision: row.unitPrecision,
       modifiers: modifiersByParent.get(row.workingOrderLineId) ?? [],
       // The as-served allergen profile (Task 8) — a safe default `{ allergens: {}, pending: true }`
       // when the parent line is somehow absent from the read (belt-and-braces; every queued line is
@@ -4068,6 +4102,8 @@ export interface ExpoItem {
   id: string;
   name: Record<string, string>;
   qty: string;
+  unitName: Record<string, string> | null;
+  unitPrecision: number | null;
   stationName: string;
   state: TicketState;
   firedAt: string | null;
@@ -4197,6 +4233,8 @@ export async function listExpoQueue(
       descriptions: workingOrderLines.descriptions,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       quantity: workingOrderLines.quantity,
+      unitName: workingOrderLines.unitName,
+      unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
       // The line's own delivery marker (design §3 — a line ages until it reaches the guest). NOT
       // exposed on `ExpoItem` itself; consulted only to exclude a served line from `ExpoOrder.worstBand`.
@@ -4366,6 +4404,8 @@ export async function listExpoQueue(
       name: row.descriptions,
       modifierSnapshots: row.modifierSnapshots,
       qty: row.quantity,
+      unitName: row.unitName,
+      unitPrecision: row.unitPrecision,
       stationName: row.stationName,
       state: row.state,
       firedAt: row.firedAt,

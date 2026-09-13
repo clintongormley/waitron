@@ -11,14 +11,20 @@ import {
 import type { Decimal, ModifierSnapshot } from "@waitron/shared";
 import type { RecordSaleLine } from "@waitron/core";
 import type { VatBreakdownLine } from "@waitron/fiscal";
+import { assertQuantityPrecision } from "./unit-validation.js";
 
 export type PricingUnit = "each" | "weight";
 export type VatClass = "general" | "reduced" | "super_reduced" | "zero";
 
+export interface UnitSnapshot {
+  name: Record<string, string>;
+  precision: number;
+}
+
 export interface PriceableProduct {
   descriptions: Record<string, string>;
-  pricingUnit: PricingUnit;
-  /** GROSS (VAT-inclusive): per item for `each`, per kg for `weight`. */
+  unit: UnitSnapshot;
+  /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
   vatClass: VatClass;
   /** Snapshotted analytics label, copied onto the sale line. */
@@ -27,7 +33,7 @@ export interface PriceableProduct {
 
 export interface BasketItem {
   product: PriceableProduct;
-  /** A count for `each`, a measured kg weight (e.g. "0.320") for `weight`. */
+  /** A positive decimal literal accepted by the selected unit's precision. */
   quantity: string;
 }
 
@@ -36,12 +42,12 @@ export interface BasketItem {
  * unit price and the rate onto `working_order_lines` at add-time; `priceLockedLines` reprices from
  * exactly those columns, so a retrieved/parked order files the same figures whether it went
  * through re-price or file-from-lock. Deliberately the STORED gross unit and rate, never
- * `line_total ÷ quantity` — recovering a weighed line by division drifts off the add-time VAT breakdown.
+ * `line_total ÷ quantity` — recovering a fractional line by division drifts off the add-time VAT breakdown.
  */
 export interface LockedLine {
-  /** The stored `working_order_lines.unit_price_gross` — GROSS (VAT-inclusive), per item or per kg. */
+  /** The stored `working_order_lines.unit_price_gross` — GROSS, per selected unit. */
   grossUnitPrice: string;
-  /** A count for `each`, a measured kg weight for `weight` — the stored `working_order_lines.quantity`. */
+  /** The stored quantity, validated against the snapshotted unit precision. */
   quantity: string;
   /** The stored `working_order_lines.vat_rate`, a percentage literal e.g. "21.00" meaning 21%. */
   vatRate: string;
@@ -49,6 +55,9 @@ export interface LockedLine {
   descriptions: Record<string, string>;
   /** Snapshotted analytics label, copied onto the sale line; `null` when absent. */
   category: string | null;
+  /** Unit snapshot from line-add time; null only for a modifier child. */
+  unitName?: Record<string, string> | null;
+  unitPrecision?: number | null;
   /** The `lineNo` of this row's PARENT dish line when this is a child MODIFIER line (ordering
    * modifiers), else `null`/absent for a top-level line. Reconstructed by the caller from the stored
    * `working_order_lines.parent_line_id` (an id) against the same batch's `line_no`s, so a
@@ -94,28 +103,30 @@ export interface PricedLines {
    */
   grossLineTotals: Decimal[];
   /**
-   * The GROSS (VAT-inclusive) UNIT price per line, at MONEY_SCALE, in `lines` order — the per-item (or
-   * per-kg) gross the line was priced from, NOT multiplied by quantity. This is the exact figure
+   * The GROSS (VAT-inclusive) UNIT price per line, at MONEY_SCALE, in `lines` order — the gross for
+   * one selected unit, NOT multiplied by quantity. This is the exact figure
    * `working_order_lines.unit_price_gross` stores at add-time so a retrieved order files from the lock:
    * `priceLockedLines` reads it straight back as its `grossUnitPrice`, so the stored value and the
    * file-time recompute round-trip byte-for-byte (never `grossLineTotals ÷ quantity`, which drifts for
-   * a weighed line). Parallel to `lines`/`grossLineTotals`.
+   * a fractional line). Parallel to `lines`/`grossLineTotals`.
    */
   grossUnitPrices: Decimal[];
   total: Decimal;
   vatBreakdown: VatBreakdownLine[];
 }
 
-/** The per-item inputs the arithmetic core needs, sourced identically whether they come from a live
+/** The per-line inputs the arithmetic core needs, sourced identically whether they come from a live
  * catalogue product or a stored lock. */
 interface PricingRow {
-  /** GROSS (VAT-inclusive) unit price — per item for `each`, per kg for `weight`. */
+  /** GROSS (VAT-inclusive) price per selected unit. */
   grossUnit: Decimal;
   quantity: string;
   /** The VAT rate as a percentage literal Decimal, e.g. "21.00". */
   rate: Decimal;
   descriptions: Record<string, string>;
   category: string | null;
+  unitName: Record<string, string> | null;
+  unitPrecision: number | null;
   /** The `lineNo` of this row's parent dish; `null`/absent for a top-level line. Copied onto the
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
@@ -126,7 +137,7 @@ interface PricingRow {
 // funnel through here, so a locked-line filing can never diverge from a walk-up's to the céntimo —
 // the two entry points differ ONLY in how they source the gross unit and the rate (a product's
 // `unitPrice`/`vatClass` vs a stored `unit_price_gross`/`vat_rate`). Keep them sharing this; do not
-// reimplement the per-item gross/base/netUnit/tax = gross − base arithmetic in either caller.
+// reimplement the per-line gross/base/netUnit/tax = gross − base arithmetic in either caller.
 function priceRows(rows: readonly PricingRow[]): PricedLines {
   const lines: RecordSaleLine[] = [];
   const grossLineTotals: Decimal[] = [];
@@ -150,6 +161,8 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
       vatRate: row.rate,
       lineTotal: base,
       category: row.category,
+      unitName: row.unitName,
+      unitPrecision: row.unitPrecision,
       // Presentation metadata carried through the core untouched: `null` for a top-level line, the
       // parent dish's `lineNo` for a child option line. `?? null` keeps the no-options callers
       // (`priceBasket`/`priceLockedLines`, which never set it) emitting exactly `null` here, so a
@@ -181,14 +194,19 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
 /** Prices a live basket: gross unit from the product's `unitPrice`, rate resolved from its `vatClass`. */
 export function priceBasket(items: readonly BasketItem[]): PricedLines {
   return priceRows(
-    items.map((item) => ({
-      // `unitPrice` is a plain `string` on `PriceableProduct`, so `decimal()` validates it here.
-      grossUnit: decimal(item.product.unitPrice),
-      quantity: item.quantity,
-      rate: resolveVatRate(item.product.vatClass),
-      descriptions: item.product.descriptions,
-      category: item.product.category,
-    })),
+    items.map((item) => {
+      assertQuantityPrecision(item.quantity, item.product.unit.precision, { positive: true });
+      return {
+        // `unitPrice` is a plain `string` on `PriceableProduct`, so `decimal()` validates it here.
+        grossUnit: decimal(item.product.unitPrice),
+        quantity: item.quantity,
+        rate: resolveVatRate(item.product.vatClass),
+        descriptions: item.product.descriptions,
+        category: item.product.category,
+        unitName: item.product.unit.name,
+        unitPrecision: item.product.unit.precision,
+      };
+    }),
   );
 }
 
@@ -208,6 +226,8 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
       descriptions: line.descriptions,
       modifierSnapshots: line.modifierSnapshots ?? [],
       category: line.category,
+      unitName: line.unitName ?? null,
+      unitPrecision: line.unitPrecision ?? null,
       // Carry the child→parent link through the lock round-trip so a persisted-order file (a retrieved
       // counter order, a settled tab) emits child sale_lines with the same `parent_line_id` a live
       // walk-up does. `?? null` keeps a no-modifier locked line (which never sets it) emitting `null`,
@@ -236,8 +256,7 @@ export interface SelectedOption {
 /** A basket line that carries the dish plus the modifiers selected on it. */
 export interface BasketItemWithOptions {
   product: PriceableProduct;
-  /** A count for `each`, a measured kg weight for `weight` — the DISH quantity, which every child
-   * option line follows (a modifier is priced per dish, never counted independently). */
+  /** The dish quantity, validated against its unit; every child option line follows it. */
   quantity: string;
   options: SelectedOption[];
   modifierSnapshots?: ModifierSnapshot[];
@@ -258,6 +277,7 @@ export interface BasketItemWithOptions {
 export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]): PricedLines {
   const rows: PricingRow[] = [];
   for (const item of items) {
+    assertQuantityPrecision(item.quantity, item.product.unit.precision, { positive: true });
     // The parent's eventual `lineNo` is its 1-based position, which is `rows.length + 1` BEFORE the
     // parent row is pushed (`priceRows` assigns `lineNo = i + 1` in this same order).
     const parentLineNo = rows.length + 1;
@@ -268,6 +288,8 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       rate: resolveVatRate(item.product.vatClass),
       descriptions: item.product.descriptions,
       category: item.product.category,
+      unitName: item.product.unit.name,
+      unitPrecision: item.product.unit.precision,
       parentLineNo: null,
       modifierSnapshots: item.modifierSnapshots ?? [],
     });
@@ -286,6 +308,8 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
             : resolveVatRate(opt.vatClass),
         descriptions: opt.name,
         category: item.product.category, // snapshot the parent's category
+        unitName: null,
+        unitPrecision: null,
         parentLineNo,
       });
     }

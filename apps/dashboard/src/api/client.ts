@@ -248,6 +248,22 @@ export interface CategoryProduct extends ProductCategories {
   active: boolean;
 }
 
+export interface Unit {
+  id: string;
+  name: Record<string, string>;
+  precision: number;
+}
+
+export interface UnitInput {
+  name: Record<string, string>;
+  precision: number;
+}
+
+export interface UnitPatch {
+  name?: Record<string, string>;
+  precision?: number;
+}
+
 /**
  * One product row as `GET /management-api/catalogues/:id/products` and `POST /management-api/products`
  * return it — a faithful mirror of catalogue's `Product` (`operations.ts`). `unitPrice` is a GROSS
@@ -1883,6 +1899,22 @@ export class DashboardApi {
   }
   replaceProductCategories(id: string, input: ProductCategoriesInput): Promise<ProductCategories> {
     return this.#request(`/management-api/products/${id}/categories`, "PUT", input);
+  }
+
+  listUnits(): Promise<Unit[]> {
+    return this.#request<Unit[]>("/management-api/units", "GET");
+  }
+
+  createUnit(input: UnitInput): Promise<Unit> {
+    return this.#request<Unit>("/management-api/units", "POST", input);
+  }
+
+  updateUnit(id: string, patch: UnitPatch): Promise<Unit> {
+    return this.#request<Unit>(`/management-api/units/${id}`, "PATCH", patch);
+  }
+
+  deleteUnit(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/units/${id}`, "DELETE");
   }
 
   /** `GET /management-api/catalogues/:id/products` — the products of one catalogue. */

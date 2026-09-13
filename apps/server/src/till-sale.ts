@@ -74,8 +74,7 @@ export interface TillTender {
  * A walk-up sale as the counter till captures it: a basket of `{ productId, quantity }` and one
  * tender (cash or card). Deliberately carries NO price of any kind — the server re-reads the
  * catalogue and prices authoritatively (`priceBasket`), so a browser cannot influence the filed
- * total. `quantity` is a count for an `each` product and a measured kg weight (e.g. "0.320") for a
- * `weight` product.
+ * total. `quantity` is a positive decimal string validated against the selected unit's precision.
  *
  * `workingOrderId` is the pay-idempotency key (park & retrieve, sub-project 7b). The till mints it and
  * holds it stable across a lost-response retry, so a re-sent pay REPLAYS against the same
@@ -139,6 +138,9 @@ export interface TillSaleLine {
   /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim. The
    *  receipt resolves the invoice locale from this map (art. 7.1.e). */
   descriptions: Record<string, string>;
+  /** Unit label frozen with the filed line; null for a modifier child. */
+  unitName?: Record<string, string> | null;
+  unitPrecision?: number | null;
   /** The filed quantity, trailing-zero-trimmed for display so a walk-up ("2") and a retrieved order
    *  (stored "2.000") read alike ("2"); a weighed "0.320" reads "0.32". */
   quantity: string;

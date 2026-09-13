@@ -16,6 +16,7 @@ import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import { productUnit } from "./product-name.js";
 
 /**
  * The multiplication sign for a per-option-quantity badge (`×2`). The SAME `×` (U+00D7) the printed
@@ -34,8 +35,8 @@ function optionQuantityBadge(quantity: number | undefined): string {
 }
 
 /**
- * The running order: one row per rung-up line, each with the product's name, the quantity (a count,
- * or a kg weight for a weight product) and its gross line total, plus a remove control. It reads the
+ * The running order: one row per rung-up line, each with the product's name, localized unit quantity,
+ * gross line total, and a remove control. It reads the
  * store and re-renders on every `"changed"` event — it holds no basket state of its own, so it can
  * never disagree with the store the pay flow reads.
  *
@@ -99,8 +100,7 @@ export class TillBasket extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* Dish-line quantity stepper (feature B): the -/N/+ control on an each line. The count sits
-         between the two step buttons; a weight line renders the static kg label in this same cell. */
+      /* Dish-line quantity stepper: -/N/+ for a whole, non-hardware unit; other units stay static. */
       .stepper {
         display: inline-flex;
         align-items: center;
@@ -424,14 +424,14 @@ export class TillBasket extends LitElement {
   }
 
   /**
-   * The line's quantity cell. An `each` line gets a −/count/+ stepper (dish-line quantity, feature B):
-   * `+` bumps the count via {@link WorkingOrderStore.setLineQuantity} (no line merge — each add stays its
+   * A whole, non-hardware line gets a −/count/+ stepper: `+` bumps the count via
+   * {@link WorkingOrderStore.setLineQuantity} (no line merge — each add stays its
    * own line), `−` lowers it but is DISABLED at 1 because deletion is the × remove control's job, never
-   * the stepper's. A `weight` line has no stepper — a measured weight has no +/- — so it keeps the static
-   * kg label ({@link quantityLabel}).
+   * the stepper's. A fractional or hardware-mapped line keeps the static localized quantity label.
    */
   #quantityCell(line: OrderLine, index: number) {
-    if (line.product.pricingUnit === "weight") {
+    const unit = productUnit(line.product);
+    if (unit.hardwareUnit !== null || unit.precision > 0) {
       return html`<span class="qty">${quantityLabel(line)}</span>`;
     }
     const count = Number(line.quantity);

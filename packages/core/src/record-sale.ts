@@ -46,6 +46,9 @@ export interface RecordSaleLine {
   lineNo: number;
   /** locale -> text, snapshotted at line-add time. Never a catalogue reference. */
   descriptions: Record<string, string>;
+  /** Unit label and accepted precision frozen when the item was selected. */
+  unitName?: Record<string, string> | null;
+  unitPrecision?: number | null;
   quantity: string;
   unitPrice: string;
   /** A percentage literal, e.g. "21.00" meaning 21% — matches `sale_lines.vat_rate`'s own

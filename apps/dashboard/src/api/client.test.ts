@@ -526,6 +526,30 @@ describe("DashboardApi", () => {
     ]);
   });
 
+  it("uses the canonical unit collection and item routes", async () => {
+    const unit = { id: "u1", name: { en: "portion" }, precision: 2 };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([unit]))
+      .mockResolvedValueOnce(jsonResponse(unit, true, 201))
+      .mockResolvedValueOnce(jsonResponse({ ...unit, precision: 1 }))
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.listUnits()).resolves.toEqual([unit]);
+    await expect(api.createUnit({ name: { en: "portion" }, precision: 2 })).resolves.toEqual(unit);
+    await expect(api.updateUnit("u1", { precision: 1 })).resolves.toEqual({
+      ...unit,
+      precision: 1,
+    });
+    await expect(api.deleteUnit("u1")).resolves.toBeUndefined();
+    expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+      ["/management-api/units", "GET", undefined],
+      ["/management-api/units", "POST", JSON.stringify({ name: { en: "portion" }, precision: 2 })],
+      ["/management-api/units/u1", "PATCH", JSON.stringify({ precision: 1 })],
+      ["/management-api/units/u1", "DELETE", undefined],
+    ]);
+  });
+
   it("listProducts GETs the addressed catalogue's products with credentials", async () => {
     const products = [
       {

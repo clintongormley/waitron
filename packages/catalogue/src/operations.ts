@@ -44,6 +44,14 @@ import {
   menuItems,
   menuSections,
 } from "./schema/menu.js";
+import { productUnits, units } from "./schema/units.js";
+import {
+  assignProductUnit,
+  getSellableUnit,
+  getUnit,
+  type SellableUnit,
+  type Unit,
+} from "./units.js";
 
 /**
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
@@ -88,7 +96,7 @@ export interface MenuOffer extends MenuItem {
   menuName: string;
   sectionName: Record<string, string>;
   descriptions: Record<string, string>;
-  pricingUnit: PricingUnit;
+  unit: SellableUnit;
   vatClass: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
@@ -129,8 +137,10 @@ export interface Product {
   categoryIds: string[];
   primaryCategoryId: string | null;
   descriptions: Record<string, string>;
+  unitId: string;
+  unit: Unit;
   pricingUnit: PricingUnit;
-  /** GROSS (VAT-inclusive): per item for `each`, per kg for `weight`. */
+  /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
   vatClass: VatClass;
   active: boolean;
@@ -154,7 +164,8 @@ export interface CreateProductInput {
   catalogueId: string;
   categoryId: string | null;
   descriptions: Record<string, string>;
-  pricingUnit: PricingUnit;
+  unitId?: string;
+  pricingUnit?: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
   /** Omitted leaves it null (unreviewed); validated against the EU-14 taxonomy on insert. */
@@ -176,6 +187,7 @@ export interface UpdateProductInput {
   descriptions?: Record<string, string>;
   unitPrice?: string;
   vatClass?: VatClass;
+  unitId?: string;
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
   /** `null` clears the declaration back to unreviewed; omitted leaves it unchanged. */
@@ -241,6 +253,7 @@ export interface ResolvedOptionGroup {
 export interface AvailableProduct {
   id: string;
   descriptions: Record<string, string>;
+  unit: SellableUnit;
   pricingUnit: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
@@ -285,7 +298,7 @@ const CATALOGUE_COLUMNS = {
   version: catalogues.version,
 };
 
-const PRODUCT_COLUMNS = {
+const PRODUCT_BASE_COLUMNS = {
   id: products.id,
   catalogueId: products.catalogueId,
   categoryId: products.categoryId,
@@ -300,13 +313,24 @@ const PRODUCT_COLUMNS = {
   image: products.image,
 };
 
-/** The product row as Drizzle types it back: `pricing_unit`/`vat_class` are `text` columns, so they
- * arrive as bare `string` before {@link toProduct} re-attaches their union types. */
+const PRODUCT_COLUMNS = {
+  ...PRODUCT_BASE_COLUMNS,
+  unitId: units.id,
+  unitName: units.name,
+  unitPrecision: units.precision,
+  hardwareUnit: units.hardwareUnit,
+};
+
+/** The joined product row as Drizzle types it back. */
 interface RawProduct {
   id: string;
   catalogueId: string;
   categoryId: string | null;
   descriptions: Record<string, string>;
+  unitId: string | null;
+  unitName: Record<string, string> | null;
+  unitPrecision: number | null;
+  hardwareUnit: string | null;
   pricingUnit: string;
   unitPrice: string;
   vatClass: string;
@@ -332,15 +356,49 @@ interface RawProduct {
 // read back is always a `PricingUnit`/`VatClass`; the cast re-attaches the type the column's runtime
 // CHECK already guarantees.
 function toProduct(row: RawProduct, categoryIds: string[]): Product {
+  const { unitName, unitPrecision, hardwareUnit, ...product } = row;
+  const unit = sellableUnit(row.unitId, unitName, unitPrecision, row.pricingUnit, hardwareUnit);
   return {
-    ...row,
+    ...product,
     categoryIds,
     primaryCategoryId: row.categoryId,
     modifierIds: [],
+    unit,
+    unitId: unit.id,
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
     dietOverride: row.dietOverride as DietOverride | null,
   };
+}
+
+function sellableUnit(
+  id: string | null,
+  name: Record<string, string> | null,
+  precision: number | null,
+  legacy: string,
+  hardwareUnit?: string | null,
+): SellableUnit {
+  if (id !== null && name !== null && precision !== null) {
+    return {
+      id,
+      name,
+      precision,
+      hardwareUnit: hardwareUnit as SellableUnit["hardwareUnit"],
+    };
+  }
+  return legacy === "weight"
+    ? {
+        id: "00000000-0000-0000-0000-000000000002",
+        name: { en: "kg" },
+        precision: 3,
+        hardwareUnit: "kg",
+      }
+    : {
+        id: "00000000-0000-0000-0000-000000000001",
+        name: { en: "each" },
+        precision: 0,
+        hardwareUnit: null,
+      };
 }
 
 export async function createCatalogue(
@@ -726,6 +784,10 @@ export async function listMenuOffers(
       menuName: catalogues.name,
       sectionName: menuSections.name,
       descriptions: products.descriptions,
+      unitId: units.id,
+      unitName: units.name,
+      unitPrecision: units.precision,
+      hardwareUnit: units.hardwareUnit,
       pricingUnit: products.pricingUnit,
       vatClass: products.vatClass,
       category: categories.name,
@@ -747,6 +809,14 @@ export async function listMenuOffers(
     .innerJoin(
       products,
       and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
+    )
+    .leftJoin(
+      productUnits,
+      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
+    )
+    .leftJoin(
+      units,
+      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
     )
     .leftJoin(
       categories,
@@ -861,16 +931,34 @@ export async function listMenuOffers(
     rows.map((row) => row.id),
   );
   return rows.map((row) => ({
-    ...row,
+    id: row.id,
+    menuId: row.menuId,
+    productId: row.productId,
+    sectionId: row.sectionId,
+    grossPrice: row.grossPrice,
+    displayOrder: row.displayOrder,
+    active: row.active,
+    menuName: row.menuName,
+    sectionName: row.sectionName,
+    descriptions: row.descriptions,
+    unit: sellableUnit(
+      row.unitId,
+      row.unitName,
+      row.unitPrecision,
+      row.pricingUnit,
+      row.hardwareUnit,
+    ),
+    pricingUnit: row.pricingUnit as PricingUnit,
+    vatClass: row.vatClass as VatClass,
     category:
       row.category === null
         ? null
         : resolveContentText(row.category, content.defaultLanguage, content.defaultLanguage),
-    pricingUnit: row.pricingUnit as PricingUnit,
-    vatClass: row.vatClass as VatClass,
+    allergens: row.allergens,
     diet: row.diet as DietProfile | null,
     dietDerivation: row.dietDerivation as DietDerivation | null,
     dietOverride: row.dietOverride as DietOverride | null,
+    courseId: row.courseId,
     optionGroups: groupsByItem.get(row.id) ?? [],
     modifiers: modifiersByItem.get(row.id) ?? [],
   }));
@@ -1028,6 +1116,11 @@ export async function createProduct(
   tenantId: TenantId,
   input: CreateProductInput,
 ): Promise<Product> {
+  if (input.unitId === undefined && input.pricingUnit === undefined) {
+    throw new AppError("management.request_invalid", { field: "unitId" });
+  }
+  const selectedUnit =
+    input.unitId === undefined ? null : await getSellableUnit(tx, tenantId, input.unitId);
   // Validate before the write: an unreviewed product stores null, a supplied map is checked against
   // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
   // before any row is inserted. The map is the MANUAL overlay; at create there is no recipe, so the
@@ -1051,7 +1144,7 @@ export async function createProduct(
       catalogueId: input.catalogueId,
       categoryId: null,
       descriptions: input.descriptions,
-      pricingUnit: input.pricingUnit,
+      pricingUnit: input.pricingUnit ?? (selectedUnit?.hardwareUnit === null ? "each" : "weight"),
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
       active: input.active ?? true,
@@ -1061,12 +1154,28 @@ export async function createProduct(
       diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
       image: input.image ?? null,
     })
-    .returning(PRODUCT_COLUMNS);
+    .returning({ id: products.id });
+  if (input.unitId !== undefined) await assignProductUnit(tx, tenantId, row!.id, input.unitId);
   const membership = await replaceProductCategories(tx, tenantId, row!.id, {
     categoryIds: input.categoryId === null ? [] : [input.categoryId],
     primaryCategoryId: input.categoryId,
   });
-  return toProduct({ ...row!, categoryId: membership.primaryCategoryId }, membership.categoryIds);
+  const [created] = await tx
+    .select(PRODUCT_COLUMNS)
+    .from(products)
+    .leftJoin(
+      productUnits,
+      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
+    )
+    .leftJoin(
+      units,
+      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
+    )
+    .where(and(eq(products.tenantId, tenantId), eq(products.id, row!.id)));
+  return toProduct(
+    { ...created!, categoryId: membership.primaryCategoryId },
+    membership.categoryIds,
+  );
 }
 
 export async function listProducts(
@@ -1083,6 +1192,14 @@ export async function listProducts(
     })
     .from(products)
     .leftJoin(
+      productUnits,
+      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
+    )
+    .leftJoin(
+      units,
+      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
+    )
+    .leftJoin(
       productCategories,
       and(
         eq(productCategories.tenantId, products.tenantId),
@@ -1095,7 +1212,7 @@ export async function listProducts(
         catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId),
       ),
     )
-    .groupBy(products.id)
+    .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
   const attachments = await tx
@@ -1121,7 +1238,7 @@ export async function listProducts(
 
 export async function updateProduct(
   tx: Transaction,
-  tenantId: string,
+  tenantId: TenantId,
   id: string,
   patch: UpdateProductInput,
 ): Promise<void> {
@@ -1131,7 +1248,7 @@ export async function updateProduct(
   // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
   // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
   // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
-  const { allergens, dietOverride, categoryId, ...rest } = patch;
+  const { allergens, dietOverride, categoryId, unitId, ...rest } = patch;
   if (categoryId !== undefined) {
     // Choosing a primary retains other memberships; clearing is allowed only for the final membership.
     await lockCategories(tx, tenantId);
@@ -1149,6 +1266,7 @@ export async function updateProduct(
   // column, and `diet` is republished only when the override was in the patch — an unrelated edit
   // must not disturb the published diet profile. Mirrors the allergen republish guard exactly.
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
+  if (unitId !== undefined) await getUnit(tx, tenantId, unitId);
   await tx
     .update(products)
     .set({
@@ -1158,6 +1276,7 @@ export async function updateProduct(
       updatedAt: sql`now()`,
     })
     .where(and(eq(products.tenantId, tenantId), eq(products.id, id)));
+  if (unitId !== undefined) await assignProductUnit(tx, tenantId, id, unitId);
   // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
   // (`republishProductOverlays`) does the work of the two single-overlay round trips, landing the same
   // `allergens` and `diet` values; when only one changed, the matching single-overlay function runs so
@@ -1368,6 +1487,10 @@ export async function listAvailableProducts(
       id: products.id,
       tenantId: products.tenantId,
       descriptions: products.descriptions,
+      unitId: units.id,
+      unitName: units.name,
+      unitPrecision: units.precision,
+      hardwareUnit: units.hardwareUnit,
       pricingUnit: products.pricingUnit,
       unitPrice: products.unitPrice,
       vatClass: products.vatClass,
@@ -1383,6 +1506,14 @@ export async function listAvailableProducts(
     })
     .from(products)
     .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
+    .leftJoin(
+      productUnits,
+      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
+    )
+    .leftJoin(
+      units,
+      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
+    )
     .leftJoin(categories, eq(categories.id, products.categoryId))
     .leftJoin(contentLanguages, eq(contentLanguages.tenantId, products.tenantId))
     .where(
@@ -1488,6 +1619,13 @@ export async function listAvailableProducts(
   const available = rows.map((row) => ({
     id: row.id,
     descriptions: row.descriptions,
+    unit: sellableUnit(
+      row.unitId,
+      row.unitName,
+      row.unitPrecision,
+      row.pricingUnit,
+      row.hardwareUnit,
+    ),
     pricingUnit: row.pricingUnit as PricingUnit,
     unitPrice: row.unitPrice,
     vatClass: row.vatClass as VatClass,

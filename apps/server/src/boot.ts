@@ -122,6 +122,7 @@ import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { mountRecipeApi } from "./recipe-api.js";
@@ -2047,6 +2048,7 @@ export async function startServer(
     },
     log,
   );
+  mountUnitsApi(app, { db, cfg: { tenantId: till.tenantId }, venueLocale }, log);
   // The deployment holds one tenant per database. The dashboard's gated purchase-invoice write
   // group (facturas recibidas: header + VAT desglose) on the SAME app, the identical convention.
   // Reuses the EXACT `db` and tenant `mountCatalogueApi` above receives (`till.tenantId`) so the

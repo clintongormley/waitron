@@ -11,11 +11,6 @@
 // so — like `seedCatalogues`'s `createProduct` — this calls them directly rather than
 // raw-inserting.
 //
-// Only EACH-priced products may carry option groups: the ring path rejects options on a `weight`
-// product (`options.unsupported_product`, apps/server/src/working-order.ts). `PRODUCT_OPTION_GROUPS`
-// only ever names each-priced images by construction (menu.ts), but this re-checks it against the
-// menu data before attaching — a defensive, fail-loud guard rather than trusting the naming by eye.
-
 import {
   createOptionGroup,
   createOptionGroupItem,
@@ -24,13 +19,7 @@ import {
 } from "@waitron/catalogue";
 import type { TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import {
-  CASA_DELGADO,
-  DELI_TAKEAWAY,
-  MENU_DEL_DIA,
-  PRODUCT_OPTION_GROUPS,
-  type SeedLocale,
-} from "./menu.js";
+import { PRODUCT_OPTION_GROUPS, type SeedLocale } from "./menu.js";
 
 export interface SeedOptionsInput {
   /** image basename -> product id, from `seedCatalogues`. */
@@ -40,20 +29,6 @@ export interface SeedOptionsInput {
    *  file/display full-tag" — content authored bare here, single-locale on the row, like `SeedProduct`
    *  descriptions in `seedCatalogues`). */
   locale: SeedLocale;
-}
-
-/** The `pricingUnit` menu.ts declares for the product carrying `image`, or `undefined` if no product
- *  in either demo catalogue uses that basename. Scans both catalogues once per lookup — a handful of
- *  calls at seed time, not a hot path. */
-function pricingUnitFor(image: string): "each" | "weight" | undefined {
-  for (const catalogue of [CASA_DELGADO, DELI_TAKEAWAY, MENU_DEL_DIA]) {
-    for (const category of catalogue.categories) {
-      for (const product of category.products) {
-        if (product.image === image) return product.pricingUnit;
-      }
-    }
-  }
-  return undefined;
 }
 
 /**
@@ -71,14 +46,6 @@ export async function seedOptions(
     if (productId === undefined) {
       throw new Error(`seedOptions: no seeded product for image '${productImage}'`);
     }
-    const unit = pricingUnitFor(productImage);
-    if (unit !== "each") {
-      throw new Error(
-        `seedOptions: '${productImage}' is not an each-priced product (pricingUnit=${String(unit)}) — ` +
-          "the sale path rejects options on a weight product (options.unsupported_product)",
-      );
-    }
-
     const groupIds: string[] = [];
     const menuGroups: { groupId: string; options: { optionId: string; priceDelta: string }[] }[] =
       [];

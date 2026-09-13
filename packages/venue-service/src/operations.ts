@@ -785,7 +785,10 @@ export async function listWorkingLineContexts(
     menuId: string;
     menuName: string;
     categoryName: string;
-    pricingUnit: "each" | "weight";
+    unitId: string;
+    unitName: Record<string, string>;
+    unitPrecision: number;
+    hardwareUnit: "kg" | "g" | "mg" | null;
     vatClass: string;
     allergens: MenuOffer["allergens"];
     diet: unknown;
@@ -800,7 +803,10 @@ export async function listWorkingLineContexts(
       menuId: workingLineContexts.menuId,
       menuName: workingLineContexts.menuName,
       categoryName: workingLineContexts.categoryName,
-      pricingUnit: workingLineContexts.pricingUnit,
+      unitId: workingLineContexts.unitId,
+      unitName: workingLineContexts.unitName,
+      unitPrecision: workingLineContexts.unitPrecision,
+      hardwareUnit: workingLineContexts.hardwareUnit,
       vatClass: workingLineContexts.vatClass,
       allergens: workingLineContexts.allergens,
       diet: workingLineContexts.diet,
@@ -821,7 +827,10 @@ export async function listWorkingLineContexts(
         eq(workingOrderLines.workingOrderId, workingOrderId),
       ),
     );
-  return rows.map((row) => ({ ...row, pricingUnit: row.pricingUnit as "each" | "weight" }));
+  return rows.map((row) => ({
+    ...row,
+    hardwareUnit: row.hardwareUnit as "kg" | "g" | "mg" | null,
+  }));
 }
 
 /** Snapshot the commercial attribution of newly priced working-order lines. */
@@ -861,7 +870,10 @@ export async function recordWorkingLineContexts(
         departmentId: context.departmentId,
         departmentName: department.name,
         categoryName: offer.category ?? "Uncategorised",
-        pricingUnit: offer.pricingUnit,
+        unitId: offer.unit.id,
+        unitName: offer.unit.name,
+        unitPrecision: offer.unit.precision,
+        hardwareUnit: offer.unit.hardwareUnit,
         vatClass: offer.vatClass,
         allergens: offer.allergens,
         diet: offer.diet,

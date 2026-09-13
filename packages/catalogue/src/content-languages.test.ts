@@ -116,6 +116,22 @@ describe("site content languages", () => {
       expect(descriptions.rows[0]!.descriptions).toEqual({ en: "Bread", fr: "Pain" });
     });
   });
+  it("refuses to change the default while a unit lacks its translation", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
+      await tx.execute(sql`
+        insert into units (tenant_id, name, precision) values (${tenantId}, '{"en":"cup"}'::jsonb, 0)`);
+    });
+    await expect(
+      withTenant(suite.db, tenantId, (tx) =>
+        writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] }),
+      ),
+    ).rejects.toMatchObject({
+      code: "content.default_missing",
+      params: { language: "fr", count: 1 },
+    });
+  });
   it("uses the site's supplied default before configuration and persists runtime additions", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, async (tx) => {
