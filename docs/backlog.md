@@ -148,9 +148,11 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 
 1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
 2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The owner-requested
-   Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products;
-   Categories is implemented on `products-categories` (pending branch finishing and merge), with
-   [API and reusable-form integration notes](developers/product-categories.md). The
+   Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products.
+   Categories has landed (#340, see below); Units, Modifiers and Products have specs and plans written
+   but no code yet ([units](superpowers/specs/2026-09-12-product-units-design.md),
+   [modifiers](superpowers/specs/2026-09-12-product-modifiers-design.md),
+   [products](superpowers/specs/2026-09-12-product-editor-design.md)). The
    [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) defines the branch contracts.
    Products integrates the other three; recipes are deferred for
    this workflow and their authoring withdrawal belongs to that build.
@@ -196,6 +198,50 @@ What it left open:
 - **The online language selector has nothing to select for yet.** The setting and the rule for
   choosing a language are built and tested; the customer-facing online ordering surface they were
   built for does not exist. This is a prerequisite that landed early, not a half-finished feature.
+
+**Product categories — LANDED #340 (2026-09-13).** A product can now belong to several categories
+without its sales being counted twice. One membership is the primary one: its name is the label
+written onto new order lines, and its existing preparation route is the one the kitchen sees. The
+other memberships and any parent categories add no destinations and no routes. Categories get their
+own dashboard page at `/manage/categories`, where you can translate a category's name, give it a
+picture from the shared library, put it under a parent (not itself and not one of its own
+descendants), and see the products assigned directly to it — a child's products do not count towards
+its parent. Deleting a category is refused while children, products or preparation routes still point
+at it, and the refusal tells you how many of each. Labels already written onto past orders stay
+readable and never block a deletion. Under the hood the single stored category name became translated
+JSON in the existing core row, and the new hierarchy, picture and membership tables belong to the
+catalogue module. [Design](superpowers/specs/2026-09-12-product-categories-design.md),
+[plan and review evidence](superpowers/plans/2026-09-12-product-categories.md),
+[API and integration guide](developers/product-categories.md).
+
+What it left open:
+
+- **The old combined catalogue screen is still the product editor, and its category picker is
+  add-only.** `catalogue-screen.ts` keeps its single-category selector, which can add a category and
+  make it primary but deliberately refuses to clear a product that has more than one membership —
+  so the only way to remove a membership today is from the Categories page. The two reusable pieces
+  the replacement editor needs already exist and are tested (`dashboard-category-form` and
+  `dashboard-category-membership-picker`, both in `apps/dashboard/src/widgets/`). **Next action:** the
+  Products build composes them into the new product editor and retires the single selector; the
+  property and event contracts it should use are written out in
+  [the integration guide](developers/product-categories.md).
+- **A populated database cannot be migrated onto this — it has to be reset.** Core migration
+  `0020_category_names` drops the old text `categories.name` column and recreates it as required JSON,
+  with no translation and no backfill. A disposable probe ran the real SQL against a category that had
+  a text name and it failed with `23502` (a required column left empty), which is the expected and
+  documented outcome. So any preproduction or development database with categories in it goes through
+  the normal reset workflow (`wa-wt reset demo` or `wa-wt reset onboarding`), not a plain migrate. No shared development database was
+  reset during the build, which means **the first person to run the dev stack after this merge is the
+  one who hits this.**
+- **Category authoring serialises per tenant, and nobody has measured what that costs.** Hierarchy
+  edits, membership replacement and category deletion all take the same one lock per tenant, which is
+  the design's deliberate choice and is what makes the races safe. The review confirmed the specific
+  races are handled but reported no throughput measurement, so there is no evidence either way about
+  how this behaves with several managers editing the catalogue at once. **Next action:** measure it
+  before anyone widens category authoring to more concurrent editors, rather than assuming it is fine.
+- **Routing from category memberships is still not designed** — that item is unchanged and sits under
+  A9 below. This merge kept the existing single-route behaviour on purpose; choosing the primary
+  category as the reporting label does not decide anything about the later routing design.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
