@@ -36,6 +36,12 @@ export class SetupConnectionScreen extends LitElement {
       .otherwise {
         margin: 0;
       }
+      /* The browser's own warning, shown the way the browser shows it. The literal words carry the
+         meaning; the colour is emphasis, so nothing is lost to a reader who cannot see it. */
+      .warning-words {
+        color: var(--wt-color-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
     `,
   ];
   @property() errorMessage?: string;
@@ -45,8 +51,8 @@ export class SetupConnectionScreen extends LitElement {
     return html`<wt-card>
       <h1>Is your connection to this page secure?</h1>
       <p>
-        Check your browser's address bar to see whether this page is secure or not. If it is “not
-        secure” (in red), then you need to
+        Check your browser's address bar to see whether this page is secure or not. If it says
+        <span class="warning-words" data-test="warning-words">“not secure”</span>, then you need to
         <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
           >install this server's certificate</a
         >.

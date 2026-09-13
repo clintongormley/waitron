@@ -15,6 +15,18 @@ function emptyResponse(): Response {
   return { ok: true, status: 200, json: async () => undefined, text: async () => "" } as Response;
 }
 
+/** A non-JSON failure — what a provisioned box really sends for an unmounted setup route. */
+function textResponse(body: string, status: number): Response {
+  return {
+    ok: false,
+    status,
+    json: async (): Promise<unknown> => {
+      throw new SyntaxError("Unexpected token '4', \"404 Not Found\" is not valid JSON");
+    },
+    text: async () => body,
+  } as Response;
+}
+
 /** A complete, valid provision body — the shape the wizard assembles and POSTs. */
 const provisionBody: ProvisionBody = {
   mode: "live",
@@ -106,6 +118,29 @@ describe("SetupApi", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, false, 500));
     const api = new SetupApi("", fetchImpl);
     await expect(api.provision(provisionBody)).rejects.toMatchObject({ code: "server.internal" });
+  });
+
+  /**
+   * A provisioned box does not mount the setup routes, so `GET /setup-api/status` comes back as
+   * Hono's own `404 Not Found` with `content-type: text/plain` — verified against a running dev box
+   * on 2026-09-13. Parsing that as JSON throws, and the throw used to escape as if the network had
+   * failed, so a server that plainly ANSWERED was reported to the operator as unreachable.
+   */
+  it("keeps the status when a failed response carries no JSON body", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(textResponse("404 Not Found", 404));
+    const api = new SetupApi("", fetchImpl);
+    await expect(api.getStatus()).rejects.toMatchObject({ status: 404, code: "server.internal" });
+  });
+
+  it("carries the status alongside the code when the envelope is JSON", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "setup.not_ready" } }, false, 409));
+    const api = new SetupApi("", fetchImpl);
+    await expect(api.provision(provisionBody)).rejects.toMatchObject({
+      code: "setup.not_ready",
+      status: 409,
+    });
   });
 
   it("resolves undefined on an empty 2xx body", async () => {

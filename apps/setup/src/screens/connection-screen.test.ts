@@ -52,6 +52,18 @@ describe("setup-connection-screen", () => {
     expect(text(link)).toBe("install this server's certificate");
   });
 
+  // The operator is matching words on their own screen, so the page shows the browser's warning the
+  // way the browser shows it. Colour is emphasis only — the literal words "not secure" carry the
+  // meaning, so this reads the same to anyone who cannot see the red.
+  it("shows the browser's warning words in the browser's own red, and bold", async () => {
+    const { el, host } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
+    const warning = el.shadowRoot!.querySelector<HTMLElement>("[data-test=warning-words]")!;
+    expect(text(warning)).toContain("not secure");
+    expect(Number(getComputedStyle(warning).fontWeight)).toBeGreaterThanOrEqual(600);
+    host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+    expect(getComputedStyle(warning).color).toBe("rgb(4, 5, 6)");
+  });
+
   // The link is the "not secure" branch of one sentence, so it has to sit INSIDE that sentence.
   // Lifted into a paragraph of its own it stops being the consequence of what the operator just read.
   it("puts the guide link inside the sentence that describes the warning", async () => {

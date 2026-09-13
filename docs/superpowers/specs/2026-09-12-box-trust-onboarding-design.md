@@ -103,3 +103,26 @@ secure" sentence, and "Otherwise:" stays attached to Continue.
 Both pages, and the whole setup wizard's visible text, say "server" rather than "box", and "IP
 address" rather than "numeric network address" (owner decision, 2026-09-13). Code identifiers,
 comments and the error code `no_box_ca` are unchanged.
+
+## The connection step's failure cases, 2026-09-13
+
+"A failed read leaves a retry and the guide visible" above did not say what the operator is TOLD, and
+one sentence covered every failure: *"We could not read the server's setup information. Check its
+power and your network connection..."*. On a box that is already set up, that sends the operator to
+check a machine that is working perfectly.
+
+The distinction was always available and was being discarded. `fetch` REJECTS when nothing answers,
+and resolves when the server answered, so an `ApiError` now carries the HTTP `status` and its
+presence means the box is ALIVE. Three messages replace the one: 404 — "This server is already set
+up. Reload to open it."; any other status — "This server reported a problem. Try again in a moment.";
+no status — "We could not reach the server. Check its power and your network connection."
+
+What the 404 branch cannot tell apart, stated because nothing guards it: a wrong base URL or a proxy
+could also answer 404, and the message would then name the wrong reason. The wizard is served
+same-origin by the box, so neither arises on a box an operator has in front of them.
+
+A defect found on the way, and fixed: `SetupApi` assumed every failed response carried the
+`{ error: { code } }` envelope and called `res.json()` on it. A provisioned box answers
+`404 Not Found` as `text/plain` — run against a dev box — so the parse threw a `SyntaxError` that
+escaped as though the network had failed. That affected every wizard call, not only this one: a proxy
+error page during provisioning read as "network down". The parse is now defensive.

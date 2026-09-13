@@ -259,12 +259,60 @@ describe("setup-app", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
     expect((await screenHost(el, "connection")).shadowRoot!.textContent).toContain(
-      "could not read",
+      "could not reach",
     );
     getStatus.mockResolvedValue({ environment: "preproduction", needs: ["venue"] });
     host.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
+  });
+
+  /**
+   * A box that is already set up does not mount the setup routes, so its answer is a 404 — the box
+   * is ALIVE. Telling the operator to check its power and network sends them to look at a machine
+   * that is working perfectly. `fetch` rejects when nothing answers, so the presence of a status is
+   * what separates the two.
+   */
+  it("says the server is already set up when it answers 404, not that it is unreachable", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const body = (await screenHost(el, "connection")).shadowRoot!.textContent!;
+    expect(body).toContain("already set up");
+    expect(body).not.toContain("could not reach");
+    expect(body).not.toContain("power");
+  });
+
+  it("says it could not reach the server when nothing answers at all", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const body = (await screenHost(el, "connection")).shadowRoot!.textContent!;
+    expect(body).toContain("could not reach");
+    expect(body).not.toContain("already set up");
+  });
+
+  // A 5xx is the box answering that IT is broken — neither "unreachable" nor "already set up".
+  it("does not call a server error 'already set up'", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const body = (await screenHost(el, "connection")).shadowRoot!.textContent!;
+    expect(body).not.toContain("already set up");
+    // It answered, so telling the operator to go and check the power is wrong too.
+    expect(body).not.toContain("could not reach");
   });
 
   it("renders the four-choice onboarding screen on boot", async () => {

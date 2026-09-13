@@ -171,6 +171,27 @@ const ADOPT_GENERIC_ERROR =
  * so the wizard can warn before provisioning a real `production` venue. A failed read keeps the
  * connection screen visible with help and a retry, without collecting credentials.
  */
+/**
+ * What a failed setup read means, in words the operator can act on.
+ *
+ * The distinction is free and we used to throw it away: `fetch` REJECTS when nothing answers, and
+ * resolves when the server answered — in which case `SetupApi` throws an {@link ApiError} carrying
+ * its HTTP `status`. So a status means the box is ALIVE, and telling that operator to go and check
+ * its power points them at a machine that is working perfectly.
+ *
+ * A 404 means alive but no longer mounting the setup routes. On a real box that has one cause: it
+ * is already set up, and `/` now serves the till. Stated rather than guarded, because nothing here
+ * can tell them apart: a wrong base URL or a proxy could also answer 404, and this would then name
+ * the wrong reason. The wizard is served same-origin by the box itself, so neither arises on a box
+ * an operator actually has in front of them.
+ */
+function connectionFailure(error: unknown): string {
+  const status = (error as { status?: number } | null)?.status;
+  if (status === 404) return "This server is already set up. Reload to open it.";
+  if (status !== undefined) return "This server reported a problem. Try again in a moment.";
+  return "We could not reach the server. Check its power and your network connection.";
+}
+
 @customElement("setup-app")
 export class SetupApp extends LitElement {
   static override styles = [
@@ -316,10 +337,9 @@ export class SetupApp extends LitElement {
       this.developmentMode = status.developmentMode === true;
       // Availability describes the box, not whether this browser has installed its CA.
       if (this.screen === "connection" && !discovery.caDownloadAvailable) this.screen = "mode";
-    } catch {
+    } catch (error) {
       if (this.isConnected && generation === this.#connectionGeneration)
-        this.connectionError =
-          "We could not read the server's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
+        this.connectionError = connectionFailure(error);
     }
   }
 
@@ -334,10 +354,9 @@ export class SetupApp extends LitElement {
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
       this.screen = "mode";
-    } catch {
+    } catch (error) {
       if (this.isConnected && generation === this.#connectionGeneration)
-        this.connectionError =
-          "We could not read the server's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
+        this.connectionError = connectionFailure(error);
     } finally {
       if (generation === this.#connectionGeneration) this.connectionChecking = false;
     }
