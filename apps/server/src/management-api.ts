@@ -273,6 +273,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // (409, the house convention — `passkey.already_registered`/`table.label_taken` map the same way,
   // not the `?? 400` default).
   "person.email_invalid": 400,
+  "person.telephone_invalid": 400,
   "person.email_taken": 409,
   "profile.invalid": 400,
   "person.display_name_taken": 409,

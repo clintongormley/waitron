@@ -219,6 +219,51 @@ describe("invited person lifecycle", () => {
     });
   });
 
+  it("rejects a malformed telephone on both invite and update, but accepts an absent one", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    await expect(
+      run((tx) =>
+        invitePerson(tx, {
+          tenantId,
+          managementSessionId: sessionId,
+          displayName: "Bad Phone",
+          firstNames: "Bad",
+          lastNames: "Phone",
+          telephone: "123",
+          role: "staff",
+          email: "bad-phone@example.com",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "person.telephone_invalid" });
+    const created = await run((tx) =>
+      invitePerson(tx, {
+        tenantId,
+        managementSessionId: sessionId,
+        displayName: "Good Phone",
+        firstNames: "Good",
+        lastNames: "Phone",
+        telephone: null,
+        role: "staff",
+        email: "good-phone@example.com",
+      }),
+    );
+    await expect(
+      run((tx) =>
+        updatePersonDetails(tx, {
+          managementSessionId: sessionId,
+          personId: created.id,
+          displayName: "Good Phone",
+          firstNames: "Good",
+          lastNames: "Phone",
+          telephone: "12345",
+          email: "good-phone@example.com",
+          role: "staff",
+          status: "pending",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "person.telephone_invalid" });
+  });
+
   it("does not let the only active admin demote or deactivate themselves", async () => {
     const isolatedTenant = await seedTenant(suite.db);
     const { personId, sessionId } = await openManagementSession(suite.db, isolatedTenant, "admin");

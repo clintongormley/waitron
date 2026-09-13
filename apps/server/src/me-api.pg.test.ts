@@ -57,7 +57,7 @@ describe("your profile as app_user", () => {
         displayName: "Updated name",
         firstNames: "Updated",
         lastNames: "Owner",
-        telephone: "+34 600",
+        telephone: "+34 600 000 000",
         email: "profile@example.com",
         locale: "en-GB",
       }),
