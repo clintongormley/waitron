@@ -64,20 +64,20 @@ export class SetupConnectionScreen extends LitElement {
       </p>
       ${this.errorMessage ? html`<p class="error" role="alert">${this.errorMessage}</p>` : nothing}
       ${
-      this.setupUnavailable
-        ? nothing
-        : html`<div class="actions">
-            <p class="otherwise" data-test="otherwise">Otherwise:</p>
-            <wt-button
-              variant="primary"
-              data-test="continue"
-              ?disabled=${this.checking}
-              @click=${() => this.dispatchEvent(new CustomEvent("connection-continue"))}
-            >
-              ${this.checking ? "Checking connection…" : "Continue to setup"}
-            </wt-button>
-          </div>`
-    }
+        this.setupUnavailable
+          ? nothing
+          : html`<div class="actions">
+              <p class="otherwise" data-test="otherwise">Otherwise:</p>
+              <wt-button
+                variant="primary"
+                data-test="continue"
+                ?disabled=${this.checking}
+                @click=${() => this.dispatchEvent(new CustomEvent("connection-continue"))}
+              >
+                ${this.checking ? "Checking connection…" : "Continue to setup"}
+              </wt-button>
+            </div>`
+      }
     `;
   }
 }
