@@ -70,40 +70,47 @@ export class CategoriesScreen extends LitElement {
       a {
         color: var(--wt-color-primary);
       }
-      .thumbnail,
-      .thumbnail-placeholder {
+      /* The name column's markup is built here but handed to <wt-data-table> as a cell callback, so
+         the nodes are parented in THAT element's shadow root, not this screen's. A class selector in
+         this stylesheet can never reach them; a part= attribute on the markup plus ::part() here
+         crosses exactly that one boundary — the pattern printers-screen.ts uses for its cell markup. */
+      wt-data-table::part(thumbnail),
+      wt-data-table::part(thumbnail-placeholder) {
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
         flex: none;
       }
-      .thumbnail {
+      wt-data-table::part(thumbnail) {
         object-fit: cover;
         border-radius: var(--wt-radius-sm);
       }
-      .name-cell {
+      wt-data-table::part(name-cell) {
         display: inline-flex;
         align-items: center;
         gap: var(--wt-space-2);
       }
-      .swatch {
+      wt-data-table::part(swatch) {
         width: var(--wt-space-4);
         height: var(--wt-space-4);
         flex: none;
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
       }
-      .swatch.none {
+      wt-data-table::part(swatch-none) {
         background: transparent;
       }
-      .name {
+      wt-data-table::part(name) {
         overflow-wrap: anywhere;
         text-align: start;
       }
       /* Marks a tree-mode ancestor kept only to show a matching descendant's path — see the
-         filtering block in render(). wt-button's part="button" is what a consumer can style from
-         outside its shadow root (see "Page composition" in design-system.md). */
-      wt-button.name[data-muted]::part(button) {
-        color: var(--wt-color-text-muted);
+         filtering block in render(). The colour has to reach the <button> inside wt-button's OWN
+         shadow root, which is one boundary further than ::part() can select. Re-pointing the token
+         that wt-button's ghost variant reads for its colour (--wt-color-text) on the host does it,
+         because a custom property set on an element is inherited by its shadow tree. Scoped to this
+         one button instance, so no other element's text colour moves. */
+      wt-data-table::part(name-muted) {
+        --wt-color-text: var(--wt-color-text-muted);
       }
       label {
         display: grid;
@@ -347,28 +354,29 @@ export class CategoriesScreen extends LitElement {
     await this.#load();
   }
   #rowParent = (category: CategorySummary): string | null => category.parentId;
+  // `part=` rather than `class=` throughout this cell: see the ::part() block in static styles.
   #swatch(color: string | null) {
     return color
-      ? html`<span class="swatch" style=${`background:${color}`} aria-hidden="true"></span>`
-      : html`<span class="swatch none" aria-hidden="true"></span>`;
+      ? html`<span part="swatch" style=${`background:${color}`} aria-hidden="true"></span>`
+      : html`<span part="swatch swatch-none" aria-hidden="true"></span>`;
   }
   #nameCell(category: CategorySummary, matchIds: ReadonlySet<string>) {
     // In tree mode a row can be present only to keep a matching descendant's ancestor chain
     // visible (see the filtering block in render()); mute those so the match itself stands out.
     const muted = this.mode === "tree" && !matchIds.has(category.id);
-    return html`<span class="name-cell">
+    return html`<span part="name-cell">
       ${
         category.image
           ? html`<img
-              class="thumbnail"
+              part="thumbnail"
               src=${`/media/${encodeURIComponent(category.image)}`}
               alt=""
             />`
-          : html`<span class="thumbnail-placeholder" aria-hidden="true"></span>`
+          : html`<span part="thumbnail-placeholder" aria-hidden="true"></span>`
       }
       ${this.#swatch(category.color)}
       <wt-button
-        class="name"
+        part=${muted ? "name name-muted" : "name"}
         variant="ghost"
         data-category=${category.id}
         ?data-muted=${muted}

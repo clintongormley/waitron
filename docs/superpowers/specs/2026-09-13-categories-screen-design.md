@@ -225,6 +225,11 @@ products modal.
 > `border: 1px solid var(--wt-color-border)`, and `.swatch.none` only clears the background to
 > transparent — it does not switch the border style to dashed. This line is left as the original
 > design intent, not the shipped behaviour.
+>
+> **Follow-up 2026-09-14 (Task 19).** Those two rules kept their declarations but were renamed to
+> `wt-data-table::part(swatch)` and `wt-data-table::part(swatch-none)`: as class selectors they had
+> never reached the swatch at all, which is rendered inside `wt-data-table`'s shadow root, so no
+> square of either kind appeared in the browser. The solid-versus-dashed point above is unaffected.
 
 The filter matches the resolved name only (not the path), case-insensitive, in both modes. In tree
 mode the matches' ancestors are included so each match is shown in place; ancestors that do not

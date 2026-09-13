@@ -470,7 +470,13 @@ it("filters by name keeping ancestors in tree mode", async () => {
   expect(muted("eggs")).toBe(false);
 });
 
-it("renders each name with its colour square", async () => {
+// These two suites assert RENDERED style, not just markup. The name column's cell markup is handed
+// to wt-data-table as a cell callback, so it lands in wt-data-table's shadow root rather than this
+// screen's — and a stylesheet only styles nodes inside the shadow root that adopted it. Presence and
+// attribute assertions pass either way, which is how a release where no swatch, no thumbnail box and
+// no muting ever appeared in the browser still went green. Reading geometry and colour back is what
+// distinguishes "the element is there" from "the element is visible".
+it("renders each name with its colour square, sized and bordered from tokens", async () => {
   const fx = apiFixture();
   fx.api.listCategories.mockResolvedValue([{ ...food, color: "#b12525" }]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
@@ -479,9 +485,90 @@ it("renders each name with its colour square", async () => {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await vi.waitFor(() => expect(table.rows.length).toBe(1));
   await table.updateComplete;
-  const swatch = table.shadowRoot!.querySelector<HTMLElement>(".swatch")!;
+  const swatch = table.shadowRoot!.querySelector<HTMLElement>('[part~="swatch"]')!;
   expect(swatch.getAttribute("style")).toContain("#b12525");
+
+  // The colour is data, applied inline, so it survives even unstyled — the box around it does not.
+  const styles = getComputedStyle(swatch);
+  expect(styles.backgroundColor).toBe("rgb(177, 37, 37)");
+  const space4 = getComputedStyle(el).getPropertyValue("--wt-space-4").trim();
+  expect(styles.width).toBe(space4);
+  expect(styles.height).toBe(space4);
+  expect(styles.borderTopWidth).toBe("1px");
+  const box = swatch.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.height).toBeGreaterThan(0);
+
+  // The thumbnail placeholder shares the same cell and the same failure mode.
+  const placeholder = table.shadowRoot!.querySelector<HTMLElement>(
+    '[part~="thumbnail-placeholder"]',
+  )!;
+  const tapMin = getComputedStyle(el).getPropertyValue("--wt-tap-min").trim();
+  expect(getComputedStyle(placeholder).width).toBe(tapMin);
+  expect(placeholder.getBoundingClientRect().height).toBeGreaterThan(0);
 });
+
+// The placeholder above and a real image are different elements under different rules, so the
+// styling has to be proven separately for each. The src 404s here; only the box is under test.
+it("sizes a category's thumbnail image from tokens", async () => {
+  const fx = apiFixture();
+  fx.api.listCategories.mockResolvedValue([{ ...food, image: "cheese.png" }]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(table.rows.length).toBe(1));
+  await table.updateComplete;
+  const thumbnail = table.shadowRoot!.querySelector<HTMLElement>('[part~="thumbnail"]')!;
+  expect(thumbnail.tagName).toBe("IMG");
+  const tapMin = getComputedStyle(el).getPropertyValue("--wt-tap-min").trim();
+  expect(getComputedStyle(thumbnail).width).toBe(tapMin);
+  expect(getComputedStyle(thumbnail).height).toBe(tapMin);
+  expect(getComputedStyle(thumbnail).objectFit).toBe("cover");
+});
+
+it("paints a tree-mode ancestor row's name in the muted colour", async () => {
+  const fx = apiFixture();
+  const breakfast: CategorySummary = {
+    id: "breakfast",
+    name: { en: "Breakfast" },
+    image: null,
+    color: null,
+    parentId: "food",
+  };
+  fx.api.listCategories.mockResolvedValue([food, breakfast]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(table.rows.length).toBe(2));
+  el.shadowRoot!.querySelector('[name="category-search"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "breakfast" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  await table.updateComplete;
+
+  // The colour lands on the <button> inside wt-button's OWN shadow root, one boundary further in
+  // than the cell markup — so read it there rather than off the host.
+  const painted = async (id: string) => {
+    const host = table.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >(`[data-category="${id}"]`)!;
+    await host.updateComplete;
+    return getComputedStyle(host.shadowRoot!.querySelector('[part="button"]')!).color;
+  };
+  const mutedToken = getComputedStyle(el).getPropertyValue("--wt-color-text-muted").trim();
+  const ancestor = await painted("food");
+  const match = await painted("breakfast");
+  expect(ancestor).not.toBe(match);
+  expect(ancestor).toBe(hexToRgb(mutedToken));
+});
+
+/** `getComputedStyle().color` always reports `rgb(...)`; the tokens are authored as hex. */
+function hexToRgb(hex: string): string {
+  const value = Number.parseInt(hex.replace("#", ""), 16);
+  return `rgb(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255})`;
+}
 
 it("opens the category editor from a ?category= deep link", async () => {
   const previous = location.href;

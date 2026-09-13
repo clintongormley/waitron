@@ -181,6 +181,21 @@ primitive. Always supply `aria-label`; use its loading, empty and error properti
 replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
 
+**Style your own cell markup with `part=` and `::part()`, never with a CSS class.** A cell callback
+returns a template, but the nodes it produces are rendered by `wt-data-table` and so end up inside
+`wt-data-table`'s shadow root — not your screen's. A stylesheet only reaches nodes inside the shadow
+root that adopted it, so a `.swatch` rule in your screen's `static styles` silently matches nothing:
+the element is in the page, correct in every attribute, and completely unstyled. Put `part="swatch"`
+on the markup and write `wt-data-table::part(swatch)` in your screen instead — that crosses exactly
+the one boundary involved. A nested primitive (`wt-button`, `wt-lozenge`) is unaffected, because it
+carries its own styles wherever it is mounted. Reaching *inside* such a primitive is one boundary
+further than `::part()` can select: set the token it reads on the host instead — the categories
+screen's muted ancestor row points `--wt-color-text` at `--wt-color-text-muted` through
+`wt-data-table::part(name-muted)`, and the button's own ghost-variant rule picks it up by
+inheritance. Cost: the categories screen's colour swatches, thumbnail boxes and ancestor-row muting
+never rendered at all in the browser, through a full review and a green suite — DOM-presence tests
+cannot see it, so assert a computed width or colour when you add a styled cell.
+
 Supply `rowParent` — a `(row) => string | null` returning the parent row's own key, or `null` for a
 top-level row — to switch the same table into tree mode, as the categories screen does for its
 hierarchy. A row whose declared parent key isn't present among the current rows floats to the top
