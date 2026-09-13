@@ -556,17 +556,17 @@ export class CategoriesScreen extends LitElement {
           </p>
           <ul>
             ${dependants.products.map(
-            (product) =>
-              html`<li>
-                <a href=${`/manage/catalogue/product/${encodeURIComponent(product.id)}`}
-                  >${this.#text(product.name)}</a
-                >${
-                  product.reporting
-                    ? html` <span class="danger">${t("categories.delete_reporting")}</span>`
-                    : nothing
-                }
-              </li>`,
-          )}
+              (product) =>
+                html`<li>
+                  <a href=${`/manage/catalogue/product/${encodeURIComponent(product.id)}`}
+                    >${this.#text(product.name)}</a
+                  >${
+                    product.reporting
+                      ? html` <span class="danger">${t("categories.delete_reporting")}</span>`
+                      : nothing
+                  }
+                </li>`,
+            )}
           </ul>`,
       );
     }
@@ -584,13 +584,13 @@ export class CategoriesScreen extends LitElement {
         html`<p>${heading}</p>
           <ul>
             ${dependants.children.map(
-            (child) =>
-              html`<li>
-                <a href=${`/manage/categories?category=${encodeURIComponent(child.id)}`}
-                  >${this.#text(child.name)}</a
-                >
-              </li>`,
-          )}
+              (child) =>
+                html`<li>
+                  <a href=${`/manage/categories?category=${encodeURIComponent(child.id)}`}
+                    >${this.#text(child.name)}</a
+                  >
+                </li>`,
+            )}
           </ul>`,
       );
     }
@@ -601,14 +601,14 @@ export class CategoriesScreen extends LitElement {
           </p>
           <ul>
             ${dependants.routes.map(
-            (route) =>
-              html`<li>
-                <a href="/manage/venue-operations/view/routing"
-                  >${route.station ?? t("categories.no_preparation")} ·
-                  ${route.zone ?? t("categories.route_all_zones")}</a
-                >
-              </li>`,
-          )}
+              (route) =>
+                html`<li>
+                  <a href="/manage/venue-operations/view/routing"
+                    >${route.station ?? t("categories.no_preparation")} ·
+                    ${route.zone ?? t("categories.route_all_zones")}</a
+                  >
+                </li>`,
+            )}
           </ul>`,
       );
     }
