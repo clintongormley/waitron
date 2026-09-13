@@ -237,12 +237,21 @@ export interface CategorySummary {
   id: string;
   name: Record<string, string>;
   image: string | null;
+  color: string | null;
   parentId: string | null;
 }
 export interface CategoryInput {
   name: Record<string, string>;
   image?: string | null;
+  color?: string | null;
   parentId?: string | null;
+}
+/** `GET /management-api/categories/:id/dependants` — what a delete confirmation must show. */
+export interface CategoryDependants {
+  products: { id: string; name: Record<string, string>; reporting: boolean }[];
+  children: { id: string; name: Record<string, string> }[];
+  parentId: string | null;
+  routes: { id: string; station: string | null; zone: string | null }[];
 }
 export interface ProductCategories {
   categoryIds: string[];
@@ -1945,6 +1954,14 @@ export class DashboardApi {
   }
   listCategoryProducts(id: string): Promise<CategoryProduct[]> {
     return this.#request(`/management-api/categories/${id}/products`, "GET");
+  }
+  /** `GET /management-api/categories/:id/dependants` — products, children and routes a delete would affect. */
+  getCategoryDependants(id: string): Promise<CategoryDependants> {
+    return this.#request(`/management-api/categories/${id}/dependants`, "GET");
+  }
+  /** `POST /management-api/categories/:id/products` — add products to a category in one write. */
+  addProductsToCategory(id: string, productIds: string[]): Promise<void> {
+    return this.#request(`/management-api/categories/${id}/products`, "POST", { productIds });
   }
   listLibraryProducts(): Promise<Product[]> {
     return this.#request("/management-api/products", "GET");
