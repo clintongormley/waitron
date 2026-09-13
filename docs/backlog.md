@@ -490,7 +490,9 @@ chosen — while everything else about that choice (its translations, price, max
 class and allergen or dietary effects) opens in its own small window. You reorder the choices by
 dragging the handle at the start of a row or, with the handle focused, by pressing the up and down
 arrow keys. Two model changes came with it: a **Yes/no** modifier no longer has its own wording for
-Yes and No, because it now behaves like a tick box showing the modifier's own name; and an extra's
+Yes and No, because it now behaves like a tick box showing the modifier's own name — a "yes" answer
+prints that name and a "no" answer, though still recorded, prints nothing on the receipt, the kitchen
+ticket or the till basket (owner decision 2026-09-13); and an extra's
 choice is either preselected or not, replacing the old starting quantity, so what the total maximum
 limits is how many choices you may preselect. Create on the Modifiers list became a round plus
 button beside the heading.
@@ -505,13 +507,6 @@ What it left open:
   tests cannot catch this — axe checks static markup, and a missing announcement is not a markup
   defect. **Next action:** add a polite live region to the choices table naming the moved choice and
   its new position, and cover it with a test that reads the region's text after a key press.
-- **Nothing is printed for a "no" answer, and whether that is right is the owner's call.** A negative
-  Yes/no answer is still recorded, but it appears nowhere — not on the receipt, the kitchen ticket or
-  the till basket. The alternative is a code-supplied negation ("No cutlery") on those surfaces. The
-  reasoning on both sides is written up as Ruling C in the branch's own working ledger,
-  `.superpowers/sdd/2026-09-13-modifiers-editing-rework/progress.md` — which is untracked, so it
-  lives in that worktree and in the PR thread, not in the repository — and is not repeated here. **Next action:** the owner decides; if the answer is to print a negation, it is a code-chosen
-  localized string on the three printing paths, never the operator's own wording.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
