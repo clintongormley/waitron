@@ -132,3 +132,10 @@ held-order quantity edit, and retained extras choices were refused through their
 The review report, timing, usage, exact commands and finding-by-finding triage are retained under
 `/tmp/waitron-modifiers-review.gIUXNa/`. Browser and rendering experiments were outside the
 reviewer's bounded pass; implementation receipts above remain the focused checks for those paths.
+
+
+CI run `34746191891` exposed six exact receipt-response assertions in
+`working-order.pg.test.ts` that omitted `modifierSnapshots: []`. The focused local run reproduced
+all six failures; extending the nine expected line objects retained their amount/quantity/parent
+assertions and passed all 51 tests with
+`TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test working-order.pg.test.ts`.
