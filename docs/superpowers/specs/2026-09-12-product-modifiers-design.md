@@ -20,6 +20,10 @@ choices or attached modifiers is explicit and preserved.
 | Options | Ordered translated choices, availability, optional single default                                                                                                 | Exactly one radio/select choice; selection required before adding the product. |
 | Yes/no  | Translated modifier name and two translated labels, stable Boolean values, default false                                                                          | One yes/no control with an explicit value.                                     |
 
+> **Superseded detail, 2026-09-13.** Yes/no no longer has its own two translated labels (`yesLabel`,
+> `noLabel`), and an extras choice has a `preselected` flag instead of a `defaultQuantity`. See
+> [`2026-09-13-modifiers-editing-rework-design.md`](2026-09-13-modifiers-editing-rework-design.md).
+
 New modifiers default to available. Unavailable modifiers stay editable but cannot be newly
 attached or selected at the till. Existing attachments remain so re-enabling does not require
 reconstruction. Deactivation is explicit; product authoring shows an unavailable attached modifier.

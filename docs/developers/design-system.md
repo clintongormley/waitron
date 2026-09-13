@@ -913,9 +913,9 @@ Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — th
 hamburger; it opens a small menu of actions for one row, not the app's whole navigation, so it
 needs the icon that means "more options here," not "open navigation" (see "Icons" below) — with a
 label that identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table
-heading, and Edit, Delete or domain-specific actions in each row's menu. Where the heading area is
-tight, Create can instead be a round icon-only `wt-button` (`shape="round"` with the `plus` icon and
-an `aria-label`) beside the heading, as on the Modifiers screen. The menu uses a native
+heading, and Edit, Delete or domain-specific actions in each row's menu. A screen may instead
+offer Create as a round icon-only `wt-button` (`shape="round"` with the `plus` icon and an
+`aria-label`) beside the heading; the Modifiers screen does, by design choice. The menu uses a native
 popover: clicking outside or pressing Escape closes it. Its action buttons follow normal Tab
 navigation. Give every `wt-button` slotted into a `wt-row-actions` popover `align="start"` — a
 centred label reads oddly once the button has been stretched to the popover's full width, the way a

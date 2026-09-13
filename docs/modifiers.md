@@ -13,7 +13,7 @@ maximum still applies. For two dishes, two bacon portions per dish add 4.00 to t
 
 Use **Options** when you need exactly one unpriced choice, such as a cup or a glass. You can choose
 a default or leave the decision to the operator. Use **Yes/no** for a Boolean answer, such as
-whether to include cutlery. It works like a tick box showing the modifier's own name, so write that
+whether to include cutlery. At the till it is one on/off switch labelled with the modifier's own name, so write that
 name as the thing being asked for ("Cutlery"); there is no separate wording for Yes and No to write
 or translate. The initial default is No. The recorded answer is kept even when it is "no" — but only
 an affirmative answer prints on a receipt, kitchen ticket or the till basket; a negative one leaves

@@ -56,6 +56,11 @@ edit form keeps the modifier name, the Available switch, and the default (yes or
 is shown as a single toggle switch labelled with the modifier name, rather than two radio buttons; on
 the toggle, on means yes and off means no.
 
+> **Superseded detail, 2026-09-13 (owner decision).** The lines below that have the till basket print
+> "Yes" or "No" from its own translations no longer hold. A "yes" answer shows the modifier's name
+> alone and a "no" answer, though still recorded, shows nothing — on the receipt, the kitchen ticket
+> and the till basket alike. No "Yes"/"No" strings were added. See `docs/modifiers.md`.
+
 ## What changes in the contract
 
 Two simplifications fall out of the form rework. Both are behavioural changes to a contract that six
@@ -107,8 +112,9 @@ grants of these tables are unchanged.
 - **`packages/db`** — the schema and a regenerated migration.
 - **`apps/server`** — the selection-to-snapshot step (`modifier-selection.ts`) drops the yes-no
   label; the demo seed (`demo-seed/seed-options.ts`) drops default quantities and custom labels.
-  Confirm the receipt and kitchen-ticket line builders do not read the yes-no label — current reading
-  says they filter it out, but that is a claim to verify by running, not to assume.
+  Confirm what the receipt and kitchen-ticket line builders do with the yes-no label, by running them
+  rather than reading. (They did read it: before this change a receipt printed the modifier name and
+  the chosen label, such as "Hielo: Sin hielo".)
 - **`apps/till`** — `modifier-picker.ts` renders yes/no as a toggle and pre-fills quantity 1 for a
   preselected extra; `basket.ts` prints "Yes"/"No" from its own translations; the client types
   follow shared.

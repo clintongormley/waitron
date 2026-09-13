@@ -56,10 +56,17 @@ choices table naming the choice by its current label, so a rejection never lands
 manager cannot see. The screen's reads use the existing option-group, item and content-language live
 sources.
 
-Products can compose this form directly and select the saved definition. The optional choice
-fields `addAllergens`, `removeAllergens`, `addOrigins`, `removeOrigins`, and extras `vatClass` keep
-existing effects and tax inheritance. The form uses selected items without source fields; Products
-can replace its private effect-rendering methods with the shared pickers during integration.
+One choice is edited in `dashboard-choice-form` (`apps/dashboard/src/widgets/choice-form.ts`), a
+modal inside the modifier form. It accepts `open`, `busy`, `locales`, `kind: "extras" | "options"`,
+`value: ChoiceDraft | null` and `fieldErrors`, validates its own fields, and emits
+`wt-choice-save` with `{ value: ChoiceDraft }` or `wt-choice-cancel` with `{}`. Nothing reaches the
+server until the modifier itself is saved.
+
+Products can compose the modifier form directly and select the saved definition. The optional choice
+fields `addAllergens`, `removeAllergens`, `addOrigins`, `removeOrigins`, `dietaryEffect`, and extras
+`vatClass` keep existing effects and tax inheritance. The choice form renders the allergen and
+dietary effects, using selected items without source fields; Products can replace its private
+effect-rendering methods with the shared pickers during integration.
 
 ## Ordering and stored facts
 

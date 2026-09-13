@@ -490,7 +490,7 @@ chosen — while everything else about that choice (its translations, price, max
 class and allergen or dietary effects) opens in its own small window. You reorder the choices by
 dragging the handle at the start of a row or, with the handle focused, by pressing the up and down
 arrow keys. Two model changes came with it: a **Yes/no** modifier no longer has its own wording for
-Yes and No, because it now behaves like a tick box showing the modifier's own name — a "yes" answer
+Yes and No, because it is now one on/off switch labelled with the modifier's own name — a "yes" answer
 prints that name and a "no" answer, though still recorded, prints nothing on the receipt, the kitchen
 ticket or the till basket (owner decision 2026-09-13); and an extra's
 choice is either preselected or not, replacing the old starting quantity, so what the total maximum
