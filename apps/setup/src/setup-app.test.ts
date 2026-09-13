@@ -1322,7 +1322,7 @@ describe("modal shell", () => {
     expect(modal.dismissible).toBe(false);
     // The screens keep their own h1, so the modal is named by a label rather than its heading —
     // setting `heading` would paint a second title above the first.
-    expect(modal.getAttribute("aria-label")).toBe("Set up your box");
+    expect(modal.getAttribute("aria-label")).toBe("Set up your server");
     expect(modal.getAttribute("heading")).toBeNull();
   });
 

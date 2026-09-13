@@ -749,7 +749,7 @@ export class SetupApp extends LitElement {
     return html`<wt-modal
       open
       .dismissible=${false}
-      aria-label="Set up your box"
+      aria-label="Set up your server"
       @setup-defaults-requested=${(event: CustomEvent) => {
         event.stopPropagation();
         void this.#loadVenueDefaults();
