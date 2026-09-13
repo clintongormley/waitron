@@ -239,8 +239,11 @@ What it left open:
   instead of leaving the stack trace to decode
   (`apps/server/src/dev-migration-hint.ts`, `WAITRON_ENV=dev` only); the mechanism and the limits of
   what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
-  trap is unchanged and will recur on the next migration of this shape: **a populated development
-  database still has to be reset by hand.**
+  trap is unchanged: **a populated development database still has to be reset by hand.** It has
+  already recurred — #342's `packages/venue-service/drizzle/0005_unit_snapshots.sql` and `0006`
+  add three `NOT NULL` columns to `working_line_contexts`, so any dev database holding an open
+  order line fails the same way. That table was empty when this was written, which is the only
+  reason it did not bite immediately.
 - **Category authoring serialises per tenant, and nobody has measured what that costs.** Hierarchy
   edits, membership replacement and category deletion all take the same one lock per tenant, which is
   the design's deliberate choice and is what makes the races safe. The review confirmed the specific
