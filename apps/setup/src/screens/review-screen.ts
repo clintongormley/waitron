@@ -102,6 +102,10 @@ export class SetupReviewScreen extends LitElement {
           ${venue?.rectificativeSeriesCode ?? "—"}
         </dd>
         <dt>Operator</dt>
+        <dd data-test="summary-admin-name">
+          ${[venue?.admin?.firstNames, venue?.admin?.lastNames].filter(Boolean).join(" ") || "—"}
+        </dd>
+        <dt>Operator display name</dt>
         <dd data-test="summary-admin">${venue?.admin?.displayName ?? "—"}</dd>
         <dt>Operator email</dt>
         <dd data-test="summary-admin-email">${venue?.admin?.email ?? "—"}</dd>

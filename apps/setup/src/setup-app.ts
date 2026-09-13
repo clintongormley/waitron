@@ -34,7 +34,7 @@ import { SERVER_FIELDS } from "./server-fields.js";
  * connection and offers certificate help.
  * The following `mode` screen offers the four product journeys:
  *
- * - Demo or Prepare → `admin` (first operator) → `venue` (tenant + location + series) → `review`
+ * - Demo or Prepare → `admin` (your account) → `venue` (tenant + location + series) → `review`
  *   (confirm + POST) → `provisioning` (in flight) → `done` (restarting).
  * - Go live → `live-source`; importing a prepared configuration adds `configuration-preview`, then
  *   both sources follow `admin` → `venue` → `cert` (AEAT, live ES-common only) → `fiscal-test` →

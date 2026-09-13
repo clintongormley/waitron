@@ -37,12 +37,19 @@ export interface SetupStatus {
 }
 
 /**
- * The first operator's credentials, collected on the admin step. Sent PLAINTEXT — the server hashes
+ * The first operator's name and credentials, collected on the admin step. Sent PLAINTEXT — the server hashes
  * `pin`/`password` with `hashPin`/`hashPassword` at the request boundary
  * (`apps/server/src/setup-api.ts`) into the stored `pinHash`/`passwordHash`; the browser never hashes.
  * `email` is the admin's dashboard-login credential — REQUIRED, validated/normalised server-side.
+ * `firstNames`/`lastNames` are the person's real name, required here as they are everywhere else a
+ * person is created: `POST /management-api/staff` rejects a body missing either
+ * (`apps/server/src/management-api.ts`) and `invitePerson` requires both
+ * (`packages/identity/src/staff.ts`). `displayName` is what colleagues see and defaults to
+ * "First Last".
  */
 export interface AdminDraft {
+  firstNames: string;
+  lastNames: string;
   displayName: string;
   email: string;
   pin: string;

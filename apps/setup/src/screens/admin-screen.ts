@@ -12,8 +12,8 @@ import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
-/** The four credential fields, each a `wt-input`. */
-type AdminField = "displayName" | "email" | "password" | "pin";
+/** The operator's name and credential fields, each a `wt-input`. All are required. */
+type AdminField = "firstNames" | "lastNames" | "displayName" | "email" | "password" | "pin";
 
 @customElement("setup-admin-screen")
 export class SetupAdminScreen extends LitElement {
@@ -32,8 +32,10 @@ export class SetupAdminScreen extends LitElement {
   /** The accumulated draft, passed down from the shell. Read ONCE on mount to seed the local fields. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
 
-  /** The editable credential fields. Seeding overlays whatever the draft already holds. */
+  /** The editable account fields. Seeding overlays whatever the draft already holds. */
   @state() private values: Record<AdminField, string> = {
+    firstNames: "",
+    lastNames: "",
     displayName: "",
     email: "",
     password: "",
@@ -48,6 +50,12 @@ export class SetupAdminScreen extends LitElement {
   /** Guards {@link SetupAdminScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
 
+  /**
+   * Once the operator types into Display name it stops following the two name fields. Seeding from a
+   * draft counts as edited: stepping back must not overwrite a name they chose.
+   */
+  #displayNameEdited = false;
+
   override willUpdate(): void {
     if (this.#seeded) return;
     this.#seeded = true;
@@ -55,23 +63,31 @@ export class SetupAdminScreen extends LitElement {
   }
 
   /**
-   * Overlay whatever admin credentials the shell's draft already holds onto the local field state, so
+   * Overlay whatever admin details the shell's draft already holds onto the local field state, so
    * Back-then-forward restores every value the operator entered. `??` keeps the local default ("") when
    * a field is absent.
    */
   #seedFromDraft(): void {
     const admin = this.draft.venue?.admin ?? {};
     this.values = {
+      firstNames: admin.firstNames ?? this.values.firstNames,
+      lastNames: admin.lastNames ?? this.values.lastNames,
       displayName: admin.displayName ?? this.values.displayName,
       email: admin.email ?? this.values.email,
       password: admin.password ?? this.values.password,
       pin: admin.pin ?? this.values.pin,
     };
+    if (admin.displayName !== undefined) this.#displayNameEdited = true;
   }
 
   #onField(key: AdminField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.values = { ...this.values, [key]: event.detail.value };
+    const values = { ...this.values, [key]: event.detail.value };
+    if (key === "displayName") this.#displayNameEdited = true;
+    else if (!this.#displayNameEdited && (key === "firstNames" || key === "lastNames")) {
+      values.displayName = `${values.firstNames} ${values.lastNames}`.trim();
+    }
+    this.values = values;
   }
 
   /**
@@ -81,10 +97,16 @@ export class SetupAdminScreen extends LitElement {
    */
   #next(): void {
     const invalid = new Set<AdminField>();
-    if (this.values.displayName.trim() === "") invalid.add("displayName");
-    if (this.values.email.trim() === "") invalid.add("email");
-    if (this.values.password.trim() === "") invalid.add("password");
-    if (this.values.pin.trim() === "") invalid.add("pin");
+    for (const key of [
+      "firstNames",
+      "lastNames",
+      "displayName",
+      "email",
+      "password",
+      "pin",
+    ] as const) {
+      if (this.values[key].trim() === "") invalid.add(key);
+    }
     this.invalid = invalid;
     if (invalid.size > 0) {
       this.showError = true;
@@ -94,6 +116,8 @@ export class SetupAdminScreen extends LitElement {
     dispatchSetupPatch(this, {
       venue: {
         admin: {
+          firstNames: this.values.firstNames,
+          lastNames: this.values.lastNames,
           displayName: this.values.displayName,
           email: this.values.email,
           pin: this.values.pin,
@@ -108,9 +132,11 @@ export class SetupAdminScreen extends LitElement {
     dispatchSetupGoto(this, "mode");
   }
 
-  /** Renders one credential field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
+  /** Renders one account field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
   #field(label: string, key: AdminField, type = "text"): TemplateResult {
     const fieldPurpose = {
+      firstNames: { name: "given-name", autocomplete: "given-name" },
+      lastNames: { name: "family-name", autocomplete: "family-name" },
       displayName: { name: "name", autocomplete: "name" },
       email: { name: "email", autocomplete: "username" },
       password: { name: "new-password", autocomplete: "new-password" },
@@ -131,7 +157,7 @@ export class SetupAdminScreen extends LitElement {
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
     >
       <wt-help-tooltip slot="help" aria-label=${`Help with ${label.toLowerCase()}`}>
-        ${{ displayName: "Use the name your colleagues will see in Waitron.", email: "Use your email to sign in to the dashboard and recover your account.", password: "Choose a password for signing in to the dashboard.", pin: "Choose a numeric PIN for quick sign-in at the till." }[key]}
+        ${{ firstNames: "Your first name, or names, as they appear on your ID.", lastNames: "Your surname, or surnames, as they appear on your ID.", displayName: "Use the name your colleagues will see in Waitron.", email: "Use your email to sign in to the dashboard and recover your account.", password: "Choose a password for signing in to the dashboard.", pin: "Choose a numeric PIN for quick sign-in at the till." }[key]}
       </wt-help-tooltip>
       ${
         type === "password"
@@ -155,8 +181,9 @@ export class SetupAdminScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1>The first operator</h1>
+      <h1>Your account</h1>
       <p>Create the account that manages this server. You can add more people later.</p>
+      ${this.#field("First name(s)", "firstNames")} ${this.#field("Last name(s)", "lastNames")}
       ${this.#field("Display name", "displayName")} ${this.#field("Email", "email", "email")}
       ${this.#field("Password", "password", "password")} ${this.#field("PIN", "pin", "password")}
       ${
@@ -164,7 +191,7 @@ export class SetupAdminScreen extends LitElement {
           ? html`<wt-form-error-summary
               data-test="error"
               heading="There is a problem with this form"
-              .errors=${[...this.invalid].map((key) => `Enter your ${{ displayName: "display name", email: "email", password: "password", pin: "PIN" }[key]}.`)}
+              .errors=${[...this.invalid].map((key) => `Enter your ${{ firstNames: "first name", lastNames: "last name", displayName: "display name", email: "email", password: "password", pin: "PIN" }[key]}.`)}
             ></wt-form-error-summary>`
           : nothing
       }

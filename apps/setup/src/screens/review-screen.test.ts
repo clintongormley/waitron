@@ -30,6 +30,8 @@ function fullDraft(): DeepPartial<ProvisionBody> {
       seriesCode: "FA",
       rectificativeSeriesCode: "RF",
       admin: {
+        firstNames: "Alba",
+        lastNames: "Ramos",
         displayName: "Alba",
         email: "alba@example.com",
         pin: SAMPLE_PIN,
@@ -54,6 +56,7 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-location]")).toBe("Calle Mayor");
     expect(text(el, "[data-test=summary-seriesCode]")).toBe("FA");
     expect(text(el, "[data-test=summary-rectificativeSeriesCode]")).toBe("RF");
+    expect(text(el, "[data-test=summary-admin-name]")).toBe("Alba Ramos");
     expect(text(el, "[data-test=summary-admin]")).toBe("Alba");
     expect(text(el, "[data-test=summary-admin-email]")).toBe("alba@example.com");
   });
@@ -90,6 +93,7 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-mode]")).toBe("—");
     expect(text(el, "[data-test=summary-country]")).toBe("—");
     expect(text(el, "[data-test=summary-location]")).toBe("—");
+    expect(text(el, "[data-test=summary-admin-name]")).toBe("—");
     expect(text(el, "[data-test=summary-admin]")).toBe("—");
     expect(text(el, "[data-test=summary-admin-email]")).toBe("—");
     expect(text(el, "[data-test=summary-cert]")).toBe("not attached");
