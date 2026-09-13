@@ -118,15 +118,7 @@ it("blocks type changes and deletion for attached definitions, but permits deact
     app(tenant, (tx) => deleteModifier(tx, tenant, definition.id)),
   ).rejects.toMatchObject({ code: "modifier.in_use", params: { dependency: "product" } });
   await expect(
-    app(tenant, (tx) =>
-      updateModifier(
-        tx,
-        tenant,
-        definition.id,
-        { type: "yes-no", name },
-        "en",
-      ),
-    ),
+    app(tenant, (tx) => updateModifier(tx, tenant, definition.id, { type: "yes-no", name }, "en")),
   ).rejects.toMatchObject({ code: "modifier.in_use" });
   expect(
     await app(tenant, (tx) =>

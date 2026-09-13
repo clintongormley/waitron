@@ -248,10 +248,7 @@ describe("strict definition input boundaries", () => {
     [{ ...extraInput, choices: [{ ...extra, available: null }] }, "choices.0.available"],
     [{ ...extraInput, choices: [{ ...extra, priceDelta: null }] }, "choices.0.priceDelta"],
     [{ ...extraInput, choices: [{ ...extra, maxQuantity: null }] }, "choices.0.maxQuantity"],
-    [
-      { ...extraInput, choices: [{ ...extra, preselected: null }] },
-      "choices.0.preselected",
-    ],
+    [{ ...extraInput, choices: [{ ...extra, preselected: null }] }, "choices.0.preselected"],
   ])("rejects explicit null instead of silently applying a default: %#", (input, field) => {
     expectInvalid(() => parseModifierInput(input), field as string);
   });
@@ -497,44 +494,107 @@ describe("adversarial explicit selections", () => {
 describe("preselected extras and label-free yes/no", () => {
   it("accepts a preselected extras choice and rejects defaultQuantity", () => {
     const parsed = parseModifierInput({
-      type: "extras", name: { en: "Extras" }, required: false, maxTotalQuantity: null,
-      choices: [{ id: crypto.randomUUID(), name: { en: "Cheese" }, available: true,
-        priceDelta: "1.00", maxQuantity: 2, preselected: true }],
+      type: "extras",
+      name: { en: "Extras" },
+      required: false,
+      maxTotalQuantity: null,
+      choices: [
+        {
+          id: crypto.randomUUID(),
+          name: { en: "Cheese" },
+          available: true,
+          priceDelta: "1.00",
+          maxQuantity: 2,
+          preselected: true,
+        },
+      ],
     });
     if (parsed.type !== "extras") throw new Error("type");
     expect(parsed.choices[0]!.preselected).toBe(true);
     expect("defaultQuantity" in parsed.choices[0]!).toBe(false);
-    expect(() => parseModifierInput({
-      type: "extras", name: { en: "Extras" }, required: false, maxTotalQuantity: null,
-      choices: [{ id: crypto.randomUUID(), name: { en: "Cheese" }, available: true,
-        priceDelta: "1.00", maxQuantity: 2, defaultQuantity: 1 }],
-    })).toThrow(expect.objectContaining({ code: "modifier.invalid" }));
+    expect(() =>
+      parseModifierInput({
+        type: "extras",
+        name: { en: "Extras" },
+        required: false,
+        maxTotalQuantity: null,
+        choices: [
+          {
+            id: crypto.randomUUID(),
+            name: { en: "Cheese" },
+            available: true,
+            priceDelta: "1.00",
+            maxQuantity: 2,
+            defaultQuantity: 1,
+          },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ code: "modifier.invalid" }));
   });
 
   it("forces preselected false on an unavailable extras choice", () => {
     const parsed = parseModifierInput({
-      type: "extras", name: { en: "Extras" }, required: false, maxTotalQuantity: null,
-      choices: [{ id: crypto.randomUUID(), name: { en: "Cheese" }, available: false,
-        priceDelta: "1.00", maxQuantity: 2, preselected: true }],
+      type: "extras",
+      name: { en: "Extras" },
+      required: false,
+      maxTotalQuantity: null,
+      choices: [
+        {
+          id: crypto.randomUUID(),
+          name: { en: "Cheese" },
+          available: false,
+          priceDelta: "1.00",
+          maxQuantity: 2,
+          preselected: true,
+        },
+      ],
     });
     if (parsed.type !== "extras") throw new Error("type");
     expect(parsed.choices[0]!.preselected).toBe(false);
   });
 
   it("rejects more preselected choices than the total cap", () => {
-    const choice = (name: string) => ({ id: crypto.randomUUID(), name: { en: name },
-      available: true, priceDelta: "1.00", maxQuantity: 1, preselected: true });
-    expect(() => parseModifierInput({
-      type: "extras", name: { en: "Extras" }, required: false, maxTotalQuantity: 1,
-      choices: [choice("A"), choice("B")],
-    })).toThrow(expect.objectContaining({ code: "modifier.invalid", params: { field: "maxTotalQuantity" } }));
+    const choice = (name: string) => ({
+      id: crypto.randomUUID(),
+      name: { en: name },
+      available: true,
+      priceDelta: "1.00",
+      maxQuantity: 1,
+      preselected: true,
+    });
+    expect(() =>
+      parseModifierInput({
+        type: "extras",
+        name: { en: "Extras" },
+        required: false,
+        maxTotalQuantity: 1,
+        choices: [choice("A"), choice("B")],
+      }),
+    ).toThrow(
+      expect.objectContaining({ code: "modifier.invalid", params: { field: "maxTotalQuantity" } }),
+    );
   });
 
   it("parses a yes-no modifier with no custom labels and rejects them", () => {
-    const parsed = parseModifierInput({ type: "yes-no", name: { en: "Decaf" }, defaultValue: true });
-    expect(parsed).toEqual({ type: "yes-no", name: { en: "Decaf" }, available: true, defaultValue: true });
-    expect(() => parseModifierInput({ type: "yes-no", name: { en: "Decaf" },
-      yesLabel: { en: "Y" }, noLabel: { en: "N" }, defaultValue: true }))
-      .toThrow(expect.objectContaining({ code: "modifier.invalid" }));
+    const parsed = parseModifierInput({
+      type: "yes-no",
+      name: { en: "Decaf" },
+      defaultValue: true,
+    });
+    expect(parsed).toEqual({
+      type: "yes-no",
+      name: { en: "Decaf" },
+      available: true,
+      defaultValue: true,
+    });
+    expect(() =>
+      parseModifierInput({
+        type: "yes-no",
+        name: { en: "Decaf" },
+        yesLabel: { en: "Y" },
+        noLabel: { en: "N" },
+        defaultValue: true,
+      }),
+    ).toThrow(expect.objectContaining({ code: "modifier.invalid" }));
   });
 });
