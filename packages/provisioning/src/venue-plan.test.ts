@@ -404,6 +404,22 @@ describe("describeVenueAction", () => {
     ]);
   });
 
+  it("shows only the parts of the admin a plan actually carries", () => {
+    const admin = {
+      kind: "seed-admin" as const,
+      displayName: "Owner",
+      firstNames: null,
+      lastNames: null,
+      locale: null,
+      pinHash: "scrypt$00$00",
+      passwordHash: "scrypt$aa$bb",
+      email: "owner@example.test",
+    };
+    expect(describeVenueAction(admin)).toBe("seed admin Owner");
+    expect(describeVenueAction({ ...admin, locale: "en-GB" })).toBe("seed admin Owner (en-GB)");
+    expect(describeVenueAction({ ...admin, lastNames: "Ruiz" })).toBe("seed admin Owner (Ruiz)");
+  });
+
   it("names the admin but NEVER the pin hash — the description is operator-facing", () => {
     // The pin_hash is a secret: it must not reach a plan summary an operator sees. Uses a distinctive
     // hash so the negative assertion cannot pass by coincidence.
@@ -417,7 +433,7 @@ describe("describeVenueAction", () => {
       passwordHash: "scrypt$feedface$0ddba11",
       email: "owner@example.test",
     });
-    expect(line).toBe("seed admin Alicia");
+    expect(line).toBe("seed admin Alicia (Alicia Maria Fernandez Ruiz, es-ES)");
     expect(line).not.toContain("scrypt");
     expect(line).not.toContain("deadbeef");
     expect(line).not.toContain("cafef00d");

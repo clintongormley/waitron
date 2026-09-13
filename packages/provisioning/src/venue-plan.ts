@@ -254,10 +254,15 @@ export function describeVenueAction(action: VenueAction): string {
   switch (action.kind) {
     case "ensure-tenant":
       return `ensure tenant ${action.country}/${action.taxId} (${action.legalName})`;
-    case "seed-admin":
-      // The admin's NAME only — never the pin hash. This line goes into the plan summary an operator
-      // reads, and the hash is a secret (§ SECRET DISCIPLINE).
-      return `seed admin ${action.displayName}`;
+    case "seed-admin": {
+      // The admin's name and language only — never a hash. This line goes into the plan summary an
+      // operator reads, and the hashes are secrets (§ SECRET DISCIPLINE).
+      const realName = [action.firstNames, action.lastNames].filter(Boolean).join(" ");
+      const details = [realName, action.locale].filter(Boolean).join(", ");
+      return details === ""
+        ? `seed admin ${action.displayName}`
+        : `seed admin ${action.displayName} (${details})`;
+    }
     case "seed-device-profiles":
       return `seed device profiles ${action.profiles.map((p) => p.name).join(", ")}`;
     case "create-location":
