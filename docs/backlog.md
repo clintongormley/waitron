@@ -414,6 +414,14 @@ What it left open:
   unit had only a unique constraint, so Postgres refused the reassignment's UPDATE on a published
   table with `55000` — `packages/catalogue/drizzle/0010_product_units_primary_key.sql` gives it a
   primary key. The design doc's older deletion paragraph is marked superseded rather than rewritten.
+  LANDED #350 (2026-09-13).
+- **Nothing checks that a table shared by replication has a primary key.** #350 found
+  `product_units` publishing its rows with only a unique constraint, which makes Postgres refuse every
+  UPDATE to it (`55000`), and the in-memory test database does not enforce that, so no test noticed.
+  `CLAUDE.md` §3 now states the rule and says outright that no guard enforces it. Nobody has checked
+  whether any other published table has the same shape. **Next action:** a root guard beside
+  `scripts/classification-complete.test.ts` that migrates every set and fails on any published table
+  without a primary key — proven by deleting `0010_product_units_primary_key.sql` and watching it fail.
 - **Its migrations cannot run over a populated development database, and nothing here said so.**
   `packages/venue-service/drizzle/0005_unit_snapshots.sql` and `0006_unit_snapshot_identity.sql` add
   three `NOT NULL` columns to `working_line_contexts` with no default — the same shape as
@@ -1017,8 +1025,8 @@ image constraints under *Detail → Box image*.
 - **A fifth, with a real hypothesis this time: `test-dashboard`'s browser a11y suite fails on a stray
   `:hover` state left over from a prior test in the same shared browser page.** Seen three times the
   same day (2026-09-13), on two unrelated PRs, in code neither branch touched: `products-editor`'s CI
-  run failed `dashboard-app.a11y.test.ts`'s recipe-screen heading-order case (job 103718734296); this
-  branch's PR #350 failed `floor-screen.a11y.test.ts`'s "renders accessibly with empty lists" on a
+  run failed `dashboard-app.a11y.test.ts`'s recipe-screen heading-order case (job 103718734296); PR
+  #350 failed `floor-screen.a11y.test.ts`'s "renders accessibly with empty lists" on a
   color-contrast check TWICE in a row across two separate pushes (jobs 103778327703 and
   103778897882), always the same element (`wt-button[data-add-zone=""]`), always the same colors
   (foreground `#fefefe`, background `#3f83ed`, ratio 3.66 against a 4.5 minimum) — and passed cleanly,
@@ -1027,7 +1035,7 @@ image constraints under *Detail → Box image*.
   (`packages/ui/src/components/wt-button.ts`'s `:hover` rule) lands almost exactly on `#3f83ed`. That
   matches axe capturing the button mid-hover rather than at rest — most likely a leftover pointer
   position from an earlier test in the same file, in a browser-mode suite that reuses one page across
-  tests in a file. **Confirmed and fixed the same day, on this branch.** The colour is exact, not
+  tests in a file. **Confirmed and fixed the same day, in #350 (landed 2026-09-13).** The colour is exact, not
   approximate: `#1f6feb` at opacity `0.85` over the light `--wt-color-bg` `#f7f7f8` is `#3f83ed` on
   every channel, and `#ffffff` composited the same way is `#fefefe`. The failure was reproduced
   locally by running a file that hovers a `wt-button` immediately before the untouched
