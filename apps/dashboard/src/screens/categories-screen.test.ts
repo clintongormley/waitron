@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
-import type { DashboardApi, CategorySummary, Product } from "../api/client.js";
+import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 afterEach(cleanupWidgets);
 // The tree/flat toggle persists to localStorage; a leftover value from an earlier test would make
@@ -52,6 +52,10 @@ function apiFixture() {
     replaceProductCategories: vi
       .fn()
       .mockResolvedValue({ categoryIds: ["drink"], primaryCategoryId: "drink" }),
+    getCategoryDependants: vi
+      .fn()
+      .mockResolvedValue({ products: [], children: [], parentId: null, routes: [] }),
+    addProductsToCategory: vi.fn().mockResolvedValue(undefined),
   };
   return { api, client: api as unknown as DashboardApi };
 }
@@ -196,11 +200,17 @@ it("shows deletion dependencies and keeps the confirmation open", async () => {
   expect(modal.open).toBe(true);
 });
 
-it("adds a category membership without removing the product's existing primary", async () => {
+it("opens the products modal from the name and lists members with lozenges", async () => {
   const fx = apiFixture();
-  fx.api.listLibraryProducts.mockResolvedValue([
-    { ...product, categoryIds: ["drink"], primaryCategoryId: "drink" },
-  ]);
+  const lone: Product = {
+    ...product,
+    id: "r",
+    descriptions: { en: "Napkin" },
+    categoryIds: ["food"],
+    primaryCategoryId: "food",
+  };
+  fx.api.listCategories.mockResolvedValue([food, { ...drink, color: "#2244aa" }]);
+  fx.api.listLibraryProducts.mockResolvedValue([product, lone]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
   });
@@ -211,23 +221,126 @@ it("adds a category membership without removing the product's existing primary",
   await table.updateComplete;
   table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
-  await el.updateComplete;
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
-    'select[name="category-product"]',
+  const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
+  expect(modal.open).toBe(true);
+  const products = modal.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
   )!;
-  select.value = "p";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
-  await el.updateComplete;
-  const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
-  await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
+  await products.updateComplete;
+  expect(products.rows.map((row) => (row as { id: string }).id).sort()).toEqual(["p", "r"]);
+  const lozenges = [...products.shadowRoot!.querySelectorAll("wt-lozenge")];
+  expect(lozenges.some((lozenge) => lozenge.textContent?.trim() === "Drinks")).toBe(true);
+  // "Napkin" has no membership beyond the reporting category "Food", so its Other categories
+  // cell falls back to the muted dash rather than an empty lozenge list.
+  expect(products.shadowRoot!.querySelector(".muted")).not.toBeNull();
+});
+
+it("adds products via the checkbox table in one call", async () => {
+  const fx = apiFixture();
+  const q: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
+  const r: Product = { ...product, id: "r", descriptions: { en: "Napkin" }, categoryIds: [] };
+  fx.api.listLibraryProducts.mockResolvedValue([q, r]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
   await vi.waitFor(() =>
-    expect(fx.api.replaceProductCategories).toHaveBeenCalledWith("p", {
-      categoryIds: ["drink", "food"],
-      primaryCategoryId: "drink",
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-products"]')!.click();
+  await el.updateComplete;
+  const addTable = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-add-products"]',
+  )!;
+  await addTable.updateComplete;
+  const pickQ = addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="pick-q"]')!;
+  pickQ.checked = true;
+  pickQ.dispatchEvent(new Event("change", { bubbles: true }));
+  const pickR = addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="pick-r"]')!;
+  pickR.checked = true;
+  pickR.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+  const addButton = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="add-selected"]',
+  )!;
+  expect(addButton.textContent?.trim()).toBe(t("categories.add_selected").replace("{count}", "2"));
+  addButton.click();
+  await vi.waitFor(() =>
+    expect(fx.api.addProductsToCategory).toHaveBeenCalledWith(
+      "food",
+      expect.arrayContaining(["q", "r"]),
+    ),
+  );
+  expect(fx.api.addProductsToCategory).toHaveBeenCalledTimes(1);
+  expect((fx.api.addProductsToCategory.mock.calls[0]![1] as string[]).length).toBe(2);
+});
+
+it("shows the delete preview with product, child and route links, disabling Delete until it resolves", async () => {
+  const fx = apiFixture();
+  let resolveDependants!: (value: CategoryDependants) => void;
+  fx.api.getCategoryDependants.mockReturnValue(
+    new Promise<CategoryDependants>((resolve) => {
+      resolveDependants = resolve;
     }),
   );
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
+  actions.querySelectorAll("wt-button")[1]!.click();
+  await el.updateComplete;
+  const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
+  const deleteButton = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-button[variant="danger"]',
+  )!;
+  expect(deleteButton.disabled).toBe(true);
+  resolveDependants({
+    products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
+    children: [{ id: "breakfast", name: { en: "Breakfast" } }],
+    parentId: null,
+    routes: [{ id: "r1", station: "Grill", zone: "Bar" }],
+  });
+  await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
+  const links = [...modal.querySelectorAll("a")];
+  expect(links.some((link) => link.textContent?.includes("Toast"))).toBe(true);
+  expect(links.some((link) => link.textContent?.includes("Breakfast"))).toBe(true);
+  expect(links.some((link) => link.textContent?.includes("Grill"))).toBe(true);
+});
+
+it("a delete-modal product link points at the product editor", async () => {
+  const fx = apiFixture();
+  fx.api.getCategoryDependants.mockResolvedValue({
+    products: [{ id: "p", name: { en: "Toast" }, reporting: false }],
+    children: [],
+    parentId: null,
+    routes: [],
+  });
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
+  actions.querySelectorAll("wt-button")[1]!.click();
+  await el.updateComplete;
+  const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
+  await vi.waitFor(() => expect(modal.querySelector("a")).not.toBeNull());
+  // The app has no client-side navigate() for this — image-library.ts's identical "what uses
+  // this" links (packages/media/src/dashboard/image-library.ts) are plain <a href> too, so a real
+  // browser navigation is the established mechanism; the pretty-path shape comes from
+  // apps/dashboard/src/navigation.ts's dashboardPath (children.catalogue.product = "product").
+  expect(modal.querySelector("a")!.getAttribute("href")).toBe("/manage/catalogue/product/p");
 });
 
 it("does not search disabled translations that are absent from the displayed category name", async () => {

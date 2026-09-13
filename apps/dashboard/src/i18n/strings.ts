@@ -33,8 +33,6 @@ export const en = {
   "categories.primary_required":
     "Choose a replacement Reporting Category before removing this membership.",
   "categories.membership": "Product categories",
-  "categories.add": "Add product",
-  "categories.remove": "Remove membership",
   "categories.search_products": "Search products",
   "categories.choose_primary": "Choose primary",
   "categories.no_products": "No directly assigned products.",
@@ -48,6 +46,7 @@ export const en = {
   "categories.none": "None",
   "categories.add_products": "Add products",
   "categories.add_selected": "Add {count} products",
+  "categories.select_all_visible": "Select all visible",
   "categories.remove_from": "Remove from this category",
   "categories.delete_intro": "This cannot be undone. Deleting it will:",
   "categories.delete_products": "Remove it from {count} products",
@@ -1216,8 +1215,6 @@ export const es: Record<StringKey, string> = {
   "categories.primary_required":
     "Elige una Categoría de informes de reemplazo antes de quitar esta asignación.",
   "categories.membership": "Categorías del producto",
-  "categories.add": "Añadir producto",
-  "categories.remove": "Quitar asignación",
   "categories.search_products": "Buscar productos",
   "categories.choose_primary": "Elige la principal",
   "categories.no_products": "No hay productos asignados directamente.",
@@ -1231,6 +1228,7 @@ export const es: Record<StringKey, string> = {
   "categories.none": "Ninguna",
   "categories.add_products": "Añadir productos",
   "categories.add_selected": "Añadir {count} productos",
+  "categories.select_all_visible": "Seleccionar todos los visibles",
   "categories.remove_from": "Quitar de esta categoría",
   "categories.delete_intro": "No se puede deshacer. Eliminarlo hará que:",
   "categories.delete_products": "Quitarlo de {count} productos",

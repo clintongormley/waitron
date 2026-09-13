@@ -22,15 +22,17 @@ Deleting a category is confirmed and then goes ahead. It is no longer refused wh
 to it. The delete removes the product memberships, clears the reporting category from any product
 using it, moves direct children up to the deleted category's own parent, drops its preparation
 routes, and then removes the category. Because it cascades instead of refusing, a delete can take
-more with it than the category itself, and today's confirmation dialog shows only the category's
-name — it does not tell you what else will go. Previously recorded labels on past orders stay
-readable and are untouched.
+more with it than the category itself, so the confirmation dialog fetches the dependants preview
+(`GET .../dependants`) and lists what will go — each affected product, child category and kitchen
+route as a link to it, with the ones clearing a reporting category called out separately — before
+Delete is enabled. Previously recorded labels on past orders stay readable and are untouched.
 
-**What the API supports but no screen uses yet.** The routes below carry a category colour, a
-dependants preview and a bulk add of products. None of them is wired into the dashboard at the time
-of writing: the category form has no colour input, nothing calls the dependants route, and nothing
-calls the bulk add. Those screens are still to be built, and this page is due a revision describing
-the finished workflow once they are.
+Opening a category's name shows its directly assigned products in a modal: a filterable table with
+each product's reporting category and other memberships as coloured lozenges, an Edit action that
+reopens the full membership picker, and a Remove action that pre-fills the picker with this category
+taken out (so clearing a reporting category is still a confirmed choice, not an immediate write). Its
+"Add products" view is a separate checkbox table over products not yet in the category, backed by the
+bulk-add route in one write.
 
 ## API and Products integration
 
