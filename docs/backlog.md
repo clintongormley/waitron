@@ -728,6 +728,17 @@ ongoing overhaul listed at the top of Track A.
   `<select>`, so a rule alone could not be guarded. Sorts by the label the person reads with
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens. Fix `wt-data-table`'s
   locale-less `localeCompare` at the same time.
+- **`wt-combobox` landed with nothing using it** (#351, 2026-09-13). It is a searchable dropdown in
+  `packages/ui`: pick one option or several (`multiple`), and optionally offer to add what was typed
+  when nothing matches. So far it appears only in the UI kit's demo page and has an icon registered in
+  `apps/dashboard/src/icons.ts`. No dashboard screen uses it yet. Left out on purpose, per its
+  [design](superpowers/specs/2026-09-13-wt-combobox-design.md): searching on the server, disabling
+  single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a
+  count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not
+  sort its options, and neither its design nor that row mentions the other, so decide whether
+  `wt-select` becomes a non-searchable mode of the combobox or stays a separate element before
+  building either. **Next action:** the first screen with a long or growing list to choose from adopts
+  it; whoever does that fixes the answer to the `wt-select` question in the same change.
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
   reset on filter change, ignore superseded responses, keep passive live refreshes. Deliberately kept
