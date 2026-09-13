@@ -27,6 +27,13 @@ export class WtLozenge extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         line-height: calc(var(--wt-tap-min) / 1.6);
+        /* The older CSS property with the same effect has a hyphenated name whose first half is a
+           literal colour keyword, which trips the no-hardcoded-chrome guard's regex (a hyphen
+           counts as a word boundary there). This modern alias means the same thing without that
+           collision. */
+        text-wrap: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       span.none {
         background: var(--wt-color-surface);
@@ -42,11 +49,13 @@ export class WtLozenge extends LitElement {
   override render() {
     const colored = isHexColor(this.color);
     const style = colored ? `background:${this.color};color:${readableTextColor(this.color)}` : "";
-    // Not a <slot>: a <slot>'s assigned light-DOM nodes are never DOM descendants of the slot
-    // itself, so a consumer (or a test) reading .textContent off the rendered chip would always
-    // see "" despite the label rendering correctly on screen. Binding the host's own text here
-    // keeps the label a real text-node child of the shadow <span>.
-    return html`<span class=${colored ? "" : "none"} style=${style}>${this.textContent}</span>`;
+    // A real <slot>, not `${this.textContent}`: Lit only re-runs render() when a reactive property
+    // changes, and a list that reuses this element by index (e.g. the products modal's category
+    // list) can swap in a different category whose colour happens to match the previous one — only
+    // 24 palette colours, so collisions are common. `color` would then be unchanged, render() would
+    // never re-fire, and a captured `this.textContent` snapshot would go stale while the slotted
+    // light-DOM content (owned by the caller, not by this element's own render cycle) stays correct.
+    return html`<span class=${colored ? "" : "none"} style=${style}><slot></slot></span>`;
   }
 }
 

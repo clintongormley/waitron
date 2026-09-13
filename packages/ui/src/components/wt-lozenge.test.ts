@@ -14,7 +14,10 @@ test("a coloured lozenge paints the colour and readable text", async () => {
   // readableTextColor('#dd9e5f') is '#000000'
   expect(readableTextColor("#dd9e5f")).toBe("#000000");
   expect(style.color).toBe("rgb(0, 0, 0)");
-  expect(chip.textContent).toContain("Breakfast");
+  // The label is slotted, not shadow-rendered text, so it reads off the host's own light-DOM
+  // content — a slot's assigned nodes are never DOM descendants of the <slot> element itself, so
+  // `chip.textContent` (the shadow `<span>`) is always "" regardless of what's slotted in.
+  expect(el.textContent).toContain("Breakfast");
 });
 
 test("a colourless lozenge uses the neutral token chrome", async () => {
