@@ -21,6 +21,9 @@ creates.
   surface and padding, and keeps its `h1`. The `wt-card raised` elements *inside* `mode`,
   `role`, `live-source` and `configuration-preview` are choice tiles, not screen chrome, and stay.
   `provisioning` has a plain card on each of its two branches; `live-source` has none.
+  *Correction, 2026-09-13, found in review before landing:* this was wrong about
+  `configuration-preview`, whose raised card wrapped the whole screen including its Back and Continue
+  buttons. It was chrome, and it was removed like the others.
 - The modal needs an accessible name and the screens keep their own `h1`, so the shell passes
   `aria-label` rather than `heading` — setting `heading` would paint a second title above the first.
 - `wt-dialog` gains a `dismissible` property, defaulting to true so every existing caller is

@@ -1001,8 +1001,9 @@ image constraints under *Detail → Box image*.
   session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
   permissions included (receipt in `docs/developers/testing-guide.md`). Many test comments give the
   old belief as their reason for using a real PostgreSQL container, often citing "CLAUDE.md §4" by
-  number, which now points at text saying the opposite. The ones in files the onboarding
-  corrections touched were fixed; find the rest with `grep -rn "PGlite" apps packages scripts`. A
+  number, which now points at text saying the opposite. The ones in source files the onboarding
+  corrections touched were fixed; that branch's dated plan still quotes the old belief in a code
+  snippet and is left as written. Find the rest with `grep -rn "PGlite" apps packages scripts`. A
   sweep, not a one-liner: for each suite, check whether anything else still needs the container
   (concurrency, triggers running as the deployment role, or who connected) before moving it, and
   correct the comment either way.

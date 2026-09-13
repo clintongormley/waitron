@@ -169,8 +169,8 @@ top and bottom margins. The body scrolls independently, so your footer actions s
 It uses the raised surface and shadow tokens: white in the light theme, with the matching dark
 surface in the dark theme. Put `wt-form-actions` in its `footer` slot to keep Cancel on the left
 and Save on the right. The one standing exception is the setup wizard, which uses a non-dismissible
-`wt-modal` as its whole page and keeps Back and Next in the scrolling body, by owner decision
-(`docs/superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md`):
+`wt-modal` as its whole page and keeps Back and Next in the scrolling body (see the Decisions in
+`docs/superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md`):
 
 ```html
 <wt-modal heading="Add printer">
