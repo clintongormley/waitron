@@ -10,6 +10,7 @@ import {
   type ModifierChoice,
 } from "./modifier-contract.js";
 import { lockModifierDefinitions } from "./modifier-lock.js";
+import { MAX_MODIFIER_INTEGER } from "./modifier-limits.js";
 import { validateContentTranslations } from "./content-languages.js";
 import "./errors.js";
 
@@ -128,7 +129,7 @@ function groupValues(input: ModifierInput) {
     type: input.type,
     required,
     minSelect: required ? 1 : 0,
-    maxSelect: input.type === "extras" ? (input.maxTotalQuantity ?? 2147483647) : 1,
+    maxSelect: input.type === "extras" ? (input.maxTotalQuantity ?? MAX_MODIFIER_INTEGER) : 1,
     maxTotalQuantity: input.type === "extras" ? input.maxTotalQuantity : null,
     defaultChoiceId: input.type === "options" ? input.defaultChoiceId : null,
     defaultValue: input.type === "yes-no" ? input.defaultValue : false,

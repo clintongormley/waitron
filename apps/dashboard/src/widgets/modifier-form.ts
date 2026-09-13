@@ -20,10 +20,10 @@ import "./choice-form.js";
 import type { ChoiceDraft } from "./choice-form.js";
 import { reorder } from "./reorder.js";
 import { type Modifier, type ModifierInput, type ModifierExtraChoice } from "../api/client.js";
+import { isModifierPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
 import {
   isPositiveInteger,
-  isPrice,
   nameFields,
   nonBlankNames,
   switchField,
@@ -344,7 +344,7 @@ export class ModifierForm extends LitElement {
         // The defaults mirror what #save submits for an absent value, so this checks the number the
         // server will actually receive.
         return (
-          !isPrice(choice.priceDelta ?? "0.00") ||
+          !isModifierPrice(choice.priceDelta ?? "0.00") ||
           !isPositiveInteger(String(choice.maxQuantity ?? 1))
         );
       });

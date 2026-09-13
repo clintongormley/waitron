@@ -6,6 +6,7 @@ import {
 } from "./allergens.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import type { VatClass } from "./pricing.js";
+import { MAX_MODIFIER_INTEGER, isModifierPrice } from "./modifier-limits.js";
 import "./errors.js";
 
 export type {
@@ -50,7 +51,7 @@ function integer(value: unknown, field: string, minimum: number): number {
     typeof value !== "number" ||
     !Number.isSafeInteger(value) ||
     value < minimum ||
-    value > 2147483647
+    value > MAX_MODIFIER_INTEGER
   )
     invalid(field);
   return value;
@@ -136,8 +137,7 @@ export function parseModifierInput(value: unknown): ModifierInput {
     };
     if (!extras) return base;
     const price = choice.priceDelta === undefined ? "0.00" : choice.priceDelta;
-    if (typeof price !== "string" || !/^\d{1,10}(?:\.\d{1,2})?$/.test(price))
-      invalid(`${field}.priceDelta`);
+    if (typeof price !== "string" || !isModifierPrice(price)) invalid(`${field}.priceDelta`);
     const [whole, fraction = ""] = price.split(".");
     const maxQuantity = integer(
       choice.maxQuantity === undefined ? 1 : choice.maxQuantity,
