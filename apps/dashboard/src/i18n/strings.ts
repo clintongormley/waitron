@@ -32,7 +32,6 @@ export const en = {
     "This category is used by {children} child categories, {products} products and {routes} preparation routes. Remove those references first.",
   "categories.primary_required":
     "Choose a replacement Reporting Category before removing this membership.",
-  "categories.primary": "Primary",
   "categories.membership": "Product categories",
   "categories.add": "Add product",
   "categories.remove": "Remove membership",
@@ -1214,7 +1213,6 @@ export const es: Record<StringKey, string> = {
     "Esta categoría tiene {children} categorías hijas, {products} productos y {routes} rutas de preparación. Elimina primero esas referencias.",
   "categories.primary_required":
     "Elige una Categoría de informes de reemplazo antes de quitar esta asignación.",
-  "categories.primary": "Principal",
   "categories.membership": "Categorías del producto",
   "categories.add": "Añadir producto",
   "categories.remove": "Quitar asignación",
@@ -1233,7 +1231,7 @@ export const es: Record<StringKey, string> = {
   "categories.add_selected": "Añadir {count} productos",
   "categories.remove_from": "Quitar de esta categoría",
   "categories.delete_intro": "No se puede deshacer. Eliminarlo hará que:",
-  "categories.delete_products": "Lo quitará de {count} productos",
+  "categories.delete_products": "Quitarlo de {count} productos",
   "categories.delete_reporting": "categoría de informes, se borrará",
   "categories.delete_children_under": "Mover {count} categorías hijas bajo {parent}",
   "categories.delete_children_top": "Mover {count} categorías hijas al nivel superior",
