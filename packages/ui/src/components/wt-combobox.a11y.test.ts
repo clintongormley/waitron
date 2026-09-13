@@ -19,6 +19,12 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  // No visible `label` — the accessible name has to come from the forwarded aria-label fallback.
+  test("closed, named via aria-label", async () => {
+    await mountThemed('<wt-combobox aria-label="Dietary tags"></wt-combobox>', theme);
+    await expectNoA11yViolations(host);
+  });
+
   test("open with results", async () => {
     const el = (await mountThemed(
       '<wt-combobox label="Dietary tags"></wt-combobox>',

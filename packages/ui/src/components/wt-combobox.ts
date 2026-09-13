@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
@@ -174,9 +174,13 @@ export class WtCombobox extends LitElement {
   ];
 
   @property() label = "";
-  /** Read by a consumer's validation summary. Nothing here attaches it to the DOM: like every other
-      `packages/ui` primitive this component has no native form association. */
+  /** The trigger's DOM `id` and `name`, exactly as `wt-input` uses theirs, so a named field gets a
+      stable semantic id instead of a generated one. It is NOT a native form association — no
+      primitive in this design system has one (design-system.md → Forms). */
   @property() name = "";
+  // wt-button and wt-dialog forward the host's own aria-label the same way: it is the accessible
+  // name whenever there is no visible `label` to point aria-labelledby at.
+  @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
   @property() error = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) invalid = false;
@@ -201,6 +205,9 @@ export class WtCombobox extends LitElement {
   @query("[popover]") private popup!: HTMLElement;
   @query(".search") private searchInput!: HTMLInputElement;
 
+  // An unnamed combobox has no semantic id to give its trigger, so the label's `for` points at a
+  // generated one instead.
+  private readonly generatedTriggerId = uniqueId("wt-combobox-trigger");
   private readonly labelId = uniqueId("wt-combobox-label");
   private readonly listboxId = uniqueId("wt-combobox-listbox");
   private readonly errorId = uniqueId("wt-combobox-error");
@@ -240,10 +247,19 @@ export class WtCombobox extends LitElement {
       }
       return this.countLabel(this.values.length);
     }
+    // An empty value means nothing is selected, so an option whose own value is "" never displaces
+    // the placeholder.
+    if (this.value === "") return "";
     return this.options.find((o) => o.value === this.value)?.label ?? "";
   }
 
+  // Hiding the panel does NOT move focus out of the search box. Measured in Chromium 2026-09-13:
+  // after hidePopover() has set display: none, shadowRoot.activeElement is still .search, and the
+  // next keydown is delivered there before the browser reconciles focus. So closing the panel in
+  // updated() does not by itself stop a disabled control being changed by keyboard — this guard
+  // does, and the "disabling an open panel" test goes red without it.
   private commitSelection(optionValue: string, sourceEvent: Event): void {
+    if (this.disabled) return;
     if (this.multiple) {
       this.values = this.values.includes(optionValue)
         ? this.values.filter((v) => v !== optionValue)
@@ -257,7 +273,9 @@ export class WtCombobox extends LitElement {
   }
 
   /** Announces the typed text; creating the option is the consumer's, never this component's. */
+  // Guarded for the same measured reason as commitSelection: the hidden panel keeps keyboard focus.
   private addNew(sourceEvent: Event): void {
+    if (this.disabled) return;
     sourceEvent.stopPropagation();
     this.dispatchEvent(
       new CustomEvent("wt-combobox-add", {
@@ -279,23 +297,36 @@ export class WtCombobox extends LitElement {
     this.activeIndex = this.rowCount > 0 ? 0 : -1;
   }
 
-  private onSearchKeydown(event: KeyboardEvent): void {
+  /** The list scrolls, so a moved active row has to be brought back into view once Lit has drawn it. */
+  private async scrollActiveIntoView(): Promise<void> {
+    await this.updateComplete;
+    if (this.activeIndex < 0) return;
+    this.shadowRoot
+      ?.getElementById(`${this.listboxId}-${this.activeIndex}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }
+
+  private async onSearchKeydown(event: KeyboardEvent): Promise<void> {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
         this.activeIndex = Math.min(this.activeIndex + 1, this.rowCount - 1);
+        await this.scrollActiveIntoView();
         return;
       case "ArrowUp":
         event.preventDefault();
-        this.activeIndex = Math.max(this.activeIndex - 1, 0);
+        this.activeIndex = this.rowCount > 0 ? Math.max(this.activeIndex - 1, 0) : -1;
+        await this.scrollActiveIntoView();
         return;
       case "Home":
         event.preventDefault();
-        this.activeIndex = 0;
+        this.activeIndex = this.rowCount > 0 ? 0 : -1;
+        await this.scrollActiveIntoView();
         return;
       case "End":
         event.preventDefault();
         this.activeIndex = this.rowCount - 1;
+        await this.scrollActiveIntoView();
         return;
       case "Enter": {
         event.preventDefault();
@@ -312,7 +343,7 @@ export class WtCombobox extends LitElement {
     }
   }
 
-  private onTriggerClick(event: MouseEvent): void {
+  private async onTriggerClick(event: MouseEvent): Promise<void> {
     event.preventDefault();
     if (this.disabled) return;
     if (this.popup.matches(":popover-open")) {
@@ -324,13 +355,21 @@ export class WtCombobox extends LitElement {
       this.activeIndex = -1;
       // Opening synchronously makes its dimensions available before the first paint.
       this.popup.showPopover();
-      this.positionPopup();
       this.searchInput.focus();
+      // Clearing the search changes which rows the panel holds, so it has to be measured against
+      // the rendered list rather than the one the previous filter left behind. The await resolves
+      // on a microtask, still ahead of the frame this click paints — pinned by the test named
+      // "positions the popup against the trigger before the first painted frame".
+      await this.updateComplete;
+      this.positionPopup();
     }
   }
 
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
+    // The width is applied before the panel is measured: it changes how the labels wrap, and so the
+    // height the vertical clamp below depends on.
+    this.popup.style.width = `${anchor.width}px`;
     const popup = this.popup.getBoundingClientRect();
     // Left-aligned with the trigger, pulled left only far enough to keep the panel inside the
     // viewport's 8px right gutter — never pushed RIGHT of its trigger. (wt-row-actions floors this
@@ -338,7 +377,15 @@ export class WtCombobox extends LitElement {
     const maxLeft = Math.max(0, innerWidth - popup.width - 8);
     this.popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
     this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
-    this.popup.style.width = `${anchor.width}px`;
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    // Disabling only stops the trigger, so a panel already open stays on screen and usable. Closing
+    // it here takes the whole interaction away at once; commitSelection and addNew refuse
+    // separately, because hiding the panel leaves keyboard focus behind in it (see their comment).
+    if (changed.has("disabled") && this.disabled && this.popup?.matches(":popover-open")) {
+      this.popup.hidePopover();
+    }
   }
 
   private onToggle(event: ToggleEvent): void {
@@ -355,11 +402,12 @@ export class WtCombobox extends LitElement {
   }
 
   override render() {
+    const triggerId = this.name || this.generatedTriggerId;
     return html`
       ${
         this.label
           ? html`<div class="label-row">
-              <label id=${this.labelId}
+              <label id=${this.labelId} for=${triggerId}
                 >${this.label}${
                   this.required
                     ? html`<span class="required" data-required aria-hidden="true">*</span>`
@@ -371,10 +419,13 @@ export class WtCombobox extends LitElement {
       }
       <button
         type="button"
+        id=${triggerId}
+        name=${this.name || nothing}
         class="trigger"
         aria-haspopup="listbox"
         aria-expanded=${this.expanded}
         aria-labelledby=${this.label ? this.labelId : nothing}
+        aria-label=${!this.label && this.ariaLabel ? this.ariaLabel : nothing}
         aria-invalid=${this.invalid || this.error !== ""}
         aria-describedby=${this.error !== "" ? this.errorId : nothing}
         popovertarget="panel"
@@ -395,7 +446,7 @@ export class WtCombobox extends LitElement {
           aria-expanded="true"
           aria-required=${this.required}
           placeholder=${this.searchPlaceholder}
-          aria-label=${this.label || this.searchPlaceholder}
+          aria-label=${this.label || this.ariaLabel || this.searchPlaceholder}
           aria-controls=${this.listboxId}
           aria-activedescendant=${
             this.activeIndex >= 0 ? `${this.listboxId}-${this.activeIndex}` : nothing

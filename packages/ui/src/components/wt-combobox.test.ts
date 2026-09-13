@@ -18,6 +18,40 @@ test("renders its label", async () => {
   expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Dietary tags");
 });
 
+test("associates the visible label with the trigger, so clicking the label opens the panel", async () => {
+  const { el, trigger, popup } = await mountCombobox();
+  const label = el.shadowRoot!.querySelector("label")!;
+  expect(trigger.id).toMatch(/^wt-combobox-trigger-\d+$/);
+  expect(label.htmlFor).toBe(trigger.id);
+  await userEvent.click(label);
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+});
+
+test("a named combobox uses that semantic name for the trigger's id and name attribute", async () => {
+  const { el, trigger } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" name="tags"></wt-combobox>',
+  );
+  expect(trigger.id).toBe("tags");
+  expect(trigger.getAttribute("name")).toBe("tags");
+  expect(el.shadowRoot!.querySelector("label")!.htmlFor).toBe("tags");
+});
+
+test("falls back to a forwarded aria-label when there is no visible label", async () => {
+  const el = await mount('<wt-combobox aria-label="Dietary tags"></wt-combobox>');
+  const trigger = el.shadowRoot!.querySelector(".trigger")!;
+  expect(trigger.getAttribute("aria-label")).toBe("Dietary tags");
+  expect(trigger.hasAttribute("aria-labelledby")).toBe(false);
+  // The panel's search box takes the same fallback, so it is not left called just "Search".
+  expect(el.shadowRoot!.querySelector(".search")!.getAttribute("aria-label")).toBe("Dietary tags");
+});
+
+test("a visible label takes precedence over a forwarded aria-label", async () => {
+  const el = await mount('<wt-combobox label="Dietary tags" aria-label="Ignored"></wt-combobox>');
+  const trigger = el.shadowRoot!.querySelector(".trigger")!;
+  expect(trigger.hasAttribute("aria-label")).toBe(false);
+  expect(trigger.getAttribute("aria-labelledby")).toBe(el.shadowRoot!.querySelector("label")!.id);
+});
+
 test("opens the panel on trigger click and reflects aria-expanded", async () => {
   const { trigger, popup } = await mountCombobox();
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
@@ -469,4 +503,102 @@ test("disabled trigger dims via the disabled-opacity token", async () => {
   const el = await mount("<wt-combobox disabled></wt-combobox>");
   host.style.setProperty("--wt-opacity-disabled", "0.3");
   expect(getComputedStyle(el.shadowRoot!.querySelector(".trigger")!).opacity).toBe("0.3");
+});
+
+async function mountWithManyOptions(count = 20) {
+  const mounted = await mountCombobox();
+  mounted.el.options = Array.from({ length: count }, (_, index) => ({
+    value: String(index),
+    label: `Option ${index}`,
+  }));
+  await mounted.el.updateComplete;
+  return mounted;
+}
+
+test("keyboard navigation keeps the active option inside the scrolling list", async () => {
+  const { el, trigger } = await mountWithManyOptions();
+  await userEvent.click(trigger);
+  await userEvent.keyboard("{End}");
+  await vi.waitFor(() => {
+    const list = el.shadowRoot!.querySelector(".list")!.getBoundingClientRect();
+    const active = el.shadowRoot!.querySelector(".option.active")!.getBoundingClientRect();
+    expect(active.bottom).toBeLessThanOrEqual(list.bottom);
+  });
+});
+
+test("disabling an open panel closes it, so nothing further can be selected", async () => {
+  const { el, trigger, popup } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
+  );
+  el.options = TAGS;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  el.disabled = true;
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  expect(el.values).toEqual([]);
+});
+
+test("disabling an open panel also stops the add row announcing a new option", async () => {
+  const { el, trigger, popup } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" allow-add multiple></wt-combobox>',
+  );
+  el.options = TAGS;
+  await el.updateComplete;
+  const added = vi.fn();
+  el.addEventListener("wt-combobox-add", added);
+  await userEvent.click(trigger);
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "kosher");
+  el.disabled = true;
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  await userEvent.keyboard("{End}{Enter}");
+  expect(added).not.toHaveBeenCalled();
+});
+
+test("navigating an empty list never points aria-activedescendant at a missing row", async () => {
+  const { el, trigger } = await mountCombobox();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  expect(search.getAttribute("aria-activedescendant")).toBeNull();
+  await userEvent.keyboard("{Home}");
+  await el.updateComplete;
+  expect(search.getAttribute("aria-activedescendant")).toBeNull();
+});
+
+test("an empty value means nothing selected, even when an option carries an empty value", async () => {
+  const { el } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" placeholder="Choose a tag"></wt-combobox>',
+  );
+  el.options = [{ value: "", label: "Unset" }];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".value")!.textContent?.trim()).toBe("Choose a tag");
+});
+
+test("the popup stays inside the bottom gutter once its width matches the trigger", async () => {
+  const { el, trigger, popup } = await mountCombobox();
+  el.options = TAGS.map((tag) => ({
+    ...tag,
+    label: "A long option label that wraps onto several lines",
+  }));
+  el.style.cssText = `position: fixed; left: 20px; top: ${innerHeight - 100}px; width: 150px`;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+});
+
+test("reopening after a filtered search fits the full list, not the filtered one", async () => {
+  const { el, trigger, popup } = await mountWithManyOptions();
+  el.style.cssText = `position: fixed; left: 20px; top: ${innerHeight - 100}px; width: 250px`;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "Option 19");
+  await userEvent.keyboard("{Escape}");
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
 });
