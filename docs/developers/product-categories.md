@@ -11,17 +11,24 @@ products. A child's products do not count towards its parent. Create and edit fo
 the name, choose an image from the shared library, and choose or clear a parent. You cannot choose
 the category itself or any of its descendants.
 
-A primary category is optional. When you remove a product's primary membership and leave other
-memberships, you may name a replacement in the same save, but you do not have to: leave it out and
-the product keeps the memberships with no reporting category. Removing the last membership clears
-primary.
+A primary category is now optional in the data model and the API: a product may hold memberships
+with no reporting category at all. The dashboard does not offer that yet. The membership picker
+still refuses to submit while categories are selected and none of them is primary, so through
+today's screens you always choose or keep one. Removing the last membership clears primary.
 
-Deleting a category requires a confirmation and then goes ahead. It is no longer refused when
-something refers to it. The delete removes the product memberships, clears the reporting category
-from any product using it, moves direct children up to the deleted category's own parent, drops its
-preparation routes, and then removes the category. The confirmation is where you see what will be
-affected, so read it before agreeing: ask for the dependants first and show the counts. Previously
-recorded labels on past orders stay readable and are untouched.
+Deleting a category is confirmed and then goes ahead. It is no longer refused when something refers
+to it. The delete removes the product memberships, clears the reporting category from any product
+using it, moves direct children up to the deleted category's own parent, drops its preparation
+routes, and then removes the category. Because it cascades instead of refusing, a delete can take
+more with it than the category itself, and today's confirmation dialog shows only the category's
+name — it does not tell you what else will go. Previously recorded labels on past orders stay
+readable and are untouched.
+
+**What the API supports but no screen uses yet.** The routes below carry a category colour, a
+dependants preview and a bulk add of products. None of them is wired into the dashboard at the time
+of writing: the category form has no colour input, nothing calls the dependants route, and nothing
+calls the bulk add. Those screens are still to be built, and this page is due a revision describing
+the finished workflow once they are.
 
 ## API and Products integration
 
@@ -53,11 +60,13 @@ reporting category for), `children` carries `{ id, name }` per direct child, and
 `{ id, station, zone }` per preparation route. `routes` is always empty when the venue-service
 module is not installed, since that is the module owning the table.
 
-The bulk add is for assigning a whole selection at once from the category side. A product that has
-no reporting category yet takes this one; a product that already has one keeps it. Adding a product
-that is already a member changes nothing, so you can resubmit a selection. An empty list is accepted
-and does nothing. The whole selection is checked before anything is written: an unknown, foreign or
-repeated id rejects the entire request with `category.membership_invalid`, and nothing is added.
+The bulk add assigns a whole selection to one category in a single write. A product that has no
+reporting category yet takes this one; a product that already has one keeps it. Adding a product
+that is already a member changes nothing, so a caller may resubmit a selection. An empty list is
+accepted and does nothing. The whole selection is checked before anything is written: an unknown,
+foreign or repeated id rejects the entire request with `category.membership_invalid`, and nothing
+is added.
+
 Names require nonblank text in your default content language. Keep disabled translations in your
 edit payload: the form preserves them, and changing enabled languages does not delete them.
 Category names participate in the default-language translation-gap check.
