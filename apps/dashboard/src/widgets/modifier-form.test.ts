@@ -236,6 +236,116 @@ it("blocks an available required empty choice set", async () => {
   await click(el, "save");
   expect(submit).toHaveBeenCalledTimes(1);
 });
+function choiceOrder(el: ModifierForm) {
+  return [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+    row.getAttribute("data-choice"),
+  );
+}
+it("reorders choices with the keyboard", async () => {
+  const el = await mount(extra); // choices a, b
+  const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-a"]')!;
+  handle.focus();
+  handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["b", "a"]);
+  // The moved handle keeps the focus so a second press continues the move.
+  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector('[data-test="drag-a"]'));
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await click(el, "save");
+  expect(submit.mock.calls[0]![0].detail.value.choices.map((c: { id: string }) => c.id)).toEqual([
+    "b",
+    "a",
+  ]);
+});
+it("leaves the order alone at the ends, on another key, and while saving", async () => {
+  // Three choices, not two: with two, moving the first one up past the start rearranges nothing
+  // even when the move is NOT clamped, so the assertion would hold either way.
+  const el = await mount({
+    ...extra,
+    choices: [
+      ...extra.choices,
+      {
+        id: "c",
+        name: { es: "Cebolla" },
+        available: true,
+        priceDelta: "0.50",
+        maxQuantity: 1,
+        preselected: false,
+      },
+    ],
+  });
+  const press = (id: string, key: string) =>
+    el
+      .shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)!
+      .dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  press("a", "ArrowUp");
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["a", "b", "c"]);
+  press("c", "ArrowDown");
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["a", "b", "c"]);
+  press("a", "ArrowLeft");
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["a", "b", "c"]);
+  el.busy = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="drag-a"]')!.disabled).toBe(
+    true,
+  );
+  press("a", "ArrowDown");
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["a", "b", "c"]);
+});
+it("reorders choices by pointer drag", async () => {
+  const el = await mount(extra);
+  const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-a"]')!;
+  const rowB = el.shadowRoot!.querySelector<HTMLElement>('tr[data-choice="b"]')!;
+  handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1 }));
+  const box = rowB.getBoundingClientRect();
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      pointerId: 1,
+      clientY: box.top + box.height / 2,
+    }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["b", "a"]);
+  // pointerup ends the gesture: a later move over a row must not reorder anything.
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientY: box.top }),
+  );
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["b", "a"]);
+});
+it("ignores a second finger while a drag is live", async () => {
+  const el = await mount(extra);
+  const down = (id: string, pointerId: number) =>
+    el
+      .shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)!
+      .dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId }));
+  const boxB = el
+    .shadowRoot!.querySelector<HTMLElement>('tr[data-choice="b"]')!
+    .getBoundingClientRect();
+  const centreOfB = boxB.top + boxB.height / 2;
+  down("a", 1);
+  down("b", 2); // a drag is already live, so the second handle does not take it over
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, pointerId: 2, clientY: centreOfB }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 2 }));
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["a", "b"]);
+  // The first pointer still owns the gesture, so its own move reorders.
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientY: centreOfB }),
+  );
+  await el.updateComplete;
+  expect(choiceOrder(el)).toEqual(["b", "a"]);
+  document.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerId: 1 }));
+});
 it("retains a draft across busy/server errors and emits cancel once", async () => {
   const el = await mount();
   const submit = vi.fn(),

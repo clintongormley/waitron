@@ -11,6 +11,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "./choice-form.js";
 import type { ChoiceDraft } from "./choice-form.js";
+import { reorder } from "./reorder.js";
 import { type Modifier, type ModifierInput, type ModifierExtraChoice } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
@@ -82,6 +83,12 @@ export class ModifierForm extends LitElement {
         background: transparent;
         color: var(--wt-color-text);
         cursor: grab;
+        /* A touch that starts on the handle drags the row; without this the browser claims the
+           gesture and scrolls the modal instead. Not a themed value, so no token. */
+        touch-action: none;
+      }
+      .handle:disabled {
+        cursor: default;
       }
       .visually-hidden {
         position: absolute;
@@ -113,6 +120,10 @@ export class ModifierForm extends LitElement {
   @state() private defaultValue = false;
   @state() private choiceOpen = false;
   @state() private editingChoice: FormChoice | null = null;
+  /** The live pointer drag: the choice being dragged and the pointer that owns the gesture. */
+  #drag: { id: string; pointerId: number } | null = null;
+  /** Set by a keyboard move so the next update can return focus to the handle that moved. */
+  #refocus: string | null = null;
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("fieldErrors")) {
       this.serverErrors = Object.fromEntries(
@@ -200,6 +211,72 @@ export class ModifierForm extends LitElement {
   #removeChoice(id: string): void {
     this.choices = this.choices.filter((choice) => choice.id !== id);
     if (this.defaultChoiceId === id) this.defaultChoiceId = null;
+  }
+  #indexOfChoice(id: string): number {
+    return this.choices.findIndex((choice) => choice.id === id);
+  }
+  /** The choices array order IS the saved order, so a move rewrites the array rather than a rank. */
+  #moveChoice(id: string, to: number): void {
+    const from = this.#indexOfChoice(id);
+    if (from < 0) return;
+    this.choices = reorder(this.choices, from, to);
+  }
+  #reorderKey(event: KeyboardEvent, id: string): void {
+    const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+    if (delta === 0 || this.busy) return;
+    // Without this the arrow scrolls the modal, carrying the row out from under the handle.
+    event.preventDefault();
+    this.#moveChoice(id, this.#indexOfChoice(id) + delta);
+    // The move re-inserts the handle's DOM node, which drops focus; restore it after the update so
+    // repeated presses keep moving the same choice.
+    this.#refocus = id;
+  }
+  #startDrag(event: PointerEvent, id: string): void {
+    if (this.busy || this.#drag !== null) return;
+    // Keep the press from selecting the row's text or starting the browser's own drag.
+    event.preventDefault();
+    this.#drag = { id, pointerId: event.pointerId };
+    document.addEventListener("pointermove", this.#onPointerMove);
+    document.addEventListener("pointerup", this.#onPointerEnd);
+    document.addEventListener("pointercancel", this.#onPointerEnd);
+  }
+  readonly #onPointerMove = (event: PointerEvent): void => {
+    const drag = this.#drag;
+    // Ignore a stray second pointer: only the one that started the gesture moves the row.
+    if (drag === null || event.pointerId !== drag.pointerId) return;
+    const over = this.#choiceAt(event.clientY);
+    if (over === null || over === drag.id) return;
+    this.#moveChoice(drag.id, this.#indexOfChoice(over));
+  };
+  /** Ends the gesture. A cancelled pointer (the OS interrupting a touch) needs no separate handler:
+   * each crossed row has already been committed to `choices`, so there is nothing to commit here. */
+  readonly #onPointerEnd = (event: PointerEvent): void => {
+    if (this.#drag !== null && event.pointerId !== this.#drag.pointerId) return;
+    this.#endDrag();
+  };
+  #endDrag(): void {
+    this.#drag = null;
+    document.removeEventListener("pointermove", this.#onPointerMove);
+    document.removeEventListener("pointerup", this.#onPointerEnd);
+    document.removeEventListener("pointercancel", this.#onPointerEnd);
+  }
+  /** The choice whose row box contains `clientY`, or null when `clientY` is outside every row. */
+  #choiceAt(clientY: number): string | null {
+    for (const row of this.shadowRoot!.querySelectorAll("tbody tr")) {
+      const box = row.getBoundingClientRect();
+      if (clientY >= box.top && clientY <= box.bottom) return row.getAttribute("data-choice");
+    }
+    return null;
+  }
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#endDrag();
+  }
+  override updated(): void {
+    const id = this.#refocus;
+    if (id === null) return;
+    this.#refocus = null;
+    this.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
   }
   #cancel(event: Event): void {
     event.stopPropagation();
@@ -336,7 +413,10 @@ export class ModifierForm extends LitElement {
           type="button"
           class="handle"
           data-test=${`drag-${choice.id}`}
-          aria-label=${t("modifiers.reorder")}
+          aria-label=${`${t("modifiers.reorder")}: ${label}`}
+          ?disabled=${this.busy}
+          @keydown=${(event: KeyboardEvent) => this.#reorderKey(event, choice.id)}
+          @pointerdown=${(event: PointerEvent) => this.#startDrag(event, choice.id)}
         >
           <wt-icon name="grip"></wt-icon>
         </button>
