@@ -131,7 +131,8 @@ hook, or how tests are scheduled:
   unconfirmed). Confirm with `git diff --name-only origin/main..HEAD` that the hook typechecked
   the actual changed packages; run any missing typechecks and verify the PR’s CI scope and results.
 - **The pre-push log file can be days stale.** Reproduce; do not read it.
-- **The four browser packages run vitest in real headless Chromium.** Concurrency is decided by
+- **Every package whose vitest config enables browser mode runs in real headless Chromium.**
+  Concurrency is decided by
   measured headroom, never by a count: check free memory and the heaviest processes first, then scale
   `--workspace-concurrency` to what is free. What is NOT allowed is adding a browser run beside ANOTHER
   SESSION's browser run, or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check
@@ -355,7 +356,9 @@ container or browser test** — most of these rules exist because a test passed 
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
   every hook, so a hand-isolated fixture writes into the real repo. Run such a suite once under
   `GIT_DIR` before trusting it.
-- **The four browser packages run vitest in real headless Chromium** — see §2 for the concurrency rule.
+- **Browser-mode packages run vitest in real headless Chromium** — see §2 for the concurrency rule.
+  Which packages those are is a property to check (`grep -l 'browser' */vitest.config.ts`), not a
+  number to remember: the count has already gone stale once.
 - **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.** A module
   mock cannot replace an already-loaded browser ES module.
 - **Browser recovery tests read the native control inside a shared component.** A host's `checked`
@@ -399,11 +402,14 @@ container or browser test** — most of these rules exist because a test passed 
   `include`/`exclude` replace rather than merge. A config measuring nothing still exits 0 with the
   thresholds intact. Whenever `include` points inside a dot-directory, read the per-file table, not
   the exit code.
-- **A server-rendered HTML page asserted as a STRING has nothing checking that it renders.** An
-  invalid CSS value, an unclosed tag or a dark-theme colour nobody can read passes every assertion:
-  `light-dark(#4a5costs, …)` survived this page's whole green suite. Render the page in the headless
-  Chromium already on the machine (`~/Library/Caches/ms-playwright/chromium_headless_shell-*`) and
-  LOOK at it, in both themes and at phone width, before calling such a page done.
+- **A page asserted as a STRING, or reached only through its API, has nothing checking that it
+  renders.** An invalid CSS value, an unclosed tag, an unreadable dark-theme colour and a screen that
+  throws on open all pass every such assertion. Cost: a corrupted colour value on `/setup/trust` that
+  every test accepted, caught only by opening the page; and, on another branch, an image library
+  that reached a green gate through review and CI and then answered 500 to the first person who
+  opened it. Open it and LOOK, in both themes and at phone width. A browser-mode package has the
+  harness already; `apps/server`'s string-rendered pages have none, so write the rendered string to a
+  file and open it with the workspace's playwright Chromium.
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
   `toEqual` is what put `memberOf` under a matcher for the first time.
 

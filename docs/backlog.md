@@ -229,8 +229,12 @@ What that leaves open:
   went through `finish-branch`, an independent review, and green CI, and the first person to open the
   screen got a 500. Every layer read code or ran tests; none opened the page. The test-shape lesson —
   a matrix that varies two things separately and never crosses them proves less than it looks — is the
-  reusable half. **Next action for whoever agrees:** this belongs in `CLAUDE.md` §4 as a rule, not
-  here, and the root file takes the normal branch-and-PR flow.
+  reusable half. **Half of it is written, not yet merged** — on the certificate-pages branch, which hit
+  the same wall from the other side — a corrupted colour value that every string assertion accepted — and
+  added the §4 rule covering it: a page asserted as a string, or reached only through its API, has
+  nothing checking that it renders, so open it in the browser packages' real Chromium. **Next action:**
+  the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
+  crosses them proves less than it looks. That is a different rule and wants its own line.
 
 **Product categories — LANDED #340 (2026-09-13).** A product can now belong to several categories
 without its sales being counted twice. One membership is the primary one: its name is the label
@@ -795,7 +799,9 @@ Still to walk on real devices: installing the certificate, reopening without a w
 it after a re-image. Track each OS/browser in [ui-review.md](ui-review.md). Browser rendering and a
 successful API request do not verify an OS trust installation. The original Mac/Chrome incident
 needed removal of the old CA and a full browser quit; HTTPS-only browser policy can still prevent
-opening HTTP before any Waitron page runs.
+opening HTTP before any Waitron page runs — and since 2026-09-13 the guide no longer carries a written
+answer to that case, so the HTTPS-only row in [ui-review.md](ui-review.md) is now walking an
+unanswered one. `deploy/README.md` keeps the advice for whoever installs the box.
 
 ### B2. Backups that leave the box
 
@@ -996,6 +1002,16 @@ turns out to need a design moves to its track.
   presence light.
 - KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
   `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
+- **A failed HTTP response is assumed to carry our JSON error envelope, in two more clients.**
+  `apps/setup` was fixed on 2026-09-13 after a real failure: a provisioned box answers an unmounted
+  setup route with `404 Not Found` as `text/plain`, so `await res.json()` threw and the throw escaped
+  looking like a network outage — the operator was told to check the power of a machine that was
+  working. `packages/dashboard-kit/src/request.ts` and `apps/till/src/api/client.ts` still do the same
+  unguarded parse, and NEITHER has a `.catch`, so any non-JSON error body throws in both. What caught
+  us in `apps/setup` was a `text/plain` 404; the `null` body is a second way in, found by review
+  rather than in the field, and it defeats a bare `.catch` too because `null` is valid JSON. **Next action:** guard both parses and keep the HTTP status
+  on the rejection, as `apps/setup/src/api/client.ts` now does. Note `null` is valid JSON, so a
+  `.catch` alone is not enough — the parsed value needs checking too.
 - Two QR libraries coexist (`qrcode` in `apps/server`, `qrcode-generator` in `apps/till`) — unify into
   `packages/shared`; hoist the receipt's hand-ported money/date/label formatters there too (the paper
   receipt already drifts from the screen by an NBSP normalisation).

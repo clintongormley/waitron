@@ -66,7 +66,7 @@ export class SetupProvisioningScreen extends LitElement {
           <h1>Provisioning</h1>
           <p class="error" role="alert" data-test="error">${this.message}</p>
           <p>
-            If the browser shows a certificate warning, or this server was re-imaged,
+            If the browser shows a certificate warning, or this page will not connect,
             <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
               >open certificate and connection help</a
             >

@@ -152,7 +152,7 @@ print_links() {
   Secure help:   ${BOX_URL}/setup/trust
   If HTTP is unavailable or you use an operator-supplied certificate, use Secure help.
   Install this box's certificate before entering setup details.
-  After a re-image, follow the guide to replace the old certificate.
+  On a box serving its own certificate, the guide's first step removes any old one.
   Once set up:
     Till         ${BOX_URL}
     Dashboard    ${BOX_URL}/manage

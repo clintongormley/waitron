@@ -185,22 +185,35 @@ export interface ApiError {
   status?: number;
 }
 
+/** A plain (non-array, non-null) object — the only parsed body shape an envelope can be read from. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
- * The rejection for any non-2xx.
+ * The rejection for any non-2xx. Whatever the body turns out to be, the HTTP `status` always
+ * survives onto the {@link ApiError}: its presence is how the wizard tells a box that ANSWERED from
+ * one nothing could reach, and an exception thrown in here would throw that distinction away.
  *
- * The JSON parse is DEFENSIVE, and that is the whole point: a failed response need not carry our
- * `{ error: { code } }` envelope. A provisioned box does not mount the setup routes, so
+ * Everything about the body is therefore treated as untrusted. A failed response need not carry our
+ * `{ error: { code } }` envelope: a provisioned box does not mount the setup routes, so
  * `GET /setup-api/status` returns Hono's own `404 Not Found` as `content-type: text/plain` — run
- * against a dev box on 2026-09-13. Parsing that threw a `SyntaxError` that escaped as though the
- * network had failed, so a server that plainly answered was reported to the operator as unreachable.
+ * against a dev box on 2026-09-13 — which makes `res.json()` throw.
+ *
+ * Catching that throw is NOT enough on its own, and that is the non-obvious part: `null` is VALID
+ * JSON, so a body of literal `null` parses successfully and the `catch` never runs, leaving
+ * `null.error` to throw a `TypeError` instead. The parsed value is checked for being an object
+ * before anything is read off it, and `code` is used only when it is a STRING — a non-string code is
+ * not a domain error code, and passing one through would let a caller's `code.startsWith(...)` throw.
  */
 async function apiError(res: Response): Promise<ApiError> {
-  const envelope = (await res.json().catch(() => ({}))) as {
-    error?: { code?: string; params?: Record<string, unknown> };
-  };
+  const parsed: unknown = await res.json().catch(() => undefined);
+  const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
+  const code = envelope?.code;
+  const params = envelope?.params;
   return {
-    code: envelope.error?.code ?? "server.internal",
-    params: envelope.error?.params,
+    code: typeof code === "string" ? code : "server.internal",
+    params: isRecord(params) ? params : undefined,
     status: res.status,
   };
 }

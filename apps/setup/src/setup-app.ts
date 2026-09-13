@@ -156,21 +156,15 @@ const ADOPT_ERROR_MESSAGES: Record<string, string> = {
 const ADOPT_GENERIC_ERROR =
   "Couldn't connect to the primary. Check the address and login, then try again.";
 
-/**
- * The setup wizard's ROOT element — the shell that turns the screens into a working app, mirroring
- * `apps/dashboard/src/dashboard-app.ts`.
- *
- * It owns the two things the whole flow shares: the injected {@link SetupApi}, and the accumulated
- * request {@link SetupApp.draft} that each screen contributes a slice of (via a bubbling `setup-patch`
- * event the shell deep-merges) and the `review` step finally POSTs. Most nav is a plain `setup-goto`
- * event that flips {@link SetupApp.screen} — no server call, no history entry. The one CONDITIONAL
- * transition, venue→`cert`/`review`, is a screen-agnostic `setup-advance` the shell resolves against
- * the merged draft ({@link SetupApp.#onAdvance}), so the venue screen need not read `mode` to route.
- *
- * On boot it reads `GET /setup-api/status` ({@link SetupApp.#boot}) to learn the box's `environment`,
- * so the wizard can warn before provisioning a real `production` venue. A failed read keeps the
- * connection screen visible with help and a retry, without collecting credentials.
- */
+/** The outcome of a failed connection check: what to tell the operator, and whether a fresh check
+ * could ever come out differently. Held as ONE value ({@link SetupApp.connectionFailure}) because
+ * the two are halves of a single answer — a screen showing one without the other is incoherent. */
+interface ConnectionFailure {
+  message: string;
+  /** False when retrying is pointless, so the screen drops its Continue action entirely. */
+  canRetry: boolean;
+}
+
 /**
  * What a failed setup read means, in words the operator can act on.
  *
@@ -185,11 +179,7 @@ const ADOPT_GENERIC_ERROR =
  * the wrong reason. The wizard is served same-origin by the box itself, so neither arises on a box
  * an operator actually has in front of them.
  */
-function connectionFailure(error: unknown): {
-  message: string;
-  /** False when retrying is pointless, so the screen drops its Continue action entirely. */
-  canRetry: boolean;
-} {
+function describeConnectionFailure(error: unknown): ConnectionFailure {
   const status = (error as { status?: number } | null)?.status;
   if (status === 404)
     return { message: "This server is already set up. Reload to open it.", canRetry: false };
@@ -201,6 +191,22 @@ function connectionFailure(error: unknown): {
   };
 }
 
+/**
+ * The setup wizard's ROOT element — the shell that turns the screens into a working app, mirroring
+ * `apps/dashboard/src/dashboard-app.ts`.
+ *
+ * It owns the two things the whole flow shares: the injected {@link SetupApi}, and the accumulated
+ * request {@link SetupApp.draft} that each screen contributes a slice of (via a bubbling `setup-patch`
+ * event the shell deep-merges) and the `review` step finally POSTs. Most nav is a plain `setup-goto`
+ * event that flips {@link SetupApp.screen} — no server call, no history entry. The one CONDITIONAL
+ * transition, venue→`cert`/`review`, is a screen-agnostic `setup-advance` the shell resolves against
+ * the merged draft ({@link SetupApp.#onAdvance}), so the venue screen need not read `mode` to route.
+ *
+ * On boot it reads `GET /setup-api/status` ({@link SetupApp.#boot}) to learn the box's `environment`,
+ * so the wizard can warn before provisioning a real `production` venue. A failed read keeps the
+ * connection screen visible with help, and a retry when retrying could help, without collecting
+ * credentials.
+ */
 @customElement("setup-app")
 export class SetupApp extends LitElement {
   static override styles = [
@@ -223,9 +229,13 @@ export class SetupApp extends LitElement {
 
   /** Certificate setup precedes collecting credentials and business details. */
   @state() private screen: Screen = "connection";
-  @state() private connectionError?: string;
-  /** True once a failure proves this server can never be set up from here — see `connectionFailure`. */
-  @state() private connectionSetupUnavailable = false;
+  /**
+   * The LAST failed connection check, or `undefined` when none applies — including while a fresh
+   * check is in flight, so an answer never outlives the question it answered. The connection
+   * screen's message and whether it offers its Continue action are both DERIVED from this in
+   * `render`, so the two can never describe different checks.
+   */
+  @state() private connectionFailure?: ConnectionFailure;
   @state() private connectionChecking = false;
   #connectionGeneration = 0;
   @state() private venueDefaults: VenueDefaults = {};
@@ -349,19 +359,23 @@ export class SetupApp extends LitElement {
       // Availability describes the box, not whether this browser has installed its CA.
       if (this.screen === "connection" && !discovery.caDownloadAvailable) this.screen = "mode";
     } catch (error) {
-      if (this.isConnected && generation === this.#connectionGeneration) {
-        const failure = connectionFailure(error);
-        this.connectionError = failure.message;
-        this.connectionSetupUnavailable = !failure.canRetry;
-      }
+      this.#recordConnectionFailure(error, generation);
     }
+  }
+
+  /** The single place a failed connection check is recorded, so both halves of the answer always
+   * come from the same check. Ignores an outcome a newer check has already superseded, and a
+   * teardown mid-request, on the same discipline as {@link SetupApp.#boot}. */
+  #recordConnectionFailure(error: unknown, generation: number): void {
+    if (!this.isConnected || generation !== this.#connectionGeneration) return;
+    this.connectionFailure = describeConnectionFailure(error);
   }
 
   async #continueConnection(): Promise<void> {
     if (this.connectionChecking) return;
     const generation = ++this.#connectionGeneration;
     this.connectionChecking = true;
-    this.connectionError = undefined;
+    this.connectionFailure = undefined;
     try {
       const status = await this.api.getStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
@@ -369,11 +383,7 @@ export class SetupApp extends LitElement {
       this.developmentMode = status.developmentMode === true;
       this.screen = "mode";
     } catch (error) {
-      if (this.isConnected && generation === this.#connectionGeneration) {
-        const failure = connectionFailure(error);
-        this.connectionError = failure.message;
-        this.connectionSetupUnavailable = !failure.canRetry;
-      }
+      this.#recordConnectionFailure(error, generation);
     } finally {
       if (generation === this.#connectionGeneration) this.connectionChecking = false;
     }
@@ -780,9 +790,9 @@ export class SetupApp extends LitElement {
       case "connection":
         return html`<setup-connection-screen
           data-test="screen-connection"
-          .errorMessage=${this.connectionError}
+          .errorMessage=${this.connectionFailure?.message}
           .checking=${this.connectionChecking}
-          .setupUnavailable=${this.connectionSetupUnavailable}
+          .setupUnavailable=${this.connectionFailure?.canRetry === false}
           @connection-continue=${() => void this.#continueConnection()}
         ></setup-connection-screen>`;
       case "role":

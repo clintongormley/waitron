@@ -76,6 +76,7 @@ describe("the guessed device", () => {
     expect(html).not.toContain("Using a different device?");
     // With no device to name, step 1 still exists but points at the list rather than listing twice.
     expect(html).toMatch(heading("1. Remove any old Waitron certificate"));
+    expect(html).toContain("Find your device in step 3");
     expect(html).toMatch(heading("3. Install it on your device"));
   });
 
@@ -100,36 +101,54 @@ describe("the words at the top", () => {
   });
 });
 
-it("covers common operating systems, browser stores and replacement certificates", () => {
-  const html = renderTrustPage(base);
-  for (const name of [
-    "macOS",
-    "Windows",
-    "Linux",
-    "ChromeOS",
-    "Android",
-    "iPhone",
-    "iPad",
-    "Chrome",
-    "Edge",
-    "Firefox",
-    "Safari",
-  ])
-    expect(html).toContain(name);
-});
+// The "every operating system and browser" assertion that used to live here is DELETED, not moved:
+// it hardcoded eleven names, omitted Chromium and Samsung Internet, and so passed with either of
+// them deleted. The `it.each(DEVICE_ORDER)` block above asserts every device's own summary line,
+// derived from the list itself, which is the claim that one only looked like it was making.
 
 it("warns that a download may need confirming before it reaches the disk", () => {
   expect(renderTrustPage(base)).toMatch(/Keep/);
 });
 
+it("judges the page the link opens, not the one the operator is reading", () => {
+  const html = renderTrustPage({ ...base, device: "windows" });
+  // The entry point the installer prints is HTTP — `deploy/waitron.sh`'s "Start here:
+  // http://waitron.local/setup/trust", served by the landing listener; the HTTPS "Secure help"
+  // address is the fallback for when HTTP is off. Installing a certificate authority does not turn
+  // an HTTP connection into an HTTPS one, so on that entry path THIS page reads "not secure"
+  // however well the install went. Only the page behind the Continue link can answer the question.
+  expect(html).toContain(
+    "Open Waitron with the link below, then check the address bar of the page it opens.",
+  );
+  // Not a bare /reopen this page/i — seven device steps legitimately end with that phrase. What must
+  // not come back is the SENTENCE that told the operator to judge this page.
+  expect(html).not.toContain("Reopen this page. If your address bar");
+  expect(html).not.toContain("start again from the beginning of this page");
+});
+
 it("shows the browser's own warning words when telling the operator to start again", () => {
   const html = renderTrustPage({ ...base, device: "windows" });
   expect(html).toContain('<span class="warning-words">“not secure”</span>');
-  expect(html).toContain("start again from the beginning of this page");
+  expect(html).toContain("come back here and start again from step 1.");
+});
+
+// Every hand-copied token pair in the page's stylesheet, light then dark, against
+// packages/ui/src/tokens/colors.css. The page cannot import the tokens — `apps/server` has no
+// `@waitron/ui` dependency and the page must stay one self-contained string — so these literals are
+// the only copy, and the incident behind CLAUDE.md §4's render rule was a colour value nothing
+// checked. Guarding one pair and calling the comment satisfied is how that happens twice.
+it.each([
+  ["--wt-color-primary", "background: light-dark(#1f6feb, #4c8dff)"],
+  ["--wt-color-on-primary", "color: light-dark(#ffffff, #06101f)"],
+  ["--wt-color-text-muted", "light-dark(#5c626e, #a1a7b3)"],
+  ["--wt-color-danger", "light-dark(#b3261e, #ff6b5e)"],
+])("keeps %s in step with the design tokens", (_token, declaration) => {
+  expect(renderTrustPage(base)).toContain(declaration);
 });
 
 it("drops the troubleshooting box the owner did not want", () => {
-  expect(renderTrustPage(base)).not.toContain("If you cannot open this page");
+  // The base page's own heading, so this goes red if the box comes back.
+  expect(renderTrustPage(base)).not.toContain("If you cannot open or download");
 });
 
 it("shows the Waitron logo without fetching anything", () => {
@@ -146,7 +165,7 @@ it("shows a QR only when one was rendered, and says nothing when there is none",
   expect(withQr).toContain("<svg id='qr'></svg>");
   expect(withQr).toContain("Open this page on another device");
   // The caption explained what a QR is to someone already holding a phone at it.
-  expect(withQr).not.toContain("This QR opens the server address.");
+  expect(withQr).not.toContain("This QR opens the box address.");
 });
 
 it("calls it a server, never a box", () => {
@@ -175,6 +194,5 @@ it("does not describe a plain HTTP recovery destination as secure", () => {
   });
   expect(html).toContain('href="http://waitron.local">Continue to Waitron</a>');
   expect(html).not.toContain("secure site");
-  expect(html).not.toContain("secure server address");
   expect(html).not.toContain("Install the certificate on that device first");
 });

@@ -68,6 +68,11 @@ The installer also prints the HTTPS help address for installations without the H
 
 ## Rework, 2026-09-13
 
+**SUPERSEDED the same day by *The guide restructured, 2026-09-13* below**, which moved certificate
+removal out of the disclosure this section describes and into numbered step 1. Read that one for the
+shape that shipped; this section records the intermediate state, and its two word counts were
+measured against a page that no longer exists.
+
 Owner review of both pages. Recorded here rather than rewritten above: the sections before this one
 describe what was true when they were written.
 
@@ -91,8 +96,10 @@ the operator to read their own address bar, in the browser's own words: if it sa
 red) they install the certificate, otherwise they continue. The Chrome 153 probe row above is why:
 the page cannot tell. 103 rendered words before, 40 after (owner's copy, 2026-09-13).
 
-The sentence disclaiming that Continue proves trust is GONE, and this section is the only record of
-that. The requirement it served — "a communication check, never proof of installed trust" — is now
+The sentence disclaiming that Continue proves trust is GONE from the screen, and this section is the
+only record of the sentence. The FACT it stated is recorded elsewhere too — `deploy/README.md` still
+tells the installer that Continue "checks communication with the box, not installed trust", which is
+as true of the new screen as of the old one. The requirement it served — "a communication check, never proof of installed trust" — is now
 carried by the shape of the screen: the heading is a question, the operator is handed the test to
 run themselves, and nothing on the page reports a verdict. No test forbids verdict wording, and that
 is deliberate: the owner's own copy contains the phrase "whether this page is secure or not", so any
@@ -141,8 +148,11 @@ certificate while the old one is still trusted does nothing the operator can SEE
 using the entry it already has and the page still warns, so an operator who skipped removal has no
 way to tell that is what happened. The steps are: remove any old Waitron certificate; get the
 certificate; install it on this device; open Waitron. Every device's install steps now end "then
-reopen this page", because the page the operator is reading is also the page that tells them whether
-it worked.
+reopen this page". The reason first given for that — the page being read is also the page that says
+whether it worked — turned out to be FALSE and was corrected the same day: the printed entry point is
+plain `http://`, where the address bar reads "not secure" however well the install went. Only the page
+behind the Continue link can answer the question, which is what step 4 now says. The step wording
+stands; its original justification does not.
 
 The heading marks the word *securely*, and the opening line names what the certificate is FOR —
 entering passwords and sensitive information — rather than describing the mechanism. Step 4 shows
@@ -155,17 +165,30 @@ Three things were DELETED. Two are only recorded here, because nothing else now 
 - *"This is the connection certificate, not your business's tax-agency certificate."* Nothing on this
   page offers a tax-agency certificate, so the distinction answered a question the page had not
   raised.
-- The **"If you cannot open this page or download the file"** box. This retires the Operator flow
+- The troubleshooting box. Its heading on `main` was **"If you cannot open or download"**, quoted
+  from the base file; an earlier commit on this same branch had renamed it to "If you cannot open
+  this page or download the file" before a later one deleted it, and quoting that intermediate
+  wording here would name something `main` never had. This retires the Operator flow
   claim above that "the guide explains using HTTP where the browser permits it, or transferring the
   certificate from another device that can reach the box" — the guide no longer says either.
-  **Worth knowing before anyone relies on that paragraph again:** the box also carried the only
-  written route for a browser whose policy forbids the HTTP version, and the only advice to check the
-  device's clock. What remains for the other-device case is the QR section. Deleted on the owner's
-  instruction, 2026-09-13; the deletion is cheap to reverse and this is the note that says what to
-  put back.
-- The QR caption *"This QR opens the server address."*, which explained a QR code to someone already
-  holding a phone up to it. Its heading now says the same thing: "Open this page on another device".
+  **Worth knowing before anyone relies on that paragraph again:** the box carried the page's only
+  route for a browser whose policy forbids the HTTP version, and the page's only advice to check the
+  device's clock. For the HTTP-exception and transfer-from-another-device route, "only" was an
+  over-claim this paragraph itself made and review falsified: `deploy/README.md` still gives the
+  installer both, and `docs/ui-review.md` now records that the guide answers the HTTPS-only case no
+  longer. For the CLOCK advice the word was right — a grep of `deploy/`, `docs/` and
+  `apps/server/src` finds no other copy, so "check your device's date and time" is gone from the
+  product entirely. What remains on the page for the other-device case is the QR
+  section. Deleted on the owner's instruction, 2026-09-13; the deletion is cheap to reverse and this
+  is the note that says what to put back.
+- The QR caption, which explained a QR code to someone already holding a phone up to it. Its exact
+  words were *"This QR opens the box address."* — quoted from the base file, not from memory, because
+  this entry is the only remaining record of a deleted string and the quote is its whole value.
+  The heading now says the same thing: "Open this page on another device".
 
 Also retired by this change, and fixed in the same commit: `deploy/README.md` claimed the guide
-covers "replacing the old certificate after a re-image". The guide no longer names re-imaging; it
-tells the operator to remove any old certificate first, whatever put it there.
+covers "replacing the old certificate after a re-image". The four-step guide no longer names
+re-imaging; it tells the operator to remove any old certificate first, whatever put it there. One
+exception an over-claim here missed until review: the branch a box takes when it has NO certificate
+of its own still says "a certificate downloaded before a re-image may no longer apply", and carries
+no removal step at all, because there is nothing to install.

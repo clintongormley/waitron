@@ -112,13 +112,19 @@ details { border: 1px solid light-dark(#c4cbd4, #637080); border-radius: .5rem; 
 details[open] { padding-bottom: .3rem; }
 details details { padding-inline: .6rem; }
 summary { cursor: pointer; font-weight: 600; }
+/* Four token pairs are inlined below, light then dark, and kept in step by hand: #5c626e/#a1a7b3
+   is --wt-color-text-muted, #b3261e/#ff6b5e is --wt-color-danger, #1f6feb/#4c8dff is
+   --wt-color-primary, and #ffffff/#06101f is --wt-color-on-primary, all declared in
+   packages/ui/src/tokens/colors.css. apps/server does not depend on @waitron/ui, and this page must
+   stay one self-contained string with no external assets, so it cannot read the custom properties.
+   Same arrangement, and the same reason, as packages/ui/brand/README.md. */
 .note { color: light-dark(#5c626e, #a1a7b3); font-size: .92rem; }
 /* The browser's own warning, in the browser's own colour. The words carry the meaning; the colour
    is emphasis, so a reader who cannot see it loses nothing. */
 .accent, .warning-words { color: light-dark(#b3261e, #ff6b5e); }
 .warning-words { font-weight: 600; }
 .button { display: inline-block; padding: .7rem 1.1rem; border-radius: .4rem; font-weight: 600;
-  text-decoration: none; background: light-dark(#1f6feb, #4c8dff); color: light-dark(#ffffff, #16181d); }
+  text-decoration: none; background: light-dark(#1f6feb, #4c8dff); color: light-dark(#ffffff, #06101f); }
 code, a { overflow-wrap: anywhere; }
 .logo svg { width: 9.5rem; height: auto; display: block; }
 .qr svg { max-width: 14rem; height: auto; background: white; }
@@ -129,9 +135,8 @@ code, a { overflow-wrap: anywhere; }
 <p>You need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>
 ${steps}
 <section class="go"><h2>${caAvailable ? "4" : "2"}. Open Waitron</h2>
-<p>Reopen this page. If your address bar still shows that the page is
-<span class="warning-words">“not secure”</span>, then start again from the beginning of this page,
-otherwise:</p>
+<p>Open Waitron with the link below, then check the address bar of the page it opens. If that still
+shows <span class="warning-words">“not secure”</span>, come back here and start again from step 1.</p>
 <p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">Continue to Waitron</a></p>
 <ul>${urlItems}</ul></section>
 ${qrSvg ? `<section class="qr"><h2>Open this page on another device</h2><figure>${qrSvg}</figure></section>` : ""}

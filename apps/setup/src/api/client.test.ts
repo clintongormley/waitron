@@ -15,6 +15,18 @@ function emptyResponse(): Response {
   return { ok: true, status: 200, json: async () => undefined, text: async () => "" } as Response;
 }
 
+/** A failure with NO body at all — `res.json()` throws on nothing, exactly as it does on text. */
+function emptyErrorResponse(status: number): Response {
+  return {
+    ok: false,
+    status,
+    json: async (): Promise<unknown> => {
+      throw new SyntaxError("Unexpected end of JSON input");
+    },
+    text: async () => "",
+  } as Response;
+}
+
 /** A non-JSON failure — what a provisioned box really sends for an unmounted setup route. */
 function textResponse(body: string, status: number): Response {
   return {
@@ -130,6 +142,65 @@ describe("SetupApi", () => {
     const fetchImpl = vi.fn().mockResolvedValue(textResponse("404 Not Found", 404));
     const api = new SetupApi("", fetchImpl);
     await expect(api.getStatus()).rejects.toMatchObject({ status: 404, code: "server.internal" });
+  });
+
+  /**
+   * A failed response's body is whatever the thing that answered chose to send, and only ONE shape
+   * of it is our error envelope. These cases are the ones a plain `JSON.parse` survives but a naive
+   * `envelope.error?.code` does not: `null` is VALID JSON, so the parse succeeds and reading `.error`
+   * off it throws a `TypeError` that escapes the client — losing the HTTP status, which is the one
+   * fact the wizard uses to tell an answering box from an unreachable one. An array, a number or a
+   * string parse fine and simply have no `error` to read. Each must still reject with the status.
+   */
+  it.each([
+    ["a literal null body", null],
+    ["an array body", []],
+    ["a number body", 42],
+    ["a string body", "nope"],
+    ["an envelope whose error is not an object", { error: "boom" }],
+  ])("keeps the status and falls back to server.internal for %s", async (_label, body) => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body, false, 404));
+    const api = new SetupApi("", fetchImpl);
+    await expect(api.getStatus()).rejects.toMatchObject({ code: "server.internal", status: 404 });
+  });
+
+  /** A non-string `code` is not a domain error code, and passing it through would let a caller's
+   * `code.startsWith(...)` throw on a number. It falls back like a missing code, status intact. */
+  it("ignores a non-string code in the envelope", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: 42, params: { field: "taxId" } } }, false, 400),
+      );
+    const api = new SetupApi("", fetchImpl);
+    const rejection = await api.getStatus().catch((error: unknown) => error);
+    expect(rejection).toMatchObject({ code: "server.internal", status: 400 });
+  });
+
+  /** An empty failure body: `res.json()` throws on nothing at all, and the status must survive. */
+  it("keeps the status when a failed response has an empty body", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyErrorResponse(503));
+    const api = new SetupApi("", fetchImpl);
+    await expect(api.getStatus()).rejects.toMatchObject({ code: "server.internal", status: 503 });
+  });
+
+  /** The control in the other direction: a real envelope still yields its code, params and status. */
+  it("reads code, params and status from a valid error envelope", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "setup.request_invalid", params: { field: "taxId" } } },
+          false,
+          400,
+        ),
+      );
+    const api = new SetupApi("", fetchImpl);
+    await expect(api.getStatus()).rejects.toEqual({
+      code: "setup.request_invalid",
+      params: { field: "taxId" },
+      status: 400,
+    });
   });
 
   it("carries the status alongside the code when the envelope is JSON", async () => {

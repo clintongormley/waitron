@@ -306,6 +306,39 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
   });
 
+  /**
+   * The two halves of one fact — what to SAY and whether an action is worth offering — must always
+   * describe the SAME check. A fresh check clears the previous outcome's message; if the "no action
+   * here" half is left behind from the previous outcome, the operator is left looking at a screen
+   * with no message and no control at all while the check runs.
+   *
+   * The connection screen hides its own Continue after the 404, so the shell is driven through the
+   * `connection-continue` event it listens for rather than through a click.
+   */
+  it("never leaves the connection screen with neither a message nor an action", async () => {
+    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal", status: 404 });
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus,
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const host = await screenHost(el, "connection");
+    expect(host.shadowRoot!.textContent).toContain("already set up");
+    expect(host.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+
+    // A check that has not answered yet: the previous outcome no longer applies, and the new one is
+    // not known.
+    getStatus.mockReturnValue(new Promise(() => {}));
+    host.dispatchEvent(new CustomEvent("connection-continue"));
+    await flush(el);
+
+    const during = await screenHost(el, "connection");
+    expect(during.shadowRoot!.textContent).not.toContain("already set up");
+    expect(during.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+  });
+
   // A 5xx is the box answering that IT is broken — neither "unreachable" nor "already set up".
   it("does not call a server error 'already set up'", async () => {
     const el = await mountSetupApp(
@@ -827,6 +860,22 @@ describe("setup-app", () => {
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
+  });
+
+  /**
+   * The certificate guide the failed-provision screen points at ("/setup/trust") is about trusting
+   * THIS server's certificate — remove any old Waitron certificate, get this one, install it. It has
+   * no section about a server being re-imaged, so the pointer must not promise one.
+   */
+  it("points at the certificate guide without promising a re-imaging section", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "server.internal", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "provisioning");
+    const help = host.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=trust-help]")!;
+    expect(help.getAttribute("href")).toBe("/setup/trust");
+    expect(host.shadowRoot!.textContent).not.toContain("re-imaged");
   });
 
   it("maps a conflicting saved operation to a terminal recovery message", async () => {

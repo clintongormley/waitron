@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectTrustDevice } from "./detect-device.js";
+import { detectTrustDevice, trustDeviceForRequest } from "./detect-device.js";
 
 // Real, current user-agent strings. Sources, read 2026-09-13:
 //   github.com/jnrbsn/user-agents (user-agents.json, refreshed daily) — the macOS, Windows and
@@ -211,5 +211,42 @@ describe("detectTrustDevice — the iPadOS limit, pinned rather than worked arou
     // Chromium-family browser sends one, still wins.
     expect(detectTrustDevice({ userAgent: UA.ipadSafari })).toBe("ios");
     expect(detectTrustDevice({ platform: '"iOS"', userAgent: ipadInDesktopMode })).toBe("ios");
+  });
+});
+
+describe("trustDeviceForRequest — the two headers are named in one place", () => {
+  /** The smallest shape Hono's `c.req` satisfies: one `header(name)` lookup. */
+  const requestWith = (headers: Record<string, string>) => ({
+    header: (name: string): string | undefined => headers[name],
+  });
+
+  it("reads the user-agent and the platform hint from a request", () => {
+    expect(trustDeviceForRequest(requestWith({ "user-agent": UA.linuxFirefox }))).toBe(
+      "firefox-linux",
+    );
+    expect(
+      trustDeviceForRequest(
+        requestWith({ "user-agent": UA.macosSafari, "sec-ch-ua-platform": '"Windows"' }),
+      ),
+    ).toBe("windows");
+  });
+
+  it("asks for those two headers and no others", () => {
+    // The security boundary this file documents is that only these two headers are read. What this
+    // pins is THIS function: give it a third header to read and the assertion goes red. It says
+    // nothing about the route handlers — they are never called here, so a handler that reached for a
+    // cookie itself would not show up.
+    const asked: string[] = [];
+    trustDeviceForRequest({
+      header: (name: string) => {
+        asked.push(name);
+        return undefined;
+      },
+    });
+    expect(asked.sort()).toEqual(["sec-ch-ua-platform", "user-agent"]);
+  });
+
+  it("answers unknown when the request carries neither header", () => {
+    expect(trustDeviceForRequest(requestWith({}))).toBe("unknown");
   });
 });

@@ -110,7 +110,7 @@ it("trust page omits the QR section (and skips the renderer) when there is no LA
   const html = await (await app.request("/setup/trust")).text();
   expect(rendered).toBe(0);
   expect(html).not.toContain("data-qr=");
-  expect(html).not.toContain("Open on another device");
+  expect(html).not.toContain("Open this page on another device");
   expect(html).not.toContain("<figure>");
   // And no line apologising for the absence — the reader never knew a QR was on offer.
   expect(html).not.toMatch(/no QR/i);

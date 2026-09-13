@@ -70,3 +70,20 @@ export function detectTrustDevice(headers: { userAgent?: string; platform?: stri
   // `Firefox/` is the desktop/Android token — Firefox on iOS is `FxiOS/` and never reaches here.
   return system === "linux" && ua.includes("Firefox/") ? "firefox-linux" : system;
 }
+
+/**
+ * The same answer, taken straight from a request. This file is the one place that names the two
+ * headers, so a route handler asks for a device rather than for header values.
+ *
+ * The parameter is the smallest structural shape that works — Hono's `c.req` satisfies it with no
+ * import here, which keeps this file free of I/O, imports and state. Deliberately NOT Hono's
+ * `Context`: that would hand the detector the response, the cookies and the body.
+ */
+export function trustDeviceForRequest(req: {
+  header(name: string): string | undefined;
+}): TrustDevice {
+  return detectTrustDevice({
+    userAgent: req.header("user-agent"),
+    platform: req.header("sec-ch-ua-platform"),
+  });
+}
