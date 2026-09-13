@@ -12,6 +12,17 @@ export interface FieldContext {
   error: (key: string) => string;
 }
 
+/** The largest integer the server's modifier contract accepts. */
+const MAX_INTEGER = 2147483647;
+
+/** A price the server's modifier contract accepts (packages/catalogue/src/modifier-contract.ts):
+ * up to ten whole digits and at most two decimal places. */
+export const isPrice = (text: string) => /^\d{1,10}(?:\.\d{1,2})?$/.test(text);
+
+/** A whole number from 1 to the server's integer limit, written in plain digits. */
+export const isPositiveInteger = (text: string) =>
+  /^\d+$/.test(text) && Number(text) >= 1 && Number(text) <= MAX_INTEGER;
+
 /** A translated name without its blank entries, so a language left blank is not submitted. */
 export const nonBlankNames = (value: Record<string, string>) =>
   Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));

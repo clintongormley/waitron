@@ -17,6 +17,8 @@ import {
 import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
 import {
+  isPositiveInteger,
+  isPrice,
   nameFields,
   nonBlankNames,
   switchField,
@@ -38,9 +40,6 @@ export type ChoiceDraft = ModifierEffects & {
   maxQuantity?: number;
   vatClass?: VatClass | null;
 };
-
-/** The largest integer the server's modifier contract accepts. */
-const MAX_INTEGER = 2147483647;
 
 @customElement("dashboard-choice-form")
 export class ChoiceForm extends LitElement {
@@ -135,16 +134,11 @@ export class ChoiceForm extends LitElement {
     const errors: Record<string, string> = {};
     const language = currentContentLanguages().defaultLanguage;
     if (!this.name[language]?.trim()) errors.name = t("modifiers.name_required");
-    // The bounds are the server's (packages/catalogue/src/modifier-contract.ts), so a value it would
-    // refuse is caught here, on its own field, rather than as a problem with the whole modifier.
+    // The checks use the server's limits, so a value it would refuse is caught here, on its own
+    // field, rather than as a problem with the whole modifier.
     if (this.kind === "extras") {
-      if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(this.priceDelta))
-        errors.priceDelta = t("modifiers.price_invalid");
-      if (
-        !/^\d+$/.test(this.maxQuantity) ||
-        Number(this.maxQuantity) < 1 ||
-        Number(this.maxQuantity) > MAX_INTEGER
-      )
+      if (!isPrice(this.priceDelta)) errors.priceDelta = t("modifiers.price_invalid");
+      if (!isPositiveInteger(this.maxQuantity))
         errors.maxQuantity = t("modifiers.quantity_invalid");
     }
     this.errors = errors;

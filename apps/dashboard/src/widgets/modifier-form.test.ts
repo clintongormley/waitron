@@ -297,6 +297,35 @@ it("blocks a save when an extras choice has a malformed price", async () => {
   expect(submit).not.toHaveBeenCalled();
   expect(choicesError(el)).toContain("Bacon");
 });
+it("refuses a total quantity cap above what the server stores, beside the cap field", async () => {
+  const el = await mount(extra);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await change(el, "maxTotalQuantity", "2147483648");
+  await click(el, "save");
+  expect(submit).not.toHaveBeenCalled();
+  expect(
+    (el.shadowRoot!.querySelector('[name="maxTotalQuantity"]') as unknown as { error: string })
+      .error,
+  ).toBe(t("modifiers.quantity_invalid"));
+  await change(el, "maxTotalQuantity", "2147483647");
+  await click(el, "save");
+  expect(submit).toHaveBeenCalledTimes(1);
+});
+it.each([
+  { limit: "an eleven-digit price", patch: { priceDelta: "12345678901" } },
+  { limit: "a quantity above the server's integer", patch: { maxQuantity: 2147483648 } },
+])("blocks a save when a loaded extras choice has $limit", async ({ patch }) => {
+  const el = await mount({
+    ...extra,
+    choices: [extra.choices[0]!, { ...extra.choices[1]!, ...patch }],
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await click(el, "save");
+  expect(submit).not.toHaveBeenCalled();
+  expect(choicesError(el)).toContain("Bacon");
+});
 it("names the choice a server-rejected choice field belongs to", async () => {
   const el = await mount(extra);
   el.fieldErrors = { "choices.1.priceDelta": "Rejected" };

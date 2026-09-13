@@ -21,6 +21,8 @@ import { reorder } from "./reorder.js";
 import { type Modifier, type ModifierInput, type ModifierExtraChoice } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import {
+  isPositiveInteger,
+  isPrice,
   nameFields,
   nonBlankNames,
   switchField,
@@ -340,22 +342,15 @@ export class ModifierForm extends LitElement {
         if (!extras) return false;
         // The defaults mirror what #save submits for an absent value, so this checks the number the
         // server will actually receive.
-        const quantity = choice.maxQuantity ?? 1;
         return (
-          !/^\d+(?:\.\d{1,2})?$/.test(choice.priceDelta ?? "0.00") ||
-          !Number.isSafeInteger(quantity) ||
-          quantity < 1
+          !isPrice(choice.priceDelta ?? "0.00") ||
+          !isPositiveInteger(String(choice.maxQuantity ?? 1))
         );
       });
       if (broken !== undefined) errors.choices = this.#choiceProblem(broken);
     }
     if (this.type === "extras" && this.cap !== "") {
-      if (
-        !/^\d+$/.test(this.cap) ||
-        !Number.isSafeInteger(Number(this.cap)) ||
-        Number(this.cap) < 1
-      )
-        errors.maxTotalQuantity = t("modifiers.quantity_invalid");
+      if (!isPositiveInteger(this.cap)) errors.maxTotalQuantity = t("modifiers.quantity_invalid");
       // A well-formed cap that the preselections exceed is not a bad cap: say which side to change,
       // beside the choices that are the problem.
       else if (
