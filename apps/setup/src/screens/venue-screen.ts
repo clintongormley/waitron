@@ -133,6 +133,29 @@ const LOCALE_LABELS: Readonly<Record<string, string>> = {
   "en-GB": "English",
 };
 
+/**
+ * The receipt languages a location starts with. A province with its own language gets that language
+ * AND the country's, country first, because a Spanish business issuing in Catalonia issues in both.
+ * A province with no language of its own gets the country's alone. Both are only defaults: the
+ * operator can untick either. Two is the most this ever returns, which keeps a fresh form inside the
+ * one-or-two every layer below insists on: `#next` refuses a selection outside 1–2, the server
+ * refuses it in the pure planner before any admin connection is spent
+ * (`packages/provisioning/src/venue-plan.ts:125`), and the stored list is bounded by the
+ * `locations_invoice_locales_len` check constraint (`packages/db/src/schema/tenants.ts:183`). The
+ * setup boundary also refuses a locale the country pack does not offer
+ * (`apps/server/src/setup-api.ts:339`).
+ */
+function defaultInvoiceLocales(
+  pack: CountryPack | undefined,
+  area: AdministrativeArea | undefined,
+): string[] {
+  if (pack === undefined) return [];
+  const regional = area?.defaultLocale;
+  return regional === undefined || regional === pack.defaultLocale
+    ? [pack.defaultLocale]
+    : [pack.defaultLocale, regional];
+}
+
 @customElement("setup-venue-screen")
 export class SetupVenueScreen extends LitElement {
   static override styles = [
@@ -323,14 +346,15 @@ export class SetupVenueScreen extends LitElement {
     };
     const pack = this.#pack();
     const area = this.#area(pack);
-    this.invoiceLocales = loc.invoiceLocales ?? [
-      area?.defaultLocale ?? pack?.defaultLocale ?? "es-ES",
-    ];
+    const defaults = defaultInvoiceLocales(pack, area);
+    this.invoiceLocales = loc.invoiceLocales ?? (defaults.length > 0 ? defaults : ["es-ES"]);
     if (loc.invoiceLocales !== undefined) {
+      // Order-sensitive ON PURPOSE, unlike the compare-by-value rule for saved selections
+      // (CLAUDE.md §3): `locales[0]` is the venue's PRIMARY invoice locale
+      // (`packages/provisioning/src/venue-plan.ts:170`), so a reordered list is a different choice
+      // and must stop the province from overwriting it.
       this.#invoiceLocalesFollowAreaDefault =
-        pack !== undefined &&
-        loc.invoiceLocales.length === 1 &&
-        loc.invoiceLocales[0] === (area?.defaultLocale ?? pack.defaultLocale);
+        pack !== undefined && JSON.stringify(loc.invoiceLocales) === JSON.stringify(defaults);
     }
   }
 
@@ -353,7 +377,7 @@ export class SetupVenueScreen extends LitElement {
         ...(area === undefined ? {} : { province: area.name }),
       };
       if (pack !== undefined && area !== undefined && this.#invoiceLocalesFollowAreaDefault) {
-        this.invoiceLocales = [area.defaultLocale ?? pack.defaultLocale];
+        this.invoiceLocales = defaultInvoiceLocales(pack, area);
       }
       return;
     }
@@ -366,7 +390,7 @@ export class SetupVenueScreen extends LitElement {
     const pack = getVenueSetupCountryPack(country);
     this.values = { ...this.values, country, postalCode: "", province: "" };
     if (pack !== undefined) {
-      this.invoiceLocales = [pack.defaultLocale];
+      this.invoiceLocales = defaultInvoiceLocales(pack, undefined);
       this.#invoiceLocalesFollowAreaDefault = true;
     }
   }
@@ -379,7 +403,7 @@ export class SetupVenueScreen extends LitElement {
     if (area === undefined) return;
     this.values = { ...this.values, province: area.name };
     if (this.#invoiceLocalesFollowAreaDefault) {
-      this.invoiceLocales = [area.defaultLocale ?? pack.defaultLocale];
+      this.invoiceLocales = defaultInvoiceLocales(pack, area);
     }
   }
 
@@ -604,7 +628,6 @@ export class SetupVenueScreen extends LitElement {
       </label>
       ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? "Tax ID", "taxId")}${this.#field("Legal name", "legalName")}`}
       ${this.#demo ? nothing : html`<h2>Location</h2>`} ${this.#field("Location name", "name")}
-      <p data-test="fiscalTerritory">Fiscal territory: ${jurisdiction?.id ?? "Select province"}</p>
       ${
         this.#demo
           ? nothing
@@ -668,6 +691,7 @@ export class SetupVenueScreen extends LitElement {
             </label>`
           : this.#field("Province / region", "province")
       }
+      <p data-test="fiscalTerritory">Fiscal territory: ${jurisdiction?.id ?? "Select province"}</p>
       <p data-test="timeZone">Time zone: ${area?.timeZone ?? pack?.defaultTimeZone ?? "—"}</p>
       ${
         this.#demo
