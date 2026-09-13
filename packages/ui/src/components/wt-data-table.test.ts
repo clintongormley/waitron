@@ -164,3 +164,84 @@ test("select-all is indeterminate when only some rows are selected", async () =>
   expect(all.indeterminate).toBe(true);
   expect(all.checked).toBe(false);
 });
+
+type TreeRow = { id: string; parent: string | null; name: string };
+const treeRows: TreeRow[] = [
+  { id: "food", parent: null, name: "Food" },
+  { id: "break", parent: "food", name: "Breakfast" },
+  { id: "eggs", parent: "break", name: "Eggs" },
+  { id: "drinks", parent: null, name: "Drinks" },
+];
+const treeColumns: DataTableColumn<TreeRow>[] = [
+  { key: "name", label: "Name", cell: (r) => r.name, sortValue: (r) => r.name },
+];
+async function treeTable(props: Partial<WtDataTable<TreeRow>> = {}): Promise<WtDataTable<TreeRow>> {
+  const el = (await mount(
+    '<wt-data-table aria-label="Categories"></wt-data-table>',
+  )) as WtDataTable<TreeRow>;
+  Object.assign(el, {
+    rows: treeRows,
+    columns: treeColumns,
+    rowKey: (r: TreeRow) => r.id,
+    rowParent: (r: TreeRow) => r.parent,
+    ...props,
+  });
+  await el.updateComplete;
+  return el;
+}
+
+test("tree mode nests children under parents in order", async () => {
+  const el = await treeTable();
+  const keys = [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) =>
+    r.getAttribute("data-row-key"),
+  );
+  expect(keys).toEqual(["food", "break", "eggs", "drinks"]);
+});
+
+test("tree mode sets treegrid semantics and aria-level", async () => {
+  const el = await treeTable();
+  expect(el.shadowRoot!.querySelector("table")!.getAttribute("role")).toBe("treegrid");
+  const rowFor = (key: string) => el.shadowRoot!.querySelector(`tbody tr[data-row-key="${key}"]`)!;
+  expect(rowFor("food").getAttribute("aria-level")).toBe("1");
+  expect(rowFor("eggs").getAttribute("aria-level")).toBe("3");
+  expect(rowFor("food").getAttribute("aria-expanded")).toBe("true");
+  expect(rowFor("eggs").hasAttribute("aria-expanded")).toBe(false); // leaf
+});
+
+test("collapsing a branch hides its descendants and flips aria-expanded", async () => {
+  const el = await treeTable();
+  const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tbody tr[data-row-key="break"] button.tree-toggle',
+  )!;
+  toggle.click();
+  await el.updateComplete;
+  const keys = [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) =>
+    r.getAttribute("data-row-key"),
+  );
+  expect(keys).toEqual(["food", "break", "drinks"]); // eggs hidden
+  expect(
+    el.shadowRoot!.querySelector('tbody tr[data-row-key="break"]')!.getAttribute("aria-expanded"),
+  ).toBe("false");
+});
+
+test("sorting orders siblings within their parent, not the whole list", async () => {
+  const rows: TreeRow[] = [
+    { id: "food", parent: null, name: "Food" },
+    { id: "z", parent: "food", name: "Zebra" },
+    { id: "a", parent: "food", name: "Apple" },
+    { id: "drinks", parent: null, name: "Drinks" },
+  ];
+  const el = await treeTable({ rows });
+  el.shadowRoot!.querySelector<HTMLButtonElement>("th button.sort")!.click();
+  await el.updateComplete;
+  const keys = [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) =>
+    r.getAttribute("data-row-key"),
+  );
+  expect(keys).toEqual(["drinks", "food", "a", "z"]); // top level sorted; a,z sorted under food
+});
+
+test("a row whose parent is absent renders at the top level", async () => {
+  const el = await treeTable({ rows: [{ id: "eggs", parent: "missing", name: "Eggs" }] });
+  const row = el.shadowRoot!.querySelector('tbody tr[data-row-key="eggs"]')!;
+  expect(row.getAttribute("aria-level")).toBe("1");
+});

@@ -112,6 +112,33 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+
+      .tree-toggle {
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font-size: var(--wt-font-size-lg);
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .tree-toggle:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
+      .tree-spacer {
+        display: inline-block;
+        width: var(--wt-tap-min);
+      }
+
+      .tree-cell {
+        display: inline-flex;
+        align-items: center;
+      }
     `,
   ];
 
@@ -119,13 +146,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) columns: readonly DataTableColumn<Row>[] = [];
   @property({ attribute: false }) rowKey: (row: Row, index: number) => string = (_row, index) =>
     String(index);
+  @property({ attribute: false }) rowParent?: (row: Row) => string | null;
   @property({ type: Boolean }) loading = false;
   @property() loadingMessage = "Loading";
   @property() emptyMessage = "No results";
   @property() errorMessage = "";
+  @property() collapseLabel = "Collapse";
+  @property() expandLabel = "Expand";
   @property({ attribute: "aria-label" }) override ariaLabel = "";
   /** When set, a leading column of checkboxes (plus a select-all header box) lets the caller pick
-   * rows. Selection is controlled: the caller passes `selected` and updates it on wt-selection-change. */
+   * rows. Selection is controlled: the caller passes `selected` and updates it on wt-selection-change.
+   * Works in both flat and tree mode — the header and every visible row (at any depth) gets a box. */
   @property({ type: Boolean }) selectable = false;
   @property({ attribute: false }) selected: readonly string[] = [];
   /** Accessible name for each row's checkbox; defaults to a generic label when not supplied. */
@@ -134,6 +165,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   @state() private sortKey: string | null = null;
   @state() private sortDirection: SortDirection = "ascending";
+  @state() private collapsed = new Set<string>();
 
   #emitSelection(next: string[]): void {
     this.dispatchEvent(
@@ -173,14 +205,21 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.sortDirection = "ascending";
   }
 
-  #sortedRows(): Row[] {
-    const column = this.columns.find(
-      (candidate) => candidate.key === this.sortKey && candidate.sortValue !== undefined,
-    );
-    if (column?.sortValue === undefined) return [...this.rows];
+  /**
+   * The comparator both the plain and tree rendering paths share: nulls sort last, numbers
+   * compare numerically, everything else compares as a locale-aware string, and a tie (or an
+   * unsortable column) falls back to each row's original position in `this.rows` so the sort
+   * is stable and, with no sortable column selected, a no-op.
+   */
+  #sortByColumn(
+    rows: readonly Row[],
+    column: DataTableColumn<Row> | undefined,
+    indexOf: ReadonlyMap<Row, number>,
+  ): Row[] {
+    if (column?.sortValue === undefined) return [...rows];
     const direction = this.sortDirection === "ascending" ? 1 : -1;
-    return this.rows
-      .map((row, index) => ({ row, index, value: column.sortValue!(row) }))
+    return [...rows]
+      .map((row) => ({ row, index: indexOf.get(row)!, value: column.sortValue!(row) }))
       .sort((left, right) => {
         if (left.value == null && right.value == null) return left.index - right.index;
         if (left.value == null) return 1;
@@ -197,6 +236,144 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .map(({ row }) => row);
   }
 
+  #sortedRows(): Row[] {
+    const column = this.columns.find(
+      (candidate) => candidate.key === this.sortKey && candidate.sortValue !== undefined,
+    );
+    const indexOf = new Map<Row, number>();
+    this.rows.forEach((row, index) => indexOf.set(row, index));
+    return this.#sortByColumn(this.rows, column, indexOf);
+  }
+
+  #treeRows(): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
+    const keyOf = (row: Row, i: number) => this.rowKey(row, i);
+    const parentOf = this.rowParent!;
+    const indexOf = new Map<Row, number>();
+    this.rows.forEach((r, i) => indexOf.set(r, i));
+    const present = new Set(this.rows.map((r) => keyOf(r, indexOf.get(r)!)));
+    // group children by parent key ("" = top level, including orphans whose parent is absent)
+    const childrenByParent = new Map<string, Row[]>();
+    for (const row of this.rows) {
+      const p = parentOf(row);
+      const bucket = p !== null && present.has(p) ? p : "";
+      (childrenByParent.get(bucket) ?? childrenByParent.set(bucket, []).get(bucket)!).push(row);
+    }
+    const column = this.columns.find((c) => c.key === this.sortKey && c.sortValue !== undefined);
+    const out: { row: Row; key: string; depth: number; hasChildren: boolean }[] = [];
+    const walk = (parentKey: string, depth: number) => {
+      const siblings = this.#sortByColumn(childrenByParent.get(parentKey) ?? [], column, indexOf);
+      for (const row of siblings) {
+        const key = keyOf(row, indexOf.get(row)!);
+        const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
+        out.push({ row, key, depth, hasChildren });
+        if (hasChildren && !this.collapsed.has(key)) walk(key, depth + 1);
+      }
+    };
+    walk("", 0);
+    return out;
+  }
+
+  #toggle(key: string): void {
+    const next = new Set(this.collapsed);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this.collapsed = next;
+  }
+
+  #selectionState(visibleKeys: string[]): { allSelected: boolean; someSelected: boolean } {
+    const allSelected =
+      visibleKeys.length > 0 && visibleKeys.every((key) => this.selected.includes(key));
+    const someSelected = visibleKeys.some((key) => this.selected.includes(key));
+    return { allSelected, someSelected };
+  }
+
+  /**
+   * The header both rendering paths share. The `role=` attributes are the implicit roles of
+   * `thead`, `tr` and `th`, so stating them costs nothing on the plain table and keeps the tree's
+   * `role="treegrid"` complete — axe wants every level named once the table's own role is
+   * overridden.
+   */
+  #renderHead(visibleKeys: string[]) {
+    const { allSelected, someSelected } = this.#selectionState(visibleKeys);
+    return html`
+      <thead role="rowgroup">
+        <tr role="row">
+          ${
+            this.selectable
+              ? html`<th scope="col" role="columnheader" class="select">
+                  <input
+                    type="checkbox"
+                    data-test="select-all"
+                    aria-label=${this.selectAllLabel}
+                    .checked=${allSelected}
+                    .indeterminate=${someSelected && !allSelected}
+                    @change=${(event: Event) => {
+                      event.stopPropagation();
+                      this.#toggleAll(visibleKeys);
+                    }}
+                  />
+                </th>`
+              : nothing
+          }
+          ${this.columns.map(
+            (column) => html`
+              <th
+                role="columnheader"
+                scope="col"
+                data-align=${column.align ?? "start"}
+                aria-sort=${
+                  column.sortValue === undefined
+                    ? nothing
+                    : this.sortKey === column.key
+                      ? this.sortDirection
+                      : "none"
+                }
+              >
+                ${
+                  column.sortValue === undefined
+                    ? column.label
+                    : html`<button
+                        class="sort"
+                        data-sort=${column.key}
+                        @click=${() => this.#sort(column)}
+                      >
+                        ${column.label}<span class="indicator" aria-hidden="true"
+                          >${
+                            this.sortKey === column.key
+                              ? this.sortDirection === "ascending"
+                                ? "▲"
+                                : "▼"
+                              : ""
+                          }</span
+                        >
+                      </button>`
+                }
+              </th>
+            `,
+          )}
+        </tr>
+      </thead>
+    `;
+  }
+
+  /** The per-row checkbox cell both rendering paths share; `role="gridcell"` only in tree mode,
+   * where the table's own role is overridden to `treegrid` and every cell needs one. */
+  #renderSelectCell(key: string, row: Row, isTree: boolean) {
+    if (!this.selectable) return nothing;
+    return html`<td class="select" role=${isTree ? "gridcell" : nothing}>
+      <input
+        type="checkbox"
+        data-test=${`select-${key}`}
+        aria-label=${this.selectionLabel(row)}
+        .checked=${this.selected.includes(key)}
+        @change=${(event: Event) => {
+          event.stopPropagation();
+          this.#toggleRow(key);
+        }}
+      />
+    </td>`;
+  }
+
   override render() {
     if (this.loading) return html`<p class="message" role="status">${this.loadingMessage}</p>`;
     if (this.errorMessage !== "")
@@ -205,98 +382,78 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return html`<p class="message" role="status">${this.emptyMessage}</p>`;
 
     const label = this.ariaLabel || undefined;
-    const sorted = this.#sortedRows();
-    const visibleKeys = sorted.map((row, index) => this.rowKey(row, index));
-    const allSelected =
-      visibleKeys.length > 0 && visibleKeys.every((key) => this.selected.includes(key));
-    const someSelected = visibleKeys.some((key) => this.selected.includes(key));
+    const isTree = this.rowParent !== undefined;
+
+    if (!isTree) {
+      const sorted = this.#sortedRows();
+      const visibleKeys = sorted.map((row, index) => this.rowKey(row, index));
+      return html`
+        <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
+          <table>
+            ${this.#renderHead(visibleKeys)}
+            <tbody>
+              ${sorted.map((row, index) => {
+                const key = this.rowKey(row, index);
+                return html`
+                  <tr data-row-key=${key}>
+                    ${this.#renderSelectCell(key, row, false)}
+                    ${this.columns.map(
+                      (column) => html`
+                        <td data-align=${column.align ?? "start"}>${column.cell(row)}</td>
+                      `,
+                    )}
+                  </tr>
+                `;
+              })}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    const entries = this.#treeRows();
+    const visibleKeys = entries.map((e) => e.key);
     return html`
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
-        <table>
-          <thead>
-            <tr>
-              ${
-                this.selectable
-                  ? html`<th scope="col" class="select">
-                      <input
-                        type="checkbox"
-                        data-test="select-all"
-                        aria-label=${this.selectAllLabel}
-                        .checked=${allSelected}
-                        .indeterminate=${someSelected && !allSelected}
-                        @change=${(event: Event) => {
-                          event.stopPropagation();
-                          this.#toggleAll(visibleKeys);
-                        }}
-                      />
-                    </th>`
-                  : nothing
-              }
-              ${this.columns.map(
-                (column) => html`
-                  <th
-                    scope="col"
-                    data-align=${column.align ?? "start"}
-                    aria-sort=${
-                      column.sortValue === undefined
-                        ? nothing
-                        : this.sortKey === column.key
-                          ? this.sortDirection
-                          : "none"
-                    }
-                  >
-                    ${
-                      column.sortValue === undefined
-                        ? column.label
-                        : html`<button
-                            class="sort"
-                            data-sort=${column.key}
-                            @click=${() => this.#sort(column)}
-                          >
-                            ${column.label}<span class="indicator" aria-hidden="true"
-                              >${
-                                this.sortKey === column.key
-                                  ? this.sortDirection === "ascending"
-                                    ? "▲"
-                                    : "▼"
-                                  : ""
-                              }</span
+        <table role="treegrid">
+          ${this.#renderHead(visibleKeys)}
+          <tbody role="rowgroup">
+            ${entries.map(({ row, key, depth, hasChildren }) => {
+              const expanded = !this.collapsed.has(key);
+              return html`<tr
+                data-row-key=${key}
+                role="row"
+                aria-level=${depth + 1}
+                aria-expanded=${hasChildren ? String(expanded) : nothing}
+              >
+                ${this.#renderSelectCell(key, row, true)}
+                ${this.columns.map(
+                  (column, ci) =>
+                    html`<td role="gridcell" data-align=${column.align ?? "start"}>
+                      ${
+                        ci === 0
+                          ? html`<span
+                              class="tree-cell"
+                              style=${`padding-inline-start: calc(${depth} * var(--wt-space-4))`}
                             >
-                          </button>`
-                    }
-                  </th>
-                `,
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            ${sorted.map((row, index) => {
-              const key = this.rowKey(row, index);
-              return html`
-                <tr data-row-key=${key}>
-                  ${
-                    this.selectable
-                      ? html`<td class="select">
-                          <input
-                            type="checkbox"
-                            data-test=${`select-${key}`}
-                            aria-label=${this.selectionLabel(row)}
-                            .checked=${this.selected.includes(key)}
-                            @change=${(event: Event) => {
-                              event.stopPropagation();
-                              this.#toggleRow(key);
-                            }}
-                          />
-                        </td>`
-                      : nothing
-                  }
-                  ${this.columns.map(
-                    (column) => html`
-                      <td data-align=${column.align ?? "start"}>${column.cell(row)}</td>
-                    `,
-                  )}
-                </tr>
-              `;
+                              ${
+                                hasChildren
+                                  ? html`<button
+                                      class="tree-toggle"
+                                      aria-label=${expanded ? this.collapseLabel : this.expandLabel}
+                                      @click=${() => this.#toggle(key)}
+                                    >
+                                      ${expanded ? "▾" : "▸"}
+                                    </button>`
+                                  : html`<span class="tree-spacer"></span>`
+                              }
+                              ${column.cell(row)}
+                            </span>`
+                          : column.cell(row)
+                      }
+                    </td>`,
+                )}
+              </tr>`;
             })}
           </tbody>
         </table>
