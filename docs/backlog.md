@@ -778,7 +778,8 @@ by error code, and an ahead-of-image database check (#310); the enum-upgrade rep
 guards (#307); real hardware bringup (#302); `linux/amd64`-only images (#325, published — the manifest
 carries amd64 alone); the backup + recovery-key wizard (#295); guided node onboarding, all four modes
 (#296); the print-agent process, its box wiring and on-node auto-enrolment (#282, #289, #308, #311); the
-CA-trust onboarding guidance, connection retry/help and the per-OS certificate walkthrough (#330).
+CA-trust onboarding guidance, connection retry/help and the per-OS certificate walkthrough (#330,
+reworked #346).
 Proven end to end 2026-09-09: blank box → phone setup → provision → trading over HTTPS → enrolled
 till → a recorded preproduction sale.
 
@@ -790,10 +791,17 @@ covers macOS, Windows, Linux, ChromeOS, Android and iPhone/iPad, with browser-sp
 [Design](superpowers/specs/2026-09-12-box-trust-onboarding-design.md),
 [plan and validation](superpowers/plans/2026-09-12-box-trust-onboarding.md).
 
-Reworked 2026-09-13 after an owner review of both pages: the guide opens the visitor's own device's
-steps, guessed from the request headers with the full list as the fallback, carries the logo, and
-shows roughly half the on-screen text it did; the wizard's connection step shrank to one question.
+Reworked in #346 (2026-09-13) after an owner review of both pages: the guide opens the visitor's own
+device's steps, guessed from the request headers with the full list as the fallback, carries the logo,
+and shows roughly half the on-screen text it did; the wizard's connection step shrank to one question.
 Per-device coverage is unchanged. See the *Rework, 2026-09-13* section of the design.
+
+One guard here is narrower than its name. `scripts/trust-page-logo.test.ts` checks that the logo
+pasted into the server's source still matches the brand lockup — the two drawings agree, and nothing
+else. It does not check that the page renders, that either theme is readable, or that the logo is
+visible at all. That distinction is exactly what the new `CLAUDE.md` §4 rule is about, but the guard
+itself is not named there. **Next action:** name it and its hedge on that rule's line, whenever
+`CLAUDE.md` is next opened for a PR.
 
 Still to walk on real devices: installing the certificate, reopening without a warning, then replacing
 it after a re-image. Track each OS/browser in [ui-review.md](ui-review.md). Browser rendering and a
