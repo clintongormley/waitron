@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Transaction } from "@waitron/db";
 import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
-import { AppError, assertSupportedLocale } from "@waitron/shared";
+import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
@@ -262,6 +262,8 @@ export async function saveOwnProfile(
     throw new AppError("profile.invalid", { field: "lastNames" });
   const telephone =
     input.telephone === undefined ? person.telephone : input.telephone?.trim() || null;
+  if (input.telephone !== undefined && telephone !== null && !isValidTelephone(telephone))
+    throw new AppError("person.telephone_invalid", {});
   const email = normalizeAndValidateEmail(input.email);
   const locale = assertSupportedLocale(input.locale);
   const changedEmail = email !== person.email;

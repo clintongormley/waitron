@@ -329,6 +329,9 @@ importers:
       '@waitron/country-packs':
         specifier: workspace:*
         version: link:../../packages/country-packs
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@waitron/ui':
         specifier: workspace:*
         version: link:../../packages/ui

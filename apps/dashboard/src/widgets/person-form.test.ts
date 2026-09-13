@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
 import { PersonForm } from "./person-form.js";
@@ -125,6 +126,50 @@ describe("person-form", () => {
     change(el, "last-names", "Gormley");
     await el.updateComplete;
     expect(displayName(el)).toBe("Clint");
+  });
+
+  it("resumes generating the display name once it is cleared again", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "first-names", "Alex");
+    change(el, "last-names", "Ramos");
+    await el.updateComplete;
+    expect(displayName(el)).toBe("Alex Ramos");
+    // Customise it, then confirm the customised value survives a further name change.
+    change(el, "display-name", "Lex");
+    change(el, "last-names", "Soler");
+    await el.updateComplete;
+    expect(displayName(el)).toBe("Lex");
+    // Clearing the field puts it back under the names' control — the old edited-flag could not.
+    change(el, "display-name", "");
+    change(el, "first-names", "Alexandra");
+    await el.updateComplete;
+    expect(displayName(el)).toBe("Alexandra Soler");
+  });
+
+  it("rejects a malformed telephone beside the field and blocks Create, then submits a valid one", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "first-names", "Ada");
+    change(el, "last-names", "Lovelace");
+    change(el, "display-name", "Ada");
+    change(el, "email", "ada@example.com");
+    change(el, "telephone", "12345"); // 5 digits — below the 6-digit floor
+    let created = false;
+    el.addEventListener("create-person", () => {
+      created = true;
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    await el.updateComplete;
+    expect(created).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=telephone]")!.getAttribute("error")).toBe(
+      codeMessage("person.telephone_invalid"),
+    );
+
+    change(el, "telephone", "+44 20 7946 0958");
+    const event = await new Promise<CustomEvent>((resolve) => {
+      el.addEventListener("create-person", (e) => resolve(e as CustomEvent), { once: true });
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    });
+    expect(event.detail.telephone).toBe("+44 20 7946 0958");
   });
 
   it("explains every missing required field in one form summary", async () => {

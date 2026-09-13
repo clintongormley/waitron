@@ -2,7 +2,7 @@ import "./errors.js";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { isUniqueViolation, uniqueViolationConstraint } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, assertSupportedLocale } from "@waitron/shared";
+import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
@@ -211,6 +211,8 @@ export async function updatePersonDetails(
   const firstNames = requiredText(input.firstNames, "firstNames");
   const lastNames = requiredText(input.lastNames, "lastNames");
   const telephone = input.telephone?.trim() || null;
+  if (telephone !== null && !isValidTelephone(telephone))
+    throw new AppError("person.telephone_invalid", {});
   const email = normalizeAndValidateEmail(input.email);
   await assertDisplayNameAvailable(tx, tenantId, displayName, person.id);
   await assertEmailAvailable(tx, tenantId, email, person.id);
@@ -436,6 +438,8 @@ export async function invitePerson(
   const firstNames = requiredText(input.firstNames, "firstNames");
   const lastNames = requiredText(input.lastNames, "lastNames");
   const telephone = input.telephone?.trim() || null;
+  if (telephone !== null && !isValidTelephone(telephone))
+    throw new AppError("person.telephone_invalid", {});
   const email = normalizeAndValidateEmail(input.email);
   await assertDisplayNameAvailable(tx, tenantId, displayName);
   await assertEmailAvailable(tx, tenantId, email);

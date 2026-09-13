@@ -8,6 +8,7 @@ import {
   classifyBand,
   compareDecimal,
   decimal,
+  deriveDisplayName,
   firstCodeInCauseChain,
   divideDecimal,
   FALLBACK_LOCALE,
@@ -16,6 +17,7 @@ import {
   hasCode,
   isAppError,
   isSupportedLocale,
+  isValidTelephone,
   isZeroDecimal,
   locationId,
   MAX_MONEY_INTEGER_DIGITS,
@@ -105,6 +107,11 @@ describe("package public surface (./index.js)", () => {
     const wrapped = new Error("w", { cause: Object.assign(new Error("d"), { code: "42704" }) });
     expect(sqlStateOf(wrapped)).toBe("42704");
     expect(firstCodeInCauseChain(wrapped, (code) => code === "42704")).toBe("42704");
+  });
+
+  it("re-exports the profile helpers", () => {
+    expect(deriveDisplayName("", "", "", "Alba", "Ruiz")).toBe("Alba Ruiz");
+    expect(isValidTelephone("+34 600 000 000")).toBe(true);
   });
 
   it("re-exports the timing band classifier", () => {

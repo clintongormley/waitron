@@ -70,7 +70,7 @@ describe("your profile", () => {
       displayName: " New Name ",
       firstNames: " Ada Augusta ",
       lastNames: " Lovelace ",
-      telephone: " +44 20 ",
+      telephone: " +44 20 7946 0958 ",
       email: f.email,
       locale: "en-GB",
     };
@@ -100,7 +100,7 @@ describe("your profile", () => {
       displayName: "New Name",
       firstNames: "Ada Augusta",
       lastNames: "Lovelace",
-      telephone: "+44 20",
+      telephone: "+44 20 7946 0958",
       email: f.email,
       pendingEmail: "changed@example.com",
       locale: "en-GB",
@@ -147,6 +147,7 @@ describe("your profile", () => {
     for (const [patch, code] of [
       [{ displayName: " " }, "profile.invalid"],
       [{ email: "bad" }, "person.email_invalid"],
+      [{ telephone: "12345" }, "person.telephone_invalid"],
       [{ locale: "xx" }, "locale.unsupported"],
       [{ email: "taken@example.com" }, "person.email_taken"],
     ] as const) {
@@ -154,6 +155,34 @@ describe("your profile", () => {
         withTenant(suite.db, f.tenantId, (tx) => saveOwnProfile(tx, { ...details, ...patch })),
       ).rejects.toMatchObject({ code });
     }
+  });
+
+  it("accepts a valid telephone stored trimmed and an absent one, rejecting only a malformed value", async () => {
+    const f = await fixture();
+    const base = {
+      ...f,
+      displayName: "Name",
+      firstNames: "Ada",
+      lastNames: "Lovelace",
+      email: f.email,
+      locale: "en-GB",
+      currentPassword: "correct horse",
+    };
+    await withTenant(suite.db, f.tenantId, (tx) =>
+      saveOwnProfile(tx, { ...base, telephone: "  +34 600 000 000  " }),
+    );
+    expect(await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).toMatchObject({
+      telephone: "+34 600 000 000",
+    });
+    await withTenant(suite.db, f.tenantId, (tx) =>
+      saveOwnProfile(tx, { ...base, telephone: null }),
+    );
+    expect(await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).toMatchObject({
+      telephone: null,
+    });
+    await expect(
+      withTenant(suite.db, f.tenantId, (tx) => saveOwnProfile(tx, { ...base, telephone: "123" })),
+    ).rejects.toMatchObject({ code: "person.telephone_invalid" });
   });
 
   it("rejects a display name already used by an active person", async () => {

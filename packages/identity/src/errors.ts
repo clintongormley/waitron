@@ -49,6 +49,10 @@ declare module "@waitron/shared" {
      * — malformed, no domain dot, or contained whitespace. The address itself is not a credential and
      * carries no param. */
     "person.email_invalid": Record<string, never>;
+    /** The supplied telephone number failed the screening check (see isValidTelephone) at a write
+     * boundary — not 6–15 digits, or contained a disallowed character. Telephone is optional, so an
+     * absent/empty value is not rejected; only a non-empty malformed one carries this code. */
+    "person.telephone_invalid": Record<string, never>;
     /** Another person in this tenant already holds this normalised email. */
     "person.email_taken": { email: string };
     /** Another active or pending person already uses this display name. */

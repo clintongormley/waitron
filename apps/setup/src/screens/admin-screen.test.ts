@@ -385,9 +385,9 @@ it("restores both names when the operator steps back", async () => {
   ]);
 });
 
-// A display name that arrived in the draft was chosen by the operator, so correcting a name on the
-// way back must not overwrite it. Prove-by-deletion: drop the seeding line that marks the display
-// name as edited in `#seedFromDraft` and this flips red — the display name would follow again.
+// A display name that diverges from "first last" was chosen by the operator, so correcting a name
+// must not overwrite it. `deriveDisplayName` decides this per name change: "Clint" is not
+// "Clinton Gormley", so it is kept.
 it("keeps a display name that came from the draft when a name is corrected", async () => {
   const draft: DeepPartial<ProvisionBody> = {
     venue: { admin: { firstNames: "Clinton", lastNames: "Gormley", displayName: "Clint" } },
@@ -395,4 +395,33 @@ it("keeps a display name that came from the draft when a name is corrected", asy
   const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", { draft });
   await type(el, "lastNames", "Gormsley");
   expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe("Clint");
+});
+
+// Regression (the old `#displayNameEdited` flag): a draft whose display name is exactly its
+// generated "first last" was NOT customised, so a name change on the way back must regenerate it.
+// The old flag marked any seeded display name as edited and froze it here.
+it("regenerates an auto-filled display name from the draft when a name changes on the way back", async () => {
+  const draft: DeepPartial<ProvisionBody> = {
+    venue: {
+      admin: { firstNames: "Clinton", lastNames: "Gormley", displayName: "Clinton Gormley" },
+    },
+  };
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", { draft });
+  await type(el, "lastNames", "Smith");
+  expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe(
+    "Clinton Smith",
+  );
+});
+
+// Regression (the old `#displayNameEdited` flag): clearing the display name must resume generation.
+// The old flag stayed set once the operator had typed, so a cleared name never refilled.
+it("resumes generating the display name after it is cleared", async () => {
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+  await type(el, "firstNames", "Clinton");
+  await type(el, "lastNames", "Gormley");
+  await type(el, "displayName", "");
+  await type(el, "firstNames", "Alba");
+  expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe(
+    "Alba Gormley",
+  );
 });

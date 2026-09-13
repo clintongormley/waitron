@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import { PersonEdit } from "./person-edit.js";
 
 afterEach(cleanupWidgets);
@@ -66,7 +67,7 @@ describe("person-edit", () => {
       ),
     ).toEqual(["active", "suspended"]);
     change(el, "edit-first-names", "Ada Augusta Byron");
-    change(el, "edit-telephone", "+44 21");
+    change(el, "edit-telephone", "+44 20 7946 0958");
     const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!;
     role.value = "admin";
     role.dispatchEvent(new Event("change"));
@@ -82,11 +83,64 @@ describe("person-edit", () => {
       displayName: "Ada",
       firstNames: "Ada Augusta Byron",
       lastNames: "Lovelace",
-      telephone: "+44 21",
+      telephone: "+44 20 7946 0958",
       email: "ada@example.com",
       role: "admin",
       status: "suspended",
     });
+  });
+
+  it("regenerates the display name from the names, keeps a customised one, and resumes once cleared", async () => {
+    // A person whose display name still equals first+last, so editing a name regenerates it.
+    const generated: PersonSummary = {
+      ...person,
+      displayName: "Ada Lovelace",
+      firstNames: "Ada",
+      lastNames: "Lovelace",
+    };
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: generated,
+      open: true,
+    });
+    const displayValue = (): string =>
+      el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        "[data-test=edit-display-name]",
+      )!.value;
+    change(el, "edit-last-names", "Byron");
+    await el.updateComplete;
+    expect(displayValue()).toBe("Ada Byron");
+    // Customise it: a later name change must leave the customised value alone.
+    change(el, "edit-display-name", "Chef Ada");
+    change(el, "edit-first-names", "Augusta");
+    await el.updateComplete;
+    expect(displayValue()).toBe("Chef Ada");
+    // Clear it: generation resumes (the old edited-flag approach could not do this).
+    change(el, "edit-display-name", "");
+    change(el, "edit-last-names", "Lovelace");
+    await el.updateComplete;
+    expect(displayValue()).toBe("Augusta Lovelace");
+  });
+
+  it("rejects a malformed telephone beside the field and blocks Save, then saves a valid or blank one", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-telephone", "12345"); // 5 digits — below the 6-digit floor
+    let saved = false;
+    el.addEventListener("save-person", () => {
+      saved = true;
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await el.updateComplete;
+    expect(saved).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=edit-telephone]")!.getAttribute("error")).toBe(
+      codeMessage("person.telephone_invalid"),
+    );
+
+    change(el, "edit-telephone", ""); // blank is allowed — telephone is optional
+    const savedEvent = await new Promise<CustomEvent>((resolve) => {
+      el.addEventListener("save-person", (event) => resolve(event as CustomEvent), { once: true });
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    });
+    expect(savedEvent.detail.telephone).toBeNull();
   });
 
   it("resends a pending invitation without a confirmation step — it isn't destructive", async () => {

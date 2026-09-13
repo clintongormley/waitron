@@ -79,6 +79,8 @@ export type { ContentLanguages } from "./content-languages.js";
 export { BAND_RANK, classifyBand, worstBand } from "./timing.js";
 export type { StationThresholds, TimingBand } from "./timing.js";
 export { perDishOptionQuantity } from "./quantity.js";
+export { deriveDisplayName } from "./derive-display-name.js";
+export { isValidTelephone } from "./telephone.js";
 export { firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
 export { sqlStateOf } from "./sql-state.js";
 export { quoteLiteral } from "./sql-literal.js";

@@ -721,7 +721,7 @@ describe("Management API staff + session routes over real Postgres", () => {
       displayName: "Grace",
       firstNames: "Grace Brewster",
       lastNames: "Hopper",
-      telephone: "+1 222",
+      telephone: "+1 222 333 4444",
       email: "grace@example.com",
       role: "supervisor",
       status: "active",
