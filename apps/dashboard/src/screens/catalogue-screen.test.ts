@@ -240,4 +240,20 @@ describe("catalogue-screen", () => {
     await flush(el);
     expect(editor(el).open).toBe(false);
   });
+
+  it("opens the product named in the address", async () => {
+    history.replaceState(null, "", "/manage/catalogue/product/p1");
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(true);
+  });
+
+  it("ignores an unknown product id", async () => {
+    history.replaceState(null, "", "/manage/catalogue/product/00000000-0000-4000-8000-000000000000");
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
+  });
 });
