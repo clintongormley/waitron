@@ -53,7 +53,7 @@ export class SetupRestoreScreen extends LitElement {
       <label class="field">
         Backup file <span aria-hidden="true">*</span>
         <wt-help-tooltip aria-label="Help with backup file"
-          >Choose the encrypted backup from the box you are recovering.</wt-help-tooltip
+          >Choose the encrypted backup from the server you are recovering.</wt-help-tooltip
         >
         <input
           name="backup"
@@ -124,8 +124,8 @@ export class SetupRestoreScreen extends LitElement {
         />
         I confirm no usable primary or mirror has newer restaurant data.
         <wt-help-tooltip aria-label="Help with recovery confirmation"
-          >Check all existing boxes before restoring. A backup may be older than a surviving primary
-          or mirror.</wt-help-tooltip
+          >Check all existing servers before restoring. A backup may be older than a surviving
+          primary or mirror.</wt-help-tooltip
         >
       </label>
       ${this.showError && !this.acknowledged ? html`<p class="error" id="acknowledge-error">Confirm that no usable primary or mirror has newer data.</p>` : nothing}

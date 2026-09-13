@@ -5,6 +5,17 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { helpLinkStyles, actionsStyles, errorStyles } from "../form-styles.js";
 
+/**
+ * The wizard's first step: it asks the operator to read their own address bar.
+ *
+ * A page cannot tell whether the browser reached it over a trusted certificate or over an
+ * interstitial the operator clicked through — after a bypass the page still reads
+ * `isSecureContext: true` and its fetches return 200 (Chrome 153 probe, recorded in
+ * `docs/superpowers/specs/2026-09-12-box-trust-onboarding-design.md`). So this screen carries no
+ * detection code, and Continue is only a communication check: it re-reads status and never proves
+ * that the certificate is installed. Nothing here reports a verdict on the connection, which is why
+ * the screen needs no disclaimer saying it cannot.
+ */
 @customElement("setup-connection-screen")
 export class SetupConnectionScreen extends LitElement {
   static override styles = [
@@ -16,48 +27,58 @@ export class SetupConnectionScreen extends LitElement {
       :host {
         display: block;
       }
+      /* "Otherwise:" and the button are one sentence, so they share a row and wrap together. */
       .actions {
-        justify-content: flex-end;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .otherwise {
+        margin: 0;
+      }
+      /* The browser's own warning, shown the way the browser shows it. The literal words carry the
+         meaning; the colour is emphasis, so nothing is lost to a reader who cannot see it. */
+      .warning-words {
+        color: var(--wt-color-danger);
+        font-weight: var(--wt-font-weight-bold);
       }
     `,
   ];
   @property() errorMessage?: string;
   @property({ type: Boolean }) checking = false;
+  /**
+   * Set when this server cannot be set up from here at all — today, when it is already set up.
+   * Continue would lead straight back to the same failure, so the whole row goes. The question and
+   * the install link stay: the operator still needs this server's certificate trusted to use it.
+   */
+  @property({ type: Boolean }) setupUnavailable = false;
 
   override render(): TemplateResult {
     return html`<wt-card>
-      <h1>Connect securely to this box</h1>
+      <h1>Is your connection to this page secure?</h1>
       <p>
-        Before you enter passwords or business details, install this box's certificate on your
-        device. If you have already installed it and this box has not been re-imaged, continue to
-        setup.
-      </p>
-      <p>
+        Check your browser's address bar to see whether this page is secure or not. If it says
+        <span class="warning-words" data-test="warning-words">“not secure”</span>, then you need to
         <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
-          >Open certificate setup and recovery instructions</a
-        >
-        for macOS, Windows, Linux, Android, iPhone and iPad, including Chrome, Edge, Firefox and
-        Safari.
-      </p>
-      <p>
-        The instructions open in a new tab. They also explain how to replace an old certificate
-        after a re-image.
-      </p>
-      <p>
-        Continue checks that the box answers. It cannot check your device's certificate settings.
-        Return here after installing the certificate and reopening your browser without a warning.
+          >install this server's certificate</a
+        >.
       </p>
       ${this.errorMessage ? html`<p class="error" role="alert">${this.errorMessage}</p>` : nothing}
-      <div class="actions">
-        <wt-button
-          variant="primary"
-          data-test="continue"
-          ?disabled=${this.checking}
-          @click=${() => this.dispatchEvent(new CustomEvent("connection-continue"))}
-        >
-          ${this.checking ? "Checking connection…" : "Continue to setup"}
-        </wt-button>
-      </div>
+      ${
+        this.setupUnavailable
+          ? nothing
+          : html`<div class="actions">
+              <p class="otherwise" data-test="otherwise">Otherwise:</p>
+              <wt-button
+                variant="primary"
+                data-test="continue"
+                ?disabled=${this.checking}
+                @click=${() => this.dispatchEvent(new CustomEvent("connection-continue"))}
+              >
+                ${this.checking ? "Checking connection…" : "Continue to setup"}
+              </wt-button>
+            </div>`
+      }
     </wt-card>`;
   }
 }

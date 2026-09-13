@@ -5,6 +5,7 @@ import { buildReachInfo } from "./box-reach.js";
 import type { ReachInfo } from "./box-reach.js";
 import { caCertPath } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
+import { trustDeviceForRequest } from "./detect-device.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 
 /** Public certificate files use a fixed state path; requests never choose a filesystem location. */
@@ -114,6 +115,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       caDownloadPath: CA_DOWNLOAD_PATH,
       qrSvg: qr ?? undefined,
       httpsUrl: reach.hostnameUrl,
+      device: trustDeviceForRequest(c.req),
     });
     return c.html(html, 200, { "Cache-Control": "no-cache" });
   });

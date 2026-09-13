@@ -26,11 +26,19 @@ time — verified by building all three: the dashboard emits `/manage/favicon.ic
 `/favicon.ico`. `scripts/brand-icons.test.ts` (root project, so it runs on every non-docs push) fails
 if an app links to a file this directory does not hold, or points its `publicDir` somewhere else.
 
-Three token values are inlined here and **kept in step by hand**: `#1f6feb` and `#4c8dff` are
-`--wt-color-primary` light and dark, and `#16181d` in the wordmark is `--wt-color-text`, all declared
-in `packages/ui/src/tokens/colors.css`. A standalone SVG cannot read a CSS custom property, so the
-usual rule against inlining a token value does not reach here; change a token and change these with
-it.
+Four token values are inlined and **kept in step by hand**: `#1f6feb` and `#4c8dff` are
+`--wt-color-primary` light and dark, and `#16181d` / `#eceef2` are `--wt-color-text` light and dark,
+all declared in `packages/ui/src/tokens/colors.css`. A standalone SVG cannot read a CSS custom
+property, so the usual rule against inlining a token value does not reach here; change a token and
+change these with it.
+
+**They are inlined in three places.** The two source SVGs here carry `#1f6feb` and `#16181d`;
+`build-icons.mjs` carries `#4c8dff` for the favicon's dark rule; and `apps/server/src/trust-page-logo.ts`
+holds a copy of the whole lockup for the certificate page, which must stay one self-contained string
+with nothing to fetch. That copy is the only place `#eceef2` appears, because it is the only one that
+reverses the WORDMARK for a dark page. `scripts/trust-page-logo.test.ts` compares the two DRAWINGS and
+deliberately ignores paint, so it will not catch a colour that drifts — this paragraph is the only
+thing that will.
 
 ## Why an .ico and a PNG as well as the SVG
 

@@ -152,9 +152,14 @@ Much more polished than the login screen (proper top bar, product grid, basket c
 
 ### B1 — certificate installation and recovery, 2026-09-12
 
-Implementation: `feat/box-trust-onboarding`. The guide and built wizard were exercised in Chromium,
-Firefox and WebKit on macOS, including HTTP/HTTPS certificate downloads, keyboard disclosure and
-390/1280-pixel layouts. Those runs used isolated profiles with the fixture certificate error ignored;
+Implementation: `feat/box-trust-onboarding`. **This receipt is dated: it was taken on 2026-09-12,
+against pages both of which were restructured on 2026-09-13** — the guide gained four numbered steps
+and lost a section, and the wizard's first screen was rewritten. Treat it as covering the earlier
+pages, not the current ones; the 2026-09-13 branch rendered the guide in headless Chromium in both
+themes at 390px and ran the wizard's own browser suite, but did not repeat the Firefox and WebKit
+passes. The original run: the guide and built wizard were exercised in Chromium, Firefox and WebKit
+on macOS, including HTTP/HTTPS certificate downloads, keyboard disclosure and 390/1280-pixel
+layouts. Those runs used isolated profiles with the fixture certificate error ignored;
 they verify rendering and navigation, not system trust. Setup accessibility checks cover light and
 dark themes. [Design and source boundaries](superpowers/specs/2026-09-12-box-trust-onboarding-design.md).
 
@@ -171,6 +176,10 @@ the old-certificate recovery instructions. Record the actual OS and browser vers
 | Android | Chrome, Edge, Firefox, Samsung Internet | Pending | Pending |
 | iPhone/iPad | Safari, Chrome, Edge, Firefox | Pending | Pending |
 
-Also walk a browser with HTTPS-only navigation enabled. The guide documents the browser's HTTP
-exception where available, or certificate transfer from another reachable device; it does not claim
-that an HTTP link overrides browser or administrator policy.
+Also walk a browser with HTTPS-only navigation enabled. **The guide no longer documents a way
+through this** — the section carrying the browser's HTTP exception and the transfer-from-another-device
+route was deleted on 2026-09-13 (see *The guide restructured* in
+[the design](superpowers/specs/2026-09-12-box-trust-onboarding-design.md)). So this row is now
+walking an UNANSWERED case: record what the operator is actually left with, because that is the
+finding. `deploy/README.md` still carries the advice for whoever installed the box, and neither ever
+claimed an HTTP link overrides browser or administrator policy.

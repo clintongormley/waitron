@@ -178,7 +178,7 @@ it.
 
 ## Concurrency and machine-resource rules
 
-### The four browser packages run vitest in real headless Chromium
+### Browser-mode packages run vitest in real headless Chromium
 
 Browser-mode gates may run concurrently; what is not allowed is adding one beside OTHER SESSIONS'
 browser runs or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check what else is

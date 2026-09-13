@@ -89,14 +89,16 @@ it("trust page notes the operator-cert case instead of a download when no box CA
   const d = await mkdtemp(join(tmpdir(), "disc-noca3-"));
   dirs.push(d);
   const html = await (await appFor(d).request("/setup/trust")).text();
-  expect(html).toMatch(/own certificate|operator-supplied/i);
+  expect(html).toMatch(/own certificate|installer supplied/i);
 });
 
 // Beyond the six brief tests: the box with no LAN address (loopback-only) has a null `qrTarget`, so
-// the trust page must fall back to a "no QR" note and never call `renderQrSvg`. Pure injection
-// (`listIpv4: () => []`), not a real-network probe — so it closes the null-QR branch the six tests,
-// which always inject an address, leave for the aggregate.
-it("trust page shows a no-QR note (and skips the renderer) when there is no LAN address", async () => {
+// the trust page must omit the QR section entirely and never call `renderQrSvg`. It says nothing
+// about the missing QR: a line explaining an absence the reader never noticed is page length spent
+// for nothing (owner, 2026-09-13). Pure injection (`listIpv4: () => []`), not a real-network probe —
+// so it closes the null-QR branch the six tests, which always inject an address, leave for the
+// aggregate.
+it("trust page omits the QR section (and skips the renderer) when there is no LAN address", async () => {
   let rendered = 0;
   const app = appFor(await stateDirWithCa(), {
     listIpv4: () => [],
@@ -108,7 +110,10 @@ it("trust page shows a no-QR note (and skips the renderer) when there is no LAN 
   const html = await (await app.request("/setup/trust")).text();
   expect(rendered).toBe(0);
   expect(html).not.toContain("data-qr=");
-  expect(html).toMatch(/no QR code|No local network address/i);
+  expect(html).not.toContain("Open this page on another device");
+  expect(html).not.toContain("<figure>");
+  // And no line apologising for the absence — the reader never knew a QR was on offer.
+  expect(html).not.toMatch(/no QR/i);
 });
 
 // A non-ENOENT ca.crt read failure (misconfiguration) must still answer 404 no_box_ca to the LAN

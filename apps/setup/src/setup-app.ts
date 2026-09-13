@@ -146,15 +146,50 @@ const VENUE_ERROR_MESSAGES: Record<string, string> = {
  */
 const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "mirror.bundle_fetch_failed":
-    "Couldn't reach the primary box or the login was refused. Check the address and login, then try again.",
+    "Couldn't reach the primary server or the login was refused. Check the address and login, then try again.",
   "setup.request_invalid":
-    "The box rejected the details. Check the address and login, then try again.",
-  "setup.not_ready": "The box isn't ready yet. Wait a moment, then try again.",
+    "The server rejected the details. Check the address and login, then try again.",
+  "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
 };
 
 /** The generic connect-form banner for a code the map above doesn't name (or a code-less rejection). */
 const ADOPT_GENERIC_ERROR =
   "Couldn't connect to the primary. Check the address and login, then try again.";
+
+/** The outcome of a failed connection check: what to tell the operator, and whether a fresh check
+ * could ever come out differently. Held as ONE value ({@link SetupApp.connectionFailure}) because
+ * the two are halves of a single answer — a screen showing one without the other is incoherent. */
+interface ConnectionFailure {
+  message: string;
+  /** False when retrying is pointless, so the screen drops its Continue action entirely. */
+  canRetry: boolean;
+}
+
+/**
+ * What a failed setup read means, in words the operator can act on.
+ *
+ * The distinction is free and we used to throw it away: `fetch` REJECTS when nothing answers, and
+ * resolves when the server answered — in which case `SetupApi` throws an {@link ApiError} carrying
+ * its HTTP `status`. So a status means the box is ALIVE, and telling that operator to go and check
+ * its power points them at a machine that is working perfectly.
+ *
+ * A 404 means alive but no longer mounting the setup routes. On a real box that has one cause: it
+ * is already set up, and `/` now serves the till. Stated rather than guarded, because nothing here
+ * can tell them apart: a wrong base URL or a proxy could also answer 404, and this would then name
+ * the wrong reason. The wizard is served same-origin by the box itself, so neither arises on a box
+ * an operator actually has in front of them.
+ */
+function describeConnectionFailure(error: unknown): ConnectionFailure {
+  const status = (error as { status?: number } | null)?.status;
+  if (status === 404)
+    return { message: "This server is already set up. Reload to open it.", canRetry: false };
+  if (status !== undefined)
+    return { message: "This server reported a problem. Try again in a moment.", canRetry: true };
+  return {
+    message: "We could not reach the server. Check its power and your network connection.",
+    canRetry: true,
+  };
+}
 
 /**
  * The setup wizard's ROOT element — the shell that turns the screens into a working app, mirroring
@@ -169,7 +204,8 @@ const ADOPT_GENERIC_ERROR =
  *
  * On boot it reads `GET /setup-api/status` ({@link SetupApp.#boot}) to learn the box's `environment`,
  * so the wizard can warn before provisioning a real `production` venue. A failed read keeps the
- * connection screen visible with help and a retry, without collecting credentials.
+ * connection screen visible with help, and a retry when retrying could help, without collecting
+ * credentials.
  */
 @customElement("setup-app")
 export class SetupApp extends LitElement {
@@ -193,7 +229,13 @@ export class SetupApp extends LitElement {
 
   /** Certificate setup precedes collecting credentials and business details. */
   @state() private screen: Screen = "connection";
-  @state() private connectionError?: string;
+  /**
+   * The LAST failed connection check, or `undefined` when none applies — including while a fresh
+   * check is in flight, so an answer never outlives the question it answered. The connection
+   * screen's message and whether it offers its Continue action are both DERIVED from this in
+   * `render`, so the two can never describe different checks.
+   */
+  @state() private connectionFailure?: ConnectionFailure;
   @state() private connectionChecking = false;
   #connectionGeneration = 0;
   @state() private venueDefaults: VenueDefaults = {};
@@ -316,28 +358,32 @@ export class SetupApp extends LitElement {
       this.developmentMode = status.developmentMode === true;
       // Availability describes the box, not whether this browser has installed its CA.
       if (this.screen === "connection" && !discovery.caDownloadAvailable) this.screen = "mode";
-    } catch {
-      if (this.isConnected && generation === this.#connectionGeneration)
-        this.connectionError =
-          "We could not read the box's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
+    } catch (error) {
+      this.#recordConnectionFailure(error, generation);
     }
+  }
+
+  /** The single place a failed connection check is recorded, so both halves of the answer always
+   * come from the same check. Ignores an outcome a newer check has already superseded, and a
+   * teardown mid-request, on the same discipline as {@link SetupApp.#boot}. */
+  #recordConnectionFailure(error: unknown, generation: number): void {
+    if (!this.isConnected || generation !== this.#connectionGeneration) return;
+    this.connectionFailure = describeConnectionFailure(error);
   }
 
   async #continueConnection(): Promise<void> {
     if (this.connectionChecking) return;
     const generation = ++this.#connectionGeneration;
     this.connectionChecking = true;
-    this.connectionError = undefined;
+    this.connectionFailure = undefined;
     try {
       const status = await this.api.getStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
       this.screen = "mode";
-    } catch {
-      if (this.isConnected && generation === this.#connectionGeneration)
-        this.connectionError =
-          "We could not read the box's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
+    } catch (error) {
+      this.#recordConnectionFailure(error, generation);
     } finally {
       if (generation === this.#connectionGeneration) this.connectionChecking = false;
     }
@@ -504,8 +550,8 @@ export class SetupApp extends LitElement {
         }
         this.reviewError =
           field === undefined
-            ? "The box rejected the details. Check your entries, then provision again."
-            : `The box rejected the details (field: ${field}). Check your entries, then provision again.`;
+            ? "The server rejected the details. Check your entries, then provision again."
+            : `The server rejected the details (field: ${field}). Check your entries, then provision again.`;
         this.screen = "review";
         return;
       }
@@ -522,7 +568,7 @@ export class SetupApp extends LitElement {
         this.screen = "fiscal-test";
         return;
       case "setup.already_provisioning":
-        this.provisionMessage = "Setup is already in progress on this box.";
+        this.provisionMessage = "Setup is already in progress on this server.";
         this.provisionCanRetry = false;
         // A provision is running elsewhere — no re-POST, but a reload re-reads status so the operator
         // isn't stranded on a dead-end alert.
@@ -530,24 +576,24 @@ export class SetupApp extends LitElement {
         return;
       case "setup.operation_conflict":
         this.provisionMessage =
-          "This box has saved setup work for a different request. Resume the original setup or contact support.";
+          "This server has saved setup work for a different request. Resume the original setup or contact support.";
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":
       case "deployment.already_stamped":
-        this.provisionMessage = "This box is already set up.";
+        this.provisionMessage = "This server is already set up.";
         this.provisionCanRetry = false;
         // The box is provisioned and serves the till at the origin root — reloading opens it.
         this.provisionReloadLabel = "Reload to open the till";
         return;
       case "setup.not_ready":
-        this.provisionMessage = "The box isn't ready yet. Wait a moment, then try again.";
+        this.provisionMessage = "The server isn't ready yet. Wait a moment, then try again.";
         this.provisionCanRetry = true;
         return;
       default:
         this.provisionMessage =
-          "Provisioning failed. Check that the box is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.";
+          "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.";
         this.provisionCanRetry = true;
         return;
     }
@@ -680,13 +726,13 @@ export class SetupApp extends LitElement {
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     switch (code) {
       case "setup.already_provisioning":
-        this.provisionMessage = "Setup is already in progress on this box.";
+        this.provisionMessage = "Setup is already in progress on this server.";
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":
       case "deployment.already_stamped":
-        this.provisionMessage = "This box is already set up.";
+        this.provisionMessage = "This server is already set up.";
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload to open the dashboard";
         return;
@@ -744,8 +790,9 @@ export class SetupApp extends LitElement {
       case "connection":
         return html`<setup-connection-screen
           data-test="screen-connection"
-          .errorMessage=${this.connectionError}
+          .errorMessage=${this.connectionFailure?.message}
           .checking=${this.connectionChecking}
+          .setupUnavailable=${this.connectionFailure?.canRetry === false}
           @connection-continue=${() => void this.#continueConnection()}
         ></setup-connection-screen>`;
       case "role":

@@ -65,3 +65,130 @@ Public guide/download routes belong on the main listener before setup, trading a
 and before the recovery page's catch-all. Machine discovery remains setup-only. Disable box CA
 availability and downloads when operator TLS is active, even when fallback box secrets exist.
 The installer also prints the HTTPS help address for installations without the HTTP landing listener.
+
+## Rework, 2026-09-13
+
+**SUPERSEDED the same day by *The guide restructured, 2026-09-13* below**, which moved certificate
+removal out of the disclosure this section describes and into numbered step 1. Read that one for the
+shape that shipped; this section records the intermediate state, and its two word counts were
+measured against a page that no longer exists.
+
+Owner review of both pages. Recorded here rather than rewritten above: the sections before this one
+describe what was true when they were written.
+
+The guide now guesses the visitor's device from the request's `sec-ch-ua-platform` and `user-agent`
+headers and opens that device's steps, folding every other device into one closed disclosure. When
+the headers name nothing it recognises it falls back to the closed list this spec described, so a
+wrong guess costs one click and an absent guess costs nothing. Neither header's text is ever printed
+on the page — it only chooses which fixed section to open, which matters because the page is
+unauthenticated (`apps/server/src/detect-device.ts`).
+
+Removal steps moved inside each device, behind "Already installed a Waitron certificate?", and the
+separate re-image section went with them: a re-image is the reason an operator holds an old
+certificate, not a separate procedure. Added: the Waitron logo, and a warning that a browser may ask
+for the download to be confirmed with "Keep" before the file reaches the disk. Every device's steps
+now end by closing and reopening the browser. Deleted: the line announcing that no QR code was
+available, which described an absence the reader had no way to notice. Measured on screen with every
+disclosure closed: 440 words before, 260 after when a device is guessed, 209 when none is.
+
+The wizard's connection step asks one question — is your connection to this page secure? — and tells
+the operator to read their own address bar, in the browser's own words: if it says "not secure" (in
+red) they install the certificate, otherwise they continue. The Chrome 153 probe row above is why:
+the page cannot tell. 103 rendered words before, 40 after (owner's copy, 2026-09-13).
+
+The sentence disclaiming that Continue proves trust is GONE from the screen, and this section is the
+only record of the sentence. The FACT it stated is recorded elsewhere too — `deploy/README.md` still
+tells the installer that Continue "checks communication with the box, not installed trust", which is
+as true of the new screen as of the old one. The requirement it served — "a communication check, never proof of installed trust" — is now
+carried by the shape of the screen: the heading is a question, the operator is handed the test to
+run themselves, and nothing on the page reports a verdict. No test forbids verdict wording, and that
+is deliberate: the owner's own copy contains the phrase "whether this page is secure or not", so any
+forbidden-words list catches honest phrasing while missing whatever dishonest phrasing nobody
+thought of. What IS guarded: the heading stays a question, the guide link stays inside the "not
+secure" sentence, and "Otherwise:" stays attached to Continue.
+
+Both pages, and the whole setup wizard's visible text, say "server" rather than "box", and "IP
+address" rather than "numeric network address" (owner decision, 2026-09-13). Code identifiers,
+comments and the error code `no_box_ca` are unchanged.
+
+## The connection step's failure cases, 2026-09-13
+
+"A failed read leaves a retry and the guide visible" above did not say what the operator is TOLD, and
+one sentence covered every failure: *"We could not read the server's setup information. Check its
+power and your network connection..."*. On a box that is already set up, that sends the operator to
+check a machine that is working perfectly.
+
+The distinction was always available and was being discarded. `fetch` REJECTS when nothing answers,
+and resolves when the server answered, so an `ApiError` now carries the HTTP `status` and its
+presence means the box is ALIVE. Three messages replace the one: 404 — "This server is already set
+up. Reload to open it."; any other status — "This server reported a problem. Try again in a moment.";
+no status — "We could not reach the server. Check its power and your network connection."
+
+A failure also says whether retrying is worth anything. A server that is already set up cannot be
+set up again, so the whole "Otherwise: Continue to setup" row goes rather than offering a door back
+to the same failure (owner, 2026-09-13). The question and the install link STAY in that state: the
+operator still needs this server's certificate trusted to use the till it is now serving. The other
+two failures keep Continue, because a server that is off or briefly broken may come back.
+
+What the 404 branch cannot tell apart, stated because nothing guards it: a wrong base URL or a proxy
+could also answer 404, and the message would then name the wrong reason. The wizard is served
+same-origin by the box, so neither arises on a box an operator has in front of them.
+
+A defect found on the way, and fixed: `SetupApi` assumed every failed response carried the
+`{ error: { code } }` envelope and called `res.json()` on it. A provisioned box answers
+`404 Not Found` as `text/plain` — run against a dev box — so the parse threw a `SyntaxError` that
+escaped as though the network had failed. That affected every wizard call, not only this one: a proxy
+error page during provisioning read as "network down". The parse is now defensive.
+
+## The guide restructured, 2026-09-13 (owner)
+
+Four numbered steps replace the earlier three, and removing an old certificate is now step ONE
+rather than a disclosure inside the install step. The reason it has to come first: installing a new
+certificate while the old one is still trusted does nothing the operator can SEE — the browser keeps
+using the entry it already has and the page still warns, so an operator who skipped removal has no
+way to tell that is what happened. The steps are: remove any old Waitron certificate; get the
+certificate; install it on this device; open Waitron. Every device's install steps now end "then
+reopen this page". The reason first given for that — the page being read is also the page that says
+whether it worked — turned out to be FALSE and was corrected the same day: the printed entry point is
+plain `http://`, where the address bar reads "not secure" however well the install went. Only the page
+behind the Continue link can answer the question, which is what step 4 now says. The step wording
+stands; its original justification does not.
+
+The heading marks the word *securely*, and the opening line names what the certificate is FOR —
+entering passwords and sensitive information — rather than describing the mechanism. Step 4 shows
+the browser's own warning words, ``"not secure"``, in the browser's own red, and sends the operator
+back to step 1 rather than into setup. "Do not ask operators to remove an ambiguous entry" survives
+as the second sentence of step 1.
+
+Three things were DELETED. Two are only recorded here, because nothing else now says they existed:
+
+- *"This is the connection certificate, not your business's tax-agency certificate."* Nothing on this
+  page offers a tax-agency certificate, so the distinction answered a question the page had not
+  raised.
+- The troubleshooting box. Its heading on `main` was **"If you cannot open or download"**, quoted
+  from the base file; an earlier commit on this same branch had renamed it to "If you cannot open
+  this page or download the file" before a later one deleted it, and quoting that intermediate
+  wording here would name something `main` never had. This retires the Operator flow
+  claim above that "the guide explains using HTTP where the browser permits it, or transferring the
+  certificate from another device that can reach the box" — the guide no longer says either.
+  **Worth knowing before anyone relies on that paragraph again:** the box carried the page's only
+  route for a browser whose policy forbids the HTTP version, and the page's only advice to check the
+  device's clock. For the HTTP-exception and transfer-from-another-device route, "only" was an
+  over-claim this paragraph itself made and review falsified: `deploy/README.md` still gives the
+  installer both, and `docs/ui-review.md` now records that the guide answers the HTTPS-only case no
+  longer. For the CLOCK advice the word was right — a grep of `deploy/`, `docs/` and
+  `apps/server/src` finds no other copy, so "check your device's date and time" is gone from the
+  product entirely. What remains on the page for the other-device case is the QR
+  section. Deleted on the owner's instruction, 2026-09-13; the deletion is cheap to reverse and this
+  is the note that says what to put back.
+- The QR caption, which explained a QR code to someone already holding a phone up to it. Its exact
+  words were *"This QR opens the box address."* — quoted from the base file, not from memory, because
+  this entry is the only remaining record of a deleted string and the quote is its whole value.
+  The heading now says the same thing: "Open this page on another device".
+
+Also retired by this change, and fixed in the same commit: `deploy/README.md` claimed the guide
+covers "replacing the old certificate after a re-image". The four-step guide no longer names
+re-imaging; it tells the operator to remove any old certificate first, whatever put it there. One
+exception an over-claim here missed until review: the branch a box takes when it has NO certificate
+of its own still says "a certificate downloaded before a re-image may no longer apply", and carries
+no removal step at all, because there is nothing to install.

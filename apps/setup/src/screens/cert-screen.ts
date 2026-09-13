@@ -229,8 +229,8 @@ export class SetupCertScreen extends LitElement {
           <span
             >Certificate file (.pfx or .p12) *
             <wt-help-tooltip aria-label="Help with certificate file"
-              >Choose the exported signing certificate, including its private key, so this box can
-              sign fiscal records.</wt-help-tooltip
+              >Choose the exported signing certificate, including its private key, so this server
+              can sign fiscal records.</wt-help-tooltip
             ></span
           >
           <input

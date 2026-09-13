@@ -134,7 +134,7 @@ describe("setup-connect-screen", () => {
 
   it("renders a routed-back server error banner when errorMessage is set (no client banner yet)", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
-      errorMessage: "Couldn't reach the primary box.",
+      errorMessage: "Couldn't reach the primary server.",
     });
     const banner = q(el, "[data-test=server-error]")!;
     expect(banner.getAttribute("role")).toBe("alert");
@@ -147,7 +147,7 @@ describe("setup-connect-screen", () => {
   // CLIENT message wins. Prove-by-deletion: split the render into two banners and the count becomes 2.
   it("renders exactly one role=alert (the client message) when a server error and a client error coincide", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
-      errorMessage: "Couldn't reach the primary box.",
+      errorMessage: "Couldn't reach the primary server.",
     });
     q(el, "[data-test=connect]")!.click(); // empty form → client validation fails
     await el.updateComplete;

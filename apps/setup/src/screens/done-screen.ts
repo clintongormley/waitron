@@ -171,9 +171,9 @@ export class SetupDoneScreen extends LitElement {
                 ${{ demo: "Demo", prepare: "Preparation", live: "Live" }[this.onboardingIntent]}
               </p>`
         }
-        <p>The box is restarting into trading mode.</p>
+        <p>The server is restarting into trading mode.</p>
         <div class="links" data-test="links">
-          <p>Once the box is trading, reach it here:</p>
+          <p>Once the server is trading, reach it here:</p>
           <ul>
             <li><a href="/">Till</a></li>
             <li><a href="/manage">Dashboard</a></li>
@@ -187,7 +187,7 @@ export class SetupDoneScreen extends LitElement {
                 <h2>Save your break-glass code now</h2>
                 <p class="break-glass-warning" data-test="break-glass-warning">
                   Write this down and store it offline. It is shown once and will not be shown
-                  again. You need it to promote this box if the primary is unreachable.
+                  again. You need it to promote this server if the primary is unreachable.
                 </p>
                 <code class="break-glass-secret" data-test="break-glass-secret"
                   >${this.breakGlassSecret}</code
@@ -200,7 +200,7 @@ export class SetupDoneScreen extends LitElement {
             ? nothing
             : html`<div class="backup-nudge" data-test="backup-nudge">
                 <p>
-                  Your box is trading — but it has no backups yet, so there is no way back from a
+                  Your server is trading — but it has no backups yet, so there is no way back from a
                   disk failure.
                 </p>
                 <a class="nudge-link" href=${BACKUP_SETUP_URL}>Set up backups now</a>
@@ -214,7 +214,7 @@ export class SetupDoneScreen extends LitElement {
                 >
               </div>`
             : html`<p class="status" data-test="status">
-                Waiting for the box to come back online…
+                Waiting for the server to come back online…
               </p>`
         }
       </wt-card>

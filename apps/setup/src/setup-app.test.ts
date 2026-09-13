@@ -259,7 +259,7 @@ describe("setup-app", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
     expect((await screenHost(el, "connection")).shadowRoot!.textContent).toContain(
-      "could not read",
+      "could not reach",
     );
     getStatus.mockResolvedValue({ environment: "preproduction", needs: ["venue"] });
     host.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
@@ -267,11 +267,100 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
   });
 
+  /**
+   * A box that is already set up does not mount the setup routes, so its answer is a 404 — the box
+   * is ALIVE. Telling the operator to check its power and network sends them to look at a machine
+   * that is working perfectly. `fetch` rejects when nothing answers, so the presence of a status is
+   * what separates the two.
+   */
+  it("says the server is already set up when it answers 404, not that it is unreachable", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const host = await screenHost(el, "connection");
+    const body = host.shadowRoot!.textContent!;
+    expect(body).toContain("already set up");
+    expect(body).not.toContain("could not reach");
+    expect(body).not.toContain("power");
+    // A server that is already set up cannot be set up again — Continue would just fail the same way.
+    expect(host.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+  });
+
+  it("says it could not reach the server when nothing answers at all", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const host = await screenHost(el, "connection");
+    const body = host.shadowRoot!.textContent!;
+    expect(body).toContain("could not reach");
+    expect(body).not.toContain("already set up");
+    // An unreachable server may come back, so the retry stays.
+    expect(host.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+  });
+
+  /**
+   * The two halves of one fact — what to SAY and whether an action is worth offering — must always
+   * describe the SAME check. A fresh check clears the previous outcome's message; if the "no action
+   * here" half is left behind from the previous outcome, the operator is left looking at a screen
+   * with no message and no control at all while the check runs.
+   *
+   * The connection screen hides its own Continue after the 404, so the shell is driven through the
+   * `connection-continue` event it listens for rather than through a click.
+   */
+  it("never leaves the connection screen with neither a message nor an action", async () => {
+    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal", status: 404 });
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus,
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const host = await screenHost(el, "connection");
+    expect(host.shadowRoot!.textContent).toContain("already set up");
+    expect(host.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+
+    // A check that has not answered yet: the previous outcome no longer applies, and the new one is
+    // not known.
+    getStatus.mockReturnValue(new Promise(() => {}));
+    host.dispatchEvent(new CustomEvent("connection-continue"));
+    await flush(el);
+
+    const during = await screenHost(el, "connection");
+    expect(during.shadowRoot!.textContent).not.toContain("already set up");
+    expect(during.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+  });
+
+  // A 5xx is the box answering that IT is broken — neither "unreachable" nor "already set up".
+  it("does not call a server error 'already set up'", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    await flush(el);
+    const body = (await screenHost(el, "connection")).shadowRoot!.textContent!;
+    expect(body).not.toContain("already set up");
+    // It answered, so telling the operator to go and check the power is wrong too.
+    expect(body).not.toContain("could not reach");
+  });
+
   it("renders the four-choice onboarding screen on boot", async () => {
     const el = await mountSetupApp();
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain("Set up this Waitron box");
+    expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain(
+      "Set up this Waitron server",
+    );
   });
 
   it("routes Join or recover through its subchooser to the mirror connection form", async () => {
@@ -771,6 +860,22 @@ describe("setup-app", () => {
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
+  });
+
+  /**
+   * The certificate guide the failed-provision screen points at ("/setup/trust") is about trusting
+   * THIS server's certificate — remove any old Waitron certificate, get this one, install it. It has
+   * no section about a server being re-imaged, so the pointer must not promise one.
+   */
+  it("points at the certificate guide without promising a re-imaging section", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "server.internal", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "provisioning");
+    const help = host.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=trust-help]")!;
+    expect(help.getAttribute("href")).toBe("/setup/trust");
+    expect(host.shadowRoot!.textContent).not.toContain("re-imaged");
   });
 
   it("maps a conflicting saved operation to a terminal recovery message", async () => {

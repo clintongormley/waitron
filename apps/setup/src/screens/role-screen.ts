@@ -48,8 +48,8 @@ export class SetupRoleScreen extends LitElement {
       <wt-card>
         <h1>Join or recover an existing restaurant</h1>
         <p class="intro">
-          Add this box as a mirror while another primary is available, or restore a backup after a
-          disaster when no usable peer survives.
+          Add this server as a mirror while another primary is available, or restore a backup after
+          a disaster when no usable peer survives.
         </p>
       </wt-card>
 
@@ -57,7 +57,7 @@ export class SetupRoleScreen extends LitElement {
         <wt-card raised>
           <h2>Add a mirror node</h2>
           <p class="choice-copy">
-            Connect to the restaurant's primary. This box copies its data and remains read-only.
+            Connect to the restaurant's primary. This server copies its data and remains read-only.
           </p>
           <wt-button
             variant="primary"
@@ -69,8 +69,8 @@ export class SetupRoleScreen extends LitElement {
         <wt-card raised>
           <h2>Restore from backup</h2>
           <p class="choice-copy">
-            Recover onto this fresh box from an encrypted Waitron backup when no primary or mirror
-            with newer data is available.
+            Recover onto this fresh server from an encrypted Waitron backup when no primary or
+            mirror with newer data is available.
           </p>
           <wt-button
             variant="secondary"
