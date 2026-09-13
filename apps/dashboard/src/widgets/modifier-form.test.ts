@@ -217,7 +217,7 @@ it("clears an option default when its choice becomes unavailable", async () => {
   expect(submit.mock.calls[0]![0].detail.value.defaultChoiceId).toBeNull();
 });
 it("clears the preselection and the default of a choice saved from the modal as unavailable", async () => {
-  const saveUnavailable = async (el: ModifierForm, value: Record<string, unknown>) => {
+  const saveUnavailable = async (el: ModifierForm, value: object) => {
     el.shadowRoot!.querySelector("dashboard-choice-form")!.dispatchEvent(
       new CustomEvent("wt-choice-save", {
         bubbles: true,
