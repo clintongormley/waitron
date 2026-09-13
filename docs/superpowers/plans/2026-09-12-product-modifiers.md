@@ -139,3 +139,27 @@ CI run `34746191891` exposed six exact receipt-response assertions in
 all six failures; extending the nine expected line objects retained their amount/quantity/parent
 assertions and passed all 51 tests with
 `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test working-order.pg.test.ts`.
+
+
+## Rebase onto Categories — 2026-09-13
+
+Rebased onto `f1d1a8b2` (#340), retaining Categories and Modifiers navigation, translations,
+product category memberships and ordered modifier attachments. The duplicate shared planning
+commit was already on main. The existing Claude review approval is retained; `git range-diff`
+shows the review fixes and receipt-fixture correction replayed unchanged.
+
+Core migration 0020 now belongs to Categories. Restored the core migration directory from main
+and ran `pnpm --filter @waitron/db db:generate --name product_modifiers`, producing
+`0021_product_modifiers.sql` and its generated snapshot/journal entry. The integration guide names
+the new file; the earlier 0020 references above record the initial implementation.
+
+With `TESTCONTAINERS_RYUK_DISABLED=true`, focused validation passed:
+
+- `pnpm --filter @waitron/catalogue test operations.test.ts categories.test.ts categories.pg.test.ts modifiers.pg.test.ts modifier-dependencies.pg.test.ts modifier-projection.test.ts`: 110 tests.
+- `pnpm --filter @waitron/server test working-order.test.ts working-order.pg.test.ts catalogue-api.test.ts catalogue-api.pg.test.ts configuration-transfer.test.ts`: 323 tests.
+- `pnpm --filter @waitron/fiscal-verifactu test privileges inmutabilidad`: 11 tests against real PostgreSQL.
+- `pnpm --filter @waitron/dashboard test dashboard-app.test.ts i18n/codes.test.ts screens/modifiers-screen.test.ts screens/categories-screen.test.ts`: 156 Chromium tests.
+- `pnpm exec vitest run scripts/journal-monotonic.test.ts scripts/live-subscriptions.test.ts scripts/module-graph-honesty.test.ts`: 30 checks.
+
+Catalogue, server and dashboard typechecks passed. The normal push hook and current-head CI
+remain the finishing gate after this rebase.
