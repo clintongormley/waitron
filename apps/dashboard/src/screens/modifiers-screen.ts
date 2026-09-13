@@ -130,7 +130,7 @@ export class ModifiersScreen extends LitElement {
         typeof params.field === "string"
           ? params.field
           : "_form";
-      this.fieldErrors = { [field]: message, _form: message };
+      this.fieldErrors = { [field]: message };
       this.busy = false;
       return;
     }

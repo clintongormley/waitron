@@ -13,6 +13,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "./choice-form.js";
@@ -553,7 +554,10 @@ export class ModifierForm extends LitElement {
         submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'));
       }}
     >
-      ${Object.keys(this.errors).length || Object.keys(this.fieldErrors).length ? html`<p class="error" role="alert">${t("modifiers.problem")}</p>` : nothing}${this.#error("_form") ? html`<p class="error">${this.#error("_form")}</p>` : nothing}
+      <wt-form-error-summary
+        heading=${t("form.error_heading")}
+        .errors=${Object.values({ ...this.serverErrors, ...this.errors })}
+      ></wt-form-error-summary>
       <div class="fields">
         ${nameFields(this.#fields(), "name", t("modifiers.name"), this.name, (name) => {
           this.name = name;

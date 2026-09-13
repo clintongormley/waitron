@@ -5,6 +5,7 @@ import { ModifiersScreen } from "./modifiers-screen.js";
 import type { DashboardApi, Modifier } from "../api/client.js";
 import type { ModifierForm } from "../widgets/modifier-form.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 afterEach(cleanupWidgets);
 const modifier: Modifier = { id: "m", type: "text", name: { es: "Nota" }, available: true };
 function api(overrides: Partial<DashboardApi> = {}) {
@@ -23,6 +24,23 @@ async function mount(client = api()) {
   const { el } = await mountWidget<ModifiersScreen>("dashboard-modifiers-screen", { api: client });
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
   return el;
+}
+/** The entries of the modifier form's shared error summary, in order. */
+async function summaryEntries(form: ModifierForm) {
+  await form.updateComplete;
+  const summary = form.shadowRoot!.querySelector("wt-form-error-summary");
+  if (summary === null) return [];
+  await summary.updateComplete;
+  return [...summary.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent);
+}
+function submitText(form: ModifierForm) {
+  form.dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: { value: { type: "text", name: { es: "Nota" }, available: true } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
 }
 async function create(el: ModifiersScreen) {
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!.click();
@@ -179,17 +197,26 @@ it("shows a field-less server rejection's own message in the form", async () => 
   table.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-m"]')!.click();
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!;
-  form.dispatchEvent(
-    new CustomEvent("wt-submit", {
-      detail: { value: { type: "text", name: { es: "Nota" }, available: true } },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await vi.waitFor(() =>
-    expect(form.shadowRoot!.textContent).toContain(t("modifiers.in_use.choice")),
+  submitText(form);
+  await vi.waitFor(async () =>
+    expect(await summaryEntries(form)).toEqual([t("modifiers.in_use.choice")]),
   );
   expect(form.open).toBe(true);
+});
+it("shows a server rejection that names a field once, beside that field", async () => {
+  const client = api({
+    createModifier: vi
+      .fn()
+      .mockRejectedValue({ code: "modifier.invalid", params: { field: "name.es" } }),
+  });
+  const el = await mount(client);
+  const form = await create(el);
+  submitText(form);
+  const message = codeMessage("modifier.invalid");
+  await vi.waitFor(async () => expect(await summaryEntries(form)).toEqual([message]));
+  expect(
+    (form.shadowRoot!.querySelector('[name="name-es"]') as unknown as { error: string }).error,
+  ).toBe(message);
 });
 it("identifies a retained-order dependency and offers deactivation", async () => {
   const { t } = await import("../i18n/t.js");

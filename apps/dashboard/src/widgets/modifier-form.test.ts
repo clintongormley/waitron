@@ -79,7 +79,12 @@ it("shows required name feedback and emits the shared event with translations", 
   el.addEventListener("wt-submit", submit);
   await click(el, "save");
   expect(submit).not.toHaveBeenCalled();
-  expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+  const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
+  await summary.updateComplete;
+  expect(summary.heading).toBe(t("form.error_heading"));
+  expect([...summary.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
+    t("modifiers.name_required"),
+  ]);
   await change(el, "name-es", "Nota");
   await change(el, "name-en", "Note");
   await click(el, "save");
