@@ -48,7 +48,8 @@ describe("MIGRATION_CONSTRAINT_SQL_STATES", () => {
   // The module claims it shares no code with `classifyBootFailure`'s tables, and nothing else would
   // fail if a later edit put one in both. It matters most against `SCHEMA_MISMATCH_SQL_STATES`,
   // whose operator advice is to RESTORE the database — the opposite of wiping it. The socket codes
-  // can never collide with a five-character SQLSTATE, so that third of the assertion is free.
+  // are all longer than a SQLSTATE today, so that third of the assertion currently costs nothing —
+  // not "cannot collide": `boot-failure.ts` itself notes that `EPIPE` is five upper-case characters.
   it("never names a code `boot-failure.ts` classifies, in any of its three tables", () => {
     const theirs = new Set([
       ...UNREACHABLE_SOCKET_CODES,
@@ -93,7 +94,8 @@ describe("withDevMigrationHint", () => {
   it("still re-throws the original failure when the log sink itself throws", async () => {
     // No sink this process builds today is known to throw: `createRotatingFileSink` catches its own
     // IO failures and degrades to a no-op, and `boot.ts`'s stdout sink writes asynchronously on a
-    // pipe. But `tee` does not catch, so ANY sink that ever does throw propagates from here — and
+    // pipe (under `wa-wt` that stdout is a FILE, which is a synchronous write and simply untested
+    // here). But `tee` does not catch, so ANY sink that ever does throw propagates from here — and
     // reporting a logging failure in place of the migration failure would send the reader after
     // entirely the wrong problem. Cheap insurance on the one error that must survive.
     const failure = failedMigration("23502");

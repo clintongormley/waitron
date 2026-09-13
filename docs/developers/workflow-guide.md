@@ -97,8 +97,9 @@ whole list — `ensure_env` has a third path). The volume is seeded, so between 
 rows written weeks and branches ago. A branch's migrations can then be unable to run over them: migrations here carry no
 data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and recreate until Waitron is
 in production), so one that adds a column no existing row can fill stops the boot dead inside
-`applyMigrations`, and the dashboard is left showing its generic "Something went wrong, try again"
-(`apps/dashboard/src/i18n/codes.ts`) because nothing is there to answer it.
+`applyMigrations`. Vite keeps serving the pages, so the dashboard still loads; it is the first
+request that needs the server — signing in — that fails, and with no code to render it falls back to
+the generic "Something went wrong, try again" (`apps/dashboard/src/i18n/codes.ts`).
 `packages/db/drizzle/0020_category_names.sql` did exactly this on 2026-09-13: it drops the old text
 `categories.name` and recreates it as `jsonb NOT NULL`, which the seeded demo categories cannot
 satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.

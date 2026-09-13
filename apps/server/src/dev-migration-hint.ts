@@ -28,9 +28,10 @@ const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_SQL_STATES);
  * Why this is worth a line: migrations here are written with no data-preservation code on purpose
  * (CLAUDE.md §3 — schema changes drop and recreate until Waitron is in production), while the
  * development Postgres is one shared, seeded volume that every worktree boots against, and moving
- * between worktrees on the same target does not wipe it. So a migration that adds a column no
- * existing row can fill dies at boot with a raw driver stack trace, and the browser is left with a
- * generic failure. `docs/developers/workflow-guide.md` works the case through.
+ * between worktrees does not normally wipe it (`wa-wt` decides when it does; the guide says where).
+ * So a migration that adds a column no existing row can fill dies at boot with a raw driver stack
+ * trace, and the first page that needs the server is left with a generic failure.
+ * `docs/developers/workflow-guide.md` works the case through.
  *
  * WHAT THE LINE MAY AND MAY NOT CLAIM. A constraint violation says a rule was broken; it does not
  * say whether the offending rows were already in the table or were inserted by this same migration.
