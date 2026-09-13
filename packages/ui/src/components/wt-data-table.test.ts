@@ -224,7 +224,23 @@ test("collapsing a branch hides its descendants and flips aria-expanded", async 
   ).toBe("false");
 });
 
-test("sorting orders siblings within their parent, not the whole list", async () => {
+test("collapsing a node with grandchildren hides all descendants recursively", async () => {
+  const el = await treeTable();
+  const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tbody tr[data-row-key="food"] button.tree-toggle',
+  )!;
+  toggle.click();
+  await el.updateComplete;
+  const keys = [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) =>
+    r.getAttribute("data-row-key"),
+  );
+  expect(keys).toEqual(["food", "drinks"]); // break AND its child eggs both hidden
+  expect(
+    el.shadowRoot!.querySelector('tbody tr[data-row-key="food"]')!.getAttribute("aria-expanded"),
+  ).toBe("false");
+});
+
+test("sorting orders siblings within their parent, not the whole list, in both directions", async () => {
   const rows: TreeRow[] = [
     { id: "food", parent: null, name: "Food" },
     { id: "z", parent: "food", name: "Zebra" },
@@ -232,12 +248,17 @@ test("sorting orders siblings within their parent, not the whole list", async ()
     { id: "drinks", parent: null, name: "Drinks" },
   ];
   const el = await treeTable({ rows });
-  el.shadowRoot!.querySelector<HTMLButtonElement>("th button.sort")!.click();
+  const sortButton = el.shadowRoot!.querySelector<HTMLButtonElement>("th button.sort")!;
+  const keys = () =>
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) => r.getAttribute("data-row-key"));
+
+  sortButton.click();
   await el.updateComplete;
-  const keys = [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) =>
-    r.getAttribute("data-row-key"),
-  );
-  expect(keys).toEqual(["drinks", "food", "a", "z"]); // top level sorted; a,z sorted under food
+  expect(keys()).toEqual(["drinks", "food", "a", "z"]); // top level sorted; a,z sorted under food
+
+  sortButton.click();
+  await el.updateComplete;
+  expect(keys()).toEqual(["food", "z", "a", "drinks"]); // top level reversed; z,a reversed under food
 });
 
 test("a row whose parent is absent renders at the top level", async () => {
