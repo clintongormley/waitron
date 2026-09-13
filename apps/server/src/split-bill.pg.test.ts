@@ -142,7 +142,7 @@ async function setupVenue(): Promise<SeededVenue> {
   const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { en: "Bebidas" } });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,

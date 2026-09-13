@@ -156,8 +156,8 @@ async function main(): Promise<void> {
     await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, tenantId, { name: { en: "Comida" } });
-      const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
+      const comida = await createCategory(tx, tenantId, { name: { es: "Comida" } });
+      const bebidas = await createCategory(tx, tenantId, { name: { es: "Bebidas" } });
       await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,

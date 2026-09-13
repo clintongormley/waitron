@@ -149,3 +149,18 @@ The disposable populated-name migration probe ran the actual `0020` SQL against 
 text name. It asserted `23502` from adding the required JSON column, and confirmed transaction
 rollback retained the original name. Source and receipt are `migration-probe.ts` and
 `migration-probe.txt` beside the review report. No shared development database was touched.
+
+
+## CI fixture corrections (2026-09-13)
+
+The first PR run (`34746189323`, head `c472fc21`) exposed two missed fixture shapes. The recipes
+suite and recipe API suite owned separate core-only databases, so product creation failed with
+`42P01` on `product_categories`. Both now install catalogue migrations. The recipes package's exact
+`test:coverage` command passed 24 tests at 100% coverage; the recipe API suite passed 18 tests.
+
+Provisioned Spanish venues also rejected the mechanically converted English-only category maps
+with `content.translation_required`. Their test fixtures now use the venue's `LOCALE`, retaining
+the same labels and behavioral assertions. The affected server batch passed 19 files / 354 tests,
+and server typechecking passed. The four provisioned Spanish demo inputs use Spanish category
+translations as well. The standalone catalogue demo command needs an explicitly supplied database;
+its initial launch without `DATABASE_URL` stopped before database access.

@@ -141,7 +141,7 @@ beforeAll(async () => {
   productId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { en: "Bebidas" } });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
     // A product priced at exactly 1.00 gross so the filed total is "1.00" — the figure every case
     // below asserts against.
     const product = await createProduct(tx, cfg.tenantId, {
