@@ -49,9 +49,9 @@ wide margin. This section stays in full deliberately: it applies to every change
   broken, taken where zero was also the correct answer.
 - **A sentence about what ANOTHER part of the system does is checked by following the call chain to
   that part, not by reading the boundary you just edited.** The fix can be right and the sentence
-  describing it still too wide: you had one edge open, and you wrote about the whole path. Cost: on
-  one branch this exact shape reached review again and again, from different people, the controller
-  included; the instances are in [writing-claims.md](docs/developers/writing-claims.md).
+  describing it still too wide: you had one edge open, and you wrote about the whole path. Cost: this
+  shape kept reaching review on one branch, the commit that wrote the rule down included; the
+  instances are in [writing-claims.md](docs/developers/writing-claims.md).
 - **"Pre-existing", "not a regression", "harmless", "unreachable" and "narrow" are claims.** Check
   with `git log`/`git blame` first; unchecked, say "I believe this predates the branch".
 - **The correction is a new claim, and deserves MORE scrutiny than the text it replaces.** This is the

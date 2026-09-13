@@ -31,8 +31,20 @@ controller who was supposed to be watching for it. The instances:
    described a route the subject of the sentence does not take.
 
 3. **"Provisioning now trims whitespace."** True of the web boundary that had just been edited, and
-   false of the command line, which trims what it prompts for and not what arrives on a flag —
-   a difference `packages/provisioning/src/cli.test.ts` already had a test for.
+   not yet true of the command line, which the author had not opened. Two new name flags were reaching
+   the planner raw: neither trimmed, and neither read a blank as "not given", so
+   `--admin-last-names ""` — how a script says "no last name" — arrived at the database as an empty
+   string, where `persons_last_names_ck` (`packages/identity/src/schema/persons.ts`) refused it as a
+   raw SQLSTATE instead of a refusal naming the flag. The same task's review caught it and a named
+   sibling helper, `resolveWithoutPrompt`, closed it before the commit landed.
+
+   **Do not go looking for the gap in `git log` — the commit was amended, so it is not there.** Read
+   at `packages/provisioning/src/cli.ts` today, every path trims: `resolveOption`,
+   `resolveWithoutPrompt` and `resolveLocales` alike, and flag trimming in general was fixed long
+   before this branch. The two lines the claim was wrong about read
+   `values["admin-first-names"] ?? null` and `values["admin-last-names"] ?? null`, and `??` falls
+   back only on an absent value, never on an empty string. That version survives only in a local
+   reflog, which expires — which is why it is written out here rather than pointed at.
 
 4. **"PGlite cannot judge a privilege."** False, and this one came out of `CLAUDE.md` section 4
    itself, which said in as many words that PGlite does not enforce grants. Nobody had checked it;
