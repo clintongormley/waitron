@@ -347,6 +347,14 @@ it("filters by name keeping ancestors in tree mode", async () => {
   await el.updateComplete;
   const ids = table.rows.map((row) => (row as CategorySummary).id).sort();
   expect(ids).toEqual(["breakfast", "eggs", "food"]);
+  // Food and Breakfast are kept only to show Eggs's ancestor path, not because they matched "egg"
+  // themselves — they should render muted while the actual match does not.
+  await table.updateComplete;
+  const muted = (id: string) =>
+    table.shadowRoot!.querySelector(`[data-category="${id}"]`)!.hasAttribute("data-muted");
+  expect(muted("food")).toBe(true);
+  expect(muted("breakfast")).toBe(true);
+  expect(muted("eggs")).toBe(false);
 });
 
 it("renders each name with its colour square", async () => {
