@@ -99,6 +99,11 @@ export class WtCombobox extends LitElement {
         cursor: pointer;
       }
 
+      .option.active {
+        outline: var(--wt-focus-ring);
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
       .empty {
         padding: var(--wt-space-2) var(--wt-space-3);
         color: var(--wt-color-text-muted);
@@ -114,6 +119,7 @@ export class WtCombobox extends LitElement {
 
   @state() private expanded = false;
   @state() private search = "";
+  @state() private activeIndex = -1;
 
   @query(".trigger") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
@@ -128,8 +134,36 @@ export class WtCombobox extends LitElement {
     return this.options.filter((option) => option.label.toLowerCase().includes(query));
   }
 
+  private get rowCount(): number {
+    return this.filteredOptions.length;
+  }
+
   private onSearchInput(event: Event): void {
     this.search = (event.target as HTMLInputElement).value;
+    this.activeIndex = this.rowCount > 0 ? 0 : -1;
+  }
+
+  private onSearchKeydown(event: KeyboardEvent): void {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        this.activeIndex = Math.min(this.activeIndex + 1, this.rowCount - 1);
+        return;
+      case "ArrowUp":
+        event.preventDefault();
+        this.activeIndex = Math.max(this.activeIndex - 1, 0);
+        return;
+      case "Home":
+        event.preventDefault();
+        this.activeIndex = 0;
+        return;
+      case "End":
+        event.preventDefault();
+        this.activeIndex = this.rowCount - 1;
+        return;
+      default:
+        return;
+    }
   }
 
   private onTriggerClick(event: MouseEvent): void {
@@ -139,6 +173,9 @@ export class WtCombobox extends LitElement {
       this.popup.hidePopover();
     } else {
       this.search = "";
+      // No row is active until the user navigates, so a reopened panel neither announces a stale
+      // row through aria-activedescendant nor makes the first arrow press skip the first option.
+      this.activeIndex = -1;
       // Opening synchronously makes its dimensions available before the first paint.
       this.popup.showPopover();
       this.positionPopup();
@@ -196,15 +233,30 @@ export class WtCombobox extends LitElement {
         <input
           class="search"
           type="text"
+          role="combobox"
+          aria-expanded="true"
           placeholder=${this.searchPlaceholder}
           aria-label=${this.label || this.searchPlaceholder}
           aria-controls=${this.listboxId}
+          aria-activedescendant=${
+            this.activeIndex >= 0 ? `${this.listboxId}-${this.activeIndex}` : nothing
+          }
           .value=${this.search}
           @input=${this.onSearchInput}
+          @keydown=${this.onSearchKeydown}
         />
         <ul id=${this.listboxId} class="list" role="listbox">
           ${this.filteredOptions.map(
-            (option) => html`<li role="option" aria-selected="false">${option.label}</li>`,
+            (option, index) => html`
+              <li
+                id=${`${this.listboxId}-${index}`}
+                class=${index === this.activeIndex ? "option active" : "option"}
+                role="option"
+                aria-selected="false"
+              >
+                ${option.label}
+              </li>
+            `,
           )}
           ${
             this.filteredOptions.length === 0

@@ -140,3 +140,71 @@ test("resets the search box each time the panel is reopened", async () => {
   expect(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!.value).toBe("");
   expect(el.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(3);
 });
+
+test("arrow keys move the active option, reflected in aria-activedescendant", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  search.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
+  expect(search.getAttribute("aria-activedescendant")).toBe(rows[0].id);
+  expect(rows[0].classList.contains("active")).toBe(true);
+  await userEvent.keyboard("{ArrowDown}");
+  expect(search.getAttribute("aria-activedescendant")).toBe(rows[1].id);
+  await userEvent.keyboard("{ArrowUp}");
+  expect(search.getAttribute("aria-activedescendant")).toBe(rows[0].id);
+});
+
+test("ArrowUp at the first row and ArrowDown at the last row do not wrap or go out of range", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  search.focus();
+  await userEvent.keyboard("{ArrowUp}");
+  expect(el.shadowRoot!.querySelectorAll('[role="option"]')[0].classList.contains("active")).toBe(
+    true,
+  );
+  await userEvent.keyboard("{End}");
+  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
+  expect(rows[rows.length - 1].classList.contains("active")).toBe(true);
+  await userEvent.keyboard("{ArrowDown}");
+  expect(el.shadowRoot!.querySelectorAll('[role="option"]')[rows.length - 1].classList).toContain(
+    "active",
+  );
+});
+
+test("Home and End jump to the first and last option", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  search.focus();
+  await userEvent.keyboard("{End}");
+  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
+  expect(rows[rows.length - 1].classList.contains("active")).toBe(true);
+  await userEvent.keyboard("{Home}");
+  expect(el.shadowRoot!.querySelectorAll('[role="option"]')[0].classList.contains("active")).toBe(
+    true,
+  );
+});
+
+test("typing resets the active row to the first match", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "veg");
+  expect(el.shadowRoot!.querySelectorAll('[role="option"]')[0].classList.contains("active")).toBe(
+    true,
+  );
+});
+
+test("the search input carries combobox ARIA wiring", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  expect(search.getAttribute("role")).toBe("combobox");
+  expect(search.getAttribute("aria-expanded")).toBe("true");
+  expect(search.getAttribute("aria-controls")).toBe(
+    el.shadowRoot!.querySelector('[role="listbox"]')!.id,
+  );
+});
