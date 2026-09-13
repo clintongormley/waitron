@@ -1,6 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
+import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
 import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -51,10 +52,8 @@ export class PersonForm extends LitElement {
   @state() private email = "";
   @state() private telephone = "";
   @state() private selectedRole: PersonRole = "staff";
-  @state() private fieldErrors: Partial<Record<Field, string>> = {};
+  @state() private fieldErrors: Partial<Record<Field | "telephone", string>> = {};
 
-  /** Once the administrator types into Display name it stops following the two name fields. */
-  #displayNameEdited = false;
   #roleSelect = createRef<HTMLSelectElement>();
 
   override updated(): void {
@@ -65,20 +64,27 @@ export class PersonForm extends LitElement {
     event.stopPropagation();
     const value = event.detail.value;
     if (field === "firstNames" || field === "lastNames") {
+      const prevFirst = this.firstNames;
+      const prevLast = this.lastNames;
       if (field === "firstNames") this.firstNames = value;
       else this.lastNames = value;
-      if (!this.#displayNameEdited)
-        this.displayName = `${this.firstNames} ${this.lastNames}`.trim();
-    } else if (field === "displayName") {
-      this.displayName = value;
-      this.#displayNameEdited = true;
-    } else if (field === "email") this.email = value;
+      // The shared rule auto-fills only while the display name still matches the generated form,
+      // so it resumes generating after the field is cleared — an edited flag never could.
+      this.displayName = deriveDisplayName(
+        this.displayName,
+        prevFirst,
+        prevLast,
+        this.firstNames,
+        this.lastNames,
+      );
+    } else if (field === "displayName") this.displayName = value;
+    else if (field === "email") this.email = value;
     else this.telephone = value;
-    if (field !== "telephone") this.fieldErrors = { ...this.fieldErrors, [field]: undefined };
+    this.fieldErrors = { ...this.fieldErrors, [field]: undefined };
   }
 
   #validate(): boolean {
-    const errors: Partial<Record<Field, string>> = {};
+    const errors: Partial<Record<Field | "telephone", string>> = {};
     if (this.firstNames.trim() === "") errors.firstNames = t("form.first_names_required");
     if (this.lastNames.trim() === "") errors.lastNames = t("form.last_names_required");
     if (this.displayName.trim() === "") errors.displayName = t("form.display_name_required");
@@ -86,6 +92,8 @@ export class PersonForm extends LitElement {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email.trim())) {
       errors.email = codeMessage("person.email_invalid");
     }
+    const tel = this.telephone.trim();
+    if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
     this.fieldErrors = errors;
     return Object.keys(errors).length === 0;
   }
@@ -118,7 +126,6 @@ export class PersonForm extends LitElement {
     this.telephone = "";
     this.selectedRole = "staff";
     this.fieldErrors = {};
-    this.#displayNameEdited = false;
   }
 
   override render() {
@@ -200,7 +207,7 @@ export class PersonForm extends LitElement {
         type=${type}
         ?required=${required}
         label=${label}
-        error=${field === "telephone" ? "" : (this.fieldErrors[field] ?? "")}
+        error=${this.fieldErrors[field] ?? ""}
         .value=${value}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
       ></wt-input>

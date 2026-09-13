@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
 import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -76,7 +77,7 @@ export class PersonEdit extends LitElement {
     role: "staff",
     status: "pending",
   };
-  @state() private fieldErrors: Partial<Record<EditableField, string>> = {};
+  @state() private fieldErrors: Partial<Record<EditableField | "telephone", string>> = {};
   #personId: string | null = null;
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -103,15 +104,26 @@ export class PersonEdit extends LitElement {
   #change(field: EditableField | "telephone", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const value = event.detail.value;
-    this.details = {
-      ...this.details,
-      [field]: field === "telephone" ? value || null : value,
-    };
-    if (field !== "telephone") this.fieldErrors = { ...this.fieldErrors, [field]: undefined };
+    if (field === "firstNames" || field === "lastNames") {
+      const next = { ...this.details, [field]: value };
+      // Auto-fill the display name only while it still matches the generated form, so it resumes
+      // generating after the field is cleared — the same shared rule the other three forms use.
+      next.displayName = deriveDisplayName(
+        this.details.displayName,
+        this.details.firstNames,
+        this.details.lastNames,
+        next.firstNames,
+        next.lastNames,
+      );
+      this.details = next;
+    } else {
+      this.details = { ...this.details, [field]: field === "telephone" ? value || null : value };
+    }
+    this.fieldErrors = { ...this.fieldErrors, [field]: undefined };
   }
 
   #validate(): boolean {
-    const errors: Partial<Record<EditableField, string>> = {};
+    const errors: Partial<Record<EditableField | "telephone", string>> = {};
     if (this.details.firstNames.trim() === "") errors.firstNames = t("form.first_names_required");
     if (this.details.lastNames.trim() === "") errors.lastNames = t("form.last_names_required");
     if (this.details.displayName.trim() === "") {
@@ -121,6 +133,8 @@ export class PersonEdit extends LitElement {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.details.email.trim())) {
       errors.email = codeMessage("person.email_invalid");
     }
+    const tel = this.details.telephone?.trim() ?? "";
+    if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
     this.fieldErrors = errors;
     return Object.keys(errors).length === 0;
   }
@@ -158,7 +172,7 @@ export class PersonEdit extends LitElement {
         type=${field === "email" ? "email" : field === "telephone" ? "tel" : "text"}
         label=${label}
         .value=${value}
-        error=${field === "telephone" ? "" : (this.fieldErrors[field] ?? "")}
+        error=${this.fieldErrors[field] ?? ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
       ></wt-input>
     `;
