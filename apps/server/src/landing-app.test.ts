@@ -90,7 +90,7 @@ describe("landing app", () => {
       });
       const page = await (await app.request("http://waitron.local/")).text();
       expect(page).not.toContain('href="/ca.crt"');
-      expect(page).toMatch(/operator-supplied/i);
+      expect(page).toMatch(/installer supplied/i);
 
       const res = await app.request("http://waitron.local/ca.crt");
       expect(res.status).toBe(404);
@@ -137,7 +137,7 @@ it("serves the discovery guide and certificate paths as aliases on the landing a
     });
     const page = await app.request("http://waitron.local/setup/trust");
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("Connect to this Waitron box");
+    expect(await page.text()).toContain("Connect to this Waitron server");
     const cert = await app.request("http://waitron.local/setup-api/ca.crt");
     expect(cert.status).toBe(200);
     expect(cert.headers.get("cache-control")).toBe("no-store");
@@ -145,4 +145,50 @@ it("serves the discovery guide and certificate paths as aliases on the landing a
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+describe("the guide opens the visitor's own device", () => {
+  const log = { info() {}, warn() {}, error() {} } as never;
+  const UA_WINDOWS =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+
+  it("opens the steps for the device the request's headers name", async () => {
+    const dir = stateDirWithCa();
+    try {
+      const app = buildLandingApp({
+        stateDir: dir,
+        reachUrls: ["https://waitron.local"],
+        httpsUrl: "https://waitron.local",
+        log,
+      });
+      const res = await app.request("http://waitron.local/setup/trust", {
+        headers: { "user-agent": UA_WINDOWS },
+      });
+      const html = await res.text();
+      expect(html).toContain("Install it on this Windows PC");
+      expect(html).toContain("Using a different device?");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the full list when the headers name no device it knows", async () => {
+    const dir = stateDirWithCa();
+    try {
+      const app = buildLandingApp({
+        stateDir: dir,
+        reachUrls: ["https://waitron.local"],
+        httpsUrl: "https://waitron.local",
+        log,
+      });
+      const res = await app.request("http://waitron.local/setup/trust", {
+        headers: { "user-agent": "curl/8.7.1" },
+      });
+      const html = await res.text();
+      expect(html).toContain("Install it on your device");
+      expect(html).not.toContain("Using a different device?");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

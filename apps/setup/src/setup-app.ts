@@ -146,10 +146,10 @@ const VENUE_ERROR_MESSAGES: Record<string, string> = {
  */
 const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "mirror.bundle_fetch_failed":
-    "Couldn't reach the primary box or the login was refused. Check the address and login, then try again.",
+    "Couldn't reach the primary server or the login was refused. Check the address and login, then try again.",
   "setup.request_invalid":
-    "The box rejected the details. Check the address and login, then try again.",
-  "setup.not_ready": "The box isn't ready yet. Wait a moment, then try again.",
+    "The server rejected the details. Check the address and login, then try again.",
+  "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
 };
 
 /** The generic connect-form banner for a code the map above doesn't name (or a code-less rejection). */
@@ -319,7 +319,7 @@ export class SetupApp extends LitElement {
     } catch {
       if (this.isConnected && generation === this.#connectionGeneration)
         this.connectionError =
-          "We could not read the box's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
+          "We could not read the server's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
     }
   }
 
@@ -337,7 +337,7 @@ export class SetupApp extends LitElement {
     } catch {
       if (this.isConnected && generation === this.#connectionGeneration)
         this.connectionError =
-          "We could not read the box's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
+          "We could not read the server's setup information. Check its power and your network connection. If the browser shows a certificate warning, open the certificate help.";
     } finally {
       if (generation === this.#connectionGeneration) this.connectionChecking = false;
     }
@@ -504,8 +504,8 @@ export class SetupApp extends LitElement {
         }
         this.reviewError =
           field === undefined
-            ? "The box rejected the details. Check your entries, then provision again."
-            : `The box rejected the details (field: ${field}). Check your entries, then provision again.`;
+            ? "The server rejected the details. Check your entries, then provision again."
+            : `The server rejected the details (field: ${field}). Check your entries, then provision again.`;
         this.screen = "review";
         return;
       }
@@ -522,7 +522,7 @@ export class SetupApp extends LitElement {
         this.screen = "fiscal-test";
         return;
       case "setup.already_provisioning":
-        this.provisionMessage = "Setup is already in progress on this box.";
+        this.provisionMessage = "Setup is already in progress on this server.";
         this.provisionCanRetry = false;
         // A provision is running elsewhere — no re-POST, but a reload re-reads status so the operator
         // isn't stranded on a dead-end alert.
@@ -530,24 +530,24 @@ export class SetupApp extends LitElement {
         return;
       case "setup.operation_conflict":
         this.provisionMessage =
-          "This box has saved setup work for a different request. Resume the original setup or contact support.";
+          "This server has saved setup work for a different request. Resume the original setup or contact support.";
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":
       case "deployment.already_stamped":
-        this.provisionMessage = "This box is already set up.";
+        this.provisionMessage = "This server is already set up.";
         this.provisionCanRetry = false;
         // The box is provisioned and serves the till at the origin root — reloading opens it.
         this.provisionReloadLabel = "Reload to open the till";
         return;
       case "setup.not_ready":
-        this.provisionMessage = "The box isn't ready yet. Wait a moment, then try again.";
+        this.provisionMessage = "The server isn't ready yet. Wait a moment, then try again.";
         this.provisionCanRetry = true;
         return;
       default:
         this.provisionMessage =
-          "Provisioning failed. Check that the box is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.";
+          "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.";
         this.provisionCanRetry = true;
         return;
     }
@@ -680,13 +680,13 @@ export class SetupApp extends LitElement {
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     switch (code) {
       case "setup.already_provisioning":
-        this.provisionMessage = "Setup is already in progress on this box.";
+        this.provisionMessage = "Setup is already in progress on this server.";
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":
       case "deployment.already_stamped":
-        this.provisionMessage = "This box is already set up.";
+        this.provisionMessage = "This server is already set up.";
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload to open the dashboard";
         return;

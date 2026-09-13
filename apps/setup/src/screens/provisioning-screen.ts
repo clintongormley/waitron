@@ -66,7 +66,7 @@ export class SetupProvisioningScreen extends LitElement {
           <h1>Provisioning</h1>
           <p class="error" role="alert" data-test="error">${this.message}</p>
           <p>
-            If the browser shows a certificate warning, or this box was re-imaged,
+            If the browser shows a certificate warning, or this server was re-imaged,
             <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
               >open certificate and connection help</a
             >
@@ -92,7 +92,7 @@ export class SetupProvisioningScreen extends LitElement {
     }
     return html`
       <wt-card>
-        <h1>Provisioning this box</h1>
+        <h1>Provisioning this server</h1>
         <p class="status" data-test="status">
           Provisioning… this can take a moment. Keep this page open.
         </p>

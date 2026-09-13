@@ -136,9 +136,9 @@ export class SetupConnectScreen extends LitElement {
       ><wt-help-tooltip slot="help" aria-label=${`Help with ${label.toLowerCase()}`}
         >${
           {
-            primaryUrl: "Enter the full HTTPS address of the primary box this mirror will copy.",
-            personId: "Enter an admin's person ID from the primary box.",
-            password: "Enter that admin's dashboard password on the primary box.",
+            primaryUrl: "Enter the full HTTPS address of the primary server this mirror will copy.",
+            personId: "Enter an admin's person ID from the primary server.",
+            password: "Enter that admin's dashboard password on the primary server.",
             totp: "If this admin uses an authenticator, enter its current one-time code.",
           }[key]
         }</wt-help-tooltip
@@ -151,10 +151,10 @@ export class SetupConnectScreen extends LitElement {
       <wt-card>
         <h1>Connect to the primary</h1>
         <p>
-          Point this mirror at the primary box and sign in with an admin login for it. The mirror
+          Point this mirror at the primary server and sign in with an admin login for it. The mirror
           copies the venue and then shows its data read-only — it never trades or files anything.
         </p>
-        ${this.#field("Primary box address", "primaryUrl", "url")}
+        ${this.#field("Primary server address", "primaryUrl", "url")}
         ${this.#field("Admin login (person ID)", "personId")}
         ${this.#field("Admin password", "password", "password")}
         ${this.#field("Authenticator code (if required)", "totp")}
@@ -167,7 +167,7 @@ export class SetupConnectScreen extends LitElement {
             ? html`<wt-form-error-summary
                 data-test="error"
                 heading="There is a problem with this form"
-                .errors=${[...this.invalid].map((key) => `Check the ${{ primaryUrl: "primary box address", personId: "admin person ID", password: "admin password", totp: "authenticator code" }[key]}.`)}
+                .errors=${[...this.invalid].map((key) => `Check the ${{ primaryUrl: "primary server address", personId: "admin person ID", password: "admin password", totp: "authenticator code" }[key]}.`)}
               ></wt-form-error-summary>`
             : this.errorMessage === undefined
               ? nothing

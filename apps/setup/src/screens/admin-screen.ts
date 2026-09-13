@@ -158,7 +158,7 @@ export class SetupAdminScreen extends LitElement {
     return html`
       <wt-card>
         <h1>The first operator</h1>
-        <p>Create the account that manages this box. You can add more people later.</p>
+        <p>Create the account that manages this server. You can add more people later.</p>
         ${this.#field("Display name", "displayName")} ${this.#field("Email", "email", "email")}
         ${this.#field("Password", "password", "password")} ${this.#field("PIN", "pin", "password")}
         ${

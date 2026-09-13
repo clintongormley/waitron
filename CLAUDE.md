@@ -399,6 +399,11 @@ container or browser test** — most of these rules exist because a test passed 
   `include`/`exclude` replace rather than merge. A config measuring nothing still exits 0 with the
   thresholds intact. Whenever `include` points inside a dot-directory, read the per-file table, not
   the exit code.
+- **A server-rendered HTML page asserted as a STRING has nothing checking that it renders.** An
+  invalid CSS value, an unclosed tag or a dark-theme colour nobody can read passes every assertion:
+  `light-dark(#4a5costs, …)` survived this page's whole green suite. Render the page in the headless
+  Chromium already on the machine (`~/Library/Caches/ms-playwright/chromium_headless_shell-*`) and
+  LOOK at it, in both themes and at phone width, before calling such a page done.
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
   `toEqual` is what put `memberOf` under a matcher for the first time.
 

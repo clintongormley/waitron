@@ -5,7 +5,7 @@ import type { SetupConnectionScreen } from "./connection-screen.js";
 
 afterEach(cleanupWidgets);
 describe.each(["light", "dark"] as const)("connection screen (%s)", (theme) => {
-  it.each([undefined, "We could not reach the box."])(
+  it.each([undefined, "We could not read the server's setup information."])(
     "offers accessible help and retry (%s)",
     async (errorMessage) => {
       const { host } = await mountWidget<SetupConnectionScreen>(

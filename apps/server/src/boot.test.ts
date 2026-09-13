@@ -895,7 +895,7 @@ describe("startServer, against a real container as the deployment role", () => {
 
       const trust = await fetch(`https://127.0.0.1:${port}/setup/trust`, via);
       expect(trust.status).toBe(200);
-      expect(await trust.text()).toContain("Connect to this Waitron box");
+      expect(await trust.text()).toContain("Connect to this Waitron server");
       for (const path of ["/ca.crt", "/setup-api/ca.crt"]) {
         const download = await fetch(`https://127.0.0.1:${port}${path}`, via);
         expect(download.status).toBe(200);

@@ -271,7 +271,9 @@ describe("setup-app", () => {
     const el = await mountSetupApp();
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain("Set up this Waitron box");
+    expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain(
+      "Set up this Waitron server",
+    );
   });
 
   it("routes Join or recover through its subchooser to the mirror connection form", async () => {

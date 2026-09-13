@@ -72,7 +72,7 @@ export class SetupReviewScreen extends LitElement {
     return html`
       <wt-card>
         <h1>Review and provision</h1>
-        <p>Check the details below, then provision this box.</p>
+        <p>Check the details below, then provision this server.</p>
         ${this.draft.mode === "demo" ? html`<p data-test="demo-defaults">Waitron generated a demo tax ID and supplied the business and invoice defaults below. Demo does not submit invoices to the tax agency.</p>` : nothing}
         <dl>
           <dt>Mode</dt>
@@ -119,7 +119,7 @@ export class SetupReviewScreen extends LitElement {
       <div class="actions">
         <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}>Back</wt-button>
         <wt-button variant="primary" data-test="provision" @click=${() => this.#provision()}
-          >Provision this box</wt-button
+          >Provision this server</wt-button
         >
       </div>
     `;

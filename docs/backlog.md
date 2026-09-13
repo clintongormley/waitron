@@ -786,6 +786,11 @@ covers macOS, Windows, Linux, ChromeOS, Android and iPhone/iPad, with browser-sp
 [Design](superpowers/specs/2026-09-12-box-trust-onboarding-design.md),
 [plan and validation](superpowers/plans/2026-09-12-box-trust-onboarding.md).
 
+Reworked 2026-09-13 after an owner review of both pages: the guide opens the visitor's own device's
+steps, guessed from the request headers with the full list as the fallback, carries the logo, and
+shows roughly half the on-screen text it did; the wizard's connection step shrank to one question.
+Per-device coverage is unchanged. See the *Rework, 2026-09-13* section of the design.
+
 Still to walk on real devices: installing the certificate, reopening without a warning, then replacing
 it after a re-image. Track each OS/browser in [ui-review.md](ui-review.md). Browser rendering and a
 successful API request do not verify an OS trust installation. The original Mac/Chrome incident

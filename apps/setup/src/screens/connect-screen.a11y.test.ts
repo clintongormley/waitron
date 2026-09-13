@@ -21,7 +21,7 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
   it("has no violations with a routed-back server error banner shown", async () => {
     const { host } = await mountWidget<SetupConnectScreen>(
       "setup-connect-screen",
-      { errorMessage: "Couldn't reach the primary box." },
+      { errorMessage: "Couldn't reach the primary server." },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -32,7 +32,7 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
   it("has no violations when a server error and a client error coincide (one alert)", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>(
       "setup-connect-screen",
-      { errorMessage: "Couldn't reach the primary box." },
+      { errorMessage: "Couldn't reach the primary server." },
       theme,
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();

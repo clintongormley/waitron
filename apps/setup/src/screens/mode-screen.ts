@@ -152,9 +152,9 @@ export class SetupModeScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <wt-card>
-        <h1>Set up this Waitron box</h1>
+        <h1>Set up this Waitron server</h1>
         <p class="intro">
-          This box runs the till and files fiscal records. Set it up once here, then it restarts
+          This server runs the till and files fiscal records. Set it up once here, then it restarts
           into everyday trading mode.
         </p>
         <p class="cert-note">
@@ -169,7 +169,7 @@ export class SetupModeScreen extends LitElement {
         ${
           this.environment === "production"
             ? html`<p class="production-warning" role="alert" data-test="production-warning">
-                This box is stamped for production — provisioning files real records to AEAT.
+                This server is stamped for production — provisioning files real records to AEAT.
               </p>`
             : nothing
         }
@@ -185,10 +185,10 @@ export class SetupModeScreen extends LitElement {
         <wt-card raised>
           <h2>Demo</h2>
           <p class="choice-copy">
-            A practice box. Nothing is filed to AEAT — safe to explore and throw away.
+            A practice server. Nothing is filed to AEAT — safe to explore and throw away.
           </p>
           <wt-button variant="primary" data-test="choose-demo" @click=${() => this.#chooseDemo()}
-            >Set up a demo box</wt-button
+            >Set up a demo server</wt-button
           >
         </wt-card>
         <wt-card raised>
@@ -216,7 +216,8 @@ export class SetupModeScreen extends LitElement {
         <wt-card raised>
           <h2>Join or recover an existing restaurant</h2>
           <p class="choice-copy">
-            Add this box as a mirror of a running restaurant, or recover a restaurant from a backup.
+            Add this server as a mirror of a running restaurant, or recover a restaurant from a
+            backup.
           </p>
           <wt-button
             variant="secondary"
@@ -234,7 +235,7 @@ export class SetupModeScreen extends LitElement {
       <wt-card raised class="confirm">
         <h2>This is permanent</h2>
         <p class="warning" role="alert" data-test="live-warning">
-          A live box files real invoices to AEAT and can NEVER become a demo — this is permanent.
+          A live server files real invoices to AEAT and can NEVER become a demo — this is permanent.
         </p>
         <wt-switch
           class="understand"
@@ -252,7 +253,7 @@ export class SetupModeScreen extends LitElement {
             data-test="confirm-live"
             ?disabled=${!this.understood}
             @click=${() => this.#confirmLive()}
-            >Set up this live box</wt-button
+            >Set up this live server</wt-button
           >
         </div>
       </wt-card>

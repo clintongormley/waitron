@@ -169,8 +169,8 @@ const SETUP_PLACEHOLDER_HTML = `<!doctype html>
   </head>
   <body>
     <main>
-      <h1>This Waitron box needs setup</h1>
-      <p>No venue is bound to this box yet. Finish setup to start trading.</p>
+      <h1>This Waitron server needs setup</h1>
+      <p>No venue is bound to this server yet. Finish setup to start trading.</p>
     </main>
   </body>
 </html>

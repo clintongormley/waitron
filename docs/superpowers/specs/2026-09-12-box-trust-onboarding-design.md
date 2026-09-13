@@ -65,3 +65,32 @@ Public guide/download routes belong on the main listener before setup, trading a
 and before the recovery page's catch-all. Machine discovery remains setup-only. Disable box CA
 availability and downloads when operator TLS is active, even when fallback box secrets exist.
 The installer also prints the HTTPS help address for installations without the HTTP landing listener.
+
+## Rework, 2026-09-13
+
+Owner review of both pages. Recorded here rather than rewritten above: the sections before this one
+describe what was true when they were written.
+
+The guide now guesses the visitor's device from the request's `sec-ch-ua-platform` and `user-agent`
+headers and opens that device's steps, folding every other device into one closed disclosure. When
+the headers name nothing it recognises it falls back to the closed list this spec described, so a
+wrong guess costs one click and an absent guess costs nothing. Neither header's text is ever printed
+on the page — it only chooses which fixed section to open, which matters because the page is
+unauthenticated (`apps/server/src/detect-device.ts`).
+
+Removal steps moved inside each device, behind "Already installed a Waitron certificate?", and the
+separate re-image section went with them: a re-image is the reason an operator holds an old
+certificate, not a separate procedure. Added: the Waitron logo, and a warning that a browser may ask
+for the download to be confirmed with "Keep" before the file reaches the disk. Every device's steps
+now end by closing and reopening the browser. Deleted: the line announcing that no QR code was
+available, which described an absence the reader had no way to notice. Measured on screen with every
+disclosure closed: 440 words before, 260 after when a device is guessed, 209 when none is.
+
+The wizard's connection step asks one question — is your connection to this page secure? — and tells
+the operator to read their own address bar, because the Chrome 153 probe row above already
+established that the page cannot tell. It keeps the line saying Continue only checks that the server
+answers. 103 rendered words before, 56 after.
+
+Both pages, and the whole setup wizard's visible text, say "server" rather than "box", and "IP
+address" rather than "numeric network address" (owner decision, 2026-09-13). Code identifiers,
+comments and the error code `no_box_ca` are unchanged.
